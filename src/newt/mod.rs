@@ -85,7 +85,7 @@ impl Newt {
         let clock = self.clocks.clock(&cmd) + 1;
 
         // clone the fast quorum
-        let fast_quorum = self.fast_quorum.as_ref().unwrap().clone();
+        let fast_quorum = self.fast_quorum.clone().unwrap();
 
         // create `MCollect`
         let mcollect = Message::MCollect {
