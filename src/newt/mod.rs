@@ -7,6 +7,9 @@ mod votes;
 // This module contains the definition of `QuorumClocks`.
 mod quorum_clocks;
 
+// This module contains the definition of `Router`.
+mod router;
+
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::command::Command;
 use crate::config::Config;
@@ -284,9 +287,9 @@ impl DerefMut for Newt {
 mod tests {
     use crate::command::{Command, Object};
     use crate::config::Config;
-    use crate::newt::{Message, Newt, ToSend};
+    use crate::newt::router::Router;
+    use crate::newt::{Message, Newt};
     use crate::planet::{Planet, Region};
-    use std::collections::HashMap;
 
     #[test]
     fn fast_quorum_size() {
@@ -339,63 +342,34 @@ mod tests {
         newt_1.discover(procs.clone());
         newt_2.discover(procs.clone());
 
+        // create msg router
+        let mut router = Router::new();
+        router.set_proc(0, newt_0);
+        router.set_proc(1, newt_1);
+        router.set_proc(2, newt_2);
+
         // create a command
         let cmd = Command::new(vec![Object::new("A")]);
 
         // submit it in newt_0
         let msubmit = Message::MSubmit { cmd };
-        let mcollects = newt_0.handle(msubmit);
+        let mcollects = router.route(&0, msubmit);
 
         // check that the mcollect is being sent to 2 processes
         assert_eq!(mcollects.clone().unwrap().1.len(), 2 * f);
 
         // handle in mcollects
-        let mut mcollectacks =
-            handle_in_target(mcollects, &mut newt_0, &mut newt_1, &mut newt_2);
+        let mut mcollectacks = router.route_to_many(mcollects);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
 
         // handle the first mcollectack
-        let mut mcommits = handle_in_target(
-            mcollectacks.pop().unwrap(),
-            &mut newt_0,
-            &mut newt_1,
-            &mut newt_2,
-        );
+        let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
         assert!(mcommits.pop().unwrap().is_none());
 
         // handle the second mcollectack
-        let mut mcommits = handle_in_target(
-            mcollectacks.pop().unwrap(),
-            &mut newt_0,
-            &mut newt_1,
-            &mut newt_2,
-        );
+        let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
         assert!(mcommits.pop().unwrap().is_some());
-    }
-
-    fn handle_in_target(
-        to_send: ToSend,
-        newt_0: &mut Newt,
-        newt_1: &mut Newt,
-        newt_2: &mut Newt,
-    ) -> Vec<ToSend> {
-        if let Some((msg, target)) = to_send {
-            target
-                .into_iter()
-                .map(|proc_id| match proc_id {
-                    0 => newt_0.handle(msg.clone()),
-                    1 => newt_1.handle(msg.clone()),
-                    2 => newt_2.handle(msg.clone()),
-                    _ => {
-                        panic!("unhandled process id");
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            vec![]
-        }
     }
 }
