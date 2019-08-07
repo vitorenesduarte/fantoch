@@ -173,10 +173,33 @@ impl Newt {
 
             // check if we have all necessary replies
             if info.quorum_clocks.all() {
+                // compute max and its number of occurences
                 let (max_clock, max_count) = info.quorum_clocks.max_and_count();
-            }
 
-            None
+                // fast path condition: if the max was reported by at least f
+                // processes
+                if max_count >= self.bp.config.f() {
+                    // TODO above, we had to use self.bp.config because the
+                    // borrow-checker couldn't figure it out:
+                    // - is it some issue when dereferencing?
+
+                    // create `MCommit`
+                    let mcommit = Message::MCommit {
+                        dot,
+                        cmd: info.cmd.clone().unwrap(),
+                        clock,
+                        votes: info.votes.clone(),
+                    };
+
+                    // return `ToSend`
+                    Some((mcommit, self.all_procs.clone().unwrap()))
+                } else {
+                    // slow path
+                    None
+                }
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -349,7 +372,7 @@ mod tests {
             &mut newt_1,
             &mut newt_2,
         );
-        // assert!(mcommits.pop().unwrap().is_some());
+        assert!(mcommits.pop().unwrap().is_some());
     }
 
     fn handle_in_target(
