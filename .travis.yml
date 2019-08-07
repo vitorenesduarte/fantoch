@@ -39,3 +39,7 @@ after_success: |
   if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then
     cargo coveralls
   fi
+
+notifications:
+  email: false
+  slack: imdea-software:fdyPmym7oicfvSQTL5zy21n3

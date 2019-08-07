@@ -71,9 +71,9 @@ impl VoteRange {
 
 #[cfg(test)]
 mod tests {
-    use crate::clocks::Clocks;
     use crate::command::{Command, Object};
-    use crate::votes::Votes;
+    use crate::newt::clocks::Clocks;
+    use crate::newt::votes::Votes;
     use std::cmp::max;
 
     #[test]

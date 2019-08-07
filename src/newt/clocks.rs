@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::command::{Command, Object};
-use crate::votes::{ProcVotes, VoteRange};
+use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -61,8 +61,8 @@ impl Clocks {
 
 #[cfg(test)]
 mod tests {
-    use crate::clocks::Clocks;
     use crate::command::{Command, Object};
+    use crate::newt::clocks::Clocks;
 
     #[test]
     fn clocks_flow() {

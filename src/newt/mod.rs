@@ -1,9 +1,15 @@
+// This module contains the definition of `Clocks`.
+mod clocks;
+
+// This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
+mod votes;
+
 use crate::base::{BaseProc, Dot, ProcId};
-use crate::clocks::Clocks;
 use crate::command::Command;
 use crate::config::Config;
+use crate::newt::clocks::Clocks;
+use crate::newt::votes::{ProcVotes, Votes};
 use crate::planet::{Planet, Region};
-use crate::votes::{ProcVotes, Votes};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 

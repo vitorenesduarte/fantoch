@@ -4,7 +4,8 @@ test:
 	cargo test
 
 fmt:
-	rustfmt src/*
+	rustfmt src/*.rs
+	rustfmt src/newt/*.rs
 
 # `cargo install cargo-travis`
 coverage:
