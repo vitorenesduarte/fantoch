@@ -69,7 +69,7 @@ mod tests {
         // create clocks
         let mut clocks = Clocks::new(0);
 
-        // command a
+        // objects and commands
         let object_a = Object::new("A");
         let object_b = Object::new("B");
         let command_a = Command::new(vec![object_a.clone()]);
@@ -86,7 +86,7 @@ mod tests {
 
         // get proc votes
         let proc_votes = clocks.proc_votes(&command_a, clock);
-        assert_eq!(proc_votes.len(), 1);
+        assert_eq!(proc_votes.len(), 1); // single object
         assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![1]);
 
         // bump clocks
@@ -102,7 +102,7 @@ mod tests {
 
         // get proc votes
         let proc_votes = clocks.proc_votes(&command_a, clock);
-        assert_eq!(proc_votes.len(), 1);
+        assert_eq!(proc_votes.len(), 1); // single object
         assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![2]);
 
         // bump clocks
@@ -118,7 +118,7 @@ mod tests {
 
         // get proc votes
         let proc_votes = clocks.proc_votes(&command_ab, clock);
-        assert_eq!(proc_votes.len(), 2);
+        assert_eq!(proc_votes.len(), 2); // two objects
         assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![3]);
         assert_eq!(proc_votes.get(&object_b).unwrap().votes(), vec![1, 2, 3]);
 
@@ -135,7 +135,7 @@ mod tests {
 
         // get proc votes
         let proc_votes = clocks.proc_votes(&command_a, clock);
-        assert_eq!(proc_votes.len(), 1);
+        assert_eq!(proc_votes.len(), 1); // single object
         assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![4]);
     }
 }
