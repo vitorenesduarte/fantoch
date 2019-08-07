@@ -11,10 +11,6 @@ impl Region {
     pub fn new<S: Into<String>>(name: S) -> Self {
         Region { name: name.into() }
     }
-
-    pub fn name(&self) -> &String {
-        &self.name
-    }
 }
 
 #[derive(Debug, Clone)]

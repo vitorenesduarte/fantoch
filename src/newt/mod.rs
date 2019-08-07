@@ -4,10 +4,14 @@ mod clocks;
 // This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
 mod votes;
 
+// This module contains the definition of `QuorumClocks`.
+mod quorum_clocks;
+
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::command::Command;
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
+use crate::newt::quorum_clocks::QuorumClocks;
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
@@ -58,10 +62,11 @@ impl Newt {
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck {
+                from,
                 dot,
                 clock,
                 proc_votes,
-            } => self.handle_mcollectack(dot, clock, proc_votes),
+            } => self.handle_mcollectack(from, dot, clock, proc_votes),
             Message::MCommit {
                 dot,
                 cmd,
@@ -129,11 +134,13 @@ impl Newt {
             cmd: Some(cmd),
             clock,
             votes,
+            quorum_clocks: QuorumClocks::new(self.fast_quorum_size),
         };
         self.dot_to_info.insert(dot, info);
 
         // create `MCollectAck`
         let mcollectack = Message::MCollectAck {
+            from: self.id,
             dot,
             clock,
             proc_votes,
@@ -145,16 +152,31 @@ impl Newt {
 
     fn handle_mcollectack(
         &mut self,
+        from: ProcId,
         dot: Dot,
         clock: usize,
         proc_votes: ProcVotes,
     ) -> ToSend {
         if let Some(info) = self.dot_to_info.get_mut(&dot) {
-            if info.status == Status::COLLECT {
-                None
-            } else {
-                None
+            if info.status != Status::COLLECT
+                || info.quorum_clocks.contains(&from)
+            {
+                // do nothing if we're no longer COLLECT or if this is a
+                // duplicated message
+                return None;
             }
+            // update votes
+            info.votes.add(proc_votes);
+
+            // update quorum clocks
+            info.quorum_clocks.add(from, clock);
+
+            // check if we have all necessary replies
+            if info.quorum_clocks.all() {
+                let (max_clock, max_count) = info.quorum_clocks.max_and_count();
+            }
+
+            None
         } else {
             None
         }
@@ -188,6 +210,7 @@ pub enum Message {
         clock: usize,
     },
     MCollectAck {
+        from: ProcId,
         dot: Dot,
         clock: usize,
         proc_votes: ProcVotes,
@@ -207,6 +230,7 @@ struct Info {
     cmd: Option<Command>,
     clock: usize,
     votes: Votes,
+    quorum_clocks: QuorumClocks,
 }
 
 /// `Status` of commands.
