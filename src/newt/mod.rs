@@ -111,6 +111,7 @@ impl Newt {
         quorum: Vec<ProcId>,
         clock: usize,
     ) -> ToSend {
+        // discard message if no longer in START (i.e. not in the hashmap)
         if self.dot_to_info.contains_key(&dot) {
             return None;
         }
@@ -174,6 +175,8 @@ impl Newt {
             // update quorum clocks
             info.quorum_clocks.add(from, clock);
 
+            // TODO local clock bump upon each `MCollectAck`
+
             // check if we have all necessary replies
             if info.quorum_clocks.all() {
                 // compute max and its number of occurences
@@ -190,7 +193,7 @@ impl Newt {
                     let mcommit = Message::MCommit {
                         dot,
                         cmd: info.cmd.clone().unwrap(),
-                        clock,
+                        clock: max_clock,
                         votes: info.votes.clone(),
                     };
 
