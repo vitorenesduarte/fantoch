@@ -5,6 +5,12 @@
 
 Details coming soon.
 
+#### Ideas / Goals
+
+- the same protocol/system implementation should be used by the simulation and by an actual implementation
+- these simulations will only output latency (infinite CPU will be assumed)
+- even though infinite CPU is assumed, we can still use something like [flamegraph](https://github.com/jonhoo/inferno/) to detect CPU performance problems
+
 ## License
 
 Licensed under either of
