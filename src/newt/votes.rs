@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 pub type ProcVotes = BTreeMap<Object, VoteRange>;
 
 /// Votes are all Votes on some command.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Votes {
     votes: BTreeMap<Object, Vec<VoteRange>>,
 }
@@ -55,7 +55,7 @@ impl Votes {
 
 // `VoteRange` encodes a set of votes performed by some processed:
 // - this will be used to fill the `VotesTable`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VoteRange {
     by: ProcId,
     start: usize,

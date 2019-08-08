@@ -244,7 +244,7 @@ impl Newt {
 type ToSend = Option<(Message, Vec<ProcId>)>;
 
 // `Newt` protocol messages
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     MSubmit {
         cmd: Command,
@@ -401,10 +401,22 @@ mod tests {
 
         // handle the first mcollectack
         let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
-        assert!(mcommits.pop().unwrap().is_none());
+        let mcommit_tosend = mcommits.pop().unwrap();
+        // no mcommit yet
+        assert!(mcommit_tosend.is_none());
 
         // handle the second mcollectack
         let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
-        assert!(mcommits.pop().unwrap().is_some());
+        let mcommit_tosend = mcommits.pop().unwrap();
+        // there's an mcommit now
+        assert!(mcommit_tosend.is_some());
+
+        // the mcommit is sent to everyone
+        assert_eq!(mcommit_tosend.clone().unwrap().1.len(), n);
+
+        // all processes handle it
+        let nones = router.route_to_many(mcommit_tosend);
+        // and no reply is sent
+        assert_eq!(nones, vec![None, None, None]);
     }
 }

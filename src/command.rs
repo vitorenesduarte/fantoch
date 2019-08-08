@@ -10,7 +10,7 @@ impl Object {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Command {
     objects: Vec<Object>,
 }
