@@ -237,6 +237,9 @@ impl Newt {
 
         // do nothing
         None
+
+        // TODO generate phantom votes if committed clock is higher than the
+        // local object's clock
     }
 }
 
