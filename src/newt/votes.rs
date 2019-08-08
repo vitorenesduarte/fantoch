@@ -12,8 +12,15 @@ pub struct Votes {
 }
 
 impl Votes {
-    /// Creates a `Votes` instance.
-    pub fn new(cmd: &Command) -> Self {
+    /// Creates an uninitialized `Votes` instance.
+    pub fn uninit() -> Self {
+        Votes {
+            votes: BTreeMap::new(),
+        }
+    }
+
+    /// Creates an initialized `Votes` instance.
+    pub fn from(cmd: &Command) -> Self {
         // create empty votes
         let votes = cmd
             .objects_clone()
@@ -40,6 +47,9 @@ impl Votes {
             // add vote to this object's votes
             object_votes.push(vote);
         }
+
+        // check there's nothing else in the proc votes iterator
+        assert!(proc_votes.next().is_none());
     }
 }
 
@@ -88,11 +98,11 @@ mod tests {
 
         // command a
         let command_a = Command::new(vec![object_a.clone()]);
-        let mut votes_a = Votes::new(&command_a);
+        let mut votes_a = Votes::from(&command_a);
 
         // command b
         let command_ab = Command::new(vec![object_a.clone(), object_b.clone()]);
-        let mut votes_ab = Votes::new(&command_ab);
+        let mut votes_ab = Votes::from(&command_ab);
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)

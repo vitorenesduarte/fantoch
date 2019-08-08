@@ -9,8 +9,13 @@ pub struct QuorumClocks {
 }
 
 impl QuorumClocks {
-    /// Create a new `QuorumClocks` instance.
-    pub fn new(fast_quorum_size: usize) -> Self {
+    /// Creates an uninitiliazed `QuorumClocks` instance.
+    pub fn uninit() -> Self {
+        Self::from(0)
+    }
+
+    /// Creates an initiliazed `QuorumClocks` instance.
+    pub fn from(fast_quorum_size: usize) -> Self {
         QuorumClocks {
             fast_quorum_size,
             clocks: HashMap::new(),
@@ -69,7 +74,7 @@ mod tests {
     fn contains() {
         // quorum clocks
         let fast_quorum_size = 3;
-        let mut quorum_clocks = QuorumClocks::new(fast_quorum_size);
+        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -92,7 +97,7 @@ mod tests {
     fn all() {
         // quorum clocks
         let fast_quorum_size = 3;
-        let mut quorum_clocks = QuorumClocks::new(fast_quorum_size);
+        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -108,7 +113,7 @@ mod tests {
         // -------------
         // quorum clocks
         let fast_quorum_size = 3;
-        let mut quorum_clocks = QuorumClocks::new(fast_quorum_size);
+        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -121,7 +126,7 @@ mod tests {
         // -------------
         // quorum clocks
         let fast_quorum_size = 10;
-        let mut quorum_clocks = QuorumClocks::new(fast_quorum_size);
+        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);

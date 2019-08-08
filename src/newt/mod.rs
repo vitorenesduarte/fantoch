@@ -111,8 +111,11 @@ impl Newt {
         quorum: Vec<ProcId>,
         clock: usize,
     ) -> ToSend {
-        // discard message if no longer in START (i.e. not in the hashmap)
-        if self.dot_to_info.contains_key(&dot) {
+        // get message info
+        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+
+        // discard message if no longer in START
+        if info.status != Status::START {
             return None;
         }
 
@@ -128,19 +131,20 @@ impl Newt {
         // TODO we could probably save HashMap operations if the previous two
         // steps are performed together
 
-        // create votes
-        let votes = Votes::new(&cmd);
+        // create votes and quorum clocks
+        let votes = Votes::from(&cmd);
+        let quorum_clocks = QuorumClocks::from(self.bp.fast_quorum_size);
 
-        // update dot to info
-        let info = Info {
-            status: Status::COLLECT,
-            quorum,
-            cmd: Some(cmd),
-            clock,
-            votes,
-            quorum_clocks: QuorumClocks::new(self.fast_quorum_size),
-        };
-        self.dot_to_info.insert(dot, info);
+        // TODO above we have the same borrow checker problem that doesn't know
+        // how toderef, as in the MCollectAck handler
+
+        // update info
+        info.status = Status::COLLECT;
+        info.quorum = quorum;
+        info.cmd = Some(cmd);
+        info.clock = clock;
+        info.votes = votes;
+        info.quorum_clocks = quorum_clocks;
 
         // create `MCollectAck`
         let mcollectack = Message::MCollectAck {
@@ -161,49 +165,47 @@ impl Newt {
         clock: usize,
         proc_votes: ProcVotes,
     ) -> ToSend {
-        if let Some(info) = self.dot_to_info.get_mut(&dot) {
-            if info.status != Status::COLLECT
-                || info.quorum_clocks.contains(&from)
-            {
-                // do nothing if we're no longer COLLECT or if this is a
-                // duplicated message
-                return None;
-            }
-            // update votes
-            info.votes.add(proc_votes);
+        // get message info
+        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
 
-            // update quorum clocks
-            info.quorum_clocks.add(from, clock);
+        if info.status != Status::COLLECT || info.quorum_clocks.contains(&from)
+        {
+            // do nothing if we're no longer COLLECT or if this is a
+            // duplicated message
+            return None;
+        }
+        // update votes
+        info.votes.add(proc_votes);
 
-            // TODO local clock bump upon each `MCollectAck`
+        // update quorum clocks
+        info.quorum_clocks.add(from, clock);
 
-            // check if we have all necessary replies
-            if info.quorum_clocks.all() {
-                // compute max and its number of occurences
-                let (max_clock, max_count) = info.quorum_clocks.max_and_count();
+        // TODO local clock bump upon each `MCollectAck`
 
-                // fast path condition: if the max was reported by at least f
-                // processes
-                if max_count >= self.bp.config.f() {
-                    // TODO above, we had to use self.bp.config because the
-                    // borrow-checker couldn't figure it out:
-                    // - is it some issue when dereferencing?
+        // check if we have all necessary replies
+        if info.quorum_clocks.all() {
+            // compute max and its number of occurences
+            let (max_clock, max_count) = info.quorum_clocks.max_and_count();
 
-                    // create `MCommit`
-                    let mcommit = Message::MCommit {
-                        dot,
-                        cmd: info.cmd.clone().unwrap(),
-                        clock: max_clock,
-                        votes: info.votes.clone(),
-                    };
+            // fast path condition: if the max was reported by at least f
+            // processes
+            if max_count >= self.bp.config.f() {
+                // TODO above, we had to use self.bp.config because the
+                // borrow-checker couldn't figure it out:
+                // - is it some issue when dereferencing?
 
-                    // return `ToSend`
-                    Some((mcommit, self.all_procs.clone().unwrap()))
-                } else {
-                    // slow path
-                    None
-                }
+                // create `MCommit`
+                let mcommit = Message::MCommit {
+                    dot,
+                    cmd: info.cmd.clone().unwrap(),
+                    clock: max_clock,
+                    votes: info.votes.clone(),
+                };
+
+                // return `ToSend`
+                Some((mcommit, self.all_procs.clone().unwrap()))
             } else {
+                // slow path
                 None
             }
         } else {
@@ -218,6 +220,22 @@ impl Newt {
         clock: usize,
         votes: Votes,
     ) -> ToSend {
+        // get message info
+        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+
+        if info.status == Status::COMMIT {
+            // do nothing if we're already COMMIT
+            // TODO what about the executed status?
+            return None;
+        }
+
+        // update info
+        info.status = Status::COMMIT;
+        info.cmd = Some(cmd);
+        info.clock = clock;
+        info.votes = votes;
+
+        // do nothing
         None
     }
 }
@@ -256,15 +274,29 @@ pub enum Message {
 struct Info {
     status: Status,
     quorum: Vec<ProcId>,
-    cmd: Option<Command>,
+    cmd: Option<Command>, // `None` if noOp
     clock: usize,
     votes: Votes,
     quorum_clocks: QuorumClocks,
 }
 
+impl Info {
+    fn new() -> Self {
+        Info {
+            status: Status::START,
+            quorum: vec![],
+            cmd: None,
+            clock: 0,
+            votes: Votes::uninit(),
+            quorum_clocks: QuorumClocks::uninit(),
+        }
+    }
+}
+
 /// `Status` of commands.
 #[derive(PartialEq)]
 enum Status {
+    START,
     COLLECT,
     COMMIT,
 }
