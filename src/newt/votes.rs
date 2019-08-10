@@ -1,6 +1,8 @@
 use crate::base::ProcId;
 use crate::command::{Command, Object};
-use std::collections::BTreeMap;
+use crate::config::Config;
+use std::collections::{BTreeMap, HashMap};
+use threshold::{AEClock, Dot};
 
 /// ProcVotes are the Votes by some Process on some command.
 pub type ProcVotes = BTreeMap<Object, VoteRange>;
@@ -58,13 +60,13 @@ impl Votes {
 #[derive(Debug, Clone, PartialEq)]
 pub struct VoteRange {
     by: ProcId,
-    start: usize,
-    end: usize,
+    start: u64,
+    end: u64,
 }
 
 impl VoteRange {
     /// Create a new `VoteRange` instance.
-    pub fn new(by: ProcId, start: usize, end: usize) -> Self {
+    pub fn new(by: ProcId, start: u64, end: u64) -> Self {
         VoteRange { by, start, end }
     }
 
@@ -74,8 +76,47 @@ impl VoteRange {
     }
 
     /// Get all votes in this range.
-    pub fn votes(&self) -> Vec<usize> {
+    pub fn votes(&self) -> Vec<u64> {
         (self.start..self.end + 1).collect()
+    }
+}
+
+pub struct VotesTable {
+    config: Config,
+    votes: HashMap<Object, AEClock<ProcId>>,
+}
+
+impl VotesTable {
+    /// Create a new `VotesTable` instance.
+    pub fn new(config: Config) -> Self {
+        VotesTable {
+            config,
+            votes: HashMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, cmd: Option<Command>, clock: u64, votes: Votes) {
+        self.add_votes(votes);
+    }
+
+    fn add_votes(&mut self, votes: Votes) {
+        votes.votes.into_iter().for_each(|(object, vote_ranges)| {
+            // get the clock representing the votes on this object
+            let object_votes =
+                self.votes.entry(object).or_insert_with(|| AEClock::new());
+
+            // for each new vote range
+            vote_ranges.into_iter().for_each(|vote_range| {
+                // TODO this step could be more efficient if `threshold::Clock`
+                // supports adding ranges to the clock
+                vote_range.votes().into_iter().for_each(|vote| {
+                    // TODO use new `threshold::Clock` API that does not require
+                    // creating a `Dot`
+                    let dot = Dot::new(&vote_range.voter(), vote);
+                    object_votes.add_dot(&dot);
+                })
+            });
+        });
     }
 }
 

@@ -2,7 +2,7 @@ use crate::config::Config;
 use crate::planet::{Planet, Region};
 
 pub type ProcId = usize;
-pub type Dot = (ProcId, usize);
+pub type Dot = (ProcId, u64);
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {
@@ -11,7 +11,7 @@ pub struct BaseProc {
     pub planet: Planet,
     pub config: Config,
     pub fast_quorum_size: usize,
-    pub cmd_count: usize,
+    pub cmd_count: u64,
     pub fast_quorum: Option<Vec<ProcId>>,
     pub all_procs: Option<Vec<ProcId>>,
 }

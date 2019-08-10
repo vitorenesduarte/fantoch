@@ -6,7 +6,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct Clocks {
     id: ProcId,
-    clocks: HashMap<Object, usize>,
+    clocks: HashMap<Object, u64>,
 }
 
 impl Clocks {
@@ -19,7 +19,7 @@ impl Clocks {
     }
 
     /// Compute the clock of this command.
-    pub fn clock(&self, cmd: &Command) -> usize {
+    pub fn clock(&self, cmd: &Command) -> u64 {
         // compute the maximum between all clocks of the objects touched by this
         // command
         cmd.objects()
@@ -30,12 +30,12 @@ impl Clocks {
     }
 
     /// Retrives the current clock of some object.
-    fn object_clock(&self, obj: &Object) -> usize {
+    fn object_clock(&self, obj: &Object) -> u64 {
         self.clocks.get(obj).cloned().unwrap_or(0)
     }
 
     /// Computes `ProcVotes`.
-    pub fn proc_votes(&self, cmd: &Command, clock: usize) -> ProcVotes {
+    pub fn proc_votes(&self, cmd: &Command, clock: u64) -> ProcVotes {
         cmd.objects_clone()
             .into_iter()
             .map(|object| {
@@ -52,7 +52,7 @@ impl Clocks {
     }
 
     /// Bump all objects clocks to `clock`.
-    pub fn bump_to(&mut self, cmd: &Command, clock: usize) {
+    pub fn bump_to(&mut self, cmd: &Command, clock: u64) {
         for object in cmd.objects_clone() {
             self.clocks.insert(object, clock);
         }

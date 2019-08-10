@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct QuorumClocks {
     fast_quorum_size: usize,
-    clocks: HashMap<ProcId, usize>,
+    clocks: HashMap<ProcId, u64>,
 }
 
 impl QuorumClocks {
@@ -23,7 +23,7 @@ impl QuorumClocks {
     }
 
     /// Compute the clock of this command.
-    pub fn add(&mut self, proc_id: ProcId, clock: usize) {
+    pub fn add(&mut self, proc_id: ProcId, clock: u64) {
         assert!(self.clocks.len() < self.fast_quorum_size);
         self.clocks.insert(proc_id, clock);
     }
@@ -40,7 +40,7 @@ impl QuorumClocks {
 
     /// Compute the maximum clock and the number of times it was reported by the
     /// quorum.
-    pub fn max_and_count(&self) -> (usize, usize) {
+    pub fn max_and_count(&self) -> (u64, usize) {
         let mut max_count = 0;
         let max = self.clocks.iter().fold(0, |max, (_, proc_clock)| {
             match max.cmp(proc_clock) {

@@ -15,7 +15,7 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
-use crate::newt::votes::{ProcVotes, Votes};
+use crate::newt::votes::{ProcVotes, Votes, VotesTable};
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
@@ -24,6 +24,7 @@ pub struct Newt {
     bp: BaseProc,
     clocks: Clocks,
     dot_to_info: HashMap<Dot, Info>,
+    votes_table: VotesTable,
 }
 
 impl Newt {
@@ -37,14 +38,19 @@ impl Newt {
         // compute fast quorum size
         let fast_quorum_size = Newt::fast_quorum_size(&config);
 
-        // create `BaseProc`
-        let bp = BaseProc::new(id, region, planet, config, fast_quorum_size);
+        // create `BaseProc`, `Clocks`, dot_to_info and `VotesTable`    :w
+        let bp =
+            BaseProc::new(id, region, planet, config.clone(), fast_quorum_size);
+        let clocks = Clocks::new(id);
+        let dot_to_info = HashMap::new();
+        let votes_table = VotesTable::new(config);
 
         // create `Newt`
         Newt {
             bp,
-            clocks: Clocks::new(id),
-            dot_to_info: HashMap::new(),
+            clocks,
+            dot_to_info,
+            votes_table,
         }
     }
 
@@ -109,7 +115,7 @@ impl Newt {
         dot: Dot,
         cmd: Command,
         quorum: Vec<ProcId>,
-        clock: usize,
+        clock: u64,
     ) -> ToSend {
         // get message info
         let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
@@ -162,7 +168,7 @@ impl Newt {
         &mut self,
         from: ProcId,
         dot: Dot,
-        clock: usize,
+        clock: u64,
         proc_votes: ProcVotes,
     ) -> ToSend {
         // get message info
@@ -217,7 +223,7 @@ impl Newt {
         &mut self,
         dot: Dot,
         cmd: Command,
-        clock: usize,
+        clock: u64,
         votes: Votes,
     ) -> ToSend {
         // get message info
@@ -234,6 +240,10 @@ impl Newt {
         info.cmd = Some(cmd);
         info.clock = clock;
         info.votes = votes;
+
+        // update votes table
+        self.votes_table
+            .add(info.cmd.clone(), info.clock, info.votes.clone());
 
         // do nothing
         None
@@ -257,18 +267,18 @@ pub enum Message {
         dot: Dot,
         cmd: Command,
         quorum: Vec<ProcId>,
-        clock: usize,
+        clock: u64,
     },
     MCollectAck {
         from: ProcId,
         dot: Dot,
-        clock: usize,
+        clock: u64,
         proc_votes: ProcVotes,
     },
     MCommit {
         dot: Dot,
         cmd: Command,
-        clock: usize,
+        clock: u64,
         votes: Votes,
     },
 }
@@ -278,7 +288,7 @@ struct Info {
     status: Status,
     quorum: Vec<ProcId>,
     cmd: Option<Command>, // `None` if noOp
-    clock: usize,
+    clock: u64,
     votes: Votes,
     quorum_clocks: QuorumClocks,
 }
