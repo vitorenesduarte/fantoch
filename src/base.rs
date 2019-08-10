@@ -10,7 +10,8 @@ pub struct BaseProc {
     pub region: Region,
     pub planet: Planet,
     pub config: Config,
-    pub fast_quorum_size: usize,
+    // fast quorum size
+    pub q: usize,
     pub cmd_count: u64,
     pub fast_quorum: Option<Vec<ProcId>>,
     pub all_procs: Option<Vec<ProcId>>,
@@ -23,14 +24,14 @@ impl BaseProc {
         region: Region,
         planet: Planet,
         config: Config,
-        fast_quorum_size: usize,
+        q: usize,
     ) -> Self {
         BaseProc {
             id,
             region,
             planet,
             config,
-            fast_quorum_size,
+            q,
             cmd_count: 0,
             fast_quorum: None,
             all_procs: None,
@@ -54,13 +55,13 @@ impl BaseProc {
             }
         });
 
-        // create fast quorum by taking the first `fast_quorum_size` elements
+        // create fast quorum by taking the first `q` elements
         let mut count = 0;
         let fast_quorum = procs
             .iter()
             .take_while(|_| {
                 count += 1;
-                count <= self.fast_quorum_size
+                count <= self.q
             })
             .map(|(id, _)| id)
             .cloned()
@@ -98,9 +99,8 @@ mod tests {
         let id = 0;
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
-        let fast_quorum_size = 2;
-        let mut bp =
-            BaseProc::new(id, region, planet, config, fast_quorum_size);
+        let q = 2;
+        let mut bp = BaseProc::new(id, region, planet, config, q);
 
         assert_eq!(bp.next_dot(), (id, 1));
         assert_eq!(bp.next_dot(), (id, 2));
@@ -139,9 +139,8 @@ mod tests {
         let id = 8;
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
-        let fast_quorum_size = 6;
-        let mut bp =
-            BaseProc::new(id, region, planet, config, fast_quorum_size);
+        let q = 6;
+        let mut bp = BaseProc::new(id, region, planet, config, q);
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);

@@ -36,14 +36,15 @@ impl Newt {
         config: Config,
     ) -> Self {
         // compute fast quorum size
-        let fast_quorum_size = Newt::fast_quorum_size(&config);
+        let n = config.n();
+        let f = config.f();
+        let q = Newt::fast_quorum_size(f);
 
-        // create `BaseProc`, `Clocks`, dot_to_info and `VotesTable`    :w
-        let bp =
-            BaseProc::new(id, region, planet, config.clone(), fast_quorum_size);
+        // create `BaseProc`, `Clocks`, dot_to_info and `VotesTable`
+        let bp = BaseProc::new(id, region, planet, config, q);
         let clocks = Clocks::new(id);
         let dot_to_info = HashMap::new();
-        let votes_table = VotesTable::new(config);
+        let votes_table = VotesTable::new(n, q);
 
         // create `Newt`
         Newt {
@@ -54,9 +55,9 @@ impl Newt {
         }
     }
 
-    /// Computes `Newt` fast quorum size.
-    fn fast_quorum_size(config: &Config) -> usize {
-        2 * config.f()
+    /// Computes `Newt` fast quorum size given the number of tolerated faults.
+    fn fast_quorum_size(f: usize) -> usize {
+        2 * f
     }
 
     /// Handles messages by forwarding them to the respective handler.
@@ -139,7 +140,7 @@ impl Newt {
 
         // create votes and quorum clocks
         let votes = Votes::from(&cmd);
-        let quorum_clocks = QuorumClocks::from(self.bp.fast_quorum_size);
+        let quorum_clocks = QuorumClocks::from(self.bp.q);
 
         // TODO above we have the same borrow checker problem that doesn't know
         // how toderef, as in the MCollectAck handler
@@ -341,11 +342,8 @@ mod tests {
 
     #[test]
     fn fast_quorum_size() {
-        // n and f
-        let n = 5;
-        let f = 1;
-        let config = Config::new(n, f);
-        assert_eq!(Newt::fast_quorum_size(&config), 2);
+        assert_eq!(Newt::fast_quorum_size(1), 2);
+        assert_eq!(Newt::fast_quorum_size(2), 4);
     }
 
     #[test]

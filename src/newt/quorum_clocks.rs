@@ -4,7 +4,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct QuorumClocks {
-    fast_quorum_size: usize,
+    // fast quorum size
+    q: usize,
     clocks: HashMap<ProcId, u64>,
 }
 
@@ -15,16 +16,16 @@ impl QuorumClocks {
     }
 
     /// Creates an initiliazed `QuorumClocks` instance.
-    pub fn from(fast_quorum_size: usize) -> Self {
+    pub fn from(q: usize) -> Self {
         QuorumClocks {
-            fast_quorum_size,
+            q,
             clocks: HashMap::new(),
         }
     }
 
     /// Compute the clock of this command.
     pub fn add(&mut self, proc_id: ProcId, clock: u64) {
-        assert!(self.clocks.len() < self.fast_quorum_size);
+        assert!(self.clocks.len() < self.q);
         self.clocks.insert(proc_id, clock);
     }
 
@@ -35,7 +36,7 @@ impl QuorumClocks {
 
     /// Check if we have votes from all fast quorum processes.
     pub fn all(&self) -> bool {
-        self.clocks.len() == self.fast_quorum_size
+        self.clocks.len() == self.q
     }
 
     /// Compute the maximum clock and the number of times it was reported by the
@@ -73,8 +74,8 @@ mod tests {
     #[test]
     fn contains() {
         // quorum clocks
-        let fast_quorum_size = 3;
-        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
+        let q = 3;
+        let mut quorum_clocks = QuorumClocks::from(q);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -96,8 +97,8 @@ mod tests {
     #[test]
     fn all() {
         // quorum clocks
-        let fast_quorum_size = 3;
-        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
+        let q = 3;
+        let mut quorum_clocks = QuorumClocks::from(q);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -112,8 +113,8 @@ mod tests {
     fn max_and_count() {
         // -------------
         // quorum clocks
-        let fast_quorum_size = 3;
-        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
+        let q = 3;
+        let mut quorum_clocks = QuorumClocks::from(q);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -125,8 +126,8 @@ mod tests {
 
         // -------------
         // quorum clocks
-        let fast_quorum_size = 10;
-        let mut quorum_clocks = QuorumClocks::from(fast_quorum_size);
+        let q = 10;
+        let mut quorum_clocks = QuorumClocks::from(q);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);

@@ -82,15 +82,20 @@ impl VoteRange {
 }
 
 pub struct VotesTable {
-    config: Config,
+    /// number of procs
+    n: usize,
+    /// fast quorum size
+    q: usize,
     votes: HashMap<Object, AEClock<ProcId>>,
 }
 
 impl VotesTable {
-    /// Create a new `VotesTable` instance.
-    pub fn new(config: Config) -> Self {
+    /// Create a new `VotesTable` instance given the number of processes and the
+    /// fast quorum size.
+    pub fn new(n: usize, q: usize) -> Self {
         VotesTable {
-            config,
+            n,
+            q,
             votes: HashMap::new(),
         }
     }
