@@ -35,16 +35,15 @@ impl Newt {
         planet: Planet,
         config: Config,
     ) -> Self {
-        // compute fast quorum size
-        let n = config.n();
-        let f = config.f();
-        let q = Newt::fast_quorum_size(f);
+        // compute fast quorum size and stability threshold
+        let q = Newt::fast_quorum_size(&config);
+        let stability_threshold = Newt::stability_threshold(&config);
 
         // create `BaseProc`, `Clocks`, dot_to_info and `VotesTable`
         let bp = BaseProc::new(id, region, planet, config, q);
         let clocks = Clocks::new(id);
         let dot_to_info = HashMap::new();
-        let votes_table = VotesTable::new(n, q);
+        let votes_table = VotesTable::new(stability_threshold);
 
         // create `Newt`
         Newt {
@@ -55,9 +54,14 @@ impl Newt {
         }
     }
 
-    /// Computes `Newt` fast quorum size given the number of tolerated faults.
-    fn fast_quorum_size(f: usize) -> usize {
-        2 * f
+    /// Computes `Newt` fast quorum size.
+    fn fast_quorum_size(config: &Config) -> usize {
+        2 * config.f()
+    }
+
+    /// Computes `Newt` stability threshold.
+    fn stability_threshold(config: &Config) -> usize {
+        config.n() - config.f()
     }
 
     /// Handles messages by forwarding them to the respective handler.
@@ -341,9 +345,14 @@ mod tests {
     use crate::planet::{Planet, Region};
 
     #[test]
-    fn fast_quorum_size() {
-        assert_eq!(Newt::fast_quorum_size(1), 2);
-        assert_eq!(Newt::fast_quorum_size(2), 4);
+    fn newt_parameters() {
+        let config = Config::new(7, 1);
+        assert_eq!(Newt::fast_quorum_size(&config), 2);
+        assert_eq!(Newt::stability_threshold(&config), 6);
+
+        let config = Config::new(7, 2);
+        assert_eq!(Newt::fast_quorum_size(&config), 4);
+        assert_eq!(Newt::stability_threshold(&config), 5);
     }
 
     #[test]

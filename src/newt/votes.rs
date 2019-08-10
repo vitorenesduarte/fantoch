@@ -1,7 +1,6 @@
 use crate::base::ProcId;
 use crate::command::{Command, Object};
-use crate::config::Config;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use threshold::{AEClock, Dot};
 
 /// ProcVotes are the Votes by some Process on some command.
@@ -82,46 +81,56 @@ impl VoteRange {
 }
 
 pub struct VotesTable {
-    /// number of procs
-    n: usize,
-    /// fast quorum size
-    q: usize,
+    stability_threshold: usize,
     votes: HashMap<Object, AEClock<ProcId>>,
+    cmds: HashMap<Object, BTreeSet<(u64, Command)>>,
 }
 
 impl VotesTable {
-    /// Create a new `VotesTable` instance given the number of processes and the
-    /// fast quorum size.
-    pub fn new(n: usize, q: usize) -> Self {
+    /// Create a new `VotesTable` instance given the stability threshold.
+    pub fn new(stability_threshold: usize) -> Self {
         VotesTable {
-            n,
-            q,
+            stability_threshold,
             votes: HashMap::new(),
+            cmds: HashMap::new(),
         }
     }
 
     pub fn add(&mut self, cmd: Option<Command>, clock: u64, votes: Votes) {
-        self.add_votes(votes);
+        let stable_clocks = self.add_votes(votes);
     }
 
-    fn add_votes(&mut self, votes: Votes) {
-        votes.votes.into_iter().for_each(|(object, vote_ranges)| {
-            // get the clock representing the votes on this object
-            let object_votes =
-                self.votes.entry(object).or_insert_with(|| AEClock::new());
+    fn add_votes(&mut self, votes: Votes) -> Vec<(Object, u64)> {
+        votes
+            .votes
+            .into_iter()
+            .map(|(object, vote_ranges)| {
+                // get the clock representing the votes on this object
+                let object_votes = self
+                    .votes
+                    .entry(object.clone())
+                    .or_insert_with(|| AEClock::new());
 
-            // for each new vote range
-            vote_ranges.into_iter().for_each(|vote_range| {
-                // TODO this step could be more efficient if `threshold::Clock`
-                // supports adding ranges to the clock
-                vote_range.votes().into_iter().for_each(|vote| {
-                    // TODO use new `threshold::Clock` API that does not require
-                    // creating a `Dot`
-                    let dot = Dot::new(&vote_range.voter(), vote);
-                    object_votes.add_dot(&dot);
-                })
-            });
-        });
+                // for each new vote range
+                vote_ranges.into_iter().for_each(|vote_range| {
+                    // TODO this step could be more efficient if
+                    // `threshold::Clock` supports adding
+                    // ranges to the clock
+                    vote_range.votes().into_iter().for_each(|vote| {
+                        // TODO use new `threshold::Clock::add` API that does
+                        // not require creating a `Dot`
+                        let dot = Dot::new(&vote_range.voter(), vote);
+                        object_votes.add_dot(&dot);
+                    })
+                });
+
+                // compute the stable clock for this object
+                let stable_clock = object_votes
+                    .frontier_threshold(self.stability_threshold)
+                    .unwrap();
+                (object, stable_clock)
+            })
+            .collect()
     }
 }
 
