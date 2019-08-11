@@ -1,38 +1,36 @@
+use std::collections::BTreeMap;
+
 pub type Key = String;
 pub type Value = String;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
-    Get(Key),
-    Put(Key, Value),
-}
-
-impl Command {
-    /// Retrieves the `Key` accessed by this command.
-    pub fn key(&self) -> &Key{
-        match self {
-            Command::Get(key) => key,
-            Command::Put(key, _) => key,
-        }
-    }
+    Get,
+    Put(Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MultiCommand {
-    commands: Vec<Command>,
+    commands: BTreeMap<Key, Command>,
 }
 
 impl MultiCommand {
     /// Create a new `MultiCommand`.
-    pub fn new(commands: Vec<Command>) -> Self {
+    pub fn new(commands: BTreeMap<Key, Command>) -> Self {
         MultiCommand { commands }
+    }
+
+    /// Creates a multi-get command.
+    pub fn get(keys: Vec<Key>) -> Self {
+        let commands = keys.into_iter().map(|key| (key, Command::Get)).collect();
+        Self::new(commands)
     }
 
     /// Returns references to list of keys modified by this command.
     pub fn keys(&self) -> Vec<&Key> {
         self.commands
             .iter()
-            .map(|command| command.key())
+            .map(|(key, _)| key)
             .collect()
     }
 }

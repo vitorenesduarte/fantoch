@@ -1,5 +1,5 @@
-use crate::base::{ProcId, Dot};
-use crate::command::{Key, MultiCommand};
+use crate::base::ProcId;
+use crate::command::{Key, Command, MultiCommand};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
@@ -83,7 +83,7 @@ impl VoteRange {
 pub struct VotesTable {
     stability_threshold: usize,
     votes: HashMap<Key, AEClock<ProcId>>,
-    cmds: HashMap<Key, BTreeMap<SortId, MultiCommand>>,
+    cmds: HashMap<Key, BTreeMap<SortId, Command>>,
 }
 
 pub struct SortId {
@@ -102,7 +102,10 @@ impl VotesTable {
     }
 
     /// Add a new command, its clock and votes to the votes table.
-    pub fn add(&mut self, dot: Dot, cmd: Option<MultiCommand>, clock: u64, votes: Votes) {
+    pub fn add(&mut self, proc_id: ProcId, cmd: Option<MultiCommand>, clock: u64, votes: Votes) {
+        // create sort identifier:
+        // - if two commands got assigned the same clock, they will be ordered by the process id
+        let sort_id = (clock, proc_id);
         let stable_clocks = self.add_votes(votes);
 
         if let Some(cmd) = cmd {
@@ -158,16 +161,12 @@ mod tests {
         let key_a = String::from("A");
         let key_b = String::from("B");
         
-        // key command
-        let get_key_a = Command::Get(key_a.clone());
-        let get_key_b = Command::Get(key_b.clone());
-
         // command a
-        let cmd_a = MultiCommand::new(vec![get_key_a.clone()]);
+        let cmd_a = MultiCommand::get(vec![key_a.clone()]);
         let mut votes_a = Votes::from(&cmd_a);
 
         // command b
-        let cmd_ab = MultiCommand::new(vec![get_key_a.clone(), get_key_b.clone()]);
+        let cmd_ab = MultiCommand::get(vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::from(&cmd_ab);
 
         // orders on each process:

@@ -231,6 +231,9 @@ impl Newt {
         clock: u64,
         votes: Votes,
     ) -> ToSend {
+        // get original proc id
+        let proc_id = dot.0;
+
         // get message info
         let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
 
@@ -248,7 +251,7 @@ impl Newt {
 
         // update votes table
         self.votes_table
-            .add(dot, info.cmd.clone(), info.clock, info.votes.clone());
+            .add(proc_id, info.cmd.clone(), info.clock, info.votes.clone());
 
         // do nothing
         None
@@ -404,8 +407,8 @@ mod tests {
         router.set_proc(2, newt_2);
 
         // create a command
-        let get_key_a = Command::Get(String::from("A"));
-        let cmd = MultiCommand::new(vec![get_key_a]);
+        let key_a = String::from("A");
+        let cmd = MultiCommand::get(vec![key_a]);
 
         // submit it in newt_0
         let msubmit = Message::MSubmit { cmd };
