@@ -4,6 +4,9 @@ mod clocks;
 // This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
 mod votes;
 
+// This module contains the definition of `MultiVotesTable`.
+mod votes_table;
+
 // This module contains the definition of `QuorumClocks`.
 mod quorum_clocks;
 
@@ -15,7 +18,8 @@ use crate::command::MultiCommand;
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
-use crate::newt::votes::{ProcVotes, Votes, VotesTable};
+use crate::newt::votes::{ProcVotes, Votes};
+use crate::newt::votes_table::VotesTable;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
