@@ -250,8 +250,12 @@ impl Newt {
         info.votes = votes;
 
         // update votes table
-        self.votes_table
-            .add(proc_id, info.cmd.clone(), info.clock, info.votes.clone());
+        self.votes_table.add(
+            proc_id,
+            info.cmd.clone(),
+            info.clock,
+            info.votes.clone(),
+        );
 
         // do nothing
         None
@@ -341,7 +345,7 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{MultiCommand, Command};
+    use crate::command::{Command, MultiCommand};
     use crate::config::Config;
     use crate::newt::router::Router;
     use crate::newt::{Message, Newt};

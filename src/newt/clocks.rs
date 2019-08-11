@@ -1,5 +1,5 @@
 use crate::base::ProcId;
-use crate::command::{MultiCommand, Key};
+use crate::command::{Key, MultiCommand};
 use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
 
@@ -20,7 +20,8 @@ impl Clocks {
 
     /// Compute the clock of this command.
     pub fn clock(&self, cmd: &MultiCommand) -> u64 {
-        // compute the maximum between all clocks of the keys accessed by this command
+        // compute the maximum between all clocks of the keys accessed by this
+        // command
         cmd.keys()
             .iter()
             .map(|key| self.key_clock(key))
@@ -40,11 +41,8 @@ impl Clocks {
             .map(|key| {
                 // vote from the current clock value + 1 until the highest vote
                 // (i.e. the maximum between all key's clocks)
-                let vr = VoteRange::new(
-                    self.id,
-                    self.key_clock(key) + 1,
-                    clock,
-                );
+                let vr =
+                    VoteRange::new(self.id, self.key_clock(key) + 1, clock);
                 (key.clone(), vr)
             })
             .collect()

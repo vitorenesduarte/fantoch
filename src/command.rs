@@ -22,15 +22,13 @@ impl MultiCommand {
 
     /// Creates a multi-get command.
     pub fn get(keys: Vec<Key>) -> Self {
-        let commands = keys.into_iter().map(|key| (key, Command::Get)).collect();
+        let commands =
+            keys.into_iter().map(|key| (key, Command::Get)).collect();
         Self::new(commands)
     }
 
     /// Returns references to list of keys modified by this command.
     pub fn keys(&self) -> Vec<&Key> {
-        self.commands
-            .iter()
-            .map(|(key, _)| key)
-            .collect()
+        self.commands.iter().map(|(key, _)| key).collect()
     }
 }

@@ -1,5 +1,5 @@
 use crate::base::ProcId;
-use crate::command::{Key, Command, MultiCommand};
+use crate::command::{Command, Key, MultiCommand};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
@@ -102,9 +102,16 @@ impl VotesTable {
     }
 
     /// Add a new command, its clock and votes to the votes table.
-    pub fn add(&mut self, proc_id: ProcId, cmd: Option<MultiCommand>, clock: u64, votes: Votes) {
+    pub fn add(
+        &mut self,
+        proc_id: ProcId,
+        cmd: Option<MultiCommand>,
+        clock: u64,
+        votes: Votes,
+    ) {
         // create sort identifier:
-        // - if two commands got assigned the same clock, they will be ordered by the process id
+        // - if two commands got assigned the same clock, they will be ordered
+        //   by the process id
         let sort_id = (clock, proc_id);
         let stable_clocks = self.add_votes(votes);
 
@@ -160,7 +167,7 @@ mod tests {
         // keys
         let key_a = String::from("A");
         let key_b = String::from("B");
-        
+
         // command a
         let cmd_a = MultiCommand::get(vec![key_a.clone()]);
         let mut votes_a = Votes::from(&cmd_a);
