@@ -4,7 +4,7 @@ use crate::command::{Command, Key, MultiCommand};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
-pub struct VotesTable {
+pub struct MultiVotesTable {
     stability_threshold: usize,
     votes: HashMap<Key, AEClock<ProcId>>,
     cmds: HashMap<Key, BTreeMap<SortId, Command>>,
@@ -15,10 +15,10 @@ pub struct SortId {
     proc_id: ProcId,
 }
 
-impl VotesTable {
-    /// Create a new `VotesTable` instance given the stability threshold.
+impl MultiVotesTable {
+    /// Create a new `MultiVotesTable` instance given the stability threshold.
     pub fn new(stability_threshold: usize) -> Self {
-        VotesTable {
+        MultiVotesTable {
             stability_threshold,
             votes: HashMap::new(),
             cmds: HashMap::new(),

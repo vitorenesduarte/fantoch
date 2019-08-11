@@ -19,7 +19,7 @@ use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
 use crate::newt::votes::{ProcVotes, Votes};
-use crate::newt::votes_table::VotesTable;
+use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
@@ -28,7 +28,7 @@ pub struct Newt {
     bp: BaseProc,
     clocks: Clocks,
     dot_to_info: HashMap<Dot, Info>,
-    votes_table: VotesTable,
+    table: MultiVotesTable,
 }
 
 impl Newt {
@@ -43,18 +43,18 @@ impl Newt {
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
 
-        // create `BaseProc`, `Clocks`, dot_to_info and `VotesTable`
+        // create `BaseProc`, `Clocks`, dot_to_info and `MultiVotesTable`
         let bp = BaseProc::new(id, region, planet, config, q);
         let clocks = Clocks::new(id);
         let dot_to_info = HashMap::new();
-        let votes_table = VotesTable::new(stability_threshold);
+        let table = MultiVotesTable::new(stability_threshold);
 
         // create `Newt`
         Newt {
             bp,
             clocks,
             dot_to_info,
-            votes_table,
+            table,
         }
     }
 
@@ -254,7 +254,7 @@ impl Newt {
         info.votes = votes;
 
         // update votes table
-        self.votes_table.add(
+        self.table.add(
             proc_id,
             info.cmd.clone(),
             info.clock,
