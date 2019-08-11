@@ -1,33 +1,38 @@
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct Object {
-    name: String,
+pub type Key = String;
+pub type Value = String;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Command {
+    Get(Key),
+    Put(Key, Value),
 }
 
-impl Object {
-    /// Create a new `Object`.
-    pub fn new<S: Into<String>>(name: S) -> Self {
-        Object { name: name.into() }
+impl Command {
+    /// Retrieves the `Key` accessed by this command.
+    pub fn key(&self) -> &Key{
+        match self {
+            Command::Get(key) => key,
+            Command::Put(key, _) => key,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Command {
-    objects: Vec<Object>,
+pub struct MultiCommand {
+    commands: Vec<Command>,
 }
 
-impl Command {
-    /// Create a new `Command`.
-    pub fn new(objects: Vec<Object>) -> Self {
-        Command { objects }
+impl MultiCommand {
+    /// Create a new `MultiCommand`.
+    pub fn new(commands: Vec<Command>) -> Self {
+        MultiCommand { commands }
     }
 
-    /// Returns references to list of objects modified by this command.
-    pub fn objects(&self) -> &Vec<Object> {
-        &self.objects
-    }
-
-    /// Returns list of objects modified by this command.
-    pub fn objects_clone(&self) -> Vec<Object> {
-        self.objects.clone()
+    /// Returns references to list of keys modified by this command.
+    pub fn keys(&self) -> Vec<&Key> {
+        self.commands
+            .iter()
+            .map(|command| command.key())
+            .collect()
     }
 }

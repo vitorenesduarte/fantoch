@@ -11,7 +11,7 @@ mod quorum_clocks;
 mod router;
 
 use crate::base::{BaseProc, Dot, ProcId};
-use crate::command::Command;
+use crate::command::MultiCommand;
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
@@ -91,7 +91,7 @@ impl Newt {
     }
 
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend {
+    fn handle_submit(&mut self, cmd: MultiCommand) -> ToSend {
         // compute the command identifier
         let dot = self.next_dot();
 
@@ -118,7 +118,7 @@ impl Newt {
         &mut self,
         from: ProcId,
         dot: Dot,
-        cmd: Command,
+        cmd: MultiCommand,
         quorum: Vec<ProcId>,
         clock: u64,
     ) -> ToSend {
@@ -136,7 +136,7 @@ impl Newt {
         // compute proc votes
         let proc_votes = self.clocks.proc_votes(&cmd, clock);
 
-        // bump all objects clocks to be `clock`
+        // bump all keys clocks to be `clock`
         self.clocks.bump_to(&cmd, clock);
 
         // TODO we could probably save HashMap operations if the previous two
@@ -227,7 +227,7 @@ impl Newt {
     fn handle_mcommit(
         &mut self,
         dot: Dot,
-        cmd: Command,
+        cmd: MultiCommand,
         clock: u64,
         votes: Votes,
     ) -> ToSend {
@@ -248,13 +248,13 @@ impl Newt {
 
         // update votes table
         self.votes_table
-            .add(info.cmd.clone(), info.clock, info.votes.clone());
+            .add(dot, info.cmd.clone(), info.clock, info.votes.clone());
 
         // do nothing
         None
 
         // TODO generate phantom votes if committed clock is higher than the
-        // local object's clock
+        // local key's clock
     }
 }
 
@@ -265,12 +265,12 @@ type ToSend = Option<(Message, Vec<ProcId>)>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     MSubmit {
-        cmd: Command,
+        cmd: MultiCommand,
     },
     MCollect {
         from: ProcId,
         dot: Dot,
-        cmd: Command,
+        cmd: MultiCommand,
         quorum: Vec<ProcId>,
         clock: u64,
     },
@@ -282,7 +282,7 @@ pub enum Message {
     },
     MCommit {
         dot: Dot,
-        cmd: Command,
+        cmd: MultiCommand,
         clock: u64,
         votes: Votes,
     },
@@ -292,7 +292,7 @@ pub enum Message {
 struct Info {
     status: Status,
     quorum: Vec<ProcId>,
-    cmd: Option<Command>, // `None` if noOp
+    cmd: Option<MultiCommand>, // `None` if noOp
     clock: u64,
     votes: Votes,
     quorum_clocks: QuorumClocks,
@@ -338,7 +338,7 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, Object};
+    use crate::command::{MultiCommand, Command};
     use crate::config::Config;
     use crate::newt::router::Router;
     use crate::newt::{Message, Newt};
@@ -404,7 +404,8 @@ mod tests {
         router.set_proc(2, newt_2);
 
         // create a command
-        let cmd = Command::new(vec![Object::new("A")]);
+        let get_key_a = Command::Get(String::from("A"));
+        let cmd = MultiCommand::new(vec![get_key_a]);
 
         // submit it in newt_0
         let msubmit = Message::MSubmit { cmd };

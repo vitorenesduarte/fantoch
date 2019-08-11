@@ -1,15 +1,15 @@
-use crate::base::ProcId;
-use crate::command::{Command, Object};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use threshold::{AEClock, Dot};
+use crate::base::{ProcId, Dot};
+use crate::command::{Key, MultiCommand};
+use std::collections::{BTreeMap, HashMap};
+use threshold::AEClock;
 
 /// ProcVotes are the Votes by some Process on some command.
-pub type ProcVotes = BTreeMap<Object, VoteRange>;
+pub type ProcVotes = BTreeMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Votes {
-    votes: BTreeMap<Object, Vec<VoteRange>>,
+    votes: BTreeMap<Key, Vec<VoteRange>>,
 }
 
 impl Votes {
@@ -21,13 +21,13 @@ impl Votes {
     }
 
     /// Creates an initialized `Votes` instance.
-    pub fn from(cmd: &Command) -> Self {
+    pub fn from(cmd: &MultiCommand) -> Self {
         // create empty votes
         let votes = cmd
-            .objects_clone()
+            .keys()
             .into_iter()
-            // map each object into tuple (object, empty_votes)
-            .map(|object| (object, vec![]))
+            // map each key tuple (key, empty_votes)
+            .map(|key| (key.clone(), vec![]))
             .collect();
 
         // return new `Votes`
@@ -40,13 +40,13 @@ impl Votes {
         let mut proc_votes = proc_votes.into_iter();
 
         // while we iterate self
-        for (object, object_votes) in self.votes.iter_mut() {
-            // the next in proc_votes must be about the same object
-            let (next_object, vote) = proc_votes.next().unwrap();
-            assert_eq!(*object, next_object);
+        for (key, key_votes) in self.votes.iter_mut() {
+            // the next in proc_votes must be about the same key
+            let (next_key, vote) = proc_votes.next().unwrap();
+            assert_eq!(*key, next_key);
 
-            // add vote to this object's votes
-            object_votes.push(vote);
+            // add vote to this key's votes
+            key_votes.push(vote);
         }
 
         // check there's nothing else in the proc votes iterator
@@ -82,8 +82,13 @@ impl VoteRange {
 
 pub struct VotesTable {
     stability_threshold: usize,
-    votes: HashMap<Object, AEClock<ProcId>>,
-    cmds: HashMap<Object, BTreeSet<(u64, Command)>>,
+    votes: HashMap<Key, AEClock<ProcId>>,
+    cmds: HashMap<Key, BTreeMap<SortId, MultiCommand>>,
+}
+
+pub struct SortId {
+    seq: u64,
+    proc_id: ProcId,
 }
 
 impl VotesTable {
@@ -96,19 +101,24 @@ impl VotesTable {
         }
     }
 
-    pub fn add(&mut self, cmd: Option<Command>, clock: u64, votes: Votes) {
+    /// Add a new command, its clock and votes to the votes table.
+    pub fn add(&mut self, dot: Dot, cmd: Option<MultiCommand>, clock: u64, votes: Votes) {
         let stable_clocks = self.add_votes(votes);
+
+        if let Some(cmd) = cmd {
+            // if it's not a noOp
+        }
     }
 
-    fn add_votes(&mut self, votes: Votes) -> Vec<(Object, u64)> {
+    fn add_votes(&mut self, votes: Votes) -> Vec<(Key, u64)> {
         votes
             .votes
             .into_iter()
-            .map(|(object, vote_ranges)| {
-                // get the clock representing the votes on this object
-                let object_votes = self
+            .map(|(key, vote_ranges)| {
+                // get the clock representing the votes on this key
+                let key_votes = self
                     .votes
-                    .entry(object.clone())
+                    .entry(key.clone())
                     .or_insert_with(|| AEClock::new());
 
                 // for each new vote range
@@ -117,18 +127,15 @@ impl VotesTable {
                     // `threshold::Clock` supports adding
                     // ranges to the clock
                     vote_range.votes().into_iter().for_each(|vote| {
-                        // TODO use new `threshold::Clock::add` API that does
-                        // not require creating a `Dot`
-                        let dot = Dot::new(&vote_range.voter(), vote);
-                        object_votes.add_dot(&dot);
+                        key_votes.add(&vote_range.voter(), vote);
                     })
                 });
 
-                // compute the stable clock for this object
-                let stable_clock = object_votes
+                // compute the stable clock for this key
+                let stable_clock = key_votes
                     .frontier_threshold(self.stability_threshold)
                     .unwrap();
-                (object, stable_clock)
+                (key, stable_clock)
             })
             .collect()
     }
@@ -136,7 +143,7 @@ impl VotesTable {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, Object};
+    use crate::command::{Command, MultiCommand};
     use crate::newt::clocks::Clocks;
     use crate::newt::votes::Votes;
     use std::cmp::max;
@@ -147,17 +154,21 @@ mod tests {
         let mut clocks_p0 = Clocks::new(0);
         let mut clocks_p1 = Clocks::new(1);
 
-        // objects
-        let object_a = Object::new("A");
-        let object_b = Object::new("B");
+        // keys
+        let key_a = String::from("A");
+        let key_b = String::from("B");
+        
+        // key command
+        let get_key_a = Command::Get(key_a.clone());
+        let get_key_b = Command::Get(key_b.clone());
 
         // command a
-        let command_a = Command::new(vec![object_a.clone()]);
-        let mut votes_a = Votes::from(&command_a);
+        let cmd_a = MultiCommand::new(vec![get_key_a.clone()]);
+        let mut votes_a = Votes::from(&cmd_a);
 
         // command b
-        let command_ab = Command::new(vec![object_a.clone(), object_b.clone()]);
-        let mut votes_ab = Votes::from(&command_ab);
+        let cmd_ab = MultiCommand::new(vec![get_key_a.clone(), get_key_b.clone()]);
+        let mut votes_ab = Votes::from(&cmd_ab);
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)
@@ -165,100 +176,100 @@ mod tests {
 
         // -------------------------
         // submit command a by p0
-        let clock_a = clocks_p0.clock(&command_a) + 1;
+        let clock_a = clocks_p0.clock(&cmd_a) + 1;
         assert_eq!(clock_a, 1);
 
         // -------------------------
         // (local) MCollect handle by p0 (command a)
-        let clock_a_p0 = max(clock_a, clocks_p0.clock(&command_a) + 1);
-        let proc_votes_a_p0 = clocks_p0.proc_votes(&command_a, clock_a_p0);
-        clocks_p0.bump_to(&command_a, clock_a_p0);
+        let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
+        let proc_votes_a_p0 = clocks_p0.proc_votes(&cmd_a, clock_a_p0);
+        clocks_p0.bump_to(&cmd_a, clock_a_p0);
 
         // -------------------------
         // submit command ab by p1
-        let clock_ab = clocks_p1.clock(&command_ab) + 1;
+        let clock_ab = clocks_p1.clock(&cmd_ab) + 1;
         assert_eq!(clock_ab, 1);
 
         // -------------------------
         // (local) MCollect handle by p1 (command ab)
-        let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&command_ab) + 1);
-        let proc_votes_ab_p1 = clocks_p1.proc_votes(&command_ab, clock_ab_p1);
-        clocks_p1.bump_to(&command_ab, clock_ab_p1);
+        let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
+        let proc_votes_ab_p1 = clocks_p1.proc_votes(&cmd_ab, clock_ab_p1);
+        clocks_p1.bump_to(&cmd_ab, clock_ab_p1);
 
         // -------------------------
         // (remote) MCollect handle by p1 (command a)
-        let clock_a_p1 = max(clock_a, clocks_p1.clock(&command_a) + 1);
-        let proc_votes_a_p1 = clocks_p1.proc_votes(&command_a, clock_a_p1);
-        clocks_p1.bump_to(&command_a, clock_a_p1);
+        let clock_a_p1 = max(clock_a, clocks_p1.clock(&cmd_a) + 1);
+        let proc_votes_a_p1 = clocks_p1.proc_votes(&cmd_a, clock_a_p1);
+        clocks_p1.bump_to(&cmd_a, clock_a_p1);
 
         // -------------------------
         // (remote) MCollect handle by p0 (command ab)
-        let clock_ab_p0 = max(clock_ab, clocks_p0.clock(&command_ab) + 1);
-        let proc_votes_ab_p0 = clocks_p0.proc_votes(&command_ab, clock_ab_p0);
-        clocks_p0.bump_to(&command_ab, clock_ab_p0);
+        let clock_ab_p0 = max(clock_ab, clocks_p0.clock(&cmd_ab) + 1);
+        let proc_votes_ab_p0 = clocks_p0.proc_votes(&cmd_ab, clock_ab_p0);
+        clocks_p0.bump_to(&cmd_ab, clock_ab_p0);
 
         // -------------------------
         // MCollectAck handles by p0 (command a)
         votes_a.add(proc_votes_a_p0);
         votes_a.add(proc_votes_a_p1);
 
-        // there's a single object
+        // there's a single key
         assert_eq!(votes_a.votes.len(), 1);
 
         // there are two voters
-        let object_votes = votes_a.votes.get(&object_a).unwrap();
-        assert_eq!(object_votes.len(), 2);
+        let key_votes = votes_a.votes.get(&key_a).unwrap();
+        assert_eq!(key_votes.len(), 2);
 
         // p0 voted with 1
-        println!("{:?}", object_votes);
-        let mut object_votes = object_votes.into_iter();
-        let object_votes_by_p0 = object_votes.next().unwrap();
-        assert_eq!(object_votes_by_p0.voter(), 0);
-        assert_eq!(object_votes_by_p0.votes(), vec![1]);
+        println!("{:?}", key_votes);
+        let mut key_votes = key_votes.into_iter();
+        let key_votes_by_p0 = key_votes.next().unwrap();
+        assert_eq!(key_votes_by_p0.voter(), 0);
+        assert_eq!(key_votes_by_p0.votes(), vec![1]);
 
         // p1 voted with 2
-        let object_votes_by_p1 = object_votes.next().unwrap();
-        assert_eq!(object_votes_by_p1.voter(), 1);
-        assert_eq!(object_votes_by_p1.votes(), vec![2]);
+        let key_votes_by_p1 = key_votes.next().unwrap();
+        assert_eq!(key_votes_by_p1.voter(), 1);
+        assert_eq!(key_votes_by_p1.votes(), vec![2]);
 
         // -------------------------
         // MCollectAck handles by p1 (command ab)
         votes_ab.add(proc_votes_ab_p1);
         votes_ab.add(proc_votes_ab_p0);
 
-        // there are two objects
+        // there are two keys
         assert_eq!(votes_ab.votes.len(), 2);
 
-        // object a:
+        // key a:
         // there are two voters
-        let object_votes = votes_ab.votes.get(&object_a).unwrap();
-        assert_eq!(object_votes.len(), 2);
+        let key_votes = votes_ab.votes.get(&key_a).unwrap();
+        assert_eq!(key_votes.len(), 2);
 
         // p1 voted with 1
-        let mut object_votes = object_votes.into_iter();
-        let object_votes_by_p1 = object_votes.next().unwrap();
-        assert_eq!(object_votes_by_p1.voter(), 1);
-        assert_eq!(object_votes_by_p1.votes(), vec![1]);
+        let mut key_votes = key_votes.into_iter();
+        let key_votes_by_p1 = key_votes.next().unwrap();
+        assert_eq!(key_votes_by_p1.voter(), 1);
+        assert_eq!(key_votes_by_p1.votes(), vec![1]);
 
         // p0 voted with 2
-        let object_votes_by_p0 = object_votes.next().unwrap();
-        assert_eq!(object_votes_by_p0.voter(), 0);
-        assert_eq!(object_votes_by_p0.votes(), vec![2]);
+        let key_votes_by_p0 = key_votes.next().unwrap();
+        assert_eq!(key_votes_by_p0.voter(), 0);
+        assert_eq!(key_votes_by_p0.votes(), vec![2]);
 
-        // object b:
+        // key b:
         // there are two voters
-        let object_votes = votes_ab.votes.get(&object_b).unwrap();
-        assert_eq!(object_votes.len(), 2);
+        let key_votes = votes_ab.votes.get(&key_b).unwrap();
+        assert_eq!(key_votes.len(), 2);
 
         // p1 voted with 1
-        let mut object_votes = object_votes.into_iter();
-        let object_votes_by_p1 = object_votes.next().unwrap();
-        assert_eq!(object_votes_by_p1.voter(), 1);
-        assert_eq!(object_votes_by_p1.votes(), vec![1]);
+        let mut key_votes = key_votes.into_iter();
+        let key_votes_by_p1 = key_votes.next().unwrap();
+        assert_eq!(key_votes_by_p1.voter(), 1);
+        assert_eq!(key_votes_by_p1.votes(), vec![1]);
 
         // p0 voted with 1 and 2
-        let object_votes_by_p0 = object_votes.next().unwrap();
-        assert_eq!(object_votes_by_p0.voter(), 0);
-        assert_eq!(object_votes_by_p0.votes(), vec![1, 2]);
+        let key_votes_by_p0 = key_votes.next().unwrap();
+        assert_eq!(key_votes_by_p0.voter(), 0);
+        assert_eq!(key_votes_by_p0.votes(), vec![1, 2]);
     }
 }
