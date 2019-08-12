@@ -127,7 +127,7 @@ impl Newt {
         clock: u64,
     ) -> ToSend {
         // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -181,7 +181,7 @@ impl Newt {
         proc_votes: ProcVotes,
     ) -> ToSend {
         // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
 
         if info.status != Status::COLLECT || info.quorum_clocks.contains(&from)
         {
@@ -239,7 +239,7 @@ impl Newt {
         let proc_id = dot.0;
 
         // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
@@ -349,7 +349,7 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, MultiCommand};
+    use crate::command::MultiCommand;
     use crate::config::Config;
     use crate::newt::router::Router;
     use crate::newt::{Message, Newt};

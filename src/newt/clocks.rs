@@ -58,7 +58,7 @@ impl Clocks {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, MultiCommand};
+    use crate::command::MultiCommand;
     use crate::newt::clocks::Clocks;
 
     #[test]

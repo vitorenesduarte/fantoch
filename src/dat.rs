@@ -41,7 +41,7 @@ impl Dat {
         BufReader::new(file)
             .lines()
             .map(|line| line.unwrap())
-            .map(|line| Dat::latency(line))
+            .map(Dat::latency)
             .map(|(region, latency)| {
                 if region == this_region {
                     (region, 1)
@@ -80,7 +80,7 @@ impl Dat {
 
         // get all .dat files in lat dir
         path.read_dir()
-            .expect(format!("read_dir {:?} failed", path).as_str())
+            .unwrap_or_else(|_| panic!("read_dir {:?} failed", path))
             // map all entries to PathBuf
             .map(|entry| entry.unwrap().path())
             // map all entries to &str
@@ -88,7 +88,7 @@ impl Dat {
             // get only files that end in ".dat"
             .filter(|entry| entry.ends_with(".dat"))
             // map all entry to Dat
-            .map(|entry| Dat::from(entry))
+            .map(Dat::from)
             .collect()
     }
 }

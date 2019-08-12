@@ -2,7 +2,7 @@ use crate::base::ProcId;
 use crate::command::{Key, MultiCommand};
 use std::collections::btree_map::{self, BTreeMap};
 
-/// ProcVotes are the Votes by some Process on some command.
+/// `ProcVotes` are the Votes by some process on some command.
 pub type ProcVotes = BTreeMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
@@ -51,9 +51,14 @@ impl Votes {
         // check there's nothing else in the proc votes iterator
         assert!(proc_votes.next().is_none());
     }
+}
 
-    /// Creates an IntoIter.
-    pub fn into_iter(self) -> btree_map::IntoIter<Key, Vec<VoteRange>> {
+impl IntoIterator for Votes {
+    type Item = (Key, Vec<VoteRange>);
+    type IntoIter = btree_map::IntoIter<Key, Vec<VoteRange>>;
+
+    /// Returns a `Votes` into-iterator ordered by `Key` (ASC).
+    fn into_iter(self) -> Self::IntoIter {
         self.votes.into_iter()
     }
 }
@@ -80,13 +85,13 @@ impl VoteRange {
 
     /// Get all votes in this range.
     pub fn votes(&self) -> Vec<u64> {
-        (self.start..self.end + 1).collect()
+        (self.start..=self.end).collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, MultiCommand};
+    use crate::command::MultiCommand;
     use crate::newt::clocks::Clocks;
     use crate::newt::votes::Votes;
     use std::cmp::max;
@@ -160,7 +165,6 @@ mod tests {
         assert_eq!(key_votes.len(), 2);
 
         // p0 voted with 1
-        println!("{:?}", key_votes);
         let mut key_votes = key_votes.into_iter();
         let key_votes_by_p0 = key_votes.next().unwrap();
         assert_eq!(key_votes_by_p0.voter(), 0);
