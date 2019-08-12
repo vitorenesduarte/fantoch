@@ -70,9 +70,12 @@ mod tests {
         // keys and commands
         let key_a = String::from("A");
         let key_b = String::from("B");
-        let cmd_a = MultiCommand::get(vec![key_a.clone()]);
-        let cmd_b = MultiCommand::get(vec![key_b.clone()]);
-        let cmd_ab = MultiCommand::get(vec![key_a.clone(), key_b.clone()]);
+        let cmd_a_id = (100, 1); // client 100, 1st op
+        let cmd_b_id = (101, 1); // client 101, 1st op
+        let cmd_ab_id = (102, 1); // client 102, 1st op
+        let cmd_a = MultiCommand::get(cmd_a_id, vec![key_a.clone()]);
+        let cmd_b = MultiCommand::get(cmd_b_id, vec![key_b.clone()]);
+        let cmd_ab = MultiCommand::get(cmd_ab_id, vec![key_a.clone(), key_b.clone()]);
 
         // -------------------------
         // first clock for command a

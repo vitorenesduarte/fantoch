@@ -13,7 +13,7 @@ mod quorum_clocks;
 // This module contains the definition of `Router`.
 mod router;
 
-use crate::base::{BaseProc, Dot, ProcId};
+use crate::base::{BaseProc, Dot, ProcId, Rifl};
 use crate::command::{Command, MultiCommand};
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
@@ -270,7 +270,7 @@ impl Newt {
         to_execute.map(|cmds| (Message::Execute { cmds }, vec![self.id]))
     }
 
-    fn handle_execute(&mut self, cmds: HashMap<Key, Vec<Command>>) -> ToSend {
+    fn handle_execute(&mut self, cmds: HashMap<Key, Vec<(Rifl, Command)>>) -> ToSend {
         None
     }
 }
@@ -285,7 +285,7 @@ pub enum Message {
         cmd: MultiCommand,
     },
     Execute {
-        cmds: HashMap<Key, Vec<Command>>,
+        cmds: HashMap<Key, Vec<(Rifl, Command)>>,
     },
     MCollect {
         from: ProcId,
@@ -425,7 +425,8 @@ mod tests {
 
         // create a command
         let key_a = String::from("A");
-        let cmd = MultiCommand::get(vec![key_a]);
+        let cmd_id = (100, 1); // client 100, 1st op
+        let cmd = MultiCommand::get(cmd_id, vec![key_a]);
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };

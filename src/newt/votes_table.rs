@@ -1,4 +1,4 @@
-use crate::base::ProcId;
+use crate::base::{ProcId, Rifl};
 use crate::command::{Command, MultiCommand};
 use crate::newt::votes::{VoteRange, Votes};
 use crate::store::Key;
@@ -29,9 +29,11 @@ impl MultiVotesTable {
         cmd: Option<MultiCommand>,
         clock: u64,
         votes: Votes,
-    ) -> Option<HashMap<Key, Vec<Command>>> {
-        // if noOp, do nothing; else, get an iterator of the actual command
-        let mut cmd = cmd?.into_iter();
+    ) -> Option<HashMap<Key, Vec<(Rifl, Command)>>> {
+        // if noOp, do nothing; else, get its id and create an iterator of (key, command action)
+        let cmd = cmd?;
+        let cmd_id = cmd.id();
+        let mut cmd_iter = cmd.into_iter();
 
         // create sort identifier:
         // - if two commands got assigned the same clock, they will be ordered
@@ -44,7 +46,7 @@ impl MultiVotesTable {
             .into_iter()
             .map(|(key, vote_ranges)| {
                 // the next in cmd must be about the same key
-                let (cmd_key, cmd_action) = cmd.next().unwrap();
+                let (cmd_key, cmd_action) = cmd_iter.next().unwrap();
                 assert_eq!(key, cmd_key);
 
                 // TODO can we avoid the next statement? if we do e.g. a
@@ -55,7 +57,7 @@ impl MultiVotesTable {
                 let table = self.tables.entry(key).or_insert(empty_table);
 
                 // add command and votes to the table
-                table.add(sort_id, cmd_action, vote_ranges);
+                table.add(sort_id, cmd_id, cmd_action, vote_ranges);
 
                 // get new commands to be executed
                 let stable = table.stable_commands().collect();
@@ -64,7 +66,7 @@ impl MultiVotesTable {
             .collect();
 
         // check there's nothing else in the cmd iterator
-        assert!(cmd.next().is_none());
+        assert!(cmd_iter.next().is_none());
 
         // return commands to be executed
         Some(to_execute)
@@ -76,7 +78,7 @@ type SortId = (u64, ProcId);
 struct VotesTable {
     stability_threshold: usize,
     votes: AEClock<ProcId>,
-    cmds: BTreeMap<SortId, Command>,
+    cmds: BTreeMap<SortId, (Rifl, Command)>,
 }
 
 impl VotesTable {
@@ -91,11 +93,12 @@ impl VotesTable {
     fn add(
         &mut self,
         sort_id: SortId,
+        cmd_id: Rifl,
         cmd_action: Command,
         vote_ranges: Vec<VoteRange>,
     ) {
         // add command to the sorted list of commands to be executed
-        let res = self.cmds.insert(sort_id, cmd_action);
+        let res = self.cmds.insert(sort_id, (cmd_id, cmd_action));
         // and check there was nothing there for this exact same position
         assert!(res.is_none());
 
@@ -109,7 +112,7 @@ impl VotesTable {
         });
     }
 
-    fn stable_commands(&mut self) -> impl Iterator<Item = Command> {
+    fn stable_commands(&mut self) -> impl Iterator<Item = (Rifl, Command)> {
         // compute the (potentially) new stable clock for this key
         let stable_clock = self
             .votes
@@ -139,6 +142,6 @@ impl VotesTable {
         };
 
         // return stable commands
-        stable.into_iter().map(|(_, command)| command)
+        stable.into_iter().map(|(_, id_and_action)| id_and_action)
     }
 }
