@@ -1,8 +1,6 @@
 use crate::base::ProcId;
-use crate::command::{Command, Key, MultiCommand};
-use std::collections::HashMap;
+use crate::command::{Key, MultiCommand};
 use std::collections::btree_map::{self, BTreeMap};
-use threshold::AEClock;
 
 /// ProcVotes are the Votes by some Process on some command.
 pub type ProcVotes = BTreeMap<Key, VoteRange>;
@@ -43,8 +41,8 @@ impl Votes {
         // while we iterate self
         for (key, key_votes) in self.votes.iter_mut() {
             // the next in proc_votes must be about the same key
-            let (next_key, vote) = proc_votes.next().unwrap();
-            assert_eq!(*key, next_key);
+            let (vote_key, vote) = proc_votes.next().unwrap();
+            assert_eq!(*key, vote_key);
 
             // add vote to this key's votes
             key_votes.push(vote);
@@ -54,7 +52,7 @@ impl Votes {
         assert!(proc_votes.next().is_none());
     }
 
-    ///
+    /// Creates an IntoIter.
     pub fn into_iter(self) -> btree_map::IntoIter<Key, Vec<VoteRange>> {
         self.votes.into_iter()
     }

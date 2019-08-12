@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::btree_map::{self, BTreeMap};
 
 pub type Key = String;
 pub type Value = String;
@@ -30,5 +30,10 @@ impl MultiCommand {
     /// Returns references to list of keys modified by this command.
     pub fn keys(&self) -> Vec<&Key> {
         self.commands.iter().map(|(key, _)| key).collect()
+    }
+
+    /// Creates an IntoIter.
+    pub fn into_iter(self) -> btree_map::IntoIter<Key, Command> {
+        self.commands.into_iter()
     }
 }

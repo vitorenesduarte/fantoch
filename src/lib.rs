@@ -10,7 +10,8 @@ pub mod config;
 // This module contains the definition of `BaseProc`, `Dot` and `ProcId`.
 pub mod base;
 
-// This module contains the definition of `Key`, `Value`, `Command` and `MultiCommand`.
+// This module contains the definition of `Key`, `Value`, `Command` and
+// `MultiCommand`.
 pub mod command;
 
 // This module contains the definition of `Newt`.
