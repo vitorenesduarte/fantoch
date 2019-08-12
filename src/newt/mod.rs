@@ -14,13 +14,14 @@ mod quorum_clocks;
 mod router;
 
 use crate::base::{BaseProc, Dot, ProcId};
-use crate::command::MultiCommand;
+use crate::command::{Command, MultiCommand};
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
+use crate::store::Key;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -71,7 +72,8 @@ impl Newt {
     /// Handles messages by forwarding them to the respective handler.
     pub fn handle(&mut self, msg: Message) -> ToSend {
         match msg {
-            Message::MSubmit { cmd } => self.handle_submit(cmd),
+            Message::Submit { cmd } => self.handle_submit(cmd),
+            Message::Execute { cmds } => self.handle_execute(cmds),
             Message::MCollect {
                 from,
                 dot,
@@ -253,19 +255,23 @@ impl Newt {
         info.clock = clock;
         info.votes = votes;
 
-        // update votes table
-        self.table.add(
+        // TODO generate phantom votes if committed clock is higher than the
+        // local key's clock
+
+        // update votes table and get commands that can be executed
+        let to_execute = self.table.add(
             proc_id,
             info.cmd.clone(),
             info.clock,
             info.votes.clone(),
         );
 
-        // do nothing
-        None
+        // if there's something to execute, send it to self
+        to_execute.map(|cmds| (Message::Execute { cmds }, vec![self.id]))
+    }
 
-        // TODO generate phantom votes if committed clock is higher than the
-        // local key's clock
+    fn handle_execute(&mut self, cmds: HashMap<Key, Vec<Command>>) -> ToSend {
+        None
     }
 }
 
@@ -275,8 +281,11 @@ type ToSend = Option<(Message, Vec<ProcId>)>;
 // `Newt` protocol messages
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    MSubmit {
+    Submit {
         cmd: MultiCommand,
+    },
+    Execute {
+        cmds: HashMap<Key, Vec<Command>>,
     },
     MCollect {
         from: ProcId,
@@ -419,7 +428,7 @@ mod tests {
         let cmd = MultiCommand::get(vec![key_a]);
 
         // submit it in newt_0
-        let msubmit = Message::MSubmit { cmd };
+        let msubmit = Message::Submit { cmd };
         let mcollects = router.route(&0, msubmit);
 
         // check that the mcollect is being sent to 2 processes

@@ -1,6 +1,7 @@
 use crate::base::ProcId;
-use crate::command::{Key, MultiCommand};
+use crate::command::MultiCommand;
 use crate::newt::votes::{ProcVotes, VoteRange};
+use crate::store::Key;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

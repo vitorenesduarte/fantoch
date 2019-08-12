@@ -1,7 +1,6 @@
+use crate::store::{Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
-
-pub type Key = String;
-pub type Value = String;
+use std::iter::FromIterator;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
@@ -18,6 +17,11 @@ impl MultiCommand {
     /// Create a new `MultiCommand`.
     pub fn new(commands: BTreeMap<Key, Command>) -> Self {
         MultiCommand { commands }
+    }
+
+    /// Create a new `MultiCommand` from an iterator.
+    pub fn from<I: IntoIterator<Item = (Key, Command)>>(iter: I) -> Self {
+        Self::new(BTreeMap::from_iter(iter))
     }
 
     /// Creates a multi-get command.

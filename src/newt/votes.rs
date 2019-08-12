@@ -1,5 +1,6 @@
 use crate::base::ProcId;
-use crate::command::{Key, MultiCommand};
+use crate::command::MultiCommand;
+use crate::store::Key;
 use std::collections::btree_map::{self, BTreeMap};
 
 /// `ProcVotes` are the Votes by some process on some command.

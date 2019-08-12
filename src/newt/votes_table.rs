@@ -1,6 +1,7 @@
 use crate::base::ProcId;
-use crate::command::{Command, Key, MultiCommand};
+use crate::command::{Command, MultiCommand};
 use crate::newt::votes::{VoteRange, Votes};
+use crate::store::Key;
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
@@ -19,19 +20,18 @@ impl MultiVotesTable {
     }
 
     /// Add a new command, its clock and votes to the votes table.
+    /// TODO Here we can't return a `MultiCommand` because it assumes one
+    /// command per key. Also, we don't really need the order enforced by
+    /// `MultiCommand` internal data structure.
     pub fn add(
         &mut self,
         proc_id: ProcId,
         cmd: Option<MultiCommand>,
         clock: u64,
         votes: Votes,
-    ) -> Vec<Command> {
-        // do nothing if noOp
-        if cmd.is_none() {
-            return vec![];
-        }
-        // else, get an iterator of the actual command
-        let mut cmd = cmd.unwrap().into_iter();
+    ) -> Option<HashMap<Key, Vec<Command>>> {
+        // if noOp, do nothing; else, get an iterator of the actual command
+        let mut cmd = cmd?.into_iter();
 
         // create sort identifier:
         // - if two commands got assigned the same clock, they will be ordered
@@ -42,7 +42,7 @@ impl MultiVotesTable {
         // compute which commands are safe to be executed
         let to_execute = votes
             .into_iter()
-            .flat_map(|(key, vote_ranges)| {
+            .map(|(key, vote_ranges)| {
                 // the next in cmd must be about the same key
                 let (cmd_key, cmd_action) = cmd.next().unwrap();
                 assert_eq!(key, cmd_key);
@@ -58,7 +58,8 @@ impl MultiVotesTable {
                 table.add(sort_id, cmd_action, vote_ranges);
 
                 // get new commands to be executed
-                table.stable_commands()
+                let stable = table.stable_commands().collect();
+                (cmd_key, stable)
             })
             .collect();
 
@@ -66,7 +67,7 @@ impl MultiVotesTable {
         assert!(cmd.next().is_none());
 
         // return commands to be executed
-        to_execute
+        Some(to_execute)
     }
 }
 
