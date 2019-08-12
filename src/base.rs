@@ -1,8 +1,10 @@
 use crate::config::Config;
 use crate::planet::{Planet, Region};
 
-pub type ProcId = usize;
+pub type ProcId = u64;
 pub type Dot = (ProcId, u64);
+pub type ClientId = u64;
+pub type Rifl = (ClientId, u64);
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {

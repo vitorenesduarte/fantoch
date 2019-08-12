@@ -6,6 +6,7 @@ use std::iter::FromIterator;
 pub enum Command {
     Get,
     Put(Value),
+    Delete,
 }
 
 #[derive(Debug, Clone, PartialEq)]
