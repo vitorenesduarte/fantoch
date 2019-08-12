@@ -108,7 +108,7 @@ impl VotesTable {
         });
     }
 
-    fn stable_commands(&mut self) -> Vec<Command> {
+    fn stable_commands(&mut self) -> impl Iterator<Item = Command> {
         // compute the (potentially) new stable clock for this key
         let stable_clock = self
             .votes
@@ -138,6 +138,6 @@ impl VotesTable {
         };
 
         // return stable commands
-        stable.into_iter().map(|(_, command)| command).collect()
+        stable.into_iter().map(|(_, command)| command)
     }
 }
