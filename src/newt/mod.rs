@@ -14,13 +14,14 @@ mod quorum_clocks;
 mod router;
 
 use crate::base::{BaseProc, Dot, ProcId, Rifl};
-use crate::command::{Command, MultiCommand};
+use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
+use crate::store::KVStore;
 use crate::store::Key;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
@@ -30,6 +31,8 @@ pub struct Newt {
     clocks: Clocks,
     dot_to_info: HashMap<Dot, Info>,
     table: MultiVotesTable,
+    store: KVStore,
+    pending: Pending,
 }
 
 impl Newt {
@@ -44,11 +47,14 @@ impl Newt {
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
 
-        // create `BaseProc`, `Clocks`, dot_to_info and `MultiVotesTable`
+        // create `BaseProc`, `Clocks`, dot_to_info, `MultiVotesTable`,
+        // `KVStore` and `Pending`.
         let bp = BaseProc::new(id, region, planet, config, q);
         let clocks = Clocks::new(id);
         let dot_to_info = HashMap::new();
         let table = MultiVotesTable::new(stability_threshold);
+        let store = KVStore::new();
+        let pending = Pending::new();
 
         // create `Newt`
         Newt {
@@ -56,6 +62,8 @@ impl Newt {
             clocks,
             dot_to_info,
             table,
+            store,
+            pending,
         }
     }
 
@@ -73,7 +81,6 @@ impl Newt {
     pub fn handle(&mut self, msg: Message) -> ToSend {
         match msg {
             Message::Submit { cmd } => self.handle_submit(cmd),
-            Message::Execute { cmds } => self.handle_execute(cmds),
             Message::MCollect {
                 from,
                 dot,
@@ -98,6 +105,9 @@ impl Newt {
 
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, cmd: MultiCommand) -> ToSend {
+        // start command in `Pending`
+        self.pending.start(&cmd);
+
         // compute the command identifier
         let dot = self.next_dot();
 
@@ -266,15 +276,35 @@ impl Newt {
             info.votes.clone(),
         );
 
-        // if there's something to execute, send it to self
-        to_execute.map(|cmds| (Message::Execute { cmds }, vec![self.id]))
+        // execute commands
+        if let Some(to_execute) = to_execute {
+            self.execute(to_execute);
+        }
+
+        // no message to be sent
+        None
     }
 
-    fn handle_execute(
+    fn execute(
         &mut self,
-        cmds: HashMap<Key, Vec<(Rifl, Command)>>,
-    ) -> ToSend {
-        None
+        to_execute: HashMap<Key, Vec<(Rifl, Command)>>,
+    ) -> Vec<MultiCommandResult> {
+        // create variable that will hold all ready commads
+        let mut ready_commands = Vec::new();
+
+        // iterate all commands to be executed
+        for (key, cmds) in to_execute {
+            for (cmd_id, cmd_action) in cmds {
+                // add cmd to the kv-store
+                let cmd_result = self.store.execute(&key, cmd_action);
+                let res = self.pending.add(cmd_id, key.clone(), cmd_result);
+                if let Some(ready) = res {
+                    ready_commands.push(ready);
+                }
+            }
+        }
+
+        ready_commands
     }
 }
 
@@ -286,9 +316,6 @@ type ToSend = Option<(Message, Vec<ProcId>)>;
 pub enum Message {
     Submit {
         cmd: MultiCommand,
-    },
-    Execute {
-        cmds: HashMap<Key, Vec<(Rifl, Command)>>,
     },
     MCollect {
         from: ProcId,
