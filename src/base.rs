@@ -3,6 +3,8 @@ use crate::planet::{Planet, Region};
 
 pub type ProcId = u64;
 pub type Dot = (ProcId, u64);
+
+// for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
 pub type ClientId = u64;
 pub type Rifl = (ClientId, u64);
 
