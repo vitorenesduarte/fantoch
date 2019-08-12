@@ -270,7 +270,10 @@ impl Newt {
         to_execute.map(|cmds| (Message::Execute { cmds }, vec![self.id]))
     }
 
-    fn handle_execute(&mut self, cmds: HashMap<Key, Vec<(Rifl, Command)>>) -> ToSend {
+    fn handle_execute(
+        &mut self,
+        cmds: HashMap<Key, Vec<(Rifl, Command)>>,
+    ) -> ToSend {
         None
     }
 }

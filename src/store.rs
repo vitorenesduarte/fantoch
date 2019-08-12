@@ -68,14 +68,20 @@ mod tests {
         assert_eq!(store.execute(key_b.clone(), Command::Get), Some(y.clone()));
 
         // delete key_a -> some(z)
-        assert_eq!(store.execute(key_a.clone(), Command::Delete), Some(z.clone()));
+        assert_eq!(
+            store.execute(key_a.clone(), Command::Delete),
+            Some(z.clone())
+        );
         // get key_a    -> none
         assert_eq!(store.execute(key_a.clone(), Command::Get), None);
         // get key_b    -> some(y)
         assert_eq!(store.execute(key_b.clone(), Command::Get), Some(y.clone()));
 
         // delete key_b -> some(y)
-        assert_eq!(store.execute(key_b.clone(), Command::Delete), Some(y.clone()));
+        assert_eq!(
+            store.execute(key_b.clone(), Command::Delete),
+            Some(y.clone())
+        );
         // get key_b    -> none
         assert_eq!(store.execute(key_b.clone(), Command::Get), None);
         // get key_a    -> none
@@ -89,7 +95,10 @@ mod tests {
         assert_eq!(store.execute(key_b.clone(), Command::Get), None);
 
         // delete key_a -> some(x)
-        assert_eq!(store.execute(key_a.clone(), Command::Delete), Some(x.clone()));
+        assert_eq!(
+            store.execute(key_a.clone(), Command::Delete),
+            Some(x.clone())
+        );
         // get key_a    -> none
         assert_eq!(store.execute(key_a.clone(), Command::Get), None);
     }

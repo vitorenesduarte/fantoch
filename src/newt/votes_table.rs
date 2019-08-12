@@ -30,7 +30,8 @@ impl MultiVotesTable {
         clock: u64,
         votes: Votes,
     ) -> Option<HashMap<Key, Vec<(Rifl, Command)>>> {
-        // if noOp, do nothing; else, get its id and create an iterator of (key, command action)
+        // if noOp, do nothing; else, get its id and create an iterator of (key,
+        // command action)
         let cmd = cmd?;
         let cmd_id = cmd.id();
         let mut cmd_iter = cmd.into_iter();

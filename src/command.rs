@@ -23,7 +23,10 @@ impl MultiCommand {
     }
 
     /// Create a new `MultiCommand` from an iterator.
-    pub fn from<I: IntoIterator<Item = (Key, Command)>>(id: Rifl, iter: I) -> Self {
+    pub fn from<I: IntoIterator<Item = (Key, Command)>>(
+        id: Rifl,
+        iter: I,
+    ) -> Self {
         Self::new(id, BTreeMap::from_iter(iter))
     }
 

@@ -114,7 +114,8 @@ mod tests {
 
         // command b
         let cmd_ab_id = (101, 1); // client 101, 1st op
-        let cmd_ab = MultiCommand::get(cmd_ab_id, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab =
+            MultiCommand::get(cmd_ab_id, vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::from(&cmd_ab);
 
         // orders on each process:
