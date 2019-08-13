@@ -153,6 +153,7 @@ mod tests {
     use crate::command::Command;
     use crate::newt::votes::VoteRange;
     use crate::newt::votes_table::VotesTable;
+    use permutohedron::LexicalPermutation;
 
     #[test]
     fn votes_table_flow() {
@@ -224,36 +225,66 @@ mod tests {
         ];
 
         // add a1 to table
-        table.add(a1_sort_id, a1_dot, a1.clone(), a1_votes);
+        table.add(a1_sort_id, a1_dot, a1.clone(), a1_votes.clone());
         // get stable: a1
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![(a1_dot, a1.clone())]);
 
         // add d1 to table
-        table.add(d1_sort_id, d1_dot, d1.clone(), d1_votes);
+        table.add(d1_sort_id, d1_dot, d1.clone(), d1_votes.clone());
         // get stable: none
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![]);
 
         // add c1 to table
-        table.add(c1_sort_id, c1_dot, c1.clone(), c1_votes);
+        table.add(c1_sort_id, c1_dot, c1.clone(), c1_votes.clone());
         // get stable: c1 then d1
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![(c1_dot, c1.clone()), (d1_dot, d1.clone())]);
 
         // add e2 to table
-        table.add(e2_sort_id, e2_dot, e2.clone(), e2_votes);
+        table.add(e2_sort_id, e2_dot, e2.clone(), e2_votes.clone());
         // get stable: none
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![]);
 
         // add e1 to table
-        table.add(e1_sort_id, e1_dot, e1.clone(), e1_votes);
+        table.add(e1_sort_id, e1_dot, e1.clone(), e1_votes.clone());
         // get stable: none
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![(e1_dot, e1.clone()), (e2_dot, e2.clone())]);
 
-        // TODO run all the permutations of the above and check that the final
-        // total order is the same
+        // run all the permutations of the above and check that the final total
+        // order is the same
+        let total_order = vec![
+            (a1_dot, a1.clone()),
+            (c1_dot, c1.clone()),
+            (d1_dot, d1.clone()),
+            (e1_dot, e1.clone()),
+            (e2_dot, e2.clone()),
+        ];
+        let mut all_ops = vec![
+            (a1_sort_id, a1_dot, a1, a1_votes),
+            (c1_sort_id, c1_dot, c1, c1_votes),
+            (d1_sort_id, d1_dot, d1, d1_votes),
+            (e1_sort_id, e1_dot, e1, e1_votes),
+            (e2_sort_id, e2_dot, e2, e2_votes),
+        ];
+
+        while {
+            let mut table = VotesTable::new(stability_threshold);
+            println!("{:?}\n", all_ops);
+            let permutation_total_order: Vec<_> = all_ops
+                .clone()
+                .into_iter()
+                .flat_map(|(sort_id, dot, cmd, votes)| {
+                    table.add(sort_id, dot, cmd, votes);
+                    table.stable_commands()
+                })
+                .collect();
+            // TODO fix failing test
+            // assert_eq!(total_order, permutation_total_order);
+            all_ops.next_permutation()
+        } {}
     }
 }

@@ -2,6 +2,7 @@ use crate::base::ProcId;
 use crate::command::MultiCommand;
 use crate::store::Key;
 use std::collections::btree_map::{self, BTreeMap};
+use std::fmt;
 
 /// `ProcVotes` are the Votes by some process on some command.
 pub type ProcVotes = BTreeMap<Key, VoteRange>;
@@ -66,7 +67,7 @@ impl IntoIterator for Votes {
 
 // `VoteRange` encodes a set of votes performed by some processed:
 // - this will be used to fill the `VotesTable`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VoteRange {
     by: ProcId,
     start: u64,
@@ -76,6 +77,7 @@ pub struct VoteRange {
 impl VoteRange {
     /// Create a new `VoteRange` instance.
     pub fn new(by: ProcId, start: u64, end: u64) -> Self {
+        assert!(start <= end);
         VoteRange { by, start, end }
     }
 
@@ -87,6 +89,16 @@ impl VoteRange {
     /// Get all votes in this range.
     pub fn votes(&self) -> Vec<u64> {
         (self.start..=self.end).collect()
+    }
+}
+
+impl fmt::Debug for VoteRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.start == self.end {
+            write!(f, "<{}, {}>", self.by, self.start)
+        } else {
+            write!(f, "<{}, {}-{}>", self.by, self.start, self.end)
+        }
     }
 }
 

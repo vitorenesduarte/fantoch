@@ -4,7 +4,7 @@ use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;
 use std::iter::FromIterator;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Command {
     Get,
     Put(Value),
