@@ -8,4 +8,4 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-threshold = "0.2.1"
+threshold = "0.2.2"
