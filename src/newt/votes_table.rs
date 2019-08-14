@@ -6,14 +6,16 @@ use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
 pub struct MultiVotesTable {
+    n: usize,
     stability_threshold: usize,
     tables: HashMap<Key, VotesTable>,
 }
 
 impl MultiVotesTable {
     /// Create a new `MultiVotesTable` instance given the stability threshold.
-    pub fn new(stability_threshold: usize) -> Self {
+    pub fn new(n: usize, stability_threshold: usize) -> Self {
         MultiVotesTable {
+            n,
             stability_threshold,
             tables: HashMap::new(),
         }
@@ -52,7 +54,8 @@ impl MultiVotesTable {
 
                 // TODO can we avoid the next statement? if we do e.g. a
                 // `or_insert_with`, the borrow checker will complain
-                let empty_table = VotesTable::new(self.stability_threshold);
+                let empty_table =
+                    VotesTable::new(self.n, self.stability_threshold);
 
                 // get this key's table
                 let table = self.tables.entry(key).or_insert(empty_table);
@@ -77,16 +80,20 @@ impl MultiVotesTable {
 type SortId = (u64, ProcId);
 
 struct VotesTable {
+    n: usize,
     stability_threshold: usize,
     votes: AEClock<ProcId>,
     cmds: BTreeMap<SortId, (Rifl, Command)>,
 }
 
 impl VotesTable {
-    fn new(stability_threshold: usize) -> Self {
+    fn new(n: usize, stability_threshold: usize) -> Self {
+        let procs = (0..n).map(|proc| proc as u64);
+        let votes = AEClock::with(procs);
         VotesTable {
+            n,
             stability_threshold,
-            votes: AEClock::new(),
+            votes,
             cmds: BTreeMap::new(),
         }
     }
@@ -115,6 +122,9 @@ impl VotesTable {
     }
 
     fn stable_commands(&mut self) -> impl Iterator<Item = (Rifl, Command)> {
+        // ensure the clock size equals to n
+        assert_eq!(self.votes.len(), self.n);
+
         // compute the (potentially) new stable clock for this key
         let stable_clock = self
             .votes
@@ -159,8 +169,9 @@ mod tests {
     fn votes_table_flow() {
         // let's consider that n = 5 and q = 3
         // so the threshold should be n - q + 1 = 3
+        let n = 5;
         let stability_threshold = 3;
-        let mut table = VotesTable::new(stability_threshold);
+        let mut table = VotesTable::new(n, stability_threshold);
 
         // in this example we'll use the dot as rifl
 
@@ -271,9 +282,9 @@ mod tests {
             (e2_sort_id, e2_dot, e2, e2_votes),
         ];
 
+        // the following works like a do-while
         while {
-            let mut table = VotesTable::new(stability_threshold);
-            println!("{:?}\n", all_ops);
+            let mut table = VotesTable::new(n, stability_threshold);
             let permutation_total_order: Vec<_> = all_ops
                 .clone()
                 .into_iter()
@@ -282,8 +293,7 @@ mod tests {
                     table.stable_commands()
                 })
                 .collect();
-            // TODO fix failing test
-            // assert_eq!(total_order, permutation_total_order);
+            assert_eq!(total_order, permutation_total_order);
             all_ops.next_permutation()
         } {}
     }

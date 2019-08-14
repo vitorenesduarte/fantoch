@@ -47,12 +47,13 @@ impl Newt {
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
 
-        // create `BaseProc`, `Clocks`, dot_to_info, `MultiVotesTable`,
-        // `KVStore` and `Pending`.
+        // create `MultiVotesTable`
+        let table = MultiVotesTable::new(config.n(), stability_threshold);
+
+        // create `BaseProc`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProc::new(id, region, planet, config, q);
         let clocks = Clocks::new(id);
         let dot_to_info = HashMap::new();
-        let table = MultiVotesTable::new(stability_threshold);
         let store = KVStore::new();
         let pending = Pending::new();
 
@@ -73,6 +74,11 @@ impl Newt {
     }
 
     /// Computes `Newt` stability threshold.
+    /// Typically the threshold should be n - q + 1, where n is the number of
+    /// processes and q the size of the write quorum. In `Newt`, although
+    /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
+    /// The quorum size of 2f ensures that all clocks are computed from f + 1
+    /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
     fn stability_threshold(config: &Config) -> usize {
         config.n() - config.f()
     }
