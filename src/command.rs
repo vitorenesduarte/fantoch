@@ -66,6 +66,7 @@ impl IntoIterator for MultiCommand {
 }
 
 /// Structure that aggregates partial results of multi-key commands.
+#[derive(Debug, Clone, PartialEq)]
 pub struct MultiCommandResult {
     id: Rifl,
     key_count: usize,

@@ -13,7 +13,7 @@ mod quorum_clocks;
 // This module contains the definition of `Router`.
 mod router;
 
-use crate::base::{BaseProc, Dot, ProcId, Rifl};
+use crate::base::{BaseProc, ClientId, Dot, ProcId, Rifl};
 use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
@@ -133,7 +133,7 @@ impl Newt {
         };
 
         // return `ToSend`
-        Some((mcollect, fast_quorum))
+        ToSend::Procs(mcollect, fast_quorum)
     }
 
     fn handle_mcollect(
@@ -149,7 +149,7 @@ impl Newt {
 
         // discard message if no longer in START
         if info.status != Status::START {
-            return None;
+            return ToSend::Nothing;
         }
 
         // compute command clock
@@ -188,7 +188,7 @@ impl Newt {
         };
 
         // return `ToSend`
-        Some((mcollectack, vec![from]))
+        ToSend::Procs(mcollectack, vec![from])
     }
 
     fn handle_mcollectack(
@@ -205,7 +205,7 @@ impl Newt {
         {
             // do nothing if we're no longer COLLECT or if this is a
             // duplicated message
-            return None;
+            return ToSend::Nothing;
         }
         // update votes
         info.votes.add(proc_votes);
@@ -236,13 +236,13 @@ impl Newt {
                 };
 
                 // return `ToSend`
-                Some((mcommit, self.all_procs.clone().unwrap()))
+                ToSend::Procs(mcommit, self.all_procs.clone().unwrap())
             } else {
-                // slow path
-                None
+                // TODO slow path
+                ToSend::Nothing
             }
         } else {
-            None
+            ToSend::Nothing
         }
     }
 
@@ -262,7 +262,7 @@ impl Newt {
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             // TODO what about the executed status?
-            return None;
+            return ToSend::Nothing;
         }
 
         // update info
@@ -284,17 +284,20 @@ impl Newt {
 
         // execute commands
         if let Some(to_execute) = to_execute {
-            self.execute(to_execute);
+            // TODO return these to clients
+            let ready_commands = self.execute(to_execute);
+            ToSend::Nothing
+        } else {
+            // no message to be sent
+            ToSend::Nothing
         }
-
-        // no message to be sent
-        None
     }
 
     fn execute(
         &mut self,
         to_execute: HashMap<Key, Vec<(Rifl, Command)>>,
     ) -> Vec<MultiCommandResult> {
+        // TODO I couldn't do the following with iterators. Try again.
         // create variable that will hold all ready commads
         let mut ready_commands = Vec::new();
 
@@ -315,7 +318,38 @@ impl Newt {
 }
 
 // every handle returns a `ToSend`
-type ToSend = Option<(Message, Vec<ProcId>)>;
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToSend {
+    // nothing to send
+    Nothing,
+    // a protocol message to be sent to some processes
+    Procs(Message, Vec<ProcId>),
+    // a list of command results to be sent to the issuing client
+    Clients(Vec<(ClientId, MultiCommandResult)>),
+}
+
+impl ToSend {
+    /// Check if there's nothing to be sent.
+    fn nothing(&self) -> bool {
+        *self == ToSend::Nothing
+    }
+
+    /// Check if there's something to be sent to processes.
+    fn to_procs(&self) -> bool {
+        match *self {
+            ToSend::Procs(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if there's something to be sent to clients.
+    fn to_clients(&self) -> bool {
+        match *self {
+            ToSend::Clients(_) => true,
+            _ => false,
+        }
+    }
+}
 
 // `Newt` protocol messages
 #[derive(Debug, Clone, PartialEq)]
@@ -397,7 +431,7 @@ mod tests {
     use crate::command::MultiCommand;
     use crate::config::Config;
     use crate::newt::router::Router;
-    use crate::newt::{Message, Newt};
+    use crate::newt::{Message, Newt, ToSend};
     use crate::planet::{Planet, Region};
 
     #[test]
@@ -466,35 +500,40 @@ mod tests {
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
-        let mcollects = router.route(&0, msubmit);
+        let mcollects = router.route_to_proc(&0, msubmit);
 
         // check that the mcollect is being sent to 2 processes
-        assert_eq!(mcollects.clone().unwrap().1.len(), 2 * f);
+        assert!(mcollects.to_procs());
+        if let ToSend::Procs(_, to) = mcollects.clone() {
+            assert_eq!(to.len(), 2 * f);
+        }
 
         // handle in mcollects
-        let mut mcollectacks = router.route_to_many(mcollects);
+        let mut mcollectacks = router.route(mcollects);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
+        assert!(mcollectacks.iter().all(|to_send| to_send.to_procs()));
 
         // handle the first mcollectack
-        let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
+        let mut mcommits = router.route(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
         // no mcommit yet
-        assert!(mcommit_tosend.is_none());
+        assert!(mcommit_tosend.nothing());
 
         // handle the second mcollectack
-        let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
+        let mut mcommits = router.route(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
-        // there's an mcommit now
-        assert!(mcommit_tosend.is_some());
 
-        // the mcommit is sent to everyone
-        assert_eq!(mcommit_tosend.clone().unwrap().1.len(), n);
+        // check that there is an mcommit sent to everyone
+        assert!(mcommit_tosend.to_procs());
+        if let ToSend::Procs(_, to) = mcommit_tosend.clone() {
+            assert_eq!(to.len(), n);
+        }
 
         // all processes handle it
-        let nones = router.route_to_many(mcommit_tosend);
+        let nothings = router.route(mcommit_tosend);
         // and no reply is sent
-        assert_eq!(nones, vec![None, None, None]);
+        assert_eq!(nothings, vec![ToSend::Nothing, ToSend::Nothing, ToSend::Nothing]);
     }
 }

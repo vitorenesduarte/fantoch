@@ -22,21 +22,26 @@ impl Router {
         self.procs.insert(proc_id, RefCell::new(newt));
     }
 
-    /// Route a message to some process.
-    pub fn route(&self, proc_id: &ProcId, msg: Message) -> ToSend {
-        let mut newt = self.procs.get(proc_id).unwrap().borrow_mut();
-        newt.handle(msg)
-    }
-
     /// Route a message to some target.
-    pub fn route_to_many(&self, to_send: ToSend) -> Vec<ToSend> {
-        if let Some((msg, target)) = to_send {
+    pub fn route(&self, to_send: ToSend) -> Vec<ToSend> {
+        match to_send {
+            ToSend::Nothing => vec![],
+            ToSend::Procs(msg, target) => {
             target
                 .into_iter()
-                .map(|proc_id| self.route(&proc_id, msg.clone()))
+                .map(|proc_id| self.route_to_proc(&proc_id, msg.clone()))
                 .collect()
-        } else {
-            vec![]
+            },
+            ToSend::Clients(results) => {
+                // TODO forward this to clients
+                vec![]
+            }
         }
+    }
+
+    /// Route a message to some process.
+    pub fn route_to_proc(&self, proc_id: &ProcId, msg: Message) -> ToSend {
+        let mut newt = self.procs.get(proc_id).unwrap().borrow_mut();
+        newt.handle(msg)
     }
 }
