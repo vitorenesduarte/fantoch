@@ -94,6 +94,11 @@ impl MultiCommandResult {
         // we're ready if the number of partial results equals `key_count`
         self.results.len() == self.key_count
     }
+
+    /// Returns the command identifier (RIFL) of this comand.
+    pub fn id(&self) -> Rifl {
+        self.id
+    }
 }
 
 /// Structure that tracks the progress of pending commands.

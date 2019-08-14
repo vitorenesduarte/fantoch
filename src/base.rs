@@ -1,3 +1,4 @@
+use crate::command::{MultiCommand, MultiCommandResult};
 use crate::config::Config;
 use crate::planet::{Planet, Region};
 
@@ -7,6 +8,24 @@ pub type Dot = (ProcId, u64);
 // for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
 pub type ClientId = u64;
 pub type Rifl = (ClientId, u64);
+
+pub struct Client {
+    proc_id: ProcId,
+}
+
+impl Client {
+    pub fn new(proc_id: ProcId) -> Self {
+        Client { proc_id }
+    }
+
+    pub fn handle(
+        &mut self,
+        commands: Vec<(Rifl, MultiCommandResult)>,
+    ) -> (ProcId, Vec<MultiCommand>) {
+        // TODO handle command results
+        (self.proc_id, vec![])
+    }
+}
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {

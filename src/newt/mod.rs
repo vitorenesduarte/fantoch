@@ -169,7 +169,7 @@ impl Newt {
         let quorum_clocks = QuorumClocks::from(self.bp.q);
 
         // TODO above we have the same borrow checker problem that doesn't know
-        // how toderef, as in the MCollectAck handler
+        // how to deref, as in the MCollectAck handler
 
         // update info
         info.status = Status::COLLECT;
@@ -284,9 +284,13 @@ impl Newt {
 
         // execute commands
         if let Some(to_execute) = to_execute {
-            // TODO return these to clients
             let ready_commands = self.execute(to_execute);
-            ToSend::Nothing
+            // if there ready commands, forward them to clients
+            if ready_commands.is_empty() {
+                ToSend::Nothing
+            } else {
+                ToSend::Clients(ready_commands)
+            }
         } else {
             // no message to be sent
             ToSend::Nothing
@@ -296,19 +300,28 @@ impl Newt {
     fn execute(
         &mut self,
         to_execute: HashMap<Key, Vec<(Rifl, Command)>>,
-    ) -> Vec<MultiCommandResult> {
+    ) -> HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>> {
         // TODO I couldn't do the following with iterators. Try again.
         // create variable that will hold all ready commads
-        let mut ready_commands = Vec::new();
+        let mut ready_commands = HashMap::new();
 
         // iterate all commands to be executed
         for (key, cmds) in to_execute {
             for (cmd_id, cmd_action) in cmds {
-                // add cmd to the kv-store
+                // execute cmd in the `KVStore`
                 let cmd_result = self.store.execute(&key, cmd_action);
+
+                // add partial result to `Pending`
                 let res = self.pending.add(cmd_id, key.clone(), cmd_result);
+
+                // if there's a new `MultiCommand` ready, add it to output var
                 if let Some(ready) = res {
-                    ready_commands.push(ready);
+                    let rifl = ready.id();
+                    let client_id = rifl.0;
+                    let client_ready = ready_commands
+                        .entry(client_id)
+                        .or_insert_with(Vec::new);
+                    client_ready.push((rifl, ready));
                 }
             }
         }
@@ -325,7 +338,7 @@ pub enum ToSend {
     // a protocol message to be sent to some processes
     Procs(Message, Vec<ProcId>),
     // a list of command results to be sent to the issuing client
-    Clients(Vec<(ClientId, MultiCommandResult)>),
+    Clients(HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>>),
 }
 
 impl ToSend {
@@ -500,7 +513,7 @@ mod tests {
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
-        let mcollects = router.route_to_proc(&0, msubmit);
+        let mcollects = router.route_to_proc(0, msubmit);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_procs());
@@ -534,6 +547,9 @@ mod tests {
         // all processes handle it
         let nothings = router.route(mcommit_tosend);
         // and no reply is sent
-        assert_eq!(nothings, vec![ToSend::Nothing, ToSend::Nothing, ToSend::Nothing]);
+        assert_eq!(
+            nothings,
+            vec![ToSend::Nothing, ToSend::Nothing, ToSend::Nothing]
+        );
     }
 }
