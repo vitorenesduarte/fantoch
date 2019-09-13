@@ -1,33 +1,156 @@
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct Object {
-    name: String,
+use crate::base::Rifl;
+use crate::store::{Key, Value};
+use std::collections::btree_map::{self, BTreeMap};
+use std::collections::HashMap;
+use std::iter::{self, FromIterator};
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Command {
+    Get,
+    Put(Value),
+    Delete,
 }
 
-impl Object {
-    /// Create a new `Object`.
-    pub fn new<S: Into<String>>(name: S) -> Self {
-        Object { name: name.into() }
-    }
-}
+pub type CommandResult = Option<Value>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Command {
-    objects: Vec<Object>,
+pub struct MultiCommand {
+    id: Rifl,
+    commands: BTreeMap<Key, Command>,
 }
 
-impl Command {
-    /// Create a new `Command`.
-    pub fn new(objects: Vec<Object>) -> Self {
-        Command { objects }
+impl MultiCommand {
+    /// Create a new `MultiCommand`.
+    pub fn new(id: Rifl, commands: BTreeMap<Key, Command>) -> Self {
+        MultiCommand { id, commands }
     }
 
-    /// Returns references to list of objects modified by this command.
-    pub fn objects(&self) -> &Vec<Object> {
-        &self.objects
+    /// Create a new `MultiCommand` from an iterator.
+    pub fn from<I: IntoIterator<Item = (Key, Command)>>(
+        id: Rifl,
+        iter: I,
+    ) -> Self {
+        Self::new(id, BTreeMap::from_iter(iter))
     }
 
-    /// Returns list of objects modified by this command.
-    pub fn objects_clone(&self) -> Vec<Object> {
-        self.objects.clone()
+    /// Creates a get command.
+    pub fn get(id: Rifl, key: Key) -> Self {
+        Self::from(id, iter::once((key, Command::Get)))
+    }
+
+    /// Creates a multi-get command.
+    pub fn multi_get(id: Rifl, keys: Vec<Key>) -> Self {
+        let commands = keys.into_iter().map(|key| (key, Command::Get));
+        Self::from(id, commands)
+    }
+
+    /// Returns the command identifier.
+    pub fn id(&self) -> Rifl {
+        self.id
+    }
+
+    /// Returns references to list of keys modified by this command.
+    pub fn keys(&self) -> Vec<&Key> {
+        self.commands.iter().map(|(key, _)| key).collect()
+    }
+
+    /// Returns the number of keys accessed by this command.
+    pub fn key_count(&self) -> usize {
+        self.commands.len()
+    }
+}
+
+impl IntoIterator for MultiCommand {
+    type Item = (Key, Command);
+    type IntoIter = btree_map::IntoIter<Key, Command>;
+
+    /// Returns a `MultiCommand` into-iterator ordered by `Key` (ASC).
+    fn into_iter(self) -> Self::IntoIter {
+        self.commands.into_iter()
+    }
+}
+
+/// Structure that aggregates partial results of multi-key commands.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MultiCommandResult {
+    id: Rifl,
+    key_count: usize,
+    results: HashMap<Key, CommandResult>,
+}
+
+impl MultiCommandResult {
+    /// Creates a new `MultiCommandResult` given the number of keys accessed by
+    /// the command.
+    pub fn new(id: Rifl, key_count: usize) -> Self {
+        MultiCommandResult {
+            id,
+            key_count,
+            results: HashMap::new(),
+        }
+    }
+
+    /// Adds a partial command result to the overall result.
+    /// Returns a boolean indicating whether the full result is ready.
+    fn add(&mut self, key: Key, result: CommandResult) -> bool {
+        let res = self.results.insert(key, result);
+        // assert there was nothing about this key previously
+        assert!(res.is_none());
+
+        // we're ready if the number of partial results equals `key_count`
+        self.results.len() == self.key_count
+    }
+
+    /// Returns the command identifier (RIFL) of this comand.
+    pub fn id(&self) -> Rifl {
+        self.id
+    }
+
+    /// Returns the commands results.
+    pub fn results(&self) -> &HashMap<Key, CommandResult> {
+        &self.results
+    }
+}
+
+/// Structure that tracks the progress of pending commands.
+#[derive(Default)]
+pub struct Pending {
+    pending: HashMap<Rifl, MultiCommandResult>,
+}
+
+impl Pending {
+    /// Creates a new `Pending` instance.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Starts tracking a command submitted by some client.
+    pub fn start(&mut self, cmd: &MultiCommand) {
+        // create `MultiCommandResult`
+        let cmd_result = MultiCommandResult::new(cmd.id(), cmd.key_count());
+
+        // add it to pending
+        self.pending.insert(cmd.id(), cmd_result);
+    }
+
+    /// Registers a new partial command result.
+    pub fn add(
+        &mut self,
+        id: Rifl,
+        key: Key,
+        result: CommandResult,
+    ) -> Option<MultiCommandResult> {
+        // get current result:
+        // - if it's not part of pending, then ignore it
+        // (if it's not part of pending, it means that it is from a client
+        // from another newt process, and `pending.start` has not been called)
+        let cmd_result = self.pending.get_mut(&id)?;
+
+        // add partial result:
+        // - if it's complete, remove it from pending and return it
+        if cmd_result.add(key, result) {
+            self.pending.remove(&id)
+        } else {
+            None
+        }
     }
 }

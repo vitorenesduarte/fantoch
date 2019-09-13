@@ -1,12 +1,13 @@
 use crate::base::ProcId;
-use crate::command::{Command, Object};
+use crate::command::MultiCommand;
 use crate::newt::votes::{ProcVotes, VoteRange};
+use crate::store::Key;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Clocks {
     id: ProcId,
-    clocks: HashMap<Object, usize>,
+    clocks: HashMap<Key, u64>,
 }
 
 impl Clocks {
@@ -19,49 +20,46 @@ impl Clocks {
     }
 
     /// Compute the clock of this command.
-    pub fn clock(&self, cmd: &Command) -> usize {
-        // compute the maximum between all clocks of the objects touched by this
+    pub fn clock(&self, cmd: &MultiCommand) -> u64 {
+        // compute the maximum between all clocks of the keys accessed by this
         // command
-        cmd.objects()
+        cmd.keys()
             .iter()
-            .map(|object| self.object_clock(object))
+            .map(|key| self.key_clock(key))
             .max()
             .unwrap_or(0)
     }
 
-    /// Retrives the current clock of some object.
-    fn object_clock(&self, obj: &Object) -> usize {
-        self.clocks.get(obj).cloned().unwrap_or(0)
+    /// Retrives the current clock of some key.
+    fn key_clock(&self, key: &Key) -> u64 {
+        self.clocks.get(key).cloned().unwrap_or(0)
     }
 
     /// Computes `ProcVotes`.
-    pub fn proc_votes(&self, cmd: &Command, clock: usize) -> ProcVotes {
-        cmd.objects_clone()
+    pub fn proc_votes(&self, cmd: &MultiCommand, clock: u64) -> ProcVotes {
+        cmd.keys()
             .into_iter()
-            .map(|object| {
+            .map(|key| {
                 // vote from the current clock value + 1 until the highest vote
-                // (i.e. the maximum between all object's clocks)
-                let vr = VoteRange::new(
-                    self.id,
-                    self.object_clock(&object) + 1,
-                    clock,
-                );
-                (object, vr)
+                // (i.e. the maximum between all key's clocks)
+                let vr =
+                    VoteRange::new(self.id, self.key_clock(key) + 1, clock);
+                (key.clone(), vr)
             })
             .collect()
     }
 
-    /// Bump all objects clocks to `clock`.
-    pub fn bump_to(&mut self, cmd: &Command, clock: usize) {
-        for object in cmd.objects_clone() {
-            self.clocks.insert(object, clock);
+    /// Bump all keys clocks to `clock`.
+    pub fn bump_to(&mut self, cmd: &MultiCommand, clock: u64) {
+        for key in cmd.keys() {
+            self.clocks.insert(key.clone(), clock);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, Object};
+    use crate::command::MultiCommand;
     use crate::newt::clocks::Clocks;
 
     #[test]
@@ -69,73 +67,79 @@ mod tests {
         // create clocks
         let mut clocks = Clocks::new(0);
 
-        // objects and commands
-        let object_a = Object::new("A");
-        let object_b = Object::new("B");
-        let command_a = Command::new(vec![object_a.clone()]);
-        let command_b = Command::new(vec![object_b.clone()]);
-        let command_ab = Command::new(vec![object_a.clone(), object_b.clone()]);
+        // keys and commands
+        let key_a = String::from("A");
+        let key_b = String::from("B");
+        let cmd_a_id = (100, 1); // client 100, 1st op
+        let cmd_b_id = (101, 1); // client 101, 1st op
+        let cmd_ab_id = (102, 1); // client 102, 1st op
+        let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
+        let cmd_b = MultiCommand::get(cmd_b_id, key_b.clone());
+        let cmd_ab = MultiCommand::multi_get(
+            cmd_ab_id,
+            vec![key_a.clone(), key_b.clone()],
+        );
 
         // -------------------------
         // first clock for command a
-        let clock = clocks.clock(&command_a);
+        let clock = clocks.clock(&cmd_a);
         assert_eq!(clock, 0);
 
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
         // get proc votes
-        let proc_votes = clocks.proc_votes(&command_a, clock);
-        assert_eq!(proc_votes.len(), 1); // single object
-        assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![1]);
+        let proc_votes = clocks.proc_votes(&cmd_a, clock);
+        assert_eq!(proc_votes.len(), 1); // single key
+        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![1]);
 
         // bump clocks
-        clocks.bump_to(&command_a, clock);
+        clocks.bump_to(&cmd_a, clock);
 
         // -------------------------
         // second clock for command a
-        let clock = clocks.clock(&command_a);
+        let clock = clocks.clock(&cmd_a);
         assert_eq!(clock, 1);
 
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
         // get proc votes
-        let proc_votes = clocks.proc_votes(&command_a, clock);
-        assert_eq!(proc_votes.len(), 1); // single object
-        assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![2]);
+        let proc_votes = clocks.proc_votes(&cmd_a, clock);
+        assert_eq!(proc_votes.len(), 1); // single key
+        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![2]);
 
         // bump clocks
-        clocks.bump_to(&command_a, clock);
+        clocks.bump_to(&cmd_a, clock);
 
         // -------------------------
         // first clock for command ab
-        let clock = clocks.clock(&command_ab);
+        let clock = clocks.clock(&cmd_ab);
         assert_eq!(clock, 2);
 
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
         // get proc votes
-        let proc_votes = clocks.proc_votes(&command_ab, clock);
-        assert_eq!(proc_votes.len(), 2); // two objects
-        assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![3]);
-        assert_eq!(proc_votes.get(&object_b).unwrap().votes(), vec![1, 2, 3]);
+        let proc_votes = clocks.proc_votes(&cmd_ab, clock);
+        assert_eq!(proc_votes.len(), 2); // two keys
+        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![3]);
+        assert_eq!(proc_votes.get(&key_b).unwrap().votes(), vec![1, 2, 3]);
 
         // bump clock
-        clocks.bump_to(&command_ab, clock);
+        clocks.bump_to(&cmd_ab, clock);
 
         // -------------------------
         // first clock for command b
-        let clock = clocks.clock(&command_b);
+        let clock = clocks.clock(&cmd_b);
         assert_eq!(clock, 3);
 
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
         // get proc votes
-        let proc_votes = clocks.proc_votes(&command_a, clock);
-        assert_eq!(proc_votes.len(), 1); // single object
-        assert_eq!(proc_votes.get(&object_a).unwrap().votes(), vec![4]);
+        let proc_votes = clocks.proc_votes(&cmd_a, clock);
+        assert_eq!(proc_votes.len(), 1); // single key
+        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![4]);
     }
 }

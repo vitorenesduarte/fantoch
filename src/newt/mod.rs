@@ -4,19 +4,25 @@ mod clocks;
 // This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
 mod votes;
 
+// This module contains the definition of `MultiVotesTable`.
+mod votes_table;
+
 // This module contains the definition of `QuorumClocks`.
 mod quorum_clocks;
 
 // This module contains the definition of `Router`.
 mod router;
 
-use crate::base::{BaseProc, Dot, ProcId};
-use crate::command::Command;
+use crate::base::{BaseProc, ClientId, Dot, ProcId, Rifl};
+use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
 use crate::newt::votes::{ProcVotes, Votes};
+use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
+use crate::store::KVStore;
+use crate::store::Key;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -24,6 +30,9 @@ pub struct Newt {
     bp: BaseProc,
     clocks: Clocks,
     dot_to_info: HashMap<Dot, Info>,
+    table: MultiVotesTable,
+    store: KVStore,
+    pending: Pending,
 }
 
 impl Newt {
@@ -34,17 +43,28 @@ impl Newt {
         planet: Planet,
         config: Config,
     ) -> Self {
-        // compute fast quorum size
-        let fast_quorum_size = Newt::fast_quorum_size(&config);
+        // compute fast quorum size and stability threshold
+        let q = Newt::fast_quorum_size(&config);
+        let stability_threshold = Newt::stability_threshold(&config);
 
-        // create `BaseProc`
-        let bp = BaseProc::new(id, region, planet, config, fast_quorum_size);
+        // create `MultiVotesTable`
+        let table = MultiVotesTable::new(config.n(), stability_threshold);
+
+        // create `BaseProc`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
+        let bp = BaseProc::new(id, region, planet, config, q);
+        let clocks = Clocks::new(id);
+        let dot_to_info = HashMap::new();
+        let store = KVStore::new();
+        let pending = Pending::new();
 
         // create `Newt`
         Newt {
             bp,
-            clocks: Clocks::new(id),
-            dot_to_info: HashMap::new(),
+            clocks,
+            dot_to_info,
+            table,
+            store,
+            pending,
         }
     }
 
@@ -53,10 +73,20 @@ impl Newt {
         2 * config.f()
     }
 
+    /// Computes `Newt` stability threshold.
+    /// Typically the threshold should be n - q + 1, where n is the number of
+    /// processes and q the size of the write quorum. In `Newt`, although
+    /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
+    /// The quorum size of 2f ensures that all clocks are computed from f + 1
+    /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
+    fn stability_threshold(config: &Config) -> usize {
+        config.n() - config.f()
+    }
+
     /// Handles messages by forwarding them to the respective handler.
     pub fn handle(&mut self, msg: Message) -> ToSend {
         match msg {
-            Message::MSubmit { cmd } => self.handle_submit(cmd),
+            Message::Submit { cmd } => self.handle_submit(cmd),
             Message::MCollect {
                 from,
                 dot,
@@ -80,7 +110,10 @@ impl Newt {
     }
 
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend {
+    fn handle_submit(&mut self, cmd: MultiCommand) -> ToSend {
+        // start command in `Pending`
+        self.pending.start(&cmd);
+
         // compute the command identifier
         let dot = self.next_dot();
 
@@ -100,23 +133,23 @@ impl Newt {
         };
 
         // return `ToSend`
-        Some((mcollect, fast_quorum))
+        ToSend::Procs(mcollect, fast_quorum)
     }
 
     fn handle_mcollect(
         &mut self,
         from: ProcId,
         dot: Dot,
-        cmd: Command,
+        cmd: MultiCommand,
         quorum: Vec<ProcId>,
-        clock: usize,
+        clock: u64,
     ) -> ToSend {
         // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
 
         // discard message if no longer in START
         if info.status != Status::START {
-            return None;
+            return ToSend::Nothing;
         }
 
         // compute command clock
@@ -125,7 +158,7 @@ impl Newt {
         // compute proc votes
         let proc_votes = self.clocks.proc_votes(&cmd, clock);
 
-        // bump all objects clocks to be `clock`
+        // bump all keys clocks to be `clock`
         self.clocks.bump_to(&cmd, clock);
 
         // TODO we could probably save HashMap operations if the previous two
@@ -133,10 +166,10 @@ impl Newt {
 
         // create votes and quorum clocks
         let votes = Votes::from(&cmd);
-        let quorum_clocks = QuorumClocks::from(self.bp.fast_quorum_size);
+        let quorum_clocks = QuorumClocks::from(self.bp.q);
 
         // TODO above we have the same borrow checker problem that doesn't know
-        // how toderef, as in the MCollectAck handler
+        // how to deref, as in the MCollectAck handler
 
         // update info
         info.status = Status::COLLECT;
@@ -155,24 +188,24 @@ impl Newt {
         };
 
         // return `ToSend`
-        Some((mcollectack, vec![from]))
+        ToSend::Procs(mcollectack, vec![from])
     }
 
     fn handle_mcollectack(
         &mut self,
         from: ProcId,
         dot: Dot,
-        clock: usize,
+        clock: u64,
         proc_votes: ProcVotes,
     ) -> ToSend {
         // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
 
         if info.status != Status::COLLECT || info.quorum_clocks.contains(&from)
         {
             // do nothing if we're no longer COLLECT or if this is a
             // duplicated message
-            return None;
+            return ToSend::Nothing;
         }
         // update votes
         info.votes.add(proc_votes);
@@ -203,30 +236,33 @@ impl Newt {
                 };
 
                 // return `ToSend`
-                Some((mcommit, self.all_procs.clone().unwrap()))
+                ToSend::Procs(mcommit, self.all_procs.clone().unwrap())
             } else {
-                // slow path
-                None
+                // TODO slow path
+                ToSend::Nothing
             }
         } else {
-            None
+            ToSend::Nothing
         }
     }
 
     fn handle_mcommit(
         &mut self,
         dot: Dot,
-        cmd: Command,
-        clock: usize,
+        cmd: MultiCommand,
+        clock: u64,
         votes: Votes,
     ) -> ToSend {
+        // get original proc id
+        let proc_id = dot.0;
+
         // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(|| Info::new());
+        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             // TODO what about the executed status?
-            return None;
+            return ToSend::Nothing;
         }
 
         // update info
@@ -235,40 +271,122 @@ impl Newt {
         info.clock = clock;
         info.votes = votes;
 
-        // do nothing
-        None
-
         // TODO generate phantom votes if committed clock is higher than the
-        // local object's clock
+        // local key's clock
+
+        // update votes table and get commands that can be executed
+        let to_execute = self.table.add(
+            proc_id,
+            info.cmd.clone(),
+            info.clock,
+            info.votes.clone(),
+        );
+
+        // execute commands
+        if let Some(to_execute) = to_execute {
+            let ready_commands = self.execute(to_execute);
+            // if there ready commands, forward them to clients
+            if ready_commands.is_empty() {
+                ToSend::Nothing
+            } else {
+                ToSend::Clients(ready_commands)
+            }
+        } else {
+            // no message to be sent
+            ToSend::Nothing
+        }
+    }
+
+    fn execute(
+        &mut self,
+        to_execute: HashMap<Key, Vec<(Rifl, Command)>>,
+    ) -> HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>> {
+        // TODO I couldn't do the following with iterators. Try again.
+        // create variable that will hold all ready commads
+        let mut ready_commands = HashMap::new();
+
+        // iterate all commands to be executed
+        for (key, cmds) in to_execute {
+            for (cmd_id, cmd_action) in cmds {
+                // execute cmd in the `KVStore`
+                let cmd_result = self.store.execute(&key, cmd_action);
+
+                // add partial result to `Pending`
+                let res = self.pending.add(cmd_id, key.clone(), cmd_result);
+
+                // if there's a new `MultiCommand` ready, add it to output var
+                if let Some(ready) = res {
+                    let rifl = ready.id();
+                    let client_id = rifl.0;
+                    let client_ready = ready_commands
+                        .entry(client_id)
+                        .or_insert_with(Vec::new);
+                    client_ready.push((rifl, ready));
+                }
+            }
+        }
+
+        ready_commands
     }
 }
 
 // every handle returns a `ToSend`
-type ToSend = Option<(Message, Vec<ProcId>)>;
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToSend {
+    // nothing to send
+    Nothing,
+    // a protocol message to be sent to some processes
+    Procs(Message, Vec<ProcId>),
+    // a list of command results to be sent to the issuing client
+    Clients(HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>>),
+}
+
+impl ToSend {
+    /// Check if there's nothing to be sent.
+    fn nothing(&self) -> bool {
+        *self == ToSend::Nothing
+    }
+
+    /// Check if there's something to be sent to processes.
+    fn to_procs(&self) -> bool {
+        match *self {
+            ToSend::Procs(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if there's something to be sent to clients.
+    fn to_clients(&self) -> bool {
+        match *self {
+            ToSend::Clients(_) => true,
+            _ => false,
+        }
+    }
+}
 
 // `Newt` protocol messages
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    MSubmit {
-        cmd: Command,
+    Submit {
+        cmd: MultiCommand,
     },
     MCollect {
         from: ProcId,
         dot: Dot,
-        cmd: Command,
+        cmd: MultiCommand,
         quorum: Vec<ProcId>,
-        clock: usize,
+        clock: u64,
     },
     MCollectAck {
         from: ProcId,
         dot: Dot,
-        clock: usize,
+        clock: u64,
         proc_votes: ProcVotes,
     },
     MCommit {
         dot: Dot,
-        cmd: Command,
-        clock: usize,
+        cmd: MultiCommand,
+        clock: u64,
         votes: Votes,
     },
 }
@@ -277,8 +395,8 @@ pub enum Message {
 struct Info {
     status: Status,
     quorum: Vec<ProcId>,
-    cmd: Option<Command>, // `None` if noOp
-    clock: usize,
+    cmd: Option<MultiCommand>, // `None` if noOp
+    clock: u64,
     votes: Votes,
     quorum_clocks: QuorumClocks,
 }
@@ -323,19 +441,22 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::{Command, Object};
+    use crate::base::Client;
+    use crate::command::MultiCommand;
     use crate::config::Config;
     use crate::newt::router::Router;
-    use crate::newt::{Message, Newt};
+    use crate::newt::{Message, Newt, ToSend};
     use crate::planet::{Planet, Region};
 
     #[test]
-    fn fast_quorum_size() {
-        // n and f
-        let n = 5;
-        let f = 1;
-        let config = Config::new(n, f);
+    fn newt_parameters() {
+        let config = Config::new(7, 1);
         assert_eq!(Newt::fast_quorum_size(&config), 2);
+        assert_eq!(Newt::stability_threshold(&config), 6);
+
+        let config = Config::new(7, 2);
+        assert_eq!(Newt::fast_quorum_size(&config), 4);
+        assert_eq!(Newt::stability_threshold(&config), 5);
     }
 
     #[test]
@@ -382,44 +503,76 @@ mod tests {
 
         // create msg router
         let mut router = Router::new();
+
+        // register processes
         router.set_proc(0, newt_0);
         router.set_proc(1, newt_1);
         router.set_proc(2, newt_2);
 
-        // create a command
-        let cmd = Command::new(vec![Object::new("A")]);
+        // create client 100 that is connected to newt 0
+        let mut client_100 = Client::new(100, 0);
+        // start client 100
+        let (proc_0, cmd) = client_100.start();
+
+        // register clients
+        router.set_client(100, client_100);
 
         // submit it in newt_0
-        let msubmit = Message::MSubmit { cmd };
-        let mcollects = router.route(&0, msubmit);
+        let msubmit = Message::Submit { cmd };
+        let mcollects = router.route_to_proc(proc_0, msubmit);
 
         // check that the mcollect is being sent to 2 processes
-        assert_eq!(mcollects.clone().unwrap().1.len(), 2 * f);
+        assert!(mcollects.to_procs());
+        if let ToSend::Procs(_, to) = mcollects.clone() {
+            assert_eq!(to.len(), 2 * f);
+        } else {
+            panic!("ToSend::Procs not found!");
+        }
 
         // handle in mcollects
-        let mut mcollectacks = router.route_to_many(mcollects);
+        let mut mcollectacks = router.route(mcollects);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
+        assert!(mcollectacks.iter().all(|to_send| to_send.to_procs()));
 
         // handle the first mcollectack
-        let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
+        let mut mcommits = router.route(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
         // no mcommit yet
-        assert!(mcommit_tosend.is_none());
+        assert!(mcommit_tosend.nothing());
 
         // handle the second mcollectack
-        let mut mcommits = router.route_to_many(mcollectacks.pop().unwrap());
+        let mut mcommits = router.route(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
-        // there's an mcommit now
-        assert!(mcommit_tosend.is_some());
 
-        // the mcommit is sent to everyone
-        assert_eq!(mcommit_tosend.clone().unwrap().1.len(), n);
+        // check that there is an mcommit sent to everyone
+        assert!(mcommit_tosend.to_procs());
+        if let ToSend::Procs(_, to) = mcommit_tosend.clone() {
+            assert_eq!(to.len(), n);
+        } else {
+            panic!("ToSend::Procs not found!");
+        }
 
         // all processes handle it
-        let nones = router.route_to_many(mcommit_tosend);
-        // and no reply is sent
-        assert_eq!(nones, vec![None, None, None]);
+        let mut nothings = router.route(mcommit_tosend).into_iter();
+        // the first one has a reply to a client, the remaining two are nothings
+        let to_client = nothings.next().unwrap();
+        assert!(to_client.to_clients());
+        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
+        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
+        assert_eq!(nothings.next(), None);
+
+        // handle what was sent to client
+        let new_submit = router.route(to_client).into_iter().next().unwrap();
+        assert!(new_submit.to_procs());
+
+        let mcollect = router.route(new_submit).into_iter().next().unwrap();
+        if let ToSend::Procs(Message::MCollect{ from, dot, cmd: _, quorum: _, clock: _}, _) = mcollect {
+            assert_eq!(from, 0);
+            assert_eq!(dot, (0, 2));
+        } else {
+            panic!("Message::MCollect not found!");
+        }
     }
 }
