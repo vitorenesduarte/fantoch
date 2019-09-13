@@ -525,6 +525,8 @@ mod tests {
         assert!(mcollects.to_procs());
         if let ToSend::Procs(_, to) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
+        } else {
+            panic!("ToSend::Procs not found!");
         }
 
         // handle in mcollects
@@ -548,6 +550,8 @@ mod tests {
         assert!(mcommit_tosend.to_procs());
         if let ToSend::Procs(_, to) = mcommit_tosend.clone() {
             assert_eq!(to.len(), n);
+        } else {
+            panic!("ToSend::Procs not found!");
         }
 
         // all processes handle it
@@ -560,6 +564,15 @@ mod tests {
         assert_eq!(nothings.next(), None);
 
         // handle what was sent to client
-        let new_submit = router.route(to_client);
+        let new_submit = router.route(to_client).into_iter().next().unwrap();
+        assert!(new_submit.to_procs());
+
+        let mcollect = router.route(new_submit).into_iter().next().unwrap();
+        if let ToSend::Procs(Message::MCollect{ from, dot, cmd: _, quorum: _, clock: _}, _) = mcollect {
+            assert_eq!(from, 0);
+            assert_eq!(dot, (0, 2));
+        } else {
+            panic!("Message::MCollect not found!");
+        }
     }
 }
