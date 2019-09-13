@@ -2,7 +2,7 @@ use crate::base::Rifl;
 use crate::store::{Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;
-use std::iter::FromIterator;
+use std::iter::{self, FromIterator};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Command {
@@ -33,8 +33,13 @@ impl MultiCommand {
         Self::new(id, BTreeMap::from_iter(iter))
     }
 
+    /// Creates a get command.
+    pub fn get(id: Rifl, key: Key) -> Self {
+        Self::from(id, iter::once((key, Command::Get)))
+    }
+
     /// Creates a multi-get command.
-    pub fn get(id: Rifl, keys: Vec<Key>) -> Self {
+    pub fn multi_get(id: Rifl, keys: Vec<Key>) -> Self {
         let commands = keys.into_iter().map(|key| (key, Command::Get));
         Self::from(id, commands)
     }
@@ -99,6 +104,11 @@ impl MultiCommandResult {
     pub fn id(&self) -> Rifl {
         self.id
     }
+
+    /// Returns the commands results.
+    pub fn results(&self) -> &HashMap<Key, CommandResult> {
+        &self.results
+    }
 }
 
 /// Structure that tracks the progress of pending commands.
@@ -131,6 +141,8 @@ impl Pending {
     ) -> Option<MultiCommandResult> {
         // get current result:
         // - if it's not part of pending, then ignore it
+        // (if it's not part of pending, it means that it is from a client
+        // from another newt process, and `pending.start` has not been called)
         let cmd_result = self.pending.get_mut(&id)?;
 
         // add partial result:

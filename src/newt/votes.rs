@@ -121,13 +121,15 @@ mod tests {
 
         // command a
         let cmd_a_id = (100, 1); // client 100, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_id, vec![key_a.clone()]);
+        let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
         let mut votes_a = Votes::from(&cmd_a);
 
         // command b
         let cmd_ab_id = (101, 1); // client 101, 1st op
-        let cmd_ab =
-            MultiCommand::get(cmd_ab_id, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab = MultiCommand::multi_get(
+            cmd_ab_id,
+            vec![key_a.clone(), key_b.clone()],
+        );
         let mut votes_ab = Votes::from(&cmd_ab);
 
         // orders on each process:

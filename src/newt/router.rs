@@ -42,13 +42,11 @@ impl Router {
                 .collect(),
             ToSend::Clients(results) => results
                 .into_iter()
-                .map(|(client, commands)| {
+                .filter_map(|(client, commands)| {
                     self.route_to_client(client, commands)
                 })
-                .flat_map(|(proc_id, new_commands)| {
-                    new_commands.into_iter().map(move |cmd| {
-                        ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
-                    })
+                .map(|(proc_id, cmd)| {
+                    ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
                 })
                 .collect(),
         }
@@ -65,7 +63,7 @@ impl Router {
         &self,
         client_id: ClientId,
         commands: Vec<(Rifl, MultiCommandResult)>,
-    ) -> (ProcId, Vec<MultiCommand>) {
+    ) -> Option<(ProcId, MultiCommand)> {
         let mut client = self.clients.get(&client_id).unwrap().borrow_mut();
         client.handle(commands)
     }

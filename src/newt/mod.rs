@@ -441,6 +441,7 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
+    use crate::base::Client;
     use crate::command::MultiCommand;
     use crate::config::Config;
     use crate::newt::router::Router;
@@ -502,18 +503,23 @@ mod tests {
 
         // create msg router
         let mut router = Router::new();
+
+        // register processes
         router.set_proc(0, newt_0);
         router.set_proc(1, newt_1);
         router.set_proc(2, newt_2);
 
-        // create a command
-        let key_a = String::from("A");
-        let cmd_id = (100, 1); // client 100, 1st op
-        let cmd = MultiCommand::get(cmd_id, vec![key_a]);
+        // create client 100 that is connected to newt 0
+        let mut client_100 = Client::new(100, 0);
+        // start client 100
+        let (proc_0, cmd) = client_100.start();
+
+        // register clients
+        router.set_client(100, client_100);
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
-        let mcollects = router.route_to_proc(0, msubmit);
+        let mcollects = router.route_to_proc(proc_0, msubmit);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_procs());
@@ -545,11 +551,15 @@ mod tests {
         }
 
         // all processes handle it
-        let nothings = router.route(mcommit_tosend);
-        // and no reply is sent
-        assert_eq!(
-            nothings,
-            vec![ToSend::Nothing, ToSend::Nothing, ToSend::Nothing]
-        );
+        let mut nothings = router.route(mcommit_tosend).into_iter();
+        // the first one has a reply to a client, the remaining two are nothings
+        let to_client = nothings.next().unwrap();
+        assert!(to_client.to_clients());
+        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
+        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
+        assert_eq!(nothings.next(), None);
+
+        // handle what was sent to client
+        let new_submit = router.route(to_client);
     }
 }
