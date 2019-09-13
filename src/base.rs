@@ -45,7 +45,10 @@ impl Client {
         }
     }
 
-    /// and generates its first command.
+    /// TODO pass current time to start and handle function
+    /// and record command initial time to measure its overall latency
+
+    /// Generate client's first command.
     pub fn start(&mut self) -> (ProcId, MultiCommand) {
         assert_eq!(self.command_count, 0);
         assert!(self.commands > 0);
