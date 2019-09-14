@@ -1,4 +1,5 @@
-use crate::base::{Client, ClientId, ProcId, Rifl};
+use crate::base::ProcId;
+use crate::client::{Client, ClientId, Rifl};
 use crate::command::{MultiCommand, MultiCommandResult};
 use crate::newt::{Message, Newt, ToSend};
 use std::cell::RefCell;

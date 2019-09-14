@@ -1,4 +1,5 @@
-use crate::base::{ProcId, Rifl};
+use crate::base::ProcId;
+use crate::client::Rifl;
 use crate::command::{Command, MultiCommand};
 use crate::newt::votes::{VoteRange, Votes};
 use crate::store::Key;

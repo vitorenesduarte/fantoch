@@ -13,7 +13,8 @@ mod quorum_clocks;
 // This module contains the definition of `Router`.
 mod router;
 
-use crate::base::{BaseProc, ClientId, Dot, ProcId, Rifl};
+use crate::base::{BaseProc, Dot, ProcId};
+use crate::client::{ClientId, Rifl};
 use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
 use crate::config::Config;
 use crate::newt::clocks::Clocks;
@@ -441,7 +442,7 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
-    use crate::base::Client;
+    use crate::client::Client;
     use crate::command::MultiCommand;
     use crate::config::Config;
     use crate::newt::router::Router;
@@ -568,7 +569,17 @@ mod tests {
         assert!(new_submit.to_procs());
 
         let mcollect = router.route(new_submit).into_iter().next().unwrap();
-        if let ToSend::Procs(Message::MCollect{ from, dot, cmd: _, quorum: _, clock: _}, _) = mcollect {
+        if let ToSend::Procs(
+            Message::MCollect {
+                from,
+                dot,
+                cmd: _,
+                quorum: _,
+                clock: _,
+            },
+            _,
+        ) = mcollect
+        {
             assert_eq!(from, 0);
             assert_eq!(dot, (0, 2));
         } else {

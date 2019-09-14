@@ -7,9 +7,11 @@ pub mod planet;
 // This module contains the definition of `Config`.
 pub mod config;
 
-// This module contains the definition of `BaseProc`, `Dot`, `ProcId`,
-// `ClientId` and `Rifl`.
+// This module contains the definition of `BaseProc`, `Dot`, `ProcId`.
 pub mod base;
+
+// This module contains the definition of `Client`, `ClientId` and `Rifl`.
+pub mod client;
 
 // This module contains the definition of `Key`, `Value` and `KVStore`.
 pub mod store;

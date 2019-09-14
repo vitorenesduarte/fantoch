@@ -1,4 +1,4 @@
-use crate::base::Rifl;
+use crate::client::Rifl;
 use crate::store::{Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;
