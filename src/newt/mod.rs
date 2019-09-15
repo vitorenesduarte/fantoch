@@ -569,16 +569,7 @@ mod tests {
         assert!(new_submit.to_procs());
 
         let mcollect = router.route(new_submit).into_iter().next().unwrap();
-        if let ToSend::Procs(
-            Message::MCollect {
-                from,
-                dot,
-                cmd: _,
-                quorum: _,
-                clock: _,
-            },
-            _,
-        ) = mcollect
+        if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect
         {
             assert_eq!(from, 0);
             assert_eq!(dot, (0, 2));
