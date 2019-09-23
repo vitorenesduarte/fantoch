@@ -132,21 +132,24 @@ mod tests {
         let mut expected = HashMap::new();
         expected.insert(Region::new("europe-west3"), 1);
         expected.insert(Region::new("europe-west4"), 7);
-        expected.insert(Region::new("europe-west1"), 7);
+        expected.insert(Region::new("europe-west6"), 7);
+        expected.insert(Region::new("europe-west1"), 8);
         expected.insert(Region::new("europe-west2"), 13);
         expected.insert(Region::new("europe-north1"), 31);
         expected.insert(Region::new("us-east4"), 86);
-        expected.insert(Region::new("northamerica-northeast1"), 92);
-        expected.insert(Region::new("us-east1"), 97);
-        expected.insert(Region::new("us-central1"), 109);
-        expected.insert(Region::new("us-west1"), 143);
-        expected.insert(Region::new("us-west2"), 145);
+        expected.insert(Region::new("northamerica-northeast1"), 87);
+        expected.insert(Region::new("us-east1"), 98);
+        expected.insert(Region::new("us-central1"), 105);
+        expected.insert(Region::new("us-west1"), 136);
+        expected.insert(Region::new("us-west2"), 139);
         expected.insert(Region::new("southamerica-east1"), 214);
-        expected.insert(Region::new("asia-northeast1"), 231);
-        expected.insert(Region::new("asia-east1"), 261);
-        expected.insert(Region::new("australia-southeast1"), 281);
-        expected.insert(Region::new("asia-southeast1"), 293);
-        expected.insert(Region::new("asia-south1"), 355);
+        expected.insert(Region::new("asia-northeast1"), 224);
+        expected.insert(Region::new("asia-northeast2"), 233);
+        expected.insert(Region::new("asia-east1"), 258);
+        expected.insert(Region::new("asia-east2"), 268);
+        expected.insert(Region::new("australia-southeast1"), 276);
+        expected.insert(Region::new("asia-southeast1"), 289);
+        expected.insert(Region::new("asia-south1"), 352);
 
         assert_eq!(dat.latencies(), expected);
     }

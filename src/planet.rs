@@ -92,13 +92,9 @@ mod tests {
 
         assert_eq!(planet.latency(&eu_w3, &eu_w4).unwrap(), 7);
 
-        // sometimes latency is symmetric
-        assert_eq!(planet.latency(&eu_w3, &us_c1).unwrap(), 109);
-        assert_eq!(planet.latency(&us_c1, &eu_w3).unwrap(), 109);
-
-        // sometimes it's not
-        assert_eq!(planet.latency(&eu_w3, &au_s1).unwrap(), 281);
-        assert_eq!(planet.latency(&au_s1, &eu_w3).unwrap(), 282);
+        // most times latency is symmetric
+        assert_eq!(planet.latency(&eu_w3, &us_c1).unwrap(), 105);
+        assert_eq!(planet.latency(&us_c1, &eu_w3).unwrap(), 105);
     }
 
     #[test]
@@ -114,8 +110,9 @@ mod tests {
         // - the first two have the same value, so they're ordered by name
         let expected = vec![
             Region::new("europe-west3"),
-            Region::new("europe-west1"),
             Region::new("europe-west4"),
+            Region::new("europe-west6"),
+            Region::new("europe-west1"),
             Region::new("europe-west2"),
             Region::new("europe-north1"),
             Region::new("us-east4"),
@@ -126,7 +123,9 @@ mod tests {
             Region::new("us-west2"),
             Region::new("southamerica-east1"),
             Region::new("asia-northeast1"),
+            Region::new("asia-northeast2"),
             Region::new("asia-east1"),
+            Region::new("asia-east2"),
             Region::new("australia-southeast1"),
             Region::new("asia-southeast1"),
             Region::new("asia-south1"),

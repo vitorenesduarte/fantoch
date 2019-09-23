@@ -149,11 +149,11 @@ mod tests {
         // discover procs
         bp.discover(procs);
 
-        assert_eq!(bp.fast_quorum, Some(vec![8, 6, 9, 7, 5, 14]));
+        assert_eq!(bp.fast_quorum, Some(vec![8, 9, 6, 7, 5, 14]));
         assert_eq!(
             bp.all_procs,
             Some(vec![
-                8, 6, 9, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
+                8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
             ])
         );
     }
