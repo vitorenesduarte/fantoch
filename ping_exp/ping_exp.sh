@@ -105,6 +105,7 @@ run_region_ping_exp() {
 }
 
 # exp config
+# run the experiment for 1h unless the user passes a different number of seconds as the first argument
 SECONDS=3600
 if [ ! -z "$1" ]; then
     SECONDS=$1
@@ -113,7 +114,6 @@ fi
 # remove previous files
 rm -f *.dat
 
-delete_instances
 list_regions
 create_instances
 list_instances
