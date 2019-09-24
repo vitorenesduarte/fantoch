@@ -94,7 +94,6 @@ impl Bote {
             .map(|leader| {
                 // compute the latency from leader to its closest quorum
                 let leader_to_quorum = quorum_latencies.get(&leader).unwrap();
-                println!("quorum latency {:?}: {}", leader, leader_to_quorum);
 
                 // compute perceived latency for each client
                 let latencies: Vec<_> = clients
@@ -103,16 +102,11 @@ impl Bote {
                         // compute the latency from client to leader
                         let client_to_leader =
                             self.planet.latency(client, &leader).unwrap();
-                        println!(
-                            "{:?} -> {:?}: {}",
-                            client, leader, client_to_leader
-                        );
                         // client perceived latency is the sum of both
                         client_to_leader + leader_to_quorum
                     })
                     .collect();
 
-                println!("latencies: {:?}", latencies);
                 // compute stats
                 let stats = Stats::from(&latencies);
 
