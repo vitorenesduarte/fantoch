@@ -108,7 +108,6 @@ mod tests {
         let eu_w3 = Region::new("europe-west3");
         let eu_w4 = Region::new("europe-west4");
         let us_c1 = Region::new("us-central1");
-        let au_s1 = Region::new("australia-southeast1");
 
         assert_eq!(planet.latency(&eu_w3, &eu_w4).unwrap(), 7);
 
