@@ -21,3 +21,6 @@ pub mod command;
 
 // This module contains the definition of `Newt`.
 pub mod newt;
+
+// This module contains back-of-the-envelop calculations.
+pub mod bote;

@@ -47,7 +47,7 @@ impl Planet {
     pub fn sorted_by_distance(
         &self,
         from: &Region,
-    ) -> Option<HashMap<&Region, usize>> {
+    ) -> Option<Vec<(&Region, usize)>> {
         // get from's entries
         let entries = self.latencies.get(from)?;
 
@@ -58,11 +58,31 @@ impl Planet {
         // now latency first appears first, so we can sort entries by latency
         entries.sort_unstable();
 
-        // create a mapping from region to its sorted index
-        let region_to_index = entries
+        // create a list of tuples region to latency
+        let region_to_latency = entries
             .into_iter()
             // drop latencies
-            .map(|(_, to)| to)
+            .map(|(latency, to)| (to, *latency))
+            .collect();
+
+        // return region to latency mapping
+        Some(region_to_latency)
+    }
+
+    /// Returns a list of `Region`s sorted by the distance to the `Region`
+    /// passed as argument.
+    pub fn sorted_by_distance_and_indexed(
+        &self,
+        from: &Region,
+    ) -> Option<HashMap<&Region, usize>> {
+        // sort by distance
+        let region_to_distance = self.sorted_by_distance(from)?;
+
+        // create a mapping from region to its sorted index
+        let region_to_index = region_to_distance
+            .into_iter()
+            // drop latencies
+            .map(|(to, _)| to)
             .enumerate()
             // reverse: now regions map to sort index
             .map(|(index, to)| (to, index))
@@ -98,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn sorted_by_distance() {
+    fn sorted_by_distance_and_indexed() {
         // planet
         let lat_dir = "latency/";
         let planet = Planet::new(lat_dir);
@@ -137,6 +157,9 @@ mod tests {
             .map(|(index, region)| (region, index))
             .collect();
 
-        assert_eq!(planet.sorted_by_distance(&eu_w3).unwrap(), expected);
+        assert_eq!(
+            planet.sorted_by_distance_and_indexed(&eu_w3).unwrap(),
+            expected
+        );
     }
 }
