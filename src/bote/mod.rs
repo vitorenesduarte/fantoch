@@ -19,41 +19,6 @@ impl Bote {
         println!("bote!");
     }
 
-    fn latency_to_closest_quorum(
-        &self,
-        regions: Vec<Region>,
-        quorum_size: usize,
-    ) -> HashMap<Region, usize> {
-        regions
-            .clone() // TODO can we avoid this clone?
-            .into_iter()
-            .map(|from| {
-                let (_, latency) =
-                    self.nth_closest(quorum_size, &from, &regions);
-                (from, latency)
-            })
-            .collect()
-    }
-
-    /// Compute the latency to the nth closest region.
-    /// This same method can be used to find the:
-    /// - latency to the closest quorum
-    /// - latency to the closest region
-    fn nth_closest(
-        &self,
-        nth: usize,
-        from: &Region,
-        regions: &Vec<Region>,
-    ) -> (&Region, usize) {
-        self.planet
-            .sorted_by_distance(from)
-            .unwrap()
-            .into_iter()
-            .filter(|(to, _)| regions.contains(to))
-            .nth(nth - 1)
-            .unwrap()
-    }
-
     fn leaderless(
         &self,
         servers: Vec<Region>,
@@ -113,6 +78,41 @@ impl Bote {
                 (leader, stats)
             })
             .collect()
+    }
+
+    fn latency_to_closest_quorum(
+        &self,
+        regions: Vec<Region>,
+        quorum_size: usize,
+    ) -> HashMap<Region, usize> {
+        regions
+            .clone() // TODO can we avoid this clone?
+            .into_iter()
+            .map(|from| {
+                let (_, latency) =
+                    self.nth_closest(quorum_size, &from, &regions);
+                (from, latency)
+            })
+            .collect()
+    }
+
+    /// Compute the latency to the nth closest region.
+    /// This same method can be used to find the:
+    /// - latency to the closest quorum
+    /// - latency to the closest region
+    fn nth_closest(
+        &self,
+        nth: usize,
+        from: &Region,
+        regions: &Vec<Region>,
+    ) -> (&Region, usize) {
+        self.planet
+            .sorted_by_distance(from)
+            .unwrap()
+            .into_iter()
+            .filter(|(to, _)| regions.contains(to))
+            .nth(nth - 1)
+            .unwrap()
     }
 }
 
