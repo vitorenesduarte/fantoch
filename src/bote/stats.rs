@@ -1,25 +1,50 @@
+use std::cmp::Ordering;
+use std::fmt;
+
 pub struct Stats {
     mean: usize,
-    mean_distance_to_mean: usize,
+    fairness: usize, // mean distance to mean
+}
+
+impl fmt::Debug for Stats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.mean, self.fairness)
+    }
 }
 
 impl Stats {
     pub fn from(xs: &Vec<usize>) -> Self {
         let mean = Stats::compute_mean(xs);
-        let mean_distance_to_mean =
-            Stats::compute_mean_distance_to_mean(mean, xs);
-        Stats {
-            mean,
-            mean_distance_to_mean,
-        }
+        let fairness = Stats::compute_mean_distance_to_mean(mean, xs);
+        Stats { mean, fairness }
     }
 
     pub fn mean(&self) -> usize {
         self.mean
     }
 
-    pub fn mean_distance_to_mean(&self) -> usize {
-        self.mean_distance_to_mean
+    pub fn fairness(&self) -> usize {
+        self.fairness
+    }
+
+    /// This method can be sort a list of `Stat`s and selecting the one with a
+    /// best mean. In case there are more than one `Stat` with the best
+    /// mean, it will select the one with the best fairness stat.
+    pub fn mean_cmp(&self, b: &Self) -> Ordering {
+        match self.mean.cmp(&b.mean()) {
+            Ordering::Equal => self.fairness.cmp(&b.fairness()),
+            o => o,
+        }
+    }
+
+    /// This method can be sort a list of `Stat`s and selecting the one with a
+    /// best fairness stat. In case there are more than one `Stat` with the best
+    /// fairness stat, it will select the one with the best mean.
+    pub fn fairness_cmp(&self, b: &Self) -> Ordering {
+        match self.fairness.cmp(&b.fairness()) {
+            Ordering::Equal => self.fairness.cmp(&b.mean()),
+            o => o,
+        }
     }
 
     fn compute_mean(xs: &Vec<usize>) -> usize {
@@ -49,18 +74,18 @@ mod test {
     fn stats() {
         let stats = Stats::from(&vec![1, 1, 1]);
         assert_eq!(stats.mean(), 1);
-        assert_eq!(stats.mean_distance_to_mean(), 0);
+        assert_eq!(stats.fairness(), 0);
 
         let stats = Stats::from(&vec![10, 20, 30]);
         assert_eq!(stats.mean(), 20);
-        assert_eq!(stats.mean_distance_to_mean(), 6);
+        assert_eq!(stats.fairness(), 6);
 
         let stats = Stats::from(&vec![10, 20]);
         assert_eq!(stats.mean(), 15);
-        assert_eq!(stats.mean_distance_to_mean(), 5);
+        assert_eq!(stats.fairness(), 5);
 
         let stats = Stats::from(&vec![10, 20, 40, 10]);
         assert_eq!(stats.mean(), 20);
-        assert_eq!(stats.mean_distance_to_mean(), 10);
+        assert_eq!(stats.fairness(), 10);
     }
 }

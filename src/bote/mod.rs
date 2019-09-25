@@ -3,6 +3,7 @@ mod stats;
 
 use crate::bote::stats::Stats;
 use crate::planet::{Planet, Region};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 pub struct Bote {
@@ -90,6 +91,26 @@ impl Bote {
                 (leader, stats)
             })
             .collect()
+    }
+
+    fn best_mean_leader(
+        &self,
+        servers: Vec<Region>,
+        clients: Vec<Region>,
+        quorum_size: usize,
+    ) -> Stats {
+        // compute the stats for all possible leaders
+        let mut all_stats: Vec<_> = self
+            .leader(servers, clients, quorum_size)
+            .into_iter()
+            .map(|(_, stats)| stats)
+            .collect();
+
+        // sort stats by mean latency
+        all_stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
+
+        // get the stat with the lowest mean latency
+        all_stats.into_iter().next().unwrap()
     }
 
     /// Compute the latency to closest quorum of a size `quorum_size`.
@@ -193,7 +214,7 @@ mod test {
             bote.leaderless(regions.clone(), regions.clone(), quorum_size);
         // w1 -> 9, w2 -> 11, w3 -> 8, w4 -> 8, w6 -> 15
         assert_eq!(stats.mean(), 10);
-        assert_eq!(stats.mean_distance_to_mean(), 2);
+        assert_eq!(stats.fairness(), 2);
 
         // quorum size 4
         let quorum_size = 4;
@@ -201,7 +222,7 @@ mod test {
             bote.leaderless(regions.clone(), regions.clone(), quorum_size);
         // w1 -> 11, w2 -> 14, w3 -> 9, w4 -> 10, w6 -> 15
         assert_eq!(stats.mean(), 11);
-        assert_eq!(stats.mean_distance_to_mean(), 2);
+        assert_eq!(stats.fairness(), 2);
     }
 
     #[test]
@@ -228,7 +249,7 @@ mod test {
             bote.leaderless(servers.clone(), clients.clone(), quorum_size);
         // w1 -> 9, w2 -> 11
         assert_eq!(stats.mean(), 10);
-        assert_eq!(stats.mean_distance_to_mean(), 1);
+        assert_eq!(stats.fairness(), 1);
 
         // quorum size 4
         let quorum_size = 4;
@@ -236,7 +257,7 @@ mod test {
             bote.leaderless(servers.clone(), clients.clone(), quorum_size);
         // w1 -> 11, w2 -> 14
         assert_eq!(stats.mean(), 12);
-        assert_eq!(stats.mean_distance_to_mean(), 1);
+        assert_eq!(stats.fairness(), 1);
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
@@ -247,7 +268,7 @@ mod test {
             bote.leaderless(servers.clone(), clients.clone(), quorum_size);
         // w1 -> 9, w3 -> 8, w6 -> 15
         assert_eq!(stats.mean(), 10);
-        assert_eq!(stats.mean_distance_to_mean(), 2);
+        assert_eq!(stats.fairness(), 2);
 
         // quorum size 4
         let quorum_size = 4;
@@ -255,7 +276,7 @@ mod test {
             bote.leaderless(servers.clone(), clients.clone(), quorum_size);
         // w1 -> 11, w3 -> 9, w6 -> 15
         assert_eq!(stats.mean(), 11);
-        assert_eq!(stats.mean_distance_to_mean(), 2);
+        assert_eq!(stats.fairness(), 2);
     }
 
     #[test]
@@ -282,19 +303,19 @@ mod test {
         // w1 -> 8, w2 -> 17, w3 -> 15, w4 -> 14, w6 -> 21
         let w1_stats = leader_to_stats.get(&w1).unwrap();
         assert_eq!(w1_stats.mean(), 15);
-        assert_eq!(w1_stats.mean_distance_to_mean(), 3);
+        assert_eq!(w1_stats.fairness(), 3);
 
         // quorum latency for w2 is 9
         // w1 -> 19, w2 -> 10, w3 -> 22, w4 -> 18, w6 -> 28
         let w2_stats = leader_to_stats.get(&w2).unwrap();
         assert_eq!(w2_stats.mean(), 19);
-        assert_eq!(w2_stats.mean_distance_to_mean(), 4);
+        assert_eq!(w2_stats.fairness(), 4);
 
         // quorum latency for w3 is 7
         // w1 -> 15, w2 -> 20, w3 -> 8, w4 -> 14, w6 -> 14
         let w3_stats = leader_to_stats.get(&w3).unwrap();
         assert_eq!(w3_stats.mean(), 14);
-        assert_eq!(w3_stats.mean_distance_to_mean(), 2);
+        assert_eq!(w3_stats.fairness(), 2);
     }
 
     #[test]
@@ -324,19 +345,19 @@ mod test {
         // w1 -> 8, w2 -> 17
         let w1_stats = leader_to_stats.get(&w1).unwrap();
         assert_eq!(w1_stats.mean(), 12);
-        assert_eq!(w1_stats.mean_distance_to_mean(), 4);
+        assert_eq!(w1_stats.fairness(), 4);
 
         // quorum latency for w2 is 9
         // w1 -> 19, w2 -> 10
         let w2_stats = leader_to_stats.get(&w2).unwrap();
         assert_eq!(w2_stats.mean(), 14);
-        assert_eq!(w2_stats.mean_distance_to_mean(), 4);
+        assert_eq!(w2_stats.fairness(), 4);
 
         // quorum latency for w3 is 7
         // w1 -> 15, w2 -> 20
         let w3_stats = leader_to_stats.get(&w3).unwrap();
         assert_eq!(w3_stats.mean(), 17);
-        assert_eq!(w3_stats.mean_distance_to_mean(), 2);
+        assert_eq!(w3_stats.fairness(), 2);
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
@@ -347,18 +368,45 @@ mod test {
         // w1 -> 8, w3 -> 15, w6 -> 21
         let w1_stats = leader_to_stats.get(&w1).unwrap();
         assert_eq!(w1_stats.mean(), 14);
-        assert_eq!(w1_stats.mean_distance_to_mean(), 4);
+        assert_eq!(w1_stats.fairness(), 4);
 
         // quorum latency for w2 is 9
         // w1 -> 19, w3 -> 22, w6 -> 28
         let w2_stats = leader_to_stats.get(&w2).unwrap();
         assert_eq!(w2_stats.mean(), 23);
-        assert_eq!(w2_stats.mean_distance_to_mean(), 3);
+        assert_eq!(w2_stats.fairness(), 3);
 
         // quorum latency for w3 is 7
         // w1 -> 15, w3 -> 8, w6 -> 14
         let w3_stats = leader_to_stats.get(&w3).unwrap();
         assert_eq!(w3_stats.mean(), 12);
-        assert_eq!(w3_stats.mean_distance_to_mean(), 3);
+        assert_eq!(w3_stats.fairness(), 3);
+    }
+
+    #[test]
+    fn best_mean_leader() {
+        // create bote
+        let lat_dir = "latency/";
+        let bote = Bote::new(lat_dir);
+
+        // considered regions
+        let w1 = Region::new("europe-west1");
+        let w2 = Region::new("europe-west2");
+        let w3 = Region::new("europe-west3");
+        let w4 = Region::new("europe-west4");
+        let w6 = Region::new("europe-west6");
+        let regions =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+
+        // quorum size 2:
+        let quorum_size = 2;
+        let best_leader_stats = bote.best_mean_leader(
+            regions.clone(),
+            regions.clone(),
+            quorum_size,
+        );
+
+        assert_eq!(best_leader_stats.mean(), 14);
+        assert_eq!(best_leader_stats.fairness(), 2);
     }
 }
