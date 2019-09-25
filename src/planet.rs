@@ -1,7 +1,8 @@
 use crate::dat::Dat;
 use std::collections::HashMap;
+use std::fmt;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Region {
     name: String,
 }
@@ -10,6 +11,12 @@ impl Region {
     /// Create a new `Region`.
     pub fn new<S: Into<String>>(name: S) -> Self {
         Region { name: name.into() }
+    }
+}
+
+impl fmt::Debug for Region {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
@@ -90,6 +97,38 @@ impl Planet {
 
         // return region to index mapping
         Some(region_to_index)
+    }
+}
+
+impl Planet {
+    pub fn show_distance_matrix(&self, mut regions: Vec<Region>) {
+        regions.sort();
+
+        // start header
+        print!("| |");
+        for r in regions.iter() {
+            print!(" {:?} |", r);
+        }
+        println!("");
+
+        // end header
+        print!("|:---:|");
+        for _ in regions.iter() {
+            print!(":---:|");
+        }
+        println!("");
+
+        // for each region a
+        for a in regions.iter() {
+            print!("| __{:?}__ |", a);
+
+            // compute latency from a to every other region b
+            for b in regions.iter() {
+                let lat = self.latency(a, b).unwrap();
+                print!(" {} |", lat);
+            }
+            println!("");
+        }
     }
 }
 
