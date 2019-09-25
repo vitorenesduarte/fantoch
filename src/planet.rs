@@ -40,6 +40,11 @@ impl Planet {
         Planet { latencies }
     }
 
+    /// Retrives a list with all regions.
+    pub fn regions(&self) -> Vec<Region> {
+        self.latencies.keys().cloned().collect()
+    }
+
     /// Retrives the distance between the two regions passed as argument.
     pub fn latency(&self, from: &Region, to: &Region) -> Option<usize> {
         // get from's entries

@@ -5,7 +5,14 @@ use planet_sim::planet::{Planet, Region};
 const LAT_DIR: &str = "latency/";
 
 fn main() {
+    // create planet
     let planet = Planet::new(LAT_DIR);
+
+    // compute all regions
+    let all_regions = planet.regions();
+    println!("all regions: {:?}", all_regions);
+
+    // compute all clients
     let clients = vec![
         Region::new("us-west2"),
         Region::new("us-east1"),
@@ -20,6 +27,10 @@ fn main() {
         Region::new("asia-northeast1"),
     ];
     planet.show_distance_matrix(clients.clone());
+
+    // create bote
     let bote = Bote::from(planet);
-    bote.run();
+
+    let stats = bote.leaderless(all_regions, clients, 2);
+    println!("{:?}", stats);
 }

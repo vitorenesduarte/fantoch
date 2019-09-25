@@ -13,9 +13,9 @@ impl fmt::Debug for Stats {
 }
 
 impl Stats {
-    pub fn from(xs: &Vec<usize>) -> Self {
-        let mean = Stats::compute_mean(xs);
-        let fairness = Stats::compute_mean_distance_to_mean(mean, xs);
+    pub fn from(latencies: &Vec<usize>) -> Self {
+        let mean = Stats::compute_mean(latencies);
+        let fairness = Stats::compute_mean_distance_to_mean(mean, latencies);
         Stats { mean, fairness }
     }
 

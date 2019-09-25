@@ -20,11 +20,7 @@ impl Bote {
         Bote { planet }
     }
 
-    pub fn run(&self) {
-        let clients = println!("bote!");
-    }
-
-    fn leaderless(
+    pub fn leaderless(
         &self,
         servers: Vec<Region>,
         clients: Vec<Region>,
@@ -52,6 +48,26 @@ impl Bote {
 
         // compute stats from these client perceived latencies
         Stats::from(&latencies)
+    }
+
+    pub fn best_mean_leader(
+        &self,
+        servers: Vec<Region>,
+        clients: Vec<Region>,
+        quorum_size: usize,
+    ) -> Stats {
+        // compute the stats for all possible leaders
+        let mut all_stats: Vec<_> = self
+            .leader(servers, clients, quorum_size)
+            .into_iter()
+            .map(|(_, stats)| stats)
+            .collect();
+
+        // sort stats by mean latency
+        all_stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
+
+        // get the stat with the lowest mean latency
+        all_stats.into_iter().next().unwrap()
     }
 
     fn leader(
@@ -91,26 +107,6 @@ impl Bote {
                 (leader, stats)
             })
             .collect()
-    }
-
-    fn best_mean_leader(
-        &self,
-        servers: Vec<Region>,
-        clients: Vec<Region>,
-        quorum_size: usize,
-    ) -> Stats {
-        // compute the stats for all possible leaders
-        let mut all_stats: Vec<_> = self
-            .leader(servers, clients, quorum_size)
-            .into_iter()
-            .map(|(_, stats)| stats)
-            .collect();
-
-        // sort stats by mean latency
-        all_stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
-
-        // get the stat with the lowest mean latency
-        all_stats.into_iter().next().unwrap()
     }
 
     /// Compute the latency to closest quorum of a size `quorum_size`.
