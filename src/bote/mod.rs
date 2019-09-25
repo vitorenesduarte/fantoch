@@ -1,5 +1,5 @@
-mod protocol;
-mod stats;
+pub mod protocol;
+pub mod stats;
 
 use crate::bote::stats::Stats;
 use crate::planet::{Planet, Region};
@@ -65,6 +65,7 @@ impl Bote {
 
         // sort stats by mean latency
         all_stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
+        // println!("all stats: {:?}", all_stats);
 
         // get the stat with the lowest mean latency
         all_stats.into_iter().next().unwrap()
