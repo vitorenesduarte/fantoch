@@ -16,7 +16,7 @@ impl Bote {
     }
 
     pub fn run(&self) {
-        println!("bote!");
+        let clients = println!("bote!");
     }
 
     fn leaderless(
@@ -25,22 +25,27 @@ impl Bote {
         clients: Vec<Region>,
         quorum_size: usize,
     ) -> Stats {
+        // TODO can we avoid this clone?
+        // compute the quorum latency for each server
         let quorum_latencies =
-            self.latency_to_closest_quorum(servers.clone(), quorum_size); // TODO can we also avoid this clone?
+            self.latency_to_closest_quorum(servers.clone(), quorum_size);
+
         let latencies: Vec<_> = clients
             .into_iter()
             .map(|client| {
-                // compute the latency from client to the closest available
-                // region
+                // compute the latency from this client to the closest region
                 let (closest, client_to_closest) =
                     self.nth_closest(1, &client, &servers);
+
                 // compute the latency from such region to its closest quorum
                 let closest_to_quorum = quorum_latencies.get(closest).unwrap();
-                // the final latency is the sum of both the above
+
+                // client perceived latency is the sum of both
                 client_to_closest + closest_to_quorum
             })
             .collect();
-        // compute stats
+
+        // compute stats from these client perceived latencies
         Stats::from(&latencies)
     }
 
@@ -50,9 +55,12 @@ impl Bote {
         clients: Vec<Region>,
         quorum_size: usize,
     ) -> HashMap<Region, Stats> {
+        // TODO can we avoid this clone?
+        // compute the quorum latency for each possible leader
         let quorum_latencies =
-            self.latency_to_closest_quorum(servers.clone(), quorum_size); // TODO can we also avoid this clone?
+            self.latency_to_closest_quorum(servers.clone(), quorum_size);
 
+        // compute latency stats for each possible leader
         servers
             .clone()
             .into_iter()
@@ -72,7 +80,7 @@ impl Bote {
                     })
                     .collect();
 
-                // compute stats
+                // compute stats from these client perceived latencies
                 let stats = Stats::from(&latencies);
 
                 (leader, stats)
@@ -80,6 +88,7 @@ impl Bote {
             .collect()
     }
 
+    /// Compute the latency to closest quorum of a size `quorum_size`.
     fn latency_to_closest_quorum(
         &self,
         regions: Vec<Region>,
@@ -89,6 +98,8 @@ impl Bote {
             .clone() // TODO can we avoid this clone?
             .into_iter()
             .map(|from| {
+                // for each region, get the latency to the `quorum_size`th
+                // closest region
                 let (_, latency) =
                     self.nth_closest(quorum_size, &from, &regions);
                 (from, latency)
@@ -107,10 +118,13 @@ impl Bote {
         regions: &Vec<Region>,
     ) -> (&Region, usize) {
         self.planet
+            // sort by distance
             .sorted_by_distance(from)
             .unwrap()
             .into_iter()
+            // keep only the regions in this configuration
             .filter(|(to, _)| regions.contains(to))
+            // select the nth region
             .nth(nth - 1)
             .unwrap()
     }
