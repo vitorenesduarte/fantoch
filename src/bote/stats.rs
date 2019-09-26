@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt;
 
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Stats {
     mean: usize,
     fairness: usize, // mean distance to mean

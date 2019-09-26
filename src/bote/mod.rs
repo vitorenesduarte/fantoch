@@ -3,7 +3,6 @@ pub mod stats;
 
 use crate::bote::stats::Stats;
 use crate::planet::{Planet, Region};
-use std::cmp::Ordering;
 use std::collections::HashMap;
 
 pub struct Bote {
