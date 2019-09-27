@@ -6,34 +6,68 @@ use planet_sim::planet::{Planet, Region};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter::FromIterator;
 
-// directory that contains all dat files
-const LAT_DIR: &str = "latency/";
-const MIN_LAT_IMPROV: isize = 0;
-const MIN_FAIRNESS_IMPROV: isize = 0;
-const MIN_SCORE: isize = MIN_LAT_IMPROV + MIN_FAIRNESS_IMPROV;
-
-// config score and stats
+// mapping from protocol name to its stats
 type AllStats = BTreeMap<String, Stats>;
+// config score and stats (more like: score, config and stats)
 type ConfigSS = (isize, BTreeSet<Region>, AllStats);
 
-enum SearchStrategy {
+enum SearchInput {
     C20S20,
     C11S11,
     C11S20,
     C9S9,
 }
 
+enum SearchMetric {
+    Latency,
+    Fairness,
+    MinMaxDistance,
+    LatencyAndFairness,
+}
+
+// fault tolerance considered when searching for configurations
+enum SearchFT {
+    F1,
+    F2,
+    F1AndF2,
+}
+
+impl SearchFT {
+    fn fs(&self, n: usize) -> Vec<usize> {
+        match self {
+            SearchFT::F1 => vec![1],
+            SearchFT::F2 => {
+                if n == 3 {
+                    vec![1]
+                } else {
+                    vec![2]
+                }
+            }
+            SearchFT::F1AndF2 => {
+                if n == 3 {
+                    vec![1]
+                } else {
+                    vec![1, 2]
+                }
+            }
+        }
+    }
+}
+
+// directory that contains all dat files
+const LAT_DIR: &str = "latency/";
+const MIN_LAT_IMPROV: isize = 0;
+const MIN_FAIRNESS_IMPROV: isize = 0;
+const SEARCH_INPUT: SearchInput = SearchInput::C20S20;
+const SEARCH_METRIC: SearchMetric = SearchMetric::Latency;
+const SEARCH_FT: SearchFT = SearchFT::F1AndF2;
+
 fn main() {
     // create planet
     let planet = Planet::new(LAT_DIR);
 
-    // show clients11 matrix
-    // let (_, clients) = get_search_parameters(&planet, SearchStrategy::C9S9);
-    // planet.show_distance_matrix(clients);
-
     // get actual servers and clients
-    let strategy = SearchStrategy::C20S20;
-    let (servers, clients) = get_search_parameters(&planet, strategy);
+    let (servers, clients) = get_search_parameters(&planet);
 
     // create bote
     let bote = Bote::from(planet);
@@ -114,7 +148,7 @@ fn main() {
             // compute n and max f
             let n = config.len();
 
-            print!(" |");
+            print!(" | [n={}]", n);
 
             // and show stats for all possible f
             for f in 1..=max_f(n) {
@@ -130,21 +164,18 @@ fn main() {
     }
 }
 
-fn get_search_parameters(
-    planet: &Planet,
-    strategy: SearchStrategy,
-) -> (Vec<Region>, Vec<Region>) {
+fn get_search_parameters(planet: &Planet) -> (Vec<Region>, Vec<Region>) {
     // compute all regions
     let mut regions = planet.regions();
     regions.sort();
 
     // compute clients11
     let mut clients11 = vec![
-        Region::new("asia-east1"),
         Region::new("asia-east2"),
         Region::new("asia-northeast1"),
         Region::new("asia-south1"),
         Region::new("asia-southeast1"),
+        Region::new("australia-southeast1"),
         Region::new("europe-north1"),
         Region::new("europe-west2"),
         Region::new("northamerica-northeast1"),
@@ -159,7 +190,7 @@ fn get_search_parameters(
         Region::new("asia-east2"),
         Region::new("asia-northeast1"),
         Region::new("asia-south1"),
-        Region::new("asia-southeast1"),
+        Region::new("australia-southeast1"),
         Region::new("europe-north1"),
         Region::new("europe-west2"),
         Region::new("southamerica-east1"),
@@ -168,11 +199,11 @@ fn get_search_parameters(
     ];
     clients9.sort();
 
-    match strategy {
-        SearchStrategy::C20S20 => (regions.clone(), regions),
-        SearchStrategy::C11S11 => (clients11.clone(), clients11),
-        SearchStrategy::C11S20 => (clients11, regions),
-        SearchStrategy::C9S9 => (clients9.clone(), clients9),
+    match SEARCH_INPUT {
+        SearchInput::C20S20 => (regions.clone(), regions),
+        SearchInput::C11S11 => (clients11.clone(), clients11),
+        SearchInput::C11S20 => (clients11, regions),
+        SearchInput::C9S9 => (clients9.clone(), clients9),
     }
 }
 
@@ -200,9 +231,7 @@ fn compute_score(
     let mut count: isize = 0;
 
     // f values accounted for when computing score and config validity
-    let fs = vec![1];
-    // let fs = if n == 3 { vec![1] } else { vec![1, 2] };
-    // let fs = if n == 3 { vec![1] } else { vec![2] };
+    let fs = SEARCH_FT.fs(n);
 
     for f in fs.into_iter() {
         let atlas = stats.get(&key("atlas", f)).unwrap();
@@ -212,19 +241,27 @@ fn compute_score(
         let lat_improv = (fpaxos.mean() as isize) - (atlas.mean() as isize);
         let fairness_improv =
             (fpaxos.fairness() as isize) - (atlas.fairness() as isize);
+        let min_max_dist_improv =
+            (fpaxos.min_max_dist() as isize) - (atlas.min_max_dist() as isize);
 
         // compute its score
-        score += lat_improv + fairness_improv;
+        // score += lat_improv + fairness_improv;
+        score += match SEARCH_METRIC {
+            SearchMetric::Latency => lat_improv,
+            SearchMetric::Fairness => fairness_improv,
+            SearchMetric::MinMaxDistance => min_max_dist_improv,
+            SearchMetric::LatencyAndFairness => lat_improv + fairness_improv,
+        };
         count += 1;
 
         // check if this config is valid
-        valid = valid && lat_improv >= MIN_LAT_IMPROV;
+        valid = valid
+            && lat_improv >= MIN_LAT_IMPROV
+            && fairness_improv >= MIN_FAIRNESS_IMPROV;
     }
 
     // get score average
     score = score / count;
-    // check if this config is valid
-    valid = valid && score >= MIN_SCORE;
 
     (valid, score, stats)
 }

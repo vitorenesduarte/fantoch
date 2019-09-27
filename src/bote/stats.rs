@@ -4,20 +4,30 @@ use std::fmt;
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Stats {
     mean: usize,
-    fairness: usize, // mean distance to mean
+    fairness: usize, // mean dist to mean
+    min_max_dist: usize,
 }
 
 impl fmt::Debug for Stats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {})", self.mean, self.fairness)
+        write!(
+            f,
+            "({}, {}, {})",
+            self.mean, self.fairness, self.min_max_dist
+        )
     }
 }
 
 impl Stats {
     pub fn from(latencies: &Vec<usize>) -> Self {
         let mean = Stats::compute_mean(latencies);
-        let fairness = Stats::compute_mean_distance_to_mean(mean, latencies);
-        Stats { mean, fairness }
+        let fairness = Stats::compute_mean_dist_to_mean(mean, latencies);
+        let min_max_dist = Stats::compute_min_max_dist(latencies);
+        Stats {
+            mean,
+            fairness,
+            min_max_dist,
+        }
     }
 
     pub fn mean(&self) -> usize {
@@ -26,6 +36,10 @@ impl Stats {
 
     pub fn fairness(&self) -> usize {
         self.fairness
+    }
+
+    pub fn min_max_dist(&self) -> usize {
+        self.min_max_dist
     }
 
     /// This method can be sort a list of `Stat`s and selecting the one with a
@@ -54,16 +68,31 @@ impl Stats {
         sum / count as usize
     }
 
-    fn compute_mean_distance_to_mean(mean: usize, xs: &Vec<usize>) -> usize {
-        let distances: Vec<usize> = xs
+    fn compute_mean_dist_to_mean(mean: usize, xs: &Vec<usize>) -> usize {
+        let dists: Vec<usize> = xs
             .into_iter()
             .map(|&x| {
-                let distance = (x as isize) - (mean as isize);
-                let abs_distance = distance.abs() as usize;
-                abs_distance
+                let dist = (x as isize) - (mean as isize);
+                let abs_dist = dist.abs() as usize;
+                abs_dist
             })
             .collect();
-        Stats::compute_mean(&distances)
+        Stats::compute_mean(&dists)
+    }
+
+    fn compute_min_max_dist(xs: &Vec<usize>) -> usize {
+        let mut min = usize::max_value();
+        let mut max = usize::min_value();
+        xs.into_iter().for_each(|&x| {
+            if x < min {
+                min = x;
+            }
+
+            if x > max {
+                max = x;
+            }
+        });
+        max - min
     }
 }
 
