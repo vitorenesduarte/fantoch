@@ -168,7 +168,7 @@ mod test {
 
         // quorum size 2
         let quorum_size = 2;
-        let cql = bote.latency_to_closest_quorum(regions.clone(), quorum_size);
+        let cql = bote.latency_to_closest_quorum(&regions, quorum_size);
         assert_eq!(*cql.get(&w1).unwrap(), 7);
         assert_eq!(*cql.get(&w2).unwrap(), 9);
         assert_eq!(*cql.get(&w3).unwrap(), 7);
@@ -177,7 +177,7 @@ mod test {
 
         // quorum size 3
         let quorum_size = 3;
-        let cql = bote.latency_to_closest_quorum(regions.clone(), quorum_size);
+        let cql = bote.latency_to_closest_quorum(&regions, quorum_size);
         assert_eq!(*cql.get(&w1).unwrap(), 8);
         assert_eq!(*cql.get(&w2).unwrap(), 10);
         assert_eq!(*cql.get(&w3).unwrap(), 7);
@@ -202,16 +202,14 @@ mod test {
 
         // quorum size 3
         let quorum_size = 3;
-        let stats =
-            bote.leaderless(regions.clone(), regions.clone(), quorum_size);
+        let stats = bote.leaderless(&regions, &regions, quorum_size);
         // w1 -> 9, w2 -> 11, w3 -> 8, w4 -> 8, w6 -> 15
         assert_eq!(stats.mean(), 10);
         assert_eq!(stats.fairness(), 2);
 
         // quorum size 4
         let quorum_size = 4;
-        let stats =
-            bote.leaderless(regions.clone(), regions.clone(), quorum_size);
+        let stats = bote.leaderless(&regions, &regions, quorum_size);
         // w1 -> 11, w2 -> 14, w3 -> 9, w4 -> 10, w6 -> 15
         assert_eq!(stats.mean(), 11);
         assert_eq!(stats.fairness(), 2);
@@ -237,16 +235,14 @@ mod test {
 
         // quorum size 3
         let quorum_size = 3;
-        let stats =
-            bote.leaderless(servers.clone(), clients.clone(), quorum_size);
+        let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 9, w2 -> 11
         assert_eq!(stats.mean(), 10);
         assert_eq!(stats.fairness(), 1);
 
         // quorum size 4
         let quorum_size = 4;
-        let stats =
-            bote.leaderless(servers.clone(), clients.clone(), quorum_size);
+        let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 11, w2 -> 14
         assert_eq!(stats.mean(), 12);
         assert_eq!(stats.fairness(), 1);
@@ -256,16 +252,14 @@ mod test {
 
         // quorum size 3
         let quorum_size = 3;
-        let stats =
-            bote.leaderless(servers.clone(), clients.clone(), quorum_size);
+        let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 9, w3 -> 8, w6 -> 15
         assert_eq!(stats.mean(), 10);
         assert_eq!(stats.fairness(), 2);
 
         // quorum size 4
         let quorum_size = 4;
-        let stats =
-            bote.leaderless(servers.clone(), clients.clone(), quorum_size);
+        let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 11, w3 -> 9, w6 -> 15
         assert_eq!(stats.mean(), 11);
         assert_eq!(stats.fairness(), 2);
@@ -288,8 +282,7 @@ mod test {
 
         // quorum size 2:
         let quorum_size = 2;
-        let leader_to_stats =
-            bote.leader(regions.clone(), regions.clone(), quorum_size);
+        let leader_to_stats = bote.leader(&regions, &regions, quorum_size);
 
         // quorum latency for w1 is 7
         // w1 -> 8, w2 -> 17, w3 -> 15, w4 -> 14, w6 -> 21
@@ -330,8 +323,7 @@ mod test {
 
         // subset of clients: w1 w2
         let clients = vec![w1.clone(), w2.clone()];
-        let leader_to_stats =
-            bote.leader(servers.clone(), clients.clone(), quorum_size);
+        let leader_to_stats = bote.leader(&servers, &clients, quorum_size);
 
         // quorum latency for w1 is 7
         // w1 -> 8, w2 -> 17
@@ -353,8 +345,7 @@ mod test {
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
-        let leader_to_stats =
-            bote.leader(servers.clone(), clients.clone(), quorum_size);
+        let leader_to_stats = bote.leader(&servers, &clients, quorum_size);
 
         // quorum latency for w1 is 7
         // w1 -> 8, w3 -> 15, w6 -> 21
@@ -392,11 +383,8 @@ mod test {
 
         // quorum size 2:
         let quorum_size = 2;
-        let best_leader_stats = bote.best_mean_leader(
-            regions.clone(),
-            regions.clone(),
-            quorum_size,
-        );
+        let best_leader_stats =
+            bote.best_mean_leader(&regions, &regions, quorum_size);
 
         assert_eq!(best_leader_stats.mean(), 14);
         assert_eq!(best_leader_stats.fairness(), 2);
