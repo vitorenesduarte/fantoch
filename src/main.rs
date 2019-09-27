@@ -20,11 +20,18 @@ enum SearchStrategy {
     C20S20,
     C11S11,
     C11S20,
+    C9S9,
 }
 
 fn main() {
     // create planet
     let planet = Planet::new(LAT_DIR);
+
+    // show clients11 matrix
+    // let (_, clients) = get_search_parameters(&planet, SearchStrategy::C9S9);
+    // planet.show_distance_matrix(clients);
+
+    // get actual servers and clients
     let strategy = SearchStrategy::C20S20;
     let (servers, clients) = get_search_parameters(&planet, strategy);
 
@@ -91,7 +98,9 @@ fn main() {
     });
 
     // show configs
-    for (score, config_evolution) in configs.into_iter().rev() {
+    let max_configs = 1000;
+    for (score, config_evolution) in configs.into_iter().rev().take(max_configs)
+    {
         let mut sorted_config = Vec::new();
         print!("{}", score);
         for (config, stats) in config_evolution {
@@ -145,10 +154,25 @@ fn get_search_parameters(
     ];
     clients11.sort();
 
+    // compute clients9
+    let mut clients9 = vec![
+        Region::new("asia-east2"),
+        Region::new("asia-northeast1"),
+        Region::new("asia-south1"),
+        Region::new("asia-southeast1"),
+        Region::new("europe-north1"),
+        Region::new("europe-west2"),
+        Region::new("southamerica-east1"),
+        Region::new("us-east1"),
+        Region::new("us-west2"),
+    ];
+    clients9.sort();
+
     match strategy {
         SearchStrategy::C20S20 => (regions.clone(), regions),
         SearchStrategy::C11S11 => (clients11.clone(), clients11),
         SearchStrategy::C11S20 => (clients11, regions),
+        SearchStrategy::C9S9 => (clients9.clone(), clients9),
     }
 }
 
@@ -175,10 +199,10 @@ fn compute_score(
     let mut score: isize = 0;
     let mut count: isize = 0;
 
-    // compute the f values accounted for when computing score and config
-    // validity
-    // let fs = if n == 3 { vec![1] } else { vec![1, 2] };
+    // f values accounted for when computing score and config validity
     let fs = vec![1];
+    // let fs = if n == 3 { vec![1] } else { vec![1, 2] };
+    // let fs = if n == 3 { vec![1] } else { vec![2] };
 
     for f in fs.into_iter() {
         let atlas = stats.get(&key("atlas", f)).unwrap();
@@ -194,11 +218,13 @@ fn compute_score(
         count += 1;
 
         // check if this config is valid
-        valid = valid && (lat_improv >= MIN_LAT_IMPROV && score >= MIN_SCORE);
+        valid = valid && lat_improv >= MIN_LAT_IMPROV;
     }
 
     // get score average
     score = score / count;
+    // check if this config is valid
+    valid = valid && score >= MIN_SCORE;
 
     (valid, score, stats)
 }
@@ -214,27 +240,24 @@ fn compute_stats(
     for f in 1..=max_f(n) {
         // compute atlas stats
         let atlas = bote.leaderless(
-            servers.clone(),
-            clients.clone(),
+            servers,
+            clients,
             Protocol::Atlas.quorum_size(n, f),
         );
         stats.insert(key("atlas", f), atlas);
 
         // compute fpaxos stats
         let fpaxos = bote.best_mean_leader(
-            servers.clone(),
-            clients.clone(),
+            servers,
+            clients,
             Protocol::FPaxos.quorum_size(n, f),
         );
         stats.insert(key("fpaxos", f), fpaxos);
     }
 
     // compute epaxos stats
-    let epaxos = bote.leaderless(
-        servers.clone(),
-        clients.clone(),
-        Protocol::EPaxos.quorum_size(n, 0),
-    );
+    let epaxos =
+        bote.leaderless(servers, clients, Protocol::EPaxos.quorum_size(n, 0));
     stats.insert("epaxos".to_string(), epaxos);
 
     // return all stats

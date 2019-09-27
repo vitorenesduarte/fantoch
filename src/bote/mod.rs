@@ -21,21 +21,20 @@ impl Bote {
 
     pub fn leaderless(
         &self,
-        servers: Vec<Region>,
-        clients: Vec<Region>,
+        servers: &Vec<Region>,
+        clients: &Vec<Region>,
         quorum_size: usize,
     ) -> Stats {
-        // TODO can we avoid this clone?
         // compute the quorum latency for each server
         let quorum_latencies =
-            self.latency_to_closest_quorum(servers.clone(), quorum_size);
+            self.latency_to_closest_quorum(servers, quorum_size);
 
         let latencies: Vec<_> = clients
             .into_iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
                 let (closest, client_to_closest) =
-                    self.nth_closest(1, &client, &servers);
+                    self.nth_closest(1, client, servers);
 
                 // compute the latency from such region to its closest quorum
                 let closest_to_quorum = quorum_latencies.get(closest).unwrap();
@@ -51,8 +50,8 @@ impl Bote {
 
     pub fn best_mean_leader(
         &self,
-        servers: Vec<Region>,
-        clients: Vec<Region>,
+        servers: &Vec<Region>,
+        clients: &Vec<Region>,
         quorum_size: usize,
     ) -> Stats {
         // compute the stats for all possible leaders
@@ -70,21 +69,19 @@ impl Bote {
         all_stats.into_iter().next().unwrap()
     }
 
-    fn leader(
+    fn leader<'a>(
         &self,
-        servers: Vec<Region>,
-        clients: Vec<Region>,
+        servers: &'a Vec<Region>,
+        clients: &Vec<Region>,
         quorum_size: usize,
-    ) -> HashMap<Region, Stats> {
-        // TODO can we avoid this clone?
+    ) -> HashMap<&'a Region, Stats> {
         // compute the quorum latency for each possible leader
         let quorum_latencies =
-            self.latency_to_closest_quorum(servers.clone(), quorum_size);
+            self.latency_to_closest_quorum(servers, quorum_size);
 
         // compute latency stats for each possible leader
         servers
-            .clone()
-            .into_iter()
+            .iter()
             .map(|leader| {
                 // compute the latency from leader to its closest quorum
                 let leader_to_quorum = quorum_latencies.get(&leader).unwrap();
@@ -110,14 +107,13 @@ impl Bote {
     }
 
     /// Compute the latency to closest quorum of a size `quorum_size`.
-    fn latency_to_closest_quorum(
+    fn latency_to_closest_quorum<'a>(
         &self,
-        regions: Vec<Region>,
+        regions: &'a Vec<Region>,
         quorum_size: usize,
-    ) -> HashMap<Region, usize> {
+    ) -> HashMap<&'a Region, usize> {
         regions
-            .clone() // TODO can we avoid this clone?
-            .into_iter()
+            .iter()
             .map(|from| {
                 // for each region, get the latency to the `quorum_size`th
                 // closest region
