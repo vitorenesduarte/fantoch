@@ -62,7 +62,7 @@ impl Search {
         let planet = Planet::new(lat_dir);
 
         // get regions for servers and clients
-        let (clients, regions) = Self::search_regions(&search_input, &planet);
+        let (clients, regions) = Self::search_inputs(&search_input, &planet);
 
         // create bote
         let bote = Bote::from(planet);
@@ -375,7 +375,7 @@ impl Search {
         "epaxos".to_string()
     }
 
-    fn search_regions(
+    fn search_inputs(
         search_input: &SearchInput,
         planet: &Planet,
     ) -> (Vec<Region>, Vec<Region>) {
