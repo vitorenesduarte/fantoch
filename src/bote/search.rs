@@ -92,75 +92,42 @@ impl Search {
         // create result variable
         let mut configs = BTreeSet::new();
 
-        self.configs(3).for_each(|(score3, config3, stats3)| {
-            if self.params.max_n > 3 {
-                self.configs_superset(5, config3)
-                    .for_each(|(score5, config5, stats5)| {
-                        if self.params.max_n > 5 {
-                            self.configs_superset(7, config5)
-                                .for_each(|(score7, config7, stats7)| {
-                                    if self.params.max_n > 7 {
-                                        self.configs_superset(9, config7)
-                                            .for_each(
-                                                |(score9, config9, stats9)| {
-                                                    if self.params.max_n > 9 {
-                                                        self.configs_superset(11, config9)
-                                                            .for_each(|(score11, config11, stats11)| {
-                                                        let score = score3
-                                                            + score5
-                                                            + score7
-                                                            + score9
-                                                            + score11;
-                                                        let config = vec![
-                                                            (config3, stats3),
-                                                            (config5, stats5),
-                                                            (config7, stats7),
-                                                            (config9, stats9),
-                                                            (config11, stats11),
-                                                        ];
-                                                        assert!(configs.insert(
-                                                            (score, config)
-                                                        ))
-                                                            });
-                                                    } else {
-                                                        let score = score3
-                                                            + score5
-                                                            + score7
-                                                            + score9;
-                                                        let config = vec![
-                                                            (config3, stats3),
-                                                            (config5, stats5),
-                                                            (config7, stats7),
-                                                            (config9, stats9),
-                                                        ];
-                                                        assert!(configs.insert(
-                                                            (score, config)
-                                                        ))
-                                                    }
-                                                }
-                                            );
-                                    } else {
-                                        let score = score3 + score5 + score7;
-                                        let config = vec![
-                                            (config3, stats3),
-                                            (config5, stats5),
-                                            (config7, stats7),
-                                        ];
-                                        assert!(configs.insert((score, config)))
-                                    }
-                                });
-                        } else {
-                            let score = score3 + score5;
-                            let config =
-                                vec![(config3, stats3), (config5, stats5)];
-                            assert!(configs.insert((score, config)))
-                        }
-                    });
-            } else {
-                let score = *score3;
-                let config = vec![(config3, stats3)];
-                assert!(configs.insert((score, config)))
-            }
+        // TODO turn what's below in an iterator
+        // - this iterator should receive `self.params.max_n`
+        // Currently we're assuming that `self.params.max_n == 11`
+
+        self.get_configs(3).for_each(|(score3, config3, stats3)| {
+            self.get_configs_superset(5, config3).for_each(
+                |(score5, config5, stats5)| {
+                    self.get_configs_superset(7, config5).for_each(
+                        |(score7, config7, stats7)| {
+                            self.get_configs_superset(9, config7).for_each(
+                                |(score9, config9, stats9)| {
+                                    self.get_configs_superset(11, config9)
+                                        .for_each(
+                                            |(score11, config11, stats11)| {
+                                                let score = score3
+                                                    + score5
+                                                    + score7
+                                                    + score9
+                                                    + score11;
+                                                let config = vec![
+                                                    (config3, stats3),
+                                                    (config5, stats5),
+                                                    (config7, stats7),
+                                                    (config9, stats9),
+                                                    (config11, stats11),
+                                                ];
+                                                assert!(configs
+                                                    .insert((score, config)))
+                                            },
+                                        );
+                                },
+                            );
+                        },
+                    );
+                },
+            );
         });
 
         Self::show(configs)
@@ -204,14 +171,13 @@ impl Search {
 
     /// find configurations such that:
     /// - their size is `n`
-    fn configs(&self, n: usize) -> impl Iterator<Item = &ConfigSS> {
+    fn get_configs(&self, n: usize) -> impl Iterator<Item = &ConfigSS> {
         self.all_configs.get(&n).unwrap().into_iter()
     }
-
     /// find configurations such that:
     /// - their size is `n`
     /// - are a superset of `previous_config`
-    fn configs_superset(
+    fn get_configs_superset(
         &self,
         n: usize,
         previous_config: &BTreeSet<Region>,
@@ -226,18 +192,6 @@ impl Search {
             .collect::<Vec<_>>()
             .into_iter()
     }
-
-    // /// find configurations such that:
-    // /// - their size is `n`
-    // /// - are a superset of `previous_config`
-    // fn superset_configs<'a, 'b: 'a>(
-    //     &'a self,
-    //     n: usize,
-    //     previous_config: &'b BTreeSet<Region>,
-    // ) -> impl Iterator<Item = &'a ConfigSS> {
-    //     self.configs(n)
-    //         .filter(|(_, config, _)| config.is_superset(previous_config))
-    // }
 
     fn all_configs(
         params: &SearchParams,

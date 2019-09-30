@@ -12,6 +12,7 @@ const SEARCH_INPUT: SearchInput = SearchInput::C20R20;
 const LAT_DIR: &str = "latency/";
 
 fn main() {
+    println!("> search started");
     let search = Search::new(
         MIN_LAT_IMPROV,
         MIN_FAIRNESS_IMPROV,
@@ -21,5 +22,7 @@ fn main() {
         SEARCH_INPUT,
         LAT_DIR,
     );
+    println!("> search ended");
+
     search.evolving_configs();
 }
