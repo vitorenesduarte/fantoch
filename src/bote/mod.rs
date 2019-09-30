@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod search;
 pub mod stats;
 
 use crate::bote::stats::Stats;
