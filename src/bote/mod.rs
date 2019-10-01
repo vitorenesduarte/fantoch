@@ -64,9 +64,28 @@ impl Bote {
 
         // sort stats by mean latency
         all_stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
-        // println!("all stats: {:?}", all_stats);
 
         // get the stat with the lowest mean latency
+        all_stats.into_iter().next().unwrap()
+    }
+
+    pub fn best_fair_leader(
+        &self,
+        servers: &Vec<Region>,
+        clients: &Vec<Region>,
+        quorum_size: usize,
+    ) -> Stats {
+        // compute the stats for all possible leaders
+        let mut all_stats: Vec<_> = self
+            .leader(servers, clients, quorum_size)
+            .into_iter()
+            .map(|(_, stats)| stats)
+            .collect();
+
+        // sort stats by fairness
+        all_stats.sort_unstable_by(|a, b| a.fairness_cmp(&b));
+
+        // get the stat with the lowest fairness factor (i.e. the most fair)
         all_stats.into_iter().next().unwrap()
     }
 

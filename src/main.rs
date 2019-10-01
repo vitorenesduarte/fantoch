@@ -7,13 +7,15 @@ const LAT_DIR: &str = "latency/";
 
 fn main() {
     // define search params
-    let min_lat_improv = -200;
-    let min_fairness_improv = -200;
+    // let min_lat_improv = -500;
+    // let min_fairness_improv = -500;
+    let min_lat_improv = 20;
+    let min_fairness_improv = 0;
     let min_n = 3;
-    let max_n = 11;
-    let search_metric = SearchMetric::LatencyAndFairness;
-    let search_ft_filter = SearchFTFilter::F1AndF2;
-    let search_input = SearchInput::R11C11;
+    let max_n = 13;
+    let search_metric = SearchMetric::Latency;
+    let search_ft_filter = SearchFTFilter::F1F2F3;
+    let search_input = SearchInput::R20C20;
 
     // create search
     println!("> creating search");
@@ -28,10 +30,10 @@ fn main() {
         LAT_DIR,
     );
 
-    // println!("> showing evolving configs");
-    // search.evolving_configs();
+    println!("> showing evolving configs");
+    search.evolving_configs();
 
-    println!("> showing best configs");
-    let max_configs_per_n = 10;
-    search.best_configs(max_configs_per_n);
+    // println!("> showing best configs");
+    // let max_configs_per_n = 2;
+    // search.best_configs(max_configs_per_n);
 }

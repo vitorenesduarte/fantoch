@@ -10,11 +10,7 @@ pub struct Stats {
 
 impl fmt::Debug for Stats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "({}, {}, {})",
-            self.mean, self.fairness, self.min_max_dist
-        )
+        write!(f, "({}, {})", self.mean, self.fairness,)
     }
 }
 
