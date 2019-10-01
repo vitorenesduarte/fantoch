@@ -10,39 +10,6 @@ use std::iter::FromIterator;
 type AllStats = BTreeMap<String, Stats>;
 // config score and stats (more like: score, config and stats)
 type ConfigSS = (isize, BTreeSet<Region>, AllStats);
-
-struct SearchParams {
-    min_lat_improv: isize,
-    min_fairness_improv: isize,
-    max_n: usize,
-    search_metric: SearchMetric,
-    search_ft_filter: SearchFTFilter,
-    clients: Vec<Region>,
-    regions: Vec<Region>,
-}
-
-impl SearchParams {
-    pub fn new(
-        min_lat_improv: isize,
-        min_fairness_improv: isize,
-        max_n: usize,
-        search_metric: SearchMetric,
-        search_ft_filter: SearchFTFilter,
-        clients: Vec<Region>,
-        regions: Vec<Region>,
-    ) -> Self {
-        SearchParams {
-            min_lat_improv,
-            min_fairness_improv,
-            max_n,
-            search_metric,
-            search_ft_filter,
-            clients,
-            regions,
-        }
-    }
-}
-
 pub struct Search {
     params: SearchParams,
     all_configs: HashMap<usize, BTreeSet<ConfigSS>>,
@@ -52,6 +19,7 @@ impl Search {
     pub fn new(
         min_lat_improv: isize,
         min_fairness_improv: isize,
+        min_n: usize,
         max_n: usize,
         search_metric: SearchMetric,
         search_ft_filter: SearchFTFilter,
@@ -71,21 +39,38 @@ impl Search {
         let params = SearchParams::new(
             min_lat_improv,
             min_fairness_improv,
+            min_n,
             max_n,
             search_metric,
             search_ft_filter,
             clients,
             regions,
+            bote,
         );
 
         // create empty config and get all configs
-        let all_configs = Self::all_configs(&params, &bote);
+        let all_configs = Self::compute_all_configs(&params);
 
         // return a new `Search` instance
         Search {
             params,
             all_configs,
         }
+    }
+
+    pub fn best_configs(&self, max_configs_per_n: usize) {
+        (self.params.min_n..=self.params.max_n)
+            .step_by(2)
+            .for_each(|n| {
+                println!("n = {}", n);
+                self.get_configs(n).rev().take(max_configs_per_n).for_each(
+                    |(score, config, stats)| {
+                        println!("{}: {:?}", score, config);
+                        Self::show_stats(n, stats);
+                        print!("\n");
+                    },
+                );
+            });
     }
 
     pub fn evolving_configs(&self) {
@@ -96,7 +81,12 @@ impl Search {
         // - this iterator should receive `self.params.max_n`
         // Currently we're assuming that `self.params.max_n == 11`
 
+        let count = self.get_configs(3).count();
+        let mut i = 0;
+
         self.get_configs(3).for_each(|(score3, config3, stats3)| {
+            i += 1;
+            println!("{} of {}", i, count);
             self.get_configs_superset(5, config3).for_each(
                 |(score5, config5, stats5)| {
                     self.get_configs_superset(7, config5).for_each(
@@ -150,28 +140,31 @@ impl Search {
 
                 // compute n and max f
                 let n = config.len();
-
                 print!(" | [n={}]", n);
-
-                // and show stats for all possible f
-                for f in 1..=Self::max_f(n) {
-                    let atlas =
-                        stats.get(&Self::protocol_key("atlas", f)).unwrap();
-                    let fpaxos =
-                        stats.get(&Self::protocol_key("fpaxos", f)).unwrap();
-                    print!(" a{}={:?} f{}={:?}", f, atlas, f, fpaxos);
-                }
-                let epaxos = stats.get(&Self::epaxos_protocol_key()).unwrap();
-                print!(" e={:?}", epaxos);
+                Self::show_stats(n, stats);
             }
             print!("\n");
             println!("{:?}", sorted_config);
         }
     }
 
+    fn show_stats(n: usize, stats: &AllStats) {
+        // and show stats for all possible f
+        for f in 1..=Self::max_f(n) {
+            let atlas = stats.get(&Self::protocol_key("atlas", f)).unwrap();
+            let fpaxos = stats.get(&Self::protocol_key("fpaxos", f)).unwrap();
+            print!(" a{}={:?} f{}={:?}", f, atlas, f, fpaxos);
+        }
+        let epaxos = stats.get(&Self::epaxos_protocol_key()).unwrap();
+        print!(" e={:?}", epaxos);
+    }
+
     /// find configurations such that:
     /// - their size is `n`
-    fn get_configs(&self, n: usize) -> impl Iterator<Item = &ConfigSS> {
+    fn get_configs(
+        &self,
+        n: usize,
+    ) -> impl DoubleEndedIterator<Item = &ConfigSS> {
         self.all_configs.get(&n).unwrap().into_iter()
     }
     /// find configurations such that:
@@ -193,11 +186,10 @@ impl Search {
             .into_iter()
     }
 
-    fn all_configs(
+    fn compute_all_configs(
         params: &SearchParams,
-        bote: &Bote,
     ) -> HashMap<usize, BTreeSet<ConfigSS>> {
-        (3..=params.max_n)
+        (params.min_n..=params.max_n)
             .step_by(2)
             .map(|n| {
                 let configs = params
@@ -209,7 +201,7 @@ impl Search {
                             config.into_iter().cloned().collect();
 
                         // compute config score
-                        match Self::compute_score(&config, params, bote) {
+                        match Self::compute_score(&config, params) {
                             (true, score, stats) => Some((
                                 score,
                                 BTreeSet::from_iter(config.into_iter()),
@@ -227,13 +219,12 @@ impl Search {
     fn compute_score(
         config: &Vec<Region>,
         params: &SearchParams,
-        bote: &Bote,
     ) -> (bool, isize, AllStats) {
         // compute n
         let n = config.len();
 
         // compute stats for all protocols
-        let stats = Self::compute_stats(config, params, bote);
+        let stats = Self::compute_stats(config, params);
 
         // compute score and check if it is a valid configuration
         let mut valid = true;
@@ -248,11 +239,11 @@ impl Search {
             let fpaxos = stats.get(&Self::protocol_key("fpaxos", f)).unwrap();
 
             // compute improvements of atlas wrto to fpaxos
-            let lat_improv = (fpaxos.mean() as isize) - (atlas.mean() as isize);
+            let lat_improv = Self::sub(fpaxos.mean(), atlas.mean());
             let fairness_improv =
-                (fpaxos.fairness() as isize) - (atlas.fairness() as isize);
-            let min_max_dist_improv = (fpaxos.min_max_dist() as isize)
-                - (atlas.min_max_dist() as isize);
+                Self::sub(fpaxos.fairness(), atlas.fairness());
+            let min_max_dist_improv =
+                Self::sub(fpaxos.min_max_dist(), atlas.min_max_dist());
 
             // compute its score depending on the search metric
             score += match params.search_metric {
@@ -277,18 +268,14 @@ impl Search {
         (valid, score, stats)
     }
 
-    fn compute_stats(
-        config: &Vec<Region>,
-        params: &SearchParams,
-        bote: &Bote,
-    ) -> AllStats {
+    fn compute_stats(config: &Vec<Region>, params: &SearchParams) -> AllStats {
         // compute n
         let n = config.len();
         let mut stats = BTreeMap::new();
 
         for f in 1..=Self::max_f(n) {
             // compute atlas stats
-            let atlas = bote.leaderless(
+            let atlas = params.bote.leaderless(
                 config,
                 &params.clients,
                 Protocol::Atlas.quorum_size(n, f),
@@ -296,7 +283,7 @@ impl Search {
             stats.insert(Self::protocol_key("atlas", f), atlas);
 
             // compute fpaxos stats
-            let fpaxos = bote.best_mean_leader(
+            let fpaxos = params.bote.best_mean_leader(
                 config,
                 &params.clients,
                 Protocol::FPaxos.quorum_size(n, f),
@@ -305,7 +292,7 @@ impl Search {
         }
 
         // compute epaxos stats
-        let epaxos = bote.leaderless(
+        let epaxos = params.bote.leaderless(
             config,
             &params.clients,
             Protocol::EPaxos.quorum_size(n, 0),
@@ -314,6 +301,10 @@ impl Search {
 
         // return all stats
         stats
+    }
+
+    fn sub(a: usize, b: usize) -> isize {
+        (a as isize) - (b as isize)
     }
 
     fn max_f(n: usize) -> usize {
@@ -372,6 +363,44 @@ impl Search {
             SearchInput::C11R20 => (clients11, regions),
             SearchInput::C11R11 => (clients11.clone(), clients11),
             SearchInput::C09R09 => (clients9.clone(), clients9),
+        }
+    }
+}
+
+struct SearchParams {
+    min_lat_improv: isize,
+    min_fairness_improv: isize,
+    min_n: usize,
+    max_n: usize,
+    search_metric: SearchMetric,
+    search_ft_filter: SearchFTFilter,
+    clients: Vec<Region>,
+    regions: Vec<Region>,
+    bote: Bote,
+}
+
+impl SearchParams {
+    pub fn new(
+        min_lat_improv: isize,
+        min_fairness_improv: isize,
+        min_n: usize,
+        max_n: usize,
+        search_metric: SearchMetric,
+        search_ft_filter: SearchFTFilter,
+        clients: Vec<Region>,
+        regions: Vec<Region>,
+        bote: Bote,
+    ) -> Self {
+        SearchParams {
+            min_lat_improv,
+            min_fairness_improv,
+            min_n,
+            max_n,
+            search_metric,
+            search_ft_filter,
+            clients,
+            regions,
+            bote,
         }
     }
 }
