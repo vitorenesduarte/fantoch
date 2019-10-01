@@ -30,7 +30,7 @@ impl Search {
         let planet = Planet::new(lat_dir);
 
         // get regions for servers and clients
-        let (clients, regions) = Self::search_inputs(&search_input, &planet);
+        let (regions, clients) = Self::search_inputs(&search_input, &planet);
 
         // create bote
         let bote = Bote::from(planet);
@@ -43,13 +43,12 @@ impl Search {
             max_n,
             search_metric,
             search_ft_filter,
-            clients,
-            regions,
             bote,
         );
 
         // create empty config and get all configs
-        let all_configs = Self::compute_all_configs(&params);
+        let all_configs =
+            Self::compute_all_configs(&regions, &clients, &params);
 
         // return a new `Search` instance
         Search {
@@ -187,21 +186,21 @@ impl Search {
     }
 
     fn compute_all_configs(
+        regions: &Vec<Region>,
+        clients: &Vec<Region>,
         params: &SearchParams,
     ) -> HashMap<usize, BTreeSet<ConfigSS>> {
         (params.min_n..=params.max_n)
             .step_by(2)
             .map(|n| {
-                let configs = params
-                    .regions
+                let configs = regions
                     .combination(n)
                     .filter_map(|config| {
                         // clone config
-                        let config: Vec<Region> =
+                        let config: Vec<_> =
                             config.into_iter().cloned().collect();
-
                         // compute config score
-                        match Self::compute_score(&config, params) {
+                        match Self::compute_score(&config, clients, params) {
                             (true, score, stats) => Some((
                                 score,
                                 BTreeSet::from_iter(config.into_iter()),
@@ -218,13 +217,14 @@ impl Search {
 
     fn compute_score(
         config: &Vec<Region>,
+        clients: &Vec<Region>,
         params: &SearchParams,
     ) -> (bool, isize, AllStats) {
         // compute n
         let n = config.len();
 
         // compute stats for all protocols
-        let stats = Self::compute_stats(config, params);
+        let stats = Self::compute_stats(config, clients, params);
 
         // compute score and check if it is a valid configuration
         let mut valid = true;
@@ -268,7 +268,11 @@ impl Search {
         (valid, score, stats)
     }
 
-    fn compute_stats(config: &Vec<Region>, params: &SearchParams) -> AllStats {
+    fn compute_stats(
+        config: &Vec<Region>,
+        clients: &Vec<Region>,
+        params: &SearchParams,
+    ) -> AllStats {
         // compute n
         let n = config.len();
         let mut stats = BTreeMap::new();
@@ -277,7 +281,7 @@ impl Search {
             // compute atlas stats
             let atlas = params.bote.leaderless(
                 config,
-                &params.clients,
+                clients,
                 Protocol::Atlas.quorum_size(n, f),
             );
             stats.insert(Self::protocol_key("atlas", f), atlas);
@@ -285,7 +289,7 @@ impl Search {
             // compute fpaxos stats
             let fpaxos = params.bote.best_mean_leader(
                 config,
-                &params.clients,
+                clients,
                 Protocol::FPaxos.quorum_size(n, f),
             );
             stats.insert(Self::protocol_key("fpaxos", f), fpaxos);
@@ -294,7 +298,7 @@ impl Search {
         // compute epaxos stats
         let epaxos = params.bote.leaderless(
             config,
-            &params.clients,
+            clients,
             Protocol::EPaxos.quorum_size(n, 0),
         );
         stats.insert(Self::epaxos_protocol_key(), epaxos);
@@ -359,10 +363,10 @@ impl Search {
         clients9.sort();
 
         match search_input {
-            SearchInput::C20R20 => (regions.clone(), regions),
-            SearchInput::C11R20 => (clients11, regions),
-            SearchInput::C11R11 => (clients11.clone(), clients11),
-            SearchInput::C09R09 => (clients9.clone(), clients9),
+            SearchInput::R20C20 => (regions.clone(), regions),
+            SearchInput::R20C11 => (regions, clients11),
+            SearchInput::R11C11 => (clients11.clone(), clients11),
+            SearchInput::R09C09 => (clients9.clone(), clients9),
         }
     }
 }
@@ -374,8 +378,6 @@ struct SearchParams {
     max_n: usize,
     search_metric: SearchMetric,
     search_ft_filter: SearchFTFilter,
-    clients: Vec<Region>,
-    regions: Vec<Region>,
     bote: Bote,
 }
 
@@ -387,8 +389,6 @@ impl SearchParams {
         max_n: usize,
         search_metric: SearchMetric,
         search_ft_filter: SearchFTFilter,
-        clients: Vec<Region>,
-        regions: Vec<Region>,
         bote: Bote,
     ) -> Self {
         SearchParams {
@@ -398,8 +398,6 @@ impl SearchParams {
             max_n,
             search_metric,
             search_ft_filter,
-            clients,
-            regions,
             bote,
         }
     }
@@ -409,13 +407,13 @@ impl SearchParams {
 #[allow(dead_code)]
 pub enum SearchInput {
     /// 20-clients considered, config search within the 20 regions
-    C20R20,
+    R20C20,
     /// 11-clients considered, config search within the 20 regions
-    C11R20,
+    R20C11,
     /// 11-clients considered, config search within the same 11 regions
-    C11R11,
+    R11C11,
     /// 9-clients considered, config search within the same 9 regions
-    C09R09,
+    R09C09,
 }
 
 /// what's consider when raking configurations

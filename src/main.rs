@@ -13,7 +13,7 @@ fn main() {
     let max_n = 11;
     let search_metric = SearchMetric::LatencyAndFairness;
     let search_ft_filter = SearchFTFilter::F1AndF2;
-    let search_input = SearchInput::C11R11;
+    let search_input = SearchInput::R11C11;
 
     // create search
     println!("> creating search");
