@@ -2,12 +2,12 @@ use crate::base::ProcId;
 use crate::client::{Client, ClientId, Rifl};
 use crate::command::{MultiCommand, MultiCommandResult};
 use crate::newt::{Message, Newt, ToSend};
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::collections::HashMap;
 
 pub struct Router {
-    procs: HashMap<ProcId, RefCell<Newt>>,
-    clients: HashMap<ClientId, RefCell<Client>>,
+    procs: HashMap<ProcId, Cell<Newt>>,
+    clients: HashMap<ClientId, Cell<Client>>,
 }
 
 impl Router {
@@ -19,22 +19,22 @@ impl Router {
         }
     }
 
-    /// Set a `Newt` process in the `Router` by storing it in a `RefCell`.
+    /// Set a `Newt` process in the `Router` by storing it in a `Cell`.
     /// - from this call onwards, the process can be mutated through this
     ///   `Router` by borrowing it mutabily, as done in the route methods.
     pub fn set_proc(&mut self, proc_id: ProcId, newt: Newt) {
-        self.procs.insert(proc_id, RefCell::new(newt));
+        self.procs.insert(proc_id, Cell::new(newt));
     }
 
-    /// Set a `Client` process in the `Router` by storing it in a `RefCell`.
+    /// Set a `Client` process in the `Router` by storing it in a `Cell`.
     /// - from this call onwards, the process can be mutated through this
     ///   `Router` by borrowing it mutabily, as done in the route methods.
     pub fn set_client(&mut self, client_id: ClientId, client: Client) {
-        self.clients.insert(client_id, RefCell::new(client));
+        self.clients.insert(client_id, Cell::new(client));
     }
 
     /// Route a message to some target.
-    pub fn route(&self, to_send: ToSend) -> Vec<ToSend> {
+    pub fn route(&mut self, to_send: ToSend) -> Vec<ToSend> {
         match to_send {
             ToSend::Nothing => vec![],
             ToSend::Procs(msg, target) => target
@@ -54,18 +54,18 @@ impl Router {
     }
 
     /// Route a message to some process.
-    pub fn route_to_proc(&self, proc_id: ProcId, msg: Message) -> ToSend {
-        let mut newt = self.procs.get(&proc_id).unwrap().borrow_mut();
+    pub fn route_to_proc(&mut self, proc_id: ProcId, msg: Message) -> ToSend {
+        let newt = self.procs.get_mut(&proc_id).unwrap().get_mut();
         newt.handle(msg)
     }
 
     /// Route a message to some client.
     pub fn route_to_client(
-        &self,
+        &mut self,
         client_id: ClientId,
         commands: Vec<(Rifl, MultiCommandResult)>,
     ) -> Option<(ProcId, MultiCommand)> {
-        let mut client = self.clients.get(&client_id).unwrap().borrow_mut();
+        let client = self.clients.get_mut(&client_id).unwrap().get_mut();
         client.handle(commands)
     }
 }
