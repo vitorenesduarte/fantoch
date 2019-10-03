@@ -38,6 +38,18 @@ impl Stats {
         self.min_max_dist
     }
 
+    pub fn subtract_mean(&self, o: &Self) -> isize {
+        Self::subtract(self.mean, o.mean)
+    }
+
+    pub fn subtract_fairness(&self, o: &Self) -> isize {
+        Self::subtract(self.fairness, o.fairness)
+    }
+
+    fn subtract(a: usize, b: usize) -> isize {
+        (a as isize) - (b as isize)
+    }
+
     /// This method can be sort a list of `Stat`s and selecting the one with a
     /// best mean. In case there are more than one `Stat` with the best
     /// mean, it will select the one with the best fairness stat.

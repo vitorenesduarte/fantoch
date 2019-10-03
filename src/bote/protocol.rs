@@ -40,5 +40,7 @@ mod test {
         assert_eq!(Protocol::EPaxos.quorum_size(9, 0), 6);
         assert_eq!(Protocol::EPaxos.quorum_size(11, 0), 8);
         assert_eq!(Protocol::EPaxos.quorum_size(13, 0), 9);
+        assert_eq!(Protocol::EPaxos.quorum_size(15, 0), 11);
+        assert_eq!(Protocol::EPaxos.quorum_size(17, 0), 12);
     }
 }

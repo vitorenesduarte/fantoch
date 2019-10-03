@@ -49,44 +49,45 @@ impl Bote {
         Stats::from(&latencies)
     }
 
-    pub fn best_mean_leader(
+    pub fn best_latency_leader(
         &self,
         servers: &Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
     ) -> Stats {
-        // compute the stats for all possible leaders
-        let mut all_stats: Vec<_> = self
-            .leader(servers, clients, quorum_size)
-            .into_iter()
-            .map(|(_, stats)| stats)
-            .collect();
-
         // sort stats by mean latency
-        all_stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
+        let mut stats = self.leaders_stats(servers, clients, quorum_size);
+        stats.sort_unstable_by(|a, b| a.mean_cmp(&b));
 
         // get the stat with the lowest mean latency
-        all_stats.into_iter().next().unwrap()
+        stats.into_iter().next().unwrap()
     }
 
-    pub fn best_fair_leader(
+    pub fn best_fairness_leader(
         &self,
         servers: &Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
     ) -> Stats {
-        // compute the stats for all possible leaders
-        let mut all_stats: Vec<_> = self
-            .leader(servers, clients, quorum_size)
-            .into_iter()
-            .map(|(_, stats)| stats)
-            .collect();
-
         // sort stats by fairness
-        all_stats.sort_unstable_by(|a, b| a.fairness_cmp(&b));
+        let mut stats = self.leaders_stats(servers, clients, quorum_size);
+        stats.sort_unstable_by(|a, b| a.fairness_cmp(&b));
 
         // get the stat with the lowest fairness factor (i.e. the most fair)
-        all_stats.into_iter().next().unwrap()
+        stats.into_iter().next().unwrap()
+    }
+
+    /// Compute stats for all possible leaders.
+    fn leaders_stats(
+        &self,
+        servers: &Vec<Region>,
+        clients: &Vec<Region>,
+        quorum_size: usize,
+    ) -> Vec<Stats> {
+        self.leader(servers, clients, quorum_size)
+            .into_iter()
+            .map(|(_, stats)| stats)
+            .collect()
     }
 
     fn leader<'a>(

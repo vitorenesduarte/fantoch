@@ -18,7 +18,7 @@ pub struct Search {
 impl Search {
     pub fn new(
         min_lat_improv: isize,
-        min_fairness_improv: isize,
+        min_fair_improv: isize,
         min_n: usize,
         max_n: usize,
         search_metric: SearchMetric,
@@ -37,7 +37,7 @@ impl Search {
         // create search params
         let params = SearchParams::new(
             min_lat_improv,
-            min_fairness_improv,
+            min_fair_improv,
             min_n,
             max_n,
             search_metric,
@@ -45,42 +45,43 @@ impl Search {
             bote,
         );
 
-        // let n = 13;
-        // let mut configs = BTreeSet::new();
-        // let count = all_regions.combination(n).count();
-        // let mut i = 0;
-        //
-        // all_regions.combination(n).for_each(|config| {
-        //     i += 1;
-        //     if i % 10000 == 0 {
-        //         println!("{} of {}", i, count);
-        //     }
-        //
-        //     // clone config
-        //     let config: Vec<_> = config.into_iter().cloned().collect();
-        //
-        //     // compute config score
-        //     match Self::compute_score(&config, &all_regions, &params) {
-        //         (true, score, stats) => {
-        //             configs.insert((
-        //                 score,
-        //                 BTreeSet::from_iter(config.into_iter()),
-        //                 stats,
-        //             ));
-        //         }
-        //         _ => {}
-        //     };
-        // });
-        //
-        // configs.into_iter().rev().take(10).for_each(
-        //     |(score, config, stats)| {
-        //         println!("{}: {:?}", score, config);
-        //         Self::show_stats(n, &stats);
-        //         println!("");
-        //     },
-        // );
-        //
-        // panic!("a");
+        let n = 13;
+        let mut configs = BTreeSet::new();
+        let count = all_regions.combination(n).count();
+        let mut i = 0;
+
+        all_regions.combination(n).for_each(|config| {
+            i += 1;
+            if i % 10000 == 0 {
+                println!("{} of {}", i, count);
+            }
+
+            // clone config
+            let config: Vec<_> = config.into_iter().cloned().collect();
+
+            // compute config score
+            // match Self::compute_score(&config, &all_regions, &params) {
+            match Self::compute_score(&config, &config, &params) {
+                (true, score, stats) => {
+                    configs.insert((
+                        score,
+                        BTreeSet::from_iter(config.into_iter()),
+                        stats,
+                    ));
+                }
+                _ => {}
+            };
+        });
+
+        configs.into_iter().rev().take(10).for_each(
+            |(score, config, stats)| {
+                println!("{}: {:?}", score, config);
+                Self::show_stats(n, &stats);
+                println!("");
+            },
+        );
+
+        panic!("a");
 
         // get regions for servers and clients
         let (regions, clients) = Self::search_inputs(&search_input, &planet);
@@ -125,16 +126,16 @@ impl Search {
         self.get_configs(3).for_each(|(score3, config3, stats3)| {
             i += 1;
             println!("{} of {}", i, count);
-            self.get_configs_superset(5, config3).for_each(
+            self.get_configs_superset(5, config3, stats3).for_each(
                 |(score5, config5, stats5)| {
-                    self.get_configs_superset(7, config5).for_each(
+                    self.get_configs_superset(7, config5, stats5).for_each(
                         |(score7, config7, stats7)| {
-                            self.get_configs_superset(9, config7).for_each(
+                            self.get_configs_superset(9, config7, stats7).for_each(
                                 |(score9, config9, stats9)| {
-                                    self.get_configs_superset(11, config9)
+                                    self.get_configs_superset(11, config9, stats9)
                                         .for_each(
                                             |(score11, config11, stats11)| {
-                                    self.get_configs_superset(13, config11)
+                                    self.get_configs_superset(13, config11, stats11)
                                         .for_each(
                                             |(score13, config13, stats13)| {
                                                 let score = score3
@@ -203,8 +204,12 @@ impl Search {
         // and show stats for all possible f
         for f in 1..=Self::max_f(n) {
             let atlas = stats.get(&Self::protocol_key("atlas", f)).unwrap();
-            let fpaxos = stats.get(&Self::protocol_key("fpaxos", f)).unwrap();
-            print!("a{}={:?} f{}={:?} ", f, atlas, f, fpaxos);
+            let lfpaxos = stats.get(&Self::protocol_key("lfpaxos", f)).unwrap();
+            let ffpaxos = stats.get(&Self::protocol_key("ffpaxos", f)).unwrap();
+            print!(
+                "a{}={:?} lf{}={:?} ff{}={:?} ",
+                f, atlas, f, lfpaxos, f, ffpaxos
+            );
         }
         let epaxos = stats.get(&Self::epaxos_protocol_key()).unwrap();
         print!("e={:?}", epaxos);
@@ -218,19 +223,34 @@ impl Search {
     ) -> impl DoubleEndedIterator<Item = &ConfigSS> {
         self.all_configs.get(&n).unwrap().into_iter()
     }
+
     /// find configurations such that:
     /// - their size is `n`
     /// - are a superset of `previous_config`
     fn get_configs_superset(
         &self,
         n: usize,
-        previous_config: &BTreeSet<Region>,
+        prev_config: &BTreeSet<Region>,
+        prev_stats: &AllStats,
     ) -> impl Iterator<Item = &ConfigSS> {
         self.all_configs
             .get(&n)
             .unwrap()
             .into_iter()
-            .filter(|(_, config, _)| config.is_superset(previous_config))
+            .filter(|(_, config, stats)| {
+                config.is_superset(prev_config)
+                // if config.is_superset(prev_config) {
+                //     let f = 1;
+                //     let atlas_key = Self::protocol_key("atlas", f);
+                //     let prev_atlas =
+                // prev_stats.get(&atlas_key).unwrap().mean();
+                //     let atlas = stats.get(&atlas_key).unwrap().mean();
+                //     let improv = Self::sub(prev_atlas, atlas);
+                // // true
+                // } else {
+                //     false
+                // }
+            })
             // TODO can we avoid collecting here?
             // I wasn't able to do it due to lifetime issues
             .collect::<Vec<_>>()
@@ -288,30 +308,30 @@ impl Search {
 
         for f in fs {
             let atlas = stats.get(&Self::protocol_key("atlas", f)).unwrap();
-            let fpaxos = stats.get(&Self::protocol_key("fpaxos", f)).unwrap();
+            let lfpaxos = stats.get(&Self::protocol_key("lfpaxos", f)).unwrap();
+            let ffpaxos = stats.get(&Self::protocol_key("ffpaxos", f)).unwrap();
 
-            // compute improvements of atlas wrto to fpaxos
-            let lat_improv = Self::sub(fpaxos.mean(), atlas.mean());
-            let fairness_improv =
-                Self::sub(fpaxos.fairness(), atlas.fairness());
-            let min_max_dist_improv =
-                Self::sub(fpaxos.min_max_dist(), atlas.min_max_dist());
+            // compute latency improvement of atlas wrto to latency fpaxos
+            let mut lat_improv = lfpaxos.subtract_mean(atlas);
+            // it's config if we improve latency wrto to latency fpaxos
+            valid = valid && lat_improv >= params.min_lat_improv;
+            // add the latency improvement wrto to fairness fpaxos
+            lat_improv += ffpaxos.subtract_mean(atlas);
+
+            // compute fairness improvement of atlas wrto to fairness fpaxos
+            let mut fair_improv = ffpaxos.subtract_fairness(atlas);
+            // it's config if we improve fairness wrto to fairness fpaxos
+            valid = valid && fair_improv >= params.min_fair_improv;
+            // add the fairness improvement wrto to latency fpaxos
+            fair_improv += lfpaxos.subtract_fairness(atlas);
 
             // compute its score depending on the search metric
             score += match params.search_metric {
                 SearchMetric::Latency => lat_improv,
-                SearchMetric::Fairness => fairness_improv,
-                SearchMetric::MinMaxDistance => min_max_dist_improv,
-                SearchMetric::LatencyAndFairness => {
-                    lat_improv + fairness_improv
-                }
+                SearchMetric::Fairness => fair_improv,
+                SearchMetric::LatencyAndFairness => lat_improv + fair_improv,
             };
             count += 1;
-
-            // check if this config is valid
-            valid = valid
-                && lat_improv >= params.min_lat_improv
-                && fairness_improv >= params.min_fairness_improv;
         }
 
         // get score average
@@ -338,13 +358,21 @@ impl Search {
             );
             stats.insert(Self::protocol_key("atlas", f), atlas);
 
-            // compute fpaxos stats
-            let fpaxos = params.bote.best_fair_leader(
+            // compute best latency fpaxos stats
+            let lfpaxos = params.bote.best_latency_leader(
                 config,
                 clients,
                 Protocol::FPaxos.quorum_size(n, f),
             );
-            stats.insert(Self::protocol_key("fpaxos", f), fpaxos);
+            stats.insert(Self::protocol_key("lfpaxos", f), lfpaxos);
+
+            // compute best fairness fpaxos stats
+            let ffpaxos = params.bote.best_fairness_leader(
+                config,
+                clients,
+                Protocol::FPaxos.quorum_size(n, f),
+            );
+            stats.insert(Self::protocol_key("ffpaxos", f), ffpaxos);
         }
 
         // compute epaxos stats
@@ -359,12 +387,8 @@ impl Search {
         stats
     }
 
-    fn sub(a: usize, b: usize) -> isize {
-        (a as isize) - (b as isize)
-    }
-
     fn max_f(n: usize) -> usize {
-        let max_f = 3;
+        let max_f = 2;
         std::cmp::min(n / 2 as usize, max_f)
     }
 
@@ -425,7 +449,7 @@ impl Search {
 
 struct SearchParams {
     min_lat_improv: isize,
-    min_fairness_improv: isize,
+    min_fair_improv: isize,
     min_n: usize,
     max_n: usize,
     search_metric: SearchMetric,
@@ -436,7 +460,7 @@ struct SearchParams {
 impl SearchParams {
     pub fn new(
         min_lat_improv: isize,
-        min_fairness_improv: isize,
+        min_fair_improv: isize,
         min_n: usize,
         max_n: usize,
         search_metric: SearchMetric,
@@ -445,7 +469,7 @@ impl SearchParams {
     ) -> Self {
         SearchParams {
             min_lat_improv,
-            min_fairness_improv,
+            min_fair_improv,
             min_n,
             max_n,
             search_metric,
@@ -473,7 +497,6 @@ pub enum SearchInput {
 pub enum SearchMetric {
     Latency,
     Fairness,
-    MinMaxDistance,
     LatencyAndFairness,
 }
 
@@ -482,7 +505,6 @@ pub enum SearchMetric {
 pub enum SearchFTFilter {
     F1,
     F1F2,
-    F1F2F3,
 }
 
 impl SearchFTFilter {
@@ -491,7 +513,6 @@ impl SearchFTFilter {
         let max_f = match self {
             SearchFTFilter::F1 => 1,
             SearchFTFilter::F1F2 => 2,
-            SearchFTFilter::F1F2F3 => 3,
         };
         (1..=std::cmp::min(minority, max_f)).collect()
     }
