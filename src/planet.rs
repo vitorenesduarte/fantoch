@@ -1,8 +1,11 @@
 use crate::dat::Dat;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Deserialize, Serialize,
+)]
 pub struct Region {
     name: String,
 }

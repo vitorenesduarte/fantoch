@@ -1,7 +1,8 @@
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Stats {
     mean: usize,
     fairness: usize, // mean dist to mean
@@ -38,15 +39,30 @@ impl Stats {
         self.min_max_dist
     }
 
-    pub fn subtract_mean(&self, o: &Self) -> isize {
-        Self::subtract(self.mean, o.mean)
+    pub fn mean_score(&self, o: &Self, max_mean: isize) -> (isize, isize) {
+        let scale = 10000;
+        let score = Self::ssub(self.mean, o.mean, scale) / max_mean;
+        let improv = Self::ssub(self.mean, o.mean, 1);
+        (score, improv)
     }
 
-    pub fn subtract_fairness(&self, o: &Self) -> isize {
-        Self::subtract(self.fairness, o.fairness)
+    pub fn fairness_score(
+        &self,
+        o: &Self,
+        max_fairness: isize,
+    ) -> (isize, isize) {
+        let scale = 10000;
+        let score = Self::ssub(self.fairness, o.fairness, scale) / max_fairness;
+        let improv = Self::ssub(self.fairness, o.fairness, 1);
+        (score, improv)
     }
 
-    fn subtract(a: usize, b: usize) -> isize {
+    /// Scaled-subtract.
+    fn ssub(a: usize, b: usize, scale: usize) -> isize {
+        // scale inputs
+        let a = a * scale;
+        let b = b * scale;
+        // and subtract them
         (a as isize) - (b as isize)
     }
 
