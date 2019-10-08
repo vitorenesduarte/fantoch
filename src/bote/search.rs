@@ -71,15 +71,19 @@ impl Search {
         &self,
         params: &RankingParams,
         max_configs_per_n: usize,
-    ) -> BTreeMap<usize, BTreeSet<(isize, &ConfigAndStats)>> {
+    ) -> BTreeMap<usize, Vec<(isize, &ConfigAndStats)>> {
         (params.min_n..=params.max_n)
             .step_by(2)
             .map(|n| {
                 let sorted = self
+                    // get configs
                     .configs(n, params)
+                    // sort ASC
                     .collect::<BTreeSet<_>>()
                     .into_iter()
+                    // sort DESC (highest score first)
                     .rev()
+                    // take the first `max_configs_per_n`
                     .take(max_configs_per_n)
                     .collect();
                 (n, sorted)
@@ -90,7 +94,8 @@ impl Search {
     pub fn sorted_evolved_configs(
         &self,
         p: &RankingParams,
-    ) -> BTreeSet<(isize, Vec<&ConfigAndStats>)> {
+        max_configs: usize,
+    ) -> Vec<(isize, Vec<&ConfigAndStats>)> {
         assert_eq!(p.min_n, 3);
         assert_eq!(p.max_n, 13);
 
@@ -100,7 +105,13 @@ impl Search {
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
 
+        let count = self.all_configs.get(&3).unwrap().len();
+        let mut i = 0;
+
         self.configs(3, p).for_each(|(score3, cs3)| {
+            i += 1;
+            println!("{} of {}", i, count);
+
             self.super_configs(5, p, cs3).for_each(|(score5, cs5)| {
                 self.super_configs(7, p, cs5).for_each(|(score7, cs7)| {
                     self.super_configs(9, p, cs7).for_each(|(score9, cs9)| {
@@ -127,7 +138,14 @@ impl Search {
             });
         });
 
+        // `configs` is sorted ASC
         configs
+            .into_iter()
+            // sort DESC (highest score first)
+            .rev()
+            // take the first `max_configs_per_n`
+            .take(max_configs)
+            .collect()
     }
 
     pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
@@ -254,6 +272,24 @@ impl Search {
             .into_iter()
     }
 
+    fn rank<'a>(
+        n: usize,
+        params: &'a RankingParams,
+        iter: impl Iterator<Item = &'a ConfigAndStats>,
+    ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
+        iter.filter_map(|config_and_stats| {
+            let stats = &config_and_stats.1;
+            match Self::compute_score(n, stats, &params) {
+                (true, score) => Some((score, config_and_stats)),
+                _ => None,
+            }
+        })
+        // TODO can we avoid collecting here?
+        // I wasn't able to do it due to lifetime issues
+        .collect::<Vec<_>>()
+        .into_iter()
+    }
+
     /// return ranked configurations such that:
     /// - their size is `n`
     /// - are a superset of `previous_config`
@@ -285,38 +321,6 @@ impl Search {
             .collect::<Vec<_>>()
             .into_iter()
     }
-
-    // fn show(configs: BTreeSet<(isize, Vec<(&BTreeSet<Region>, &AllStats)>)>)
-    // {     let max_configs = 1000;
-    //     for (score, config_evolution) in
-    //         configs.into_iter().rev().take(max_configs)
-    //     {
-    //         // compute sorted config and collect all stats
-    //         let mut sorted_config = Vec::new();
-    //         let mut all_stats = Vec::new();
-    //
-    //         for (config, stats) in config_evolution {
-    //             // update sorted config
-    //             for region in config {
-    //                 if !sorted_config.contains(&region) {
-    //                     sorted_config.push(region)
-    //                 }
-    //             }
-    //
-    //             // save stats
-    //             let n = config.len();
-    //             all_stats.push((n, stats));
-    //         }
-    //
-    //         println!("{}: {:?}", score, sorted_config);
-    //         for (n, stats) in all_stats {
-    //             print!("[n={}] ", n);
-    //             Self::show_stats(n, stats);
-    //             print!(" | ");
-    //         }
-    //         println!("");
-    //     }
-    // }
 
     fn compute_score(
         n: usize,
@@ -368,9 +372,6 @@ impl Search {
             let lat_score = lfpaxos_lat_improv + ffpaxos_lat_improv;
             let fair_score = lfpaxos_fair_improv + ffpaxos_fair_improv;
 
-            // let lat_score = epaxos_lat_improv;
-            // let fair_score = lfpaxos_fair_improv;
-
             // compute score depending on the ranking metric
             score += match params.ranking_metric {
                 RankingMetric::Latency => lat_score,
@@ -409,7 +410,7 @@ impl Search {
         regions.sort();
 
         // compute 17-regions (from end of 2018)
-        let mut regions17 = vec![
+        let regions17 = vec![
             Region::new("asia-east1"),
             Region::new("asia-northeast1"),
             Region::new("asia-south1"),
