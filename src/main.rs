@@ -18,7 +18,7 @@ fn main() {
     // define search params
     let min_n = 3;
     let max_n = 13;
-    let min_lat_improv = -200;
+    let min_lat_improv = -30;
     let min_fair_improv = 0;
     let max_lat = 550; // 8-550
     let max_fair = 154; // 0-154

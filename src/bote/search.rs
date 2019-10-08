@@ -14,7 +14,10 @@ type AllStats = BTreeMap<String, Stats>;
 type ConfigAndStats = (BTreeSet<Region>, AllStats);
 
 // all configs
-type AllConfigs = HashMap<usize, BTreeSet<ConfigAndStats>>;
+type AllConfigs = HashMap<usize, Vec<ConfigAndStats>>;
+
+// ranked
+type Ranked<'a> = HashMap<usize, Vec<(isize, &'a ConfigAndStats)>>;
 
 #[derive(Deserialize, Serialize)]
 pub struct Search {
@@ -72,12 +75,11 @@ impl Search {
         params: &RankingParams,
         max_configs_per_n: usize,
     ) -> BTreeMap<usize, Vec<(isize, &ConfigAndStats)>> {
-        (params.min_n..=params.max_n)
-            .step_by(2)
-            .map(|n| {
-                let sorted = self
-                    // get configs
-                    .configs(n, params)
+        self.rank(params)
+            .into_iter()
+            .map(|(n, ranked)| {
+                let sorted = ranked
+                    .into_iter()
                     // sort ASC
                     .collect::<BTreeSet<_>>()
                     .into_iter()
@@ -93,11 +95,14 @@ impl Search {
 
     pub fn sorted_evolved_configs(
         &self,
-        p: &RankingParams,
+        params: &RankingParams,
         max_configs: usize,
     ) -> Vec<(isize, Vec<&ConfigAndStats>)> {
-        assert_eq!(p.min_n, 3);
-        assert_eq!(p.max_n, 13);
+        assert_eq!(params.min_n, 3);
+        assert_eq!(params.max_n, 13);
+
+        // first we should rank all configs
+        let ranked = self.rank(params);
 
         // create result variable
         let mut configs = BTreeSet::new();
@@ -105,36 +110,42 @@ impl Search {
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
 
-        let count = self.all_configs.get(&3).unwrap().len();
+        let ranked3 = ranked.get(&3).unwrap();
+        let count = ranked3.len();
         let mut i = 0;
 
-        self.configs(3, p).for_each(|(score3, cs3)| {
+        Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
             i += 1;
             println!("{} of {}", i, count);
 
-            self.super_configs(5, p, cs3).for_each(|(score5, cs5)| {
-                self.super_configs(7, p, cs5).for_each(|(score7, cs7)| {
-                    self.super_configs(9, p, cs7).for_each(|(score9, cs9)| {
-                        self.super_configs(11, p, cs9).for_each(
-                            |(score11, cs11)| {
-                                self.super_configs(13, p, cs11).for_each(
-                                    |(score13, cs13)| {
-                                        let score = score3
-                                            + score5
-                                            + score7
-                                            + score9
-                                            + score11
-                                            + score13;
-                                        let css = vec![
-                                            cs3, cs5, cs7, cs9, cs11, cs13,
-                                        ];
-                                        assert!(configs.insert((score, css)))
+            Self::super_configs(&ranked, 5, cs3).for_each(|(score5, cs5)| {
+                Self::super_configs(&ranked, 7, cs5).for_each(
+                    |(score7, cs7)| {
+                        Self::super_configs(&ranked, 9, cs7).for_each(
+                            |(score9, cs9)| {
+                                Self::super_configs(&ranked, 11, cs9).for_each(
+                                    |(score11, cs11)| {
+                                        Self::super_configs(&ranked, 13, cs11)
+                                            .for_each(|(score13, cs13)| {
+                                                let score = score3
+                                                    + score5
+                                                    + score7
+                                                    + score9
+                                                    + score11
+                                                    + score13;
+                                                let css = vec![
+                                                    cs3, cs5, cs7, cs9, cs11,
+                                                    cs13,
+                                                ];
+                                                assert!(configs
+                                                    .insert((score, css)))
+                                            });
                                     },
                                 );
                             },
                         );
-                    });
-                });
+                    },
+                );
             });
         });
 
@@ -250,59 +261,61 @@ impl Search {
         stats
     }
 
-    fn configs(
-        &self,
-        n: usize,
-        params: &RankingParams,
-    ) -> impl Iterator<Item = (isize, &ConfigAndStats)> {
+    fn rank<'a>(&'a self, params: &RankingParams) -> Ranked<'a> {
         self.all_configs
+            .iter()
+            .filter_map(|(&n, css)| {
+                // only keep in the map `n` values between `min_n` and `max_n`
+                if n >= params.min_n && n <= params.max_n {
+                    let css = css
+                        .into_iter()
+                        .filter_map(|cs| {
+                            let stats = &cs.1;
+
+                            // only keep valid configurations
+                            match Self::compute_score(n, stats, params) {
+                                (true, score) => Some((score, cs)),
+                                _ => None,
+                            }
+                        })
+                        .collect();
+                    Some((n, css))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    // TODO `configs` and `super_configs` are super similar
+    fn configs<'a>(
+        ranked: &Ranked<'a>,
+        n: usize,
+    ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
+        ranked
             .get(&n)
             .unwrap()
             .into_iter()
-            .filter_map(|config_and_stats| {
-                let stats = &config_and_stats.1;
-                match Self::compute_score(n, stats, &params) {
-                    (true, score) => Some((score, config_and_stats)),
-                    _ => None,
-                }
-            })
+            .map(|&r| r)
             // TODO can we avoid collecting here?
             // I wasn't able to do it due to lifetime issues
             .collect::<Vec<_>>()
             .into_iter()
     }
 
-    fn rank<'a>(
-        n: usize,
-        params: &'a RankingParams,
-        iter: impl Iterator<Item = &'a ConfigAndStats>,
-    ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
-        iter.filter_map(|config_and_stats| {
-            let stats = &config_and_stats.1;
-            match Self::compute_score(n, stats, &params) {
-                (true, score) => Some((score, config_and_stats)),
-                _ => None,
-            }
-        })
-        // TODO can we avoid collecting here?
-        // I wasn't able to do it due to lifetime issues
-        .collect::<Vec<_>>()
-        .into_iter()
-    }
-
     /// return ranked configurations such that:
     /// - their size is `n`
     /// - are a superset of `previous_config`
-    fn super_configs(
-        &self,
+    fn super_configs<'a>(
+        ranked: &Ranked<'a>,
         n: usize,
-        params: &RankingParams,
         (prev_config, _prev_stats): &ConfigAndStats,
-    ) -> impl Iterator<Item = (isize, &ConfigAndStats)> {
-        // TODO We could optimize here since we're ranking and then filtering.
-        // If filter before, then we'll probably rank much fewer configurations.
-        self.configs(n, params)
-            .filter(|(_, (config, stats))| {
+    ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
+        ranked
+            .get(&n)
+            .unwrap()
+            .into_iter()
+            .filter(|(_, (config, _))| {
                 config.is_superset(prev_config)
                 // if config.is_superset(prev_config) {
                 //     let f = 1;
@@ -316,6 +329,8 @@ impl Search {
                 //     false
                 // }
             })
+            // TODO Is `.cloned()` equivalent to `.map(|&r| r)` here?
+            .map(|&r| r)
             // TODO can we avoid collecting here?
             // I wasn't able to do it due to lifetime issues
             .collect::<Vec<_>>()
