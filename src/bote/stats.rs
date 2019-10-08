@@ -39,30 +39,15 @@ impl Stats {
         self.min_max_dist
     }
 
-    pub fn mean_score(&self, o: &Self, max_mean: isize) -> (isize, isize) {
-        let scale = 10000;
-        let score = Self::ssub(self.mean, o.mean, scale) / max_mean;
-        let improv = Self::ssub(self.mean, o.mean, 1);
-        (score, improv)
+    pub fn mean_improv(&self, o: &Self) -> isize {
+        Self::sub(self.mean, o.mean)
     }
 
-    pub fn fairness_score(
-        &self,
-        o: &Self,
-        max_fairness: isize,
-    ) -> (isize, isize) {
-        let scale = 10000;
-        let score = Self::ssub(self.fairness, o.fairness, scale) / max_fairness;
-        let improv = Self::ssub(self.fairness, o.fairness, 1);
-        (score, improv)
+    pub fn fairness_improv(&self, o: &Self) -> isize {
+        Self::sub(self.fairness, o.fairness)
     }
 
-    /// Scaled-subtract.
-    fn ssub(a: usize, b: usize, scale: usize) -> isize {
-        // scale inputs
-        let a = a * scale;
-        let b = b * scale;
-        // and subtract them
+    fn sub(a: usize, b: usize) -> isize {
         (a as isize) - (b as isize)
     }
 

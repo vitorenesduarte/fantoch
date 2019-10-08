@@ -18,18 +18,14 @@ fn main() {
     // define search params
     let min_n = 3;
     let max_n = 13;
-    let min_lat_improv = -30;
+    let min_lat_improv = -10;
     let min_fair_improv = 0;
-    let max_lat = 550; // 8-550
-    let max_fair = 154; // 0-154
     let ranking_metric = RankingMetric::LatencyAndFairness;
     let ranking_ft = RankingFT::F1F2;
 
     let params = RankingParams::new(
         min_lat_improv,
         min_fair_improv,
-        max_lat,
-        max_fair,
         min_n,
         max_n,
         ranking_metric,

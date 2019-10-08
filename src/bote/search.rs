@@ -356,10 +356,8 @@ impl Search {
             let epaxos = stats.get(&Self::epaxos_protocol_key()).unwrap();
 
             // compute latency and fairness improvement of atlas wrto lfpaxos
-            let (lfpaxos_lat_score, lfpaxos_lat_improv) =
-                lfpaxos.mean_score(atlas, params.max_lat);
-            let (lfpaxos_fair_score, lfpaxos_fair_improv) =
-                ffpaxos.fairness_score(atlas, params.max_fair);
+            let lfpaxos_lat_improv = lfpaxos.mean_improv(atlas);
+            let lfpaxos_fair_improv = lfpaxos.fairness_improv(atlas);
 
             // check if it's a valid config
             valid = valid
@@ -367,23 +365,10 @@ impl Search {
                 && lfpaxos_fair_improv >= params.min_fair_improv;
 
             // compute latency and fairness improvement of atlas wrto to ffpaxos
-            let (ffpaxos_lat_score, ffpaxos_lat_improv) =
-                ffpaxos.mean_score(atlas, params.max_lat);
-            let (ffpaxos_fair_score, ffpaxos_fair_improv) =
-                ffpaxos.fairness_score(atlas, params.max_fair);
+            let ffpaxos_lat_improv = ffpaxos.mean_improv(atlas);
+            let ffpaxos_fair_improv = ffpaxos.fairness_improv(atlas);
 
-            // compute latency improvement of atlas wrto to epaxos
-            let (epaxos_lat_score, epaxos_lat_improv) = if f == 2 {
-                epaxos.mean_score(atlas, params.max_lat)
-            } else {
-                (0, 0)
-            };
-
-            // compute final scores
-            // let lat_score = lfpaxos_lat_score + ffpaxos_lat_score;
-            // let fair_score = lfpaxos_fair_score + ffpaxos_fair_score;
-
-            // DIFF make score be the improvement
+            // compute scores
             let lat_score = lfpaxos_lat_improv + ffpaxos_lat_improv;
             let fair_score = lfpaxos_fair_improv + ffpaxos_fair_improv;
 
@@ -495,8 +480,6 @@ impl std::fmt::Display for SearchInput {
 pub struct RankingParams {
     min_lat_improv: isize,
     min_fair_improv: isize,
-    max_lat: isize,
-    max_fair: isize,
     min_n: usize,
     max_n: usize,
     ranking_metric: RankingMetric,
@@ -507,8 +490,6 @@ impl RankingParams {
     pub fn new(
         min_lat_improv: isize,
         min_fair_improv: isize,
-        max_lat: isize,
-        max_fair: isize,
         min_n: usize,
         max_n: usize,
         ranking_metric: RankingMetric,
@@ -517,8 +498,6 @@ impl RankingParams {
         RankingParams {
             min_lat_improv,
             min_fair_improv,
-            max_lat,
-            max_fair,
             min_n,
             max_n,
             ranking_metric,
