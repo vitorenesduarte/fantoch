@@ -71,12 +71,12 @@ impl Search {
         &self,
         params: &RankingParams,
         max_configs_per_n: usize,
-    ) -> BTreeMap<usize, Vec<(isize, &ConfigAndStats)>> {
+    ) -> BTreeMap<usize, BTreeSet<(isize, &ConfigAndStats)>> {
         (params.min_n..=params.max_n)
             .step_by(2)
             .map(|n| {
                 let sorted = self
-                    .rank_configs(n, params)
+                    .configs(n, params)
                     .collect::<BTreeSet<_>>()
                     .into_iter()
                     .rev()
@@ -87,58 +87,48 @@ impl Search {
             .collect()
     }
 
-    // pub fn rank_evolving_configs(&self, params: &RankingParams) {
-    //     assert_eq!(params.min_n, 3);
-    //     assert_eq!(params.max_n, 13);
-    //
-    //     // create result variable
-    //     let mut configs = BTreeSet::new();
-    //
-    //     // TODO turn what's below in an iterator
-    //     // - this iterator should receive `self.params.max_n`
-    //     // Currently we're assuming that `self.params.max_n == 11`
-    //
-    //     self.rank_configs(3).for_each(|(score3, cs3)| {
-    //         self.rank_superset_configs(5, config3, stats3).for_each(
-    //             |(score5, config5, stats5)| {
-    //                 self.get_configs_superset(7, config5, stats5).for_each(
-    //                     |(score7, config7, stats7)| {
-    //                         self.get_configs_superset(9, config7,
-    // stats7).for_each(                             |(score9, config9,
-    // stats9)| {
-    // self.get_configs_superset(11, config9, stats9)
-    // .for_each(                                         |(score11,
-    // config11, stats11)| {
-    // self.get_configs_superset(13, config11, stats11)
-    // .for_each(                                         |(score13,
-    // config13, stats13)| {                                             let
-    // score = score3                                                 +
-    // score5                                                 + score7
-    //                                                 + score9
-    //                                                 + score11 + score13;
-    //                                             let config = vec![
-    //                                                 (config3, stats3),
-    //                                                 (config5, stats5),
-    //                                                 (config7, stats7),
-    //                                                 (config9, stats9),
-    //                                                 (config11, stats11),
-    //                                                 (config13, stats13),
-    //                                             ];
-    //                                             assert!(configs
-    //                                                 .insert((score, config)))
-    //                                         },
-    //                                     );
-    //                                         },
-    //                                     );
-    //                             },
-    //                         );
-    //                     },
-    //                 );
-    //             },
-    //         );
-    //     });
-    //     Self::show(configs)
-    // }
+    pub fn sorted_evolved_configs(
+        &self,
+        p: &RankingParams,
+    ) -> BTreeSet<(isize, Vec<&ConfigAndStats>)> {
+        assert_eq!(p.min_n, 3);
+        assert_eq!(p.max_n, 13);
+
+        // create result variable
+        let mut configs = BTreeSet::new();
+
+        // TODO Transform what's below in an iterator.
+        // With access to `p.min_n` and `p.max_n` it should be possible.
+
+        self.configs(3, p).for_each(|(score3, cs3)| {
+            self.super_configs(5, p, cs3).for_each(|(score5, cs5)| {
+                self.super_configs(7, p, cs5).for_each(|(score7, cs7)| {
+                    self.super_configs(9, p, cs7).for_each(|(score9, cs9)| {
+                        self.super_configs(11, p, cs9).for_each(
+                            |(score11, cs11)| {
+                                self.super_configs(13, p, cs11).for_each(
+                                    |(score13, cs13)| {
+                                        let score = score3
+                                            + score5
+                                            + score7
+                                            + score9
+                                            + score11
+                                            + score13;
+                                        let css = vec![
+                                            cs3, cs5, cs7, cs9, cs11, cs13,
+                                        ];
+                                        assert!(configs.insert((score, css)))
+                                    },
+                                );
+                            },
+                        );
+                    });
+                });
+            });
+        });
+
+        configs
+    }
 
     pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
         // create stats for all possible f
@@ -242,7 +232,7 @@ impl Search {
         stats
     }
 
-    fn rank_configs(
+    fn configs(
         &self,
         n: usize,
         params: &RankingParams,
@@ -267,15 +257,15 @@ impl Search {
     /// return ranked configurations such that:
     /// - their size is `n`
     /// - are a superset of `previous_config`
-    fn rank_superset_configs(
+    fn super_configs(
         &self,
         n: usize,
         params: &RankingParams,
         (prev_config, _prev_stats): &ConfigAndStats,
     ) -> impl Iterator<Item = (isize, &ConfigAndStats)> {
-        // TODO we could optimize here since we're ranking and then filtering
-        // - we could filter before, then probably rank much less configurations
-        self.rank_configs(n, params)
+        // TODO We could optimize here since we're ranking and then filtering.
+        // If filter before, then we'll probably rank much fewer configurations.
+        self.configs(n, params)
             .filter(|(_, (config, stats))| {
                 config.is_superset(prev_config)
                 // if config.is_superset(prev_config) {
@@ -377,6 +367,9 @@ impl Search {
             // DIFF make score be the improvement
             let lat_score = lfpaxos_lat_improv + ffpaxos_lat_improv;
             let fair_score = lfpaxos_fair_improv + ffpaxos_fair_improv;
+
+            // let lat_score = epaxos_lat_improv;
+            // let fair_score = lfpaxos_fair_improv;
 
             // compute score depending on the ranking metric
             score += match params.ranking_metric {
