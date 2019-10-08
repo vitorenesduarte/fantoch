@@ -12,6 +12,7 @@ mod quorum_clocks;
 
 // This module contains the definition of `Router`.
 mod router;
+
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::{ClientId, Rifl};
 use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
