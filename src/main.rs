@@ -9,7 +9,7 @@ fn main() {
     // define some search params
     let min_n = 3;
     let max_n = 13;
-    let search_input = SearchInput::R17C17;
+    let search_input = SearchInput::R20C20;
 
     // create search
     let search = Search::new(min_n, max_n, search_input, LAT_DIR);
@@ -18,14 +18,16 @@ fn main() {
     // define search params
     let min_n = 3;
     let max_n = 13;
-    let min_lat_improv = -10;
+    let min_lat_improv = 20;
     let min_fair_improv = 0;
+    let min_lat_decrease = 10;
     let ranking_metric = RankingMetric::LatencyAndFairness;
     let ranking_ft = RankingFT::F1F2;
 
     let params = RankingParams::new(
         min_lat_improv,
         min_fair_improv,
+        min_lat_decrease,
         min_n,
         max_n,
         ranking_metric,
@@ -41,15 +43,15 @@ fn main() {
     //         println!("n={}", n);
     //         sorted.into_iter().for_each(|(score, (config, stats))| {
     //             println!("{}: {:?}", score, config);
-    //             println!("{}", Search::stats_fmt(stats, n));
+    //             println!("{}", Search::stats_fmt(stats, n, true));
     //             println!("");
     //         });
     //     });
 
     println!("> showing evolving configs");
-    let max_configs = 100;
+    let max_configs = 1000;
     search
-        .sorted_evolved_configs(&params, max_configs)
+        .sorted_evolving_configs(&params, max_configs)
         .into_iter()
         .for_each(|(score, css)| {
             let mut sorted_config = Vec::new();
@@ -72,7 +74,7 @@ fn main() {
 
             for (n, stats) in all_stats {
                 print!("[n={}] ", n);
-                print!("{}", Search::stats_fmt(stats, n));
+                print!("{}", Search::stats_fmt(stats, n, false));
                 print!(" | ");
             }
             println!("");

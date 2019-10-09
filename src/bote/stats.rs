@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
@@ -102,6 +103,33 @@ impl Stats {
             }
         });
         max - min
+    }
+}
+
+/// Mapping from protocol name to its stats.
+#[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
+pub struct AllStats(BTreeMap<String, Stats>);
+
+impl AllStats {
+    pub fn new() -> AllStats {
+        AllStats(BTreeMap::new())
+    }
+
+    pub fn get(&self, prefix: &str, f: usize) -> &Stats {
+        let key = Self::key(prefix, f);
+        self.0.get(&key).unwrap()
+    }
+
+    pub fn insert(&mut self, prefix: &str, f: usize, stats: Stats) {
+        let key = Self::key(prefix, f);
+        self.0.insert(key, stats);
+    }
+
+    fn key(prefix: &str, f: usize) -> String {
+        match prefix {
+            "epaxos" => String::from("epaxos"),
+            _ => format!("{}f{}", prefix, f),
+        }
     }
 }
 

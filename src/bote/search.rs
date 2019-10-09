@@ -1,14 +1,11 @@
 use crate::bote::protocol::Protocol;
-use crate::bote::stats::Stats;
+use crate::bote::stats::AllStats;
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter::FromIterator;
-
-// mapping from protocol name to its stats
-type AllStats = BTreeMap<String, Stats>;
 
 // config and stats
 type ConfigAndStats = (BTreeSet<Region>, AllStats);
@@ -93,16 +90,22 @@ impl Search {
             .collect()
     }
 
-    pub fn sorted_evolved_configs(
+    pub fn sorted_evolving_configs(
         &self,
-        params: &RankingParams,
+        p: &RankingParams,
         max_configs: usize,
     ) -> Vec<(isize, Vec<&ConfigAndStats>)> {
-        assert_eq!(params.min_n, 3);
-        assert_eq!(params.max_n, 13);
+        assert_eq!(p.min_n, 3);
+        assert_eq!(p.max_n, 13);
 
         // first we should rank all configs
-        let ranked = self.rank(params);
+        let ranked = self.rank(p);
+        let ranked_count = ranked
+            .iter()
+            .map(|(n, css)| (n, css.len()))
+            .collect::<BTreeMap<_, _>>()
+            .into_iter()
+            .for_each(|(n, count)| println!("{}: {}", n, count));
 
         // create result variable
         let mut configs = BTreeSet::new();
@@ -116,16 +119,21 @@ impl Search {
 
         Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
             i += 1;
-            println!("{} of {}", i, count);
+            if i % 10 == 0 {
+                println!("{} of {}", i, count);
+            }
 
-            Self::super_configs(&ranked, 5, cs3).for_each(|(score5, cs5)| {
-                Self::super_configs(&ranked, 7, cs5).for_each(
-                    |(score7, cs7)| {
-                        Self::super_configs(&ranked, 9, cs7).for_each(
-                            |(score9, cs9)| {
-                                Self::super_configs(&ranked, 11, cs9).for_each(
-                                    |(score11, cs11)| {
-                                        Self::super_configs(&ranked, 13, cs11)
+            Self::super_configs(&ranked, p, 5, cs3).for_each(
+                |(score5, cs5)| {
+                    Self::super_configs(&ranked, p, 7, cs5).for_each(
+                        |(score7, cs7)| {
+                            Self::super_configs(&ranked, p, 9, cs7).for_each(
+                                |(score9, cs9)| {
+                                    Self::super_configs(&ranked, p, 11, cs9)
+                                        .for_each(|(score11, cs11)| {
+                                            Self::super_configs(
+                                                &ranked, p, 13, cs11,
+                                            )
                                             .for_each(|(score13, cs13)| {
                                                 let score = score3
                                                     + score5
@@ -140,13 +148,13 @@ impl Search {
                                                 assert!(configs
                                                     .insert((score, css)))
                                             });
-                                    },
-                                );
-                            },
-                        );
-                    },
-                );
-            });
+                                        });
+                                },
+                            );
+                        },
+                    );
+                },
+            );
         });
 
         // `configs` is sorted ASC
@@ -154,29 +162,35 @@ impl Search {
             .into_iter()
             // sort DESC (highest score first)
             .rev()
-            // take the first `max_configs_per_n`
+            // take the first `max_configs`
             .take(max_configs)
             .collect()
     }
 
-    pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
-        // create stats for all possible f
+    pub fn stats_fmt(
+        stats: &AllStats,
+        n: usize,
+        include_lfpaxos: bool,
+    ) -> String {
+        // shows stats for all possible f
         let fmt: String = (1..=Self::max_f(n))
             .map(|f| {
-                let atlas = stats.get(&Self::protocol_key("atlas", f)).unwrap();
-                let lfpaxos =
-                    stats.get(&Self::protocol_key("lfpaxos", f)).unwrap();
-                let ffpaxos =
-                    stats.get(&Self::protocol_key("ffpaxos", f)).unwrap();
-                format!(
-                    "a{}={:?} lf{}={:?} ff{}={:?} ",
-                    f, atlas, f, lfpaxos, f, ffpaxos
-                )
+                let atlas = stats.get("atlas", f);
+                let ffpaxos = stats.get("ffpaxos", f);
+                let r = format!("a{}={:?} ff{}={:?} ", f, atlas, f, ffpaxos);
+
+                if include_lfpaxos {
+                    // append lfpaxos if we should
+                    let lfpaxos = stats.get("lfpaxos", f);
+                    format!("lf{}={:?} ", f, lfpaxos)
+                } else {
+                    r
+                }
             })
             .collect();
 
-        // add epaxos stats
-        let epaxos = stats.get(&Self::epaxos_protocol_key()).unwrap();
+        // add epaxos
+        let epaxos = stats.get("epaxos", 0);
         format!("{}e={:?}", fmt, epaxos)
     }
 
@@ -221,7 +235,7 @@ impl Search {
     ) -> AllStats {
         // compute n
         let n = config.len();
-        let mut stats = BTreeMap::new();
+        let mut stats = AllStats::new();
 
         for f in 1..=Self::max_f(n) {
             // compute atlas stats
@@ -230,7 +244,7 @@ impl Search {
                 clients,
                 Protocol::Atlas.quorum_size(n, f),
             );
-            stats.insert(Self::protocol_key("atlas", f), atlas);
+            stats.insert("atlas", f, atlas);
 
             // compute best latency fpaxos stats
             let lfpaxos = bote.best_latency_leader(
@@ -238,7 +252,7 @@ impl Search {
                 clients,
                 Protocol::FPaxos.quorum_size(n, f),
             );
-            stats.insert(Self::protocol_key("lfpaxos", f), lfpaxos);
+            stats.insert("lfpaxos", f, lfpaxos);
 
             // compute best fairness fpaxos stats
             let ffpaxos = bote.best_fairness_leader(
@@ -246,7 +260,7 @@ impl Search {
                 clients,
                 Protocol::FPaxos.quorum_size(n, f),
             );
-            stats.insert(Self::protocol_key("ffpaxos", f), ffpaxos);
+            stats.insert("ffpaxos", f, ffpaxos);
         }
 
         // compute epaxos stats
@@ -255,7 +269,7 @@ impl Search {
             clients,
             Protocol::EPaxos.quorum_size(n, 0),
         );
-        stats.insert(Self::epaxos_protocol_key(), epaxos);
+        stats.insert("epaxos", 0, epaxos);
 
         // return all stats
         stats
@@ -308,26 +322,19 @@ impl Search {
     /// - are a superset of `previous_config`
     fn super_configs<'a>(
         ranked: &Ranked<'a>,
+        params: &RankingParams,
         n: usize,
-        (prev_config, _prev_stats): &ConfigAndStats,
+        (prev_config, prev_stats): &ConfigAndStats,
     ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
         ranked
             .get(&n)
             .unwrap()
             .into_iter()
-            .filter(|(_, (config, _))| {
+            .filter(|(_, (config, stats))| {
+                // config.is_superset(prev_config)
                 config.is_superset(prev_config)
-                // if config.is_superset(prev_config) {
-                //     let f = 1;
-                //     let atlas_key = Self::protocol_key("atlas", f);
-                //     let prev_atlas =
-                // prev_stats.get(&atlas_key).unwrap().mean();
-                //     let atlas = stats.get(&atlas_key).unwrap().mean();
-                //     let improv = Self::sub(prev_atlas, atlas);
-                // // true
-                // } else {
-                //     false
-                // }
+                    && Self::lat_decrease(prev_stats, stats)
+                        >= params.min_lat_decrease
             })
             // TODO Is `.cloned()` equivalent to `.map(|&r| r)` here?
             .map(|&r| r)
@@ -335,6 +342,15 @@ impl Search {
             // I wasn't able to do it due to lifetime issues
             .collect::<Vec<_>>()
             .into_iter()
+    }
+
+    /// Compute the latency decrease for Atlas f = 1 when the number of sites
+    /// increases.
+    fn lat_decrease(prev_stats: &AllStats, stats: &AllStats) -> isize {
+        let f = 1;
+        let prev_atlas = prev_stats.get("atlas", f);
+        let atlas = stats.get("atlas", f);
+        prev_atlas.mean_improv(atlas)
     }
 
     fn compute_score(
@@ -350,27 +366,38 @@ impl Search {
         let fs = params.ranking_ft.fs(n);
 
         for f in fs {
-            let atlas = stats.get(&Self::protocol_key("atlas", f)).unwrap();
-            let lfpaxos = stats.get(&Self::protocol_key("lfpaxos", f)).unwrap();
-            let ffpaxos = stats.get(&Self::protocol_key("ffpaxos", f)).unwrap();
-            let epaxos = stats.get(&Self::epaxos_protocol_key()).unwrap();
+            let atlas = stats.get("atlas", f);
+            let lfpaxos = stats.get("lfpaxos", f);
+            let ffpaxos = stats.get("ffpaxos", f);
+            let epaxos = stats.get("epaxos", 0);
 
-            // compute latency and fairness improvement of atlas wrto lfpaxos
-            let lfpaxos_lat_improv = lfpaxos.mean_improv(atlas);
-            let lfpaxos_fair_improv = lfpaxos.fairness_improv(atlas);
-
-            // check if it's a valid config
-            valid = valid
-                && lfpaxos_lat_improv >= params.min_lat_improv
-                && lfpaxos_fair_improv >= params.min_fair_improv;
+            // // compute latency and fairness improvement of atlas wrto lfpaxos
+            // let lfpaxos_lat_improv = lfpaxos.mean_improv(atlas);
+            // let lfpaxos_fair_improv = lfpaxos.fairness_improv(atlas);
+            //
+            // // check if it's a valid config
+            // valid = valid
+            //     && lfpaxos_lat_improv >= params.min_lat_improv
+            //     && lfpaxos_fair_improv >= params.min_fair_improv;
+            //
+            // // compute latency and fairness improvement of atlas wrto to
+            // ffpaxos let ffpaxos_lat_improv =
+            // ffpaxos.mean_improv(atlas); let ffpaxos_fair_improv =
+            // ffpaxos.fairness_improv(atlas);
+            //
+            // // compute scores
+            // let lat_score = lfpaxos_lat_improv + ffpaxos_lat_improv;
+            // let fair_score = lfpaxos_fair_improv + ffpaxos_fair_improv;
 
             // compute latency and fairness improvement of atlas wrto to ffpaxos
-            let ffpaxos_lat_improv = ffpaxos.mean_improv(atlas);
-            let ffpaxos_fair_improv = ffpaxos.fairness_improv(atlas);
+            let lat_improv = ffpaxos.mean_improv(atlas);
+
+            // check if it's a valid config
+            valid = valid && lat_improv >= params.min_lat_improv;
 
             // compute scores
-            let lat_score = lfpaxos_lat_improv + ffpaxos_lat_improv;
-            let fair_score = lfpaxos_fair_improv + ffpaxos_fair_improv;
+            let lat_score = lat_improv;
+            let fair_score = 0;
 
             // compute score depending on the ranking metric
             score += match params.ranking_metric {
@@ -386,14 +413,6 @@ impl Search {
     fn max_f(n: usize) -> usize {
         let max_f = 2;
         std::cmp::min(n / 2 as usize, max_f)
-    }
-
-    fn protocol_key(prefix: &str, f: usize) -> String {
-        format!("{}f{}", prefix, f).to_string()
-    }
-
-    fn epaxos_protocol_key() -> String {
-        "epaxos".to_string()
     }
 
     /// It returns a tuple where the:
@@ -480,6 +499,7 @@ impl std::fmt::Display for SearchInput {
 pub struct RankingParams {
     min_lat_improv: isize,
     min_fair_improv: isize,
+    min_lat_decrease: isize,
     min_n: usize,
     max_n: usize,
     ranking_metric: RankingMetric,
@@ -490,6 +510,7 @@ impl RankingParams {
     pub fn new(
         min_lat_improv: isize,
         min_fair_improv: isize,
+        min_lat_decrease: isize,
         min_n: usize,
         max_n: usize,
         ranking_metric: RankingMetric,
@@ -498,6 +519,7 @@ impl RankingParams {
         RankingParams {
             min_lat_improv,
             min_fair_improv,
+            min_lat_decrease,
             min_n,
             max_n,
             ranking_metric,
