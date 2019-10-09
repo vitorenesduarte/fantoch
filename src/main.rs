@@ -17,8 +17,8 @@ fn main() {
 
     // define search params
     let min_n = 3;
-    let max_n = 13;
-    let min_lat_improv = 20;
+    let max_n = 11;
+    let min_lat_improv = 30;
     let min_fair_improv = 0;
     let min_lat_decrease = 10;
     let ranking_metric = RankingMetric::LatencyAndFairness;
@@ -49,7 +49,7 @@ fn main() {
     //     });
 
     println!("> showing evolving configs");
-    let max_configs = 1000;
+    let max_configs = 10;
     search
         .sorted_evolving_configs(&params, max_configs)
         .into_iter()

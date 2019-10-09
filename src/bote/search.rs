@@ -96,7 +96,7 @@ impl Search {
         max_configs: usize,
     ) -> Vec<(isize, Vec<&ConfigAndStats>)> {
         assert_eq!(p.min_n, 3);
-        assert_eq!(p.max_n, 13);
+        assert_eq!(p.max_n, 11);
 
         // first we should rank all configs
         let ranked = self.rank(p);
@@ -131,32 +131,15 @@ impl Search {
                         |(score7, cs7)| {
                             Self::super_configs(&ranked, p, 9, cs7).for_each(
                                 |(score9, cs9)| {
-                                    Self::super_configs(&ranked, p, 11, cs9)
-                                        .for_each(|(score11, cs11)| {
-                                            Self::super_configs(
-                                                &ranked, p, 13, cs11,
-                                            )
-                                            .for_each(|(score13, cs13)| {
-                                                let score = score3
-                                                    + score5
-                                                    + score7
-                                                    + score9
-                                                    + score11
-                                                    + score13;
-                                                let css = vec![
-                                                    cs3, cs5, cs7, cs9, cs11,
-                                                    cs13,
-                                                ];
-                                                assert!(configs
-                                                    .insert((score, css)))
-                                            });
+                                    Self::super_configs(&ranked, p, 11, cs9).for_each(
+                                        |(score11, cs11)| {
+                                            let score = score3 + score5 + score7 + score9 + score11;
+                                                let css = vec![cs3, cs5, cs7, cs9, cs11];
+                                                assert!(configs.insert((score, css)))
                                         });
-                                },
-                            );
-                        },
-                    );
-                },
-            );
+                                });
+                        });
+                });
         });
 
         // `configs` is sorted ASC
@@ -273,22 +256,6 @@ impl Search {
         );
         stats.insert("epaxos", 0, epaxos);
 
-        // compute best latency paxos stats
-        let paxosl = bote.best_latency_leader(
-            config,
-            clients,
-            Protocol::Paxos.quorum_size(n, 0),
-        );
-        stats.insert("paxosl", 0, paxosl);
-
-        // compute best fairness paxos stats
-        let paxosf = bote.best_fairness_leader(
-            config,
-            clients,
-            Protocol::Paxos.quorum_size(n, 0),
-        );
-        stats.insert("paxosf", 0, paxosf);
-
         // return all stats
         stats
     }
@@ -302,6 +269,7 @@ impl Search {
                     let css = css
                         .into_iter()
                         .filter_map(|cs| {
+                            // get stats
                             let stats = &cs.1;
 
                             // only keep valid configurations
@@ -384,10 +352,10 @@ impl Search {
         let fs = params.ranking_ft.fs(n);
 
         for f in fs {
-            let atlas = stats.get("atlas", f);
+            let epaxos = stats.get("epaxos", 0);
             let fpaxosl = stats.get("fpaxosl", f);
             let fpaxosf = stats.get("fpaxosf", f);
-            let epaxos = stats.get("epaxos", 0);
+            let atlas = stats.get("atlas", f);
 
             // // compute latency and fairness improvement of atlas wrto fpaxosl
             // let fpaxosl_lat_improv = fpaxosl.mean_improv(atlas);
@@ -408,13 +376,16 @@ impl Search {
             // let fair_score = fpaxosl_fair_improv + fpaxosf_fair_improv;
 
             // compute latency improvement of atlas wrto to fpaxosf
-            let lat_improv = fpaxosf.mean_improv(atlas);
+            let fpaxosf_lat_improv = fpaxosf.mean_improv(atlas);
 
             // check if it's a valid config
-            valid = valid && lat_improv >= params.min_lat_improv;
+            valid = valid && fpaxosf_lat_improv >= params.min_lat_improv;
+
+            let epaxos_lat_improv =
+                if f == 2 { epaxos.mean_improv(atlas) } else { 0 };
 
             // compute scores
-            let lat_score = lat_improv;
+            let lat_score = fpaxosf_lat_improv + epaxos_lat_improv;
             let fair_score = 0;
 
             // compute score depending on the ranking metric
