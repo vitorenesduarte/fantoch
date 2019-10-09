@@ -9,7 +9,7 @@ fn main() {
     // define some search params
     let min_n = 3;
     let max_n = 13;
-    let search_input = SearchInput::R20C20;
+    let search_input = SearchInput::R17C17;
 
     // create search
     let search = Search::new(min_n, max_n, search_input, LAT_DIR);

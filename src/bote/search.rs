@@ -424,10 +424,6 @@ impl Search {
         search_input: &SearchInput,
         planet: &Planet,
     ) -> (Vec<Region>, Option<Vec<Region>>) {
-        // compute all regions
-        let mut regions = planet.regions();
-        regions.sort();
-
         // compute 17-regions (from end of 2018)
         let regions17 = vec![
             Region::new("asia-east1"),
@@ -449,10 +445,15 @@ impl Search {
             Region::new("us-west2"),
         ];
 
+        // compute all regions
+        let mut regions = planet.regions();
+        regions.sort();
+
         match search_input {
+            SearchInput::R17 => (regions17, None),
+            SearchInput::R17C17 => (regions17.clone(), Some(regions17)),
             SearchInput::R20 => (regions, None),
             SearchInput::R20C20 => (regions.clone(), Some(regions)),
-            SearchInput::R17C17 => (regions17.clone(), Some(regions17)),
         }
     }
 
@@ -478,20 +479,23 @@ impl Search {
 /// identifies which regions considered for the search
 #[allow(dead_code)]
 pub enum SearchInput {
+    /// search within 2018 17 regions, clients colocated with servers
+    R17,
+    /// search within 2018 17 regions, clients deployed in the 17 regions
+    R17C17,
     /// search within the 20 regions, clients colocated with servers
     R20,
     /// search within the 20 regions, clients deployed in the 20 regions
     R20C20,
-    /// search within 2018 17 regions, clients deployed in the 17 regions
-    R17C17,
 }
 
 impl std::fmt::Display for SearchInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            SearchInput::R17 => write!(f, "R17"),
+            SearchInput::R17C17 => write!(f, "R17C17"),
             SearchInput::R20 => write!(f, "R20"),
             SearchInput::R20C20 => write!(f, "R20C20"),
-            SearchInput::R17C17 => write!(f, "R17C17"),
         }
     }
 }
