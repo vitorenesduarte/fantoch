@@ -388,7 +388,7 @@ mod test {
     }
 
     #[test]
-    fn best_mean_leader() {
+    fn best_latency_leader() {
         // create bote
         let lat_dir = "latency/";
         let bote = Bote::new(lat_dir);
@@ -405,7 +405,7 @@ mod test {
         // quorum size 2:
         let quorum_size = 2;
         let best_leader_stats =
-            bote.best_mean_leader(&regions, &regions, quorum_size);
+            bote.best_latency_leader(&regions, &regions, quorum_size);
 
         assert_eq!(best_leader_stats.mean(), 14);
         assert_eq!(best_leader_stats.fairness(), 2);

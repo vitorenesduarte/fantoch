@@ -100,7 +100,9 @@ impl Search {
 
         // first we should rank all configs
         let ranked = self.rank(p);
-        let ranked_count = ranked
+
+        // show how many ranked configs we have for each n
+        ranked
             .iter()
             .map(|(n, css)| (n, css.len()))
             .collect::<BTreeMap<_, _>>()
@@ -170,19 +172,19 @@ impl Search {
     pub fn stats_fmt(
         stats: &AllStats,
         n: usize,
-        include_lfpaxos: bool,
+        include_fpaxosl: bool,
     ) -> String {
         // shows stats for all possible f
         let fmt: String = (1..=Self::max_f(n))
             .map(|f| {
                 let atlas = stats.get("atlas", f);
-                let ffpaxos = stats.get("ffpaxos", f);
-                let r = format!("a{}={:?} ff{}={:?} ", f, atlas, f, ffpaxos);
+                let fpaxosf = stats.get("fpaxosf", f);
+                let r = format!("a{}={:?} ff{}={:?} ", f, atlas, f, fpaxosf);
 
-                if include_lfpaxos {
-                    // append lfpaxos if we should
-                    let lfpaxos = stats.get("lfpaxos", f);
-                    format!("lf{}={:?} ", f, lfpaxos)
+                if include_fpaxosl {
+                    // append fpaxosl if we should
+                    let fpaxosl = stats.get("fpaxosl", f);
+                    format!("lf{}={:?} ", f, fpaxosl)
                 } else {
                     r
                 }
@@ -247,20 +249,20 @@ impl Search {
             stats.insert("atlas", f, atlas);
 
             // compute best latency fpaxos stats
-            let lfpaxos = bote.best_latency_leader(
+            let fpaxosl = bote.best_latency_leader(
                 config,
                 clients,
                 Protocol::FPaxos.quorum_size(n, f),
             );
-            stats.insert("lfpaxos", f, lfpaxos);
+            stats.insert("fpaxosl", f, fpaxosl);
 
             // compute best fairness fpaxos stats
-            let ffpaxos = bote.best_fairness_leader(
+            let fpaxosf = bote.best_fairness_leader(
                 config,
                 clients,
                 Protocol::FPaxos.quorum_size(n, f),
             );
-            stats.insert("ffpaxos", f, ffpaxos);
+            stats.insert("fpaxosf", f, fpaxosf);
         }
 
         // compute epaxos stats
@@ -270,6 +272,22 @@ impl Search {
             Protocol::EPaxos.quorum_size(n, 0),
         );
         stats.insert("epaxos", 0, epaxos);
+
+        // compute best latency paxos stats
+        let paxosl = bote.best_latency_leader(
+            config,
+            clients,
+            Protocol::Paxos.quorum_size(n, 0),
+        );
+        stats.insert("paxosl", 0, paxosl);
+
+        // compute best fairness paxos stats
+        let paxosf = bote.best_fairness_leader(
+            config,
+            clients,
+            Protocol::Paxos.quorum_size(n, 0),
+        );
+        stats.insert("paxosf", 0, paxosf);
 
         // return all stats
         stats
@@ -367,30 +385,30 @@ impl Search {
 
         for f in fs {
             let atlas = stats.get("atlas", f);
-            let lfpaxos = stats.get("lfpaxos", f);
-            let ffpaxos = stats.get("ffpaxos", f);
+            let fpaxosl = stats.get("fpaxosl", f);
+            let fpaxosf = stats.get("fpaxosf", f);
             let epaxos = stats.get("epaxos", 0);
 
-            // // compute latency and fairness improvement of atlas wrto lfpaxos
-            // let lfpaxos_lat_improv = lfpaxos.mean_improv(atlas);
-            // let lfpaxos_fair_improv = lfpaxos.fairness_improv(atlas);
+            // // compute latency and fairness improvement of atlas wrto fpaxosl
+            // let fpaxosl_lat_improv = fpaxosl.mean_improv(atlas);
+            // let fpaxosl_fair_improv = fpaxosl.fairness_improv(atlas);
             //
             // // check if it's a valid config
             // valid = valid
-            //     && lfpaxos_lat_improv >= params.min_lat_improv
-            //     && lfpaxos_fair_improv >= params.min_fair_improv;
+            //     && fpaxosl_lat_improv >= params.min_lat_improv
+            //     && fpaxosl_fair_improv >= params.min_fair_improv;
             //
             // // compute latency and fairness improvement of atlas wrto to
-            // ffpaxos let ffpaxos_lat_improv =
-            // ffpaxos.mean_improv(atlas); let ffpaxos_fair_improv =
-            // ffpaxos.fairness_improv(atlas);
+            // fpaxosf let fpaxosf_lat_improv =
+            // fpaxosf.mean_improv(atlas); let fpaxosf_fair_improv =
+            // fpaxosf.fairness_improv(atlas);
             //
             // // compute scores
-            // let lat_score = lfpaxos_lat_improv + ffpaxos_lat_improv;
-            // let fair_score = lfpaxos_fair_improv + ffpaxos_fair_improv;
+            // let lat_score = fpaxosl_lat_improv + fpaxosf_lat_improv;
+            // let fair_score = fpaxosl_fair_improv + fpaxosf_fair_improv;
 
-            // compute latency and fairness improvement of atlas wrto to ffpaxos
-            let lat_improv = ffpaxos.mean_improv(atlas);
+            // compute latency improvement of atlas wrto to fpaxosf
+            let lat_improv = fpaxosf.mean_improv(atlas);
 
             // check if it's a valid config
             valid = valid && lat_improv >= params.min_lat_improv;
