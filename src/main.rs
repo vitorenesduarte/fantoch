@@ -1,5 +1,5 @@
 use planet_sim::bote::search::{
-    RankingFT, RankingMetric, RankingParams, Search, SearchInput,
+    FTMetric, FairnessMetric, RankingParams, Search, SearchInput,
 };
 
 // directory that contains all dat files
@@ -18,20 +18,18 @@ fn main() {
     // define search params
     let min_n = 3;
     let max_n = 11;
-    let min_lat_improv = 30;
-    let min_fair_improv = 0;
-    let min_lat_decrease = 10;
-    let ranking_metric = RankingMetric::LatencyAndFairness;
-    let ranking_ft = RankingFT::F1F2;
+    let min_mean_improv = -10;
+    let min_mean_decrease = 0;
+    let fairness_metric = FairnessMetric::COV;
+    let ft_metric = FTMetric::F1F2;
 
     let params = RankingParams::new(
-        min_lat_improv,
-        min_fair_improv,
-        min_lat_decrease,
+        min_mean_improv,
+        min_mean_decrease,
         min_n,
         max_n,
-        ranking_metric,
-        ranking_ft,
+        fairness_metric,
+        ft_metric,
     );
 
     // println!("> showing best configs: min_lat_improv={}", min_lat_improv);
@@ -70,7 +68,7 @@ fn main() {
                 all_stats.push((n, stats));
             }
 
-            println!("{}: {:?}", score, sorted_config);
+            println!("{:?}: {:?}", score, sorted_config);
 
             for (n, stats) in all_stats {
                 print!("[n={}] ", n);

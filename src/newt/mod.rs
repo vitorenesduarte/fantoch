@@ -342,6 +342,7 @@ pub enum ToSend {
     Clients(HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>>),
 }
 
+#[allow(dead_code)] // TODO remove me
 impl ToSend {
     /// Check if there's nothing to be sent.
     fn nothing(&self) -> bool {
