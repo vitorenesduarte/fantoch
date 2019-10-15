@@ -10,6 +10,15 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::fs;
 use std::iter::FromIterator;
+use std::time::Instant;
+
+macro_rules! timed {
+    ( $x:expr ) => {{
+        let start = Instant::now();
+        let result = $x;
+        (result, start.elapsed())
+    }};
+}
 
 // config and stats
 type ConfigAndStats = (BTreeSet<Region>, AllStats);
@@ -53,8 +62,10 @@ impl Search {
             let bote = Bote::from(planet);
 
             // create empty config and get all configs
-            let all_configs =
-                Self::compute_all_configs(min_n, max_n, servers, clients, bote);
+            let (all_configs, time) = timed!(Self::compute_all_configs(
+                min_n, max_n, servers, clients, bote
+            ));
+            println!("compute all configs: {:?}", time);
 
             // create a new `Search` instance
             let search = Search { all_configs };
@@ -462,23 +473,19 @@ impl Search {
     }
 
     fn save_search(name: &String, search: &Search) {
-        use std::time::Instant;
-
-        // record start time
-        let start = Instant::now();
-
         // save search
-        match serde_json::to_string(search) {
-            Ok(serialized) => {
+        match timed!(serde_json::to_string(search)) {
+            (Ok(serialized), time) => {
                 // show time for serialization
-                println!("search serialization: {:?}", start.elapsed());
-                fs::write(name, serialized).expect("error saving search")
-            }
-            Err(err) => panic!(format!("error serializing search: {}", err)),
-        }
+                println!("search serialization: {:?}", time);
 
-        // show total time for save
-        println!("total search save: {:?}", start.elapsed());
+                match timed!(fs::write(name, serialized)) {
+                    (Ok(()), time) => println!("search save: {:?}", time),
+                    (Err(err), _) => panic!("error saving search: {}", err),
+                }
+            }
+            (Err(err), _) => panic!("error serializing search: {}", err),
+        }
     }
 }
 
