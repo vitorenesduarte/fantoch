@@ -188,7 +188,9 @@ impl Search {
                         let config: Vec<_> =
                             config.into_iter().cloned().collect();
 
-                        // compute clients
+                        // compute clients:
+                        // - either the ones passed as argument
+                        // - or clients colocated with servers
                         let clients = clients.as_ref().unwrap_or(&config);
 
                         // compute stats
@@ -353,9 +355,9 @@ impl Search {
                 FairnessMetric::MDTM => fpaxos.mdtm_improv(atlas),
             };
 
-            // check if it's a valid config, i.e.,
-            // - there's enough `mean_improv`
-            // - there's enough `fairness_improv`
+            // check if it's a valid config, i.e. there's enough:
+            // - `min_mean_improv`
+            // - `min_fairness_improv`
             valid = valid
                 && fpaxos_mean_improv >= params.min_mean_improv
                 && fpaxos_fairness_improv >= params.min_fairness_improv;
