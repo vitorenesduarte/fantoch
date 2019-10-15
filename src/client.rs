@@ -56,6 +56,7 @@ impl Client {
         &mut self,
         commands: Vec<(Rifl, MultiCommandResult)>,
     ) -> Option<(ProcId, MultiCommand)> {
+        // TODO do something with `commands`
         // check if we should generate a new command or not
         if self.command_count < self.commands {
             Some(self.gen_cmd())

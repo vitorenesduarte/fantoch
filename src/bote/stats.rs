@@ -1,108 +1,90 @@
+use crate::bote::float::F64;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use statrs::statistics::Statistics;
 use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Stats {
-    mean: usize,
-    fairness: usize, // mean dist to mean
-    min_max_dist: usize,
+    mean: F64,
+    cov: F64,  // coefficient of variation
+    mdtm: F64, // mean distance to mean
 }
 
 impl fmt::Debug for Stats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {})", self.mean, self.fairness,)
+        write!(
+            f,
+            "({:.0}, {:.2}, {:.2})",
+            self.mean.value(),
+            self.cov.value(),
+            self.mdtm.value()
+        )
     }
 }
 
 impl Stats {
     pub fn from(latencies: &Vec<usize>) -> Self {
-        let mean = Stats::compute_mean(latencies);
-        let fairness = Stats::compute_mean_dist_to_mean(mean, latencies);
-        let min_max_dist = Stats::compute_min_max_dist(latencies);
-        Stats {
-            mean,
-            fairness,
-            min_max_dist,
-        }
+        let (mean, cov, mdtm) = Stats::compute_stats(&latencies);
+        Stats { mean, cov, mdtm }
     }
 
-    pub fn mean(&self) -> usize {
+    pub fn mean_improv(&self, other: &Self) -> F64 {
+        self.mean - other.mean
+    }
+
+    pub fn cov_improv(&self, other: &Self) -> F64 {
+        self.cov - other.cov
+    }
+
+    pub fn mdtm_improv(&self, other: &Self) -> F64 {
+        self.mdtm - other.mdtm
+    }
+
+    pub fn mean(&self) -> F64 {
         self.mean
     }
 
-    pub fn fairness(&self) -> usize {
-        self.fairness
+    pub fn cov(&self) -> F64 {
+        self.cov
     }
 
-    pub fn min_max_dist(&self) -> usize {
-        self.min_max_dist
+    pub fn mdtm(&self) -> F64 {
+        self.mdtm
     }
 
-    pub fn mean_improv(&self, o: &Self) -> isize {
-        Self::sub(self.mean, o.mean)
+    pub fn show_mean(&self) -> String {
+        self.mean.round()
     }
 
-    pub fn fairness_improv(&self, o: &Self) -> isize {
-        Self::sub(self.fairness, o.fairness)
+    pub fn show_cov(&self) -> String {
+        self.cov.round()
     }
 
-    fn sub(a: usize, b: usize) -> isize {
-        (a as isize) - (b as isize)
+    pub fn show_mdtm(&self) -> String {
+        self.mdtm.round()
     }
 
-    /// This method can be sort a list of `Stat`s and selecting the one with a
-    /// best mean. In case there are more than one `Stat` with the best
-    /// mean, it will select the one with the best fairness stat.
-    pub fn mean_cmp(&self, b: &Self) -> Ordering {
-        match self.mean.cmp(&b.mean()) {
-            Ordering::Equal => self.fairness.cmp(&b.fairness()),
-            o => o,
-        }
-    }
+    fn compute_stats(xs: &Vec<usize>) -> (F64, F64, F64) {
+        // transform input in a `Vec<f64>`
+        let xs: Vec<f64> = xs.into_iter().map(|&x| x as f64).collect();
 
-    /// This method can be sort a list of `Stat`s and selecting the one with a
-    /// best fairness stat. In case there are more than one `Stat` with the best
-    /// fairness stat, it will select the one with the best mean.
-    pub fn fairness_cmp(&self, b: &Self) -> Ordering {
-        match self.fairness.cmp(&b.fairness()) {
-            Ordering::Equal => self.fairness.cmp(&b.mean()),
-            o => o,
-        }
-    }
+        // compute mean
+        // TODO maybe find a different library that does not consume the `Vec`
+        let mean = xs.clone().mean();
 
-    fn compute_mean(xs: &Vec<usize>) -> usize {
-        let count = xs.len();
-        let sum: usize = xs.into_iter().sum();
-        sum / count as usize
-    }
+        // compute coefficient of variation
+        let cov = xs.clone().std_dev() / mean;
 
-    fn compute_mean_dist_to_mean(mean: usize, xs: &Vec<usize>) -> usize {
-        let dists: Vec<usize> = xs
+        // compute mean distance to mean
+        let mdtm = xs
             .into_iter()
-            .map(|&x| {
-                let dist = (x as isize) - (mean as isize);
-                let abs_dist = dist.abs() as usize;
-                abs_dist
-            })
-            .collect();
-        Stats::compute_mean(&dists)
-    }
+            .map(|x| (x - mean).abs())
+            .collect::<Vec<_>>()
+            .mean();
 
-    fn compute_min_max_dist(xs: &Vec<usize>) -> usize {
-        let mut min = usize::max_value();
-        let mut max = usize::min_value();
-        xs.into_iter().for_each(|&x| {
-            if x < min {
-                min = x;
-            }
-
-            if x > max {
-                max = x;
-            }
-        });
-        max - min
+        // return the 3 stats
+        (F64::new(mean), F64::new(cov), F64::new(mdtm))
     }
 }
 
@@ -140,19 +122,23 @@ mod test {
     #[test]
     fn stats() {
         let stats = Stats::from(&vec![1, 1, 1]);
-        assert_eq!(stats.mean(), 1);
-        assert_eq!(stats.fairness(), 0);
+        assert_eq!(stats.show_mean(), "1.0");
+        assert_eq!(stats.show_cov(), "0.0");
+        assert_eq!(stats.show_mdtm(), "0.0");
 
         let stats = Stats::from(&vec![10, 20, 30]);
-        assert_eq!(stats.mean(), 20);
-        assert_eq!(stats.fairness(), 6);
+        assert_eq!(stats.show_mean(), "20.0");
+        assert_eq!(stats.show_cov(), "0.5");
+        assert_eq!(stats.show_mdtm(), "6.7");
 
         let stats = Stats::from(&vec![10, 20]);
-        assert_eq!(stats.mean(), 15);
-        assert_eq!(stats.fairness(), 5);
+        assert_eq!(stats.show_mean(), "15.0");
+        assert_eq!(stats.show_cov(), "0.5");
+        assert_eq!(stats.show_mdtm(), "5.0");
 
         let stats = Stats::from(&vec![10, 20, 40, 10]);
-        assert_eq!(stats.mean(), 20);
-        assert_eq!(stats.fairness(), 10);
+        assert_eq!(stats.show_mean(), "20.0");
+        assert_eq!(stats.show_cov(), "0.7");
+        assert_eq!(stats.show_mdtm(), "10.0");
     }
 }

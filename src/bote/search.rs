@@ -1,5 +1,6 @@
+use crate::bote::float::F64;
 use crate::bote::protocol::Protocol;
-use crate::bote::stats::AllStats;
+use crate::bote::stats::{AllStats, Stats};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
@@ -14,7 +15,7 @@ type ConfigAndStats = (BTreeSet<Region>, AllStats);
 type AllConfigs = HashMap<usize, Vec<ConfigAndStats>>;
 
 // ranked
-type Ranked<'a> = HashMap<usize, Vec<(isize, &'a ConfigAndStats)>>;
+type Ranked<'a> = HashMap<usize, Vec<(F64, &'a ConfigAndStats)>>;
 
 #[derive(Deserialize, Serialize)]
 pub struct Search {
@@ -44,8 +45,7 @@ impl Search {
             let bote = Bote::from(planet.clone());
 
             // get regions for servers and clients
-            let (regions, clients) =
-                Self::search_inputs(&search_input, &planet);
+            let (regions, clients) = search_input.get_inputs(&planet);
 
             // create empty config and get all configs
             let all_configs = Self::compute_all_configs(
@@ -71,7 +71,7 @@ impl Search {
         &self,
         params: &RankingParams,
         max_configs_per_n: usize,
-    ) -> BTreeMap<usize, Vec<(isize, &ConfigAndStats)>> {
+    ) -> BTreeMap<usize, Vec<(F64, &ConfigAndStats)>> {
         self.rank(params)
             .into_iter()
             .map(|(n, ranked)| {
@@ -94,7 +94,7 @@ impl Search {
         &self,
         p: &RankingParams,
         max_configs: usize,
-    ) -> Vec<(isize, Vec<&ConfigAndStats>)> {
+    ) -> Vec<(F64, Vec<&ConfigAndStats>)> {
         assert_eq!(p.min_n, 3);
         assert_eq!(p.max_n, 11);
 
@@ -134,8 +134,8 @@ impl Search {
                                     Self::super_configs(&ranked, p, 11, cs9).for_each(
                                         |(score11, cs11)| {
                                             let score = score3 + score5 + score7 + score9 + score11;
-                                                let css = vec![cs3, cs5, cs7, cs9, cs11];
-                                                assert!(configs.insert((score, css)))
+                                            let css = vec![cs3, cs5, cs7, cs9, cs11];
+                                            assert!(configs.insert((score, css)))
                                         });
                                 });
                         });
@@ -155,22 +155,14 @@ impl Search {
     pub fn stats_fmt(
         stats: &AllStats,
         n: usize,
-        include_fpaxosl: bool,
+        params: &RankingParams,
     ) -> String {
         // shows stats for all possible f
         let fmt: String = (1..=Self::max_f(n))
             .map(|f| {
                 let atlas = stats.get("atlas", f);
-                let fpaxosf = stats.get("fpaxosf", f);
-                let r = format!("a{}={:?} ff{}={:?} ", f, atlas, f, fpaxosf);
-
-                if include_fpaxosl {
-                    // append fpaxosl if we should
-                    let fpaxosl = stats.get("fpaxosl", f);
-                    format!("lf{}={:?} ", f, fpaxosl)
-                } else {
-                    r
-                }
+                let fpaxos = Self::get_fpaxos_stats(stats, f, params);
+                format!("a{}={:?} f{}={:?} ", f, atlas, f, fpaxos)
             })
             .collect();
 
@@ -196,7 +188,9 @@ impl Search {
                         let config: Vec<_> =
                             config.into_iter().cloned().collect();
 
-                        // compute clients
+                        // compute clients:
+                        // - either the ones passed as argument
+                        // - or clients colocated with servers
                         let clients = clients.as_ref().unwrap_or(&config);
 
                         // compute stats
@@ -223,37 +217,34 @@ impl Search {
         let mut stats = AllStats::new();
 
         for f in 1..=Self::max_f(n) {
+            // compute altas quorum size
+            let quorum_size = Protocol::Atlas.quorum_size(n, f);
+
             // compute atlas stats
-            let atlas = bote.leaderless(
-                config,
-                clients,
-                Protocol::Atlas.quorum_size(n, f),
-            );
+            let atlas = bote.leaderless(config, clients, quorum_size);
             stats.insert("atlas", f, atlas);
 
-            // compute best latency fpaxos stats
-            let fpaxosl = bote.best_latency_leader(
-                config,
-                clients,
-                Protocol::FPaxos.quorum_size(n, f),
-            );
-            stats.insert("fpaxosl", f, fpaxosl);
+            // compute fpaxos quorum size
+            let quorum_size = Protocol::FPaxos.quorum_size(n, f);
 
-            // compute best fairness fpaxos stats
-            let fpaxosf = bote.best_fairness_leader(
-                config,
-                clients,
-                Protocol::FPaxos.quorum_size(n, f),
-            );
-            stats.insert("fpaxosf", f, fpaxosf);
+            // // compute best mean fpaxos stats
+            // let fpaxos = bote.best_mean_leader(config, clients, quorum_size);
+            // stats.insert("fpaxos_mean", f, fpaxos);
+
+            // compute best cov fpaxos stats
+            let fpaxos = bote.best_cov_leader(config, clients, quorum_size);
+            stats.insert("fpaxos_cov", f, fpaxos);
+
+            // compute best mdtm fpaxos stats
+            let fpaxos = bote.best_mdtm_leader(config, clients, quorum_size);
+            stats.insert("fpaxos_mdtm", f, fpaxos);
         }
 
+        // compute epaxos quorum size
+        let quorum_size = Protocol::EPaxos.quorum_size(n, 0);
+
         // compute epaxos stats
-        let epaxos = bote.leaderless(
-            config,
-            clients,
-            Protocol::EPaxos.quorum_size(n, 0),
-        );
+        let epaxos = bote.leaderless(config, clients, quorum_size);
         stats.insert("epaxos", 0, epaxos);
 
         // return all stats
@@ -291,7 +282,7 @@ impl Search {
     fn configs<'a>(
         ranked: &Ranked<'a>,
         n: usize,
-    ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
+    ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
             .unwrap()
@@ -311,16 +302,15 @@ impl Search {
         params: &RankingParams,
         n: usize,
         (prev_config, prev_stats): &ConfigAndStats,
-    ) -> impl Iterator<Item = (isize, &'a ConfigAndStats)> {
+    ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
             .unwrap()
             .into_iter()
             .filter(|(_, (config, stats))| {
-                // config.is_superset(prev_config)
                 config.is_superset(prev_config)
-                    && Self::lat_decrease(prev_stats, stats)
-                        >= params.min_lat_decrease
+                    && Self::mean_decrease(prev_stats, stats)
+                        >= params.min_mean_decrease
             })
             // TODO Is `.cloned()` equivalent to `.map(|&r| r)` here?
             .map(|&r| r)
@@ -330,9 +320,9 @@ impl Search {
             .into_iter()
     }
 
-    /// Compute the latency decrease for Atlas f = 1 when the number of sites
-    /// increases.
-    fn lat_decrease(prev_stats: &AllStats, stats: &AllStats) -> isize {
+    /// Compute the mean latency decrease for Atlas f = 1 when the number of
+    /// sites increases.
+    fn mean_decrease(prev_stats: &AllStats, stats: &AllStats) -> F64 {
         let f = 1;
         let prev_atlas = prev_stats.get("atlas", f);
         let atlas = stats.get("atlas", f);
@@ -343,107 +333,67 @@ impl Search {
         n: usize,
         stats: &AllStats,
         params: &RankingParams,
-    ) -> (bool, isize) {
+    ) -> (bool, F64) {
         // compute score and check if it is a valid configuration
         let mut valid = true;
-        let mut score: isize = 0;
+        let mut score = F64::zero();
 
         // f values accounted for when computing score and config validity
-        let fs = params.ranking_ft.fs(n);
+        let fs = params.ft_metric.fs(n);
 
         for f in fs {
-            let epaxos = stats.get("epaxos", 0);
-            let fpaxosl = stats.get("fpaxosl", f);
-            let fpaxosf = stats.get("fpaxosf", f);
+            // get atlas and fpaxos stats
             let atlas = stats.get("atlas", f);
+            let fpaxos = Self::get_fpaxos_stats(stats, f, params);
 
-            // // compute latency and fairness improvement of atlas wrto fpaxosl
-            // let fpaxosl_lat_improv = fpaxosl.mean_improv(atlas);
-            // let fpaxosl_fair_improv = fpaxosl.fairness_improv(atlas);
-            //
-            // // check if it's a valid config
-            // valid = valid
-            //     && fpaxosl_lat_improv >= params.min_lat_improv
-            //     && fpaxosl_fair_improv >= params.min_fair_improv;
-            //
-            // // compute latency and fairness improvement of atlas wrto to
-            // fpaxosf let fpaxosf_lat_improv =
-            // fpaxosf.mean_improv(atlas); let fpaxosf_fair_improv =
-            // fpaxosf.fairness_improv(atlas);
-            //
-            // // compute scores
-            // let lat_score = fpaxosl_lat_improv + fpaxosf_lat_improv;
-            // let fair_score = fpaxosl_fair_improv + fpaxosf_fair_improv;
+            // compute mean latency improvement of atlas wrto to fpaxos
+            let fpaxos_mean_improv = fpaxos.mean_improv(atlas);
 
-            // compute latency improvement of atlas wrto to fpaxosf
-            let fpaxosf_lat_improv = fpaxosf.mean_improv(atlas);
-
-            // check if it's a valid config
-            valid = valid && fpaxosf_lat_improv >= params.min_lat_improv;
-
-            let epaxos_lat_improv =
-                if f == 2 { epaxos.mean_improv(atlas) } else { 0 };
-
-            // compute scores
-            let lat_score = fpaxosf_lat_improv + epaxos_lat_improv;
-            let fair_score = 0;
-
-            // compute score depending on the ranking metric
-            score += match params.ranking_metric {
-                RankingMetric::Latency => lat_score,
-                RankingMetric::Fairness => fair_score,
-                RankingMetric::LatencyAndFairness => lat_score + fair_score,
+            // compute fairness improvement of atlas wrto to fpaxos
+            let fpaxos_fairness_improv = match params.fairness_metric {
+                FairnessMetric::COV => fpaxos.cov_improv(atlas),
+                FairnessMetric::MDTM => fpaxos.mdtm_improv(atlas),
             };
+
+            // check if it's a valid config, i.e. there's enough:
+            // - `min_mean_improv`
+            // - `min_fairness_improv`
+            valid = valid
+                && fpaxos_mean_improv >= params.min_mean_improv
+                && fpaxos_fairness_improv >= params.min_fairness_improv;
+
+            // let epaxos = stats.get("epaxos", 0);
+            //
+            // let epaxos_mean_improv = if f == 2 {
+            //     epaxos.mean_improv(atlas)
+            // } else {
+            //     F64::zero()
+            // };
+            //
+            // // update score
+            // score += fpaxos_mean_improv + epaxos_mean_improv;
+
+            // update score
+            score += fpaxos_mean_improv;
         }
 
         (valid, score)
     }
 
+    fn get_fpaxos_stats<'a>(
+        stats: &'a AllStats,
+        f: usize,
+        params: &RankingParams,
+    ) -> &'a Stats {
+        match params.fairness_metric {
+            FairnessMetric::COV => stats.get("fpaxos_cov", f),
+            FairnessMetric::MDTM => stats.get("fpaxos_mdtm", f),
+        }
+    }
+
     fn max_f(n: usize) -> usize {
         let max_f = 2;
         std::cmp::min(n / 2 as usize, max_f)
-    }
-
-    /// It returns a tuple where the:
-    /// - 1st component is the set of regions where to look for a configuration
-    /// - 2nd component might be a set of clients
-    ///
-    /// If the 2nd component is `None`, clients are colocated with servers.
-    fn search_inputs(
-        search_input: &SearchInput,
-        planet: &Planet,
-    ) -> (Vec<Region>, Option<Vec<Region>>) {
-        // compute 17-regions (from end of 2018)
-        let regions17 = vec![
-            Region::new("asia-east1"),
-            Region::new("asia-northeast1"),
-            Region::new("asia-south1"),
-            Region::new("asia-southeast1"),
-            Region::new("australia-southeast1"),
-            Region::new("europe-north1"),
-            Region::new("europe-west1"),
-            Region::new("europe-west2"),
-            Region::new("europe-west3"),
-            Region::new("europe-west4"),
-            Region::new("northamerica-northeast1"),
-            Region::new("southamerica-east1"),
-            Region::new("us-central1"),
-            Region::new("us-east1"),
-            Region::new("us-east4"),
-            Region::new("us-west1"),
-            Region::new("us-west2"),
-        ];
-
-        // compute all regions
-        let mut regions = planet.regions();
-        regions.sort();
-
-        match search_input {
-            SearchInput::R17 => (regions17, None),
-            SearchInput::R17C17 => (regions17.clone(), Some(regions17)),
-            SearchInput::R20 => (regions, None),
-            SearchInput::R20C20 => (regions.clone(), Some(regions)),
-        }
     }
 
     fn filename(
@@ -489,59 +439,102 @@ impl std::fmt::Display for SearchInput {
     }
 }
 
-pub struct RankingParams {
-    min_lat_improv: isize,
-    min_fair_improv: isize,
-    min_lat_decrease: isize,
-    min_n: usize,
-    max_n: usize,
-    ranking_metric: RankingMetric,
-    ranking_ft: RankingFT,
-}
+impl SearchInput {
+    /// It returns a tuple where the:
+    /// - 1st component is the set of regions where to look for a configuration
+    /// - 2nd component might be a set of clients
+    ///
+    /// If the 2nd component is `None`, clients are colocated with servers.
+    fn get_inputs(
+        &self,
+        planet: &Planet,
+    ) -> (Vec<Region>, Option<Vec<Region>>) {
+        // compute 17-regions (from end of 2018)
+        let regions17 = vec![
+            Region::new("asia-east1"),
+            Region::new("asia-northeast1"),
+            Region::new("asia-south1"),
+            Region::new("asia-southeast1"),
+            Region::new("australia-southeast1"),
+            Region::new("europe-north1"),
+            Region::new("europe-west1"),
+            Region::new("europe-west2"),
+            Region::new("europe-west3"),
+            Region::new("europe-west4"),
+            Region::new("northamerica-northeast1"),
+            Region::new("southamerica-east1"),
+            Region::new("us-central1"),
+            Region::new("us-east1"),
+            Region::new("us-east4"),
+            Region::new("us-west1"),
+            Region::new("us-west2"),
+        ];
 
-impl RankingParams {
-    pub fn new(
-        min_lat_improv: isize,
-        min_fair_improv: isize,
-        min_lat_decrease: isize,
-        min_n: usize,
-        max_n: usize,
-        ranking_metric: RankingMetric,
-        ranking_ft: RankingFT,
-    ) -> Self {
-        RankingParams {
-            min_lat_improv,
-            min_fair_improv,
-            min_lat_decrease,
-            min_n,
-            max_n,
-            ranking_metric,
-            ranking_ft,
+        // compute all regions
+        let mut regions = planet.regions();
+        regions.sort();
+
+        match self {
+            SearchInput::R17 => (regions17, None),
+            SearchInput::R17C17 => (regions17.clone(), Some(regions17)),
+            SearchInput::R20 => (regions, None),
+            SearchInput::R20C20 => (regions.clone(), Some(regions)),
         }
     }
 }
 
-/// what's consider when raking configurations
-#[allow(dead_code)]
-pub enum RankingMetric {
-    Latency,
-    Fairness,
-    LatencyAndFairness,
+pub struct RankingParams {
+    min_mean_improv: F64,
+    min_fairness_improv: F64,
+    min_mean_decrease: F64,
+    min_n: usize,
+    max_n: usize,
+    fairness_metric: FairnessMetric,
+    ft_metric: FTMetric,
 }
 
-/// fault tolerance considered when ranking configurations
+impl RankingParams {
+    pub fn new(
+        min_mean_improv: isize,
+        min_fairness_improv: isize,
+        min_mean_decrease: isize,
+        min_n: usize,
+        max_n: usize,
+        fairness_metric: FairnessMetric,
+        ft_metric: FTMetric,
+    ) -> Self {
+        RankingParams {
+            min_mean_improv: F64::new(min_mean_improv as f64),
+            min_fairness_improv: F64::new(min_fairness_improv as f64),
+            min_mean_decrease: F64::new(min_mean_decrease as f64),
+            min_n,
+            max_n,
+            fairness_metric,
+            ft_metric,
+        }
+    }
+}
+
+/// metric considered for selecting FPaxos leader
 #[allow(dead_code)]
-pub enum RankingFT {
+pub enum FairnessMetric {
+    COV,  // coefficient of variation (stddev / mean)
+    MDTM, // mean distance to mean
+}
+
+/// metric considered for fault tolerance
+#[allow(dead_code)]
+pub enum FTMetric {
     F1,
     F1F2,
 }
 
-impl RankingFT {
+impl FTMetric {
     fn fs(&self, n: usize) -> Vec<usize> {
         let minority = n / 2 as usize;
         let max_f = match self {
-            RankingFT::F1 => 1,
-            RankingFT::F1F2 => 2,
+            FTMetric::F1 => 1,
+            FTMetric::F1F2 => 2,
         };
         (1..=std::cmp::min(minority, max_f)).collect()
     }
