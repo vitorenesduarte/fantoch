@@ -8,16 +8,15 @@ const LAT_DIR: &str = "latency/";
 fn main() {
     // define some search params
     let min_n = 3;
-    let max_n = 13;
-    let search_input = SearchInput::R17C17;
+    let max_n = 11;
+    let search_input = SearchInput::R17CMaxN;
 
     // create search
     let search = Search::new(min_n, max_n, search_input, LAT_DIR);
     println!("> search created!");
+    panic!("a");
 
     // define search params
-    let min_n = 3;
-    let max_n = 11;
     let min_mean_improv = 30;
     let min_fairness_improv = 0;
     let min_mean_decrease = 10;

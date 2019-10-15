@@ -4,6 +4,7 @@ use crate::bote::stats::{AllStats, Stats};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
@@ -46,14 +47,14 @@ impl Search {
             let planet = Planet::new(lat_dir);
 
             // get regions for servers and clients
-            let (regions, clients) = search_input.get_inputs(max_n, &planet);
+            let (servers, clients) = search_input.get_inputs(max_n, &planet);
 
             // create bote
             let bote = Bote::from(planet);
 
             // create empty config and get all configs
             let all_configs =
-                Self::compute_all_configs(min_n, max_n, regions, clients, bote);
+                Self::compute_all_configs(min_n, max_n, servers, clients, bote);
 
             // create a new `Search` instance
             let search = Search { all_configs };
@@ -184,7 +185,7 @@ impl Search {
     fn compute_all_configs(
         min_n: usize,
         max_n: usize,
-        regions: Vec<Region>,
+        servers: Option<Vec<Region>>,
         all_clients: Vec<Vec<Region>>,
         bote: Bote,
     ) -> AllConfigs {
@@ -192,7 +193,9 @@ impl Search {
         let clients_count = all_clients.len();
 
         all_clients
-            .into_iter()
+            // PARALLEL
+            .into_par_iter()
+            // .into_iter()
             .enumerate()
             .inspect(|(i, _)| {
                 // show progress
@@ -201,9 +204,13 @@ impl Search {
                 }
             })
             .map(|(_, clients)| {
-                // for each set of clients, compute `Configs` for it
+                // compute servers: if we have something, use what we got,
+                // otherwise use the set of clients
+                let servers = servers.as_ref().unwrap_or(&clients);
+
+                // compute `Configs` for this set of clients
                 let configs = Self::compute_configs(
-                    min_n, max_n, &regions, &clients, &bote,
+                    min_n, max_n, &servers, &clients, &bote,
                 );
 
                 (clients, configs)
@@ -324,7 +331,9 @@ impl Search {
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!("configs for n = {} should be ranked!", n)
+            })
             .into_iter()
             .map(|&r| r)
             // TODO can we avoid collecting here?
@@ -344,7 +353,9 @@ impl Search {
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!("super configs for n = {} should be ranked!", n)
+            })
             .into_iter()
             .filter(|(_, (config, stats))| {
                 config.is_superset(prev_config)
@@ -444,18 +455,30 @@ impl Search {
     }
 
     fn get_saved_search(name: &String) -> Option<Search> {
-        fs::read_to_string(name)
-            .ok()
-            .map(|json| serde_json::from_str::<Search>(&json).unwrap())
+        fs::read_to_string(name).ok().map(|json| {
+            serde_json::from_str::<Search>(&json)
+                .expect("error deserializing search")
+        })
     }
 
     fn save_search(name: &String, search: &Search) {
+        use std::time::Instant;
+
+        // record start time
+        let start = Instant::now();
+
+        // save search
         match serde_json::to_string(search) {
             Ok(serialized) => {
+                // show time for serialization
+                println!("search serialization: {:?}", start.elapsed());
                 fs::write(name, serialized).expect("error saving search")
             }
             Err(err) => panic!(format!("error serializing search: {}", err)),
         }
+
+        // show total time for save
+        println!("total search save: {:?}", start.elapsed());
     }
 }
 
@@ -490,7 +513,7 @@ impl SearchInput {
         &self,
         max_n: usize,
         planet: &Planet,
-    ) -> (Vec<Region>, Vec<Vec<Region>>) {
+    ) -> (Option<Vec<Region>>, Vec<Vec<Region>>) {
         // compute 17-regions (from end of 2018)
         let regions17 = vec![
             Region::new("asia-east1"),
@@ -520,15 +543,15 @@ impl SearchInput {
             SearchInput::R17CMaxN => {
                 let all_clients =
                     regions17.combination(max_n).map(vec_cloned).collect();
-                (regions17, all_clients)
+                (None, all_clients)
             }
             SearchInput::R17C17 => {
                 let all_clients = vec![regions17.clone()];
-                (regions17, all_clients)
+                (Some(regions17), all_clients)
             }
             SearchInput::R20C20 => {
                 let all_clients = vec![regions.clone()];
-                (regions, all_clients)
+                (Some(regions), all_clients)
             }
         }
     }

@@ -37,7 +37,7 @@ impl Bote {
             .into_iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
-                let (closest, client_to_closest) =
+                let (client_to_closest, closest) =
                     self.nth_closest(1, client, servers);
 
                 // compute the latency from such region to its closest quorum
@@ -164,9 +164,9 @@ impl Bote {
             .map(|from| {
                 // for each region, get the latency to the `quorum_size`th
                 // closest region
-                let (_, latency) =
+                let (latency, _) =
                     self.nth_closest(quorum_size, &from, &regions);
-                (from, latency)
+                (from, *latency)
             })
             .collect()
     }
@@ -180,14 +180,14 @@ impl Bote {
         nth: usize,
         from: &Region,
         regions: &Vec<Region>,
-    ) -> (&Region, usize) {
+    ) -> &(usize, Region) {
         self.planet
             // sort by distance
             .sorted_by_distance(from)
             .unwrap()
             .into_iter()
             // keep only the regions in this configuration
-            .filter(|(to, _)| regions.contains(to))
+            .filter(|(_, to)| regions.contains(to))
             // select the nth region
             .nth(nth - 1)
             .unwrap()

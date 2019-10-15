@@ -28,19 +28,27 @@ pub struct Planet {
     /// mapping from region A to a mapping from region B to the latency between
     /// A and B
     latencies: HashMap<Region, HashMap<Region, usize>>,
+    /// mapping from each region to the regions sorted by distance
+    sorted_by_distance: HashMap<Region, Vec<(usize, Region)>>,
 }
 
 impl Planet {
     /// Creates a new `Planet` instance.
     pub fn new(lat_dir: &str) -> Self {
         // create latencies
-        let latencies = Dat::all_dats(lat_dir)
+        let latencies: HashMap<_, _> = Dat::all_dats(lat_dir)
             .iter()
             .map(|dat| (dat.region(), dat.latencies()))
             .collect();
 
+        // also create sorted by distance
+        let sorted_by_distance = Self::sort_by_distance(latencies.clone());
+
         // return a new planet
-        Planet { latencies }
+        Planet {
+            latencies,
+            sorted_by_distance,
+        }
     }
 
     /// Retrives a list with all regions.
@@ -62,42 +70,25 @@ impl Planet {
     pub fn sorted_by_distance(
         &self,
         from: &Region,
-    ) -> Option<Vec<(&Region, usize)>> {
-        // get from's entries
-        let entries = self.latencies.get(from)?;
-
-        // collect entries into a vector with reversed tuple order
-        let mut entries: Vec<_> =
-            entries.iter().map(|(to, latency)| (latency, to)).collect();
-
-        // now latency first appears first, so we can sort entries by latency
-        entries.sort_unstable();
-
-        // create a list of tuples region to latency
-        let region_to_latency = entries
-            .into_iter()
-            // drop latencies
-            .map(|(latency, to)| (to, *latency))
-            .collect();
-
-        // return region to latency mapping
-        Some(region_to_latency)
+    ) -> Option<&Vec<(usize, Region)>> {
+        self.sorted_by_distance.get(from)
     }
 
     /// Returns a list of `Region`s sorted by the distance to the `Region`
     /// passed as argument.
+    // TODO should this be here or simply expose `sorted_by_distance`?
     pub fn sorted_by_distance_and_indexed(
         &self,
         from: &Region,
     ) -> Option<HashMap<&Region, usize>> {
-        // sort by distance
-        let region_to_distance = self.sorted_by_distance(from)?;
+        // get sorted regions
+        let sorted_regions = self.sorted_by_distance(from)?;
 
         // create a mapping from region to its sorted index
-        let region_to_index = region_to_distance
+        let region_to_index = sorted_regions
             .into_iter()
             // drop latencies
-            .map(|(to, _)| to)
+            .map(|(_, to)| to)
             .enumerate()
             // reverse: now regions map to sort index
             .map(|(index, to)| (to, index))
@@ -105,6 +96,27 @@ impl Planet {
 
         // return region to index mapping
         Some(region_to_index)
+    }
+
+    /// Returns a mapping from region to regions sorted by distance (ASC).
+    fn sort_by_distance(
+        latencies: HashMap<Region, HashMap<Region, usize>>,
+    ) -> HashMap<Region, Vec<(usize, Region)>> {
+        latencies
+            .into_iter()
+            .map(|(from, entries)| {
+                // collect entries into a vector with reversed tuple order
+                let mut entries: Vec<_> = entries
+                    .into_iter()
+                    .map(|(to, latency)| (latency, to))
+                    .collect();
+
+                // sort entries by latency
+                entries.sort_unstable();
+
+                (from, entries)
+            })
+            .collect()
     }
 }
 
