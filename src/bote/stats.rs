@@ -66,14 +66,24 @@ impl Stats {
     }
 
     fn compute_stats(xs: &Vec<usize>) -> (F64, F64, F64) {
+        // transform input in a `Vec<f64>`
         let xs: Vec<f64> = xs.into_iter().map(|&x| x as f64).collect();
-        let mean = xs.clone().mean(); // TODO maybe find a different library that does not consume the `Vec`
+
+        // compute mean
+        // TODO maybe find a different library that does not consume the `Vec`
+        let mean = xs.clone().mean();
+
+        // compute coefficient of variation
         let cov = xs.clone().std_dev() / mean;
+
+        // compute mean distance to mean
         let mdtm = xs
             .into_iter()
             .map(|x| (x - mean).abs())
             .collect::<Vec<_>>()
             .mean();
+
+        // return the 3 stats
         (F64::new(mean), F64::new(cov), F64::new(mdtm))
     }
 }
