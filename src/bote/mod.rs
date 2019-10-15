@@ -8,6 +8,7 @@ use crate::planet::{Planet, Region};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct Bote {
     planet: Planet,
 }

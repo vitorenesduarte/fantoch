@@ -89,7 +89,7 @@ impl Stats {
 }
 
 /// Mapping from protocol name to its stats.
-#[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug,Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
 pub struct AllStats(BTreeMap<String, Stats>);
 
 impl AllStats {

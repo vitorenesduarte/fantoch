@@ -5,22 +5,30 @@ use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
+use std::fmt;
+use std::fs;
 use std::iter::FromIterator;
 
 // config and stats
 type ConfigAndStats = (BTreeSet<Region>, AllStats);
 
-// all configs
-type AllConfigs = HashMap<usize, Vec<ConfigAndStats>>;
+// configs: mapping from `n` to list of configurations of such size
+type Configs = HashMap<usize, Vec<ConfigAndStats>>;
 
-// ranked
+// all configs: mapping from clients to `Config`
+type AllConfigs = Vec<(Vec<Region>, Configs)>;
+
+// ranked: mapping from `n` to list of configurations of such size
+// - these configurations are already a subset of all configurations that passed
+//   some filter and have a score associated with it
 type Ranked<'a> = HashMap<usize, Vec<(F64, &'a ConfigAndStats)>>;
+
+// all ranked: mapping from clients to `Ranked`
+type AllRanked<'a> = Vec<(&'a Vec<Region>, Ranked<'a>)>;
 
 #[derive(Deserialize, Serialize)]
 pub struct Search {
-    regions: Vec<Region>,
-    clients: Option<Vec<Region>>,
     all_configs: AllConfigs,
 }
 
@@ -37,27 +45,18 @@ impl Search {
             // create planet
             let planet = Planet::new(lat_dir);
 
-            // get all regions
-            let mut all_regions = planet.regions();
-            all_regions.sort();
+            // get regions for servers and clients
+            let (regions, clients) = search_input.get_inputs(max_n, &planet);
 
             // create bote
-            let bote = Bote::from(planet.clone());
-
-            // get regions for servers and clients
-            let (regions, clients) = search_input.get_inputs(&planet);
+            let bote = Bote::from(planet);
 
             // create empty config and get all configs
-            let all_configs = Self::compute_all_configs(
-                min_n, max_n, &regions, &clients, &bote,
-            );
+            let all_configs =
+                Self::compute_all_configs(min_n, max_n, regions, clients, bote);
 
             // create a new `Search` instance
-            let search = Search {
-                regions,
-                clients,
-                all_configs,
-            };
+            let search = Search { all_configs };
 
             // save it
             Self::save_search(&filename, &search);
@@ -67,47 +66,48 @@ impl Search {
         })
     }
 
-    pub fn sorted_configs(
-        &self,
-        params: &RankingParams,
-        max_configs_per_n: usize,
-    ) -> BTreeMap<usize, Vec<(F64, &ConfigAndStats)>> {
-        self.rank(params)
-            .into_iter()
-            .map(|(n, ranked)| {
-                let sorted = ranked
-                    .into_iter()
-                    // sort ASC
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    // sort DESC (highest score first)
-                    .rev()
-                    // take the first `max_configs_per_n`
-                    .take(max_configs_per_n)
-                    .collect();
-                (n, sorted)
-            })
-            .collect()
-    }
+    // pub fn sorted_configs(
+    //     &self,
+    //     params: &RankingParams,
+    //     max_configs_per_n: usize,
+    // ) -> BTreeMap<usize, Vec<(F64, &ConfigAndStats)>> {
+    //     self.rank(params)
+    //         .into_iter()
+    //         .map(|(n, ranked)| {
+    //             let sorted = ranked
+    //                 .into_iter()
+    //                 // sort ASC
+    //                 .collect::<BTreeSet<_>>()
+    //                 .into_iter()
+    //                 // sort DESC (highest score first)
+    //                 .rev()
+    //                 // take the first `max_configs_per_n`
+    //                 .take(max_configs_per_n)
+    //                 .collect();
+    //             (n, sorted)
+    //         })
+    //         .collect()
+    // }
 
     pub fn sorted_evolving_configs(
         &self,
         p: &RankingParams,
-        max_configs: usize,
-    ) -> Vec<(F64, Vec<&ConfigAndStats>)> {
+    ) -> Vec<(F64, Vec<&ConfigAndStats>, &Vec<Region>)> {
         assert_eq!(p.min_n, 3);
         assert_eq!(p.max_n, 11);
 
         // first we should rank all configs
-        let ranked = self.rank(p);
+        let all_ranked = self.rank_all(p);
 
-        // show how many ranked configs we have for each n
-        ranked
+        // show how many ranked configs we have for each set of clients
+        all_ranked
             .iter()
-            .map(|(n, css)| (n, css.len()))
-            .collect::<BTreeMap<_, _>>()
-            .into_iter()
-            .for_each(|(n, count)| println!("{}: {}", n, count));
+            .enumerate()
+            .map(|(i, (_clients, configs))| {
+                let count = configs.iter().map(|(_, css)| css.len()).count();
+                (i, count)
+            })
+            .for_each(|(i, count)| println!("{}: {}", i, count));
 
         // create result variable
         let mut configs = BTreeSet::new();
@@ -115,31 +115,43 @@ impl Search {
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
 
-        let ranked3 = ranked.get(&3).unwrap();
-        let count = ranked3.len();
-        let mut i = 0;
+        all_ranked.into_iter().for_each(|(clients, ranked)| {
+            let ranked3 = ranked.get(&3).unwrap();
+            let count = ranked3.len();
+            let mut i = 0;
 
-        Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
-            i += 1;
-            if i % 10 == 0 {
-                println!("{} of {}", i, count);
-            }
+            Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
+                i += 1;
+                if i % 10 == 0 {
+                    println!("{} of {}", i, count);
+                }
 
-            Self::super_configs(&ranked, p, 5, cs3).for_each(
-                |(score5, cs5)| {
-                    Self::super_configs(&ranked, p, 7, cs5).for_each(
-                        |(score7, cs7)| {
-                            Self::super_configs(&ranked, p, 9, cs7).for_each(
-                                |(score9, cs9)| {
-                                    Self::super_configs(&ranked, p, 11, cs9).for_each(
-                                        |(score11, cs11)| {
-                                            let score = score3 + score5 + score7 + score9 + score11;
-                                            let css = vec![cs3, cs5, cs7, cs9, cs11];
-                                            assert!(configs.insert((score, css)))
+                Self::super_configs(&ranked, p, 5, cs3).for_each(
+                    |(score5, cs5)| {
+                        Self::super_configs(&ranked, p, 7, cs5).for_each(
+                            |(score7, cs7)| {
+                                Self::super_configs(&ranked, p, 9, cs7)
+                                    .for_each(|(score9, cs9)| {
+                                        Self::super_configs(
+                                            &ranked, p, 11, cs9,
+                                        )
+                                        .for_each(|(score11, cs11)| {
+                                            let score = score3
+                                                + score5
+                                                + score7
+                                                + score9
+                                                + score11;
+                                            let css =
+                                                vec![cs3, cs5, cs7, cs9, cs11];
+                                            assert!(configs
+                                                .insert((score, css, clients)))
                                         });
-                                });
-                        });
-                });
+                                    });
+                            },
+                        );
+                    },
+                );
+            });
         });
 
         // `configs` is sorted ASC
@@ -147,8 +159,6 @@ impl Search {
             .into_iter()
             // sort DESC (highest score first)
             .rev()
-            // take the first `max_configs`
-            .take(max_configs)
             .collect()
     }
 
@@ -174,25 +184,47 @@ impl Search {
     fn compute_all_configs(
         min_n: usize,
         max_n: usize,
-        regions: &Vec<Region>,
-        clients: &Option<Vec<Region>>,
-        bote: &Bote,
+        regions: Vec<Region>,
+        all_clients: Vec<Vec<Region>>,
+        bote: Bote,
     ) -> AllConfigs {
+        // get the count of client configurations
+        let clients_count = all_clients.len();
+
+        all_clients
+            .into_iter()
+            .enumerate()
+            .inspect(|(i, _)| {
+                // show progress
+                if i % 10 == 0 {
+                    println!("{} of {}", i, clients_count);
+                }
+            })
+            .map(|(_, clients)| {
+                // for each set of clients, compute `Configs` for it
+                let configs = Self::compute_configs(
+                    min_n, max_n, &regions, &clients, &bote,
+                );
+
+                (clients, configs)
+            })
+            .collect()
+    }
+
+    fn compute_configs(
+        min_n: usize,
+        max_n: usize,
+        regions: &Vec<Region>,
+        clients: &Vec<Region>,
+        bote: &Bote,
+    ) -> Configs {
         (min_n..=max_n)
             .step_by(2)
             .map(|n| {
                 let configs = regions
                     .combination(n)
+                    .map(vec_cloned)
                     .map(|config| {
-                        // clone config
-                        let config: Vec<_> =
-                            config.into_iter().cloned().collect();
-
-                        // compute clients:
-                        // - either the ones passed as argument
-                        // - or clients colocated with servers
-                        let clients = clients.as_ref().unwrap_or(&config);
-
                         // compute stats
                         let stats = Self::compute_stats(&config, clients, bote);
 
@@ -251,8 +283,15 @@ impl Search {
         stats
     }
 
-    fn rank<'a>(&'a self, params: &RankingParams) -> Ranked<'a> {
+    fn rank_all<'a>(&'a self, params: &RankingParams) -> AllRanked<'a> {
         self.all_configs
+            .iter()
+            .map(|(clients, configs)| (clients, Self::rank(configs, params)))
+            .collect()
+    }
+
+    fn rank<'a>(configs: &'a Configs, params: &RankingParams) -> Ranked<'a> {
+        configs
             .iter()
             .filter_map(|(&n, css)| {
                 // only keep in the map `n` values between `min_n` and `max_n`
@@ -405,35 +444,39 @@ impl Search {
     }
 
     fn get_saved_search(name: &String) -> Option<Search> {
-        std::fs::read_to_string(name)
+        fs::read_to_string(name)
             .ok()
             .map(|json| serde_json::from_str::<Search>(&json).unwrap())
     }
 
     fn save_search(name: &String, search: &Search) {
-        std::fs::write(name, serde_json::to_string(search).unwrap()).unwrap()
+        match serde_json::to_string(search) {
+            Ok(serialized) => {
+                fs::write(name, serialized).expect("error saving search")
+            }
+            Err(err) => panic!(format!("error serializing search: {}", err)),
+        }
     }
 }
 
 /// identifies which regions considered for the search
 #[allow(dead_code)]
 pub enum SearchInput {
-    /// search within 2018 17 regions, clients colocated with servers
-    R17,
+    /// search within 2018 17 regions, clients deployed in the MAX regions
+    /// - e.g. if the max number of regions is 11, clients are deployed in
+    ///   those 11 regions
+    R17CMaxN,
     /// search within 2018 17 regions, clients deployed in the 17 regions
     R17C17,
-    /// search within the 20 regions, clients colocated with servers
-    R20,
     /// search within the 20 regions, clients deployed in the 20 regions
     R20C20,
 }
 
-impl std::fmt::Display for SearchInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for SearchInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SearchInput::R17 => write!(f, "R17"),
+            SearchInput::R17CMaxN => write!(f, "R17CMaxN"),
             SearchInput::R17C17 => write!(f, "R17C17"),
-            SearchInput::R20 => write!(f, "R20"),
             SearchInput::R20C20 => write!(f, "R20C20"),
         }
     }
@@ -442,13 +485,12 @@ impl std::fmt::Display for SearchInput {
 impl SearchInput {
     /// It returns a tuple where the:
     /// - 1st component is the set of regions where to look for a configuration
-    /// - 2nd component might be a set of clients
-    ///
-    /// If the 2nd component is `None`, clients are colocated with servers.
+    /// - 2nd component is a list of client locations
     fn get_inputs(
         &self,
+        max_n: usize,
         planet: &Planet,
-    ) -> (Vec<Region>, Option<Vec<Region>>) {
+    ) -> (Vec<Region>, Vec<Vec<Region>>) {
         // compute 17-regions (from end of 2018)
         let regions17 = vec![
             Region::new("asia-east1"),
@@ -475,12 +517,25 @@ impl SearchInput {
         regions.sort();
 
         match self {
-            SearchInput::R17 => (regions17, None),
-            SearchInput::R17C17 => (regions17.clone(), Some(regions17)),
-            SearchInput::R20 => (regions, None),
-            SearchInput::R20C20 => (regions.clone(), Some(regions)),
+            SearchInput::R17CMaxN => {
+                let all_clients =
+                    regions17.combination(max_n).map(vec_cloned).collect();
+                (regions17, all_clients)
+            }
+            SearchInput::R17C17 => {
+                let all_clients = vec![regions17.clone()];
+                (regions17, all_clients)
+            }
+            SearchInput::R20C20 => {
+                let all_clients = vec![regions.clone()];
+                (regions, all_clients)
+            }
         }
     }
+}
+
+fn vec_cloned<T: Clone>(vec: Vec<&T>) -> Vec<T> {
+    vec.into_iter().cloned().collect()
 }
 
 pub struct RankingParams {

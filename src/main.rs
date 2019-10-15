@@ -51,9 +51,10 @@ fn main() {
     println!("> showing evolving configs");
     let max_configs = 2;
     search
-        .sorted_evolving_configs(&params, max_configs)
+        .sorted_evolving_configs(&params)
         .into_iter()
-        .for_each(|(score, css)| {
+        .take(max_configs)
+        .for_each(|(score, css, clients)| {
             let mut sorted_config = Vec::new();
             let mut all_stats = Vec::new();
 
@@ -70,7 +71,9 @@ fn main() {
                 all_stats.push((n, stats));
             }
 
-            println!("{}: {:?}", score.round(), sorted_config);
+            println!("{}:", score.round());
+            println!("servers: {:?}", sorted_config);
+            println!("clients: {:?}", clients);
 
             for (n, stats) in all_stats {
                 print!("[n={}] ", n);
