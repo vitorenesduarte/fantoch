@@ -114,7 +114,7 @@ impl Search {
         p: &RankingParams,
     ) -> Vec<(F64, Vec<&ConfigAndStats>, &Vec<Region>)> {
         assert_eq!(p.min_n, 3);
-        assert_eq!(p.max_n, 15);
+        assert_eq!(p.max_n, 17);
 
         // first we should rank all configs
         let all_ranked = timed!("rank all", self.rank_all(p));
@@ -161,20 +161,33 @@ impl Search {
                                                     &ranked, 15, cs13, p,
                                                 )
                                                 .for_each(|(score15, cs15)| {
-                                                    let score = score3
-                                                        + score5
-                                                        + score7
-                                                        + score9
-                                                        + score11
-                                                        + score13
-                                                        + score15;
-                                                    let css = vec![
-                                                        cs3, cs5, cs7, cs9,
-                                                        cs11, cs13, cs15,
-                                                    ];
-                                                    let config =
-                                                        (score, css, clients);
-                                                    configs.insert(config);
+                                                    Self::super_configs(
+                                                        &ranked, 17, cs15, p,
+                                                    )
+                                                    .for_each(
+                                                        |(score17, cs17)| {
+                                                            let score = score3
+                                                                + score5
+                                                                + score7
+                                                                + score9
+                                                                + score11
+                                                                + score13
+                                                                + score15
+                                                                + score17;
+                                                            let css = vec![
+                                                                cs3, cs5, cs7,
+                                                                cs9, cs11,
+                                                                cs13, cs15,
+                                                                cs17,
+                                                            ];
+                                                            let config = (
+                                                                score, css,
+                                                                clients,
+                                                            );
+                                                            configs
+                                                                .insert(config);
+                                                        },
+                                                    );
                                                 });
                                             });
                                         });

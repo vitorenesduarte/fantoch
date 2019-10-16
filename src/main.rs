@@ -8,7 +8,7 @@ const LAT_DIR: &str = "latency/";
 fn main() {
     // define some search params
     let min_n = 3;
-    let max_n = 15;
+    let max_n = 17;
     let search_input = SearchInput::R17CMaxN;
 
     // create search
@@ -16,9 +16,9 @@ fn main() {
     println!("> search created!");
 
     // define search params
-    let min_mean_improv = 30;
+    let min_mean_improv = 0;
     let min_fairness_improv = 0;
-    let min_mean_decrease = 15;
+    let min_mean_decrease = 0;
     let fairness_metric = FairnessMetric::COV;
     let ft_metric = FTMetric::F1F2;
 
