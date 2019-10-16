@@ -139,7 +139,7 @@ impl Search {
         let count = all_ranked.len();
         all_ranked.into_iter().for_each(|(clients, ranked)| {
             i += 1;
-            if i % 10 == 0 {
+            if i % 100 == 0 {
                 println!("{} of {}", i, count);
             }
 
@@ -478,7 +478,7 @@ impl Search {
             .map(|file| BufReader::new(file))
             // and try to deserialize
             .map(|reader| {
-                serde_json::from_reader(reader)
+                bincode::deserialize_from(reader)
                     .expect("error deserializing search")
             })
     }
@@ -491,7 +491,7 @@ impl Search {
             .map(|file| BufWriter::new(file))
             // and try to serialize
             .map(|writer| {
-                serde_json::to_writer(writer, search)
+                bincode::serialize_into(writer, search)
                     .expect("error serializing search")
             });
     }
