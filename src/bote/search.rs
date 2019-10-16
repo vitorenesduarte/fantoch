@@ -114,10 +114,10 @@ impl Search {
         p: &RankingParams,
     ) -> Vec<(F64, Vec<&ConfigAndStats>, &Vec<Region>)> {
         assert_eq!(p.min_n, 3);
-        assert_eq!(p.max_n, 11);
+        assert_eq!(p.max_n, 15);
 
         // first we should rank all configs
-        let all_ranked = self.rank_all(p);
+        let all_ranked = timed!("rank all", self.rank_all(p));
 
         // show how many ranked configs we have for each set of clients
         let count = all_ranked
@@ -134,7 +134,6 @@ impl Search {
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
 
-        // PARALLEL
         let mut i = 0;
         let count = all_ranked.len();
         all_ranked.into_iter().for_each(|(clients, ranked)| {
@@ -144,25 +143,40 @@ impl Search {
             }
 
             Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
-                Self::super_configs(&ranked, p, 5, cs3).for_each(
+                Self::super_configs(&ranked, 5, cs3, p).for_each(
                     |(score5, cs5)| {
-                        Self::super_configs(&ranked, p, 7, cs5).for_each(
+                        Self::super_configs(&ranked, 7, cs5, p).for_each(
                             |(score7, cs7)| {
-                                Self::super_configs(&ranked, p, 9, cs7)
+                                Self::super_configs(&ranked, 9, cs7, p)
                                     .for_each(|(score9, cs9)| {
                                         Self::super_configs(
-                                            &ranked, p, 11, cs9,
+                                            &ranked, 11, cs9, p,
                                         )
                                         .for_each(|(score11, cs11)| {
-                                            let score = score3
-                                                + score5
-                                                + score7
-                                                + score9
-                                                + score11;
-                                            let css =
-                                                vec![cs3, cs5, cs7, cs9, cs11];
-                                            assert!(configs
-                                                .insert((score, css, clients)))
+                                            Self::super_configs(
+                                                &ranked, 13, cs11, p,
+                                            )
+                                            .for_each(|(score13, cs13)| {
+                                                Self::super_configs(
+                                                    &ranked, 15, cs13, p,
+                                                )
+                                                .for_each(|(score15, cs15)| {
+                                                    let score = score3
+                                                        + score5
+                                                        + score7
+                                                        + score9
+                                                        + score11
+                                                        + score13
+                                                        + score15;
+                                                    let css = vec![
+                                                        cs3, cs5, cs7, cs9,
+                                                        cs11, cs13, cs15,
+                                                    ];
+                                                    let config =
+                                                        (score, css, clients);
+                                                    configs.insert(config);
+                                                });
+                                            });
                                         });
                                     });
                             },
@@ -215,7 +229,7 @@ impl Search {
             .enumerate()
             .inspect(|(i, _)| {
                 // show progress
-                if i % 10 == 0 {
+                if i % 100 == 0 {
                     println!("{} of {}", i, clients_count);
                 }
             })
@@ -308,7 +322,8 @@ impl Search {
 
     fn rank_all<'a>(&'a self, params: &RankingParams) -> AllRanked<'a> {
         self.all_configs
-            .iter()
+            // PARALLEL
+            .par_iter()
             .map(|(clients, configs)| (clients, Self::rank(configs, params)))
             .collect()
     }
@@ -363,9 +378,9 @@ impl Search {
     /// - are a superset of `previous_config`
     fn super_configs<'a>(
         ranked: &Ranked<'a>,
-        params: &RankingParams,
         n: usize,
         (prev_config, prev_stats): &ConfigAndStats,
+        params: &RankingParams,
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
@@ -375,8 +390,7 @@ impl Search {
             .into_iter()
             .filter(|(_, (config, stats))| {
                 config.is_superset(prev_config)
-                    && Self::mean_decrease(prev_stats, stats)
-                        >= params.min_mean_decrease
+                    && Self::min_mean_decrease(stats, prev_stats, n, params)
             })
             // TODO Is `.cloned()` equivalent to `.map(|&r| r)` here?
             .map(|&r| r)
@@ -388,11 +402,17 @@ impl Search {
 
     /// Compute the mean latency decrease for Atlas f = 1 when the number of
     /// sites increases.
-    fn mean_decrease(prev_stats: &AllStats, stats: &AllStats) -> F64 {
-        let f = 1;
-        let prev_atlas = prev_stats.get("atlas", f);
-        let atlas = stats.get("atlas", f);
-        prev_atlas.mean_improv(atlas)
+    fn min_mean_decrease(
+        stats: &AllStats,
+        prev_stats: &AllStats,
+        n: usize,
+        params: &RankingParams,
+    ) -> bool {
+        params.ft_metric.fs(n - 2).into_iter().all(|f| {
+            let atlas = stats.get("atlas", f);
+            let prev_atlas = prev_stats.get("atlas", f);
+            prev_atlas.mean_improv(atlas) >= params.min_mean_decrease
+        })
     }
 
     fn compute_score(
@@ -428,19 +448,17 @@ impl Search {
                 && fpaxos_mean_improv >= params.min_mean_improv
                 && fpaxos_fairness_improv >= params.min_fairness_improv;
 
-            // let epaxos = stats.get("epaxos", 0);
-            //
-            // let epaxos_mean_improv = if f == 2 {
-            //     epaxos.mean_improv(atlas)
-            // } else {
-            //     F64::zero()
-            // };
-            //
-            // // update score
-            // score += fpaxos_mean_improv + epaxos_mean_improv;
+            // get epaxos stats
+            let epaxos = stats.get("epaxos", 0);
+
+            // compute mean latency improvement of atlas wrto to epaxos
+            let epaxos_mean_improv = epaxos.mean_improv(atlas);
 
             // update score
-            score += fpaxos_mean_improv;
+            // score += fpaxos_mean_improv;
+            // give extra weigth for epaxos improv
+            let weight = F64::new(10 as f64);
+            score += fpaxos_mean_improv + (weight * epaxos_mean_improv);
         }
 
         (valid, score)

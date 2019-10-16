@@ -46,6 +46,14 @@ impl std::ops::Sub for F64 {
     }
 }
 
+impl std::ops::Mul for F64 {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        Self(self.0 * other.0)
+    }
+}
+
 // based on: https://github.com/reem/rust-ordered-float/ `cmp` implementation for `OrderedFloat`
 impl Ord for F64 {
     fn cmp(&self, other: &Self) -> Ordering {
