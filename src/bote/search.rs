@@ -8,15 +8,18 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
-use std::fs;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 use std::iter::FromIterator;
 use std::time::Instant;
 
 macro_rules! timed {
-    ( $x:expr ) => {{
+    ( $s:expr, $x:expr ) => {{
         let start = Instant::now();
         let result = $x;
-        (result, start.elapsed())
+        let time = start.elapsed();
+        println!("{}: {:?}", $s, time);
+        result
     }};
 }
 
@@ -49,33 +52,38 @@ impl Search {
         search_input: SearchInput,
         lat_dir: &str,
     ) -> Self {
+        // get filename
         let filename = Self::filename(min_n, max_n, &search_input);
 
-        Search::get_saved_search(&filename).unwrap_or_else(|| {
-            // create planet
-            let planet = Planet::new(lat_dir);
+        timed!("get saved search", Search::get_saved_search(&filename))
+            .unwrap_or_else(|| {
+                // create planet
+                let planet = Planet::new(lat_dir);
 
-            // get regions for servers and clients
-            let (servers, clients) = search_input.get_inputs(max_n, &planet);
+                // get regions for servers and clients
+                let (servers, clients) =
+                    search_input.get_inputs(max_n, &planet);
 
-            // create bote
-            let bote = Bote::from(planet);
+                // create bote
+                let bote = Bote::from(planet);
 
-            // create empty config and get all configs
-            let (all_configs, time) = timed!(Self::compute_all_configs(
-                min_n, max_n, servers, clients, bote
-            ));
-            println!("compute all configs: {:?}", time);
+                // create empty config and get all configs
+                let all_configs = timed!(
+                    "compute all configs",
+                    Self::compute_all_configs(
+                        min_n, max_n, servers, clients, bote
+                    )
+                );
 
-            // create a new `Search` instance
-            let search = Search { all_configs };
+                // create a new `Search` instance
+                let search = Search { all_configs };
 
-            // save it
-            Self::save_search(&filename, &search);
+                // save it
+                timed!("save search", Self::save_search(&filename, &search));
 
-            // and return it
-            search
-        })
+                // and return it
+                search
+            })
     }
 
     // pub fn sorted_configs(
@@ -112,14 +120,13 @@ impl Search {
         let all_ranked = self.rank_all(p);
 
         // show how many ranked configs we have for each set of clients
-        all_ranked
+        let count = all_ranked
             .iter()
-            .enumerate()
-            .map(|(i, (_clients, configs))| {
-                let count = configs.iter().map(|(_, css)| css.len()).count();
-                (i, count)
+            .map(|(_, configs)| {
+                configs.iter().map(|(_, css)| css.len()).count()
             })
-            .for_each(|(i, count)| println!("{}: {}", i, count));
+            .count();
+        println!("config count: {}", count);
 
         // create result variable
         let mut configs = BTreeSet::new();
@@ -127,17 +134,16 @@ impl Search {
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
 
+        // PARALLEL
+        let mut i = 0;
+        let count = all_ranked.len();
         all_ranked.into_iter().for_each(|(clients, ranked)| {
-            let ranked3 = ranked.get(&3).unwrap();
-            let count = ranked3.len();
-            let mut i = 0;
+            i += 1;
+            if i % 10 == 0 {
+                println!("{} of {}", i, count);
+            }
 
             Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
-                i += 1;
-                if i % 10 == 0 {
-                    println!("{} of {}", i, count);
-                }
-
                 Self::super_configs(&ranked, p, 5, cs3).for_each(
                     |(score5, cs5)| {
                         Self::super_configs(&ranked, p, 7, cs5).for_each(
@@ -206,7 +212,6 @@ impl Search {
         all_clients
             // PARALLEL
             .into_par_iter()
-            // .into_iter()
             .enumerate()
             .inspect(|(i, _)| {
                 // show progress
@@ -466,26 +471,29 @@ impl Search {
     }
 
     fn get_saved_search(name: &String) -> Option<Search> {
-        fs::read_to_string(name).ok().map(|json| {
-            serde_json::from_str::<Search>(&json)
-                .expect("error deserializing search")
-        })
+        // open the file in read-only
+        File::open(name)
+            .ok()
+            // create a buf reader
+            .map(|file| BufReader::new(file))
+            // and try to deserialize
+            .map(|reader| {
+                serde_json::from_reader(reader)
+                    .expect("error deserializing search")
+            })
     }
 
     fn save_search(name: &String, search: &Search) {
-        // save search
-        match timed!(serde_json::to_string(search)) {
-            (Ok(serialized), time) => {
-                // show time for serialization
-                println!("search serialization: {:?}", time);
-
-                match timed!(fs::write(name, serialized)) {
-                    (Ok(()), time) => println!("search save: {:?}", time),
-                    (Err(err), _) => panic!("error saving search: {}", err),
-                }
-            }
-            (Err(err), _) => panic!("error serializing search: {}", err),
-        }
+        // if the file does not exist it will be created, otherwise truncated
+        File::create(name)
+            .ok()
+            // create a buf writer
+            .map(|file| BufWriter::new(file))
+            // and try to serialize
+            .map(|writer| {
+                serde_json::to_writer(writer, search)
+                    .expect("error serializing search")
+            });
     }
 }
 

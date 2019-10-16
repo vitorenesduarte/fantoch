@@ -14,12 +14,11 @@ fn main() {
     // create search
     let search = Search::new(min_n, max_n, search_input, LAT_DIR);
     println!("> search created!");
-    panic!("a");
 
     // define search params
-    let min_mean_improv = 30;
+    let min_mean_improv = 100;
     let min_fairness_improv = 0;
-    let min_mean_decrease = 10;
+    let min_mean_decrease = 30;
     let fairness_metric = FairnessMetric::COV;
     let ft_metric = FTMetric::F1F2;
 
