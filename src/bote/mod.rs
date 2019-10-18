@@ -30,8 +30,7 @@ impl Bote {
         quorum_size: usize,
     ) -> Stats {
         // compute the quorum latency for each server
-        let quorum_latencies =
-            self.latency_to_closest_quorum(servers, quorum_size);
+        let quorum_latencies = self.all_quorum_latencies(servers, quorum_size);
 
         let latencies: Vec<_> = clients
             .into_iter()
@@ -52,109 +51,113 @@ impl Bote {
         Stats::from(&latencies)
     }
 
-    pub fn best_mean_leader(
+    pub fn leader(
         &self,
+        leader: &Region,
         servers: &Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
     ) -> Stats {
+        // compute the quorum latency only for this leader
+        let quorum_latency = self.quorum_latency(leader, servers, quorum_size);
+        self.leader_stats(leader, quorum_latency, clients)
+    }
+
+    pub fn best_mean_leader<'a>(
+        &self,
+        servers: &'a Vec<Region>,
+        clients: &Vec<Region>,
+        quorum_size: usize,
+    ) -> (&'a Region, Stats) {
         self.best_leader(servers, clients, quorum_size, |a, b| {
             a.mean().cmp(&b.mean())
         })
     }
 
-    pub fn best_cov_leader(
+    pub fn best_cov_leader<'a>(
         &self,
-        servers: &Vec<Region>,
+        servers: &'a Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
-    ) -> Stats {
+    ) -> (&'a Region, Stats) {
         self.best_leader(servers, clients, quorum_size, |a, b| {
             a.cov().cmp(&b.cov())
         })
     }
 
-    pub fn best_mdtm_leader(
+    pub fn best_mdtm_leader<'a>(
         &self,
-        servers: &Vec<Region>,
+        servers: &'a Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
-    ) -> Stats {
+    ) -> (&'a Region, Stats) {
         self.best_leader(servers, clients, quorum_size, |a, b| {
             a.mdtm().cmp(&b.mdtm())
         })
     }
 
-    fn best_leader<F>(
+    fn best_leader<'a, F>(
         &self,
-        servers: &Vec<Region>,
+        servers: &'a Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
         compare: F,
-    ) -> Stats
+    ) -> (&'a Region, Stats)
     where
         F: Fn(&Stats, &Stats) -> Ordering,
     {
         // sort stats using `compare`
-        let mut stats = self.leaders_stats(servers, clients, quorum_size);
-        stats.sort_unstable_by(compare);
+        let mut stats = self.all_leaders_stats(servers, clients, quorum_size);
+        stats.sort_unstable_by(|(_la, sa), (_lb, sb)| compare(sa, sb));
 
         // get the lowest (in terms of `compare`) stat
         stats.into_iter().next().unwrap()
     }
 
-    /// Compute stats for all possible leaders.
-    fn leaders_stats(
-        &self,
-        servers: &Vec<Region>,
-        clients: &Vec<Region>,
-        quorum_size: usize,
-    ) -> Vec<Stats> {
-        self.leader(servers, clients, quorum_size)
-            .into_iter()
-            .map(|(_, stats)| stats)
-            .collect()
-    }
-
-    fn leader<'a>(
+    fn all_leaders_stats<'a>(
         &self,
         servers: &'a Vec<Region>,
         clients: &Vec<Region>,
         quorum_size: usize,
-    ) -> HashMap<&'a Region, Stats> {
+    ) -> Vec<(&'a Region, Stats)> {
         // compute the quorum latency for each possible leader
-        let quorum_latencies =
-            self.latency_to_closest_quorum(servers, quorum_size);
+        let quorum_latencies = self.all_quorum_latencies(servers, quorum_size);
 
         // compute latency stats for each possible leader
         servers
             .iter()
             .map(|leader| {
                 // compute the latency from leader to its closest quorum
-                let leader_to_quorum = quorum_latencies.get(&leader).unwrap();
-
-                // compute perceived latency for each client
-                let latencies: Vec<_> = clients
-                    .iter()
-                    .map(|client| {
-                        // compute the latency from client to leader
-                        let client_to_leader =
-                            self.planet.latency(client, &leader).unwrap();
-                        // client perceived latency is the sum of both
-                        client_to_leader + leader_to_quorum
-                    })
-                    .collect();
-
-                // compute stats from these client perceived latencies
-                let stats = Stats::from(&latencies);
-
-                (leader, stats)
+                let quorum_latency = quorum_latencies.get(&leader).unwrap();
+                (leader, self.leader_stats(leader, *quorum_latency, clients))
             })
             .collect()
     }
 
+    fn leader_stats(
+        &self,
+        leader: &Region,
+        leader_to_quorum: usize,
+        clients: &Vec<Region>,
+    ) -> Stats {
+        // compute perceived latency for each client
+        let latencies: Vec<_> = clients
+            .iter()
+            .map(|client| {
+                // compute the latency from client to leader
+                let client_to_leader =
+                    self.planet.latency(client, &leader).unwrap();
+                // client perceived latency is the sum of both
+                client_to_leader + leader_to_quorum
+            })
+            .collect();
+
+        // compute stats from these client perceived latencies
+        Stats::from(&latencies)
+    }
+
     /// Compute the latency to closest quorum of a size `quorum_size`.
-    fn latency_to_closest_quorum<'a>(
+    fn all_quorum_latencies<'a>(
         &self,
         regions: &'a Vec<Region>,
         quorum_size: usize,
@@ -164,11 +167,19 @@ impl Bote {
             .map(|from| {
                 // for each region, get the latency to the `quorum_size`th
                 // closest region
-                let (latency, _) =
-                    self.nth_closest(quorum_size, &from, &regions);
-                (from, *latency)
+                (from, self.quorum_latency(from, regions, quorum_size))
             })
             .collect()
+    }
+
+    fn quorum_latency(
+        &self,
+        from: &Region,
+        regions: &Vec<Region>,
+        quorum_size: usize,
+    ) -> usize {
+        let (latency, _) = self.nth_closest(quorum_size, &from, &regions);
+        *latency
     }
 
     /// Compute the latency to the nth closest region.
@@ -197,9 +208,10 @@ impl Bote {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::iter::FromIterator;
 
     #[test]
-    fn latency_to_closest_quorum() {
+    fn all_quorum_latencies() {
         // create bote
         let lat_dir = "latency/";
         let bote = Bote::new(lat_dir);
@@ -215,7 +227,7 @@ mod test {
 
         // quorum size 2
         let quorum_size = 2;
-        let cql = bote.latency_to_closest_quorum(&regions, quorum_size);
+        let cql = bote.all_quorum_latencies(&regions, quorum_size);
         assert_eq!(*cql.get(&w1).unwrap(), 7);
         assert_eq!(*cql.get(&w2).unwrap(), 9);
         assert_eq!(*cql.get(&w3).unwrap(), 7);
@@ -224,7 +236,7 @@ mod test {
 
         // quorum size 3
         let quorum_size = 3;
-        let cql = bote.latency_to_closest_quorum(&regions, quorum_size);
+        let cql = bote.all_quorum_latencies(&regions, quorum_size);
         assert_eq!(*cql.get(&w1).unwrap(), 8);
         assert_eq!(*cql.get(&w2).unwrap(), 10);
         assert_eq!(*cql.get(&w3).unwrap(), 7);
@@ -335,7 +347,10 @@ mod test {
 
         // quorum size 2:
         let quorum_size = 2;
-        let leader_to_stats = bote.leader(&regions, &regions, quorum_size);
+        let leader_to_stats: HashMap<_, _> = bote
+            .leader(&regions, &regions, quorum_size)
+            .into_iter()
+            .collect();
 
         // quorum latency for w1 is 7
         // w1 -> 8, w2 -> 17, w3 -> 15, w4 -> 14, w6 -> 21
@@ -379,7 +394,10 @@ mod test {
 
         // subset of clients: w1 w2
         let clients = vec![w1.clone(), w2.clone()];
-        let leader_to_stats = bote.leader(&servers, &clients, quorum_size);
+        let leader_to_stats: HashMap<_, _> = bote
+            .leader(&servers, &clients, quorum_size)
+            .into_iter()
+            .collect();
 
         // quorum latency for w1 is 7
         // w1 -> 8, w2 -> 17
@@ -404,7 +422,10 @@ mod test {
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
-        let leader_to_stats = bote.leader(&servers, &clients, quorum_size);
+        let leader_to_stats: HashMap<_, _> = bote
+            .leader(&servers, &clients, quorum_size)
+            .into_iter()
+            .collect();
 
         // quorum latency for w1 is 7
         // w1 -> 8, w3 -> 15, w6 -> 21
@@ -445,7 +466,7 @@ mod test {
 
         // quorum size 2:
         let quorum_size = 2;
-        let stats = bote.best_mean_leader(&regions, &regions, quorum_size);
+        let (_, stats) = bote.best_mean_leader(&regions, &regions, quorum_size);
 
         assert_eq!(stats.show_mean(), "14.2");
         assert_eq!(stats.show_cov(), "0.3");

@@ -1,6 +1,6 @@
 use crate::bote::float::F64;
 use crate::bote::protocol::Protocol;
-use crate::bote::stats::{AllStats, Stats};
+use crate::bote::stats::AllStats;
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
@@ -86,35 +86,12 @@ impl Search {
             })
     }
 
-    // pub fn sorted_configs(
-    //     &self,
-    //     params: &RankingParams,
-    //     max_configs_per_n: usize,
-    // ) -> BTreeMap<usize, Vec<(F64, &ConfigAndStats)>> {
-    //     self.rank(params)
-    //         .into_iter()
-    //         .map(|(n, ranked)| {
-    //             let sorted = ranked
-    //                 .into_iter()
-    //                 // sort ASC
-    //                 .collect::<BTreeSet<_>>()
-    //                 .into_iter()
-    //                 // sort DESC (highest score first)
-    //                 .rev()
-    //                 // take the first `max_configs_per_n`
-    //                 .take(max_configs_per_n)
-    //                 .collect();
-    //             (n, sorted)
-    //         })
-    //         .collect()
-    // }
-
     pub fn sorted_evolving_configs(
         &self,
         p: &RankingParams,
     ) -> Vec<(F64, Vec<&ConfigAndStats>, &Vec<Region>)> {
         assert_eq!(p.min_n, 3);
-        assert_eq!(p.max_n, 17);
+        assert_eq!(p.max_n, 13);
 
         // first we should rank all configs
         let all_ranked = timed!("rank all", self.rank_all(p));
@@ -157,38 +134,19 @@ impl Search {
                                                 &ranked, 13, cs11, p,
                                             )
                                             .for_each(|(score13, cs13)| {
-                                                Self::super_configs(
-                                                    &ranked, 15, cs13, p,
-                                                )
-                                                .for_each(|(score15, cs15)| {
-                                                    Self::super_configs(
-                                                        &ranked, 17, cs15, p,
-                                                    )
-                                                    .for_each(
-                                                        |(score17, cs17)| {
-                                                            let score = score3
-                                                                + score5
-                                                                + score7
-                                                                + score9
-                                                                + score11
-                                                                + score13
-                                                                + score15
-                                                                + score17;
-                                                            let css = vec![
-                                                                cs3, cs5, cs7,
-                                                                cs9, cs11,
-                                                                cs13, cs15,
-                                                                cs17,
-                                                            ];
-                                                            let config = (
-                                                                score, css,
-                                                                clients,
-                                                            );
-                                                            configs
-                                                                .insert(config);
-                                                        },
-                                                    );
-                                                });
+                                                let score = score3
+                                                    + score5
+                                                    + score7
+                                                    + score9
+                                                    + score11
+                                                    + score13;
+                                                let css = vec![
+                                                    cs3, cs5, cs7, cs9, cs11,
+                                                    cs13,
+                                                ];
+                                                let config =
+                                                    (score, css, clients);
+                                                configs.insert(config);
                                             });
                                         });
                                     });
@@ -207,23 +165,27 @@ impl Search {
             .collect()
     }
 
-    pub fn stats_fmt(
-        stats: &AllStats,
-        n: usize,
-        params: &RankingParams,
-    ) -> String {
-        // shows stats for all possible f
-        let fmt: String = (1..=Self::max_f(n))
-            .map(|f| {
-                let atlas = stats.get("atlas", f);
-                let fpaxos = Self::get_fpaxos_stats(stats, f, params);
-                format!("a{}={:?} f{}={:?} ", f, atlas, f, fpaxos)
-            })
-            .collect();
+    pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
+        vec!["", "C"]
+            .into_iter()
+            .map(|suffix| {
+                // shows stats for all possible f
+                let fmt: String = (1..=Self::max_f(n))
+                    .map(|f| {
+                        let atlas = stats.get_with_suffix("atlas", f, suffix);
+                        let fpaxos = stats.get_with_suffix("fpaxos", f, suffix);
+                        format!(
+                            "a{}{}={:?} f{}{}={:?} ",
+                            f, suffix, atlas, f, suffix, fpaxos
+                        )
+                    })
+                    .collect();
 
-        // add epaxos
-        let epaxos = stats.get("epaxos", 0);
-        format!("{}e={:?}", fmt, epaxos)
+                // add epaxos
+                let epaxos = stats.get_with_suffix("epaxos", 0, suffix);
+                format!("{}e{}={:?} ", fmt, suffix, epaxos)
+            })
+            .collect()
     }
 
     fn compute_all_configs(
@@ -289,45 +251,47 @@ impl Search {
             .collect()
     }
 
-    fn compute_stats(
+    pub fn compute_stats(
         config: &Vec<Region>,
-        clients: &Vec<Region>,
+        all_clients: &Vec<Region>,
         bote: &Bote,
     ) -> AllStats {
         // compute n
         let n = config.len();
         let mut stats = AllStats::new();
 
-        for f in 1..=Self::max_f(n) {
-            // compute altas quorum size
-            let quorum_size = Protocol::Atlas.quorum_size(n, f);
+        // compute best cov fpaxos f=1 leader
+        // - this leader will then be used for both f=1 and f=2 stats
+        let f = 1;
+        let quorum_size = Protocol::FPaxos.quorum_size(n, f);
+        let (leader, _) =
+            bote.best_cov_leader(config, all_clients, quorum_size);
 
-            // compute atlas stats
-            let atlas = bote.leaderless(config, clients, quorum_size);
-            stats.insert("atlas", f, atlas);
+        // compute stats for both `clients` and colocated clients i.e. `config`
+        for (suffix, clients) in vec![("", all_clients), ("C", config)] {
+            for f in 1..=Self::max_f(n) {
+                // compute altas quorum size
+                let quorum_size = Protocol::Atlas.quorum_size(n, f);
 
-            // compute fpaxos quorum size
-            let quorum_size = Protocol::FPaxos.quorum_size(n, f);
+                // compute atlas stats
+                let atlas = bote.leaderless(config, clients, quorum_size);
+                stats.insert("atlas", f, suffix, atlas);
 
-            // // compute best mean fpaxos stats
-            // let fpaxos = bote.best_mean_leader(config, clients, quorum_size);
-            // stats.insert("fpaxos_mean", f, fpaxos);
+                // compute fpaxos quorum size
+                let quorum_size = Protocol::FPaxos.quorum_size(n, f);
 
-            // compute best cov fpaxos stats
-            let fpaxos = bote.best_cov_leader(config, clients, quorum_size);
-            stats.insert("fpaxos_cov", f, fpaxos);
+                // // compute best mean fpaxos stats
+                let fpaxos = bote.leader(leader, config, clients, quorum_size);
+                stats.insert("fpaxos", f, suffix, fpaxos);
+            }
 
-            // compute best mdtm fpaxos stats
-            let fpaxos = bote.best_mdtm_leader(config, clients, quorum_size);
-            stats.insert("fpaxos_mdtm", f, fpaxos);
+            // compute epaxos quorum size
+            let quorum_size = Protocol::EPaxos.quorum_size(n, 0);
+
+            // compute epaxos stats
+            let epaxos = bote.leaderless(config, clients, quorum_size);
+            stats.insert("epaxos", 0, suffix, epaxos);
         }
-
-        // compute epaxos quorum size
-        let quorum_size = Protocol::EPaxos.quorum_size(n, 0);
-
-        // compute epaxos stats
-        let epaxos = bote.leaderless(config, clients, quorum_size);
-        stats.insert("epaxos", 0, epaxos);
 
         // return all stats
         stats
@@ -443,16 +407,13 @@ impl Search {
         for f in fs {
             // get atlas and fpaxos stats
             let atlas = stats.get("atlas", f);
-            let fpaxos = Self::get_fpaxos_stats(stats, f, params);
+            let fpaxos = stats.get("fpaxos", f);
 
             // compute mean latency improvement of atlas wrto to fpaxos
             let fpaxos_mean_improv = fpaxos.mean_improv(atlas);
 
-            // compute fairness improvement of atlas wrto to fpaxos
-            let fpaxos_fairness_improv = match params.fairness_metric {
-                FairnessMetric::COV => fpaxos.cov_improv(atlas),
-                FairnessMetric::MDTM => fpaxos.mdtm_improv(atlas),
-            };
+            // compute fairness improvement of atlas wrto to cov fpaxos
+            let fpaxos_fairness_improv = fpaxos.cov_improv(atlas);
 
             // check if it's a valid config, i.e. there's enough:
             // - `min_mean_improv`
@@ -470,22 +431,11 @@ impl Search {
             // update score
             // score += fpaxos_mean_improv;
             // give extra weigth for epaxos improv
-            let weight = F64::new(10 as f64);
+            let weight = F64::new(30 as f64);
             score += fpaxos_mean_improv + (weight * epaxos_mean_improv);
         }
 
         (valid, score)
-    }
-
-    fn get_fpaxos_stats<'a>(
-        stats: &'a AllStats,
-        f: usize,
-        params: &RankingParams,
-    ) -> &'a Stats {
-        match params.fairness_metric {
-            FairnessMetric::COV => stats.get("fpaxos_cov", f),
-            FairnessMetric::MDTM => stats.get("fpaxos_mdtm", f),
-        }
     }
 
     fn max_f(n: usize) -> usize {
@@ -613,7 +563,6 @@ pub struct RankingParams {
     min_mean_decrease: F64,
     min_n: usize,
     max_n: usize,
-    fairness_metric: FairnessMetric,
     ft_metric: FTMetric,
 }
 
@@ -624,7 +573,6 @@ impl RankingParams {
         min_mean_decrease: isize,
         min_n: usize,
         max_n: usize,
-        fairness_metric: FairnessMetric,
         ft_metric: FTMetric,
     ) -> Self {
         RankingParams {
@@ -633,17 +581,9 @@ impl RankingParams {
             min_mean_decrease: F64::new(min_mean_decrease as f64),
             min_n,
             max_n,
-            fairness_metric,
             ft_metric,
         }
     }
-}
-
-/// metric considered for selecting FPaxos leader
-#[allow(dead_code)]
-pub enum FairnessMetric {
-    COV,  // coefficient of variation (stddev / mean)
-    MDTM, // mean distance to mean
 }
 
 /// metric considered for fault tolerance

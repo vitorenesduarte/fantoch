@@ -136,20 +136,36 @@ impl AllStats {
     }
 
     pub fn get(&self, prefix: &str, f: usize) -> &Stats {
-        let key = Self::key(prefix, f);
+        self.get_with_suffix(prefix, f, "")
+    }
+
+    pub fn get_with_suffix(
+        &self,
+        prefix: &str,
+        f: usize,
+        suffix: &str,
+    ) -> &Stats {
+        let key = Self::key(prefix, f, suffix);
         self.0.get(&key).unwrap()
     }
 
-    pub fn insert(&mut self, prefix: &str, f: usize, stats: Stats) {
-        let key = Self::key(prefix, f);
+    pub fn insert(
+        &mut self,
+        prefix: &str,
+        f: usize,
+        suffix: &str,
+        stats: Stats,
+    ) {
+        let key = Self::key(prefix, f, suffix);
         self.0.insert(key, stats);
     }
 
-    fn key(prefix: &str, f: usize) -> String {
-        match prefix {
+    fn key(prefix: &str, f: usize, suffix: &str) -> String {
+        let prefix = match prefix {
             "epaxos" => String::from("epaxos"),
             _ => format!("{}f{}", prefix, f),
-        }
+        };
+        format!("{}{}", prefix, suffix)
     }
 }
 

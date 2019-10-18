@@ -9,7 +9,8 @@ for (id, line) in enumerate(file):
     min_n = 3
     max_n = 0
     # a2 and f2 are initialized with a latency 0 since for n = 3 we don't have a latency value
-    data = {"a1": [], "a2": [0], "f1": [], "f2": [0], "e": []}
+    data = {"a1": [], "a2": [0], "f1": [], "f2": [0], "e": [],
+            "a1C": [], "a2C": [0], "f1C": [], "f2C": [0], "eC": []}
 
     # drop last " " and split by "|"
     for n_entry in line.strip()[:-1].split("|"):
@@ -48,25 +49,26 @@ for (id, line) in enumerate(file):
     width = 0.12
     ylimits = [0, 600]
 
-    # create plot
-    fig, ax = plt.subplots()
+    for (suffix, title) in [("", "everywhere"), ("C", "colocated")]:
+        # create plot
+        fig, ax = plt.subplots()
 
-    ax.bar(xs - 4*width/2, data["a1"], width, label='Atlas f=1')
-    ax.bar(xs - 2*width/2, data["a2"], width, label='Atlas f=2')
-    ax.bar(xs, data["e"], width, label='EPaxos')
-    ax.bar(xs + 2*width/2, data["f1"], width, label='FPaxos f=1')
-    ax.bar(xs + 4*width/2, data["f2"], width, label='FPaxos f=2')
+        ax.bar(xs - 4*width/2, data["a1" + suffix], width, label='Atlas f=1')
+        ax.bar(xs - 2*width/2, data["a2" + suffix], width, label='Atlas f=2')
+        ax.bar(xs, data["e" + suffix], width, label='EPaxos')
+        ax.bar(xs + 2*width/2, data["f1" + suffix], width, label='FPaxos f=1')
+        ax.bar(xs + 4*width/2, data["f2" + suffix], width, label='FPaxos f=2')
 
-    # set y limits, legend and labels
-    ax.set_ylim(ylimits)
-    ax.legend(loc='upper right', shadow=True)
-    ax.set(xlabel='#sites', ylabel='(ms)')
-    ax.grid()
+        # set title, y limits, legend and labels
+        ax.set_title(title)
+        ax.set_ylim(ylimits)
+        ax.legend(loc='upper right', shadow=True)
+        ax.set(xlabel='#sites', ylabel='(ms)')
+        ax.grid()
 
-    # tickcs
-    ax.set_xticks(xs)
-    ax.set_xticklabels(labels)
+        # tickcs
+        ax.set_xticks(xs)
+        ax.set_xticklabels(labels)
 
-    # save figure in eps and png
-    # fig.savefig(str(id) + ".eps", format='eps')
-    fig.savefig(str(id) + ".png", dpi=400, format='png')
+        # save figure in png
+        fig.savefig(str(id) + title + ".png", dpi=400, format='png')

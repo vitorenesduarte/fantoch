@@ -1,6 +1,4 @@
-use planet_sim::bote::search::{
-    FTMetric, FairnessMetric, RankingParams, Search, SearchInput,
-};
+use planet_sim::bote::search::{FTMetric, RankingParams, Search, SearchInput};
 
 // directory that contains all dat files
 const LAT_DIR: &str = "latency/";
@@ -8,18 +6,17 @@ const LAT_DIR: &str = "latency/";
 fn main() {
     // define some search params
     let min_n = 3;
-    let max_n = 17;
-    let search_input = SearchInput::R17CMaxN;
+    let max_n = 13;
 
     // create search
+    let search_input = SearchInput::R17CMaxN;
     let search = Search::new(min_n, max_n, search_input, LAT_DIR);
     println!("> search created!");
 
     // define search params
-    let min_mean_improv = 0;
+    let min_mean_improv = 30;
     let min_fairness_improv = 0;
-    let min_mean_decrease = 0;
-    let fairness_metric = FairnessMetric::COV;
+    let min_mean_decrease = 15;
     let ft_metric = FTMetric::F1F2;
 
     let params = RankingParams::new(
@@ -28,23 +25,8 @@ fn main() {
         min_mean_decrease,
         min_n,
         max_n,
-        fairness_metric,
         ft_metric,
     );
-
-    // println!("> showing best configs: min_lat_improv={}", min_lat_improv);
-    // let max_configs_per_n = 1;
-    // search
-    //     .sorted_configs(&params, max_configs_per_n)
-    //     .into_iter()
-    //     .for_each(|(n, sorted)| {
-    //         println!("n={}", n);
-    //         sorted.into_iter().for_each(|(score, (config, stats))| {
-    //             println!("{}: {:?}", score, config);
-    //             println!("{}", Search::stats_fmt(stats, n, true));
-    //             println!("");
-    //         });
-    //     });
 
     println!("> computing evolving configs");
     let max_configs = 2;
@@ -70,14 +52,11 @@ fn main() {
             }
 
             println!("{}: {:?}", score.round(), sorted_config);
-            // println!("{}:", score.round());
-            // println!("servers: {:?}", sorted_config);
-            // println!("clients: {:?}", clients);
 
             for (n, stats) in all_stats {
                 print!("[n={}] ", n);
-                print!("{}", Search::stats_fmt(stats, n, &params));
-                print!(" | ");
+                print!("{}", Search::stats_fmt(stats, n));
+                print!("| ");
             }
             println!("");
         });
