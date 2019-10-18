@@ -4,23 +4,44 @@ use crate::bote::stats::{AllStats, Stats};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
+use std::fmt;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 use std::iter::FromIterator;
+use std::time::Instant;
+
+macro_rules! timed {
+    ( $s:expr, $x:expr ) => {{
+        let start = Instant::now();
+        let result = $x;
+        let time = start.elapsed();
+        println!("{}: {:?}", $s, time);
+        result
+    }};
+}
 
 // config and stats
 type ConfigAndStats = (BTreeSet<Region>, AllStats);
 
-// all configs
-type AllConfigs = HashMap<usize, Vec<ConfigAndStats>>;
+// configs: mapping from `n` to list of configurations of such size
+type Configs = HashMap<usize, Vec<ConfigAndStats>>;
 
-// ranked
+// all configs: mapping from clients to `Config`
+type AllConfigs = Vec<(Vec<Region>, Configs)>;
+
+// ranked: mapping from `n` to list of configurations of such size
+// - these configurations are already a subset of all configurations that passed
+//   some filter and have a score associated with it
 type Ranked<'a> = HashMap<usize, Vec<(F64, &'a ConfigAndStats)>>;
+
+// all ranked: mapping from clients to `Ranked`
+type AllRanked<'a> = Vec<(&'a Vec<Region>, Ranked<'a>)>;
 
 #[derive(Deserialize, Serialize)]
 pub struct Search {
-    regions: Vec<Region>,
-    clients: Option<Vec<Region>>,
     all_configs: AllConfigs,
 }
 
@@ -31,83 +52,81 @@ impl Search {
         search_input: SearchInput,
         lat_dir: &str,
     ) -> Self {
+        // get filename
         let filename = Self::filename(min_n, max_n, &search_input);
 
-        Search::get_saved_search(&filename).unwrap_or_else(|| {
-            // create planet
-            let planet = Planet::new(lat_dir);
+        timed!("get saved search", Search::get_saved_search(&filename))
+            .unwrap_or_else(|| {
+                // create planet
+                let planet = Planet::new(lat_dir);
 
-            // get all regions
-            let mut all_regions = planet.regions();
-            all_regions.sort();
+                // get regions for servers and clients
+                let (servers, clients) =
+                    search_input.get_inputs(max_n, &planet);
 
-            // create bote
-            let bote = Bote::from(planet.clone());
+                // create bote
+                let bote = Bote::from(planet);
 
-            // get regions for servers and clients
-            let (regions, clients) = search_input.get_inputs(&planet);
+                // create empty config and get all configs
+                let all_configs = timed!(
+                    "compute all configs",
+                    Self::compute_all_configs(
+                        min_n, max_n, servers, clients, bote
+                    )
+                );
 
-            // create empty config and get all configs
-            let all_configs = Self::compute_all_configs(
-                min_n, max_n, &regions, &clients, &bote,
-            );
+                // create a new `Search` instance
+                let search = Search { all_configs };
 
-            // create a new `Search` instance
-            let search = Search {
-                regions,
-                clients,
-                all_configs,
-            };
+                // save it
+                timed!("save search", Self::save_search(&filename, &search));
 
-            // save it
-            Self::save_search(&filename, &search);
-
-            // and return it
-            search
-        })
-    }
-
-    pub fn sorted_configs(
-        &self,
-        params: &RankingParams,
-        max_configs_per_n: usize,
-    ) -> BTreeMap<usize, Vec<(F64, &ConfigAndStats)>> {
-        self.rank(params)
-            .into_iter()
-            .map(|(n, ranked)| {
-                let sorted = ranked
-                    .into_iter()
-                    // sort ASC
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    // sort DESC (highest score first)
-                    .rev()
-                    // take the first `max_configs_per_n`
-                    .take(max_configs_per_n)
-                    .collect();
-                (n, sorted)
+                // and return it
+                search
             })
-            .collect()
     }
+
+    // pub fn sorted_configs(
+    //     &self,
+    //     params: &RankingParams,
+    //     max_configs_per_n: usize,
+    // ) -> BTreeMap<usize, Vec<(F64, &ConfigAndStats)>> {
+    //     self.rank(params)
+    //         .into_iter()
+    //         .map(|(n, ranked)| {
+    //             let sorted = ranked
+    //                 .into_iter()
+    //                 // sort ASC
+    //                 .collect::<BTreeSet<_>>()
+    //                 .into_iter()
+    //                 // sort DESC (highest score first)
+    //                 .rev()
+    //                 // take the first `max_configs_per_n`
+    //                 .take(max_configs_per_n)
+    //                 .collect();
+    //             (n, sorted)
+    //         })
+    //         .collect()
+    // }
 
     pub fn sorted_evolving_configs(
         &self,
         p: &RankingParams,
-        max_configs: usize,
-    ) -> Vec<(F64, Vec<&ConfigAndStats>)> {
+    ) -> Vec<(F64, Vec<&ConfigAndStats>, &Vec<Region>)> {
         assert_eq!(p.min_n, 3);
-        assert_eq!(p.max_n, 11);
+        assert_eq!(p.max_n, 17);
 
         // first we should rank all configs
-        let ranked = self.rank(p);
+        let all_ranked = timed!("rank all", self.rank_all(p));
 
-        // show how many ranked configs we have for each n
-        ranked
+        // show how many ranked configs we have for each set of clients
+        let count = all_ranked
             .iter()
-            .map(|(n, css)| (n, css.len()))
-            .collect::<BTreeMap<_, _>>()
-            .into_iter()
-            .for_each(|(n, count)| println!("{}: {}", n, count));
+            .map(|(_, configs)| {
+                configs.iter().map(|(_, css)| css.len()).count()
+            })
+            .count();
+        println!("config count: {}", count);
 
         // create result variable
         let mut configs = BTreeSet::new();
@@ -115,31 +134,69 @@ impl Search {
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
 
-        let ranked3 = ranked.get(&3).unwrap();
-        let count = ranked3.len();
         let mut i = 0;
-
-        Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
+        let count = all_ranked.len();
+        all_ranked.into_iter().for_each(|(clients, ranked)| {
             i += 1;
-            if i % 10 == 0 {
+            if i % 100 == 0 {
                 println!("{} of {}", i, count);
             }
 
-            Self::super_configs(&ranked, p, 5, cs3).for_each(
-                |(score5, cs5)| {
-                    Self::super_configs(&ranked, p, 7, cs5).for_each(
-                        |(score7, cs7)| {
-                            Self::super_configs(&ranked, p, 9, cs7).for_each(
-                                |(score9, cs9)| {
-                                    Self::super_configs(&ranked, p, 11, cs9).for_each(
-                                        |(score11, cs11)| {
-                                            let score = score3 + score5 + score7 + score9 + score11;
-                                            let css = vec![cs3, cs5, cs7, cs9, cs11];
-                                            assert!(configs.insert((score, css)))
+            Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
+                Self::super_configs(&ranked, 5, cs3, p).for_each(
+                    |(score5, cs5)| {
+                        Self::super_configs(&ranked, 7, cs5, p).for_each(
+                            |(score7, cs7)| {
+                                Self::super_configs(&ranked, 9, cs7, p)
+                                    .for_each(|(score9, cs9)| {
+                                        Self::super_configs(
+                                            &ranked, 11, cs9, p,
+                                        )
+                                        .for_each(|(score11, cs11)| {
+                                            Self::super_configs(
+                                                &ranked, 13, cs11, p,
+                                            )
+                                            .for_each(|(score13, cs13)| {
+                                                Self::super_configs(
+                                                    &ranked, 15, cs13, p,
+                                                )
+                                                .for_each(|(score15, cs15)| {
+                                                    Self::super_configs(
+                                                        &ranked, 17, cs15, p,
+                                                    )
+                                                    .for_each(
+                                                        |(score17, cs17)| {
+                                                            let score = score3
+                                                                + score5
+                                                                + score7
+                                                                + score9
+                                                                + score11
+                                                                + score13
+                                                                + score15
+                                                                + score17;
+                                                            let css = vec![
+                                                                cs3, cs5, cs7,
+                                                                cs9, cs11,
+                                                                cs13, cs15,
+                                                                cs17,
+                                                            ];
+                                                            let config = (
+                                                                score, css,
+                                                                clients,
+                                                            );
+                                                            configs
+                                                                .insert(config);
+                                                        },
+                                                    );
+                                                });
+                                            });
                                         });
-                                });
-                        });
-                });
+                                    });
+                            },
+                        );
+                    },
+                );
+            });
         });
 
         // `configs` is sorted ASC
@@ -147,8 +204,6 @@ impl Search {
             .into_iter()
             // sort DESC (highest score first)
             .rev()
-            // take the first `max_configs`
-            .take(max_configs)
             .collect()
     }
 
@@ -174,25 +229,52 @@ impl Search {
     fn compute_all_configs(
         min_n: usize,
         max_n: usize,
-        regions: &Vec<Region>,
-        clients: &Option<Vec<Region>>,
-        bote: &Bote,
+        servers: Option<Vec<Region>>,
+        all_clients: Vec<Vec<Region>>,
+        bote: Bote,
     ) -> AllConfigs {
+        // get the count of client configurations
+        let clients_count = all_clients.len();
+
+        all_clients
+            // PARALLEL
+            .into_par_iter()
+            .enumerate()
+            .inspect(|(i, _)| {
+                // show progress
+                if i % 100 == 0 {
+                    println!("{} of {}", i, clients_count);
+                }
+            })
+            .map(|(_, clients)| {
+                // compute servers: if we have something, use what we got,
+                // otherwise use the set of clients
+                let servers = servers.as_ref().unwrap_or(&clients);
+
+                // compute `Configs` for this set of clients
+                let configs = Self::compute_configs(
+                    min_n, max_n, &servers, &clients, &bote,
+                );
+
+                (clients, configs)
+            })
+            .collect()
+    }
+
+    fn compute_configs(
+        min_n: usize,
+        max_n: usize,
+        regions: &Vec<Region>,
+        clients: &Vec<Region>,
+        bote: &Bote,
+    ) -> Configs {
         (min_n..=max_n)
             .step_by(2)
             .map(|n| {
                 let configs = regions
                     .combination(n)
+                    .map(vec_cloned)
                     .map(|config| {
-                        // clone config
-                        let config: Vec<_> =
-                            config.into_iter().cloned().collect();
-
-                        // compute clients:
-                        // - either the ones passed as argument
-                        // - or clients colocated with servers
-                        let clients = clients.as_ref().unwrap_or(&config);
-
                         // compute stats
                         let stats = Self::compute_stats(&config, clients, bote);
 
@@ -251,8 +333,16 @@ impl Search {
         stats
     }
 
-    fn rank<'a>(&'a self, params: &RankingParams) -> Ranked<'a> {
+    fn rank_all<'a>(&'a self, params: &RankingParams) -> AllRanked<'a> {
         self.all_configs
+            // PARALLEL
+            .par_iter()
+            .map(|(clients, configs)| (clients, Self::rank(configs, params)))
+            .collect()
+    }
+
+    fn rank<'a>(configs: &'a Configs, params: &RankingParams) -> Ranked<'a> {
+        configs
             .iter()
             .filter_map(|(&n, css)| {
                 // only keep in the map `n` values between `min_n` and `max_n`
@@ -285,7 +375,9 @@ impl Search {
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!("configs for n = {} should be ranked!", n)
+            })
             .into_iter()
             .map(|&r| r)
             // TODO can we avoid collecting here?
@@ -299,18 +391,19 @@ impl Search {
     /// - are a superset of `previous_config`
     fn super_configs<'a>(
         ranked: &Ranked<'a>,
-        params: &RankingParams,
         n: usize,
         (prev_config, prev_stats): &ConfigAndStats,
+        params: &RankingParams,
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
-            .unwrap()
+            .unwrap_or_else(|| {
+                panic!("super configs for n = {} should be ranked!", n)
+            })
             .into_iter()
             .filter(|(_, (config, stats))| {
                 config.is_superset(prev_config)
-                    && Self::mean_decrease(prev_stats, stats)
-                        >= params.min_mean_decrease
+                    && Self::min_mean_decrease(stats, prev_stats, n, params)
             })
             // TODO Is `.cloned()` equivalent to `.map(|&r| r)` here?
             .map(|&r| r)
@@ -322,11 +415,17 @@ impl Search {
 
     /// Compute the mean latency decrease for Atlas f = 1 when the number of
     /// sites increases.
-    fn mean_decrease(prev_stats: &AllStats, stats: &AllStats) -> F64 {
-        let f = 1;
-        let prev_atlas = prev_stats.get("atlas", f);
-        let atlas = stats.get("atlas", f);
-        prev_atlas.mean_improv(atlas)
+    fn min_mean_decrease(
+        stats: &AllStats,
+        prev_stats: &AllStats,
+        n: usize,
+        params: &RankingParams,
+    ) -> bool {
+        params.ft_metric.fs(n - 2).into_iter().all(|f| {
+            let atlas = stats.get("atlas", f);
+            let prev_atlas = prev_stats.get("atlas", f);
+            prev_atlas.mean_improv(atlas) >= params.min_mean_decrease
+        })
     }
 
     fn compute_score(
@@ -362,19 +461,17 @@ impl Search {
                 && fpaxos_mean_improv >= params.min_mean_improv
                 && fpaxos_fairness_improv >= params.min_fairness_improv;
 
-            // let epaxos = stats.get("epaxos", 0);
-            //
-            // let epaxos_mean_improv = if f == 2 {
-            //     epaxos.mean_improv(atlas)
-            // } else {
-            //     F64::zero()
-            // };
-            //
-            // // update score
-            // score += fpaxos_mean_improv + epaxos_mean_improv;
+            // get epaxos stats
+            let epaxos = stats.get("epaxos", 0);
+
+            // compute mean latency improvement of atlas wrto to epaxos
+            let epaxos_mean_improv = epaxos.mean_improv(atlas);
 
             // update score
-            score += fpaxos_mean_improv;
+            // score += fpaxos_mean_improv;
+            // give extra weigth for epaxos improv
+            let weight = F64::new(10 as f64);
+            score += fpaxos_mean_improv + (weight * epaxos_mean_improv);
         }
 
         (valid, score)
@@ -405,35 +502,50 @@ impl Search {
     }
 
     fn get_saved_search(name: &String) -> Option<Search> {
-        std::fs::read_to_string(name)
+        // open the file in read-only
+        File::open(name)
             .ok()
-            .map(|json| serde_json::from_str::<Search>(&json).unwrap())
+            // create a buf reader
+            .map(|file| BufReader::new(file))
+            // and try to deserialize
+            .map(|reader| {
+                bincode::deserialize_from(reader)
+                    .expect("error deserializing search")
+            })
     }
 
     fn save_search(name: &String, search: &Search) {
-        std::fs::write(name, serde_json::to_string(search).unwrap()).unwrap()
+        // if the file does not exist it will be created, otherwise truncated
+        File::create(name)
+            .ok()
+            // create a buf writer
+            .map(|file| BufWriter::new(file))
+            // and try to serialize
+            .map(|writer| {
+                bincode::serialize_into(writer, search)
+                    .expect("error serializing search")
+            });
     }
 }
 
 /// identifies which regions considered for the search
 #[allow(dead_code)]
 pub enum SearchInput {
-    /// search within 2018 17 regions, clients colocated with servers
-    R17,
+    /// search within 2018 17 regions, clients deployed in the MAX regions
+    /// - e.g. if the max number of regions is 11, clients are deployed in
+    ///   those 11 regions
+    R17CMaxN,
     /// search within 2018 17 regions, clients deployed in the 17 regions
     R17C17,
-    /// search within the 20 regions, clients colocated with servers
-    R20,
     /// search within the 20 regions, clients deployed in the 20 regions
     R20C20,
 }
 
-impl std::fmt::Display for SearchInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for SearchInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SearchInput::R17 => write!(f, "R17"),
+            SearchInput::R17CMaxN => write!(f, "R17CMaxN"),
             SearchInput::R17C17 => write!(f, "R17C17"),
-            SearchInput::R20 => write!(f, "R20"),
             SearchInput::R20C20 => write!(f, "R20C20"),
         }
     }
@@ -442,13 +554,12 @@ impl std::fmt::Display for SearchInput {
 impl SearchInput {
     /// It returns a tuple where the:
     /// - 1st component is the set of regions where to look for a configuration
-    /// - 2nd component might be a set of clients
-    ///
-    /// If the 2nd component is `None`, clients are colocated with servers.
+    /// - 2nd component is a list of client locations
     fn get_inputs(
         &self,
+        max_n: usize,
         planet: &Planet,
-    ) -> (Vec<Region>, Option<Vec<Region>>) {
+    ) -> (Option<Vec<Region>>, Vec<Vec<Region>>) {
         // compute 17-regions (from end of 2018)
         let regions17 = vec![
             Region::new("asia-east1"),
@@ -475,12 +586,25 @@ impl SearchInput {
         regions.sort();
 
         match self {
-            SearchInput::R17 => (regions17, None),
-            SearchInput::R17C17 => (regions17.clone(), Some(regions17)),
-            SearchInput::R20 => (regions, None),
-            SearchInput::R20C20 => (regions.clone(), Some(regions)),
+            SearchInput::R17CMaxN => {
+                let all_clients =
+                    regions17.combination(max_n).map(vec_cloned).collect();
+                (None, all_clients)
+            }
+            SearchInput::R17C17 => {
+                let all_clients = vec![regions17.clone()];
+                (Some(regions17), all_clients)
+            }
+            SearchInput::R20C20 => {
+                let all_clients = vec![regions.clone()];
+                (Some(regions), all_clients)
+            }
         }
     }
+}
+
+fn vec_cloned<T: Clone>(vec: Vec<&T>) -> Vec<T> {
+    vec.into_iter().cloned().collect()
 }
 
 pub struct RankingParams {

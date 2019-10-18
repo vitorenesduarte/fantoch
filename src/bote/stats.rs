@@ -1,6 +1,5 @@
 use crate::bote::float::F64;
 use serde::{Deserialize, Serialize};
-use statrs::statistics::Statistics;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -66,30 +65,69 @@ impl Stats {
     }
 
     fn compute_stats(xs: &Vec<usize>) -> (F64, F64, F64) {
-        // transform input in a `Vec<f64>`
+        // transform `usize`s in `f64`s
         let xs: Vec<f64> = xs.into_iter().map(|&x| x as f64).collect();
 
         // compute mean
-        // TODO maybe find a different library that does not consume the `Vec`
-        let mean = xs.clone().mean();
+        let mean = Self::compute_mean(&xs);
 
         // compute coefficient of variation
-        let cov = xs.clone().std_dev() / mean;
+        let cov = Self::compute_cov(&xs, mean);
 
         // compute mean distance to mean
-        let mdtm = xs
-            .into_iter()
-            .map(|x| (x - mean).abs())
-            .collect::<Vec<_>>()
-            .mean();
+        let mdtm = Self::compute_mdtm(&xs, mean);
 
         // return the 3 stats
         (F64::new(mean), F64::new(cov), F64::new(mdtm))
     }
+
+    // from https://rust-lang-nursery.github.io/rust-cookbook/science/mathematics/statistics.html
+    fn compute_mean(data: &[f64]) -> f64 {
+        let sum = data.into_iter().sum::<f64>();
+        let count = data.len() as f64;
+        // assumes `count > 0`
+        sum / count
+    }
+
+    fn compute_cov(data: &[f64], mean: f64) -> f64 {
+        let stddev = Self::compute_stddev(data, mean);
+        stddev / mean
+    }
+
+    fn compute_mdtm(data: &[f64], mean: f64) -> f64 {
+        let count = data.len() as f64;
+        let distances_sum = data
+            .into_iter()
+            .map(|x| {
+                let diff = mean - x;
+                diff.abs()
+            })
+            .sum::<f64>();
+        distances_sum / count
+    }
+
+    fn compute_stddev(data: &[f64], mean: f64) -> f64 {
+        let variance = Self::compute_variance(data, mean);
+        variance.sqrt()
+    }
+
+    fn compute_variance(data: &[f64], mean: f64) -> f64 {
+        let count = data.len() as f64;
+        let sum = data
+            .into_iter()
+            .map(|x| {
+                let diff = mean - x;
+                diff * diff
+            })
+            .sum::<f64>();
+        // we divide by (count - 1) to have the corrected version of variance
+        // - https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation
+        sum / (count - 1.0)
+    }
 }
 
 /// Mapping from protocol name to its stats.
-#[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
 pub struct AllStats(BTreeMap<String, Stats>);
 
 impl AllStats {

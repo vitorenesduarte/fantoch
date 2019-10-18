@@ -8,19 +8,17 @@ const LAT_DIR: &str = "latency/";
 fn main() {
     // define some search params
     let min_n = 3;
-    let max_n = 13;
-    let search_input = SearchInput::R17C17;
+    let max_n = 17;
+    let search_input = SearchInput::R17CMaxN;
 
     // create search
     let search = Search::new(min_n, max_n, search_input, LAT_DIR);
     println!("> search created!");
 
     // define search params
-    let min_n = 3;
-    let max_n = 11;
-    let min_mean_improv = 30;
+    let min_mean_improv = 0;
     let min_fairness_improv = 0;
-    let min_mean_decrease = 10;
+    let min_mean_decrease = 0;
     let fairness_metric = FairnessMetric::COV;
     let ft_metric = FTMetric::F1F2;
 
@@ -48,12 +46,13 @@ fn main() {
     //         });
     //     });
 
-    println!("> showing evolving configs");
+    println!("> computing evolving configs");
     let max_configs = 2;
     search
-        .sorted_evolving_configs(&params, max_configs)
+        .sorted_evolving_configs(&params)
         .into_iter()
-        .for_each(|(score, css)| {
+        .take(max_configs)
+        .for_each(|(score, css, _clients)| {
             let mut sorted_config = Vec::new();
             let mut all_stats = Vec::new();
 
@@ -71,6 +70,9 @@ fn main() {
             }
 
             println!("{}: {:?}", score.round(), sorted_config);
+            // println!("{}:", score.round());
+            // println!("servers: {:?}", sorted_config);
+            // println!("clients: {:?}", clients);
 
             for (n, stats) in all_stats {
                 print!("[n={}] ", n);
