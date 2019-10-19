@@ -208,7 +208,6 @@ impl Bote {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::iter::FromIterator;
 
     #[test]
     fn all_quorum_latencies() {
@@ -348,7 +347,7 @@ mod test {
         // quorum size 2:
         let quorum_size = 2;
         let leader_to_stats: HashMap<_, _> = bote
-            .leader(&regions, &regions, quorum_size)
+            .all_leaders_stats(&regions, &regions, quorum_size)
             .into_iter()
             .collect();
 
@@ -395,7 +394,7 @@ mod test {
         // subset of clients: w1 w2
         let clients = vec![w1.clone(), w2.clone()];
         let leader_to_stats: HashMap<_, _> = bote
-            .leader(&servers, &clients, quorum_size)
+            .all_leaders_stats(&servers, &clients, quorum_size)
             .into_iter()
             .collect();
 
@@ -423,7 +422,7 @@ mod test {
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
         let leader_to_stats: HashMap<_, _> = bote
-            .leader(&servers, &clients, quorum_size)
+            .all_leaders_stats(&servers, &clients, quorum_size)
             .into_iter()
             .collect();
 
