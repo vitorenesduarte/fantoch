@@ -25,8 +25,8 @@ impl Bote {
 
     pub fn leaderless(
         &self,
-        servers: &Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &[Region],
+        clients: &[Region],
         quorum_size: usize,
     ) -> Stats {
         // compute the quorum latency for each server
@@ -54,8 +54,8 @@ impl Bote {
     pub fn leader(
         &self,
         leader: &Region,
-        servers: &Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &[Region],
+        clients: &[Region],
         quorum_size: usize,
     ) -> Stats {
         // compute the quorum latency only for this leader
@@ -65,8 +65,8 @@ impl Bote {
 
     pub fn best_mean_leader<'a>(
         &self,
-        servers: &'a Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &'a [Region],
+        clients: &[Region],
         quorum_size: usize,
     ) -> (&'a Region, Stats) {
         self.best_leader(servers, clients, quorum_size, |a, b| {
@@ -76,8 +76,8 @@ impl Bote {
 
     pub fn best_cov_leader<'a>(
         &self,
-        servers: &'a Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &'a [Region],
+        clients: &[Region],
         quorum_size: usize,
     ) -> (&'a Region, Stats) {
         self.best_leader(servers, clients, quorum_size, |a, b| {
@@ -87,8 +87,8 @@ impl Bote {
 
     pub fn best_mdtm_leader<'a>(
         &self,
-        servers: &'a Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &'a [Region],
+        clients: &[Region],
         quorum_size: usize,
     ) -> (&'a Region, Stats) {
         self.best_leader(servers, clients, quorum_size, |a, b| {
@@ -98,8 +98,8 @@ impl Bote {
 
     fn best_leader<'a, F>(
         &self,
-        servers: &'a Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &'a [Region],
+        clients: &[Region],
         quorum_size: usize,
         compare: F,
     ) -> (&'a Region, Stats)
@@ -116,8 +116,8 @@ impl Bote {
 
     fn all_leaders_stats<'a>(
         &self,
-        servers: &'a Vec<Region>,
-        clients: &Vec<Region>,
+        servers: &'a [Region],
+        clients: &[Region],
         quorum_size: usize,
     ) -> Vec<(&'a Region, Stats)> {
         // compute the quorum latency for each possible leader
@@ -138,7 +138,7 @@ impl Bote {
         &self,
         leader: &Region,
         leader_to_quorum: usize,
-        clients: &Vec<Region>,
+        clients: &[Region],
     ) -> Stats {
         // compute perceived latency for each client
         let latencies: Vec<_> = clients
@@ -159,7 +159,7 @@ impl Bote {
     /// Compute the latency to closest quorum of a size `quorum_size`.
     fn all_quorum_latencies<'a>(
         &self,
-        regions: &'a Vec<Region>,
+        regions: &'a [Region],
         quorum_size: usize,
     ) -> HashMap<&'a Region, usize> {
         regions
@@ -175,7 +175,7 @@ impl Bote {
     fn quorum_latency(
         &self,
         from: &Region,
-        regions: &Vec<Region>,
+        regions: &[Region],
         quorum_size: usize,
     ) -> usize {
         let (latency, _) = self.nth_closest(quorum_size, &from, &regions);
@@ -190,7 +190,7 @@ impl Bote {
         &self,
         nth: usize,
         from: &Region,
-        regions: &Vec<Region>,
+        regions: &[Region],
     ) -> &(usize, Region) {
         self.planet
             // sort by distance

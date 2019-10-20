@@ -226,8 +226,8 @@ impl Search {
     fn compute_configs(
         min_n: usize,
         max_n: usize,
-        regions: &Vec<Region>,
-        clients: &Vec<Region>,
+        regions: &[Region],
+        clients: &[Region],
         bote: &Bote,
     ) -> Configs {
         (min_n..=max_n)
@@ -252,8 +252,8 @@ impl Search {
     }
 
     pub fn compute_stats(
-        config: &Vec<Region>,
-        all_clients: &Vec<Region>,
+        config: &[Region],
+        all_clients: &[Region],
         bote: &Bote,
     ) -> AllStats {
         // compute n
