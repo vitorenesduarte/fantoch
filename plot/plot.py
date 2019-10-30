@@ -47,7 +47,7 @@ for (id, line) in enumerate(file):
 
     # style stuff
     width = 0.12
-    ylimits = [0, 600]
+    ylimits = [0, 500]
 
     for (suffix, title) in [("", "everywhere"), ("C", "colocated")]:
         # create plot
