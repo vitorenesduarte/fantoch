@@ -428,6 +428,11 @@ impl Search {
             // compute mean latency improvement of atlas wrto to epaxos
             let epaxos_mean_improv = epaxos.mean_improv(atlas);
 
+            // make sure we improve on EPaxos for large n
+            if n == 11 && n == 13 {
+                valid = valid && epaxos_mean_improv >= params.min_mean_improv;
+            }
+
             // update score
             // score += fpaxos_mean_improv;
             // give extra weigth for epaxos improv
