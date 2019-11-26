@@ -122,7 +122,7 @@ impl Planet {
 
 impl Planet {
     pub fn show_distance_matrix(&self, mut regions: Vec<Region>) {
-        regions.sort();
+        // regions.sort();
 
         // start header
         print!("| |");
