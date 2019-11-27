@@ -59,15 +59,15 @@ impl Stats {
     }
 
     pub fn show_mean(&self) -> String {
-        self.mean.round()
+        self.mean().round()
     }
 
     pub fn show_cov(&self) -> String {
-        self.cov.round()
+        self.cov().round()
     }
 
     pub fn show_mdtm(&self) -> String {
-        self.mdtm.round()
+        self.mdtm().round()
     }
 
     fn compute_stats(xs: &Vec<usize>) -> (F64, F64, F64) {
@@ -182,6 +182,22 @@ mod test {
     #[test]
     fn stats() {
         let stats = Stats::from(&vec![1, 1, 1]);
+        assert_eq!(stats.mean(), F64::new(1.0));
+        assert_eq!(stats.cov(), F64::new(0.0));
+        assert_eq!(stats.mdtm(), F64::new(0.0));
+
+        let stats = Stats::from(&vec![10, 20, 30]);
+        assert_eq!(stats.mean(), F64::new(20.0));
+        assert_eq!(stats.cov(), F64::new(0.5));
+
+        let stats = Stats::from(&vec![10, 20]);
+        assert_eq!(stats.mean(), F64::new(15.0));
+        assert_eq!(stats.mdtm(), F64::new(5.0));
+    }
+
+    #[test]
+    fn stats_show() {
+        let stats = Stats::from(&vec![1, 1, 1]);
         assert_eq!(stats.show_mean(), "1.0");
         assert_eq!(stats.show_cov(), "0.0");
         assert_eq!(stats.show_mdtm(), "0.0");
@@ -200,5 +216,20 @@ mod test {
         assert_eq!(stats.show_mean(), "20.0");
         assert_eq!(stats.show_cov(), "0.7");
         assert_eq!(stats.show_mdtm(), "10.0");
+    }
+
+    #[test]
+    fn stats_improv() {
+        let stats_a = Stats::from(&vec![1, 1, 1]);
+        let stats_b = Stats::from(&vec![10, 20]);
+        assert_eq!(stats_a.mean_improv(&stats_b), F64::new(-14.0));
+
+        let stats_a = Stats::from(&vec![1, 1, 1]);
+        let stats_b = Stats::from(&vec![10, 20, 30]);
+        assert_eq!(stats_a.cov_improv(&stats_b), F64::new(-0.5));
+
+        let stats_a = Stats::from(&vec![1, 1, 1]);
+        let stats_b = Stats::from(&vec![10, 20]);
+        assert_eq!(stats_a.mdtm_improv(&stats_b), F64::new(-5.0));
     }
 }
