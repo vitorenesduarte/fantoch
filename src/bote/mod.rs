@@ -177,6 +177,7 @@ impl Bote {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn quorum_latencies() {
@@ -432,7 +433,12 @@ mod test {
 
         // quorum size 2:
         let quorum_size = 2;
-        let (_, stats) = bote.best_mean_leader(&regions, &regions, quorum_size);
+        let (_, stats) = bote.best_leader(
+            &regions,
+            &regions,
+            quorum_size,
+            StatsSortBy::Mean,
+        );
 
         assert_eq!(stats.show_mean(), "14.2");
         assert_eq!(stats.show_cov(), "0.3");
