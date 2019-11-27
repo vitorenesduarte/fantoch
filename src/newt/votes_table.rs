@@ -164,7 +164,7 @@ mod tests {
     use crate::command::Command;
     use crate::newt::votes::VoteRange;
     use crate::newt::votes_table::VotesTable;
-    use permutohedron::LexicalPermutation;
+    use permutator::Permutation;
 
     #[test]
     fn votes_table_flow() {
@@ -283,10 +283,9 @@ mod tests {
             (e2_sort_id, e2_dot, e2, e2_votes),
         ];
 
-        // the following works like a do-while
-        while {
+        all_ops.permutation().for_each(|p| {
             let mut table = VotesTable::new(n, stability_threshold);
-            let permutation_total_order: Vec<_> = all_ops
+            let permutation_total_order: Vec<_> = p
                 .clone()
                 .into_iter()
                 .flat_map(|(sort_id, dot, cmd, votes)| {
@@ -295,7 +294,6 @@ mod tests {
                 })
                 .collect();
             assert_eq!(total_order, permutation_total_order);
-            all_ops.next_permutation()
-        } {}
+        });
     }
 }
