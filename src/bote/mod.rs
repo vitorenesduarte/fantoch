@@ -3,10 +3,8 @@ pub mod protocol;
 pub mod search;
 pub mod stats;
 
-use crate::bote::stats::Stats;
+use crate::bote::stats::{Stats, StatsSortBy};
 use crate::planet::{Planet, Region};
-use std::cmp::Ordering;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Bote {
@@ -88,79 +86,30 @@ impl Bote {
         Stats::from(&latencies)
     }
 
-    /// Computes the best leader (mean-latency-wise) and its `Stats` for a
+    /// Computes the best leader (for some criteria) and its `Stats` for a
     /// leader-based protocol with a given `quorum_size`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
     /// - one list being the regions where `clients` are
-    pub fn best_mean_leader<'a>(
+    ///
+    /// The best leader is select based on sort criteria `stats_sort_by`.
+    fn best_leader<'a>(
         &self,
         servers: &'a [Region],
         clients: &[Region],
         quorum_size: usize,
+        stats_sort_by: StatsSortBy,
     ) -> (&'a Region, Stats) {
-        self.best_leader(servers, clients, quorum_size, |a, b| {
-            a.mean().cmp(&b.mean())
-        })
-    }
-
-    /// Computes the best leader (cov-latency-wise) and its `Stats` for a
-    /// leader-based protocol with a given `quorum_size`.
-    ///
-    /// Takes as input two lists of regions:
-    /// - one list being the regions where `servers` are
-    /// - one list being the regions where `clients` are
-    pub fn best_cov_leader<'a>(
-        &self,
-        servers: &'a [Region],
-        clients: &[Region],
-        quorum_size: usize,
-    ) -> (&'a Region, Stats) {
-        self.best_leader(servers, clients, quorum_size, |a, b| {
-            a.cov().cmp(&b.cov())
-        })
-    }
-
-    /// Computes the best leader (mdtm-latency-wise) and its `Stats` for a
-    /// leader-based protocol with a given `quorum_size`.
-    ///
-    /// Takes as input two lists of regions:
-    /// - one list being the regions where `servers` are
-    /// - one list being the regions where `clients` are
-    pub fn best_mdtm_leader<'a>(
-        &self,
-        servers: &'a [Region],
-        clients: &[Region],
-        quorum_size: usize,
-    ) -> (&'a Region, Stats) {
-        self.best_leader(servers, clients, quorum_size, |a, b| {
-            a.mdtm().cmp(&b.mdtm())
-        })
-    }
-
-    /// Computes the best leader and its `Stats` for a leader-based protocol
-    /// with a given `quorum_size`.
-    ///
-    /// Takes as input two lists of regions:
-    /// - one list being the regions where `servers` are
-    /// - one list being the regions where `clients` are
-    ///
-    /// This selects the best leader given some criteria defined by `compare`
-    /// function.
-    fn best_leader<'a, F>(
-        &self,
-        servers: &'a [Region],
-        clients: &[Region],
-        quorum_size: usize,
-        compare: F,
-    ) -> (&'a Region, Stats)
-    where
-        F: Fn(&Stats, &Stats) -> Ordering,
-    {
-        // sort stats using `compare`
+        // compute all stats
         let mut stats = self.all_leaders_stats(servers, clients, quorum_size);
-        stats.sort_unstable_by(|(_la, sa), (_lb, sb)| compare(sa, sb));
+
+        // select the best leader based on `stats_sort_by`
+        stats.sort_unstable_by(|(_la, sa), (_lb, sb)| match stats_sort_by {
+            StatsSortBy::Mean => sa.mean().cmp(&sb.mean()),
+            StatsSortBy::COV => sa.cov().cmp(&sb.cov()),
+            StatsSortBy::MDTM => sa.mdtm().cmp(&sb.mdtm()),
+        });
 
         // get the lowest (in terms of `compare`) stat
         stats.into_iter().next().unwrap()

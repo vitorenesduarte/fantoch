@@ -1,6 +1,6 @@
 use crate::bote::float::F64;
 use crate::bote::protocol::Protocol;
-use crate::bote::stats::AllStats;
+use crate::bote::stats::{AllStats, StatsSortBy};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use permutator::Combination;
@@ -264,8 +264,12 @@ impl Search {
         // - this leader will then be used for both f=1 and f=2 stats
         let f = 1;
         let quorum_size = Protocol::FPaxos.quorum_size(n, f);
-        let (leader, _) =
-            bote.best_cov_leader(config, all_clients, quorum_size);
+        let (leader, _) = bote.best_leader(
+            config,
+            all_clients,
+            quorum_size,
+            StatsSortBy::COV,
+        );
 
         // compute stats for both `clients` and colocated clients i.e. `config`
         for (suffix, clients) in vec![("", all_clients), ("C", config)] {

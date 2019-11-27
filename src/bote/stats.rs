@@ -3,6 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub enum StatsSortBy {
+    Mean,
+    COV,
+    MDTM,
+}
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Stats {
     mean: F64,
