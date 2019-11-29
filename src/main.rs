@@ -1,5 +1,7 @@
-use planet_sim::bote::search::{FTMetric, RankingParams, Search, SearchInput};
 use planet_sim::planet::{Planet, Region};
+
+// directory that contains all dat files
+const LAT_DIR: &str = "latency/";
 
 fn main() {
     distance_matrix();
