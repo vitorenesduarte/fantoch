@@ -1,7 +1,6 @@
 sudo: required
 language: rust
 rust:
-  - stable
   - nightly
 matrix:
   allow_failures:
@@ -35,7 +34,7 @@ before_script:
 
 script:
   - cargo build --release
-  - cargo test --release
+  - RUST_TEST_TIME_UNIT=100,60000 cargo t --release --  -Z unstable-options --ensure-time
 
 after_success: |
   if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then
