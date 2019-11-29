@@ -633,7 +633,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn search() {
+    #[ignore]
+    fn full_search() {
         // define some search params
         let min_n = 3;
         let max_n = 13;
