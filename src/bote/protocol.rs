@@ -6,12 +6,12 @@ pub enum Protocol {
 }
 
 impl Protocol {
-    pub fn name(&self) -> &str {
+    pub fn short_name(&self) -> &str {
         match self {
-            Protocol::FPaxos => "fpaxos",
-            Protocol::Atlas => "atlas",
-            Protocol::Paxos => "paxos",
-            Protocol::EPaxos => "epaxos",
+            Protocol::FPaxos => "f",
+            Protocol::Atlas => "a",
+            Protocol::Paxos => "p",
+            Protocol::EPaxos => "e",
         }
     }
 
@@ -34,6 +34,21 @@ impl Protocol {
 
     fn minority(n: usize) -> usize {
         (n / 2)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum ClientPlacement {
+    Input,
+    Colocated,
+}
+
+impl ClientPlacement {
+    pub fn short_name(&self) -> &str {
+        match self {
+            ClientPlacement::Input => "",
+            ClientPlacement::Colocated => "C",
+        }
     }
 }
 

@@ -5,8 +5,8 @@ use planet_sim::planet::{Planet, Region};
 const LAT_DIR: &str = "latency/";
 
 fn main() {
-    distance_matrix();
-    // search();
+    // distance_matrix();
+    search();
 }
 
 fn search() {

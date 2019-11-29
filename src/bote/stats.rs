@@ -1,5 +1,5 @@
 use crate::bote::float::F64;
-use crate::bote::protocol::Protocol;
+use crate::bote::protocol::{ClientPlacement, Protocol};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -142,42 +142,50 @@ impl AllStats {
         AllStats(BTreeMap::new())
     }
 
-    pub fn get(&self, protocol: Protocol, f: usize) -> &Stats {
-        self.get_with_suffix(protocol, f, "")
-    }
-
-    pub fn get_with_suffix(
+    pub fn get(
         &self,
         protocol: Protocol,
         f: usize,
-        suffix: &str,
+        placement: ClientPlacement,
     ) -> &Stats {
-        let key = Self::key(protocol, f, suffix);
-        let value = self.0.get(&key);
-        assert!(value.is_some(), "stats with key {} not found", key);
-        value.unwrap()
+        let key = Self::key(protocol, f, placement);
+        self.get_and_check_unwrap(&key)
     }
 
-    pub fn insert(&mut self, protocol: Protocol, f: usize, stats: Stats) {
-        self.insert_with_suffix(protocol, f, "", stats)
+    fn get_and_check_unwrap(&self, key: &String) -> &Stats {
+        let stats = self.0.get(key);
+        assert!(stats.is_some(), "stats with key {} not found", key);
+        stats.unwrap()
     }
 
-    pub fn insert_with_suffix(
+    pub fn insert(
         &mut self,
         protocol: Protocol,
         f: usize,
-        suffix: &str,
+        placement: ClientPlacement,
         stats: Stats,
     ) {
-        let key = Self::key(protocol, f, suffix);
+        let key = Self::key(protocol, f, placement);
         self.0.insert(key, stats);
     }
 
-    fn key(protocol: Protocol, f: usize, suffix: &str) -> String {
+    pub fn fmt(
+        &self,
+        protocol: Protocol,
+        f: usize,
+        placement: ClientPlacement,
+    ) -> String {
+        let key = Self::key(protocol, f, placement);
+        let stats = self.get_and_check_unwrap(&key);
+        format!("{}={:?}", key, stats)
+    }
+
+    fn key(protocol: Protocol, f: usize, placement: ClientPlacement) -> String {
         let prefix = match protocol {
-            Protocol::EPaxos => String::from(protocol.name()),
-            _ => format!("{}f{}", protocol.name(), f),
+            Protocol::EPaxos => String::from(protocol.short_name()),
+            _ => format!("{}f{}", protocol.short_name(), f),
         };
+        let suffix = placement.short_name();
         format!("{}{}", prefix, suffix)
     }
 }
@@ -244,16 +252,18 @@ mod test {
     fn all_stats() {
         let stats = Stats::from(&vec![10, 20, 40, 10]);
         let f = 1;
+        let placement = ClientPlacement::Colocated;
         let mut all_stats = AllStats::new();
-        all_stats.insert(Protocol::Atlas, f, stats.clone());
-        assert_eq!(all_stats.get(Protocol::Atlas, f), &stats);
+        all_stats.insert(Protocol::Atlas, f, placement, stats.clone());
+        assert_eq!(all_stats.get(Protocol::Atlas, f, placement), &stats);
     }
 
     #[test]
     #[should_panic]
     fn all_stats_panic() {
         let f = 1;
+        let placement = ClientPlacement::Colocated;
         let all_stats = AllStats::new();
-        all_stats.get(Protocol::Atlas, f);
+        all_stats.get(Protocol::Atlas, f, placement);
     }
 }

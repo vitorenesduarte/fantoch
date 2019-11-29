@@ -1,4 +1,5 @@
 use crate::bote::float::F64;
+use crate::bote::protocol::ClientPlacement;
 use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
 use crate::bote::stats::{AllStats, StatsSortBy};
 use crate::bote::Bote;
@@ -166,24 +167,21 @@ impl Search {
     }
 
     pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
-        vec!["", "C"]
+        vec![ClientPlacement::Input, ClientPlacement::Colocated]
             .into_iter()
-            .map(|suffix| {
+            .map(|placement| {
                 // shows stats for all possible f
                 let fmt: String = (1..=Self::max_f(n))
                     .map(|f| {
-                        let atlas = stats.get_with_suffix(Atlas, f, suffix);
-                        let fpaxos = stats.get_with_suffix(FPaxos, f, suffix);
-                        format!(
-                            "a{}{}={:?} f{}{}={:?} ",
-                            f, suffix, atlas, f, suffix, fpaxos
-                        )
+                        let atlas = stats.fmt(Atlas, f, placement);
+                        let fpaxos = stats.fmt(FPaxos, f, placement);
+                        format!("{} {} ", atlas, fpaxos)
                     })
                     .collect();
 
                 // add epaxos
-                let epaxos = stats.get_with_suffix(EPaxos, 0, suffix);
-                format!("{}e{}={:?} ", fmt, suffix, epaxos)
+                let epaxos = stats.fmt(EPaxos, 0, placement);
+                format!("{}{} ", fmt, epaxos)
             })
             .collect()
     }
@@ -272,21 +270,25 @@ impl Search {
         );
 
         // compute stats for both `clients` and colocated clients i.e. `config`
-        for (suffix, clients) in vec![("", all_clients), ("C", config)] {
+        let which_clients = vec![
+            (ClientPlacement::Input, all_clients),
+            (ClientPlacement::Colocated, config),
+        ];
+        for (placement, clients) in which_clients {
             for f in 1..=Self::max_f(n) {
                 // compute altas quorum size
                 let quorum_size = Atlas.quorum_size(n, f);
 
                 // compute atlas stats
                 let atlas = bote.leaderless(config, clients, quorum_size);
-                stats.insert_with_suffix(Atlas, f, suffix, atlas);
+                stats.insert(Atlas, f, placement, atlas);
 
                 // compute fpaxos quorum size
                 let quorum_size = FPaxos.quorum_size(n, f);
 
                 // // compute best mean fpaxos stats
                 let fpaxos = bote.leader(leader, config, clients, quorum_size);
-                stats.insert_with_suffix(FPaxos, f, suffix, fpaxos);
+                stats.insert(FPaxos, f, placement, fpaxos);
             }
 
             // compute epaxos quorum size
@@ -294,7 +296,7 @@ impl Search {
 
             // compute epaxos stats
             let epaxos = bote.leaderless(config, clients, quorum_size);
-            stats.insert_with_suffix(EPaxos, 0, suffix, epaxos);
+            stats.insert(EPaxos, 0, placement, epaxos);
         }
 
         // return all stats
@@ -389,9 +391,10 @@ impl Search {
         n: usize,
         params: &RankingParams,
     ) -> bool {
+        let placement = ClientPlacement::Input;
         params.ft_metric.fs(n - 2).into_iter().all(|f| {
-            let atlas = stats.get(Atlas, f);
-            let prev_atlas = prev_stats.get(Atlas, f);
+            let atlas = stats.get(Atlas, f, placement);
+            let prev_atlas = prev_stats.get(Atlas, f, placement);
             prev_atlas.mean_improv(atlas) >= params.min_mean_decrease
         })
     }
@@ -408,10 +411,13 @@ impl Search {
         // f values accounted for when computing score and config validity
         let fs = params.ft_metric.fs(n);
 
+        // placement is input
+        let placement = ClientPlacement::Input;
+
         for f in fs {
             // get atlas and fpaxos stats
-            let atlas = stats.get(Atlas, f);
-            let fpaxos = stats.get(FPaxos, f);
+            let atlas = stats.get(Atlas, f, placement);
+            let fpaxos = stats.get(FPaxos, f, placement);
 
             // compute mean latency improvement of atlas wrto to fpaxos
             let fpaxos_mean_improv = fpaxos.mean_improv(atlas);
@@ -427,7 +433,7 @@ impl Search {
                 && fpaxos_fairness_improv >= params.min_fairness_improv;
 
             // get epaxos stats
-            let epaxos = stats.get(EPaxos, 0);
+            let epaxos = stats.get(EPaxos, 0, placement);
 
             // compute mean latency improvement of atlas wrto to epaxos
             let epaxos_mean_improv = epaxos.mean_improv(atlas);
@@ -541,22 +547,22 @@ impl SearchInput {
         ];
 
         // compute all regions
-        let mut regions = planet.regions();
-        regions.sort();
+        let mut all_regions = planet.regions();
+        all_regions.sort();
 
         match self {
             SearchInput::R17CMaxN => {
-                let all_clients =
+                let clients =
                     regions17.combination(max_n).map(vec_cloned).collect();
-                (None, all_clients)
+                (None, clients)
             }
             SearchInput::R17C17 => {
-                let all_clients = vec![regions17.clone()];
-                (Some(regions17), all_clients)
+                let clients = vec![regions17.clone()];
+                (Some(regions17), clients)
             }
             SearchInput::R20C20 => {
-                let all_clients = vec![regions.clone()];
-                (Some(regions), all_clients)
+                let clients = vec![all_regions.clone()];
+                (Some(all_regions), clients)
             }
         }
     }
