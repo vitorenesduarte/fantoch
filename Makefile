@@ -10,7 +10,5 @@ fmt:
 	rustfmt src/bote/*.rs
 	rustup override set stable
 
-# `cargo install cargo-travis`
 coverage:
-	cargo coverage
-	open target/kcov/index.html
+	docker run --security-opt seccomp=unconfined -v "${PWD}:/volume" xd009642/tarpaulin
