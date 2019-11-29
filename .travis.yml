@@ -1,7 +1,7 @@
 sudo: required
 language: rust
 rust:
-  - nightly
+  - stable
 matrix:
   allow_failures:
     - rust: nightly
@@ -37,7 +37,7 @@ script:
   - cargo test --release
 
 after_success: |
-  if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then
+  if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then
     cargo coveralls
   fi
 
