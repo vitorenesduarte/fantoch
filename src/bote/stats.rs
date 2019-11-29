@@ -149,13 +149,13 @@ impl AllStats {
         placement: ClientPlacement,
     ) -> &Stats {
         let key = Self::key(protocol, f, placement);
-        self.get_and_check_unwrap(&key)
+        self.get_and_unwrap(&key)
     }
 
-    fn get_and_check_unwrap(&self, key: &String) -> &Stats {
-        let stats = self.0.get(key);
-        assert!(stats.is_some(), "stats with key {} not found", key);
-        stats.unwrap()
+    fn get_and_unwrap(&self, key: &String) -> &Stats {
+        self.0.get(key).unwrap_or_else(|| {
+            panic!("stats with key {} not found", key);
+        })
     }
 
     pub fn insert(
@@ -176,7 +176,7 @@ impl AllStats {
         placement: ClientPlacement,
     ) -> String {
         let key = Self::key(protocol, f, placement);
-        let stats = self.get_and_check_unwrap(&key);
+        let stats = self.get_and_unwrap(&key);
         format!("{}={:?}", key, stats)
     }
 
@@ -191,7 +191,7 @@ impl AllStats {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

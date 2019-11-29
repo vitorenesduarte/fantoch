@@ -87,7 +87,7 @@ impl fmt::Debug for F64 {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

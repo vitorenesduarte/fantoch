@@ -34,8 +34,8 @@ before_script:
   # - cargo install-update -a
 
 script:
-  - cargo build
-  - cargo test
+  - cargo build --release
+  - cargo test --release
 
 after_success: |
   if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then

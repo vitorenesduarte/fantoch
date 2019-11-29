@@ -50,10 +50,14 @@ impl ClientPlacement {
             ClientPlacement::Colocated => "C",
         }
     }
+
+    pub fn all() -> impl Iterator<Item = ClientPlacement> {
+        vec![ClientPlacement::Input, ClientPlacement::Colocated].into_iter()
+    }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]
