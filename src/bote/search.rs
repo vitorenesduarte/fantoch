@@ -498,22 +498,25 @@ impl Search {
 /// identifies which regions considered for the search
 #[allow(dead_code)]
 pub enum SearchInput {
-    /// search within 2018 17 regions, clients deployed in the MAX regions
-    /// - e.g. if the max number of regions is 11, clients are deployed in
-    ///   those 11 regions
-    R17CMaxN,
+    /// search within selected 13 regions, clients deployed in the 13 regions
+    R13C13,
     /// search within 2018 17 regions, clients deployed in the 17 regions
     R17C17,
     /// search within the 20 regions, clients deployed in the 20 regions
     R20C20,
+    /// search within 2018 17 regions, clients deployed in the MAX regions
+    /// - e.g. if the max number of regions is 11, clients are deployed in
+    ///   those 11 regions
+    R17CMaxN,
 }
 
 impl fmt::Display for SearchInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SearchInput::R17CMaxN => write!(f, "R17CMaxN"),
+            SearchInput::R13C13 => write!(f, "R13C13"),
             SearchInput::R17C17 => write!(f, "R17C17"),
             SearchInput::R20C20 => write!(f, "R20C20"),
+            SearchInput::R17CMaxN => write!(f, "R17CMaxN"),
         }
     }
 }
@@ -527,7 +530,24 @@ impl SearchInput {
         max_n: usize,
         planet: &Planet,
     ) -> (Option<Vec<Region>>, Vec<Vec<Region>>) {
-        // compute 17-regions (from end of 2018)
+        // selected 13-regions
+        let regions13 = vec![
+            Region::new("asia-southeast1"),
+            Region::new("europe-west4"),
+            Region::new("southamerica-east1"),
+            Region::new("australia-southeast1"),
+            Region::new("europe-west2"),
+            Region::new("asia-south1"),
+            Region::new("us-east1"),
+            Region::new("asia-northeast1"),
+            Region::new("europe-west1"),
+            Region::new("asia-east1"),
+            Region::new("us-west1"),
+            Region::new("europe-west3"),
+            Region::new("us-central1"),
+        ];
+
+        // 17-regions available in the end of 2018
         let regions17 = vec![
             Region::new("asia-east1"),
             Region::new("asia-northeast1"),
@@ -548,15 +568,14 @@ impl SearchInput {
             Region::new("us-west2"),
         ];
 
-        // compute all regions
+        // all regions
         let mut all_regions = planet.regions();
         all_regions.sort();
 
         match self {
-            SearchInput::R17CMaxN => {
-                let clients =
-                    regions17.combination(max_n).map(vec_cloned).collect();
-                (None, clients)
+            SearchInput::R13C13 => {
+                let clients = vec![regions13.clone()];
+                (Some(regions13), clients)
             }
             SearchInput::R17C17 => {
                 let clients = vec![regions17.clone()];
@@ -565,6 +584,11 @@ impl SearchInput {
             SearchInput::R20C20 => {
                 let clients = vec![all_regions.clone()];
                 (Some(all_regions), clients)
+            }
+            SearchInput::R17CMaxN => {
+                let clients =
+                    regions17.combination(max_n).map(vec_cloned).collect();
+                (None, clients)
             }
         }
     }
@@ -633,14 +657,14 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn full_search() {
         // define some search params
         let min_n = 3;
         let max_n = 13;
 
-        // create search
-        let search_input = SearchInput::R17CMaxN;
+        // create search:
+        // originally `search_input = SearchInput::R17CMaxN`
+        let search_input = SearchInput::R13C13;
         let search = Search::new(min_n, max_n, search_input, LAT_DIR);
 
         // define search params:
