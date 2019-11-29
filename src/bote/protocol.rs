@@ -14,8 +14,8 @@ impl Protocol {
     }
 
     pub fn quorum_size(&self, n: usize, f: usize) -> usize {
-        // for Paxos and EPaxos, we ignore the f passed as argument, and compute
-        // f to be a minority of n processes
+        // since EPaxos always tolerates a minority of failures, we ignore the f
+        // passed as argument, and compute f to be a minority of n processes
         match self {
             Protocol::FPaxos => f + 1,
             Protocol::EPaxos => {
