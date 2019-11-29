@@ -51,6 +51,7 @@ impl Search {
         min_n: usize,
         max_n: usize,
         search_input: SearchInput,
+        save_search: bool,
         lat_dir: &str,
     ) -> Self {
         // get filename
@@ -79,8 +80,13 @@ impl Search {
                 // create a new `Search` instance
                 let search = Search { all_configs };
 
-                // save it
-                timed!("save search", Self::save_search(&filename, &search));
+                // save it if `save_search`
+                if save_search {
+                    timed!(
+                        "save search",
+                        Self::save_search(&filename, &search)
+                    );
+                }
 
                 // and return it
                 search
@@ -661,11 +667,13 @@ mod tests {
         // define some search params
         let min_n = 3;
         let max_n = 13;
-
-        // create search:
         // originally `search_input = SearchInput::R17CMaxN`
         let search_input = SearchInput::R13C13;
-        let search = Search::new(min_n, max_n, search_input, LAT_DIR);
+        let save_search = false;
+
+        // create search
+        let search =
+            Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
 
         // define search params:
         // originally 30 was used for the `min_mean_improv`;
