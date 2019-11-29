@@ -2,6 +2,7 @@ sudo: required
 language: rust
 rust:
   - stable
+
 matrix:
   allow_failures:
     - rust: nightly
@@ -16,29 +17,21 @@ cache:
 
 addons:
   apt:
-    packages:
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - binutils-dev
-      - libiberty-dev
-      - cmake
-    sources:
-      - kalakris-cmake
+      packages:
+          - libssl-dev
 
-before_script:
-  - export PATH=$HOME/.cargo/bin:$PATH
-  # - cargo install cargo-update || echo "cargo-update already installed"
-  - cargo install cargo-travis || echo "cargo-travis already installed"
-  # - cargo install-update -a
+before_cache: |
+	if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
+    cargo install cargo-tarpaulin -f
+  fi
 
 script:
-  - cargo build --release
-  - cargo test --release
+  - cargo build
+  - cargo test
 
 after_success: |
   if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then
-    cargo coveralls
+    cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
   fi
 
 notifications:
