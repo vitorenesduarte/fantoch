@@ -390,8 +390,12 @@ impl Search {
         n: usize,
         params: &RankingParams,
     ) -> bool {
+        // compare only for the number of faults tolerated by `prev_stats`
+        let n = n - 2;
+
         let placement = ClientPlacement::Input;
-        params.ft_metric.fs(n - 2).into_iter().all(|f| {
+
+        params.ft_metric.fs(n).into_iter().all(|f| {
             let atlas = stats.get(Atlas, f, placement);
             let prev_atlas = prev_stats.get(Atlas, f, placement);
             prev_atlas.mean_improv(atlas) >= params.min_mean_decrease
@@ -428,8 +432,8 @@ impl Search {
             // - `min_mean_improv`
             // - `min_fairness_improv`
             valid = valid
-                && fpaxos_mean_improv >= params.min_mean_improv
-                && fpaxos_fairness_improv >= params.min_fairness_improv;
+                && fpaxos_mean_improv >= params.min_mean_fpaxos_improv
+                && fpaxos_fairness_improv >= params.min_fairness_fpaxos_improv;
 
             // get epaxos stats
             let epaxos = stats.get(EPaxos, 0, placement);
@@ -438,13 +442,12 @@ impl Search {
             let epaxos_mean_improv = epaxos.mean_improv(atlas);
 
             // make sure we improve on EPaxos for large n
-            if n == 11 && n == 13 {
-                valid = valid && epaxos_mean_improv >= params.min_mean_improv;
+            if n == 11 || n == 13 {
+                valid = valid
+                    && epaxos_mean_improv >= params.min_mean_epaxos_improv;
             }
 
-            // update score
-            // score += fpaxos_mean_improv;
-            // give extra weigth for epaxos improv
+            // update score: give extra weigth for epaxos improv
             let weight = F64::new(30 as f64);
             score += fpaxos_mean_improv + (weight * epaxos_mean_improv);
         }
@@ -572,8 +575,9 @@ fn vec_cloned<T: Clone>(vec: Vec<&T>) -> Vec<T> {
 }
 
 pub struct RankingParams {
-    min_mean_improv: F64,
-    min_fairness_improv: F64,
+    min_mean_fpaxos_improv: F64,
+    min_mean_epaxos_improv: F64,
+    min_fairness_fpaxos_improv: F64,
     min_mean_decrease: F64,
     min_n: usize,
     max_n: usize,
@@ -582,16 +586,20 @@ pub struct RankingParams {
 
 impl RankingParams {
     pub fn new(
-        min_mean_improv: isize,
-        min_fairness_improv: isize,
+        min_mean_fpaxos_improv: isize,
+        min_mean_epaxos_improv: isize,
+        min_fairness_fpaxos_improv: isize,
         min_mean_decrease: isize,
         min_n: usize,
         max_n: usize,
         ft_metric: FTMetric,
     ) -> Self {
         RankingParams {
-            min_mean_improv: F64::new(min_mean_improv as f64),
-            min_fairness_improv: F64::new(min_fairness_improv as f64),
+            min_mean_fpaxos_improv: F64::new(min_mean_fpaxos_improv as f64),
+            min_mean_epaxos_improv: F64::new(min_mean_epaxos_improv as f64),
+            min_fairness_fpaxos_improv: F64::new(
+                min_fairness_fpaxos_improv as f64,
+            ),
             min_mean_decrease: F64::new(min_mean_decrease as f64),
             min_n,
             max_n,
@@ -634,16 +642,21 @@ mod tests {
         let search_input = SearchInput::R17CMaxN;
         let search = Search::new(min_n, max_n, search_input, LAT_DIR);
 
-        // define search params
-        let min_mean_improv = 30;
-        let min_fairness_improv = 0;
+        // define search params:
+        // originally 30 was used for the `min_mean_improv`;
+        // here we want the test to be run asap,
+        // so we restrict the search the maximum possible
+        let min_mean_fpaxos_improv = 110;
+        let min_mean_epaxos_improv = 35;
+        let min_fairness_fpaxos_improv = 0;
         let min_mean_decrease = 15;
         let ft_metric = FTMetric::F1F2;
 
         // create ranking params
         let params = RankingParams::new(
-            min_mean_improv,
-            min_fairness_improv,
+            min_mean_fpaxos_improv,
+            min_mean_epaxos_improv,
+            min_fairness_fpaxos_improv,
             min_mean_decrease,
             min_n,
             max_n,
