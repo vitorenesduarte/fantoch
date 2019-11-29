@@ -41,7 +41,7 @@ type Ranked<'a> = HashMap<usize, Vec<(F64, &'a ConfigAndStats)>>;
 // all ranked: mapping from clients to `Ranked`
 type AllRanked<'a> = Vec<(&'a Vec<Region>, Ranked<'a>)>;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub struct Search {
     all_configs: AllConfigs,
 }
@@ -657,13 +657,13 @@ impl FTMetric {
 }
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     // directory that contains all dat files
     const LAT_DIR: &str = "latency/";
 
-    use super::*;
-
     #[test]
-    fn full_search() {
+    fn search() {
         // define some search params
         let min_n = 3;
         let max_n = 13;
@@ -736,5 +736,26 @@ mod tests {
             Region::new("us-central1"),
         ];
         assert_eq!(sorted_config, expected_config);
+    }
+
+    #[test]
+    fn search_save() {
+        let min_n = 3;
+        let max_n = 5;
+        let search_input = SearchInput::R17C17;
+        let filename = Search::filename(min_n, max_n, &search_input);
+
+        // create search and save it
+        let save_search = true;
+        let expected =
+            Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
+
+        // get saved search and assert it is the same search
+        let saved = Search::get_saved_search(&filename);
+        assert!(saved.is_some());
+        assert_eq!(saved.unwrap(), expected);
+
+        // remove search file
+        assert!(std::fs::remove_file(filename).is_ok());
     }
 }
