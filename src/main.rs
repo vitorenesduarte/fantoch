@@ -20,5 +20,7 @@ fn main() {
         Region::new("europe-west3"),
         Region::new("us-central1"),
     ];
-    println!("{}", planet.distance_matrix(regions).unwrap());
+    if let Ok(matrix) = planet.distance_matrix(regions) {
+        println!("{}", matrix);
+    }
 }
