@@ -1,4 +1,5 @@
 use crate::bote::float::F64;
+use crate::bote::protocol::Protocol;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -9,7 +10,7 @@ pub enum StatsSortBy {
     MDTM,
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Stats {
     mean: F64,
     cov: F64,  // coefficient of variation
@@ -141,35 +142,41 @@ impl AllStats {
         AllStats(BTreeMap::new())
     }
 
-    pub fn get(&self, prefix: &str, f: usize) -> &Stats {
-        self.get_with_suffix(prefix, f, "")
+    pub fn get(&self, protocol: Protocol, f: usize) -> &Stats {
+        self.get_with_suffix(protocol, f, "")
     }
 
     pub fn get_with_suffix(
         &self,
-        prefix: &str,
+        protocol: Protocol,
         f: usize,
         suffix: &str,
     ) -> &Stats {
-        let key = Self::key(prefix, f, suffix);
-        self.0.get(&key).unwrap()
+        let key = Self::key(protocol, f, suffix);
+        let value = self.0.get(&key);
+        assert!(value.is_some(), "stats with key {} not found", key);
+        value.unwrap()
     }
 
-    pub fn insert(
+    pub fn insert(&mut self, protocol: Protocol, f: usize, stats: Stats) {
+        self.insert_with_suffix(protocol, f, "", stats)
+    }
+
+    pub fn insert_with_suffix(
         &mut self,
-        prefix: &str,
+        protocol: Protocol,
         f: usize,
         suffix: &str,
         stats: Stats,
     ) {
-        let key = Self::key(prefix, f, suffix);
+        let key = Self::key(protocol, f, suffix);
         self.0.insert(key, stats);
     }
 
-    fn key(prefix: &str, f: usize, suffix: &str) -> String {
-        let prefix = match prefix {
-            "epaxos" => String::from("epaxos"),
-            _ => format!("{}f{}", prefix, f),
+    fn key(protocol: Protocol, f: usize, suffix: &str) -> String {
+        let prefix = match protocol {
+            Protocol::EPaxos => String::from(protocol.name()),
+            _ => format!("{}f{}", protocol.name(), f),
         };
         format!("{}{}", prefix, suffix)
     }
@@ -231,5 +238,22 @@ mod test {
         let stats_a = Stats::from(&vec![1, 1, 1]);
         let stats_b = Stats::from(&vec![10, 20]);
         assert_eq!(stats_a.mdtm_improv(&stats_b), F64::new(-5.0));
+    }
+
+    #[test]
+    fn all_stats() {
+        let stats = Stats::from(&vec![10, 20, 40, 10]);
+        let f = 1;
+        let mut all_stats = AllStats::new();
+        all_stats.insert(Protocol::Atlas, f, stats.clone());
+        assert_eq!(all_stats.get(Protocol::Atlas, f), &stats);
+    }
+
+    #[test]
+    #[should_panic]
+    fn all_stats_panic() {
+        let f = 1;
+        let all_stats = AllStats::new();
+        all_stats.get(Protocol::Atlas, f);
     }
 }

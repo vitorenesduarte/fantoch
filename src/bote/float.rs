@@ -152,7 +152,6 @@ mod test {
     #[test]
     fn ord() {
         use std::cmp::Ordering;
-        use std::f64::NAN;
         assert_eq!(F64::new(5.2).cmp(&F64::new(5.3)), Ordering::Less);
         assert_eq!(F64::new(5.3).cmp(&F64::new(5.2)), Ordering::Greater);
         assert_eq!(F64::new(5.2).cmp(&F64::new(5.2)), Ordering::Equal);

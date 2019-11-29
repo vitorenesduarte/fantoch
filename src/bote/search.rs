@@ -1,5 +1,5 @@
 use crate::bote::float::F64;
-use crate::bote::protocol::Protocol;
+use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
 use crate::bote::stats::{AllStats, StatsSortBy};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
@@ -172,8 +172,8 @@ impl Search {
                 // shows stats for all possible f
                 let fmt: String = (1..=Self::max_f(n))
                     .map(|f| {
-                        let atlas = stats.get_with_suffix("atlas", f, suffix);
-                        let fpaxos = stats.get_with_suffix("fpaxos", f, suffix);
+                        let atlas = stats.get_with_suffix(Atlas, f, suffix);
+                        let fpaxos = stats.get_with_suffix(FPaxos, f, suffix);
                         format!(
                             "a{}{}={:?} f{}{}={:?} ",
                             f, suffix, atlas, f, suffix, fpaxos
@@ -182,7 +182,7 @@ impl Search {
                     .collect();
 
                 // add epaxos
-                let epaxos = stats.get_with_suffix("epaxos", 0, suffix);
+                let epaxos = stats.get_with_suffix(EPaxos, 0, suffix);
                 format!("{}e{}={:?} ", fmt, suffix, epaxos)
             })
             .collect()
@@ -263,7 +263,7 @@ impl Search {
         // compute best cov fpaxos f=1 leader
         // - this leader will then be used for both f=1 and f=2 stats
         let f = 1;
-        let quorum_size = Protocol::FPaxos.quorum_size(n, f);
+        let quorum_size = FPaxos.quorum_size(n, f);
         let (leader, _) = bote.best_leader(
             config,
             all_clients,
@@ -275,26 +275,26 @@ impl Search {
         for (suffix, clients) in vec![("", all_clients), ("C", config)] {
             for f in 1..=Self::max_f(n) {
                 // compute altas quorum size
-                let quorum_size = Protocol::Atlas.quorum_size(n, f);
+                let quorum_size = Atlas.quorum_size(n, f);
 
                 // compute atlas stats
                 let atlas = bote.leaderless(config, clients, quorum_size);
-                stats.insert("atlas", f, suffix, atlas);
+                stats.insert_with_suffix(Atlas, f, suffix, atlas);
 
                 // compute fpaxos quorum size
-                let quorum_size = Protocol::FPaxos.quorum_size(n, f);
+                let quorum_size = FPaxos.quorum_size(n, f);
 
                 // // compute best mean fpaxos stats
                 let fpaxos = bote.leader(leader, config, clients, quorum_size);
-                stats.insert("fpaxos", f, suffix, fpaxos);
+                stats.insert_with_suffix(FPaxos, f, suffix, fpaxos);
             }
 
             // compute epaxos quorum size
-            let quorum_size = Protocol::EPaxos.quorum_size(n, 0);
+            let quorum_size = EPaxos.quorum_size(n, 0);
 
             // compute epaxos stats
             let epaxos = bote.leaderless(config, clients, quorum_size);
-            stats.insert("epaxos", 0, suffix, epaxos);
+            stats.insert_with_suffix(EPaxos, 0, suffix, epaxos);
         }
 
         // return all stats
@@ -390,8 +390,8 @@ impl Search {
         params: &RankingParams,
     ) -> bool {
         params.ft_metric.fs(n - 2).into_iter().all(|f| {
-            let atlas = stats.get("atlas", f);
-            let prev_atlas = prev_stats.get("atlas", f);
+            let atlas = stats.get(Atlas, f);
+            let prev_atlas = prev_stats.get(Atlas, f);
             prev_atlas.mean_improv(atlas) >= params.min_mean_decrease
         })
     }
@@ -410,8 +410,8 @@ impl Search {
 
         for f in fs {
             // get atlas and fpaxos stats
-            let atlas = stats.get("atlas", f);
-            let fpaxos = stats.get("fpaxos", f);
+            let atlas = stats.get(Atlas, f);
+            let fpaxos = stats.get(FPaxos, f);
 
             // compute mean latency improvement of atlas wrto to fpaxos
             let fpaxos_mean_improv = fpaxos.mean_improv(atlas);
@@ -427,7 +427,7 @@ impl Search {
                 && fpaxos_fairness_improv >= params.min_fairness_improv;
 
             // get epaxos stats
-            let epaxos = stats.get("epaxos", 0);
+            let epaxos = stats.get(EPaxos, 0);
 
             // compute mean latency improvement of atlas wrto to epaxos
             let epaxos_mean_improv = epaxos.mean_improv(atlas);

@@ -6,6 +6,15 @@ pub enum Protocol {
 }
 
 impl Protocol {
+    pub fn name(&self) -> &str {
+        match self {
+            Protocol::FPaxos => "fpaxos",
+            Protocol::Atlas => "atlas",
+            Protocol::Paxos => "paxos",
+            Protocol::EPaxos => "epaxos",
+        }
+    }
+
     pub fn quorum_size(&self, n: usize, f: usize) -> usize {
         // for Paxos and EPaxos, we ignore the f passed as argument, and compute
         // f to be a minority of n processes
