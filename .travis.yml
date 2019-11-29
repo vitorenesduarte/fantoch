@@ -18,12 +18,29 @@ cache:
 addons:
   apt:
     packages:
-      - libssl-dev
+      # <tarpaulin>
+      # - libssl-dev
+      # </tarpaulin>
+      # <travis>
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - binutils-dev
+      - libiberty-dev
+      - cmake
+    sources:
+      - kalakris-cmake
+      # </travis>
 
 before_script: |
   if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
     export PATH=$HOME/.cargo/bin:$PATH
-    cargo install cargo-tarpaulin || echo "cargo-tarpaulin already installed"
+    # <tarpaulin>
+    # cargo install cargo-tarpaulin || echo "cargo-tarpaulin already installed"
+    # </tarpaulin>
+    # <travis>
+    cargo install cargo-travis || echo "cargo-travis already installed"
+    # </travis>
     cargo install-update -a # update outdated cached binaries
   fi
 
@@ -34,7 +51,12 @@ script:
 after_success: |
   if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then
     # measure code coverage and upload to coveralls.io
-    cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+    # <tarpaulin>
+    # cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+    # </tarpaulin>
+    # <travis>
+    cargo coveralls
+    # </travis>
   fi
 
 notifications:
