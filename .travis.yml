@@ -45,7 +45,6 @@ before_script: |
     cargo install cargo-travis || echo "cargo-travis already installed"
     # </travis>
 
-    cargo install-update -a # update outdated cached binaries
   fi
 
 script:
@@ -63,6 +62,7 @@ after_success: |
     # <travis>
     cargo coveralls
     # </travis>
+
   fi
 
 notifications:
