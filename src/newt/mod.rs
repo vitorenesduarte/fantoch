@@ -342,6 +342,7 @@ pub enum ToSend {
     Clients(HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>>),
 }
 
+#[allow(dead_code)] // TODO remove me
 impl ToSend {
     /// Check if there's nothing to be sent.
     fn nothing(&self) -> bool {
@@ -443,7 +444,6 @@ impl DerefMut for Newt {
 #[cfg(test)]
 mod tests {
     use crate::client::Client;
-    use crate::command::MultiCommand;
     use crate::config::Config;
     use crate::newt::router::Router;
     use crate::newt::{Message, Newt, ToSend};

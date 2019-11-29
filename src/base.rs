@@ -40,8 +40,10 @@ impl BaseProc {
 
     /// Updates the processes known by this process.
     pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) {
-        let region_to_index =
-            self.planet.sorted_by_distance(&self.region).unwrap();
+        let region_to_index = self
+            .planet
+            .sorted_by_distance_and_indexed(&self.region)
+            .unwrap();
 
         // use the region order (based on distance) to order processes
         // - if two processes are from the same region, they're sorted by id

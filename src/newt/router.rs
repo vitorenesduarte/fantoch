@@ -5,11 +5,13 @@ use crate::newt::{Message, Newt, ToSend};
 use std::cell::Cell;
 use std::collections::HashMap;
 
+#[allow(dead_code)] // TODO remove me
 pub struct Router {
     procs: HashMap<ProcId, Cell<Newt>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
+#[allow(dead_code)] // TODO remove me
 impl Router {
     /// Create a new `Router`.
     pub fn new() -> Self {

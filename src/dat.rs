@@ -37,7 +37,7 @@ impl Dat {
         let this_region = self.region();
 
         // for each line in the file, compute a pair (region, latency)
-        // and filter out the pair about this `Dat`'s region
+        // - intra-region latency is assumed to be 1
         BufReader::new(file)
             .lines()
             .map(|line| line.unwrap())
