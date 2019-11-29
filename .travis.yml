@@ -17,10 +17,10 @@ cache:
 
 addons:
   apt:
-      packages:
-          - libssl-dev
+    packages:
+      - libssl-dev
 
-before_cache: |
+before_script: |
   if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
     cargo install cargo-tarpaulin -f
   fi
