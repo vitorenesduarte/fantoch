@@ -152,12 +152,6 @@ impl AllStats {
         self.get_and_unwrap(&key)
     }
 
-    fn get_and_unwrap(&self, key: &String) -> &Stats {
-        self.0.get(key).unwrap_or_else(|| {
-            panic!("stats with key {} not found", key);
-        })
-    }
-
     pub fn insert(
         &mut self,
         protocol: Protocol,
@@ -187,6 +181,12 @@ impl AllStats {
         };
         let suffix = placement.short_name();
         format!("{}{}", prefix, suffix)
+    }
+
+    fn get_and_unwrap(&self, key: &String) -> &Stats {
+        self.0.get(key).unwrap_or_else(|| {
+            panic!("stats with key {} not found", key);
+        })
     }
 }
 
