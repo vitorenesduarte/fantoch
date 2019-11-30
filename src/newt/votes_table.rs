@@ -161,9 +161,7 @@ impl VotesTable {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::Command;
-    use crate::newt::votes::VoteRange;
-    use crate::newt::votes_table::VotesTable;
+    use super::*;
     use permutator::Permutation;
 
     #[test]

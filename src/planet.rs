@@ -159,7 +159,7 @@ impl Planet {
 
 #[cfg(test)]
 mod tests {
-    use crate::planet::{Planet, Region};
+    use super::*;
     use std::collections::HashMap;
 
     // directory that contains all dat files

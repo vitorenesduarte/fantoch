@@ -86,9 +86,7 @@ impl BaseProc {
 
 #[cfg(test)]
 mod tests {
-    use crate::base::BaseProc;
-    use crate::config::Config;
-    use crate::planet::{Planet, Region};
+    use super::*;
 
     #[test]
     fn next_dot() {

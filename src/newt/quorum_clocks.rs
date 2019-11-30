@@ -69,7 +69,7 @@ impl QuorumClocks {
 
 #[cfg(test)]
 mod tests {
-    use crate::newt::quorum_clocks::QuorumClocks;
+    use super::*;
 
     #[test]
     fn contains() {

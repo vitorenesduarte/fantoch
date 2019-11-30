@@ -443,11 +443,9 @@ impl DerefMut for Newt {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::client::Client;
-    use crate::config::Config;
     use crate::newt::router::Router;
-    use crate::newt::{Message, Newt, ToSend};
-    use crate::planet::{Planet, Region};
 
     #[test]
     fn newt_parameters() {

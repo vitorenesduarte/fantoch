@@ -109,8 +109,7 @@ impl From<&str> for Dat {
 
 #[cfg(test)]
 mod tests {
-    use crate::dat::Dat;
-    use crate::planet::Region;
+    use super::*;
     use std::collections::HashMap;
 
     #[test]

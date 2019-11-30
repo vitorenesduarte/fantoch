@@ -59,8 +59,7 @@ impl Clocks {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::MultiCommand;
-    use crate::newt::clocks::Clocks;
+    use super::*;
 
     #[test]
     fn clocks_flow() {

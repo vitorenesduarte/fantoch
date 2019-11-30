@@ -104,9 +104,8 @@ impl fmt::Debug for VoteRange {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::MultiCommand;
+    use super::*;
     use crate::newt::clocks::Clocks;
-    use crate::newt::votes::Votes;
     use std::cmp::max;
 
     #[test]

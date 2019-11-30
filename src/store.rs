@@ -27,8 +27,7 @@ impl KVStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::command::Command;
-    use crate::store::KVStore;
+    use super::*;
 
     #[test]
     fn store_flow() {

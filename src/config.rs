@@ -28,7 +28,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::Config;
+    use super::*;
 
     #[test]
     fn config() {
