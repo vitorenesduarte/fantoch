@@ -33,21 +33,15 @@ impl Votes {
 
     /// Add `ProcVotes` to `Votes`.
     pub fn add(&mut self, proc_votes: ProcVotes) {
-        // create proc_votes iterator
-        let mut proc_votes = proc_votes.into_iter();
-
-        // while we iterate self
-        for (key, key_votes) in self.votes.iter_mut() {
-            // the next in proc_votes must be about the same key
-            let (vote_key, vote) = proc_votes.next().unwrap();
-            assert_eq!(*key, vote_key);
-
-            // add vote to this key's votes
-            key_votes.push(vote);
+        for (key, vote) in proc_votes {
+            // TODO the `get_mut` is not ideal since `self.votes` is a b-tree
+            self.votes
+                .get_mut(&key)
+                .unwrap_or_else(|| {
+                    panic!("key {} must be part of votes", key)
+                })
+                .push(vote);
         }
-
-        // check there's nothing else in the proc votes iterator
-        assert!(proc_votes.next().is_none());
     }
 }
 
@@ -142,7 +136,6 @@ mod tests {
         // (local) MCollect handle by p0 (command a)
         let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
         let proc_votes_a_p0 = clocks_p0.proc_votes(&cmd_a, clock_a_p0);
-        clocks_p0.bump_to(&cmd_a, clock_a_p0);
 
         // -------------------------
         // submit command ab by p1
@@ -153,19 +146,16 @@ mod tests {
         // (local) MCollect handle by p1 (command ab)
         let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
         let proc_votes_ab_p1 = clocks_p1.proc_votes(&cmd_ab, clock_ab_p1);
-        clocks_p1.bump_to(&cmd_ab, clock_ab_p1);
 
         // -------------------------
         // (remote) MCollect handle by p1 (command a)
         let clock_a_p1 = max(clock_a, clocks_p1.clock(&cmd_a) + 1);
         let proc_votes_a_p1 = clocks_p1.proc_votes(&cmd_a, clock_a_p1);
-        clocks_p1.bump_to(&cmd_a, clock_a_p1);
 
         // -------------------------
         // (remote) MCollect handle by p0 (command ab)
         let clock_ab_p0 = max(clock_ab, clocks_p0.clock(&cmd_ab) + 1);
         let proc_votes_ab_p0 = clocks_p0.proc_votes(&cmd_ab, clock_ab_p0);
-        clocks_p0.bump_to(&cmd_ab, clock_ab_p0);
 
         // -------------------------
         // MCollectAck handles by p0 (command a)

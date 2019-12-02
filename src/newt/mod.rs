@@ -159,9 +159,6 @@ impl Newt {
         // - this computation needs to occur before the next `bump_to`
         let proc_votes = self.clocks.proc_votes(&cmd, cmd_clock);
 
-        // bump all keys clocks to be `cmd_clock`
-        self.clocks.bump_to(&cmd, cmd_clock);
-
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
         if self.bp.id == dot.0 {
@@ -194,7 +191,7 @@ impl Newt {
         from: ProcId,
         dot: Dot,
         clock: u64,
-        proc_votes: ProcVotes,
+        remote_proc_votes: ProcVotes,
     ) -> ToSend {
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -206,8 +203,8 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // update votes
-        info.votes.add(proc_votes);
+        // update votes with remove votes
+        info.votes.add(remote_proc_votes);
 
         // update quorum clocks while computing max clock and its number of
         // occurences
@@ -218,7 +215,10 @@ impl Newt {
         //   operations or when handling `MCollect` from other processes) that
         //   could potentially delay the execution of this command
         let cmd = info.cmd.as_ref().unwrap();
-        self.clocks.bump_to(cmd, max_clock);
+        let local_proc_votes = self.clocks.proc_votes(cmd, max_clock);
+
+        // update votes with local votes
+        info.votes.add(local_proc_votes);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {

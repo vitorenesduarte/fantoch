@@ -31,29 +31,36 @@ impl Clocks {
     }
 
     /// Computes the votes consumed by this command.
-    pub fn proc_votes(&self, cmd: &MultiCommand, highest: u64) -> ProcVotes {
+    pub fn proc_votes(
+        &mut self,
+        cmd: &MultiCommand,
+        highest: u64,
+    ) -> ProcVotes {
         cmd.keys()
             .into_iter()
-            .map(|key| {
+            .filter_map(|key| {
                 // vote from the current clock value + 1 until the highest vote
                 // (i.e. the maximum between all key's clocks)
-                let current = self.key_clock(key);
-                let vr = VoteRange::new(self.id, current + 1, highest);
-                (key.clone(), vr)
+                let previous = self.key_clock_swap(key, highest);
+                if previous < highest {
+                    let vr = VoteRange::new(self.id, previous + 1, highest);
+                    Some((key.clone(), vr))
+                } else {
+                    None
+                }
             })
             .collect()
     }
 
-    /// Bump all keys clocks to `clock`.
-    pub fn bump_to(&mut self, cmd: &MultiCommand, clock: u64) {
-        for key in cmd.keys() {
-            self.clocks.insert(key.clone(), clock);
-        }
-    }
-
-    /// Retrives the current clock for a single key.
+    /// Retrives the current clock for a single `key`.
     fn key_clock(&self, key: &Key) -> u64 {
         self.clocks.get(key).cloned().unwrap_or(0)
+    }
+
+    /// Updates the clock of this `key` to be `value` and returns the previous
+    /// clock value.
+    fn key_clock_swap(&mut self, key: &Key, value: u64) -> u64 {
+        self.clocks.insert(key.clone(), value).unwrap_or(0)
     }
 }
 
@@ -92,9 +99,6 @@ mod tests {
         assert_eq!(proc_votes.len(), 1); // single key
         assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![1]);
 
-        // bump clocks
-        clocks.bump_to(&cmd_a, clock);
-
         // -------------------------
         // second clock for command a
         let clock = clocks.clock(&cmd_a);
@@ -107,9 +111,6 @@ mod tests {
         let proc_votes = clocks.proc_votes(&cmd_a, clock);
         assert_eq!(proc_votes.len(), 1); // single key
         assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![2]);
-
-        // bump clocks
-        clocks.bump_to(&cmd_a, clock);
 
         // -------------------------
         // first clock for command ab
@@ -124,9 +125,6 @@ mod tests {
         assert_eq!(proc_votes.len(), 2); // two keys
         assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![3]);
         assert_eq!(proc_votes.get(&key_b).unwrap().votes(), vec![1, 2, 3]);
-
-        // bump clock
-        clocks.bump_to(&cmd_ab, clock);
 
         // -------------------------
         // first clock for command b
