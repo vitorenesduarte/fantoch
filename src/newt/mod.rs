@@ -364,6 +364,8 @@ struct CommandInfo {
     // `votes` is used by the coordinator to aggregate `ProcVotes` from fast
     // quorum members
     votes: Votes,
+    // `quorum_clocks` is used by the coordinator to compute the highest clock
+    // reported by fast quorum members and the number of times it was reported
     quorum_clocks: QuorumClocks,
 }
 

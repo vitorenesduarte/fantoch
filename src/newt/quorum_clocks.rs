@@ -1,13 +1,13 @@
 use crate::base::ProcId;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct QuorumClocks {
     // fast quorum size
     q: usize,
-    // all clocks reported by the fast quorum members
-    clocks: HashMap<ProcId, u64>,
+    // set of processes that have participated in this computation
+    participants: HashSet<ProcId>,
     // cache current max clock
     max_clock: u64,
     // number of times the maximum clock has been reported
@@ -19,7 +19,7 @@ impl QuorumClocks {
     pub fn new(q: usize) -> Self {
         QuorumClocks {
             q,
-            clocks: HashMap::new(),
+            participants: HashSet::new(),
             max_clock: 0,
             max_clock_count: 0,
         }
@@ -27,16 +27,16 @@ impl QuorumClocks {
 
     /// Check if we have a clock from a given `ProcId`.
     pub fn contains(&self, proc_id: &ProcId) -> bool {
-        self.clocks.contains_key(proc_id)
+        self.participants.contains(proc_id)
     }
 
     /// Sets the new clock reported by `ProcId` and returns the maximum clock
     /// seen until now.
     pub fn add(&mut self, proc_id: ProcId, clock: u64) -> (u64, usize) {
-        assert!(self.clocks.len() < self.q);
+        assert!(self.participants.len() < self.q);
 
-        // record clock reported
-        self.clocks.insert(proc_id, clock);
+        // record new participant
+        self.participants.insert(proc_id);
 
         // update max clock and max clock count
         match self.max_clock.cmp(&clock) {
@@ -60,7 +60,7 @@ impl QuorumClocks {
 
     /// Check if we all fast quorum processes have reported their clock.
     pub fn all(&self) -> bool {
-        self.clocks.len() == self.q
+        self.participants.len() == self.q
     }
 }
 
