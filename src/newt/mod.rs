@@ -10,9 +10,6 @@ mod votes_table;
 // This module contains the definition of `QuorumClocks`.
 mod quorum_clocks;
 
-// This module contains the definition of `Router`.
-mod router;
-
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::{ClientId, Rifl};
 use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
@@ -445,7 +442,7 @@ impl DerefMut for Newt {
 mod tests {
     use super::*;
     use crate::client::Client;
-    use crate::newt::router::Router;
+    use crate::router::Router;
 
     #[test]
     fn newt_parameters() {
