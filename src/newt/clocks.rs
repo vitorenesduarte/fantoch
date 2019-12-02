@@ -19,10 +19,10 @@ impl Clocks {
         }
     }
 
-    /// Compute the clock of this command.
+    /// Retrieves the current clock for some command.
+    /// If the command touches multiple keys, returns the maximum between the
+    /// clocks associated with each key.
     pub fn clock(&self, cmd: &MultiCommand) -> u64 {
-        // compute the maximum between all clocks of the keys accessed by this
-        // command
         cmd.keys()
             .iter()
             .map(|key| self.key_clock(key))
@@ -30,20 +30,15 @@ impl Clocks {
             .unwrap_or(0)
     }
 
-    /// Retrives the current clock of some key.
-    fn key_clock(&self, key: &Key) -> u64 {
-        self.clocks.get(key).cloned().unwrap_or(0)
-    }
-
-    /// Computes `ProcVotes`.
-    pub fn proc_votes(&self, cmd: &MultiCommand, clock: u64) -> ProcVotes {
+    /// Computes the votes consumed by this command.
+    pub fn proc_votes(&self, cmd: &MultiCommand, highest: u64) -> ProcVotes {
         cmd.keys()
             .into_iter()
             .map(|key| {
                 // vote from the current clock value + 1 until the highest vote
                 // (i.e. the maximum between all key's clocks)
-                let vr =
-                    VoteRange::new(self.id, self.key_clock(key) + 1, clock);
+                let current = self.key_clock(key);
+                let vr = VoteRange::new(self.id, current + 1, highest);
                 (key.clone(), vr)
             })
             .collect()
@@ -54,6 +49,11 @@ impl Clocks {
         for key in cmd.keys() {
             self.clocks.insert(key.clone(), clock);
         }
+    }
+
+    /// Retrives the current clock for a single key.
+    fn key_clock(&self, key: &Key) -> u64 {
+        self.clocks.get(key).cloned().unwrap_or(0)
     }
 }
 

@@ -14,25 +14,21 @@ pub struct Votes {
 }
 
 impl Votes {
-    /// Creates an uninitialized `Votes` instance.
-    pub fn uninit() -> Self {
+    /// Creates an empty `Votes` instance.
+    pub fn new() -> Self {
         Votes {
             votes: BTreeMap::new(),
         }
     }
 
-    /// Creates an initialized `Votes` instance.
-    pub fn from(cmd: &MultiCommand) -> Self {
-        // create empty votes
-        let votes = cmd
-            .keys()
-            .into_iter()
-            // map each key tuple (key, empty_votes)
-            .map(|key| (key.clone(), vec![]))
-            .collect();
-
-        // return new `Votes`
-        Votes { votes }
+    /// Initializes `Votes` instance.
+    pub fn set_keys(&mut self, cmd: &MultiCommand) {
+        // insert an empty set of votes for each key
+        cmd.keys().into_iter().for_each(|key| {
+            // TODO use `Vec::with_capacity` here if we can
+            let empty_votes = vec![];
+            self.votes.insert(key.clone(), empty_votes);
+        });
     }
 
     /// Add `ProcVotes` to `Votes`.
@@ -121,7 +117,8 @@ mod tests {
         // command a
         let cmd_a_id = (100, 1); // client 100, 1st op
         let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
-        let mut votes_a = Votes::from(&cmd_a);
+        let mut votes_a = Votes::new();
+        votes_a.set_keys(&cmd_a);
 
         // command b
         let cmd_ab_id = (101, 1); // client 101, 1st op
@@ -129,7 +126,8 @@ mod tests {
             cmd_ab_id,
             vec![key_a.clone(), key_b.clone()],
         );
-        let mut votes_ab = Votes::from(&cmd_ab);
+        let mut votes_ab = Votes::new();
+        votes_ab.set_keys(&cmd_ab);
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)
@@ -140,7 +138,7 @@ mod tests {
         let clock_a = clocks_p0.clock(&cmd_a) + 1;
         assert_eq!(clock_a, 1);
 
-        // -------------------------
+        // ---------------------current_clock
         // (local) MCollect handle by p0 (command a)
         let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
         let proc_votes_a_p0 = clocks_p0.proc_votes(&cmd_a, clock_a_p0);
@@ -151,7 +149,7 @@ mod tests {
         let clock_ab = clocks_p1.clock(&cmd_ab) + 1;
         assert_eq!(clock_ab, 1);
 
-        // -------------------------
+        // ----------------------current_clock
         // (local) MCollect handle by p1 (command ab)
         let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
         let proc_votes_ab_p1 = clocks_p1.proc_votes(&cmd_ab, clock_ab_p1);

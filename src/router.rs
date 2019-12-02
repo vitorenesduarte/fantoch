@@ -57,8 +57,13 @@ impl Router {
 
     /// Route a message to some process.
     pub fn route_to_proc(&mut self, proc_id: ProcId, msg: Message) -> ToSend {
-        let newt = self.procs.get_mut(&proc_id).unwrap().get_mut();
-        newt.handle(msg)
+        self.procs
+            .get_mut(&proc_id)
+            .unwrap_or_else(|| {
+                panic!("proc {} should have been set before", proc_id);
+            })
+            .get_mut()
+            .handle(msg)
     }
 
     /// Route a message to some client.
@@ -67,7 +72,12 @@ impl Router {
         client_id: ClientId,
         commands: Vec<(Rifl, MultiCommandResult)>,
     ) -> Option<(ProcId, MultiCommand)> {
-        let client = self.clients.get_mut(&client_id).unwrap().get_mut();
-        client.handle(commands)
+        self.clients
+            .get_mut(&client_id)
+            .unwrap_or_else(|| {
+                panic!("client {} should have been set before", client_id);
+            })
+            .get_mut()
+            .handle(commands)
     }
 }

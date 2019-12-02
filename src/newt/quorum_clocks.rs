@@ -6,27 +6,23 @@ use std::collections::HashMap;
 pub struct QuorumClocks {
     // fast quorum size
     q: usize,
+    // all clocks reported by the fast quorum members
     clocks: HashMap<ProcId, u64>,
+    // cache current max clock
+    max_clock: u64,
+    // number of times the maximum clock has been reported
+    max_clock_count: usize,
 }
 
 impl QuorumClocks {
-    /// Creates an uninitiliazed `QuorumClocks` instance.
-    pub fn uninit() -> Self {
-        Self::from(0)
-    }
-
-    /// Creates an initiliazed `QuorumClocks` instance.
-    pub fn from(q: usize) -> Self {
+    /// Creates a `QuorumClocks` instance given the quorum size.
+    pub fn new(q: usize) -> Self {
         QuorumClocks {
             q,
             clocks: HashMap::new(),
+            max_clock: 0,
+            max_clock_count: 0,
         }
-    }
-
-    /// Compute the clock of this command.
-    pub fn add(&mut self, proc_id: ProcId, clock: u64) {
-        assert!(self.clocks.len() < self.q);
-        self.clocks.insert(proc_id, clock);
     }
 
     /// Check if we have a clock from a given `ProcId`.
@@ -34,36 +30,37 @@ impl QuorumClocks {
         self.clocks.contains_key(proc_id)
     }
 
-    /// Check if we have votes from all fast quorum processes.
-    pub fn all(&self) -> bool {
-        self.clocks.len() == self.q
+    /// Sets the new clock reported by `ProcId` and returns the maximum clock
+    /// seen until now.
+    pub fn add(&mut self, proc_id: ProcId, clock: u64) -> (u64, usize) {
+        assert!(self.clocks.len() < self.q);
+
+        // record clock reported
+        self.clocks.insert(proc_id, clock);
+
+        // update max clock and max clock count
+        match self.max_clock.cmp(&clock) {
+            Ordering::Less => {
+                // new max clock
+                self.max_clock = clock;
+                self.max_clock_count = 1;
+            }
+            Ordering::Equal => {
+                // same max clock, simply update its count
+                self.max_clock_count += 1;
+            }
+            Ordering::Greater => {
+                // max clock did not change, do nothing
+            }
+        };
+
+        // return max clock and number of occurrences
+        (self.max_clock, self.max_clock_count)
     }
 
-    /// Compute the maximum clock and the number of times it was reported by the
-    /// quorum.
-    pub fn max_and_count(&self) -> (u64, usize) {
-        let mut max_count = 0;
-        let max = self.clocks.iter().fold(0, |max, (_, proc_clock)| {
-            match max.cmp(proc_clock) {
-                Ordering::Less => {
-                    // we have a new max
-                    max_count = 1;
-                    *proc_clock
-                }
-                Ordering::Equal => {
-                    // same max, increment its count
-                    max_count += 1;
-                    max
-                }
-                Ordering::Greater => {
-                    // nothing to see here
-                    max
-                }
-            }
-        });
-
-        // return max and its count
-        (max, max_count)
+    /// Check if we all fast quorum processes have reported their clock.
+    pub fn all(&self) -> bool {
+        self.clocks.len() == self.q
     }
 }
 
@@ -75,7 +72,7 @@ mod tests {
     fn contains() {
         // quorum clocks
         let q = 3;
-        let mut quorum_clocks = QuorumClocks::from(q);
+        let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -98,7 +95,7 @@ mod tests {
     fn all() {
         // quorum clocks
         let q = 3;
-        let mut quorum_clocks = QuorumClocks::from(q);
+        let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
@@ -114,41 +111,28 @@ mod tests {
         // -------------
         // quorum clocks
         let q = 3;
-        let mut quorum_clocks = QuorumClocks::from(q);
+        let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
-        quorum_clocks.add(0, 10);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 1));
-        quorum_clocks.add(1, 10);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 2));
-        quorum_clocks.add(2, 10);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 3));
+        assert_eq!(quorum_clocks.add(0, 10), (10, 1));
+        assert_eq!(quorum_clocks.add(1, 10), (10, 2));
+        assert_eq!(quorum_clocks.add(2, 10), (10, 3));
 
         // -------------
         // quorum clocks
         let q = 10;
-        let mut quorum_clocks = QuorumClocks::from(q);
+        let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
-        quorum_clocks.add(0, 10);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 1));
-        quorum_clocks.add(1, 9);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 1));
-        quorum_clocks.add(2, 10);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 2));
-        quorum_clocks.add(3, 9);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 2));
-        quorum_clocks.add(4, 9);
-        assert_eq!(quorum_clocks.max_and_count(), (10, 2));
-        quorum_clocks.add(5, 12);
-        assert_eq!(quorum_clocks.max_and_count(), (12, 1));
-        quorum_clocks.add(6, 12);
-        assert_eq!(quorum_clocks.max_and_count(), (12, 2));
-        quorum_clocks.add(7, 10);
-        assert_eq!(quorum_clocks.max_and_count(), (12, 2));
-        quorum_clocks.add(8, 12);
-        assert_eq!(quorum_clocks.max_and_count(), (12, 3));
-        quorum_clocks.add(9, 13);
-        assert_eq!(quorum_clocks.max_and_count(), (13, 1));
+        assert_eq!(quorum_clocks.add(0, 10), (10, 1));
+        assert_eq!(quorum_clocks.add(1, 9), (10, 1));
+        assert_eq!(quorum_clocks.add(2, 10), (10, 2));
+        assert_eq!(quorum_clocks.add(3, 9), (10, 2));
+        assert_eq!(quorum_clocks.add(4, 9), (10, 2));
+        assert_eq!(quorum_clocks.add(5, 12), (12, 1));
+        assert_eq!(quorum_clocks.add(6, 12), (12, 2));
+        assert_eq!(quorum_clocks.add(7, 10), (12, 2));
+        assert_eq!(quorum_clocks.add(8, 12), (12, 3));
+        assert_eq!(quorum_clocks.add(9, 13), (13, 1));
     }
 }
