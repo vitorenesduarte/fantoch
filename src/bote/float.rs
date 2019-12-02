@@ -19,11 +19,11 @@ impl F64 {
     }
 
     /// Rounds the inner `f64` with 1 decimal place.
-    pub fn round(&self) -> String {
+    pub fn round(self) -> String {
         format!("{:.1}", self.0)
     }
 
-    pub fn value(&self) -> f64 {
+    pub fn value(self) -> f64 {
         self.0
     }
 }

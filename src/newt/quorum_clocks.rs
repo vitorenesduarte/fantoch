@@ -26,8 +26,8 @@ impl QuorumClocks {
     }
 
     /// Check if we have a clock from a given `ProcId`.
-    pub fn contains(&self, proc_id: &ProcId) -> bool {
-        self.participants.contains(proc_id)
+    pub fn contains(&self, proc_id: ProcId) -> bool {
+        self.participants.contains(&proc_id)
     }
 
     /// Sets the new clock reported by `ProcId` and returns the maximum clock
@@ -76,19 +76,19 @@ mod tests {
 
         // add clocks and check they're there
         quorum_clocks.add(0, 10);
-        assert!(quorum_clocks.contains(&0));
-        assert!(!quorum_clocks.contains(&1));
-        assert!(!quorum_clocks.contains(&2));
+        assert!(quorum_clocks.contains(0));
+        assert!(!quorum_clocks.contains(1));
+        assert!(!quorum_clocks.contains(2));
 
         quorum_clocks.add(1, 10);
-        assert!(quorum_clocks.contains(&0));
-        assert!(quorum_clocks.contains(&1));
-        assert!(!quorum_clocks.contains(&2));
+        assert!(quorum_clocks.contains(0));
+        assert!(quorum_clocks.contains(1));
+        assert!(!quorum_clocks.contains(2));
 
         quorum_clocks.add(2, 10);
-        assert!(quorum_clocks.contains(&0));
-        assert!(quorum_clocks.contains(&1));
-        assert!(quorum_clocks.contains(&2));
+        assert!(quorum_clocks.contains(0));
+        assert!(quorum_clocks.contains(1));
+        assert!(quorum_clocks.contains(2));
     }
 
     #[test]

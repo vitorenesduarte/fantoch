@@ -30,7 +30,7 @@ impl fmt::Debug for Stats {
 }
 
 impl Stats {
-    pub fn from(latencies: &Vec<usize>) -> Self {
+    pub fn from(latencies: &[usize]) -> Self {
         let (mean, cov, mdtm) = Stats::compute_stats(&latencies);
         Stats { mean, cov, mdtm }
     }
@@ -71,9 +71,9 @@ impl Stats {
         self.mdtm().round()
     }
 
-    fn compute_stats(xs: &Vec<usize>) -> (F64, F64, F64) {
+    fn compute_stats(xs: &[usize]) -> (F64, F64, F64) {
         // transform `usize`s in `f64`s
-        let xs: Vec<f64> = xs.into_iter().map(|&x| x as f64).collect();
+        let xs: Vec<f64> = xs.iter().map(|&x| x as f64).collect();
 
         // compute mean
         let mean = Self::compute_mean(&xs);
@@ -90,7 +90,7 @@ impl Stats {
 
     // from https://rust-lang-nursery.github.io/rust-cookbook/science/mathematics/statistics.html
     fn compute_mean(data: &[f64]) -> f64 {
-        let sum = data.into_iter().sum::<f64>();
+        let sum = data.iter().sum::<f64>();
         let count = data.len() as f64;
         // assumes `count > 0`
         sum / count
@@ -104,7 +104,7 @@ impl Stats {
     fn compute_mdtm(data: &[f64], mean: f64) -> f64 {
         let count = data.len() as f64;
         let distances_sum = data
-            .into_iter()
+            .iter()
             .map(|x| {
                 let diff = mean - x;
                 diff.abs()
@@ -121,7 +121,7 @@ impl Stats {
     fn compute_variance(data: &[f64], mean: f64) -> f64 {
         let count = data.len() as f64;
         let sum = data
-            .into_iter()
+            .iter()
             .map(|x| {
                 let diff = mean - x;
                 diff * diff
@@ -134,12 +134,14 @@ impl Stats {
 }
 
 /// Mapping from protocol name to its stats.
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize, Default,
+)]
 pub struct AllStats(BTreeMap<String, Stats>);
 
 impl AllStats {
     pub fn new() -> AllStats {
-        AllStats(BTreeMap::new())
+        Default::default()
     }
 
     pub fn get(
@@ -183,7 +185,7 @@ impl AllStats {
         format!("{}{}", prefix, suffix)
     }
 
-    fn get_and_unwrap(&self, key: &String) -> &Stats {
+    fn get_and_unwrap(&self, key: &str) -> &Stats {
         self.0.get(key).unwrap_or_else(|| {
             panic!("stats with key {} not found", key);
         })

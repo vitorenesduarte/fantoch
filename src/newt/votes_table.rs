@@ -53,13 +53,16 @@ impl MultiVotesTable {
                 let (cmd_key, cmd_action) = cmd_iter.next().unwrap();
                 assert_eq!(key, cmd_key);
 
-                // TODO can we avoid the next statement? if we do e.g. a
-                // `or_insert_with`, the borrow checker will complain
-                let empty_table =
-                    VotesTable::new(self.n, self.stability_threshold);
+                // TODO the borrow checker complains if `self.n` or
+                // `self.stability_threshold` is passed to `VotesTable::new`
+                let n = self.n;
+                let stability_threshold = self.stability_threshold;
 
                 // get this key's table
-                let table = self.tables.entry(key).or_insert(empty_table);
+                let table = self
+                    .tables
+                    .entry(key)
+                    .or_insert_with(|| VotesTable::new(n, stability_threshold));
 
                 // add command and votes to the table
                 table.add(sort_id, cmd_id, cmd_action, vote_ranges);

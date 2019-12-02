@@ -103,13 +103,13 @@ impl Search {
         // first we should rank all configs
         let all_ranked = timed!("rank all", self.rank_all(p));
 
-        // show how many ranked configs we have for each set of clients
-        let count = all_ranked
+        // show how many ranked configs we have
+        let count: usize = all_ranked
             .iter()
             .map(|(_, configs)| {
-                configs.iter().map(|(_, css)| css.len()).count()
+                configs.iter().map(|(_, css)| css.len()).sum::<usize>()
             })
-            .count();
+            .sum();
         println!("config count: {}", count);
 
         // create result variable
@@ -323,7 +323,7 @@ impl Search {
                 // only keep in the map `n` values between `min_n` and `max_n`
                 if n >= params.min_n && n <= params.max_n {
                     let css = css
-                        .into_iter()
+                        .iter()
                         .filter_map(|cs| {
                             // get stats
                             let stats = &cs.1;
@@ -344,6 +344,7 @@ impl Search {
     }
 
     // TODO `configs` and `super_configs` are super similar
+    #[allow(clippy::iter_cloned_collect)]
     fn configs<'a>(
         ranked: &Ranked<'a>,
         n: usize,
@@ -353,8 +354,8 @@ impl Search {
             .unwrap_or_else(|| {
                 panic!("configs for n = {} should be ranked!", n)
             })
-            .into_iter()
-            .map(|&r| r)
+            .iter()
+            .cloned()
             // TODO can we avoid collecting here?
             // I wasn't able to do it due to lifetime issues
             .collect::<Vec<_>>()
@@ -375,13 +376,12 @@ impl Search {
             .unwrap_or_else(|| {
                 panic!("super configs for n = {} should be ranked!", n)
             })
-            .into_iter()
+            .iter()
             .filter(|(_, (config, stats))| {
                 config.is_superset(prev_config)
                     && Self::min_mean_decrease(stats, prev_stats, n, params)
             })
-            // TODO Is `.cloned()` equivalent to `.map(|&r| r)` here?
-            .map(|&r| r)
+            .cloned()
             // TODO can we avoid collecting here?
             // I wasn't able to do it due to lifetime issues
             .collect::<Vec<_>>()
@@ -454,7 +454,7 @@ impl Search {
             }
 
             // update score: give extra weigth for epaxos improv
-            let weight = F64::new(30 as f64);
+            let weight = F64::new(30_f64);
             score += fpaxos_mean_improv + (weight * epaxos_mean_improv);
         }
 
@@ -474,12 +474,12 @@ impl Search {
         format!("{}_{}_{}.data", min_n, max_n, search_input)
     }
 
-    fn get_saved_search(name: &String) -> Option<Search> {
+    fn get_saved_search(name: &str) -> Option<Search> {
         // open the file in read-only
         File::open(name)
             .ok()
             // create a buf reader
-            .map(|file| BufReader::new(file))
+            .map(BufReader::new)
             // and try to deserialize
             .map(|reader| {
                 bincode::deserialize_from(reader)
@@ -487,17 +487,18 @@ impl Search {
             })
     }
 
-    fn save_search(name: &String, search: &Search) {
+    fn save_search(name: &str, search: &Search) {
         // if the file does not exist it will be created, otherwise truncated
         File::create(name)
             .ok()
             // create a buf writer
-            .map(|file| BufWriter::new(file))
+            .map(BufWriter::new)
             // and try to serialize
             .map(|writer| {
                 bincode::serialize_into(writer, search)
                     .expect("error serializing search")
-            });
+            })
+            .unwrap_or_else(|| panic!("couldn't save seach"));
     }
 }
 

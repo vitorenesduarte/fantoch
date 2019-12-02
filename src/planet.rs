@@ -86,7 +86,7 @@ impl Planet {
 
         // create a mapping from region to its sorted index
         let region_to_index = sorted_regions
-            .into_iter()
+            .iter()
             // drop latencies
             .map(|(_, to)| to)
             .enumerate()
@@ -132,14 +132,14 @@ impl Planet {
         for r in regions.iter() {
             write!(&mut output, " {:?} |", r)?;
         }
-        writeln!(&mut output, "")?;
+        writeln!(&mut output)?;
 
         // end header
         write!(&mut output, "|:---:|")?;
         for _ in regions.iter() {
             write!(&mut output, ":---:|")?;
         }
-        writeln!(&mut output, "")?;
+        writeln!(&mut output)?;
 
         // for each region a
         for a in regions.iter() {
@@ -150,7 +150,7 @@ impl Planet {
                 let lat = self.latency(a, b).unwrap();
                 write!(&mut output, " {} |", lat)?;
             }
-            writeln!(&mut output, "")?;
+            writeln!(&mut output)?;
         }
 
         Ok(output)

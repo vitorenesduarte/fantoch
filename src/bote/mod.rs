@@ -34,7 +34,7 @@ impl Bote {
         quorum_size: usize,
     ) -> Stats {
         let latencies: Vec<_> = clients
-            .into_iter()
+            .iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
                 let (client_to_closest, closest) =
@@ -165,7 +165,7 @@ impl Bote {
             // sort by distance
             .sorted_by_distance(from)
             .unwrap()
-            .into_iter()
+            .iter()
             // keep only the regions in this configuration
             .filter(|(_, to)| regions.contains(to))
             // select the nth region

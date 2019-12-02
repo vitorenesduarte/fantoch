@@ -8,7 +8,7 @@ use std::fmt;
 pub type ProcVotes = BTreeMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Votes {
     votes: BTreeMap<Key, Vec<VoteRange>>,
 }
@@ -16,9 +16,7 @@ pub struct Votes {
 impl Votes {
     /// Creates an empty `Votes` instance.
     pub fn new() -> Self {
-        Votes {
-            votes: BTreeMap::new(),
-        }
+        Default::default()
     }
 
     /// Initializes `Votes` instance.
@@ -37,9 +35,7 @@ impl Votes {
             // TODO the `get_mut` is not ideal since `self.votes` is a b-tree
             self.votes
                 .get_mut(&key)
-                .unwrap_or_else(|| {
-                    panic!("key {} must be part of votes", key)
-                })
+                .unwrap_or_else(|| panic!("key {} must be part of votes", key))
                 .push(vote);
         }
     }
