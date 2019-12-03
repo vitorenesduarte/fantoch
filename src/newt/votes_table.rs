@@ -15,7 +15,7 @@ pub struct MultiVotesTable {
 impl MultiVotesTable {
     /// Create a new `MultiVotesTable` instance given the stability threshold.
     pub fn new(n: usize, stability_threshold: usize) -> Self {
-        MultiVotesTable {
+        Self {
             n,
             stability_threshold,
             tables: HashMap::new(),
@@ -96,7 +96,7 @@ impl VotesTable {
         let ids = (1..=n).map(|id| id as u64);
         let votes = AEClock::with(ids);
         assert_eq!(votes.len(), n);
-        VotesTable {
+        Self {
             n,
             stability_threshold,
             votes,
@@ -188,7 +188,9 @@ mod tests {
 
         // a1
         let a1 = Command::Put(String::from("A1"));
-        let a1_dot = (proc_id_1, 1);
+        // assumes a single client per process that has the same id as the
+        // process
+        let a1_rifl = Rifl::new(proc_id_1, 1);
         // p1, final clock = 1
         let a1_sort_id = (1, proc_id_1);
         // p1, p2 and p3 voted with 1
@@ -200,7 +202,7 @@ mod tests {
 
         // c1
         let c1 = Command::Put(String::from("C1"));
-        let c1_dot = (proc_id_3, 1);
+        let c1_rifl = Rifl::new(proc_id_3, 1);
         // p3, final clock = 3
         let c1_sort_id = (3, proc_id_3);
         // p1 voted with 2, p2 voted with 3 and p3 voted with 2
@@ -212,7 +214,7 @@ mod tests {
 
         // d1
         let d1 = Command::Put(String::from("D1"));
-        let d1_dot = (proc_id_4, 1);
+        let d1_rifl = Rifl::new(proc_id_4, 1);
         // p4, final clock = 3
         let d1_sort_id = (3, proc_id_4);
         // p2 voted with 2, p3 voted with 3 and p4 voted with 1-3
@@ -224,7 +226,7 @@ mod tests {
 
         // e1
         let e1 = Command::Put(String::from("E1"));
-        let e1_dot = (proc_id_5, 1);
+        let e1_rifl = Rifl::new(proc_id_5, 1);
         // p5, final clock = 4
         let e1_sort_id = (4, proc_id_5);
         // p1 voted with 3, p4 voted with 4 and p5 voted with 1-4
@@ -236,7 +238,7 @@ mod tests {
 
         // e2
         let e2 = Command::Put(String::from("E2"));
-        let e2_dot = (proc_id_5, 2);
+        let e2_rifl = Rifl::new(proc_id_5, 2);
         // p5, final clock = 5
         let e2_sort_id = (5, proc_id_5);
         // p1 voted with 4-5, p4 voted with 5 and p5 voted with 5
@@ -247,50 +249,50 @@ mod tests {
         ];
 
         // add a1 to table
-        table.add(a1_sort_id, a1_dot, a1.clone(), a1_votes.clone());
+        table.add(a1_sort_id, a1_rifl, a1.clone(), a1_votes.clone());
         // get stable: a1
         let stable: Vec<_> = table.stable_commands().collect();
-        assert_eq!(stable, vec![(a1_dot, a1.clone())]);
+        assert_eq!(stable, vec![(a1_rifl, a1.clone())]);
 
         // add d1 to table
-        table.add(d1_sort_id, d1_dot, d1.clone(), d1_votes.clone());
+        table.add(d1_sort_id, d1_rifl, d1.clone(), d1_votes.clone());
         // get stable: none
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![]);
 
         // add c1 to table
-        table.add(c1_sort_id, c1_dot, c1.clone(), c1_votes.clone());
+        table.add(c1_sort_id, c1_rifl, c1.clone(), c1_votes.clone());
         // get stable: c1 then d1
         let stable: Vec<_> = table.stable_commands().collect();
-        assert_eq!(stable, vec![(c1_dot, c1.clone()), (d1_dot, d1.clone())]);
+        assert_eq!(stable, vec![(c1_rifl, c1.clone()), (d1_rifl, d1.clone())]);
 
         // add e2 to table
-        table.add(e2_sort_id, e2_dot, e2.clone(), e2_votes.clone());
+        table.add(e2_sort_id, e2_rifl, e2.clone(), e2_votes.clone());
         // get stable: none
         let stable: Vec<_> = table.stable_commands().collect();
         assert_eq!(stable, vec![]);
 
         // add e1 to table
-        table.add(e1_sort_id, e1_dot, e1.clone(), e1_votes.clone());
+        table.add(e1_sort_id, e1_rifl, e1.clone(), e1_votes.clone());
         // get stable: none
         let stable: Vec<_> = table.stable_commands().collect();
-        assert_eq!(stable, vec![(e1_dot, e1.clone()), (e2_dot, e2.clone())]);
+        assert_eq!(stable, vec![(e1_rifl, e1.clone()), (e2_rifl, e2.clone())]);
 
         // run all the permutations of the above and check that the final total
         // order is the same
         let total_order = vec![
-            (a1_dot, a1.clone()),
-            (c1_dot, c1.clone()),
-            (d1_dot, d1.clone()),
-            (e1_dot, e1.clone()),
-            (e2_dot, e2.clone()),
+            (a1_rifl, a1.clone()),
+            (c1_rifl, c1.clone()),
+            (d1_rifl, d1.clone()),
+            (e1_rifl, e1.clone()),
+            (e2_rifl, e2.clone()),
         ];
         let mut all_ops = vec![
-            (a1_sort_id, a1_dot, a1, a1_votes),
-            (c1_sort_id, c1_dot, c1, c1_votes),
-            (d1_sort_id, d1_dot, d1, d1_votes),
-            (e1_sort_id, e1_dot, e1, e1_votes),
-            (e2_sort_id, e2_dot, e2, e2_votes),
+            (a1_sort_id, a1_rifl, a1, a1_votes),
+            (c1_sort_id, c1_rifl, c1, c1_votes),
+            (d1_sort_id, d1_rifl, d1, d1_votes),
+            (e1_sort_id, e1_rifl, e1, e1_votes),
+            (e2_sort_id, e2_rifl, e2, e2_votes),
         ];
 
         all_ops.permutation().for_each(|p| {

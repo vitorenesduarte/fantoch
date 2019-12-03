@@ -57,7 +57,7 @@ impl Search {
         // get filename
         let filename = Self::filename(min_n, max_n, &search_input);
 
-        timed!("get saved search", Search::get_saved_search(&filename))
+        timed!("get saved search", Self::get_saved_search(&filename))
             .unwrap_or_else(|| {
                 // create planet
                 let planet = Planet::new(lat_dir);
@@ -78,7 +78,7 @@ impl Search {
                 );
 
                 // create a new `Search` instance
-                let search = Search { all_configs };
+                let search = Self { all_configs };
 
                 // save it if `save_search`
                 if save_search {
@@ -625,7 +625,7 @@ impl RankingParams {
         max_n: usize,
         ft_metric: FTMetric,
     ) -> Self {
-        RankingParams {
+        Self {
             min_mean_fpaxos_improv: F64::new(min_mean_fpaxos_improv as f64),
             min_mean_epaxos_improv: F64::new(min_mean_epaxos_improv as f64),
             min_fairness_fpaxos_improv: F64::new(

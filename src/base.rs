@@ -30,7 +30,7 @@ impl BaseProc {
         // we may rely on the fact that a zero accepted ballot means the process
         // has never been through Paxos phase-2, all ids must non-zero
         assert!(id != 0);
-        BaseProc {
+        Self {
             id,
             region,
             planet,

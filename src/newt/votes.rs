@@ -68,7 +68,7 @@ impl VoteRange {
     /// Create a new `VoteRange` instance.
     pub fn new(by: ProcId, start: u64, end: u64) -> Self {
         assert!(start <= end);
-        VoteRange { by, start, end }
+        Self { by, start, end }
     }
 
     /// Get which process voted.
@@ -105,6 +105,7 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::Rifl;
     use crate::newt::clocks::Clocks;
     use std::cmp::max;
 
@@ -119,15 +120,15 @@ mod tests {
         let key_b = String::from("B");
 
         // command a
-        let cmd_a_id = (100, 1); // client 100, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
+        let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
+        let cmd_a = MultiCommand::get(cmd_a_rifl, key_a.clone());
         let mut votes_a = Votes::new();
         votes_a.set_keys(&cmd_a);
 
         // command b
-        let cmd_ab_id = (101, 1); // client 101, 1st op
+        let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab = MultiCommand::multi_get(
-            cmd_ab_id,
+            cmd_ab_rifl,
             vec![key_a.clone(), key_b.clone()],
         );
         let mut votes_ab = Votes::new();

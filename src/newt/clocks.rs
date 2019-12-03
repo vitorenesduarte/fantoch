@@ -13,7 +13,7 @@ pub struct Clocks {
 impl Clocks {
     /// Create a new `Clocks` instance.
     pub fn new(id: ProcId) -> Self {
-        Clocks {
+        Self {
             id,
             clocks: HashMap::new(),
         }
@@ -70,6 +70,7 @@ impl Clocks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::Rifl;
 
     #[test]
     fn clocks_flow() {
@@ -79,9 +80,9 @@ mod tests {
         // keys and commands
         let key_a = String::from("A");
         let key_b = String::from("B");
-        let cmd_a_id = (100, 1); // client 100, 1st op
-        let cmd_b_id = (101, 1); // client 101, 1st op
-        let cmd_ab_id = (102, 1); // client 102, 1st op
+        let cmd_a_id = Rifl::new(100, 1); // client 100, 1st op
+        let cmd_b_id = Rifl::new(101, 1); // client 101, 1st op
+        let cmd_ab_id = Rifl::new(102, 1); // client 102, 1st op
         let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
         let cmd_b = MultiCommand::get(cmd_b_id, key_b.clone());
         let cmd_ab = MultiCommand::multi_get(

@@ -14,11 +14,11 @@ pub struct Bote {
 impl Bote {
     pub fn new(lat_dir: &str) -> Self {
         let planet = Planet::new(lat_dir);
-        Bote::from(planet)
+        Self::from(planet)
     }
 
     pub fn from(planet: Planet) -> Self {
-        Bote { planet }
+        Self { planet }
     }
 
     /// Computes `Stats` for a leaderless-based protocol with a given

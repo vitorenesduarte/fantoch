@@ -22,7 +22,7 @@ pub struct MultiCommand {
 impl MultiCommand {
     /// Create a new `MultiCommand`.
     pub fn new(rifl: Rifl, commands: BTreeMap<Key, Command>) -> Self {
-        MultiCommand { rifl, commands }
+        Self { rifl, commands }
     }
 
     /// Create a new `MultiCommand` from an iterator.
@@ -73,7 +73,7 @@ impl IntoIterator for MultiCommand {
 /// Structure that aggregates partial results of multi-key commands.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MultiCommandResult {
-    id: Rifl,
+    rifl: Rifl,
     key_count: usize,
     results: HashMap<Key, CommandResult>,
 }
@@ -81,9 +81,9 @@ pub struct MultiCommandResult {
 impl MultiCommandResult {
     /// Creates a new `MultiCommandResult` given the number of keys accessed by
     /// the command.
-    pub fn new(id: Rifl, key_count: usize) -> Self {
-        MultiCommandResult {
-            id,
+    pub fn new(rifl: Rifl, key_count: usize) -> Self {
+        Self {
+            rifl,
             key_count,
             results: HashMap::new(),
         }
@@ -91,7 +91,7 @@ impl MultiCommandResult {
 
     /// Adds a partial command result to the overall result.
     /// Returns a boolean indicating whether the full result is ready.
-    fn add_partial(&mut self, key: Key, result: CommandResult) -> bool {
+    pub fn add_partial(&mut self, key: Key, result: CommandResult) -> bool {
         let res = self.results.insert(key, result);
         // assert there was nothing about this key previously
         assert!(res.is_none());
@@ -101,57 +101,12 @@ impl MultiCommandResult {
     }
 
     /// Returns the command identifier (RIFL) of this comand.
-    pub fn id(&self) -> Rifl {
-        self.id
+    pub fn rifl(&self) -> Rifl {
+        self.rifl
     }
 
     /// Returns the commands results.
     pub fn results(&self) -> &HashMap<Key, CommandResult> {
         &self.results
-    }
-}
-
-/// Structure that tracks the progress of pending commands.
-#[derive(Default)]
-pub struct Pending {
-    pending: HashMap<Rifl, MultiCommandResult>,
-}
-
-impl Pending {
-    /// Creates a new `Pending` instance.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Starts tracking a command submitted by some client.
-    pub fn start(&mut self, cmd: &MultiCommand) {
-        // create `MultiCommandResult`
-        let cmd_result = MultiCommandResult::new(cmd.rifl(), cmd.key_count());
-
-        // add it to pending
-        self.pending.insert(cmd.rifl(), cmd_result);
-    }
-
-    /// Adds a new partial command result.
-    pub fn add_partial(
-        &mut self,
-        id: Rifl,
-        key: Key,
-        result: CommandResult,
-    ) -> Option<MultiCommandResult> {
-        // get current result:
-        // - if it's not part of pending, then ignore it
-        // (if it's not part of pending, it means that it is from a client
-        // from another newt process, and `pending.start` has not been called)
-        let cmd_result = self.pending.get_mut(&id)?;
-
-        // add partial result:
-        // - if it's complete, remove it from pending and return it
-        let is_complete = cmd_result.add_partial(key, result);
-        if is_complete {
-            self.pending.remove(&id)
-        } else {
-            None
-        }
     }
 }

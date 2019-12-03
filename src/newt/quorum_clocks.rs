@@ -17,7 +17,7 @@ pub struct QuorumClocks {
 impl QuorumClocks {
     /// Creates a `QuorumClocks` instance given the quorum size.
     pub fn new(q: usize) -> Self {
-        QuorumClocks {
+        Self {
             q,
             participants: HashSet::new(),
             max_clock: 0,

@@ -12,7 +12,7 @@ pub struct KVStore {
 impl KVStore {
     /// Creates a new `KVStore` instance.
     pub fn new() -> Self {
-        KVStore::default()
+        Default::default()
     }
 
     /// Executes a `Command` on the `KVStore`.

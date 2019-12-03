@@ -12,7 +12,7 @@ impl Config {
     /// The second argument `f` represents the number of faults tolerated by the
     /// system.
     pub fn new(n: usize, f: usize) -> Self {
-        Config { n, f }
+        Self { n, f }
     }
 
     /// Retrieve the number of procs.

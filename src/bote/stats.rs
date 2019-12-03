@@ -32,7 +32,7 @@ impl fmt::Debug for Stats {
 impl Stats {
     pub fn from(latencies: &[usize]) -> Self {
         let (mean, cov, mdtm) = Stats::compute_stats(&latencies);
-        Stats { mean, cov, mdtm }
+        Self { mean, cov, mdtm }
     }
 
     pub fn mean_improv(&self, other: &Self) -> F64 {

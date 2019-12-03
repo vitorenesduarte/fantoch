@@ -13,7 +13,8 @@ mod quorum_clocks;
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::{ClientId, Rifl};
 use crate::config::Config;
-use crate::kvs::command::{Command, MultiCommand, MultiCommandResult, Pending};
+use crate::kvs::command::{Command, MultiCommand, MultiCommandResult};
+use crate::kvs::pending::Pending;
 use crate::kvs::store::{KVStore, Key};
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
@@ -54,7 +55,7 @@ impl Newt {
         let pending = Pending::new();
 
         // create `Newt`
-        Newt {
+        Self {
             bp,
             clocks,
             cmds_info,
@@ -315,12 +316,16 @@ impl Newt {
 
                 // if there's a new `MultiCommand` ready, add it to output var
                 if let Some(ready) = res {
-                    let rifl = ready.id();
-                    let client_id = rifl.0;
-                    let client_ready = ready_commands
+                    // get rifl and client id
+                    let rifl = ready.rifl();
+                    let client_id = rifl.client_id();
+
+                    // get the commands already ready for this client and add a
+                    // new one
+                    ready_commands
                         .entry(client_id)
-                        .or_insert_with(Vec::new);
-                    client_ready.push((rifl, ready));
+                        .or_insert_with(Vec::new)
+                        .push((rifl, ready));
                 }
             }
         }
@@ -337,7 +342,7 @@ struct CommandsInfo {
 
 impl CommandsInfo {
     fn new(q: usize) -> Self {
-        CommandsInfo {
+        Self {
             q,
             dot_to_info: HashMap::new(),
         }
@@ -372,7 +377,7 @@ struct CommandInfo {
 
 impl CommandInfo {
     fn new(q: usize) -> Self {
-        CommandInfo {
+        Self {
             status: Status::START,
             quorum: vec![],
             cmd: None,
