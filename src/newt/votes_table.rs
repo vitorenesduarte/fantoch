@@ -115,13 +115,9 @@ impl VotesTable {
         assert!(res.is_none());
 
         // update votes with the votes used on this command
-        // TODO the following step could be more efficient if `threshold::Clock`
-        // supports adding ranges to the clock add all vote ranges to votes
-        vote_ranges.into_iter().for_each(|vote_range| {
-            vote_range.votes().into_iter().for_each(|vote| {
-                // always assert that it's a new vote
-                assert!(self.votes.add(&vote_range.voter(), vote));
-            })
+        vote_ranges.into_iter().for_each(|range| {
+            // assert there's at least one new vote
+            assert!(self.votes.add_range(&range.voter(), range.start(), range.end()))
         });
     }
 

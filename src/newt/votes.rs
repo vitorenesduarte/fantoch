@@ -102,6 +102,16 @@ impl VoteRange {
         self.by
     }
 
+    /// Get range start.
+    pub fn start(&self) -> u64 {
+        self.start
+    }
+
+    /// Get range end.
+    pub fn end(&self) -> u64 {
+        self.end
+    }
+
     /// Get all votes in this range.
     pub fn votes(&self) -> Vec<u64> {
         (self.start..=self.end).collect()
