@@ -209,14 +209,12 @@ impl Newt {
         // occurences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
-        // bump all keys clocks in `cmd` to be `max_clock`
+        // optimization: bump all keys clocks in `cmd` to be `max_clock`
         // - this prevents us from generating votes (either clients submit new
         //   operations or when handling `MCollect` from other processes) that
         //   could potentially delay the execution of this command
         let cmd = info.cmd.as_ref().unwrap();
         let local_proc_votes = self.clocks.proc_votes(cmd, max_clock);
-
-        // update votes with local votes
         info.votes.add(local_proc_votes);
 
         // check if we have all necessary replies

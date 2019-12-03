@@ -5,7 +5,7 @@ use std::collections::btree_map::{self, BTreeMap};
 use std::fmt;
 
 /// `ProcVotes` are the Votes by some process on some command.
-pub type ProcVotes = BTreeMap<Key, VoteRange>;
+pub type ProcVotes = BTreeMap<Key, Option<VoteRange>>;
 
 /// Votes are all Votes on some command.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -31,13 +31,43 @@ impl Votes {
 
     /// Add `ProcVotes` to `Votes`.
     pub fn add(&mut self, proc_votes: ProcVotes) {
-        for (key, vote) in proc_votes {
-            // TODO the `get_mut` is not ideal since `self.votes` is a b-tree
-            self.votes
-                .get_mut(&key)
-                .unwrap_or_else(|| panic!("key {} must be part of votes", key))
-                .push(vote);
-        }
+        self.votes.iter_mut().zip(proc_votes.into_iter()).for_each(
+            |((key, current_votes), (vote_key, vote))| {
+                // each item from zip should be about the same key
+                assert_eq!(*key, vote_key);
+
+                // add vote to this key's votes
+                match vote {
+                    Some(vote) => {
+                        current_votes.push(vote);
+                    }
+                    None => {}
+                }
+            },
+        );
+        // // create proc_votes iterator
+        // let mut proc_votes = proc_votes.into_iter();
+
+        // // while we iterate self
+        // for (key, key_votes) in self.votes.iter_mut() {
+        //     // the next in proc_votes must be about the same key
+        //     let (vote_key, vote) = proc_votes.next().unwrap();
+        //     assert_eq!(*key, vote_key);
+
+        //     // add vote to this key's votes
+        //     key_votes.push(vote);
+        // }
+
+        // // check there's nothing else in the proc votes iterator
+        // assert!(proc_votes.next().is_none());
+
+        // for (key, vote) in proc_votes {
+        //     // TODO the `get_mut` is not ideal since `self.votes` is a b-tree
+        //     self.votes
+        //         .get_mut(&key)
+        //         .unwrap_or_else(|| panic!("key {} must be part of votes",
+        // key))         .push(vote);
+        // }
     }
 }
 
