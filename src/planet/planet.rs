@@ -46,36 +46,9 @@ impl Planet {
     }
 
     /// Returns a list of `Region`s sorted by the distance to the `Region`
-    /// passed as argument.
-    pub fn sorted_by_distance(
-        &self,
-        from: &Region,
-    ) -> Option<&Vec<(usize, Region)>> {
+    /// passed as argument. The distance to each region is also returned.
+    pub fn sorted(&self, from: &Region) -> Option<&Vec<(usize, Region)>> {
         self.sorted_by_distance.get(from)
-    }
-
-    /// Returns a list of `Region`s sorted by the distance to the `Region`
-    /// passed as argument.
-    // TODO should this be here or simply expose `sorted_by_distance`?
-    pub fn sorted_by_distance_and_indexed(
-        &self,
-        from: &Region,
-    ) -> Option<HashMap<&Region, usize>> {
-        // get sorted regions
-        let sorted_regions = self.sorted_by_distance(from)?;
-
-        // create a mapping from region to its sorted index
-        let region_to_index = sorted_regions
-            .iter()
-            // drop latencies
-            .map(|(_, to)| to)
-            .enumerate()
-            // reverse: now regions map to sort index
-            .map(|(index, to)| (to, index))
-            .collect();
-
-        // return region to index mapping
-        Some(region_to_index)
     }
 
     /// Returns a mapping from region to regions sorted by distance (ASC).
@@ -140,7 +113,6 @@ impl Planet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     // directory that contains all dat files
     const LAT_DIR: &str = "latency/";
@@ -164,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn sorted_by_distance_and_indexed() {
+    fn sorted_by_distance() {
         // planet
         let lat_dir = "latency/";
         let planet = Planet::new(lat_dir);
@@ -196,17 +168,14 @@ mod tests {
             Region::new("asia-southeast1"),
             Region::new("asia-south1"),
         ];
-        // create a mapping from region to its sorted index
-        let expected: HashMap<_, _> = expected
-            .iter()
-            .enumerate()
-            .map(|(index, region)| (region, index))
+        let res: Vec<_> = planet
+            .sorted(&eu_w3)
+            .unwrap()
+            .into_iter()
+            .map(|(_, region)| region)
+            .cloned()
             .collect();
-
-        assert_eq!(
-            planet.sorted_by_distance_and_indexed(&eu_w3).unwrap(),
-            expected
-        );
+        assert_eq!(res, expected);
     }
 
     #[test]

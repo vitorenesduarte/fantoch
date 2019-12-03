@@ -163,7 +163,7 @@ impl Bote {
     ) -> &(usize, Region) {
         self.planet
             // sort by distance
-            .sorted_by_distance(from)
+            .sorted(from)
             .unwrap()
             .iter()
             // keep only the regions in this configuration

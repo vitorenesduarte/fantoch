@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::planet::{Planet, Region};
+use std::collections::HashMap;
 
 pub type ProcId = u64;
 
@@ -61,10 +62,15 @@ impl BaseProc {
 
     /// Updates the processes known by this process.
     pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) {
-        let region_to_index = self
+        let region_to_index: HashMap<_, _> = self
             .planet
-            .sorted_by_distance_and_indexed(&self.region)
-            .unwrap();
+            .sorted(&self.region)
+            .unwrap()
+            .into_iter()
+            .map(|(_, region)| region)
+            .enumerate()
+            .map(|(index, region)| (region, index))
+            .collect();
 
         // use the region order (based on distance) to order processes
         // - if two processes are from the same region, they're sorted by id
