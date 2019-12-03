@@ -9,7 +9,7 @@ pub struct Planet {
     /// A and B
     latencies: HashMap<Region, HashMap<Region, usize>>,
     /// mapping from each region to the regions sorted by distance
-    sorted_by_distance: HashMap<Region, Vec<(usize, Region)>>,
+    sorted: HashMap<Region, Vec<(usize, Region)>>,
 }
 
 impl Planet {
@@ -21,14 +21,11 @@ impl Planet {
             .map(|dat| (dat.region(), dat.latencies()))
             .collect();
 
-        // also create sorted by distance
-        let sorted_by_distance = Self::sort_by_distance(latencies.clone());
+        // also create sorted
+        let sorted = Self::sort_by_distance(latencies.clone());
 
         // return a new planet
-        Planet {
-            latencies,
-            sorted_by_distance,
-        }
+        Planet { latencies, sorted }
     }
 
     /// Retrieves a list with all regions.
@@ -48,7 +45,7 @@ impl Planet {
     /// Returns a list of `Region`s sorted by the distance to the `Region`
     /// passed as argument. The distance to each region is also returned.
     pub fn sorted(&self, from: &Region) -> Option<&Vec<(usize, Region)>> {
-        self.sorted_by_distance.get(from)
+        self.sorted.get(from)
     }
 
     /// Returns a mapping from region to regions sorted by distance (ASC).
@@ -136,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn sorted_by_distance() {
+    fn sorted() {
         // planet
         let lat_dir = "latency/";
         let planet = Planet::new(lat_dir);
@@ -168,6 +165,8 @@ mod tests {
             Region::new("asia-southeast1"),
             Region::new("asia-south1"),
         ];
+        // get sorted regions from `eu_w3`, drop the distance and clone the
+        // region
         let res: Vec<_> = planet
             .sorted(&eu_w3)
             .unwrap()
