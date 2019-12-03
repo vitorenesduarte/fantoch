@@ -2,7 +2,24 @@ use crate::config::Config;
 use crate::planet::{Planet, Region};
 
 pub type ProcId = u64;
-pub type Dot = (ProcId, u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Dot {
+    proc_id: ProcId,
+    seq: u64,
+}
+
+impl Dot {
+    /// Creates a new `Dot` identifier.
+    pub fn new(proc_id: ProcId, seq: u64) -> Self {
+        Self { proc_id, seq }
+    }
+
+    /// Retrieves the identifier of the process that created this `Dot`.
+    pub fn proc_id(&self) -> ProcId {
+        self.proc_id
+    }
+}
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {
@@ -84,7 +101,7 @@ impl BaseProc {
     /// Increments `cmd_count` and returns the next dot.
     pub fn next_dot(&mut self) -> Dot {
         self.cmd_count += 1;
-        (self.id, self.cmd_count)
+        Dot::new(self.id, self.cmd_count)
     }
 }
 
@@ -106,9 +123,9 @@ mod tests {
         let q = 2;
         let mut bp = BaseProc::new(id, region, planet, config, q);
 
-        assert_eq!(bp.next_dot(), (id, 1));
-        assert_eq!(bp.next_dot(), (id, 2));
-        assert_eq!(bp.next_dot(), (id, 3));
+        assert_eq!(bp.next_dot(), Dot::new(id, 1));
+        assert_eq!(bp.next_dot(), Dot::new(id, 2));
+        assert_eq!(bp.next_dot(), Dot::new(id, 3));
     }
 
     #[test]

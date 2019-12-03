@@ -13,9 +13,12 @@ pub struct Rifl {
 }
 
 impl Rifl {
+    /// Creates a new `Rifl` identifier.
     pub fn new(client_id: ClientId, seq: u64) -> Self {
         Self { client_id, seq }
     }
+
+    /// Retrieves the identifier of the client that created this `Rifl`.
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }

@@ -166,8 +166,7 @@ impl Newt {
 
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
-        let original_coordinator = dot.0;
-        if self.bp.id == original_coordinator {
+        if self.bp.id == dot.proc_id() {
             info.votes.set_keys(&cmd);
         }
 
@@ -272,13 +271,9 @@ impl Newt {
         // local key's clock
 
         // update votes table and get commands that can be executed
-        let original_coordinator = dot.0;
-        let to_execute = self.table.add(
-            original_coordinator,
-            info.cmd.clone(),
-            info.clock,
-            votes,
-        );
+        let to_execute =
+            self.table
+                .add(dot.proc_id(), info.cmd.clone(), info.clock, votes);
 
         // execute commands
         match to_execute {
@@ -595,7 +590,7 @@ mod tests {
         if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect
         {
             assert_eq!(from, target_proc);
-            assert_eq!(dot, (target_proc, 2));
+            assert_eq!(dot, Dot::new(target_proc, 2));
         } else {
             panic!("Message::MCollect not found!");
         }
