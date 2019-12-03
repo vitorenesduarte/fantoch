@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::kvs::command::{MultiCommand, MultiCommandResult};
-use crate::kvs::store::Key;
+use crate::kvs::Key;
 use rand::Rng;
 
 pub type ClientId = u64;

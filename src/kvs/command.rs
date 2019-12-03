@@ -1,5 +1,5 @@
 use crate::client::Rifl;
-use crate::kvs::store::{Key, Value};
+use crate::kvs::{Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;
 use std::iter::{self, FromIterator};

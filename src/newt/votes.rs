@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::kvs::command::MultiCommand;
-use crate::kvs::store::Key;
+use crate::kvs::Key;
 use std::collections::btree_map::{self, BTreeMap};
 use std::fmt;
 

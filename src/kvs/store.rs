@@ -1,8 +1,6 @@
 use crate::kvs::command::{Command, CommandResult};
+use crate::kvs::{Key, Value};
 use std::collections::HashMap;
-
-pub type Key = String;
-pub type Value = String;
 
 #[derive(Default)]
 pub struct KVStore {

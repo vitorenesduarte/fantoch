@@ -1,6 +1,6 @@
 use crate::client::Rifl;
 use crate::kvs::command::{CommandResult, MultiCommand, MultiCommandResult};
-use crate::kvs::store::Key;
+use crate::kvs::Key;
 use std::collections::HashMap;
 
 /// Structure that tracks the progress of pending commands.
