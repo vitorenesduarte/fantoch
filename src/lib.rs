@@ -1,6 +1,3 @@
-// This module contains the definition of `Dat`.
-mod dat;
-
 // This module contains the definition of `Region` and `Planet`.
 pub mod planet;
 

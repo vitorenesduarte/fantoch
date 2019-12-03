@@ -1,27 +1,7 @@
-use crate::dat::Dat;
-use serde::{Deserialize, Serialize};
+use crate::planet::dat::Dat;
+use crate::planet::Region;
 use std::collections::HashMap;
 use std::fmt::{self, Write};
-
-#[derive(
-    Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Deserialize, Serialize,
-)]
-pub struct Region {
-    name: String,
-}
-
-impl Region {
-    /// Create a new `Region`.
-    pub fn new<S: Into<String>>(name: S) -> Self {
-        Region { name: name.into() }
-    }
-}
-
-impl fmt::Debug for Region {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Planet {
