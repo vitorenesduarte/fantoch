@@ -55,7 +55,7 @@ impl Clocks {
             .collect()
     }
 
-    /// Retrives the current clock for a single `key`.
+    /// Retrieves the current clock for a single `key`.
     fn key_clock(&self, key: &Key) -> u64 {
         self.clocks.get(key).cloned().unwrap_or(0)
     }
@@ -89,7 +89,7 @@ mod tests {
             vec![key_a.clone(), key_b.clone()],
         );
 
-        // closure to retrive the votes on some key
+        // closure to retrieve the votes on some key
         let get_key_votes = |votes: &ProcVotes, key: &Key| {
             votes.get(key).unwrap().as_ref().unwrap().votes()
         };
