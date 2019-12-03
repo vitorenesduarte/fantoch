@@ -166,7 +166,8 @@ impl Newt {
 
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
-        if self.bp.id == dot.0 {
+        let original_coordinator = dot.0;
+        if self.bp.id == original_coordinator {
             info.votes.set_keys(&cmd);
         }
 
@@ -266,34 +267,32 @@ impl Newt {
         info.status = Status::COMMIT;
         info.cmd = cmd;
         info.clock = clock;
-        info.votes = votes;
 
         // TODO generate phantom votes if committed clock is higher than the
         // local key's clock
 
-        // get original coordinator
-        let original_coordinator = dot.0;
-
         // update votes table and get commands that can be executed
+        let original_coordinator = dot.0;
         let to_execute = self.table.add(
             original_coordinator,
             info.cmd.clone(),
             info.clock,
-            info.votes.clone(),
+            votes,
         );
 
         // execute commands
-        if let Some(to_execute) = to_execute {
-            let ready_commands = self.execute(to_execute);
-            // if there ready commands, forward them to clients
-            if ready_commands.is_empty() {
-                ToSend::Nothing
-            } else {
-                ToSend::Clients(ready_commands)
+        match to_execute {
+            Some(to_execute) => {
+                let ready_commands = self.execute(to_execute);
+                // if there ready commands, forward them to clients
+                if ready_commands.is_empty() {
+                    ToSend::Nothing
+                } else {
+                    ToSend::Clients(ready_commands)
+                }
             }
-        } else {
             // no message to be sent
-            ToSend::Nothing
+            None => ToSend::Nothing,
         }
     }
 
