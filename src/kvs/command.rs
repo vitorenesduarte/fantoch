@@ -44,6 +44,11 @@ impl MultiCommand {
         Self::from(rifl, commands)
     }
 
+    /// Creates a put command.
+    pub fn put(rifl: Rifl, key: Key, value: Value) -> Self {
+        Self::from(rifl, iter::once((key, Command::Put(value))))
+    }
+
     /// Returns the command identifier.
     pub fn rifl(&self) -> Rifl {
         self.rifl

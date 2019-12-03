@@ -77,16 +77,22 @@ mod tests {
         // create key clocks
         let mut clocks = KeysClocks::new(1);
 
-        // keys and commands
+        // keys
         let key_a = String::from("A");
         let key_b = String::from("B");
-        let cmd_a_id = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_b_id = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_ab_id = Rifl::new(102, 1); // client 102, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
-        let cmd_b = MultiCommand::get(cmd_b_id, key_b.clone());
+
+        // command a
+        let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
+        let cmd_a = MultiCommand::get(cmd_a_rifl, key_a.clone());
+
+        // command b
+        let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
+        let cmd_b = MultiCommand::get(cmd_b_rifl, key_b.clone());
+
+        // command ab
+        let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
         let cmd_ab = MultiCommand::multi_get(
-            cmd_ab_id,
+            cmd_ab_rifl,
             vec![key_a.clone(), key_b.clone()],
         );
 
