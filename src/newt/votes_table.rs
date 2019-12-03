@@ -38,7 +38,7 @@ impl MultiVotesTable {
         // TODO if noOp, should we add `Votes` to the table, or there will be no
         // votes?
         let cmd = cmd?;
-        let cmd_id = cmd.rifl();
+        let rifl = cmd.rifl();
 
         // create sort identifier:
         // - if two commands got assigned the same clock, they will be ordered
@@ -66,7 +66,7 @@ impl MultiVotesTable {
                     .or_insert_with(|| VotesTable::new(n, stability_threshold));
 
                 // add command and votes to the table
-                table.add(sort_id, cmd_id, cmd_action, vote_ranges);
+                table.add(sort_id, rifl, cmd_action, vote_ranges);
 
                 // get new commands to be executed
                 let stable = table.stable_commands().collect();
@@ -107,12 +107,12 @@ impl VotesTable {
     fn add(
         &mut self,
         sort_id: SortId,
-        cmd_id: Rifl,
+        rifl: Rifl,
         cmd_action: Command,
         vote_ranges: Vec<VoteRange>,
     ) {
         // add command to the sorted list of commands to be executed
-        let res = self.cmds.insert(sort_id, (cmd_id, cmd_action));
+        let res = self.cmds.insert(sort_id, (rifl, cmd_action));
         // and check there was nothing there for this exact same position
         assert!(res.is_none());
 
