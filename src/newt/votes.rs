@@ -1,6 +1,6 @@
 use crate::base::ProcId;
-use crate::command::MultiCommand;
-use crate::store::Key;
+use crate::kvs::command::MultiCommand;
+use crate::kvs::store::Key;
 use std::collections::btree_map::{self, BTreeMap};
 use std::fmt;
 
@@ -42,29 +42,6 @@ impl Votes {
                 }
             },
         );
-        // // create proc_votes iterator
-        // let mut proc_votes = proc_votes.into_iter();
-
-        // // while we iterate self
-        // for (key, key_votes) in self.votes.iter_mut() {
-        //     // the next in proc_votes must be about the same key
-        //     let (vote_key, vote) = proc_votes.next().unwrap();
-        //     assert_eq!(*key, vote_key);
-
-        //     // add vote to this key's votes
-        //     key_votes.push(vote);
-        // }
-
-        // // check there's nothing else in the proc votes iterator
-        // assert!(proc_votes.next().is_none());
-
-        // for (key, vote) in proc_votes {
-        //     // TODO the `get_mut` is not ideal since `self.votes` is a b-tree
-        //     self.votes
-        //         .get_mut(&key)
-        //         .unwrap_or_else(|| panic!("key {} must be part of votes",
-        // key))         .push(vote);
-        // }
     }
 }
 

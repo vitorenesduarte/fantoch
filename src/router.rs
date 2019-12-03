@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::client::{Client, ClientId, Rifl};
-use crate::command::{MultiCommand, MultiCommandResult};
+use crate::kvs::command::{MultiCommand, MultiCommandResult};
 use crate::newt::{Message, Newt, ToSend};
 use std::cell::Cell;
 use std::collections::HashMap;

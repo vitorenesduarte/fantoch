@@ -1,4 +1,4 @@
-use crate::command::{Command, CommandResult};
+use crate::kvs::command::{Command, CommandResult};
 use std::collections::HashMap;
 
 pub type Key = String;

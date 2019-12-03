@@ -1,8 +1,8 @@
 use crate::base::ProcId;
 use crate::client::Rifl;
-use crate::command::{Command, MultiCommand};
+use crate::kvs::command::{Command, MultiCommand};
+use crate::kvs::store::Key;
 use crate::newt::votes::{VoteRange, Votes};
-use crate::store::Key;
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
@@ -35,9 +35,10 @@ impl MultiVotesTable {
     ) -> Option<HashMap<Key, Vec<(Rifl, Command)>>> {
         // if noOp, do nothing; else, get its id and create an iterator of (key,
         // command action)
+        // TODO if noOp, should we add `Votes` to the table, or there will be no
+        // votes?
         let cmd = cmd?;
-        let cmd_id = cmd.id();
-        let mut cmd_iter = cmd.into_iter();
+        let cmd_id = cmd.rifl();
 
         // create sort identifier:
         // - if two commands got assigned the same clock, they will be ordered
@@ -48,9 +49,9 @@ impl MultiVotesTable {
         // compute which commands are safe to be executed
         let to_execute = votes
             .into_iter()
-            .map(|(key, vote_ranges)| {
-                // the next in cmd must be about the same key
-                let (cmd_key, cmd_action) = cmd_iter.next().unwrap();
+            .zip(cmd.into_iter())
+            .map(|((key, vote_ranges), (cmd_key, cmd_action))| {
+                // each item from zip should be about the same key
                 assert_eq!(key, cmd_key);
 
                 // TODO the borrow checker complains if `self.n` or
@@ -72,9 +73,6 @@ impl MultiVotesTable {
                 (cmd_key, stable)
             })
             .collect();
-
-        // check there's nothing else in the cmd iterator
-        assert!(cmd_iter.next().is_none());
 
         // return commands to be executed
         Some(to_execute)

@@ -12,15 +12,14 @@ mod quorum_clocks;
 
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::{ClientId, Rifl};
-use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
 use crate::config::Config;
+use crate::kvs::command::{Command, MultiCommand, MultiCommandResult, Pending};
+use crate::kvs::store::{KVStore, Key};
 use crate::newt::clocks::Clocks;
 use crate::newt::quorum_clocks::QuorumClocks;
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
-use crate::store::KVStore;
-use crate::store::Key;
 use std::collections::HashMap;
 
 pub struct Newt {
@@ -311,7 +310,8 @@ impl Newt {
                 let cmd_result = self.store.execute(&key, cmd_action);
 
                 // add partial result to `Pending`
-                let res = self.pending.add(cmd_id, key.clone(), cmd_result);
+                let res =
+                    self.pending.add_partial(cmd_id, key.clone(), cmd_result);
 
                 // if there's a new `MultiCommand` ready, add it to output var
                 if let Some(ready) = res {

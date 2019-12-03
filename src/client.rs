@@ -1,6 +1,6 @@
 use crate::base::ProcId;
-use crate::command::{MultiCommand, MultiCommandResult};
-use crate::store::Key;
+use crate::kvs::command::{MultiCommand, MultiCommandResult};
+use crate::kvs::store::Key;
 use rand::Rng;
 
 // for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
