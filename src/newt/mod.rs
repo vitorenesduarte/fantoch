@@ -1,33 +1,27 @@
-// This module contains the definition of `Clocks`.
-mod clocks;
-
 // This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
 mod votes;
 
 // This module contains the definition of `MultiVotesTable`.
 mod votes_table;
 
-// This module contains the definition of `QuorumClocks`.
-mod quorum_clocks;
+// This module contains the definition of `KeyClocks` and `QuorumClocks`.
+mod clocks;
 
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::{ClientId, Rifl};
-use crate::command::{Command, MultiCommand, MultiCommandResult, Pending};
 use crate::config::Config;
-use crate::newt::clocks::Clocks;
-use crate::newt::quorum_clocks::QuorumClocks;
+use crate::kvs::command::{Command, MultiCommand, MultiCommandResult};
+use crate::kvs::{KVStore, Key, Pending};
+use crate::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
-use crate::store::KVStore;
-use crate::store::Key;
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
 
 pub struct Newt {
     bp: BaseProc,
-    clocks: Clocks,
-    dot_to_info: HashMap<Dot, Info>,
+    keys_clocks: KeysClocks,
+    cmds_info: CommandsInfo,
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
@@ -50,20 +44,25 @@ impl Newt {
 
         // create `BaseProc`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProc::new(id, region, planet, config, q);
-        let clocks = Clocks::new(id);
-        let dot_to_info = HashMap::new();
+        let keys_clocks = KeysClocks::new(id);
+        let cmds_info = CommandsInfo::new(q);
         let store = KVStore::new();
         let pending = Pending::new();
 
         // create `Newt`
-        Newt {
+        Self {
             bp,
-            clocks,
-            dot_to_info,
+            keys_clocks,
+            cmds_info,
             table,
             store,
             pending,
         }
+    }
+
+    /// Returns the process identifier.
+    pub fn id(&self) -> ProcId {
+        self.bp.id
     }
 
     /// Computes `Newt` fast quorum size.
@@ -113,17 +112,17 @@ impl Newt {
         self.pending.start(&cmd);
 
         // compute the command identifier
-        let dot = self.next_dot();
+        let dot = self.bp.next_dot();
 
         // compute its clock
-        let clock = self.clocks.clock(&cmd) + 1;
+        let clock = self.keys_clocks.clock(&cmd) + 1;
 
         // clone the fast quorum
-        let fast_quorum = self.fast_quorum.clone().unwrap();
+        let fast_quorum = self.bp.fast_quorum.clone().unwrap();
 
         // create `MCollect`
         let mcollect = Message::MCollect {
-            from: self.id,
+            from: self.bp.id,
             dot,
             cmd,
             clock,
@@ -142,46 +141,44 @@ impl Newt {
         quorum: Vec<ProcId>,
         clock: u64,
     ) -> ToSend {
-        // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
+        // get cmd info
+        let info = self.cmds_info.get(dot);
 
         // discard message if no longer in START
         if info.status != Status::START {
             return ToSend::Nothing;
         }
 
+        // TODO can we somehow combine a subset of the next 3 operations in
+        // order to save HashMap operations?
+
         // compute command clock
-        let clock = std::cmp::max(clock, self.clocks.clock(&cmd) + 1);
+        let cmd_clock = std::cmp::max(clock, self.keys_clocks.clock(&cmd) + 1);
 
-        // compute proc votes
-        let proc_votes = self.clocks.proc_votes(&cmd, clock);
+        // compute votes consumed by this command
+        // - this computation needs to occur before the next `bump_to`
+        let proc_votes = self.keys_clocks.proc_votes(&cmd, cmd_clock);
 
-        // bump all keys clocks to be `clock`
-        self.clocks.bump_to(&cmd, clock);
+        // if coordinator, set keys in `info.votes`
+        // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
+        if self.bp.id == dot.proc_id() {
+            info.votes.set_keys(&cmd);
+        }
 
-        // TODO we could probably save HashMap operations if the previous two
-        // steps are performed together
-
-        // create votes and quorum clocks
-        let votes = Votes::from(&cmd);
-        let quorum_clocks = QuorumClocks::from(self.bp.q);
-
-        // TODO above we have the same borrow checker problem that doesn't know
-        // how to deref, as in the MCollectAck handler
-
-        // update info
+        // update command info:
+        // - change status to collect
+        // - save command and quorum
+        // - set command clock
         info.status = Status::COLLECT;
-        info.quorum = quorum;
         info.cmd = Some(cmd);
-        info.clock = clock;
-        info.votes = votes;
-        info.quorum_clocks = quorum_clocks;
+        info.quorum = quorum;
+        info.clock = cmd_clock;
 
         // create `MCollectAck`
         let mcollectack = Message::MCollectAck {
-            from: self.id,
+            from: self.bp.id,
             dot,
-            clock,
+            clock: info.clock,
             proc_votes,
         };
 
@@ -194,47 +191,49 @@ impl Newt {
         from: ProcId,
         dot: Dot,
         clock: u64,
-        proc_votes: ProcVotes,
+        remote_proc_votes: ProcVotes,
     ) -> ToSend {
-        // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
+        // get cmd info
+        let info = self.cmds_info.get(dot);
 
-        if info.status != Status::COLLECT || info.quorum_clocks.contains(&from)
-        {
+        if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
             // do nothing if we're no longer COLLECT or if this is a
             // duplicated message
             return ToSend::Nothing;
         }
-        // update votes
-        info.votes.add(proc_votes);
 
-        // update quorum clocks
-        info.quorum_clocks.add(from, clock);
+        // update votes with remote votes
+        info.votes.add(remote_proc_votes);
 
-        // TODO local clock bump upon each `MCollectAck`
+        // update quorum clocks while computing max clock and its number of
+        // occurences
+        let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
+
+        // optimization: bump all keys clocks in `cmd` to be `max_clock`
+        // - this prevents us from generating votes (either when clients submit
+        //   new operations or when handling `MCollect` from other processes)
+        //   that could potentially delay the execution of this command
+        let cmd = info.cmd.as_ref().unwrap();
+        let local_proc_votes = self.keys_clocks.proc_votes(cmd, max_clock);
+
+        // update votes with local votes
+        info.votes.add(local_proc_votes);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
-            // compute max and its number of occurences
-            let (max_clock, max_count) = info.quorum_clocks.max_and_count();
-
-            // fast path condition: if the max was reported by at least f
-            // processes
+            // fast path condition:
+            // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
-                // TODO above, we had to use self.bp.config because the
-                // borrow-checker couldn't figure it out:
-                // - is it some issue when dereferencing?
-
                 // create `MCommit`
                 let mcommit = Message::MCommit {
                     dot,
-                    cmd: info.cmd.clone().unwrap(),
+                    cmd: info.cmd.clone(),
                     clock: max_clock,
                     votes: info.votes.clone(),
                 };
 
                 // return `ToSend`
-                ToSend::Procs(mcommit, self.all_procs.clone().unwrap())
+                ToSend::Procs(mcommit, self.bp.all_procs.clone().unwrap())
             } else {
                 // TODO slow path
                 ToSend::Nothing
@@ -247,15 +246,12 @@ impl Newt {
     fn handle_mcommit(
         &mut self,
         dot: Dot,
-        cmd: MultiCommand,
+        cmd: Option<MultiCommand>,
         clock: u64,
         votes: Votes,
     ) -> ToSend {
-        // get original proc id
-        let proc_id = dot.0;
-
-        // get message info
-        let info = self.dot_to_info.entry(dot).or_insert_with(Info::new);
+        // get cmd info
+        let info = self.cmds_info.get(dot);
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
@@ -263,35 +259,32 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // update info
+        // update command info:
         info.status = Status::COMMIT;
-        info.cmd = Some(cmd);
+        info.cmd = cmd;
         info.clock = clock;
-        info.votes = votes;
 
         // TODO generate phantom votes if committed clock is higher than the
         // local key's clock
 
         // update votes table and get commands that can be executed
-        let to_execute = self.table.add(
-            proc_id,
-            info.cmd.clone(),
-            info.clock,
-            info.votes.clone(),
-        );
+        let to_execute =
+            self.table
+                .add(dot.proc_id(), info.cmd.clone(), info.clock, votes);
 
         // execute commands
-        if let Some(to_execute) = to_execute {
-            let ready_commands = self.execute(to_execute);
-            // if there ready commands, forward them to clients
-            if ready_commands.is_empty() {
-                ToSend::Nothing
-            } else {
-                ToSend::Clients(ready_commands)
+        match to_execute {
+            Some(to_execute) => {
+                let ready_commands = self.execute(to_execute);
+                // if there ready commands, forward them to clients
+                if ready_commands.is_empty() {
+                    ToSend::Nothing
+                } else {
+                    ToSend::Clients(ready_commands)
+                }
             }
-        } else {
             // no message to be sent
-            ToSend::Nothing
+            None => ToSend::Nothing,
         }
     }
 
@@ -305,26 +298,85 @@ impl Newt {
 
         // iterate all commands to be executed
         for (key, cmds) in to_execute {
-            for (cmd_id, cmd_action) in cmds {
+            for (rifl, cmd) in cmds {
                 // execute cmd in the `KVStore`
-                let cmd_result = self.store.execute(&key, cmd_action);
+                let cmd_result = self.store.execute(&key, cmd);
 
                 // add partial result to `Pending`
-                let res = self.pending.add(cmd_id, key.clone(), cmd_result);
+                let res =
+                    self.pending.add_partial(rifl, key.clone(), cmd_result);
 
                 // if there's a new `MultiCommand` ready, add it to output var
                 if let Some(ready) = res {
-                    let rifl = ready.id();
-                    let client_id = rifl.0;
-                    let client_ready = ready_commands
-                        .entry(client_id)
-                        .or_insert_with(Vec::new);
-                    client_ready.push((rifl, ready));
+                    // get rifl and client id
+                    let ready_rifl = ready.rifl();
+                    let ready_client_id = rifl.client_id();
+
+                    // get the commands already ready for this client and add a
+                    // new one
+                    ready_commands
+                        .entry(ready_client_id)
+                        .or_insert_with(Vec::new)
+                        .push((ready_rifl, ready));
                 }
             }
         }
 
         ready_commands
+    }
+}
+
+// `CommandsInfo` contains `CommandInfo` for each `Dot`.
+struct CommandsInfo {
+    q: usize,
+    dot_to_info: HashMap<Dot, CommandInfo>,
+}
+
+impl CommandsInfo {
+    fn new(q: usize) -> Self {
+        Self {
+            q,
+            dot_to_info: HashMap::new(),
+        }
+    }
+
+    // Returns the `CommandInfo` associated with `Dot`.
+    // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
+    fn get(&mut self, dot: Dot) -> &mut CommandInfo {
+        // TODO the borrow checker complains if `self.q` is passed to
+        // `CommandInfo::new`
+        let q = self.q;
+        self.dot_to_info
+            .entry(dot)
+            .or_insert_with(|| CommandInfo::new(q))
+    }
+}
+
+// `CommandInfo` contains all information required in the life-cyle of a
+// `Command`
+struct CommandInfo {
+    status: Status,
+    quorum: Vec<ProcId>,
+    cmd: Option<MultiCommand>, // `None` if noOp
+    clock: u64,
+    // `votes` is used by the coordinator to aggregate `ProcVotes` from fast
+    // quorum members
+    votes: Votes,
+    // `quorum_clocks` is used by the coordinator to compute the highest clock
+    // reported by fast quorum members and the number of times it was reported
+    quorum_clocks: QuorumClocks,
+}
+
+impl CommandInfo {
+    fn new(q: usize) -> Self {
+        Self {
+            status: Status::START,
+            quorum: vec![],
+            cmd: None,
+            clock: 0,
+            votes: Votes::new(),
+            quorum_clocks: QuorumClocks::new(q),
+        }
     }
 }
 
@@ -384,33 +436,10 @@ pub enum Message {
     },
     MCommit {
         dot: Dot,
-        cmd: MultiCommand,
+        cmd: Option<MultiCommand>,
         clock: u64,
         votes: Votes,
     },
-}
-
-// `Info` contains all information required in the life-cyle of a `Command`
-struct Info {
-    status: Status,
-    quorum: Vec<ProcId>,
-    cmd: Option<MultiCommand>, // `None` if noOp
-    clock: u64,
-    votes: Votes,
-    quorum_clocks: QuorumClocks,
-}
-
-impl Info {
-    fn new() -> Self {
-        Info {
-            status: Status::START,
-            quorum: vec![],
-            cmd: None,
-            clock: 0,
-            votes: Votes::uninit(),
-            quorum_clocks: QuorumClocks::uninit(),
-        }
-    }
 }
 
 /// `Status` of commands.
@@ -419,23 +448,6 @@ enum Status {
     START,
     COLLECT,
     COMMIT,
-}
-
-// with `Deref` and `DerefMut`, we can use `BaseProc` variables and methods
-// as if they were defined in `Newt`, much like `Newt` inherits from
-// `BaseProc`
-impl Deref for Newt {
-    type Target = BaseProc;
-
-    fn deref(&self) -> &Self::Target {
-        &self.bp
-    }
-}
-
-impl DerefMut for Newt {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.bp
-    }
 }
 
 #[cfg(test)]
@@ -457,11 +469,16 @@ mod tests {
 
     #[test]
     fn newt_flow() {
+        // procs ids
+        let proc_id_1 = 1;
+        let proc_id_2 = 2;
+        let proc_id_3 = 3;
+
         // procs
         let procs = vec![
-            (0, Region::new("europe-west2")),
-            (1, Region::new("europe-west3")),
-            (2, Region::new("europe-west4")),
+            (proc_id_1, Region::new("europe-west2")),
+            (proc_id_2, Region::new("europe-west3")),
+            (proc_id_3, Region::new("europe-west4")),
         ];
 
         // planet
@@ -473,49 +490,52 @@ mod tests {
         let config = Config::new(n, f);
 
         // newts
-        let mut newt_0 = Newt::new(
-            0,
+        let mut newt_1 = Newt::new(
+            proc_id_1,
             Region::new("europe-west2"),
             planet.clone(),
             config.clone(),
         );
-        let mut newt_1 = Newt::new(
-            1,
+        let mut newt_2 = Newt::new(
+            proc_id_2,
             Region::new("europe-west3"),
             planet.clone(),
             config.clone(),
         );
-        let mut newt_2 = Newt::new(
-            2,
+        let mut newt_3 = Newt::new(
+            proc_id_3,
             Region::new("europe-west4"),
             planet.clone(),
             config.clone(),
         );
 
         // discover procs in all newts
-        newt_0.discover(procs.clone());
-        newt_1.discover(procs.clone());
-        newt_2.discover(procs.clone());
+        newt_1.bp.discover(procs.clone());
+        newt_2.bp.discover(procs.clone());
+        newt_3.bp.discover(procs.clone());
 
         // create msg router
         let mut router = Router::new();
 
         // register processes
-        router.set_proc(0, newt_0);
-        router.set_proc(1, newt_1);
-        router.set_proc(2, newt_2);
+        router.register_proc(newt_1);
+        router.register_proc(newt_2);
+        router.register_proc(newt_3);
 
-        // create client 100 that is connected to newt 0
-        let mut client_100 = Client::new(100, 0);
+        // create client 100 that is connected to newt 1
+        let mut client_100 = Client::new(100, proc_id_1);
         // start client 100
-        let (proc_0, cmd) = client_100.start();
+        let (target_proc, cmd) = client_100.start();
+
+        // check that `target_proc` is newt 1
+        assert_eq!(target_proc, proc_id_1);
 
         // register clients
-        router.set_client(100, client_100);
+        router.register_client(client_100);
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
-        let mcollects = router.route_to_proc(proc_0, msubmit);
+        let mcollects = router.route_to_proc(target_proc, msubmit);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_procs());
@@ -566,8 +586,8 @@ mod tests {
         let mcollect = router.route(new_submit).into_iter().next().unwrap();
         if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect
         {
-            assert_eq!(from, 0);
-            assert_eq!(dot, (0, 2));
+            assert_eq!(from, target_proc);
+            assert_eq!(dot, Dot::new(target_proc, 2));
         } else {
             panic!("Message::MCollect not found!");
         }

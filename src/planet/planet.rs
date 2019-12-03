@@ -1,27 +1,7 @@
-use crate::dat::Dat;
-use serde::{Deserialize, Serialize};
+use crate::planet::dat::Dat;
+use crate::planet::Region;
 use std::collections::HashMap;
 use std::fmt::{self, Write};
-
-#[derive(
-    Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Deserialize, Serialize,
-)]
-pub struct Region {
-    name: String,
-}
-
-impl Region {
-    /// Create a new `Region`.
-    pub fn new<S: Into<String>>(name: S) -> Self {
-        Region { name: name.into() }
-    }
-}
-
-impl fmt::Debug for Region {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Planet {
@@ -51,12 +31,12 @@ impl Planet {
         }
     }
 
-    /// Retrives a list with all regions.
+    /// Retrieves a list with all regions.
     pub fn regions(&self) -> Vec<Region> {
         self.latencies.keys().cloned().collect()
     }
 
-    /// Retrives the distance between the two regions passed as argument.
+    /// Retrieves the distance between the two regions passed as argument.
     pub fn latency(&self, from: &Region, to: &Region) -> Option<usize> {
         // get from's entries
         let entries = self.latencies.get(from)?;
@@ -86,7 +66,7 @@ impl Planet {
 
         // create a mapping from region to its sorted index
         let region_to_index = sorted_regions
-            .into_iter()
+            .iter()
             // drop latencies
             .map(|(_, to)| to)
             .enumerate()
@@ -132,14 +112,14 @@ impl Planet {
         for r in regions.iter() {
             write!(&mut output, " {:?} |", r)?;
         }
-        writeln!(&mut output, "")?;
+        writeln!(&mut output)?;
 
         // end header
         write!(&mut output, "|:---:|")?;
         for _ in regions.iter() {
             write!(&mut output, ":---:|")?;
         }
-        writeln!(&mut output, "")?;
+        writeln!(&mut output)?;
 
         // for each region a
         for a in regions.iter() {
@@ -150,7 +130,7 @@ impl Planet {
                 let lat = self.latency(a, b).unwrap();
                 write!(&mut output, " {} |", lat)?;
             }
-            writeln!(&mut output, "")?;
+            writeln!(&mut output)?;
         }
 
         Ok(output)

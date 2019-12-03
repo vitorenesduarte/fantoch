@@ -1,57 +1,47 @@
 use crate::base::ProcId;
-use crate::command::MultiCommand;
-use crate::store::Key;
+use crate::kvs::command::MultiCommand;
+use crate::kvs::Key;
 use std::collections::btree_map::{self, BTreeMap};
 use std::fmt;
 
 /// `ProcVotes` are the Votes by some process on some command.
-pub type ProcVotes = BTreeMap<Key, VoteRange>;
+pub type ProcVotes = BTreeMap<Key, Option<VoteRange>>;
 
 /// Votes are all Votes on some command.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Votes {
     votes: BTreeMap<Key, Vec<VoteRange>>,
 }
 
 impl Votes {
-    /// Creates an uninitialized `Votes` instance.
-    pub fn uninit() -> Self {
-        Votes {
-            votes: BTreeMap::new(),
-        }
+    /// Creates an empty `Votes` instance.
+    pub fn new() -> Self {
+        Default::default()
     }
 
-    /// Creates an initialized `Votes` instance.
-    pub fn from(cmd: &MultiCommand) -> Self {
-        // create empty votes
-        let votes = cmd
-            .keys()
-            .into_iter()
-            // map each key tuple (key, empty_votes)
-            .map(|key| (key.clone(), vec![]))
-            .collect();
-
-        // return new `Votes`
-        Votes { votes }
+    /// Initializes `Votes` instance.
+    pub fn set_keys(&mut self, cmd: &MultiCommand) {
+        // insert an empty set of votes for each key
+        cmd.keys().into_iter().for_each(|key| {
+            // TODO use `Vec::with_capacity` here if we can
+            let empty_votes = vec![];
+            self.votes.insert(key.clone(), empty_votes);
+        });
     }
 
     /// Add `ProcVotes` to `Votes`.
     pub fn add(&mut self, proc_votes: ProcVotes) {
-        // create proc_votes iterator
-        let mut proc_votes = proc_votes.into_iter();
+        self.votes.iter_mut().zip(proc_votes.into_iter()).for_each(
+            |((key, current_votes), (vote_key, vote))| {
+                // each item from zip should be about the same key
+                assert_eq!(*key, vote_key);
 
-        // while we iterate self
-        for (key, key_votes) in self.votes.iter_mut() {
-            // the next in proc_votes must be about the same key
-            let (vote_key, vote) = proc_votes.next().unwrap();
-            assert_eq!(*key, vote_key);
-
-            // add vote to this key's votes
-            key_votes.push(vote);
-        }
-
-        // check there's nothing else in the proc votes iterator
-        assert!(proc_votes.next().is_none());
+                // add vote to this key's votes
+                if let Some(vote) = vote {
+                    current_votes.push(vote);
+                }
+            },
+        );
     }
 }
 
@@ -78,12 +68,22 @@ impl VoteRange {
     /// Create a new `VoteRange` instance.
     pub fn new(by: ProcId, start: u64, end: u64) -> Self {
         assert!(start <= end);
-        VoteRange { by, start, end }
+        Self { by, start, end }
     }
 
     /// Get which process voted.
     pub fn voter(&self) -> ProcId {
         self.by
+    }
+
+    /// Get range start.
+    pub fn start(&self) -> u64 {
+        self.start
+    }
+
+    /// Get range end.
+    pub fn end(&self) -> u64 {
+        self.end
     }
 
     /// Get all votes in this range.
@@ -105,46 +105,48 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::newt::clocks::Clocks;
+    use crate::client::Rifl;
+    use crate::newt::clocks::KeysClocks;
     use std::cmp::max;
 
     #[test]
     fn votes_flow() {
         // create clocks
-        let mut clocks_p0 = Clocks::new(0);
-        let mut clocks_p1 = Clocks::new(1);
+        let mut clocks_p0 = KeysClocks::new(0);
+        let mut clocks_p1 = KeysClocks::new(1);
 
         // keys
         let key_a = String::from("A");
         let key_b = String::from("B");
 
         // command a
-        let cmd_a_id = (100, 1); // client 100, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
-        let mut votes_a = Votes::from(&cmd_a);
+        let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
+        let cmd_a = MultiCommand::get(cmd_a_rifl, key_a.clone());
+        let mut votes_a = Votes::new();
+        votes_a.set_keys(&cmd_a);
 
         // command b
-        let cmd_ab_id = (101, 1); // client 101, 1st op
+        let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab = MultiCommand::multi_get(
-            cmd_ab_id,
+            cmd_ab_rifl,
             vec![key_a.clone(), key_b.clone()],
         );
-        let mut votes_ab = Votes::from(&cmd_ab);
+        let mut votes_ab = Votes::new();
+        votes_ab.set_keys(&cmd_ab);
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)
         // - p1: Submit(ab), MCollect(a), MCommit(ab)
 
-        // -------------------------
+        // ------------------------
         // submit command a by p0
         let clock_a = clocks_p0.clock(&cmd_a) + 1;
         assert_eq!(clock_a, 1);
 
-        // -------------------------
+        // ------------------------
         // (local) MCollect handle by p0 (command a)
         let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
         let proc_votes_a_p0 = clocks_p0.proc_votes(&cmd_a, clock_a_p0);
-        clocks_p0.bump_to(&cmd_a, clock_a_p0);
 
         // -------------------------
         // submit command ab by p1
@@ -155,19 +157,16 @@ mod tests {
         // (local) MCollect handle by p1 (command ab)
         let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
         let proc_votes_ab_p1 = clocks_p1.proc_votes(&cmd_ab, clock_ab_p1);
-        clocks_p1.bump_to(&cmd_ab, clock_ab_p1);
 
         // -------------------------
         // (remote) MCollect handle by p1 (command a)
         let clock_a_p1 = max(clock_a, clocks_p1.clock(&cmd_a) + 1);
         let proc_votes_a_p1 = clocks_p1.proc_votes(&cmd_a, clock_a_p1);
-        clocks_p1.bump_to(&cmd_a, clock_a_p1);
 
         // -------------------------
         // (remote) MCollect handle by p0 (command ab)
         let clock_ab_p0 = max(clock_ab, clocks_p0.clock(&cmd_ab) + 1);
         let proc_votes_ab_p0 = clocks_p0.proc_votes(&cmd_ab, clock_ab_p0);
-        clocks_p0.bump_to(&cmd_ab, clock_ab_p0);
 
         // -------------------------
         // MCollectAck handles by p0 (command a)

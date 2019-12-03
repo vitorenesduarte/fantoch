@@ -101,7 +101,7 @@ impl From<String> for Dat {
 
 impl From<&str> for Dat {
     fn from(filename: &str) -> Self {
-        Dat {
+        Self {
             filename: String::from(filename),
         }
     }

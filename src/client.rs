@@ -1,11 +1,28 @@
 use crate::base::ProcId;
-use crate::command::{MultiCommand, MultiCommandResult};
-use crate::store::Key;
+use crate::kvs::command::{MultiCommand, MultiCommandResult};
+use crate::kvs::Key;
 use rand::Rng;
 
-// for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
 pub type ClientId = u64;
-pub type Rifl = (ClientId, u64);
+
+// for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Rifl {
+    client_id: ClientId,
+    seq: u64,
+}
+
+impl Rifl {
+    /// Creates a new `Rifl` identifier.
+    pub fn new(client_id: ClientId, seq: u64) -> Self {
+        Self { client_id, seq }
+    }
+
+    /// Retrieves the identifier of the client that created this `Rifl`.
+    pub fn client_id(&self) -> ClientId {
+        self.client_id
+    }
+}
 
 pub struct Client {
     /// id of this client
@@ -31,7 +48,7 @@ impl Client {
         let commands = 10;
 
         // create client
-        Client {
+        Self {
             client_id,
             rifl_count: 0,
             proc_id,
@@ -39,6 +56,11 @@ impl Client {
             commands,
             command_count: 0,
         }
+    }
+
+    /// Returns the client identifier.
+    pub fn id(&self) -> ClientId {
+        self.client_id
     }
 
     /// TODO pass current time to start and handle function
@@ -81,7 +103,7 @@ impl Client {
     /// - and so on...
     fn next_rifl(&mut self) -> Rifl {
         self.rifl_count += 1;
-        (self.client_id, self.rifl_count)
+        Rifl::new(self.client_id, self.rifl_count)
     }
 
     /// Generate a command given

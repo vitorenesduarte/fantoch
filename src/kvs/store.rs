@@ -1,8 +1,6 @@
-use crate::command::{Command, CommandResult};
+use crate::kvs::command::{Command, CommandResult};
+use crate::kvs::{Key, Value};
 use std::collections::HashMap;
-
-pub type Key = String;
-pub type Value = String;
 
 #[derive(Default)]
 pub struct KVStore {
@@ -12,7 +10,7 @@ pub struct KVStore {
 impl KVStore {
     /// Creates a new `KVStore` instance.
     pub fn new() -> Self {
-        KVStore::default()
+        Default::default()
     }
 
     /// Executes a `Command` on the `KVStore`.

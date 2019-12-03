@@ -1,28 +1,28 @@
 use crate::base::ProcId;
-use crate::command::MultiCommand;
+use crate::kvs::command::MultiCommand;
+use crate::kvs::Key;
 use crate::newt::votes::{ProcVotes, VoteRange};
-use crate::store::Key;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-pub struct Clocks {
+pub struct KeysClocks {
     id: ProcId,
     clocks: HashMap<Key, u64>,
 }
 
-impl Clocks {
-    /// Create a new `Clocks` instance.
+impl KeysClocks {
+    /// Create a new `KeysClocks` instance.
     pub fn new(id: ProcId) -> Self {
-        Clocks {
+        Self {
             id,
             clocks: HashMap::new(),
         }
     }
 
-    /// Compute the clock of this command.
+    /// Retrieves the current clock for some command.
+    /// If the command touches multiple keys, returns the maximum between the
+    /// clocks associated with each key.
     pub fn clock(&self, cmd: &MultiCommand) -> u64 {
-        // compute the maximum between all clocks of the keys accessed by this
-        // command
         cmd.keys()
             .iter()
             .map(|key| self.key_clock(key))
@@ -30,54 +30,76 @@ impl Clocks {
             .unwrap_or(0)
     }
 
-    /// Retrives the current clock of some key.
-    fn key_clock(&self, key: &Key) -> u64 {
-        self.clocks.get(key).cloned().unwrap_or(0)
-    }
-
-    /// Computes `ProcVotes`.
-    pub fn proc_votes(&self, cmd: &MultiCommand, clock: u64) -> ProcVotes {
+    /// Computes the votes consumed by this command.
+    pub fn proc_votes(
+        &mut self,
+        cmd: &MultiCommand,
+        highest: u64,
+    ) -> ProcVotes {
         cmd.keys()
             .into_iter()
             .map(|key| {
                 // vote from the current clock value + 1 until the highest vote
                 // (i.e. the maximum between all key's clocks)
-                let vr =
-                    VoteRange::new(self.id, self.key_clock(key) + 1, clock);
-                (key.clone(), vr)
+                let previous = self.key_clock_swap(key, highest);
+
+                // create vote if we should
+                let vote = if previous < highest {
+                    let vr = VoteRange::new(self.id, previous + 1, highest);
+                    Some(vr)
+                } else {
+                    None
+                };
+                (key.clone(), vote)
             })
             .collect()
     }
 
-    /// Bump all keys clocks to `clock`.
-    pub fn bump_to(&mut self, cmd: &MultiCommand, clock: u64) {
-        for key in cmd.keys() {
-            self.clocks.insert(key.clone(), clock);
-        }
+    /// Retrieves the current clock for a single `key`.
+    fn key_clock(&self, key: &Key) -> u64 {
+        self.clocks.get(key).cloned().unwrap_or(0)
+    }
+
+    /// Updates the clock of this `key` to be `value` and returns the previous
+    /// clock value.
+    fn key_clock_swap(&mut self, key: &Key, value: u64) -> u64 {
+        self.clocks.insert(key.clone(), value).unwrap_or(0)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::Rifl;
 
     #[test]
-    fn clocks_flow() {
-        // create clocks
-        let mut clocks = Clocks::new(0);
+    fn key_clocks_flow() {
+        // create key clocks
+        let mut clocks = KeysClocks::new(1);
 
-        // keys and commands
+        // keys
         let key_a = String::from("A");
         let key_b = String::from("B");
-        let cmd_a_id = (100, 1); // client 100, 1st op
-        let cmd_b_id = (101, 1); // client 101, 1st op
-        let cmd_ab_id = (102, 1); // client 102, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_id, key_a.clone());
-        let cmd_b = MultiCommand::get(cmd_b_id, key_b.clone());
+
+        // command a
+        let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
+        let cmd_a = MultiCommand::get(cmd_a_rifl, key_a.clone());
+
+        // command b
+        let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
+        let cmd_b = MultiCommand::get(cmd_b_rifl, key_b.clone());
+
+        // command ab
+        let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
         let cmd_ab = MultiCommand::multi_get(
-            cmd_ab_id,
+            cmd_ab_rifl,
             vec![key_a.clone(), key_b.clone()],
         );
+
+        // closure to retrieve the votes on some key
+        let get_key_votes = |votes: &ProcVotes, key: &Key| {
+            votes.get(key).unwrap().as_ref().unwrap().votes()
+        };
 
         // -------------------------
         // first clock for command a
@@ -90,10 +112,7 @@ mod tests {
         // get proc votes
         let proc_votes = clocks.proc_votes(&cmd_a, clock);
         assert_eq!(proc_votes.len(), 1); // single key
-        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![1]);
-
-        // bump clocks
-        clocks.bump_to(&cmd_a, clock);
+        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![1]);
 
         // -------------------------
         // second clock for command a
@@ -106,10 +125,7 @@ mod tests {
         // get proc votes
         let proc_votes = clocks.proc_votes(&cmd_a, clock);
         assert_eq!(proc_votes.len(), 1); // single key
-        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![2]);
-
-        // bump clocks
-        clocks.bump_to(&cmd_a, clock);
+        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![2]);
 
         // -------------------------
         // first clock for command ab
@@ -122,11 +138,8 @@ mod tests {
         // get proc votes
         let proc_votes = clocks.proc_votes(&cmd_ab, clock);
         assert_eq!(proc_votes.len(), 2); // two keys
-        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![3]);
-        assert_eq!(proc_votes.get(&key_b).unwrap().votes(), vec![1, 2, 3]);
-
-        // bump clock
-        clocks.bump_to(&cmd_ab, clock);
+        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![3]);
+        assert_eq!(get_key_votes(&proc_votes, &key_b), vec![1, 2, 3]);
 
         // -------------------------
         // first clock for command b
@@ -139,6 +152,6 @@ mod tests {
         // get proc votes
         let proc_votes = clocks.proc_votes(&cmd_a, clock);
         assert_eq!(proc_votes.len(), 1); // single key
-        assert_eq!(proc_votes.get(&key_a).unwrap().votes(), vec![4]);
+        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![4]);
     }
 }

@@ -14,11 +14,11 @@ pub struct Bote {
 impl Bote {
     pub fn new(lat_dir: &str) -> Self {
         let planet = Planet::new(lat_dir);
-        Bote::from(planet)
+        Self::from(planet)
     }
 
     pub fn from(planet: Planet) -> Self {
-        Bote { planet }
+        Self { planet }
     }
 
     /// Computes `Stats` for a leaderless-based protocol with a given
@@ -34,7 +34,7 @@ impl Bote {
         quorum_size: usize,
     ) -> Stats {
         let latencies: Vec<_> = clients
-            .into_iter()
+            .iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
                 let (client_to_closest, closest) =
@@ -165,7 +165,7 @@ impl Bote {
             // sort by distance
             .sorted_by_distance(from)
             .unwrap()
-            .into_iter()
+            .iter()
             // keep only the regions in this configuration
             .filter(|(_, to)| regions.contains(to))
             // select the nth region

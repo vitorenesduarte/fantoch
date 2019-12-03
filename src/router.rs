@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::client::{Client, ClientId, Rifl};
-use crate::command::{MultiCommand, MultiCommandResult};
+use crate::kvs::command::{MultiCommand, MultiCommandResult};
 use crate::newt::{Message, Newt, ToSend};
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -21,18 +21,28 @@ impl Router {
         }
     }
 
-    /// Set a `Newt` process in the `Router` by storing it in a `Cell`.
+    /// Registers a `Newt` process in the `Router` by storing it in a `Cell`.
     /// - from this call onwards, the process can be mutated through this
     ///   `Router` by borrowing it mutabily, as done in the route methods.
-    pub fn set_proc(&mut self, proc_id: ProcId, newt: Newt) {
-        self.procs.insert(proc_id, Cell::new(newt));
+    pub fn register_proc(&mut self, newt: Newt) {
+        // get identifier
+        let id = newt.id();
+        // insert it
+        let res = self.procs.insert(id, Cell::new(newt));
+        // check it has never been inserted before
+        assert!(res.is_none())
     }
 
-    /// Set a `Client` process in the `Router` by storing it in a `Cell`.
+    /// Registers a `Client` process in the `Router` by storing it in a `Cell`.
     /// - from this call onwards, the process can be mutated through this
     ///   `Router` by borrowing it mutabily, as done in the route methods.
-    pub fn set_client(&mut self, client_id: ClientId, client: Client) {
-        self.clients.insert(client_id, Cell::new(client));
+    pub fn register_client(&mut self, client: Client) {
+        // get identifier
+        let id = client.id();
+        // insert it
+        let res = self.clients.insert(id, Cell::new(client));
+        // check it has never been inserted before
+        assert!(res.is_none())
     }
 
     /// Route a message to some target.
@@ -57,8 +67,13 @@ impl Router {
 
     /// Route a message to some process.
     pub fn route_to_proc(&mut self, proc_id: ProcId, msg: Message) -> ToSend {
-        let newt = self.procs.get_mut(&proc_id).unwrap().get_mut();
-        newt.handle(msg)
+        self.procs
+            .get_mut(&proc_id)
+            .unwrap_or_else(|| {
+                panic!("proc {} should have been set before", proc_id);
+            })
+            .get_mut()
+            .handle(msg)
     }
 
     /// Route a message to some client.
@@ -67,7 +82,12 @@ impl Router {
         client_id: ClientId,
         commands: Vec<(Rifl, MultiCommandResult)>,
     ) -> Option<(ProcId, MultiCommand)> {
-        let client = self.clients.get_mut(&client_id).unwrap().get_mut();
-        client.handle(commands)
+        self.clients
+            .get_mut(&client_id)
+            .unwrap_or_else(|| {
+                panic!("client {} should have been set before", client_id);
+            })
+            .get_mut()
+            .handle(commands)
     }
 }

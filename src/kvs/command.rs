@@ -1,5 +1,5 @@
 use crate::client::Rifl;
-use crate::store::{Key, Value};
+use crate::kvs::{Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;
 use std::iter::{self, FromIterator};
@@ -15,38 +15,43 @@ pub type CommandResult = Option<Value>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MultiCommand {
-    id: Rifl,
+    rifl: Rifl,
     commands: BTreeMap<Key, Command>,
 }
 
 impl MultiCommand {
     /// Create a new `MultiCommand`.
-    pub fn new(id: Rifl, commands: BTreeMap<Key, Command>) -> Self {
-        MultiCommand { id, commands }
+    pub fn new(rifl: Rifl, commands: BTreeMap<Key, Command>) -> Self {
+        Self { rifl, commands }
     }
 
     /// Create a new `MultiCommand` from an iterator.
     pub fn from<I: IntoIterator<Item = (Key, Command)>>(
-        id: Rifl,
+        rifl: Rifl,
         iter: I,
     ) -> Self {
-        Self::new(id, BTreeMap::from_iter(iter))
+        Self::new(rifl, BTreeMap::from_iter(iter))
     }
 
     /// Creates a get command.
-    pub fn get(id: Rifl, key: Key) -> Self {
-        Self::from(id, iter::once((key, Command::Get)))
+    pub fn get(rifl: Rifl, key: Key) -> Self {
+        Self::from(rifl, iter::once((key, Command::Get)))
     }
 
     /// Creates a multi-get command.
-    pub fn multi_get(id: Rifl, keys: Vec<Key>) -> Self {
+    pub fn multi_get(rifl: Rifl, keys: Vec<Key>) -> Self {
         let commands = keys.into_iter().map(|key| (key, Command::Get));
-        Self::from(id, commands)
+        Self::from(rifl, commands)
+    }
+
+    /// Creates a put command.
+    pub fn put(rifl: Rifl, key: Key, value: Value) -> Self {
+        Self::from(rifl, iter::once((key, Command::Put(value))))
     }
 
     /// Returns the command identifier.
-    pub fn id(&self) -> Rifl {
-        self.id
+    pub fn rifl(&self) -> Rifl {
+        self.rifl
     }
 
     /// Returns references to list of keys modified by this command.
@@ -73,7 +78,7 @@ impl IntoIterator for MultiCommand {
 /// Structure that aggregates partial results of multi-key commands.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MultiCommandResult {
-    id: Rifl,
+    rifl: Rifl,
     key_count: usize,
     results: HashMap<Key, CommandResult>,
 }
@@ -81,9 +86,9 @@ pub struct MultiCommandResult {
 impl MultiCommandResult {
     /// Creates a new `MultiCommandResult` given the number of keys accessed by
     /// the command.
-    pub fn new(id: Rifl, key_count: usize) -> Self {
-        MultiCommandResult {
-            id,
+    pub fn new(rifl: Rifl, key_count: usize) -> Self {
+        Self {
+            rifl,
             key_count,
             results: HashMap::new(),
         }
@@ -91,7 +96,7 @@ impl MultiCommandResult {
 
     /// Adds a partial command result to the overall result.
     /// Returns a boolean indicating whether the full result is ready.
-    fn add(&mut self, key: Key, result: CommandResult) -> bool {
+    pub fn add_partial(&mut self, key: Key, result: CommandResult) -> bool {
         let res = self.results.insert(key, result);
         // assert there was nothing about this key previously
         assert!(res.is_none());
@@ -101,56 +106,12 @@ impl MultiCommandResult {
     }
 
     /// Returns the command identifier (RIFL) of this comand.
-    pub fn id(&self) -> Rifl {
-        self.id
+    pub fn rifl(&self) -> Rifl {
+        self.rifl
     }
 
     /// Returns the commands results.
     pub fn results(&self) -> &HashMap<Key, CommandResult> {
         &self.results
-    }
-}
-
-/// Structure that tracks the progress of pending commands.
-#[derive(Default)]
-pub struct Pending {
-    pending: HashMap<Rifl, MultiCommandResult>,
-}
-
-impl Pending {
-    /// Creates a new `Pending` instance.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Starts tracking a command submitted by some client.
-    pub fn start(&mut self, cmd: &MultiCommand) {
-        // create `MultiCommandResult`
-        let cmd_result = MultiCommandResult::new(cmd.id(), cmd.key_count());
-
-        // add it to pending
-        self.pending.insert(cmd.id(), cmd_result);
-    }
-
-    /// Registers a new partial command result.
-    pub fn add(
-        &mut self,
-        id: Rifl,
-        key: Key,
-        result: CommandResult,
-    ) -> Option<MultiCommandResult> {
-        // get current result:
-        // - if it's not part of pending, then ignore it
-        // (if it's not part of pending, it means that it is from a client
-        // from another newt process, and `pending.start` has not been called)
-        let cmd_result = self.pending.get_mut(&id)?;
-
-        // add partial result:
-        // - if it's complete, remove it from pending and return it
-        if cmd_result.add(key, result) {
-            self.pending.remove(&id)
-        } else {
-            None
-        }
     }
 }
