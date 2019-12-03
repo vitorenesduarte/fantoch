@@ -86,14 +86,17 @@ type SortId = (u64, ProcId);
 struct VotesTable {
     n: usize,
     stability_threshold: usize,
+    // `votes` collects all votes seen until now so that we can compute which
+    // timestamp is stable
     votes: AEClock<ProcId>,
     cmds: BTreeMap<SortId, (Rifl, Command)>,
 }
 
 impl VotesTable {
     fn new(n: usize, stability_threshold: usize) -> Self {
-        let procs = (0..n).map(|proc| proc as u64);
-        let votes = AEClock::with(procs);
+        // compute process identifiers, making sure ids are non-zero
+        let ids = (1..=n).map(|id| id as u64);
+        let votes = AEClock::with(ids);
         VotesTable {
             n,
             stability_threshold,
@@ -117,7 +120,11 @@ impl VotesTable {
         // update votes with the votes used on this command
         vote_ranges.into_iter().for_each(|range| {
             // assert there's at least one new vote
-            assert!(self.votes.add_range(&range.voter(), range.start(), range.end()))
+            assert!(self.votes.add_range(
+                &range.voter(),
+                range.start(),
+                range.end()
+            ))
         });
     }
 
@@ -129,7 +136,7 @@ impl VotesTable {
         let stable_clock = self
             .votes
             .frontier_threshold(self.stability_threshold)
-            .unwrap();
+            .expect("stability threshold must always be smaller than the number of processes");
 
         // compute stable sort id:
         // - if clock 10 is stable, then we can execute all commands with an id

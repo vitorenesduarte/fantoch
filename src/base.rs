@@ -26,6 +26,10 @@ impl BaseProc {
         config: Config,
         q: usize,
     ) -> Self {
+        // since processes lead with ballot `id` when taking the slow path and
+        // we may rely on the fact that a zero accepted ballot means the process
+        // has never been through Paxos phase-2, all ids must non-zero
+        assert!(id != 0);
         BaseProc {
             id,
             region,
@@ -96,7 +100,7 @@ mod tests {
         let config = Config::new(n, f);
 
         // bp
-        let id = 0;
+        let id = 1;
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
         let q = 2;

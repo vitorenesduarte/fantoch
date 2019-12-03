@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn clocks_flow() {
         // create clocks
-        let mut clocks = Clocks::new(0);
+        let mut clocks = Clocks::new(1);
 
         // keys and commands
         let key_a = String::from("A");

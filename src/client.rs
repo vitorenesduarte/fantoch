@@ -41,6 +41,11 @@ impl Client {
         }
     }
 
+    /// Returns the client identifier.
+    pub fn id(&self) -> ClientId {
+        self.client_id
+    }
+
     /// TODO pass current time to start and handle function
     /// and record command initial time to measure its overall latency
 

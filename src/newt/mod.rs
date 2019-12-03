@@ -65,6 +65,11 @@ impl Newt {
         }
     }
 
+    /// Returns the process identifier.
+    pub fn id(&self) -> ProcId {
+        self.bp.id
+    }
+
     /// Computes `Newt` fast quorum size.
     fn fast_quorum_size(config: &Config) -> usize {
         2 * config.f()
@@ -468,11 +473,16 @@ mod tests {
 
     #[test]
     fn newt_flow() {
+        // procs ids
+        let proc_id_1 = 1;
+        let proc_id_2 = 2;
+        let proc_id_3 = 3;
+
         // procs
         let procs = vec![
-            (0, Region::new("europe-west2")),
-            (1, Region::new("europe-west3")),
-            (2, Region::new("europe-west4")),
+            (proc_id_1, Region::new("europe-west2")),
+            (proc_id_2, Region::new("europe-west3")),
+            (proc_id_3, Region::new("europe-west4")),
         ];
 
         // planet
@@ -484,49 +494,52 @@ mod tests {
         let config = Config::new(n, f);
 
         // newts
-        let mut newt_0 = Newt::new(
-            0,
+        let mut newt_1 = Newt::new(
+            proc_id_1,
             Region::new("europe-west2"),
             planet.clone(),
             config.clone(),
         );
-        let mut newt_1 = Newt::new(
-            1,
+        let mut newt_2 = Newt::new(
+            proc_id_2,
             Region::new("europe-west3"),
             planet.clone(),
             config.clone(),
         );
-        let mut newt_2 = Newt::new(
-            2,
+        let mut newt_3 = Newt::new(
+            proc_id_3,
             Region::new("europe-west4"),
             planet.clone(),
             config.clone(),
         );
 
         // discover procs in all newts
-        newt_0.bp.discover(procs.clone());
         newt_1.bp.discover(procs.clone());
         newt_2.bp.discover(procs.clone());
+        newt_3.bp.discover(procs.clone());
 
         // create msg router
         let mut router = Router::new();
 
         // register processes
-        router.set_proc(0, newt_0);
-        router.set_proc(1, newt_1);
-        router.set_proc(2, newt_2);
+        router.register_proc(newt_1);
+        router.register_proc(newt_2);
+        router.register_proc(newt_3);
 
-        // create client 100 that is connected to newt 0
-        let mut client_100 = Client::new(100, 0);
+        // create client 100 that is connected to newt 1
+        let mut client_100 = Client::new(100, proc_id_1);
         // start client 100
-        let (proc_0, cmd) = client_100.start();
+        let (target_proc, cmd) = client_100.start();
+
+        // check that `target_proc` is newt 1
+        assert_eq!(target_proc, proc_id_1);
 
         // register clients
-        router.set_client(100, client_100);
+        router.register_client(client_100);
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
-        let mcollects = router.route_to_proc(proc_0, msubmit);
+        let mcollects = router.route_to_proc(target_proc, msubmit);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_procs());
@@ -577,8 +590,8 @@ mod tests {
         let mcollect = router.route(new_submit).into_iter().next().unwrap();
         if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect
         {
-            assert_eq!(from, 0);
-            assert_eq!(dot, (0, 2));
+            assert_eq!(from, target_proc);
+            assert_eq!(dot, (target_proc, 2));
         } else {
             panic!("Message::MCollect not found!");
         }
