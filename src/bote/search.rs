@@ -707,12 +707,19 @@ mod tests {
 
         // the final sorted config
         let mut sorted_config = Vec::new();
-        for (config, _stats) in css {
+        for (config, stats) in css {
             // update sorted config
             for region in config {
                 if !sorted_config.contains(region) {
                     sorted_config.push(region.clone())
                 }
+            }
+
+            // check stats_fmt for n = 5
+            let n = 5;
+            if config.len() == n {
+                let expected = "af1=(272, 0.20, 46.33) ff1=(419, 0.24, 72.31) af2=(315, 0.13, 36.73) ff2=(428, 0.23, 72.31) e=(272, 0.20, 46.33) af1C=(235, 0.15, 30.96) ff1C=(410, 0.31, 85.04) af2C=(281, 0.05, 11.12) ff2C=(419, 0.30, 85.04) eC=(235, 0.15, 30.96) ";
+                assert_eq!(Search::stats_fmt(stats, n), expected);
             }
         }
 
