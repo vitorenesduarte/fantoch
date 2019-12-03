@@ -37,11 +37,8 @@ impl Votes {
                 assert_eq!(*key, vote_key);
 
                 // add vote to this key's votes
-                match vote {
-                    Some(vote) => {
-                        current_votes.push(vote);
-                    }
-                    None => {}
+                if let Some(vote) = vote {
+                    current_votes.push(vote);
                 }
             },
         );
