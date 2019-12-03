@@ -202,7 +202,7 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // update votes with remove votes
+        // update votes with remote votes
         info.votes.add(remote_proc_votes);
 
         // update quorum clocks while computing max clock and its number of
@@ -210,11 +210,13 @@ impl Newt {
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
-        // - this prevents us from generating votes (either clients submit new
-        //   operations or when handling `MCollect` from other processes) that
-        //   could potentially delay the execution of this command
+        // - this prevents us from generating votes (either when clients submit
+        //   new operations or when handling `MCollect` from other processes)
+        //   that could potentially delay the execution of this command
         let cmd = info.cmd.as_ref().unwrap();
         let local_proc_votes = self.keys_clocks.proc_votes(cmd, max_clock);
+
+        // update votes with local votes
         info.votes.add(local_proc_votes);
 
         // check if we have all necessary replies
@@ -296,26 +298,26 @@ impl Newt {
 
         // iterate all commands to be executed
         for (key, cmds) in to_execute {
-            for (cmd_id, cmd_action) in cmds {
+            for (rifl, cmd) in cmds {
                 // execute cmd in the `KVStore`
-                let cmd_result = self.store.execute(&key, cmd_action);
+                let cmd_result = self.store.execute(&key, cmd);
 
                 // add partial result to `Pending`
                 let res =
-                    self.pending.add_partial(cmd_id, key.clone(), cmd_result);
+                    self.pending.add_partial(rifl, key.clone(), cmd_result);
 
                 // if there's a new `MultiCommand` ready, add it to output var
                 if let Some(ready) = res {
                     // get rifl and client id
-                    let rifl = ready.rifl();
-                    let client_id = rifl.client_id();
+                    let ready_rifl = ready.rifl();
+                    let ready_client_id = rifl.client_id();
 
                     // get the commands already ready for this client and add a
                     // new one
                     ready_commands
-                        .entry(client_id)
+                        .entry(ready_client_id)
                         .or_insert_with(Vec::new)
-                        .push((rifl, ready));
+                        .push((ready_rifl, ready));
                 }
             }
         }

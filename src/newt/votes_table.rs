@@ -95,7 +95,6 @@ impl VotesTable {
         // compute process identifiers, making sure ids are non-zero
         let ids = (1..=n).map(|id| id as u64);
         let votes = AEClock::with(ids);
-        assert_eq!(votes.len(), n);
         Self {
             n,
             stability_threshold,

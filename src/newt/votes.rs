@@ -138,12 +138,12 @@ mod tests {
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)
         // - p1: Submit(ab), MCollect(a), MCommit(ab)
 
-        // -------------------------
+        // ------------------------
         // submit command a by p0
         let clock_a = clocks_p0.clock(&cmd_a) + 1;
         assert_eq!(clock_a, 1);
 
-        // ---------------------current_clock
+        // ------------------------
         // (local) MCollect handle by p0 (command a)
         let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
         let proc_votes_a_p0 = clocks_p0.proc_votes(&cmd_a, clock_a_p0);
@@ -153,7 +153,7 @@ mod tests {
         let clock_ab = clocks_p1.clock(&cmd_ab) + 1;
         assert_eq!(clock_ab, 1);
 
-        // ----------------------current_clock
+        // -------------------------
         // (local) MCollect handle by p1 (command ab)
         let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
         let proc_votes_ab_p1 = clocks_p1.proc_votes(&cmd_ab, clock_ab_p1);

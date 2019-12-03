@@ -37,10 +37,10 @@ impl Pending {
         // from another newt process, and `pending.start` has not been called)
         let cmd_result = self.pending.get_mut(&rifl)?;
 
-        // add partial result:
-        // - if it's complete, remove it from pending and return it
-        let is_complete = cmd_result.add_partial(key, result);
-        if is_complete {
+        // add partial result and check if it's ready
+        let is_ready = cmd_result.add_partial(key, result);
+        if is_ready {
+            // if it is, remove it from pending and return it
             self.pending.remove(&rifl)
         } else {
             None
