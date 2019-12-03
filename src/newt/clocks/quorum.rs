@@ -2,7 +2,6 @@ use crate::base::ProcId;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone)]
 pub struct QuorumClocks {
     // fast quorum size
     q: usize,

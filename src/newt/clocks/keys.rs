@@ -4,7 +4,6 @@ use crate::kvs::Key;
 use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
 pub struct KeysClocks {
     id: ProcId,
     clocks: HashMap<Key, u64>,
