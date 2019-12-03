@@ -97,6 +97,7 @@ impl VotesTable {
         // compute process identifiers, making sure ids are non-zero
         let ids = (1..=n).map(|id| id as u64);
         let votes = AEClock::with(ids);
+        assert_eq!(votes.len(), n);
         VotesTable {
             n,
             stability_threshold,
@@ -172,6 +173,13 @@ mod tests {
 
     #[test]
     fn votes_table_flow() {
+        // procs ids
+        let proc_id_1 = 1;
+        let proc_id_2 = 2;
+        let proc_id_3 = 3;
+        let proc_id_4 = 4;
+        let proc_id_5 = 5;
+
         // let's consider that n = 5 and q = 3
         // so the threshold should be n - q + 1 = 3
         let n = 5;
@@ -182,62 +190,62 @@ mod tests {
 
         // a1
         let a1 = Command::Put(String::from("A1"));
-        let a1_dot = (0, 1);
-        // p0, final clock = 1
-        let a1_sort_id = (1, 0);
-        // p0, p1 and p2 voted with 1
+        let a1_dot = (proc_id_1, 1);
+        // p1, final clock = 1
+        let a1_sort_id = (1, proc_id_1);
+        // p1, p2 and p3 voted with 1
         let a1_votes = vec![
-            VoteRange::new(0, 1, 1),
-            VoteRange::new(1, 1, 1),
-            VoteRange::new(2, 1, 1),
+            VoteRange::new(proc_id_1, 1, 1),
+            VoteRange::new(proc_id_2, 1, 1),
+            VoteRange::new(proc_id_3, 1, 1),
         ];
 
         // c1
         let c1 = Command::Put(String::from("C1"));
-        let c1_dot = (2, 1);
+        let c1_dot = (proc_id_3, 1);
         // p3, final clock = 3
-        let c1_sort_id = (3, 1);
-        // p0 voted with 2, p1 voted with 3 and p2 voted with 2
+        let c1_sort_id = (3, proc_id_3);
+        // p1 voted with 2, p2 voted with 3 and p3 voted with 2
         let c1_votes = vec![
-            VoteRange::new(0, 2, 2),
-            VoteRange::new(1, 3, 3),
-            VoteRange::new(2, 2, 2),
+            VoteRange::new(proc_id_1, 2, 2),
+            VoteRange::new(proc_id_2, 3, 3),
+            VoteRange::new(proc_id_3, 2, 2),
         ];
 
         // d1
         let d1 = Command::Put(String::from("D1"));
-        let d1_dot = (3, 1);
-        // p3, final clock = 3
-        let d1_sort_id = (3, 3);
-        // p1 voted with 2, p2 voted with 3 and p3 voted with 1-3
+        let d1_dot = (proc_id_4, 1);
+        // p4, final clock = 3
+        let d1_sort_id = (3, proc_id_4);
+        // p2 voted with 2, p3 voted with 3 and p4 voted with 1-3
         let d1_votes = vec![
-            VoteRange::new(1, 2, 2),
-            VoteRange::new(2, 3, 3),
-            VoteRange::new(3, 1, 3),
+            VoteRange::new(proc_id_2, 2, 2),
+            VoteRange::new(proc_id_3, 3, 3),
+            VoteRange::new(proc_id_4, 1, 3),
         ];
 
         // e1
         let e1 = Command::Put(String::from("E1"));
-        let e1_dot = (4, 1);
-        // p4, final clock = 4
-        let e1_sort_id = (4, 4);
-        // p0 voted with 3, p3 voted with 4 and p4 voted with 1-4
+        let e1_dot = (proc_id_5, 1);
+        // p5, final clock = 4
+        let e1_sort_id = (4, proc_id_5);
+        // p1 voted with 3, p4 voted with 4 and p5 voted with 1-4
         let e1_votes = vec![
-            VoteRange::new(0, 3, 3),
-            VoteRange::new(3, 4, 4),
-            VoteRange::new(4, 1, 4),
+            VoteRange::new(proc_id_1, 3, 3),
+            VoteRange::new(proc_id_4, 4, 4),
+            VoteRange::new(proc_id_5, 1, 4),
         ];
 
         // e2
         let e2 = Command::Put(String::from("E2"));
-        let e2_dot = (4, 2);
-        // p4, final clock = 5
-        let e2_sort_id = (5, 4);
-        // p0 voted with 4-5, p3 voted with 5 and p4 voted with 5
+        let e2_dot = (proc_id_5, 2);
+        // p5, final clock = 5
+        let e2_sort_id = (5, proc_id_5);
+        // p1 voted with 4-5, p4 voted with 5 and p5 voted with 5
         let e2_votes = vec![
-            VoteRange::new(0, 4, 5),
-            VoteRange::new(3, 5, 5),
-            VoteRange::new(4, 5, 5),
+            VoteRange::new(proc_id_1, 4, 5),
+            VoteRange::new(proc_id_4, 5, 5),
+            VoteRange::new(proc_id_5, 5, 5),
         ];
 
         // add a1 to table
