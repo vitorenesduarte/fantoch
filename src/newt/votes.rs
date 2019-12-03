@@ -106,14 +106,14 @@ impl fmt::Debug for VoteRange {
 mod tests {
     use super::*;
     use crate::client::Rifl;
-    use crate::newt::clocks::Clocks;
+    use crate::newt::clocks::KeysClocks;
     use std::cmp::max;
 
     #[test]
     fn votes_flow() {
         // create clocks
-        let mut clocks_p0 = Clocks::new(0);
-        let mut clocks_p1 = Clocks::new(1);
+        let mut clocks_p0 = KeysClocks::new(0);
+        let mut clocks_p1 = KeysClocks::new(1);
 
         // keys
         let key_a = String::from("A");

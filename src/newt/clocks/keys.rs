@@ -5,13 +5,13 @@ use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-pub struct Clocks {
+pub struct KeysClocks {
     id: ProcId,
     clocks: HashMap<Key, u64>,
 }
 
-impl Clocks {
-    /// Create a new `Clocks` instance.
+impl KeysClocks {
+    /// Create a new `KeysClocks` instance.
     pub fn new(id: ProcId) -> Self {
         Self {
             id,
@@ -73,9 +73,9 @@ mod tests {
     use crate::client::Rifl;
 
     #[test]
-    fn clocks_flow() {
-        // create clocks
-        let mut clocks = Clocks::new(1);
+    fn key_clocks_flow() {
+        // create key clocks
+        let mut clocks = KeysClocks::new(1);
 
         // keys and commands
         let key_a = String::from("A");

@@ -1,14 +1,11 @@
-// This module contains the definition of `Clocks`.
-mod clocks;
-
 // This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
 mod votes;
 
 // This module contains the definition of `MultiVotesTable`.
 mod votes_table;
 
-// This module contains the definition of `QuorumClocks`.
-mod quorum_clocks;
+// This module contains the definition of `KeyClocks` and `QuorumClocks`.
+mod clocks;
 
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::{ClientId, Rifl};
@@ -16,8 +13,7 @@ use crate::config::Config;
 use crate::kvs::command::{Command, MultiCommand, MultiCommandResult};
 use crate::kvs::pending::Pending;
 use crate::kvs::store::{KVStore, Key};
-use crate::newt::clocks::Clocks;
-use crate::newt::quorum_clocks::QuorumClocks;
+use crate::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
@@ -25,7 +21,7 @@ use std::collections::HashMap;
 
 pub struct Newt {
     bp: BaseProc,
-    clocks: Clocks,
+    keys_clocks: KeysClocks,
     cmds_info: CommandsInfo,
     table: MultiVotesTable,
     store: KVStore,
@@ -49,7 +45,7 @@ impl Newt {
 
         // create `BaseProc`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProc::new(id, region, planet, config, q);
-        let clocks = Clocks::new(id);
+        let keys_clocks = KeysClocks::new(id);
         let cmds_info = CommandsInfo::new(q);
         let store = KVStore::new();
         let pending = Pending::new();
@@ -57,7 +53,7 @@ impl Newt {
         // create `Newt`
         Self {
             bp,
-            clocks,
+            keys_clocks,
             cmds_info,
             table,
             store,
@@ -120,7 +116,7 @@ impl Newt {
         let dot = self.bp.next_dot();
 
         // compute its clock
-        let clock = self.clocks.clock(&cmd) + 1;
+        let clock = self.keys_clocks.clock(&cmd) + 1;
 
         // clone the fast quorum
         let fast_quorum = self.bp.fast_quorum.clone().unwrap();
@@ -158,11 +154,11 @@ impl Newt {
         // order to save HashMap operations?
 
         // compute command clock
-        let cmd_clock = std::cmp::max(clock, self.clocks.clock(&cmd) + 1);
+        let cmd_clock = std::cmp::max(clock, self.keys_clocks.clock(&cmd) + 1);
 
         // compute votes consumed by this command
         // - this computation needs to occur before the next `bump_to`
-        let proc_votes = self.clocks.proc_votes(&cmd, cmd_clock);
+        let proc_votes = self.keys_clocks.proc_votes(&cmd, cmd_clock);
 
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
@@ -219,7 +215,7 @@ impl Newt {
         //   operations or when handling `MCollect` from other processes) that
         //   could potentially delay the execution of this command
         let cmd = info.cmd.as_ref().unwrap();
-        let local_proc_votes = self.clocks.proc_votes(cmd, max_clock);
+        let local_proc_votes = self.keys_clocks.proc_votes(cmd, max_clock);
         info.votes.add(local_proc_votes);
 
         // check if we have all necessary replies
