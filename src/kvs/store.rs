@@ -1,6 +1,14 @@
-use crate::kvs::command::{Command, CommandResult};
 use crate::kvs::{Key, Value};
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum KVOp {
+    Get,
+    Put(Value),
+    Delete,
+}
+
+pub type KVOpResult = Option<Value>;
 
 #[derive(Default)]
 pub struct KVStore {
@@ -13,12 +21,12 @@ impl KVStore {
         Default::default()
     }
 
-    /// Executes a `Command` on the `KVStore`.
-    pub fn execute(&mut self, key: &Key, cmd: Command) -> CommandResult {
-        match cmd {
-            Command::Get => self.store.get(key).cloned(),
-            Command::Put(value) => self.store.insert(key.clone(), value),
-            Command::Delete => self.store.remove(key),
+    /// Executes a `KVOp` on the `KVStore`.
+    pub fn execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
+        match op {
+            KVOp::Get => self.store.get(key).cloned(),
+            KVOp::Put(value) => self.store.insert(key.clone(), value),
+            KVOp::Delete => self.store.remove(key),
         }
     }
 }
@@ -40,54 +48,54 @@ mod tests {
         let mut store = KVStore::new();
 
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, Command::Get), None);
+        assert_eq!(store.execute(&key_a, KVOp::Get), None);
         // get key_b    -> none
-        assert_eq!(store.execute(&key_b, Command::Get), None);
+        assert_eq!(store.execute(&key_b, KVOp::Get), None);
 
         // put key_a x -> none
-        assert_eq!(store.execute(&key_a, Command::Put(x.clone())), None);
+        assert_eq!(store.execute(&key_a, KVOp::Put(x.clone())), None);
         // get key_a    -> some(x)
-        assert_eq!(store.execute(&key_a, Command::Get), Some(x.clone()));
+        assert_eq!(store.execute(&key_a, KVOp::Get), Some(x.clone()));
 
         // put key_b y -> none
-        assert_eq!(store.execute(&key_b, Command::Put(y.clone())), None);
+        assert_eq!(store.execute(&key_b, KVOp::Put(y.clone())), None);
         // get key_b    -> some(y)
-        assert_eq!(store.execute(&key_b, Command::Get), Some(y.clone()));
+        assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // put key_a z -> some(x)
         assert_eq!(
-            store.execute(&key_a, Command::Put(z.clone())),
+            store.execute(&key_a, KVOp::Put(z.clone())),
             Some(x.clone())
         );
         // get key_a    -> some(z)
-        assert_eq!(store.execute(&key_a, Command::Get), Some(z.clone()));
+        assert_eq!(store.execute(&key_a, KVOp::Get), Some(z.clone()));
         // get key_b    -> some(y)
-        assert_eq!(store.execute(&key_b, Command::Get), Some(y.clone()));
+        assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // delete key_a -> some(z)
-        assert_eq!(store.execute(&key_a, Command::Delete), Some(z.clone()));
+        assert_eq!(store.execute(&key_a, KVOp::Delete), Some(z.clone()));
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, Command::Get), None);
+        assert_eq!(store.execute(&key_a, KVOp::Get), None);
         // get key_b    -> some(y)
-        assert_eq!(store.execute(&key_b, Command::Get), Some(y.clone()));
+        assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // delete key_b -> some(y)
-        assert_eq!(store.execute(&key_b, Command::Delete), Some(y.clone()));
+        assert_eq!(store.execute(&key_b, KVOp::Delete), Some(y.clone()));
         // get key_b    -> none
-        assert_eq!(store.execute(&key_b, Command::Get), None);
+        assert_eq!(store.execute(&key_b, KVOp::Get), None);
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, Command::Get), None);
+        assert_eq!(store.execute(&key_a, KVOp::Get), None);
 
         // put key_a x -> none
-        assert_eq!(store.execute(&key_a, Command::Put(x.clone())), None);
+        assert_eq!(store.execute(&key_a, KVOp::Put(x.clone())), None);
         // get key_a    -> some(x)
-        assert_eq!(store.execute(&key_a, Command::Get), Some(x.clone()));
+        assert_eq!(store.execute(&key_a, KVOp::Get), Some(x.clone()));
         // get key_b    -> none
-        assert_eq!(store.execute(&key_b, Command::Get), None);
+        assert_eq!(store.execute(&key_b, KVOp::Get), None);
 
         // delete key_a -> some(x)
-        assert_eq!(store.execute(&key_a, Command::Delete), Some(x.clone()));
+        assert_eq!(store.execute(&key_a, KVOp::Delete), Some(x.clone()));
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, Command::Get), None);
+        assert_eq!(store.execute(&key_a, KVOp::Get), None);
     }
 }

@@ -1,5 +1,5 @@
 use crate::base::ProcId;
-use crate::kvs::command::MultiCommand;
+use crate::kvs::command::Command;
 use crate::kvs::Key;
 use std::collections::btree_map::{self, BTreeMap};
 use std::fmt;
@@ -20,7 +20,7 @@ impl Votes {
     }
 
     /// Initializes `Votes` instance.
-    pub fn set_keys(&mut self, cmd: &MultiCommand) {
+    pub fn set_keys(&mut self, cmd: &Command) {
         // insert an empty set of votes for each key
         cmd.keys().into_iter().for_each(|key| {
             // TODO use `Vec::with_capacity` here if we can
@@ -121,16 +121,14 @@ mod tests {
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_rifl, key_a.clone());
+        let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
         let mut votes_a = Votes::new();
         votes_a.set_keys(&cmd_a);
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_ab = MultiCommand::multi_get(
-            cmd_ab_rifl,
-            vec![key_a.clone(), key_b.clone()],
-        );
+        let cmd_ab =
+            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::new();
         votes_ab.set_keys(&cmd_ab);
 

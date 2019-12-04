@@ -1,32 +1,23 @@
 use crate::client::Rifl;
-use crate::kvs::{Key, Value};
+use crate::kvs::{KVOp, KVOpResult, Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;
 use std::iter::{self, FromIterator};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Command {
-    Get,
-    Put(Value),
-    Delete,
-}
-
-pub type CommandResult = Option<Value>;
-
 #[derive(Debug, Clone, PartialEq)]
-pub struct MultiCommand {
+pub struct Command {
     rifl: Rifl,
-    commands: BTreeMap<Key, Command>,
+    ops: BTreeMap<Key, KVOp>,
 }
 
-impl MultiCommand {
-    /// Create a new `MultiCommand`.
-    pub fn new(rifl: Rifl, commands: BTreeMap<Key, Command>) -> Self {
-        Self { rifl, commands }
+impl Command {
+    /// Create a new `Command`.
+    pub fn new(rifl: Rifl, ops: BTreeMap<Key, KVOp>) -> Self {
+        Self { rifl, ops }
     }
 
-    /// Create a new `MultiCommand` from an iterator.
-    pub fn from<I: IntoIterator<Item = (Key, Command)>>(
+    /// Create a new `Command` from an iterator.
+    pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(
         rifl: Rifl,
         iter: I,
     ) -> Self {
@@ -35,18 +26,18 @@ impl MultiCommand {
 
     /// Creates a get command.
     pub fn get(rifl: Rifl, key: Key) -> Self {
-        Self::from(rifl, iter::once((key, Command::Get)))
+        Self::from(rifl, iter::once((key, KVOp::Get)))
     }
 
     /// Creates a multi-get command.
     pub fn multi_get(rifl: Rifl, keys: Vec<Key>) -> Self {
-        let commands = keys.into_iter().map(|key| (key, Command::Get));
+        let commands = keys.into_iter().map(|key| (key, KVOp::Get));
         Self::from(rifl, commands)
     }
 
     /// Creates a put command.
     pub fn put(rifl: Rifl, key: Key, value: Value) -> Self {
-        Self::from(rifl, iter::once((key, Command::Put(value))))
+        Self::from(rifl, iter::once((key, KVOp::Put(value))))
     }
 
     /// Returns the command identifier.
@@ -56,38 +47,38 @@ impl MultiCommand {
 
     /// Returns references to list of keys modified by this command.
     pub fn keys(&self) -> Vec<&Key> {
-        self.commands.iter().map(|(key, _)| key).collect()
+        self.ops.iter().map(|(key, _)| key).collect()
     }
 
     /// Returns the number of keys accessed by this command.
-    pub fn key_count(&self) -> usize {
-        self.commands.len()
+    pub fn len(&self) -> usize {
+        self.ops.len()
     }
 }
 
-impl IntoIterator for MultiCommand {
-    type Item = (Key, Command);
-    type IntoIter = btree_map::IntoIter<Key, Command>;
+impl IntoIterator for Command {
+    type Item = (Key, KVOp);
+    type IntoIter = btree_map::IntoIter<Key, KVOp>;
 
-    /// Returns a `MultiCommand` into-iterator ordered by `Key` (ASC).
+    /// Returns a `Command` into-iterator ordered by `Key` (ASC).
     fn into_iter(self) -> Self::IntoIter {
-        self.commands.into_iter()
+        self.ops.into_iter()
     }
 }
 
 /// Structure that aggregates partial results of multi-key commands.
 #[derive(Debug, Clone, PartialEq)]
-pub struct MultiCommandResult {
+pub struct CommandResult {
     rifl: Rifl,
     key_count: usize,
-    results: HashMap<Key, CommandResult>,
+    results: HashMap<Key, KVOpResult>,
 }
 
-impl MultiCommandResult {
-    /// Creates a new `MultiCommandResult` given the number of keys accessed by
+impl CommandResult {
+    /// Creates a new `CommandResult` given the number of keys accessed by
     /// the command.
     pub fn new(rifl: Rifl, key_count: usize) -> Self {
-        Self {
+        CommandResult {
             rifl,
             key_count,
             results: HashMap::new(),
@@ -96,7 +87,7 @@ impl MultiCommandResult {
 
     /// Adds a partial command result to the overall result.
     /// Returns a boolean indicating whether the full result is ready.
-    pub fn add_partial(&mut self, key: Key, result: CommandResult) -> bool {
+    pub fn add_partial(&mut self, key: Key, result: KVOpResult) -> bool {
         let res = self.results.insert(key, result);
         // assert there was nothing about this key previously
         assert!(res.is_none());
@@ -111,7 +102,7 @@ impl MultiCommandResult {
     }
 
     /// Returns the commands results.
-    pub fn results(&self) -> &HashMap<Key, CommandResult> {
+    pub fn results(&self) -> &HashMap<Key, KVOpResult> {
         &self.results
     }
 }

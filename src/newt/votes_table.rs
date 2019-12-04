@@ -1,7 +1,7 @@
 use crate::base::ProcId;
 use crate::client::Rifl;
-use crate::kvs::command::{Command, MultiCommand};
-use crate::kvs::Key;
+use crate::kvs::command::Command;
+use crate::kvs::{KVOp, Key};
 use crate::newt::votes::{VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
@@ -23,36 +23,36 @@ impl MultiVotesTable {
     }
 
     /// Add a new command, its clock and votes to the votes table.
-    /// TODO Here we can't return a `MultiCommand` because it assumes one
+    /// TODO Here we can't return a `Command` because it assumes one
     /// command per key. Also, we don't really need the order enforced by
-    /// `MultiCommand` internal data structure.
+    /// `Command` internal data structure.
     pub fn add(
         &mut self,
         proc_id: ProcId,
-        cmd: Option<MultiCommand>,
+        cmd: Option<Command>,
         clock: u64,
         votes: Votes,
-    ) -> Option<HashMap<Key, Vec<(Rifl, Command)>>> {
-        // if noOp, do nothing; else, get its id and create an iterator of (key,
-        // command action)
+    ) -> Option<Vec<(Key, Vec<(Rifl, KVOp)>)>> {
+        // if noOp, do nothing;
+        // else, get its id and create an iterator of (Key, KVOp)
         // TODO if noOp, should we add `Votes` to the table, or there will be no
         // votes?
         let cmd = cmd?;
         let rifl = cmd.rifl();
 
         // create sort identifier:
-        // - if two commands got assigned the same clock, they will be ordered
-        //   by the process id
+        // - if two ops got assigned the same clock, they will be ordered by the
+        //   process id
         let sort_id = (clock, proc_id);
 
-        // add commands and votes to the votes tables, and at the same time
-        // compute which commands are safe to be executed
+        // add ops and votes to the votes tables, and at the same time compute
+        // which ops are safe to be executed
         let to_execute = votes
             .into_iter()
             .zip(cmd.into_iter())
-            .map(|((key, vote_ranges), (cmd_key, cmd_action))| {
+            .map(|((key, vote_ranges), (op_key, op))| {
                 // each item from zip should be about the same key
-                assert_eq!(key, cmd_key);
+                assert_eq!(key, op_key);
 
                 // TODO the borrow checker complains if `self.n` or
                 // `self.stability_threshold` is passed to `VotesTable::new`
@@ -65,16 +65,16 @@ impl MultiVotesTable {
                     .entry(key)
                     .or_insert_with(|| VotesTable::new(n, stability_threshold));
 
-                // add command and votes to the table
-                table.add(sort_id, rifl, cmd_action, vote_ranges);
+                // add op and votes to the table
+                table.add(sort_id, rifl, op, vote_ranges);
 
-                // get new commands to be executed
-                let stable = table.stable_commands().collect();
-                (cmd_key, stable)
+                // get new ops to be executed
+                let stable_ops = table.stable_ops().collect();
+                (op_key, stable_ops)
             })
             .collect();
 
-        // return commands to be executed
+        // return ops to be executed
         Some(to_execute)
     }
 }
@@ -87,7 +87,7 @@ struct VotesTable {
     // `votes` collects all votes seen until now so that we can compute which
     // timestamp is stable
     votes: AEClock<ProcId>,
-    cmds: BTreeMap<SortId, (Rifl, Command)>,
+    ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
 
 impl VotesTable {
@@ -99,7 +99,7 @@ impl VotesTable {
             n,
             stability_threshold,
             votes,
-            cmds: BTreeMap::new(),
+            ops: BTreeMap::new(),
         }
     }
 
@@ -107,11 +107,11 @@ impl VotesTable {
         &mut self,
         sort_id: SortId,
         rifl: Rifl,
-        cmd_action: Command,
+        op: KVOp,
         vote_ranges: Vec<VoteRange>,
     ) {
-        // add command to the sorted list of commands to be executed
-        let res = self.cmds.insert(sort_id, (rifl, cmd_action));
+        // add op to the sorted list of ops to be executed
+        let res = self.ops.insert(sort_id, (rifl, op));
         // and check there was nothing there for this exact same position
         assert!(res.is_none());
 
@@ -122,14 +122,13 @@ impl VotesTable {
                 &range.voter(),
                 range.start(),
                 range.end()
-            ))
+            ));
+            // assert that the clock size didn't change
+            assert_eq!(self.votes.len(), self.n);
         });
     }
 
-    fn stable_commands(&mut self) -> impl Iterator<Item = (Rifl, Command)> {
-        // ensure the clock size equals to n
-        assert_eq!(self.votes.len(), self.n);
-
+    fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
         // compute the (potentially) new stable clock for this key
         let stable_clock = self
             .votes
@@ -137,7 +136,7 @@ impl VotesTable {
             .expect("stability threshold must always be smaller than the number of processes");
 
         // compute stable sort id:
-        // - if clock 10 is stable, then we can execute all commands with an id
+        // - if clock 10 is stable, then we can execute all ops with an id
         //   smaller than `(11,0)`
         // - if id with `(11,0)` is also part of this local structure, we can
         //   also execute it without 11 being stable, because, once 11 is
@@ -146,19 +145,18 @@ impl VotesTable {
 
         // in fact, in the above example, if `(11,0)` is executed, we can also
         // execute `(11,1)`, and with that, execute `(11,2)` and so on
-        // TODO loop while the previous flow is true and also return those
-        // commands
+        // TODO loop while the previous flow is true and also return those ops
 
-        // compute the list of commands that can be executed now
+        // compute the list of ops that can be executed now
         let stable = {
-            let mut unstable = self.cmds.split_off(&stable_sort_id);
+            let mut unstable = self.ops.split_off(&stable_sort_id);
             // swap unstable with self.cmds
-            std::mem::swap(&mut unstable, &mut self.cmds);
+            std::mem::swap(&mut unstable, &mut self.ops);
             // now unstable contains in fact the stable
             unstable
         };
 
-        // return stable commands
+        // return stable ops
         stable.into_iter().map(|(_, id_and_action)| id_and_action)
     }
 }
@@ -186,7 +184,7 @@ mod tests {
         // in this example we'll use the dot as rifl
 
         // a1
-        let a1 = Command::Put(String::from("A1"));
+        let a1 = KVOp::Put(String::from("A1"));
         // assumes a single client per process that has the same id as the
         // process
         let a1_rifl = Rifl::new(proc_id_1, 1);
@@ -200,7 +198,7 @@ mod tests {
         ];
 
         // c1
-        let c1 = Command::Put(String::from("C1"));
+        let c1 = KVOp::Put(String::from("C1"));
         let c1_rifl = Rifl::new(proc_id_3, 1);
         // p3, final clock = 3
         let c1_sort_id = (3, proc_id_3);
@@ -212,7 +210,7 @@ mod tests {
         ];
 
         // d1
-        let d1 = Command::Put(String::from("D1"));
+        let d1 = KVOp::Put(String::from("D1"));
         let d1_rifl = Rifl::new(proc_id_4, 1);
         // p4, final clock = 3
         let d1_sort_id = (3, proc_id_4);
@@ -224,7 +222,7 @@ mod tests {
         ];
 
         // e1
-        let e1 = Command::Put(String::from("E1"));
+        let e1 = KVOp::Put(String::from("E1"));
         let e1_rifl = Rifl::new(proc_id_5, 1);
         // p5, final clock = 4
         let e1_sort_id = (4, proc_id_5);
@@ -236,7 +234,7 @@ mod tests {
         ];
 
         // e2
-        let e2 = Command::Put(String::from("E2"));
+        let e2 = KVOp::Put(String::from("E2"));
         let e2_rifl = Rifl::new(proc_id_5, 2);
         // p5, final clock = 5
         let e2_sort_id = (5, proc_id_5);
@@ -250,31 +248,31 @@ mod tests {
         // add a1 to table
         table.add(a1_sort_id, a1_rifl, a1.clone(), a1_votes.clone());
         // get stable: a1
-        let stable: Vec<_> = table.stable_commands().collect();
+        let stable: Vec<_> = table.stable_ops().collect();
         assert_eq!(stable, vec![(a1_rifl, a1.clone())]);
 
         // add d1 to table
         table.add(d1_sort_id, d1_rifl, d1.clone(), d1_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_commands().collect();
+        let stable: Vec<_> = table.stable_ops().collect();
         assert_eq!(stable, vec![]);
 
         // add c1 to table
         table.add(c1_sort_id, c1_rifl, c1.clone(), c1_votes.clone());
         // get stable: c1 then d1
-        let stable: Vec<_> = table.stable_commands().collect();
+        let stable: Vec<_> = table.stable_ops().collect();
         assert_eq!(stable, vec![(c1_rifl, c1.clone()), (d1_rifl, d1.clone())]);
 
         // add e2 to table
         table.add(e2_sort_id, e2_rifl, e2.clone(), e2_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_commands().collect();
+        let stable: Vec<_> = table.stable_ops().collect();
         assert_eq!(stable, vec![]);
 
         // add e1 to table
         table.add(e1_sort_id, e1_rifl, e1.clone(), e1_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_commands().collect();
+        let stable: Vec<_> = table.stable_ops().collect();
         assert_eq!(stable, vec![(e1_rifl, e1.clone()), (e2_rifl, e2.clone())]);
 
         // run all the permutations of the above and check that the final total
@@ -301,7 +299,7 @@ mod tests {
                 .into_iter()
                 .flat_map(|(sort_id, dot, cmd, votes)| {
                     table.add(sort_id, dot, cmd, votes);
-                    table.stable_commands()
+                    table.stable_ops()
                 })
                 .collect();
             assert_eq!(total_order, permutation_total_order);

@@ -1,5 +1,5 @@
 use crate::base::ProcId;
-use crate::kvs::command::MultiCommand;
+use crate::kvs::command::Command;
 use crate::kvs::Key;
 use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ impl KeysClocks {
     /// Retrieves the current clock for some command.
     /// If the command touches multiple keys, returns the maximum between the
     /// clocks associated with each key.
-    pub fn clock(&self, cmd: &MultiCommand) -> u64 {
+    pub fn clock(&self, cmd: &Command) -> u64 {
         cmd.keys()
             .iter()
             .map(|key| self.key_clock(key))
@@ -30,11 +30,7 @@ impl KeysClocks {
     }
 
     /// Computes the votes consumed by this command.
-    pub fn proc_votes(
-        &mut self,
-        cmd: &MultiCommand,
-        highest: u64,
-    ) -> ProcVotes {
+    pub fn proc_votes(&mut self, cmd: &Command, highest: u64) -> ProcVotes {
         cmd.keys()
             .into_iter()
             .map(|key| {
@@ -82,18 +78,16 @@ mod tests {
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = MultiCommand::get(cmd_a_rifl, key_a.clone());
+        let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
 
         // command b
         let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_b = MultiCommand::get(cmd_b_rifl, key_b.clone());
+        let cmd_b = Command::get(cmd_b_rifl, key_b.clone());
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
-        let cmd_ab = MultiCommand::multi_get(
-            cmd_ab_rifl,
-            vec![key_a.clone(), key_b.clone()],
-        );
+        let cmd_ab =
+            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // closure to retrieve the votes on some key
         let get_key_votes = |votes: &ProcVotes, key: &Key| {

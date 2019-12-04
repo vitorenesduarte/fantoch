@@ -1,6 +1,6 @@
 use crate::base::ProcId;
-use crate::client::{Client, ClientId, Rifl};
-use crate::kvs::command::{MultiCommand, MultiCommandResult};
+use crate::client::{Client, ClientId};
+use crate::kvs::command::{Command, CommandResult};
 use crate::newt::{Message, Newt, ToSend};
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -55,8 +55,9 @@ impl Router {
                 .collect(),
             ToSend::Clients(results) => results
                 .into_iter()
-                .filter_map(|(client, commands)| {
-                    self.route_to_client(client, commands)
+                .filter_map(|cmd_result| {
+                    let client = cmd_result.rifl().source();
+                    self.route_to_client(client, cmd_result)
                 })
                 .map(|(proc_id, cmd)| {
                     ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
@@ -80,14 +81,14 @@ impl Router {
     pub fn route_to_client(
         &mut self,
         client_id: ClientId,
-        commands: Vec<(Rifl, MultiCommandResult)>,
-    ) -> Option<(ProcId, MultiCommand)> {
+        cmd_result: CommandResult,
+    ) -> Option<(ProcId, Command)> {
         self.clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
                 panic!("client {} should have been set before", client_id);
             })
             .get_mut()
-            .handle(commands)
+            .handle(cmd_result)
     }
 }

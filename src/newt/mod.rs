@@ -8,10 +8,10 @@ mod votes_table;
 mod clocks;
 
 use crate::base::{BaseProc, Dot, ProcId};
-use crate::client::{ClientId, Rifl};
+use crate::client::Rifl;
 use crate::config::Config;
-use crate::kvs::command::{Command, MultiCommand, MultiCommandResult};
-use crate::kvs::{KVStore, Key, Pending};
+use crate::kvs::command::{Command, CommandResult};
+use crate::kvs::{KVOp, KVStore, Key, Pending};
 use crate::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
@@ -107,7 +107,7 @@ impl Newt {
     }
 
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: MultiCommand) -> ToSend {
+    fn handle_submit(&mut self, cmd: Command) -> ToSend {
         // start command in `Pending`
         self.pending.start(&cmd);
 
@@ -137,7 +137,7 @@ impl Newt {
         &mut self,
         from: ProcId,
         dot: Dot,
-        cmd: MultiCommand,
+        cmd: Command,
         quorum: Vec<ProcId>,
         clock: u64,
     ) -> ToSend {
@@ -246,7 +246,7 @@ impl Newt {
     fn handle_mcommit(
         &mut self,
         dot: Dot,
-        cmd: Option<MultiCommand>,
+        cmd: Option<Command>,
         clock: u64,
         votes: Votes,
     ) -> ToSend {
@@ -273,56 +273,40 @@ impl Newt {
                 .add(dot.source(), info.cmd.clone(), info.clock, votes);
 
         // execute commands
-        match to_execute {
-            Some(to_execute) => {
-                let ready_commands = self.execute(to_execute);
-                // if there ready commands, forward them to clients
-                if ready_commands.is_empty() {
-                    ToSend::Nothing
-                } else {
-                    ToSend::Clients(ready_commands)
-                }
+        if let Some(to_execute) = to_execute {
+            let ready = self.execute(to_execute);
+            // if there ready commands, forward them to clients
+            if ready.is_empty() {
+                ToSend::Nothing
+            } else {
+                ToSend::Clients(ready)
             }
+        } else {
             // no message to be sent
-            None => ToSend::Nothing,
+            ToSend::Nothing
         }
     }
 
     fn execute(
         &mut self,
-        to_execute: HashMap<Key, Vec<(Rifl, Command)>>,
-    ) -> HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>> {
-        // TODO I couldn't do the following with iterators. Try again.
-        // create variable that will hold all ready commads
-        let mut ready_commands = HashMap::new();
-
-        // iterate all commands to be executed
-        for (key, cmds) in to_execute {
-            for (rifl, cmd) in cmds {
-                // execute cmd in the `KVStore`
-                let cmd_result = self.store.execute(&key, cmd);
+        to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>,
+    ) -> Vec<CommandResult> {
+        let mut ready = Vec::new();
+        for (key, ops) in to_execute {
+            for (rifl, op) in ops {
+                // execute op in the `KVStore`
+                let op_result = self.store.execute(&key, op);
 
                 // add partial result to `Pending`
-                let res =
-                    self.pending.add_partial(rifl, key.clone(), cmd_result);
+                let cmd_result =
+                    self.pending.add_partial(rifl, key.clone(), op_result);
 
-                // if there's a new `MultiCommand` ready, add it to output var
-                if let Some(ready) = res {
-                    // get rifl and client id
-                    let ready_rifl = ready.rifl();
-                    let ready_client_id = rifl.source();
-
-                    // get the commands already ready for this client and add a
-                    // new one
-                    ready_commands
-                        .entry(ready_client_id)
-                        .or_insert_with(Vec::new)
-                        .push((ready_rifl, ready));
+                if let Some(cmd_result) = cmd_result {
+                    ready.push(cmd_result);
                 }
             }
         }
-
-        ready_commands
+        ready
     }
 }
 
@@ -357,7 +341,7 @@ impl CommandsInfo {
 struct CommandInfo {
     status: Status,
     quorum: Vec<ProcId>,
-    cmd: Option<MultiCommand>, // `None` if noOp
+    cmd: Option<Command>, // `None` if noOp
     clock: u64,
     // `votes` is used by the coordinator to aggregate `ProcVotes` from fast
     // quorum members
@@ -388,7 +372,7 @@ pub enum ToSend {
     // a protocol message to be sent to some processes
     Procs(Message, Vec<ProcId>),
     // a list of command results to be sent to the issuing client
-    Clients(HashMap<ClientId, Vec<(Rifl, MultiCommandResult)>>),
+    Clients(Vec<CommandResult>),
 }
 
 #[allow(dead_code)] // TODO remove me
@@ -419,12 +403,12 @@ impl ToSend {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Submit {
-        cmd: MultiCommand,
+        cmd: Command,
     },
     MCollect {
         from: ProcId,
         dot: Dot,
-        cmd: MultiCommand,
+        cmd: Command,
         quorum: Vec<ProcId>,
         clock: u64,
     },
@@ -436,7 +420,7 @@ pub enum Message {
     },
     MCommit {
         dot: Dot,
-        cmd: Option<MultiCommand>,
+        cmd: Option<Command>,
         clock: u64,
         votes: Votes,
     },

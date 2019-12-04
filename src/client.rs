@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::id::Id;
-use crate::kvs::command::{MultiCommand, MultiCommandResult};
+use crate::kvs::command::{Command, CommandResult};
 use crate::kvs::Key;
 use rand::Rng;
 
@@ -52,18 +52,18 @@ impl Client {
     /// and record command initial time to measure its overall latency
 
     /// Generate client's first command.
-    pub fn start(&mut self) -> (ProcId, MultiCommand) {
+    pub fn start(&mut self) -> (ProcId, Command) {
         assert_eq!(self.command_count, 0);
         assert!(self.commands > 0);
         self.gen_cmd()
     }
 
-    /// Handle executed commands.
+    /// Handle executed command.
     pub fn handle(
         &mut self,
-        commands: Vec<(Rifl, MultiCommandResult)>,
-    ) -> Option<(ProcId, MultiCommand)> {
-        // TODO do something with `commands`
+        cmd_result: CommandResult,
+    ) -> Option<(ProcId, Command)> {
+        // TODO do something with `cmd_result`
         // check if we should generate a new command or not
         if self.command_count < self.commands {
             Some(self.gen_cmd())
@@ -73,12 +73,12 @@ impl Client {
     }
 
     /// Generate the next command.
-    fn gen_cmd(&mut self) -> (ProcId, MultiCommand) {
+    fn gen_cmd(&mut self) -> (ProcId, Command) {
         // increment command count and generate command
         self.command_count += 1;
         let rifl = self.next_rifl();
         let key = self.gen_cmd_key();
-        (self.proc_id, MultiCommand::get(rifl, key))
+        (self.proc_id, Command::get(rifl, key))
     }
 
     /// Generate the next RIFL identifier.
