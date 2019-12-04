@@ -31,8 +31,8 @@ pub struct BaseProc {
     // fast quorum size
     pub q: usize,
     pub cmd_count: u64,
-    pub fast_quorum: Option<Vec<ProcId>>,
     pub all_procs: Option<Vec<ProcId>>,
+    pub fast_quorum: Option<Vec<ProcId>>,
 }
 
 impl BaseProc {
@@ -55,53 +55,46 @@ impl BaseProc {
             config,
             q,
             cmd_count: 0,
-            fast_quorum: None,
             all_procs: None,
+            fast_quorum: None,
         }
     }
 
     /// Updates the processes known by this process.
     pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) {
-        let region_to_index: HashMap<_, _> = self
+        // TODO the following computation could be cached
+        let indexes: HashMap<_, _> = self
             .planet
+            // get all regions sorted by distance from `self.region`
             .sorted(&self.region)
-            .unwrap()
+            .expect("region should be part of planet")
             .into_iter()
-            .map(|(_, region)| region)
+            // create a mapping from region to its index
             .enumerate()
-            .map(|(index, region)| (region, index))
+            .map(|(index, (_distance, region))| (region, index))
             .collect();
 
-        // use the region order (based on distance) to order processes
-        // - if two processes are from the same region, they're sorted by id
-        procs.sort_by(|(id_a, region_a), (id_b, region_b)| {
-            if region_a == region_b {
+        // use the region order index (based on distance) to order `procs`
+        // - if two `procs` are from the same region, they're sorted by id
+        procs.sort_unstable_by(|(id_a, a), (id_b, b)| {
+            if a == b {
                 id_a.cmp(id_b)
             } else {
-                let index_a = region_to_index.get(region_a).unwrap();
-                let index_b = region_to_index.get(region_b).unwrap();
+                let index_a = indexes.get(a).expect("region should exist");
+                let index_b = indexes.get(b).expect("region should exist");
                 index_a.cmp(index_b)
             }
         });
 
-        // create fast quorum by taking the first `q` elements
-        let mut count = 0;
-        let fast_quorum = procs
-            .iter()
-            .take_while(|_| {
-                count += 1;
-                count <= self.q
-            })
-            .map(|(id, _)| id)
-            .cloned()
-            .collect();
-
         // create all procs
-        let all_procs = procs.into_iter().map(|(id, _)| id).collect();
+        let all_procs: Vec<_> = procs.into_iter().map(|(id, _)| id).collect();
+
+        // create fast quorum by taking the first `q` elements
+        let fast_quorum = all_procs.clone().into_iter().take(self.q).collect();
 
         // set fast quorum and all procs
-        self.fast_quorum = Some(fast_quorum);
         self.all_procs = Some(all_procs);
+        self.fast_quorum = Some(fast_quorum);
     }
 
     /// Increments `cmd_count` and returns the next dot.
@@ -176,12 +169,42 @@ mod tests {
         // discover procs
         bp.discover(procs);
 
-        assert_eq!(bp.fast_quorum, Some(vec![8, 9, 6, 7, 5, 14]));
         assert_eq!(
             bp.all_procs,
             Some(vec![
                 8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
             ])
         );
+        assert_eq!(bp.fast_quorum, Some(vec![8, 9, 6, 7, 5, 14]));
+    }
+
+    #[test]
+    fn discover_same_region() {
+        // procs
+        let procs = vec![
+            (0, Region::new("asia-east1")),
+            (1, Region::new("asia-east1")),
+            (2, Region::new("europe-north1")),
+            (3, Region::new("europe-north1")),
+            (4, Region::new("europe-west1")),
+        ];
+
+        // config
+        let n = 5;
+        let f = 2;
+        let config = Config::new(n, f);
+
+        // bp
+        let id = 2;
+        let region = Region::new("europe-north1");
+        let planet = Planet::new("latency/");
+        let q = 3;
+        let mut bp = BaseProc::new(id, region, planet, config, q);
+
+        // discover procs
+        bp.discover(procs);
+
+        assert_eq!(bp.all_procs, Some(vec![2, 3, 4, 0, 1]));
+        assert_eq!(bp.fast_quorum, Some(vec![2, 3, 4]));
     }
 }
