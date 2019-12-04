@@ -1,4 +1,5 @@
 use crate::base::ProcId;
+use crate::id::Id;
 use crate::kvs::command::{MultiCommand, MultiCommandResult};
 use crate::kvs::Key;
 use rand::Rng;
@@ -6,23 +7,7 @@ use rand::Rng;
 pub type ClientId = u64;
 
 // for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Rifl {
-    client_id: ClientId,
-    seq: u64,
-}
-
-impl Rifl {
-    /// Creates a new `Rifl` identifier.
-    pub fn new(client_id: ClientId, seq: u64) -> Self {
-        Self { client_id, seq }
-    }
-
-    /// Retrieves the identifier of the client that created this `Rifl`.
-    pub fn client_id(&self) -> ClientId {
-        self.client_id
-    }
-}
+pub type Rifl = Id<ClientId>;
 
 pub struct Client {
     /// id of this client

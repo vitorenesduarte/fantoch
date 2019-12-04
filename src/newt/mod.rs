@@ -161,7 +161,7 @@ impl Newt {
 
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
-        if self.bp.id == dot.proc_id() {
+        if self.bp.id == dot.source() {
             info.votes.set_keys(&cmd);
         }
 
@@ -270,7 +270,7 @@ impl Newt {
         // update votes table and get commands that can be executed
         let to_execute =
             self.table
-                .add(dot.proc_id(), info.cmd.clone(), info.clock, votes);
+                .add(dot.source(), info.cmd.clone(), info.clock, votes);
 
         // execute commands
         match to_execute {
@@ -310,7 +310,7 @@ impl Newt {
                 if let Some(ready) = res {
                     // get rifl and client id
                     let ready_rifl = ready.rifl();
-                    let ready_client_id = rifl.client_id();
+                    let ready_client_id = rifl.source();
 
                     // get the commands already ready for this client and add a
                     // new one

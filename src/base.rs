@@ -1,26 +1,11 @@
 use crate::config::Config;
+use crate::id::{Id, IdGen};
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 
 pub type ProcId = u64;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Dot {
-    proc_id: ProcId,
-    seq: u64,
-}
-
-impl Dot {
-    /// Creates a new `Dot` identifier.
-    pub fn new(proc_id: ProcId, seq: u64) -> Self {
-        Self { proc_id, seq }
-    }
-
-    /// Retrieves the identifier of the process that created this `Dot`.
-    pub fn proc_id(&self) -> ProcId {
-        self.proc_id
-    }
-}
+pub type Dot = Id<ProcId>;
+type DotGen = IdGen<ProcId>;
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {
@@ -30,9 +15,9 @@ pub struct BaseProc {
     pub config: Config,
     // fast quorum size
     pub q: usize,
-    pub cmd_count: u64,
     pub all_procs: Option<Vec<ProcId>>,
     pub fast_quorum: Option<Vec<ProcId>>,
+    dot_gen: DotGen,
 }
 
 impl BaseProc {
@@ -54,9 +39,9 @@ impl BaseProc {
             planet,
             config,
             q,
-            cmd_count: 0,
             all_procs: None,
             fast_quorum: None,
+            dot_gen: DotGen::new(id),
         }
     }
 
@@ -99,33 +84,13 @@ impl BaseProc {
 
     /// Increments `cmd_count` and returns the next dot.
     pub fn next_dot(&mut self) -> Dot {
-        self.cmd_count += 1;
-        Dot::new(self.id, self.cmd_count)
+        self.dot_gen.next()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn next_dot() {
-        // config
-        let n = 5;
-        let f = 1;
-        let config = Config::new(n, f);
-
-        // bp
-        let id = 1;
-        let region = Region::new("europe-west3");
-        let planet = Planet::new("latency/");
-        let q = 2;
-        let mut bp = BaseProc::new(id, region, planet, config, q);
-
-        assert_eq!(bp.next_dot(), Dot::new(id, 1));
-        assert_eq!(bp.next_dot(), Dot::new(id, 2));
-        assert_eq!(bp.next_dot(), Dot::new(id, 3));
-    }
 
     #[test]
     fn discover() {
