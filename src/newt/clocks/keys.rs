@@ -25,7 +25,7 @@ impl KeysClocks {
         cmd.keys()
             .map(|key| self.key_clock(key))
             .max()
-            .unwrap_or(0)
+            .expect("there must be at least one key in the command")
     }
 
     /// Computes the votes consumed by this command.
@@ -66,7 +66,7 @@ mod tests {
     use crate::client::Rifl;
 
     #[test]
-    fn key_clocks_flow() {
+    fn keys_clocks_flow() {
         // create key clocks
         let mut clocks = KeysClocks::new(1);
 

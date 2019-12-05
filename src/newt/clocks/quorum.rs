@@ -18,7 +18,7 @@ impl QuorumClocks {
     pub fn new(q: usize) -> Self {
         Self {
             q,
-            participants: HashSet::new(),
+            participants: HashSet::with_capacity(q),
             max_clock: 0,
             max_clock_count: 0,
         }
