@@ -1,5 +1,8 @@
-use crate::kvs::{Key, Value};
 use std::collections::HashMap;
+
+// Definition of `Key` and `Value` types.
+pub type Key = String;
+pub type Value = String;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum KVOp {
