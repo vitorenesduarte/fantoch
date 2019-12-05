@@ -55,9 +55,14 @@ mod tests {
         let source = 10;
         let mut gen = MyGen::new(source);
 
-        for seq in 1..10 {
+        // generate `n` ids and check the `id` generated
+        let n = 100;
+
+        for seq in 1..=n {
             // generate id
             let id = gen.next_id();
+
+            // check `id`
             assert_eq!(id.source, source);
             assert_eq!(id.seq, seq);
         }
