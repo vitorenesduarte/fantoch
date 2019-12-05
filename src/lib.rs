@@ -7,11 +7,15 @@ pub mod config;
 // This module contains the definition of `Id`.
 pub mod id;
 
+// This module contains the definition of `Client`, `ClientId` and `Rifl`.
+pub mod client;
+
 // This module contains the implementation of a key-value store.
 pub mod kvs;
 
-// This module contains the definition of `Client`, `ClientId` and `Rifl`.
-pub mod client;
+// This module contains the definition of `Command`, `CommandResult` and
+// `Pending`.
+pub mod command;
 
 // This module contains common functionality between all protocols.
 pub mod base;

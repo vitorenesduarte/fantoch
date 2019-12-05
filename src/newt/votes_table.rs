@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::client::Rifl;
-use crate::kvs::command::Command;
+use crate::command::Command;
 use crate::kvs::{KVOp, Key};
 use crate::newt::votes::{VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};

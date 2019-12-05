@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::client::{Client, ClientId};
-use crate::kvs::command::{Command, CommandResult};
+use crate::command::{Command, CommandResult};
 use crate::newt::{Message, Newt, ToSend};
 use std::cell::Cell;
 use std::collections::HashMap;

@@ -9,9 +9,9 @@ mod clocks;
 
 use crate::base::{BaseProc, Dot, ProcId};
 use crate::client::Rifl;
+use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
-use crate::kvs::command::{Command, CommandResult};
-use crate::kvs::{KVOp, KVStore, Key, Pending};
+use crate::kvs::{KVOp, KVStore, Key};
 use crate::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;

@@ -1,5 +1,5 @@
 use crate::base::ProcId;
-use crate::kvs::command::Command;
+use crate::command::Command;
 use crate::kvs::Key;
 use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;

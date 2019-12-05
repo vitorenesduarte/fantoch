@@ -1,5 +1,5 @@
 use crate::client::Rifl;
-use crate::kvs::command::{Command, CommandResult};
+use crate::command::{Command, CommandResult};
 use crate::kvs::{KVOpResult, Key};
 use std::collections::HashMap;
 

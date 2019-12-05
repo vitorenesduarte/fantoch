@@ -1,6 +1,6 @@
 use crate::base::ProcId;
+use crate::command::{Command, CommandResult};
 use crate::id::Id;
-use crate::kvs::command::{Command, CommandResult};
 use crate::kvs::Key;
 use rand::Rng;
 
