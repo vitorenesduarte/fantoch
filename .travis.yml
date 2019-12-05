@@ -47,12 +47,10 @@ before_script: |
 
   fi
 
-script:
-  - cargo build
-  - cargo test
-
-after_success: |
-  if [ "$TRAVIS_RUST_VERSION" == "stable" ]; then
+script: |
+  cargo build
+  cargo test
+  if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
     # measure code coverage and upload to coveralls.io
 
     # <tarpaulin>
