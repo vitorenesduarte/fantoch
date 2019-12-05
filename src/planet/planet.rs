@@ -71,10 +71,7 @@ impl Planet {
 }
 
 impl Planet {
-    pub fn distance_matrix(
-        &self,
-        regions: Vec<Region>,
-    ) -> Result<String, fmt::Error> {
+    pub fn distance_matrix(&self, regions: Vec<Region>) -> Result<String, fmt::Error> {
         let mut output = String::new();
 
         // start header

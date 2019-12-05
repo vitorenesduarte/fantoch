@@ -127,8 +127,7 @@ mod tests {
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_ab =
-            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::new();
         votes_ab.set_keys(&cmd_ab);
 

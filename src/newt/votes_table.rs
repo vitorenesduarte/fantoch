@@ -41,8 +41,7 @@ impl MultiVotesTable {
         let rifl = cmd.rifl();
 
         // create sort identifier:
-        // - if two ops got assigned the same clock, they will be ordered by the
-        //   process id
+        // - if two ops got assigned the same clock, they will be ordered by the process id
         let sort_id = (clock, proc_id);
 
         // add ops and votes to the votes tables, and at the same time compute
@@ -103,13 +102,7 @@ impl VotesTable {
         }
     }
 
-    fn add(
-        &mut self,
-        sort_id: SortId,
-        rifl: Rifl,
-        op: KVOp,
-        vote_ranges: Vec<VoteRange>,
-    ) {
+    fn add(&mut self, sort_id: SortId, rifl: Rifl, op: KVOp, vote_ranges: Vec<VoteRange>) {
         // add op to the sorted list of ops to be executed
         let res = self.ops.insert(sort_id, (rifl, op));
         // and check there was nothing there for this exact same position
@@ -118,11 +111,9 @@ impl VotesTable {
         // update votes with the votes used on this command
         vote_ranges.into_iter().for_each(|range| {
             // assert there's at least one new vote
-            assert!(self.votes.add_range(
-                &range.voter(),
-                range.start(),
-                range.end()
-            ));
+            assert!(self
+                .votes
+                .add_range(&range.voter(), range.start(), range.end()));
             // assert that the clock size didn't change
             assert_eq!(self.votes.len(), self.n);
         });
@@ -136,11 +127,10 @@ impl VotesTable {
             .expect("stability threshold must always be smaller than the number of processes");
 
         // compute stable sort id:
-        // - if clock 10 is stable, then we can execute all ops with an id
-        //   smaller than `(11,0)`
-        // - if id with `(11,0)` is also part of this local structure, we can
-        //   also execute it without 11 being stable, because, once 11 is
-        //   stable, it will be the first to be executed either way
+        // - if clock 10 is stable, then we can execute all ops with an id smaller than `(11,0)`
+        // - if id with `(11,0)` is also part of this local structure, we can also execute it
+        //   without 11 being stable, because, once 11 is stable, it will be the first to be
+        //   executed either way
         let stable_sort_id = (stable_clock + 1, 0);
 
         // in fact, in the above example, if `(11,0)` is executed, we can also

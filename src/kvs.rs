@@ -66,10 +66,7 @@ mod tests {
         assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // put key_a z -> some(x)
-        assert_eq!(
-            store.execute(&key_a, KVOp::Put(z.clone())),
-            Some(x.clone())
-        );
+        assert_eq!(store.execute(&key_a, KVOp::Put(z.clone())), Some(x.clone()));
         // get key_a    -> some(z)
         assert_eq!(store.execute(&key_a, KVOp::Get), Some(z.clone()));
         // get key_b    -> some(y)

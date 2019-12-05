@@ -22,8 +22,8 @@ impl Router {
     }
 
     /// Registers a `Newt` process in the `Router` by storing it in a `Cell`.
-    /// - from this call onwards, the process can be mutated through this
-    ///   `Router` by borrowing it mutabily, as done in the route methods.
+    /// - from this call onwards, the process can be mutated through this `Router` by borrowing it
+    ///   mutabily, as done in the route methods.
     pub fn register_proc(&mut self, newt: Newt) {
         // get identifier
         let id = newt.id();
@@ -34,8 +34,8 @@ impl Router {
     }
 
     /// Registers a `Client` process in the `Router` by storing it in a `Cell`.
-    /// - from this call onwards, the process can be mutated through this
-    ///   `Router` by borrowing it mutabily, as done in the route methods.
+    /// - from this call onwards, the process can be mutated through this `Router` by borrowing it
+    ///   mutabily, as done in the route methods.
     pub fn register_client(&mut self, client: Client) {
         // get identifier
         let id = client.id();
@@ -59,9 +59,7 @@ impl Router {
                     let client = cmd_result.rifl().source();
                     self.route_to_client(client, cmd_result)
                 })
-                .map(|(proc_id, cmd)| {
-                    ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
-                })
+                .map(|(proc_id, cmd)| ToSend::Procs(Message::Submit { cmd }, vec![proc_id]))
                 .collect(),
         }
     }

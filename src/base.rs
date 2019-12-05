@@ -22,13 +22,7 @@ pub struct BaseProc {
 
 impl BaseProc {
     /// Creates a new `BaseProc`.
-    pub fn new(
-        id: ProcId,
-        region: Region,
-        planet: Planet,
-        config: Config,
-        q: usize,
-    ) -> Self {
+    pub fn new(id: ProcId, region: Region, planet: Planet, config: Config, q: usize) -> Self {
         // since processes lead with ballot `id` when taking the slow path and
         // we may rely on the fact that a zero accepted ballot means the process
         // has never been through Paxos phase-2, all ids must non-zero

@@ -84,13 +84,11 @@ mod tests {
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
-        let cmd_ab =
-            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // closure to retrieve the votes on some key
-        let get_key_votes = |votes: &ProcVotes, key: &Key| {
-            votes.get(key).unwrap().as_ref().unwrap().votes()
-        };
+        let get_key_votes =
+            |votes: &ProcVotes, key: &Key| votes.get(key).unwrap().as_ref().unwrap().votes();
 
         // -------------------------
         // first clock for command a

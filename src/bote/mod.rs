@@ -27,22 +27,15 @@ impl Bote {
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
     /// - one list being the regions where `clients` are
-    pub fn leaderless(
-        &self,
-        servers: &[Region],
-        clients: &[Region],
-        quorum_size: usize,
-    ) -> Stats {
+    pub fn leaderless(&self, servers: &[Region], clients: &[Region], quorum_size: usize) -> Stats {
         let latencies: Vec<_> = clients
             .iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
-                let (client_to_closest, closest) =
-                    self.nth_closest(1, client, servers);
+                let (client_to_closest, closest) = self.nth_closest(1, client, servers);
 
                 // compute the latency from such region to its closest quorum
-                let closest_to_quorum =
-                    self.quorum_latency(closest, servers, quorum_size);
+                let closest_to_quorum = self.quorum_latency(closest, servers, quorum_size);
 
                 // client perceived latency is the sum of both
                 client_to_closest + closest_to_quorum
@@ -67,16 +60,14 @@ impl Bote {
         quorum_size: usize,
     ) -> Stats {
         // compute the latency from leader to its closest quorum
-        let leader_to_quorum =
-            self.quorum_latency(leader, servers, quorum_size);
+        let leader_to_quorum = self.quorum_latency(leader, servers, quorum_size);
 
         // compute perceived latency for each client
         let latencies: Vec<_> = clients
             .iter()
             .map(|client| {
                 // compute the latency from client to leader
-                let client_to_leader =
-                    self.planet.latency(client, &leader).unwrap();
+                let client_to_leader = self.planet.latency(client, &leader).unwrap();
                 // client perceived latency is the sum of both
                 client_to_leader + leader_to_quorum
             })
@@ -141,12 +132,7 @@ impl Bote {
     /// Computes the latency to closest quorum of size `quorum_size`.
     /// It takes as input the considered source region `from` and all available
     /// `regions`.
-    fn quorum_latency(
-        &self,
-        from: &Region,
-        regions: &[Region],
-        quorum_size: usize,
-    ) -> usize {
+    fn quorum_latency(&self, from: &Region, regions: &[Region], quorum_size: usize) -> usize {
         let (latency, _) = self.nth_closest(quorum_size, &from, &regions);
         *latency
     }
@@ -155,12 +141,7 @@ impl Bote {
     /// This same method can be used to find the:
     /// - latency to the closest quorum
     /// - latency to the closest region
-    fn nth_closest(
-        &self,
-        nth: usize,
-        from: &Region,
-        regions: &[Region],
-    ) -> &(usize, Region) {
+    fn nth_closest(&self, nth: usize, from: &Region, regions: &[Region]) -> &(usize, Region) {
         self.planet
             // sort by distance
             .sorted(from)
@@ -191,8 +172,7 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions =
-            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2
         let quorum_size = 2;
@@ -223,8 +203,7 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions =
-            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 3
         let quorum_size = 3;
@@ -255,8 +234,7 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let servers =
-            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let servers = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // subset of clients: w1 w2
         let clients = vec![w1.clone(), w2.clone()];
@@ -309,8 +287,7 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions =
-            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2:
         let quorum_size = 2;
@@ -353,8 +330,7 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let servers =
-            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let servers = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2:
         let quorum_size = 2;
@@ -428,17 +404,11 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions =
-            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2:
         let quorum_size = 2;
-        let (_, stats) = bote.best_leader(
-            &regions,
-            &regions,
-            quorum_size,
-            StatsSortBy::Mean,
-        );
+        let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, StatsSortBy::Mean);
 
         assert_eq!(stats.show_mean(), "14.2");
         assert_eq!(stats.show_cov(), "0.3");

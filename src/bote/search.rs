@@ -34,8 +34,8 @@ type Configs = HashMap<usize, Vec<ConfigAndStats>>;
 type AllConfigs = Vec<(Vec<Region>, Configs)>;
 
 // ranked: mapping from `n` to list of configurations of such size
-// - these configurations are already a subset of all configurations that passed
-//   some filter and have a score associated with it
+// - these configurations are already a subset of all configurations that passed some filter and
+//   have a score associated with it
 type Ranked<'a> = HashMap<usize, Vec<(F64, &'a ConfigAndStats)>>;
 
 // all ranked: mapping from clients to `Ranked`
@@ -57,40 +57,33 @@ impl Search {
         // get filename
         let filename = Self::filename(min_n, max_n, &search_input);
 
-        timed!("get saved search", Self::get_saved_search(&filename))
-            .unwrap_or_else(|| {
-                // create planet
-                let planet = Planet::new(lat_dir);
+        timed!("get saved search", Self::get_saved_search(&filename)).unwrap_or_else(|| {
+            // create planet
+            let planet = Planet::new(lat_dir);
 
-                // get regions for servers and clients
-                let (servers, clients) =
-                    search_input.get_inputs(max_n, &planet);
+            // get regions for servers and clients
+            let (servers, clients) = search_input.get_inputs(max_n, &planet);
 
-                // create bote
-                let bote = Bote::from(planet);
+            // create bote
+            let bote = Bote::from(planet);
 
-                // create empty config and get all configs
-                let all_configs = timed!(
-                    "compute all configs",
-                    Self::compute_all_configs(
-                        min_n, max_n, servers, clients, bote
-                    )
-                );
+            // create empty config and get all configs
+            let all_configs = timed!(
+                "compute all configs",
+                Self::compute_all_configs(min_n, max_n, servers, clients, bote)
+            );
 
-                // create a new `Search` instance
-                let search = Self { all_configs };
+            // create a new `Search` instance
+            let search = Self { all_configs };
 
-                // save it if `save_search`
-                if save_search {
-                    timed!(
-                        "save search",
-                        Self::save_search(&filename, &search)
-                    );
-                }
+            // save it if `save_search`
+            if save_search {
+                timed!("save search", Self::save_search(&filename, &search));
+            }
 
-                // and return it
-                search
-            })
+            // and return it
+            search
+        })
     }
 
     pub fn sorted_evolving_configs(
@@ -106,9 +99,7 @@ impl Search {
         // show how many ranked configs we have
         let count: usize = all_ranked
             .iter()
-            .map(|(_, configs)| {
-                configs.iter().map(|(_, css)| css.len()).sum::<usize>()
-            })
+            .map(|(_, configs)| configs.iter().map(|(_, css)| css.len()).sum::<usize>())
             .sum();
         println!("config count: {}", count);
 
@@ -127,40 +118,23 @@ impl Search {
             }
 
             Self::configs(&ranked, 3).for_each(|(score3, cs3)| {
-                Self::super_configs(&ranked, 5, cs3, p).for_each(
-                    |(score5, cs5)| {
-                        Self::super_configs(&ranked, 7, cs5, p).for_each(
-                            |(score7, cs7)| {
-                                Self::super_configs(&ranked, 9, cs7, p)
-                                    .for_each(|(score9, cs9)| {
-                                        Self::super_configs(
-                                            &ranked, 11, cs9, p,
-                                        )
-                                        .for_each(|(score11, cs11)| {
-                                            Self::super_configs(
-                                                &ranked, 13, cs11, p,
-                                            )
-                                            .for_each(|(score13, cs13)| {
-                                                let score = score3
-                                                    + score5
-                                                    + score7
-                                                    + score9
-                                                    + score11
-                                                    + score13;
-                                                let css = vec![
-                                                    cs3, cs5, cs7, cs9, cs11,
-                                                    cs13,
-                                                ];
-                                                let config =
-                                                    (score, css, clients);
-                                                configs.insert(config);
-                                            });
-                                        });
-                                    });
-                            },
-                        );
-                    },
-                );
+                Self::super_configs(&ranked, 5, cs3, p).for_each(|(score5, cs5)| {
+                    Self::super_configs(&ranked, 7, cs5, p).for_each(|(score7, cs7)| {
+                        Self::super_configs(&ranked, 9, cs7, p).for_each(|(score9, cs9)| {
+                            Self::super_configs(&ranked, 11, cs9, p).for_each(|(score11, cs11)| {
+                                Self::super_configs(&ranked, 13, cs11, p).for_each(
+                                    |(score13, cs13)| {
+                                        let score =
+                                            score3 + score5 + score7 + score9 + score11 + score13;
+                                        let css = vec![cs3, cs5, cs7, cs9, cs11, cs13];
+                                        let config = (score, css, clients);
+                                        configs.insert(config);
+                                    },
+                                );
+                            });
+                        });
+                    });
+                });
             });
         });
 
@@ -217,9 +191,7 @@ impl Search {
                 let servers = servers.as_ref().unwrap_or(&clients);
 
                 // compute `Configs` for this set of clients
-                let configs = Self::compute_configs(
-                    min_n, max_n, &servers, &clients, &bote,
-                );
+                let configs = Self::compute_configs(min_n, max_n, &servers, &clients, &bote);
 
                 (clients, configs)
             })
@@ -254,11 +226,7 @@ impl Search {
             .collect()
     }
 
-    pub fn compute_stats(
-        config: &[Region],
-        all_clients: &[Region],
-        bote: &Bote,
-    ) -> AllStats {
+    pub fn compute_stats(config: &[Region], all_clients: &[Region], bote: &Bote) -> AllStats {
         // compute n
         let n = config.len();
         let mut stats = AllStats::new();
@@ -267,12 +235,7 @@ impl Search {
         // - this leader will then be used for both f=1 and f=2 stats
         let f = 1;
         let quorum_size = FPaxos.quorum_size(n, f);
-        let (leader, _) = bote.best_leader(
-            config,
-            all_clients,
-            quorum_size,
-            StatsSortBy::COV,
-        );
+        let (leader, _) = bote.best_leader(config, all_clients, quorum_size, StatsSortBy::COV);
 
         // compute stats for both `clients` and colocated clients i.e. `config`
         let which_clients = vec![
@@ -351,9 +314,7 @@ impl Search {
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
-            .unwrap_or_else(|| {
-                panic!("configs for n = {} should be ranked!", n)
-            })
+            .unwrap_or_else(|| panic!("configs for n = {} should be ranked!", n))
             .iter()
             .cloned()
             // TODO can we avoid collecting here?
@@ -373,9 +334,7 @@ impl Search {
     ) -> impl Iterator<Item = (F64, &'a ConfigAndStats)> {
         ranked
             .get(&n)
-            .unwrap_or_else(|| {
-                panic!("super configs for n = {} should be ranked!", n)
-            })
+            .unwrap_or_else(|| panic!("super configs for n = {} should be ranked!", n))
             .iter()
             .filter(|(_, (config, stats))| {
                 config.is_superset(prev_config)
@@ -408,11 +367,7 @@ impl Search {
         })
     }
 
-    fn compute_score(
-        n: usize,
-        stats: &AllStats,
-        params: &RankingParams,
-    ) -> (bool, F64) {
+    fn compute_score(n: usize, stats: &AllStats, params: &RankingParams) -> (bool, F64) {
         // compute score and check if it is a valid configuration
         let mut valid = true;
         let mut score = F64::zero();
@@ -449,8 +404,7 @@ impl Search {
 
             // make sure we improve on EPaxos for large n
             if n == 11 || n == 13 {
-                valid = valid
-                    && epaxos_mean_improv >= params.min_mean_epaxos_improv;
+                valid = valid && epaxos_mean_improv >= params.min_mean_epaxos_improv;
             }
 
             // update score: give extra weigth for epaxos improv
@@ -466,11 +420,7 @@ impl Search {
         std::cmp::min(n / 2 as usize, max_f)
     }
 
-    fn filename(
-        min_n: usize,
-        max_n: usize,
-        search_input: &SearchInput,
-    ) -> String {
+    fn filename(min_n: usize, max_n: usize, search_input: &SearchInput) -> String {
         format!("{}_{}_{}.data", min_n, max_n, search_input)
     }
 
@@ -481,10 +431,7 @@ impl Search {
             // create a buf reader
             .map(BufReader::new)
             // and try to deserialize
-            .map(|reader| {
-                bincode::deserialize_from(reader)
-                    .expect("error deserializing search")
-            })
+            .map(|reader| bincode::deserialize_from(reader).expect("error deserializing search"))
     }
 
     fn save_search(name: &str, search: &Search) {
@@ -495,8 +442,7 @@ impl Search {
             .map(BufWriter::new)
             // and try to serialize
             .map(|writer| {
-                bincode::serialize_into(writer, search)
-                    .expect("error serializing search")
+                bincode::serialize_into(writer, search).expect("error serializing search")
             })
             .unwrap_or_else(|| panic!("couldn't save seach"));
     }
@@ -512,8 +458,7 @@ pub enum SearchInput {
     /// search within the 20 regions, clients deployed in the 20 regions
     R20C20,
     /// search within 2018 17 regions, clients deployed in the MAX regions
-    /// - e.g. if the max number of regions is 11, clients are deployed in
-    ///   those 11 regions
+    /// - e.g. if the max number of regions is 11, clients are deployed in those 11 regions
     R17CMaxN,
 }
 
@@ -532,11 +477,7 @@ impl SearchInput {
     /// It returns a tuple where the:
     /// - 1st component is the set of regions where to look for a configuration
     /// - 2nd component is a list of client locations
-    fn get_inputs(
-        &self,
-        max_n: usize,
-        planet: &Planet,
-    ) -> (Option<Vec<Region>>, Vec<Vec<Region>>) {
+    fn get_inputs(&self, max_n: usize, planet: &Planet) -> (Option<Vec<Region>>, Vec<Vec<Region>>) {
         // selected 13-regions
         let regions13 = vec![
             Region::new("asia-southeast1"),
@@ -593,8 +534,7 @@ impl SearchInput {
                 (Some(all_regions), clients)
             }
             SearchInput::R17CMaxN => {
-                let clients =
-                    regions17.combination(max_n).map(vec_cloned).collect();
+                let clients = regions17.combination(max_n).map(vec_cloned).collect();
                 (None, clients)
             }
         }
@@ -628,9 +568,7 @@ impl RankingParams {
         Self {
             min_mean_fpaxos_improv: F64::new(min_mean_fpaxos_improv as f64),
             min_mean_epaxos_improv: F64::new(min_mean_epaxos_improv as f64),
-            min_fairness_fpaxos_improv: F64::new(
-                min_fairness_fpaxos_improv as f64,
-            ),
+            min_fairness_fpaxos_improv: F64::new(min_fairness_fpaxos_improv as f64),
             min_mean_decrease: F64::new(min_mean_decrease as f64),
             min_n,
             max_n,
@@ -673,8 +611,7 @@ mod tests {
         let save_search = false;
 
         // create search
-        let search =
-            Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
+        let search = Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
 
         // define search params:
         // originally 30 was used for the `min_mean_improv`;
@@ -755,8 +692,7 @@ mod tests {
 
         // create search and save it
         let save_search = true;
-        let expected =
-            Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
+        let expected = Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
 
         // get saved search and assert it is the same search
         let saved = Search::get_saved_search(&filename);

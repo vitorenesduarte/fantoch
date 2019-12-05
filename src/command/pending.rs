@@ -75,8 +75,7 @@ mod tests {
 
         // command get a and b
         let get_ab_rifl = Rifl::new(3, 1);
-        let get_ab =
-            Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
         pending.start(&get_ab);
@@ -89,16 +88,14 @@ mod tests {
 
         // add the result of put a before being registered
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res =
-            pending.add_partial(put_a_rifl, key_a.clone(), put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, key_a.clone(), put_a_res.clone());
         assert!(res.is_none());
 
         // register `put_a`
         pending.start(&put_a);
 
         // add the result of put a and assert that the command is ready
-        let res =
-            pending.add_partial(put_a_rifl, key_a.clone(), put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, key_a.clone(), put_a_res.clone());
         assert!(res.is_some());
 
         // check that there's only one result (since the command accessed a

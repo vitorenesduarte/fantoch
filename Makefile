@@ -5,9 +5,7 @@ test:
 
 fmt:
 	rustup override set nightly
-	rustfmt src/*.rs
-	rustfmt src/newt/*.rs
-	rustfmt src/bote/*.rs
+	cargo fmt --all
 	rustup override set stable
 
 coverage:

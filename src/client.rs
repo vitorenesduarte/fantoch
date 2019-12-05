@@ -59,10 +59,7 @@ impl Client {
     }
 
     /// Handle executed command.
-    pub fn handle(
-        &mut self,
-        cmd_result: CommandResult,
-    ) -> Option<(ProcId, Command)> {
+    pub fn handle(&mut self, cmd_result: CommandResult) -> Option<(ProcId, Command)> {
         // TODO do something with `cmd_result`
         // check if we should generate a new command or not
         if self.command_count < self.commands {

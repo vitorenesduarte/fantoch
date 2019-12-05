@@ -134,9 +134,7 @@ impl Stats {
 }
 
 /// Mapping from protocol name to its stats.
-#[derive(
-    Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize, Default,
-)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize, Default)]
 pub struct AllStats(BTreeMap<String, Stats>);
 
 impl AllStats {
@@ -144,12 +142,7 @@ impl AllStats {
         Default::default()
     }
 
-    pub fn get(
-        &self,
-        protocol: Protocol,
-        f: usize,
-        placement: ClientPlacement,
-    ) -> &Stats {
+    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Stats {
         let key = Self::key(protocol, f, placement);
         self.get_and_unwrap(&key)
     }
@@ -165,12 +158,7 @@ impl AllStats {
         self.0.insert(key, stats);
     }
 
-    pub fn fmt(
-        &self,
-        protocol: Protocol,
-        f: usize,
-        placement: ClientPlacement,
-    ) -> String {
+    pub fn fmt(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> String {
         let key = Self::key(protocol, f, placement);
         let stats = self.get_and_unwrap(&key);
         format!("{}={:?}", key, stats)

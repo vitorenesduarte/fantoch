@@ -29,12 +29,7 @@ pub struct Newt {
 
 impl Newt {
     /// Creates a new `Newt` proc.
-    pub fn new(
-        id: ProcId,
-        region: Region,
-        planet: Planet,
-        config: Config,
-    ) -> Self {
+    pub fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size and stability threshold
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
@@ -210,9 +205,9 @@ impl Newt {
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
-        // - this prevents us from generating votes (either when clients submit
-        //   new operations or when handling `MCollect` from other processes)
-        //   that could potentially delay the execution of this command
+        // - this prevents us from generating votes (either when clients submit new operations or
+        //   when handling `MCollect` from other processes) that could potentially delay the
+        //   execution of this command
         let cmd = info.cmd.as_ref().unwrap();
         let local_proc_votes = self.keys_clocks.proc_votes(cmd, max_clock);
 
@@ -268,9 +263,9 @@ impl Newt {
         // local key's clock
 
         // update votes table and get commands that can be executed
-        let to_execute =
-            self.table
-                .add(dot.source(), info.cmd.clone(), info.clock, votes);
+        let to_execute = self
+            .table
+            .add(dot.source(), info.cmd.clone(), info.clock, votes);
 
         // execute commands
         if let Some(to_execute) = to_execute {
@@ -287,10 +282,7 @@ impl Newt {
         }
     }
 
-    fn execute(
-        &mut self,
-        to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>,
-    ) -> Vec<CommandResult> {
+    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) -> Vec<CommandResult> {
         let mut ready = Vec::new();
         for (key, ops) in to_execute {
             for (rifl, op) in ops {
@@ -298,8 +290,7 @@ impl Newt {
                 let op_result = self.store.execute(&key, op);
 
                 // add partial result to `Pending`
-                let cmd_result =
-                    self.pending.add_partial(rifl, key.clone(), op_result);
+                let cmd_result = self.pending.add_partial(rifl, key.clone(), op_result);
 
                 if let Some(cmd_result) = cmd_result {
                     ready.push(cmd_result);
@@ -568,8 +559,7 @@ mod tests {
         assert!(new_submit.to_procs());
 
         let mcollect = router.route(new_submit).into_iter().next().unwrap();
-        if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect
-        {
+        if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect {
             assert_eq!(from, target_proc);
             assert_eq!(dot, Dot::new(target_proc, 2));
         } else {

@@ -17,10 +17,7 @@ impl Command {
     }
 
     /// Create a new `Command` from an iterator.
-    pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(
-        rifl: Rifl,
-        iter: I,
-    ) -> Self {
+    pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(rifl: Rifl, iter: I) -> Self {
         Self::new(rifl, BTreeMap::from_iter(iter))
     }
 
