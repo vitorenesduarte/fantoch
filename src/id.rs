@@ -37,7 +37,7 @@ where
     }
 
     /// Generates the next `Id`.
-    pub fn next(&mut self) -> Id<S> {
+    pub fn next_id(&mut self) -> Id<S> {
         self.last_seq += 1;
         Id::new(self.source, self.last_seq)
     }
@@ -57,7 +57,7 @@ mod tests {
 
         for seq in 1..10 {
             // generate id
-            let id = gen.next();
+            let id = gen.next_id();
             assert_eq!(id.source, source);
             assert_eq!(id.seq, seq);
         }

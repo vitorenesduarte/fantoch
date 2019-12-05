@@ -53,7 +53,7 @@ impl BaseProc {
             // get all regions sorted by distance from `self.region`
             .sorted(&self.region)
             .expect("region should be part of planet")
-            .into_iter()
+            .iter()
             // create a mapping from region to its index
             .enumerate()
             .map(|(index, (_distance, region))| (region, index))
@@ -84,7 +84,7 @@ impl BaseProc {
 
     /// Increments `cmd_count` and returns the next dot.
     pub fn next_dot(&mut self) -> Dot {
-        self.dot_gen.next()
+        self.dot_gen.next_id()
     }
 }
 

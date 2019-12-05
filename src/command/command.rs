@@ -46,12 +46,12 @@ impl Command {
     }
 
     /// Returns references to list of keys modified by this command.
-    pub fn keys(&self) -> Vec<&Key> {
-        self.ops.iter().map(|(key, _)| key).collect()
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.ops.iter().map(|(key, _)| key)
     }
 
     /// Returns the number of keys accessed by this command.
-    pub fn len(&self) -> usize {
+    pub fn key_count(&self) -> usize {
         self.ops.len()
     }
 }
@@ -81,22 +81,24 @@ impl CommandResult {
         CommandResult {
             rifl,
             key_count,
-            results: HashMap::new(),
+            results: HashMap::with_capacity(key_count),
         }
     }
 
     /// Adds a partial command result to the overall result.
     /// Returns a boolean indicating whether the full result is ready.
     pub fn add_partial(&mut self, key: Key, result: KVOpResult) -> bool {
+        // add op result for `key`
         let res = self.results.insert(key, result);
-        // assert there was nothing about this key previously
+
+        // assert there was nothing about this `key` previously
         assert!(res.is_none());
 
         // we're ready if the number of partial results equals `key_count`
         self.results.len() == self.key_count
     }
 
-    /// Returns the command identifier (RIFL) of this comand.
+    /// Returns the command identifier.
     pub fn rifl(&self) -> Rifl {
         self.rifl
     }

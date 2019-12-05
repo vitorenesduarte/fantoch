@@ -22,7 +22,7 @@ impl Votes {
     /// Initializes `Votes` instance.
     pub fn set_keys(&mut self, cmd: &Command) {
         // insert an empty set of votes for each key
-        cmd.keys().into_iter().for_each(|key| {
+        cmd.keys().for_each(|key| {
             // TODO use `Vec::with_capacity` here if we can
             let empty_votes = vec![];
             self.votes.insert(key.clone(), empty_votes);

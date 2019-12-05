@@ -18,7 +18,7 @@ impl Pending {
     /// Starts tracking a command submitted by some client.
     pub fn start(&mut self, cmd: &Command) {
         // create `CommandResult`
-        let cmd_result = CommandResult::new(cmd.rifl(), cmd.len());
+        let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
 
         // add it to pending
         self.pending.insert(cmd.rifl(), cmd_result);

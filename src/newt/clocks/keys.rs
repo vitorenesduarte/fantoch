@@ -23,7 +23,6 @@ impl KeysClocks {
     /// clocks associated with each key.
     pub fn clock(&self, cmd: &Command) -> u64 {
         cmd.keys()
-            .iter()
             .map(|key| self.key_clock(key))
             .max()
             .unwrap_or(0)
@@ -32,7 +31,6 @@ impl KeysClocks {
     /// Computes the votes consumed by this command.
     pub fn proc_votes(&mut self, cmd: &Command, highest: u64) -> ProcVotes {
         cmd.keys()
-            .into_iter()
             .map(|key| {
                 // vote from the current clock value + 1 until the highest vote
                 // (i.e. the maximum between all key's clocks)
