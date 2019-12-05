@@ -1,6 +1,6 @@
 use crate::base::ProcId;
 use crate::command::{Command, CommandResult};
-use crate::id::Id;
+use crate::id::{Id, IdGen};
 use crate::kvs::Key;
 use rand::Rng;
 
@@ -8,13 +8,11 @@ pub type ClientId = u64;
 
 // for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
 pub type Rifl = Id<ClientId>;
+type RiflGen = IdGen<ClientId>;
 
 pub struct Client {
     /// id of this client
     client_id: ClientId,
-    /// number of RIFL identifiers already generated
-    /// TODO is this equal to `command_count`?
-    rifl_count: u64,
     /// id of the process this client is connected to
     proc_id: ProcId,
     /// conflict rate  of this workload
@@ -23,6 +21,8 @@ pub struct Client {
     commands: usize,
     /// number of commands already issued in this workload
     command_count: usize,
+    /// rifl id generator
+    rifl_gen: RiflGen,
 }
 
 impl Client {
@@ -35,11 +35,11 @@ impl Client {
         // create client
         Self {
             client_id,
-            rifl_count: 0,
             proc_id,
             conflict_rate,
             commands,
             command_count: 0,
+            rifl_gen: RiflGen::new(client_id),
         }
     }
 
@@ -87,8 +87,7 @@ impl Client {
     /// - the second RIFL will be (10, 2)
     /// - and so on...
     fn next_rifl(&mut self) -> Rifl {
-        self.rifl_count += 1;
-        Rifl::new(self.client_id, self.rifl_count)
+        self.rifl_gen.next_id()
     }
 
     /// Generate a command given

@@ -48,7 +48,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn next() {
+    fn next_id() {
         type MyGen = IdGen<u64>;
 
         // create id generator
