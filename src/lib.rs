@@ -26,5 +26,8 @@ pub mod newt;
 // This module contains back-of-the-envelop calculations.
 pub mod bote;
 
-// This module contains the definition of `Router`.
-mod router;
+// This module contains the definition of `Router` and `Runner`.
+pub mod sim;
+
+// This module contains some utilitary functions.
+mod util;

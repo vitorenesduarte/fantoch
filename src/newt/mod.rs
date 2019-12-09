@@ -428,8 +428,8 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::Client;
-    use crate::router::Router;
+    use crate::client::{Client, Workload};
+    use crate::sim::Router;
 
     #[test]
     fn newt_parameters() {
@@ -469,19 +469,19 @@ mod tests {
             proc_id_1,
             Region::new("europe-west2"),
             planet.clone(),
-            config.clone(),
+            config,
         );
         let mut newt_2 = Newt::new(
             proc_id_2,
             Region::new("europe-west3"),
             planet.clone(),
-            config.clone(),
+            config,
         );
         let mut newt_3 = Newt::new(
             proc_id_3,
             Region::new("europe-west4"),
             planet.clone(),
-            config.clone(),
+            config,
         );
 
         // discover procs in all newts
@@ -497,16 +497,26 @@ mod tests {
         router.register_proc(newt_2);
         router.register_proc(newt_3);
 
-        // create client 100 that is connected to newt 1
-        let mut client_100 = Client::new(100, proc_id_1);
-        // start client 100
-        let (target_proc, cmd) = client_100.start();
+        // client workload
+        let conflict_rate = 100;
+        let total_commands = 10;
+        let workload = Workload::new(conflict_rate, total_commands);
+
+        // create client 1 that is connected to newt 1
+        let client_id = 1;
+        let client_region = Region::new("europe-west2");
+        let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
+
+        // discover processes in client 1
+        let (target_proc, cmd) = client_1
+            .discover(procs)
+            .expect("client 1 should be able generate new ops");
 
         // check that `target_proc` is newt 1
         assert_eq!(target_proc, proc_id_1);
 
         // register clients
-        router.register_client(client_100);
+        router.register_client(client_1);
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
