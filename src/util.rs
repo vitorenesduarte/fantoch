@@ -4,9 +4,10 @@ use std::collections::HashMap;
 
 /// Zips two `Option`s.
 pub fn option_zip<L, R>(left: Option<L>, right: Option<R>) -> Option<(L, R)> {
-    let left = left.into_iter();
-    let right = right.into_iter();
-    left.zip(right).next()
+    match (left, right) {
+        (Some(left), Some(right)) => Some((left, right)),
+        _ => None
+    }
 }
 
 /// Updates the processes known by this process.
