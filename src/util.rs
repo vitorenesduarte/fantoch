@@ -52,4 +52,41 @@ mod tests {
             Some((10, String::from("A")))
         );
     }
+
+    #[test]
+    fn sort_procs_by_distance_test() {
+        // procs
+        let mut procs = vec![
+            (0, Region::new("asia-east1")),
+            (1, Region::new("asia-northeast1")),
+            (2, Region::new("asia-south1")),
+            (3, Region::new("asia-southeast1")),
+            (4, Region::new("australia-southeast1")),
+            (5, Region::new("europe-north1")),
+            (6, Region::new("europe-west1")),
+            (7, Region::new("europe-west2")),
+            (8, Region::new("europe-west3")),
+            (9, Region::new("europe-west4")),
+            (10, Region::new("northamerica-northeast1")),
+            (11, Region::new("southamerica-east1")),
+            (12, Region::new("us-central1")),
+            (13, Region::new("us-east1")),
+            (14, Region::new("us-east4")),
+            (15, Region::new("us-west1")),
+            (16, Region::new("us-west2")),
+        ];
+
+        // sort procs
+        let region = Region::new("europe-west3");
+        let planet = Planet::new("latency/");
+        sort_procs_by_distance(&region, &planet, &mut procs);
+
+        // get only processes ids
+        let proc_ids: Vec<_> = procs.into_iter().map(|(proc_id, _)| proc_id).collect();
+
+        assert_eq!(
+            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2],
+            proc_ids
+        );
+    }
 }
