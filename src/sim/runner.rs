@@ -50,6 +50,6 @@ impl Runner {
             });
 
         // create runner
-        Runner { router }
+        Self { router }
     }
 }

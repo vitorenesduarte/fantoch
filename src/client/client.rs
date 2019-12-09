@@ -44,9 +44,6 @@ impl Client {
         self.client_id
     }
 
-    /// TODO pass current time to start and handle function
-    /// and record command initial time to measure its overall latency
-
     /// Generate client's first command.
     pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) -> Option<(ProcId, Command)> {
         // set the closest process
@@ -59,6 +56,8 @@ impl Client {
     }
 
     /// Handle executed command.
+    /// TODO: pass current time to start and handle function
+    /// and record command initial time to measure its overall latency
     pub fn handle(&mut self, cmd_result: CommandResult) -> Option<(ProcId, Command)> {
         // TODO do something with `cmd_result`
         // generate command
@@ -67,7 +66,6 @@ impl Client {
     }
 
     fn next_cmd(&mut self) -> Option<Command> {
-        let gen = &mut self.rifl_gen;
-        self.workload.next_cmd(self.client_id, gen)
+        self.workload.next_cmd(self.client_id, &mut self.rifl_gen)
     }
 }

@@ -1,13 +1,12 @@
 use crate::base::ProcId;
-use crate::client::{Client, ClientId, Workload};
+use crate::client::{Client, ClientId};
 use crate::command::{Command, CommandResult};
-use crate::config::Config;
 use crate::newt::{Message, Newt, ToSend};
-use crate::planet::{Planet, Region};
 use std::cell::Cell;
 use std::collections::HashMap;
 
 #[allow(dead_code)] // TODO remove me
+#[derive(Default)]
 pub struct Router {
     procs: HashMap<ProcId, Cell<Newt>>,
     clients: HashMap<ClientId, Cell<Client>>,
@@ -17,10 +16,7 @@ pub struct Router {
 impl Router {
     /// Create a new `Router`.
     pub fn new() -> Self {
-        Router {
-            procs: HashMap::new(),
-            clients: HashMap::new(),
-        }
+        Default::default()
     }
 
     /// Registers a `Newt` process in the `Router` by storing it in a `Cell`.

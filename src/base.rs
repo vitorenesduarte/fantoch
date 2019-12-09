@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::id::{Id, IdGen};
 use crate::planet::{Planet, Region};
 use crate::util;
-use std::collections::HashMap;
 
 pub type ProcId = u64;
 pub type Dot = Id<ProcId>;
