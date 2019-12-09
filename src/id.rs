@@ -36,6 +36,11 @@ where
         }
     }
 
+    /// Retrives source.
+    pub fn source(&self) -> S {
+        self.source
+    }
+
     /// Generates the next `Id`.
     pub fn next_id(&mut self) -> Id<S> {
         self.last_seq += 1;

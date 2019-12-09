@@ -66,6 +66,6 @@ impl Client {
     }
 
     fn next_cmd(&mut self) -> Option<Command> {
-        self.workload.next_cmd(self.client_id, &mut self.rifl_gen)
+        self.workload.next_cmd(&mut self.rifl_gen)
     }
 }

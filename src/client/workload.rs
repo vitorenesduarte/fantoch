@@ -23,7 +23,7 @@ impl Workload {
     }
 
     /// Generate the next command.
-    pub fn next_cmd(&mut self, client_id: ClientId, rifl_gen: &mut RiflGen) -> Option<Command> {
+    pub fn next_cmd(&mut self, rifl_gen: &mut RiflGen) -> Option<Command> {
         // increment command count and generate command
         self.command_count += 1;
 
@@ -32,17 +32,17 @@ impl Workload {
 
         // if we should, generate a new command
         if should_gen {
-            Some(self.gen_cmd(client_id, rifl_gen))
+            Some(self.gen_cmd(rifl_gen))
         } else {
             None
         }
     }
 
     /// Generate a command.
-    fn gen_cmd(&mut self, client_id: ClientId, rifl_gen: &mut RiflGen) -> Command {
+    fn gen_cmd(&mut self, rifl_gen: &mut RiflGen) -> Command {
         // generate rifl, key and value
         let rifl = rifl_gen.next_id();
-        let key = self.gen_cmd_key(client_id);
+        let key = self.gen_cmd_key(&rifl_gen);
         // TODO: generate something with a given payload size if outside of simulation
         let value = String::from("");
 
@@ -52,13 +52,13 @@ impl Workload {
     }
 
     /// Generate a command given
-    fn gen_cmd_key(&mut self, client_id: ClientId) -> Key {
+    fn gen_cmd_key(&mut self, rifl_gen: &RiflGen) -> Key {
         if rand::thread_rng().gen_range(0, 100) < self.conflict_rate {
             // black color to generate a conflict
             String::from("black")
         } else {
             // avoid conflict with unique client key
-            client_id.to_string()
+            rifl_gen.source().to_string()
         }
     }
 }
