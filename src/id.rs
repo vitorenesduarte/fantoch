@@ -60,6 +60,9 @@ mod tests {
         let source = 10;
         let mut gen = MyGen::new(source);
 
+        // check source
+        assert_eq!(gen.source(), source);
+
         // generate `n` ids and check the `id` generated
         let n = 100;
 
