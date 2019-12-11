@@ -7,9 +7,9 @@ use std::fmt::{self, Write};
 pub struct Planet {
     /// mapping from region A to a mapping from region B to the latency between
     /// A and B
-    latencies: HashMap<Region, HashMap<Region, usize>>,
+    latencies: HashMap<Region, HashMap<Region, u64>>,
     /// mapping from each region to the regions sorted by distance
-    sorted: HashMap<Region, Vec<(usize, Region)>>,
+    sorted: HashMap<Region, Vec<(u64, Region)>>,
 }
 
 impl Planet {
@@ -34,7 +34,7 @@ impl Planet {
     }
 
     /// Retrieves the distance between the two regions passed as argument.
-    pub fn latency(&self, from: &Region, to: &Region) -> Option<usize> {
+    pub fn latency(&self, from: &Region, to: &Region) -> Option<u64> {
         // get from's entries
         let entries = self.latencies.get(from)?;
 
@@ -44,14 +44,14 @@ impl Planet {
 
     /// Returns a list of `Region`s sorted by the distance to the `Region`
     /// passed as argument. The distance to each region is also returned.
-    pub fn sorted(&self, from: &Region) -> Option<&Vec<(usize, Region)>> {
+    pub fn sorted(&self, from: &Region) -> Option<&Vec<(u64, Region)>> {
         self.sorted.get(from)
     }
 
     /// Returns a mapping from region to regions sorted by distance (ASC).
     fn sort_by_distance(
-        latencies: HashMap<Region, HashMap<Region, usize>>,
-    ) -> HashMap<Region, Vec<(usize, Region)>> {
+        latencies: HashMap<Region, HashMap<Region, u64>>,
+    ) -> HashMap<Region, Vec<(u64, Region)>> {
         latencies
             .into_iter()
             .map(|(from, entries)| {

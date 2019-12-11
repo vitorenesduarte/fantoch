@@ -25,7 +25,7 @@ impl Pending {
         }
     }
 
-    /// End a command returns its completion time.
+    /// End a command returns command latency.
     pub fn end(&mut self, rifl: Rifl, time: &dyn SysTime) -> u64 {
         // get start time
         let start_time = self
@@ -34,7 +34,9 @@ impl Pending {
             .expect("can't end a command if a command has not started");
         // compute end time
         let end_time = time.now();
-        // return completion time
+        // make sure time is monotonic
+        assert!(start_time <= end_time);
+        // return latency
         end_time - start_time
     }
 }
@@ -69,8 +71,8 @@ mod tests {
 
         // end first rifl at time 11
         time.tick(1);
-        let completion_time = pending.end(rifl1, &time);
-        assert_eq!(completion_time, 11);
+        let latency = pending.end(rifl1, &time);
+        assert_eq!(latency, 11);
 
         // start third rifl at time 15
         time.tick(4);
@@ -78,13 +80,13 @@ mod tests {
 
         // end third rifl at time 16
         time.tick(1);
-        let completion_time = pending.end(rifl3, &time);
-        assert_eq!(completion_time, 1);
+        let latency = pending.end(rifl3, &time);
+        assert_eq!(latency, 1);
 
         // end second rifl at time 20
         time.tick(4);
-        let completion_time = pending.end(rifl2, &time);
-        assert_eq!(completion_time, 10);
+        let latency = pending.end(rifl2, &time);
+        assert_eq!(latency, 10);
     }
 
     #[test]

@@ -29,7 +29,7 @@ impl Dat {
     /// Computes, based on the `Dat` file, the latency from this region to all
     /// other regions.
     /// The local latency (within the same region) will always be 1.
-    pub fn latencies(&self) -> HashMap<Region, usize> {
+    pub fn latencies(&self) -> HashMap<Region, u64> {
         // open the file in read-only mode (ignoring errors)
         let file = std::fs::File::open(self.filename.clone()).unwrap();
 
@@ -54,15 +54,15 @@ impl Dat {
 
     /// Extracts from a line of the `Dat` file, the region's name and the
     /// average latency to it.
-    fn latency(line: String) -> (Region, usize) {
+    fn latency(line: String) -> (Region, u64) {
         let mut iter = line.split(|c| c == '/' || c == ':');
 
         // latency is in the second entry
         let latency = iter.nth(1).unwrap();
-        // convert it to f32
-        let latency = f32::from_str(latency).unwrap();
-        // convert it to usize (it always rounds down)
-        let latency = latency as usize;
+        // convert it to f64
+        let latency = f64::from_str(latency).unwrap();
+        // convert it to u64 (it always rounds down)
+        let latency = latency as u64;
 
         // region is the last entry
         let region = iter.last().unwrap();

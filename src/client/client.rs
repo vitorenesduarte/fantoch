@@ -27,6 +27,8 @@ pub struct Client {
     workload: Workload,
     /// map from pending command RIFL to its start time
     pending: Pending,
+    /// list of all command latencies
+    latencies: Vec<u64>,
 }
 
 impl Client {
@@ -41,6 +43,7 @@ impl Client {
             rifl_gen: RiflGen::new(client_id),
             workload,
             pending: Pending::new(),
+            latencies: Vec::with_capacity(workload.total_commands()),
         }
     }
 
@@ -63,25 +66,35 @@ impl Client {
 
     /// Start client's workload.
     pub fn start(&mut self, time: &dyn SysTime) -> (ProcId, Command) {
-        self.next_cmd()
+        self.next_cmd(time)
             .expect("client should able to generate an operation when it is first started")
     }
 
-    /// Handle executed command.
-    /// TODO: pass current time to start and handle function
-    /// and record command initial time to measure its overall latency
+    /// Handle executed command and its overall latency.
     pub fn handle(
         &mut self,
         cmd_result: CommandResult,
         time: &dyn SysTime,
     ) -> Option<(ProcId, Command)> {
-        // TODO do something with `cmd_result`
+        // end command in pending and save command latency
+        let latency = self.pending.end(cmd_result.rifl(), time);
+        self.latencies.push(latency);
+
         // generate command
-        self.next_cmd()
+        self.next_cmd(time)
     }
 
-    fn next_cmd(&mut self) -> Option<(ProcId, Command)> {
+    fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcId, Command)> {
+        // generate command and zip with proc_id
         let cmd = self.workload.next_cmd(&mut self.rifl_gen);
-        util::option_zip(self.proc_id, cmd)
+        let zip = util::option_zip(self.proc_id, cmd);
+
+        // start command in pending if some
+        if let Some((_, cmd)) = &zip {
+            self.pending.start(cmd.rifl(), time);
+        }
+
+        // returned zipped command
+        zip
     }
 }

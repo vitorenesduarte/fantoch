@@ -28,7 +28,7 @@ impl fmt::Debug for Stats {
 }
 
 impl Stats {
-    pub fn from(latencies: &[usize]) -> Self {
+    pub fn from(latencies: &[u64]) -> Self {
         let (mean, cov, mdtm) = Stats::compute_stats(&latencies);
         Self { mean, cov, mdtm }
     }
@@ -69,7 +69,7 @@ impl Stats {
         self.mdtm().round()
     }
 
-    fn compute_stats(xs: &[usize]) -> (F64, F64, F64) {
+    fn compute_stats(xs: &[u64]) -> (F64, F64, F64) {
         // transform `usize`s in `f64`s
         let xs: Vec<f64> = xs.iter().map(|&x| x as f64).collect();
 

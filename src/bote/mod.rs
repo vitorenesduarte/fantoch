@@ -132,7 +132,7 @@ impl Bote {
     /// Computes the latency to closest quorum of size `quorum_size`.
     /// It takes as input the considered source region `from` and all available
     /// `regions`.
-    fn quorum_latency(&self, from: &Region, regions: &[Region], quorum_size: usize) -> usize {
+    fn quorum_latency(&self, from: &Region, regions: &[Region], quorum_size: usize) -> u64 {
         let (latency, _) = self.nth_closest(quorum_size, &from, &regions);
         *latency
     }
@@ -141,7 +141,7 @@ impl Bote {
     /// This same method can be used to find the:
     /// - latency to the closest quorum
     /// - latency to the closest region
-    fn nth_closest(&self, nth: usize, from: &Region, regions: &[Region]) -> &(usize, Region) {
+    fn nth_closest(&self, nth: usize, from: &Region, regions: &[Region]) -> &(u64, Region) {
         self.planet
             // sort by distance
             .sorted(from)
