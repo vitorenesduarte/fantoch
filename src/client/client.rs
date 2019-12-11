@@ -162,7 +162,7 @@ mod tests {
 
         // client
         let region = Region::new("europe-west2");
-        let total_commands = 3;
+        let total_commands = 2;
         let mut client = gen_client(total_commands, region);
 
         // discover
@@ -197,6 +197,6 @@ mod tests {
         assert!(next.is_none());
 
         // check latencies
-        assert_eq!(client.latencies, vec![10, 20]);
+        assert_eq!(client.latencies, vec![10, 5]);
     }
 }
