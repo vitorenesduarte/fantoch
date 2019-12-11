@@ -1,6 +1,6 @@
 pub trait SysTime {
     /// Returns the current time.
-    fn time(&self) -> u64;
+    fn now(&self) -> u64;
 }
 
 #[derive(Default)]
@@ -21,30 +21,29 @@ impl SimTime {
 }
 
 impl SysTime for SimTime {
-    fn time(&self) -> u64 {
+    fn now(&self) -> u64 {
         self.time
     }
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     #[test]
-    fn sim_time() {
+    fn sim_now() {
         // create new simulation time
         let mut time = SimTime::new();
-        assert_eq!(time.time(), 0);
+        assert_eq!(time.now(), 0);
 
         // first tick
         let tick = 10;
         time.tick(tick);
-        assert_eq!(time.time(), 10);
+        assert_eq!(time.now(), 10);
 
         // second tick
         let tick = 6;
         time.tick(tick);
-        assert_eq!(time.time(), 16);
+        assert_eq!(time.now(), 16);
     }
 }

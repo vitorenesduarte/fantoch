@@ -1,4 +1,5 @@
 use crate::base::ProcId;
+use crate::client::Pending;
 use crate::client::Workload;
 use crate::command::{Command, CommandResult};
 use crate::id::{Id, IdGen};
@@ -24,6 +25,8 @@ pub struct Client {
     rifl_gen: RiflGen,
     /// workload configuration
     workload: Workload,
+    /// map from pending command RIFL to its start time
+    pending: Pending,
 }
 
 impl Client {
@@ -37,6 +40,7 @@ impl Client {
             proc_id: None,
             rifl_gen: RiflGen::new(client_id),
             workload,
+            pending: Pending::new(),
         }
     }
 
