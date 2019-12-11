@@ -46,14 +46,21 @@ impl Client {
     }
 
     /// Generate client's first command.
-    pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) -> Option<(ProcId, Command)> {
-        // set the closest process
+    pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) -> bool {
+        // sort `procs` by distance from `self.region`
         util::sort_procs_by_distance(&self.region, &self.planet, &mut procs);
+
+        // set the closest process
         self.proc_id = procs.into_iter().map(|(proc_id, _)| proc_id).next();
 
-        // generate command
-        let cmd = self.next_cmd();
-        util::option_zip(self.proc_id, cmd)
+        // check if we have a closest process
+        self.proc_id.is_some()
+    }
+
+    /// Start client's workload.
+    pub fn start(&mut self, time: &dyn SysTime) -> (ProcId, Command) {
+        self.next_cmd()
+            .expect("client should able to generate an operation when it is first started")
     }
 
     /// Handle executed command.
@@ -66,11 +73,11 @@ impl Client {
     ) -> Option<(ProcId, Command)> {
         // TODO do something with `cmd_result`
         // generate command
-        let cmd = self.next_cmd();
-        util::option_zip(self.proc_id, cmd)
+        self.next_cmd()
     }
 
-    fn next_cmd(&mut self) -> Option<Command> {
-        self.workload.next_cmd(&mut self.rifl_gen)
+    fn next_cmd(&mut self) -> Option<(ProcId, Command)> {
+        let cmd = self.workload.next_cmd(&mut self.rifl_gen);
+        util::option_zip(self.proc_id, cmd)
     }
 }

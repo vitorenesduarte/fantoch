@@ -460,6 +460,9 @@ mod tests {
         // planet
         let planet = Planet::new("latency/");
 
+        // create system time
+        let time = SimTime::new();
+
         // n and f
         let n = 3;
         let f = 1;
@@ -509,18 +512,16 @@ mod tests {
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
 
         // discover processes in client 1
-        let (target_proc, cmd) = client_1
-            .discover(procs)
-            .expect("client 1 should be able generate new ops");
+        assert!(client_1.discover(procs));
+
+        // start client
+        let (target_proc, cmd) = client_1.start(&time);
 
         // check that `target_proc` is newt 1
         assert_eq!(target_proc, proc_id_1);
 
         // register clients
         router.register_client(client_1);
-
-        // create system time
-        let time = SimTime::new();
 
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
