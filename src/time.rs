@@ -3,6 +3,7 @@ pub trait SysTime {
     fn time(&self) -> u64;
 }
 
+#[derive(Default)]
 pub struct SimTime {
     time: u64,
 }
@@ -10,7 +11,7 @@ pub struct SimTime {
 impl SimTime {
     /// Creates a new simulation time.
     pub fn new() -> Self {
-        Self { time: 0 }
+        Default::default()
     }
 
     /// Increases simulation time by `tick`.
