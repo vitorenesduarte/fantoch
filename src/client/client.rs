@@ -85,16 +85,118 @@ impl Client {
     }
 
     fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcId, Command)> {
-        // generate command and zip with proc_id
-        let cmd = self.workload.next_cmd(&mut self.rifl_gen);
-        let zip = util::option_zip(self.proc_id, cmd);
+        self.proc_id.and_then(|proc_id| {
+            // generate next command in the workload if some proc_id
+            self.workload.next_cmd(&mut self.rifl_gen).map(|cmd| {
+                // if a new command was generated, start it in pending
+                self.pending.start(cmd.rifl(), time);
+                (proc_id, cmd)
+            })
+        })
+    }
+}
 
-        // start command in pending if some
-        if let Some((_, cmd)) = &zip {
-            self.pending.start(cmd.rifl(), time);
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::time::SimTime;
 
-        // returned zipped command
-        zip
+    // Generates some client.
+    fn gen_client(total_commands: usize, region: Region) -> Client {
+        // workload
+        let conflict_rate = 100;
+        let workload = Workload::new(conflict_rate, total_commands);
+
+        // client
+        let id = 1;
+        let planet = Planet::new("latency/");
+        Client::new(id, region, planet, workload)
+    }
+
+    #[test]
+    fn discover() {
+        // procs
+        let procs = vec![
+            (0, Region::new("asia-east1")),
+            (1, Region::new("australia-southeast1")),
+            (2, Region::new("europe-west1")),
+        ];
+
+        // client
+        let region = Region::new("europe-west2");
+        let total_commands = 0;
+        let mut client = gen_client(total_commands, region);
+
+        // check discover with empty vec
+        assert!(!client.discover(vec![]));
+        assert_eq!(client.proc_id, None);
+
+        // check discover with procs
+        assert!(client.discover(procs));
+        assert_eq!(client.proc_id, Some(2));
+    }
+
+    #[test]
+    #[should_panic]
+    fn start_before_discover() {
+        // client
+        let region = Region::new("europe-west2");
+        let total_commands = 10;
+        let mut client = gen_client(total_commands, region);
+
+        // create system time
+        let time = SimTime::new();
+
+        // should panic!
+        client.start(&time);
+    }
+
+    #[test]
+    fn client_flow() {
+        // procs
+        let procs = vec![
+            (0, Region::new("asia-east1")),
+            (1, Region::new("australia-southeast1")),
+            (2, Region::new("europe-west1")),
+        ];
+
+        // client
+        let region = Region::new("europe-west2");
+        let total_commands = 3;
+        let mut client = gen_client(total_commands, region);
+
+        // discover
+        client.discover(procs);
+
+        // create system time
+        let mut time = SimTime::new();
+
+        // creates a fake command result from a command
+        let fake_result = |cmd: Command| CommandResult::new(cmd.rifl(), 0);
+
+        // start client at time 0
+        let (proc_id, cmd) = client.start(&time);
+        // proc_id should be 2
+        assert_eq!(proc_id, 2);
+
+        // handle result at time 10
+        time.tick(10);
+        let next = client.handle(fake_result(cmd), &time);
+
+        // check there's next command
+        assert!(next.is_some());
+        let (proc_id, cmd) = next.unwrap();
+        // proc_id should be 2
+        assert_eq!(proc_id, 2);
+
+        // handle result at time 15
+        time.tick(5);
+        let next = client.handle(fake_result(cmd), &time);
+
+        // check there's no next command
+        assert!(next.is_none());
+
+        // check latencies
+        assert_eq!(client.latencies, vec![10, 20]);
     }
 }

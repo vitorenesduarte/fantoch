@@ -70,6 +70,7 @@ mod tests {
         let f = 1;
         let placement = ClientPlacement::Colocated;
         let all_stats = AllStats::new();
+        // should panic!
         all_stats.get(Protocol::Atlas, f, placement);
     }
 }

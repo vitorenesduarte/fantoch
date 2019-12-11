@@ -51,7 +51,7 @@ mod tests {
         // with f = 1 and f = 2, there should be no panic
         assert_eq!(Config::new(n, 1).f(), 1);
         assert_eq!(Config::new(n, 2).f(), 2);
-        // now with f = 3 it should panic
+        // should panic!
         let _config = Config::new(n, 3);
     }
 }

@@ -2,14 +2,6 @@ use crate::base::ProcId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 
-/// Zips two `Option`s.
-pub fn option_zip<L, R>(left: Option<L>, right: Option<R>) -> Option<(L, R)> {
-    match (left, right) {
-        (Some(left), Some(right)) => Some((left, right)),
-        _ => None
-    }
-}
-
 /// Updates the processes known by this process.
 pub fn sort_procs_by_distance(region: &Region, planet: &Planet, procs: &mut Vec<(ProcId, Region)>) {
     // TODO the following computation could be cached on `planet`
@@ -39,20 +31,6 @@ pub fn sort_procs_by_distance(region: &Region, planet: &Planet, procs: &mut Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn option_zip_test() {
-        assert_eq!(option_zip::<usize, String>(None, None), None);
-        assert_eq!(option_zip::<usize, String>(Some(10), None), None);
-        assert_eq!(
-            option_zip::<usize, String>(None, Some(String::from("A"))),
-            None
-        );
-        assert_eq!(
-            option_zip(Some(10), Some(String::from("A"))),
-            Some((10, String::from("A")))
-        );
-    }
 
     #[test]
     fn sort_procs_by_distance_test() {

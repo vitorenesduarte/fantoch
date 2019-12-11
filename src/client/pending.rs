@@ -105,6 +105,7 @@ mod tests {
 
         // start rifl1 twice
         pending.start(rifl1, &time);
+        // should panic!
         pending.start(rifl1, &time);
     }
 
@@ -123,6 +124,7 @@ mod tests {
         let time = SimTime::new();
 
         // end rifl1 before starting it (basically a double end)
+        // should panic!
         pending.end(rifl1, &time);
     }
 }
