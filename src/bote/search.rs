@@ -1,9 +1,10 @@
+use crate::bote::allstats::AllStats;
 use crate::bote::float::F64;
 use crate::bote::protocol::ClientPlacement;
 use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
-use crate::bote::stats::{AllStats, StatsSortBy};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
+use crate::stats::StatsKind;
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -235,7 +236,7 @@ impl Search {
         // - this leader will then be used for both f=1 and f=2 stats
         let f = 1;
         let quorum_size = FPaxos.quorum_size(n, f);
-        let (leader, _) = bote.best_leader(config, all_clients, quorum_size, StatsSortBy::COV);
+        let (leader, _) = bote.best_leader(config, all_clients, quorum_size, StatsKind::COV);
 
         // compute stats for both `clients` and colocated clients i.e. `config`
         let which_clients = vec![

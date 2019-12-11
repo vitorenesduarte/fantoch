@@ -4,6 +4,7 @@ use crate::command::{Command, CommandResult};
 use crate::id::{Id, IdGen};
 use crate::planet::{Planet, Region};
 use crate::util;
+use crate::time::SysTime;
 
 pub type ClientId = u64;
 
@@ -58,7 +59,7 @@ impl Client {
     /// Handle executed command.
     /// TODO: pass current time to start and handle function
     /// and record command initial time to measure its overall latency
-    pub fn handle(&mut self, cmd_result: CommandResult) -> Option<(ProcId, Command)> {
+    pub fn handle(&mut self, cmd_result: CommandResult, systime: &SysTime) -> Option<(ProcId, Command)> {
         // TODO do something with `cmd_result`
         // generate command
         let cmd = self.next_cmd();

@@ -27,7 +27,10 @@ pub mod newt;
 pub mod bote;
 
 // This module contains the definition of trait `SysTime` and its implementations.
-pub mod systime;
+pub mod time;
+
+// This module contains the definition of `Stats`.
+pub mod stats;
 
 // This module contains the definition of `Router` and `Runner`.
 pub mod sim;

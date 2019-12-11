@@ -2,6 +2,7 @@ use crate::base::ProcId;
 use crate::client::{Client, ClientId};
 use crate::command::{Command, CommandResult};
 use crate::newt::{Message, Newt, ToSend};
+use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
 
@@ -44,7 +45,7 @@ impl Router {
     }
 
     /// Route a message to some target.
-    pub fn route(&mut self, to_send: ToSend) -> Vec<ToSend> {
+    pub fn route(&mut self, to_send: ToSend, time: &dyn SysTime) -> Vec<ToSend> {
         match to_send {
             ToSend::Nothing => vec![],
             ToSend::Procs(msg, target) => target
@@ -55,7 +56,7 @@ impl Router {
                 .into_iter()
                 .filter_map(|cmd_result| {
                     let client = cmd_result.rifl().source();
-                    self.route_to_client(client, cmd_result)
+                    self.route_to_client(client, cmd_result, time)
                 })
                 .map(|(proc_id, cmd)| ToSend::Procs(Message::Submit { cmd }, vec![proc_id]))
                 .collect(),
@@ -78,6 +79,7 @@ impl Router {
         &mut self,
         client_id: ClientId,
         cmd_result: CommandResult,
+        time: &dyn SysTime,
     ) -> Option<(ProcId, Command)> {
         self.clients
             .get_mut(&client_id)
@@ -85,6 +87,6 @@ impl Router {
                 panic!("client {} should have been set before", client_id);
             })
             .get_mut()
-            .handle(cmd_result)
+            .handle(cmd_result, time)
     }
 }

@@ -1,10 +1,10 @@
+pub mod allstats;
 pub mod float;
 pub mod protocol;
 pub mod search;
-pub mod stats;
 
-use crate::bote::stats::{Stats, StatsSortBy};
 use crate::planet::{Planet, Region};
+use crate::stats::{Stats, StatsKind};
 
 #[derive(Debug)]
 pub struct Bote {
@@ -90,16 +90,16 @@ impl Bote {
         servers: &'a [Region],
         clients: &[Region],
         quorum_size: usize,
-        stats_sort_by: StatsSortBy,
+        stats_sort_by: StatsKind,
     ) -> (&'a Region, Stats) {
         // compute all stats
         let mut stats = self.all_leaders_stats(servers, clients, quorum_size);
 
         // select the best leader based on `stats_sort_by`
         stats.sort_unstable_by(|(_la, sa), (_lb, sb)| match stats_sort_by {
-            StatsSortBy::Mean => sa.mean().cmp(&sb.mean()),
-            StatsSortBy::COV => sa.cov().cmp(&sb.cov()),
-            StatsSortBy::MDTM => sa.mdtm().cmp(&sb.mdtm()),
+            StatsKind::Mean => sa.mean().cmp(&sb.mean()),
+            StatsKind::COV => sa.cov().cmp(&sb.cov()),
+            StatsKind::MDTM => sa.mdtm().cmp(&sb.mdtm()),
         });
 
         // get the lowest (in terms of `compare`) stat
@@ -408,7 +408,7 @@ mod tests {
 
         // quorum size 2:
         let quorum_size = 2;
-        let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, StatsSortBy::Mean);
+        let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, StatsKind::Mean);
 
         assert_eq!(stats.show_mean(), "14.2");
         assert_eq!(stats.show_cov(), "0.3");

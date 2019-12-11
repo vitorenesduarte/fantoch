@@ -430,6 +430,7 @@ mod tests {
     use super::*;
     use crate::client::{Client, Workload};
     use crate::sim::Router;
+    use crate::time::SimTime;
 
     #[test]
     fn newt_parameters() {
@@ -518,6 +519,9 @@ mod tests {
         // register clients
         router.register_client(client_1);
 
+        // create system time
+        let time = SimTime::new();
+
         // submit it in newt_0
         let msubmit = Message::Submit { cmd };
         let mcollects = router.route_to_proc(target_proc, msubmit);
@@ -531,20 +535,20 @@ mod tests {
         }
 
         // handle in mcollects
-        let mut mcollectacks = router.route(mcollects);
+        let mut mcollectacks = router.route(mcollects, &time);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
         assert!(mcollectacks.iter().all(|to_send| to_send.to_procs()));
 
         // handle the first mcollectack
-        let mut mcommits = router.route(mcollectacks.pop().unwrap());
+        let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
         let mcommit_tosend = mcommits.pop().unwrap();
         // no mcommit yet
         assert!(mcommit_tosend.nothing());
 
         // handle the second mcollectack
-        let mut mcommits = router.route(mcollectacks.pop().unwrap());
+        let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
@@ -556,7 +560,7 @@ mod tests {
         }
 
         // all processes handle it
-        let mut nothings = router.route(mcommit_tosend).into_iter();
+        let mut nothings = router.route(mcommit_tosend, &time).into_iter();
         // the first one has a reply to a client, the remaining two are nothings
         let to_client = nothings.next().unwrap();
         assert!(to_client.to_clients());
@@ -565,10 +569,10 @@ mod tests {
         assert_eq!(nothings.next(), None);
 
         // handle what was sent to client
-        let new_submit = router.route(to_client).into_iter().next().unwrap();
+        let new_submit = router.route(to_client, &time).into_iter().next().unwrap();
         assert!(new_submit.to_procs());
 
-        let mcollect = router.route(new_submit).into_iter().next().unwrap();
+        let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
         if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect {
             assert_eq!(from, target_proc);
             assert_eq!(dot, Dot::new(target_proc, 2));
