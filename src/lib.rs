@@ -26,6 +26,9 @@ pub mod newt;
 // This module contains back-of-the-envelop calculations.
 pub mod bote;
 
+// This module contains the definition of trait `SysTime` and its implementations.
+pub mod systime;
+
 // This module contains the definition of `Router` and `Runner`.
 pub mod sim;
 
