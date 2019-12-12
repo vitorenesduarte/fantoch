@@ -105,14 +105,8 @@ impl Runner {
                     ScheduleAction::SendToProc(proc_id, msg) => {
                         // route to process
                         let to_send = self.router.route_to_proc(proc_id, msg);
-                        // get process region
-                        // TODO can we avoid cloning here?
-                        let proc_region = self
-                            .proc_to_region
-                            .get(&proc_id)
-                            .expect("process region should be known")
-                            .clone();
-                        // schedule potentially new message
+                        // schedule new message from process
+                        let proc_region = self.proc_region(proc_id);
                         self.schedule_it(proc_region, to_send);
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
@@ -120,14 +114,8 @@ impl Runner {
                         let to_send = self
                             .router
                             .route_to_client(client_id, cmd_result, &self.time);
-                        // get client id and its region
-                        // TODO can we avoid cloning here?
-                        let client_region = self
-                            .client_to_region
-                            .get(&client_id)
-                            .expect("client region should be known")
-                            .clone();
-                        // schedule potentially new message
+                        // schedule new message from client
+                        let client_region = self.client_region(client_id);
                         self.schedule_it(client_region, to_send);
                     }
                 }
@@ -141,16 +129,11 @@ impl Runner {
             ToSend::Procs(msg, target) => {
                 // for each process in target, schedule message delivery
                 target.into_iter().for_each(|proc_id| {
-                    // get process region
-                    // TODO can we avoid cloning here?
-                    let proc_region = self
-                        .proc_to_region
-                        .get(&proc_id)
-                        .expect("process region should be known")
-                        .clone();
+                    // get target's region
+                    let target_region = self.proc_region(proc_id);
 
                     // compute distance between regions, create action and schedule it
-                    let distance = self.distance(&from, &proc_region);
+                    let distance = self.distance(&from, &target_region);
                     let action = ScheduleAction::SendToProc(proc_id, msg.clone());
                     self.schedule.schedule(&self.time, distance, action);
                 });
@@ -158,17 +141,13 @@ impl Runner {
             ToSend::Clients(cmd_results) => {
                 // for each command result, schedule its delivery
                 cmd_results.into_iter().for_each(|cmd_result| {
-                    // get client id and its region
-                    // TODO can we avoid cloning here?
+                    // get client id
                     let client_id = cmd_result.rifl().source();
-                    let client_region = self
-                        .client_to_region
-                        .get(&client_id)
-                        .expect("client region should be known")
-                        .clone();
+                    // get target's region
+                    let target_region = self.client_region(client_id);
 
                     // route command result to the corresponding client
-                    let distance = self.distance(&from, &client_region);
+                    let distance = self.distance(&from, &target_region);
                     let action = ScheduleAction::SendToClient(client_id, cmd_result);
                     self.schedule.schedule(&self.time, distance, action);
                 });
@@ -179,6 +158,25 @@ impl Runner {
         }
     }
 
+    /// Retrieves the region of process with identifier `proc_id`.
+    // TODO can we avoid cloning here?
+    fn proc_region(&self, proc_id: ProcId) -> Region {
+        self.proc_to_region
+            .get(&proc_id)
+            .expect("process region should be known")
+            .clone()
+    }
+
+    /// Retrieves the region of client with identifier `client_id`.
+    // TODO can we avoid cloning here?
+    fn client_region(&self, client_id: ClientId) -> Region {
+        self.client_to_region
+            .get(&client_id)
+            .expect("client region should be known")
+            .clone()
+    }
+
+    /// Computes the distance between two regions.
     fn distance(&self, from: &Region, to: &Region) -> u64 {
         self.planet
             .latency(from, to)
