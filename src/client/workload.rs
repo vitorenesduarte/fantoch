@@ -1,4 +1,4 @@
-use crate::client::client::RiflGen;
+use crate::client::RiflGen;
 use crate::command::Command;
 use crate::kvs::Key;
 use rand::Rng;

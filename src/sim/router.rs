@@ -44,6 +44,11 @@ impl Router {
         assert!(res.is_none())
     }
 
+    /// Returns an iterator of mutable references to each registered client.
+    pub fn clients(&mut self) -> impl Iterator<Item = &mut Client> {
+        self.clients.iter_mut().map(|(_, client)| client.get_mut())
+    }
+
     /// Route a message to some target.
     pub fn route(&mut self, to_send: ToSend, time: &dyn SysTime) -> Vec<ToSend> {
         match to_send {
