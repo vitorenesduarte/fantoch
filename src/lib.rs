@@ -17,8 +17,8 @@ pub mod kvs;
 // `Pending`.
 pub mod command;
 
-// This module contains common functionality between all protocols.
-pub mod base;
+// This module contains the definition of `ToSend`, `Proc` and `BaseProc`.
+pub mod proc;
 
 // This module contains the implementation of the `Newt` protocol.
 pub mod newt;

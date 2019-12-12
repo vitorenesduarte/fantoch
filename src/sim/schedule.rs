@@ -1,7 +1,6 @@
 use crate::time::{SimTime, SysTime};
 use std::collections::BTreeMap;
 
-#[derive(Default)]
 pub struct Schedule<A> {
     // mapping from scheduled time to list of scheduled actions
     schedule: BTreeMap<u64, Vec<A>>,

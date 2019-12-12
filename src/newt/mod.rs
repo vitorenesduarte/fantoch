@@ -7,7 +7,7 @@ mod votes_table;
 // This module contains the definition of `KeyClocks` and `QuorumClocks`.
 mod clocks;
 
-use crate::base::BaseProc;
+use crate::proc::BaseProc;
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::id::{Dot, ProcId, Rifl};

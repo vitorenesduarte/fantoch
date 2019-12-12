@@ -1,32 +1,35 @@
 use crate::client::{Client, Workload};
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, ProcId};
-use crate::newt::Newt;
-use crate::newt::{Message, ToSend};
 use crate::planet::{Planet, Region};
+use crate::proc::{Proc, ToSend};
 use crate::sim::Router;
 use crate::sim::Schedule;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
-pub enum ScheduleAction {
-    SendToProc(ProcId, Message),
+pub enum ScheduleAction<P: Proc> {
+    SubmitToProc(ProcId, Command),
+    SendToProc(ProcId, P::Message),
     SendToClient(ClientId, CommandResult),
 }
 
-pub struct Runner {
+pub struct Runner<P: Proc> {
     planet: Planet,
-    router: Router,
+    router: Router<P>,
     time: SimTime,
-    schedule: Schedule<ScheduleAction>,
+    schedule: Schedule<ScheduleAction<P>>,
     // mapping from process identifier to its region
     proc_to_region: HashMap<ProcId, Region>,
     // mapping from client identifier to its region
     client_to_region: HashMap<ClientId, Region>,
 }
 
-impl Runner {
+impl<P> Runner<P>
+where
+    P: Proc,
+{
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of regions:
     /// - `proc_regions`: list of regions where processes are located
     /// - `client_regions`: list of regions where clients are located
@@ -50,9 +53,9 @@ impl Runner {
             .map(|(proc_id, region)| {
                 let proc_id = proc_id as u64;
                 // create proc
-                let newt = Newt::new(proc_id, region.clone(), planet.clone(), config);
+                let proc = P::new(proc_id, region.clone(), planet.clone(), config);
                 // and register it
-                router.register_proc(newt);
+                router.register_proc(proc);
                 (proc_id, region)
             })
             .collect();
@@ -102,20 +105,27 @@ impl Runner {
             // for each scheduled action
             actions.into_iter().for_each(|action| {
                 match action {
-                    ScheduleAction::SendToProc(proc_id, msg) => {
-                        // route to process
-                        let to_send = self.router.route_to_proc(proc_id, msg);
-                        // schedule new message from process
+                    ScheduleAction::SubmitToProc(proc_id, cmd) => {
+                        // get proc's region
                         let proc_region = self.proc_region(proc_id);
+                        // submit to process and schedule output messages
+                        let to_send = self.router.submit_to_proc(proc_id, cmd);
+                        self.schedule_it(proc_region, to_send);
+                    }
+                    ScheduleAction::SendToProc(proc_id, msg) => {
+                        // get proc's region
+                        let proc_region = self.proc_region(proc_id);
+                        // route to process and schedule output messages
+                        let to_send = self.router.route_to_proc(proc_id, msg);
                         self.schedule_it(proc_region, to_send);
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
-                        // route to client
+                        // get client's region
+                        let client_region = self.client_region(client_id);
+                        // route to client and schedule output command
                         let to_send = self
                             .router
                             .route_to_client(client_id, cmd_result, &self.time);
-                        // schedule new message from client
-                        let client_region = self.client_region(client_id);
                         self.schedule_it(client_region, to_send);
                     }
                 }
@@ -124,38 +134,57 @@ impl Runner {
     }
 
     /// Schedule a `ToSend`. When scheduling, we shoud never route!
-    fn schedule_it(&mut self, from: Region, to_send: ToSend) {
+    fn schedule_it(&mut self, from: Region, to_send: ToSend<P::Message>) {
         match to_send {
-            ToSend::Procs(msg, target) => {
+            ToSend::ToCoordinator(proc_id, cmd) => {
+                // create action and schedule it
+                let action = ScheduleAction::SubmitToProc(proc_id, cmd);
+                self.schedule_it_to_proc(&from, proc_id, action);
+            }
+            ToSend::ToProcs(target, msg) => {
                 // for each process in target, schedule message delivery
                 target.into_iter().for_each(|proc_id| {
-                    // get target's region
-                    let target_region = self.proc_region(proc_id);
-
-                    // compute distance between regions, create action and schedule it
-                    let distance = self.distance(&from, &target_region);
+                    // create action and schedule it
                     let action = ScheduleAction::SendToProc(proc_id, msg.clone());
-                    self.schedule.schedule(&self.time, distance, action);
+                    self.schedule_it_to_proc(&from, proc_id, action);
                 });
             }
-            ToSend::Clients(cmd_results) => {
+            ToSend::ToClients(cmd_results) => {
                 // for each command result, schedule its delivery
                 cmd_results.into_iter().for_each(|cmd_result| {
-                    // get client id
+                    // create action and schedule it
                     let client_id = cmd_result.rifl().source();
-                    // get target's region
-                    let target_region = self.client_region(client_id);
-
-                    // route command result to the corresponding client
-                    let distance = self.distance(&from, &target_region);
                     let action = ScheduleAction::SendToClient(client_id, cmd_result);
-                    self.schedule.schedule(&self.time, distance, action);
+                    self.schedule_it_to_client(&from, client_id, action);
                 });
             }
             ToSend::Nothing => {
                 // nothing to do
             }
         }
+    }
+
+    fn schedule_it_to_proc(&mut self, from: &Region, proc_id: ProcId, action: ScheduleAction<P>) {
+        // get proc's region
+        let proc_region = self.proc_region(proc_id);
+
+        // compute distance between regions and schedule action
+        let distance = self.distance(from, &proc_region);
+        self.schedule.schedule(&self.time, distance, action);
+    }
+
+    fn schedule_it_to_client(
+        &mut self,
+        from: &Region,
+        client_id: ClientId,
+        action: ScheduleAction<P>,
+    ) {
+        // get client's region
+        let client_region = self.client_region(client_id);
+
+        // compute distance between regions and schedule action
+        let distance = self.distance(from, &client_region);
+        self.schedule.schedule(&self.time, distance, action);
     }
 
     /// Retrieves the region of process with identifier `proc_id`.

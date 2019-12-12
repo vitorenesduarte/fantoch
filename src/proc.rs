@@ -1,7 +1,28 @@
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcId};
 use crate::planet::{Planet, Region};
 use crate::util;
+
+pub enum ToSend<M> {
+    // new command to be sent to a coordinator
+    ToCoordinator(ProcId, Command),
+    // a protocol message to be sent to a list of processes
+    ToProcs(Vec<ProcId>, M),
+    // a list of command results to be sent to the issuing clients
+    ToClients(Vec<CommandResult>),
+    // nothing to send
+    Nothing,
+}
+
+pub trait Proc {
+    type Message: Clone;
+
+    fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self;
+    fn id(&self) -> ProcId;
+    fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
+    fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message>;
+}
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {
