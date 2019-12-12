@@ -20,7 +20,7 @@ impl Pending {
         let start_time = time.now();
         // add to pending and check it has never been added before
         // TODO: replace with `.expect_none` once it's stabilized
-        if let Some(_) = self.pending.insert(rifl, start_time) {
+        if self.pending.insert(rifl, start_time).is_some() {
             panic!("the same rifl can't be inserted twice in client pending list of commands");
         }
     }

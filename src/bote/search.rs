@@ -1,10 +1,8 @@
-use crate::bote::allstats::AllStats;
-use crate::bote::protocol::ClientPlacement;
 use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
+use crate::bote::protocol::{ClientPlacement, ProtocolStats};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
-use crate::stats::StatsKind;
-use crate::stats::F64;
+use crate::stats::{StatsKind, F64};
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -26,7 +24,7 @@ macro_rules! timed {
 }
 
 // config and stats
-type ConfigAndStats = (BTreeSet<Region>, AllStats);
+type ConfigAndStats = (BTreeSet<Region>, ProtocolStats);
 
 // configs: mapping from `n` to list of configurations of such size
 type Configs = HashMap<usize, Vec<ConfigAndStats>>;
@@ -147,7 +145,7 @@ impl Search {
             .collect()
     }
 
-    pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
+    pub fn stats_fmt(stats: &ProtocolStats, n: usize) -> String {
         ClientPlacement::all()
             .map(|placement| {
                 // shows stats for all possible f
@@ -227,10 +225,10 @@ impl Search {
             .collect()
     }
 
-    pub fn compute_stats(config: &[Region], all_clients: &[Region], bote: &Bote) -> AllStats {
+    pub fn compute_stats(config: &[Region], all_clients: &[Region], bote: &Bote) -> ProtocolStats {
         // compute n
         let n = config.len();
-        let mut stats = AllStats::new();
+        let mut stats = ProtocolStats::new();
 
         // compute best cov fpaxos f=1 leader
         // - this leader will then be used for both f=1 and f=2 stats
@@ -351,8 +349,8 @@ impl Search {
     /// Compute the mean latency decrease for Atlas f = 1 when the number of
     /// sites increases.
     fn min_mean_decrease(
-        stats: &AllStats,
-        prev_stats: &AllStats,
+        stats: &ProtocolStats,
+        prev_stats: &ProtocolStats,
         n: usize,
         params: &RankingParams,
     ) -> bool {
@@ -368,7 +366,7 @@ impl Search {
         })
     }
 
-    fn compute_score(n: usize, stats: &AllStats, params: &RankingParams) -> (bool, F64) {
+    fn compute_score(n: usize, stats: &ProtocolStats, params: &RankingParams) -> (bool, F64) {
         // compute score and check if it is a valid configuration
         let mut valid = true;
         let mut score = F64::zero();
