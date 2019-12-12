@@ -4,6 +4,7 @@ use crate::client::Workload;
 use crate::command::{Command, CommandResult};
 use crate::id::{Id, IdGen};
 use crate::planet::{Planet, Region};
+use crate::stats::Stats;
 use crate::time::SysTime;
 use crate::util;
 
@@ -84,6 +85,11 @@ impl Client {
         self.next_cmd(time)
     }
 
+    /// Computes `Stats` from latencies registered until now.
+    pub fn stats(&self) -> Stats {
+        Stats::from(&self.latencies)
+    }
+
     fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcId, Command)> {
         self.proc_id.and_then(|proc_id| {
             // generate next command in the workload if some proc_id
@@ -99,6 +105,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stats::F64;
     use crate::time::SimTime;
 
     // Generates some client.
@@ -198,5 +205,9 @@ mod tests {
 
         // check latencies
         assert_eq!(client.latencies, vec![10, 5]);
+
+        // check stats
+        let stats = client.stats();
+        assert_eq!(stats.mean(), F64::new(7.5));
     }
 }

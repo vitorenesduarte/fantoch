@@ -1,5 +1,4 @@
 pub mod allstats;
-pub mod float;
 pub mod protocol;
 pub mod search;
 

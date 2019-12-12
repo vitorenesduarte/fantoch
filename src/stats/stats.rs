@@ -1,4 +1,4 @@
-use crate::bote::float::F64;
+use crate::stats::F64;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

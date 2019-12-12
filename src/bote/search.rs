@@ -1,10 +1,10 @@
 use crate::bote::allstats::AllStats;
-use crate::bote::float::F64;
 use crate::bote::protocol::ClientPlacement;
 use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use crate::stats::StatsKind;
+use crate::stats::F64;
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
