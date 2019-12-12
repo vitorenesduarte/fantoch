@@ -13,7 +13,6 @@ pub struct Router {
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
-#[allow(dead_code)] // TODO remove me
 impl Router {
     /// Create a new `Router`.
     pub fn new() -> Self {
@@ -57,7 +56,8 @@ impl Router {
                 let (proc_id, cmd) = client.start(time);
                 // create `ToSend`
                 (client_region, Router::submit_to_send(proc_id, cmd))
-            }).collect()
+            })
+            .collect()
     }
 
     /// Route a message to some target.

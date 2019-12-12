@@ -448,7 +448,6 @@ impl Search {
 }
 
 /// identifies which regions considered for the search
-#[allow(dead_code)]
 pub enum SearchInput {
     /// search within selected 13 regions, clients deployed in the 13 regions
     R13C13,
@@ -577,7 +576,6 @@ impl RankingParams {
 }
 
 /// metric considered for fault tolerance
-#[allow(dead_code)]
 pub enum FTMetric {
     F1,
     F1F2,

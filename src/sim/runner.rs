@@ -8,7 +8,6 @@ use crate::sim::Router;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
-#[allow(dead_code)]
 pub struct Runner {
     time: SimTime,
     router: Router,
@@ -16,7 +15,6 @@ pub struct Runner {
     client_to_region: HashMap<ClientId, Region>,
 }
 
-#[allow(dead_code)]
 impl Runner {
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of regions:
     /// - `proc_regions`: list of regions where processes are located
