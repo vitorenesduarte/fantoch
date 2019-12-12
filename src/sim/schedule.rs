@@ -1,28 +1,22 @@
-use crate::command::CommandResult;
-use crate::id::{ClientId, ProcId};
-use crate::newt::Message;
 use crate::time::SimTime;
 use std::collections::BTreeMap;
 
-pub enum ScheduleAction {
-    SendToProc(ProcId, Message),
-    SendToClient(ClientId, CommandResult),
-}
-
-#[derive(Default)]
-pub struct Schedule {
-    // mapping from scheduled time to list of schedule actions
-    schedule: BTreeMap<u64, Vec<ScheduleAction>>,
+pub struct Schedule<A> {
+    // mapping from scheduled time to list of scheduled actions
+    schedule: BTreeMap<u64, Vec<A>>,
     min_time: Option<u64>,
 }
 
-impl Schedule {
+impl<A> Schedule<A> {
     pub fn new() -> Self {
-        Default::default()
+        Self {
+            schedule: BTreeMap::new(),
+            min_time: None,
+        }
     }
 
     /// Schedule a new `ScheduleAction` at a certain `time`.
-    pub fn schedule(&mut self, time: u64, action: ScheduleAction) {
+    pub fn schedule(&mut self, time: u64, action: A) {
         // get already scheduled actions for this `time`
         let actions = self.schedule.entry(time).or_insert_with(Vec::new);
         // insert new action
@@ -33,22 +27,37 @@ impl Schedule {
     }
 
     /// Retrieve the next list of schedule actions.
-    pub fn next_actions(&mut self, time: &mut SimTime) -> Vec<ScheduleAction> {
-        if let Some(min_time) = self.min_time {
+    pub fn next_actions(&mut self, time: &mut SimTime) -> Option<Vec<A>> {
+        let actions = self.min_time.map(|min_time| {
             // advance simulation time
             time.set_time(min_time);
 
             // get actions scheduled for `min_time`
-            let actions = self
-                .schedule
+            self.schedule
                 .remove(&min_time)
-                .expect("this time must exist in the schedule");
-            // update `self.min_time`
-            self.min_time = self.schedule.iter().map(|(min_time, _)| *min_time).next();
-            // return next actions
-            actions
-        } else {
-            Vec::new()
-        }
+                .expect("this time must exist in the schedule")
+        });
+
+        // update `self.min_time`
+        self.min_time = self.schedule.iter().map(|(min_time, _)| *min_time).next();
+
+        // return next actions
+        actions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn schedule_flow() {
+        // create simulation time
+        let mut time = SimTime::new();
+
+        // create schedule
+        let mut schedule: Schedule<u64> = Schedule::new();
+        // check there are no next actions
+        assert!(schedule.next_actions(&mut time).is_none());
     }
 }

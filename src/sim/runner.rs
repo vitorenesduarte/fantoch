@@ -1,20 +1,26 @@
 use crate::client::{Client, Workload};
+use crate::command::CommandResult;
 use crate::config::Config;
 use crate::id::{ClientId, ProcId};
 use crate::newt::Newt;
-use crate::newt::ToSend;
+use crate::newt::{Message, ToSend};
 use crate::planet::{Planet, Region};
 use crate::sim::Router;
 use crate::sim::Schedule;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
+pub enum ScheduleAction {
+    SendToProc(ProcId, Message),
+    SendToClient(ClientId, CommandResult),
+}
+
 pub struct Runner {
     time: SimTime,
     router: Router,
     proc_to_region: HashMap<ProcId, Region>,
     client_to_region: HashMap<ClientId, Region>,
-    schedule: Schedule,
+    schedule: Schedule<ScheduleAction>,
 }
 
 impl Runner {
