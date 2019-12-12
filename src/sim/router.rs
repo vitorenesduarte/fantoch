@@ -55,7 +55,8 @@ impl Router {
                 // start client
                 let (proc_id, cmd) = client.start(time);
                 // create `ToSend`
-                (client_region, Router::submit_to_send(proc_id, cmd))
+                let to_send = Router::submit_to_send(proc_id, cmd);
+                (client_region, to_send)
             })
             .collect()
     }

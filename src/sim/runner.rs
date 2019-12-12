@@ -5,6 +5,7 @@ use crate::newt::Newt;
 use crate::newt::ToSend;
 use crate::planet::{Planet, Region};
 use crate::sim::Router;
+use crate::sim::Schedule;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
@@ -13,6 +14,7 @@ pub struct Runner {
     router: Router,
     proc_to_region: HashMap<ProcId, Region>,
     client_to_region: HashMap<ClientId, Region>,
+    schedule: Schedule,
 }
 
 impl Runner {
@@ -28,9 +30,6 @@ impl Runner {
     ) -> Self {
         // check that we have the correct number of `proc_regions`
         assert_eq!(proc_regions.len(), config.n());
-
-        // create simulation time
-        let time = SimTime::new();
 
         // create router
         let mut router = Router::new();
@@ -70,19 +69,18 @@ impl Runner {
 
         // create runner
         Self {
-            time,
+            time: SimTime::new(),
             router,
             proc_to_region,
             client_to_region,
+            schedule: Schedule::new(),
         }
     }
 
     /// Run the simulation.
     pub fn run(&mut self) {
-        // borrow self.time to satisfy the borrow checker
-        let time = &self.time;
         self.router
-            .start_clients(time)
+            .start_clients(&self.time)
             .into_iter()
             .for_each(|(client_region, to_send)| {
                 // schedule client commands
@@ -102,6 +100,7 @@ impl Runner {
                 //   coordinators
                 // - we need to schedule because the client maybe be connected to a coordinator that
                 //   is far away from the client
+                // - for the same reason, the handling of `cmd_results` also needs to be scheduled
                 cmd_results
                     .into_iter()
                     .map(|cmd_result| {
