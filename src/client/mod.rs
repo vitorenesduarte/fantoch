@@ -55,6 +55,11 @@ impl Client {
         self.client_id
     }
 
+    /// Returns client's region.
+    pub fn region(&self) -> &Region {
+        &self.region
+    }
+
     /// Generate client's first command.
     pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) -> bool {
         // sort `procs` by distance from `self.region`

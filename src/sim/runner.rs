@@ -2,7 +2,7 @@ use crate::client::{Client, Workload};
 use crate::config::Config;
 use crate::id::{ClientId, ProcId};
 use crate::newt::Newt;
-use crate::newt::{Message, ToSend};
+use crate::newt::ToSend;
 use crate::planet::{Planet, Region};
 use crate::sim::Router;
 use crate::time::SimTime;
@@ -84,26 +84,16 @@ impl Runner {
         // borrow self.time to satisfy the borrow checker
         let time = &self.time;
         self.router
-            .clients()
-            .map(|client| {
-                // start all clients at time 0
-                client.start(time)
-            })
-            // TODO can we avoid collecting here?
-            .collect::<Vec<_>>()
+            .start_clients(time)
             .into_iter()
-            .for_each(|(proc_id, cmd)| {
-                // create submit message
-                let submit = Message::Submit { cmd };
-                // route it to the correct process
-                let to_send = self.router.route_to_proc(proc_id, submit);
-                // and schedule its output
-                self.schedule(to_send);
+            .for_each(|(client_region, to_send)| {
+                // schedule client commands
+                self.schedule(client_region, to_send);
             });
     }
 
     /// Schedule a `ToSend`.
-    fn schedule(&mut self, to_send: ToSend) {
+    fn schedule(&mut self, from: Region, to_send: ToSend) {
         match to_send {
             ToSend::Procs(msg, target) => {
                 // nothing new to send
@@ -117,13 +107,25 @@ impl Runner {
                 cmd_results
                     .into_iter()
                     .map(|cmd_result| {
-                        // route each command result to the corresponding client
-                        self.router.route_to_client(cmd_result, &self.time)
+                        // get client id
+                        let client_id = cmd_result.rifl().source();
+                        // get client region
+                        // TODO can we avoid cloning here?
+                        let client_region = self
+                            .client_to_region
+                            .get(&client_id)
+                            .expect("client region should be known")
+                            .clone();
+                        // route command result to the corresponding client
+                        let to_send = self
+                            .router
+                            .route_to_client(client_id, cmd_result, &self.time);
+                        (client_region, to_send)
                     })
                     // TODO can we avoid collecting here?
                     .collect::<Vec<_>>()
                     .into_iter()
-                    .for_each(|to_send| self.schedule(to_send))
+                    .for_each(|(client_region, to_send)| self.schedule(client_region, to_send))
             }
             ToSend::Nothing => {
                 // nothing to do

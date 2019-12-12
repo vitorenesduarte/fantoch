@@ -1,7 +1,8 @@
 use crate::client::Client;
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcId};
 use crate::newt::{Message, Newt, ToSend};
+use crate::planet::Region;
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -44,8 +45,19 @@ impl Router {
     }
 
     /// Returns an iterator of mutable references to each registered client.
-    pub fn clients(&mut self) -> impl Iterator<Item = &mut Client> {
-        self.clients.iter_mut().map(|(_, client)| client.get_mut())
+    pub fn start_clients(&mut self, time: &dyn SysTime) -> Vec<(Region, ToSend)> {
+        self.clients
+            .iter_mut()
+            .map(|(_, client)| {
+                let client = client.get_mut();
+                // get client region
+                // TODO can we avoid cloning here?
+                let client_region = client.region().clone();
+                // start client
+                let (proc_id, cmd) = client.start(time);
+                // create `ToSend`
+                (client_region, Router::submit_to_send(proc_id, cmd))
+            }).collect()
     }
 
     /// Route a message to some target.
@@ -58,7 +70,11 @@ impl Router {
                 .collect(),
             ToSend::Clients(results) => results
                 .into_iter()
-                .map(|cmd_result| self.route_to_client(cmd_result, time))
+                .map(|cmd_result| {
+                    // get client id
+                    let client_id = cmd_result.rifl().source();
+                    self.route_to_client(client_id, cmd_result, time)
+                })
                 .collect(),
         }
     }
@@ -75,9 +91,12 @@ impl Router {
     }
 
     /// Route a message to some client.
-    pub fn route_to_client(&mut self, cmd_result: CommandResult, time: &dyn SysTime) -> ToSend {
-        // get client id
-        let client_id = cmd_result.rifl().source();
+    pub fn route_to_client(
+        &mut self,
+        client_id: ClientId,
+        cmd_result: CommandResult,
+        time: &dyn SysTime,
+    ) -> ToSend {
         // route command result
         self.clients
             .get_mut(&client_id)
@@ -87,7 +106,11 @@ impl Router {
             .get_mut()
             .handle(cmd_result, time)
             .map_or(ToSend::Nothing, |(proc_id, cmd)| {
-                ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
+                Router::submit_to_send(proc_id, cmd)
             })
+    }
+
+    fn submit_to_send(proc_id: ProcId, cmd: Command) -> ToSend {
+        ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
     }
 }
