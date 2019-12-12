@@ -89,17 +89,54 @@ impl Runner {
 
     /// Run the simulation.
     pub fn run(&mut self) {
+        // start clients
         self.router
             .start_clients(&self.time)
             .into_iter()
             .for_each(|(client_region, to_send)| {
                 // schedule client commands
-                self.schedule(client_region, to_send);
+                self.schedule_it(client_region, to_send);
             });
+        // run the simulation while there are things scheduled
+        while let Some(actions) = self.schedule.next_actions(&mut self.time) {
+            // for each scheduled action
+            actions.into_iter().for_each(|action| {
+                match action {
+                    ScheduleAction::SendToProc(proc_id, msg) => {
+                        // route to process
+                        let to_send = self.router.route_to_proc(proc_id, msg);
+                        // get process region
+                        // TODO can we avoid cloning here?
+                        let proc_region = self
+                            .proc_to_region
+                            .get(&proc_id)
+                            .expect("process region should be known")
+                            .clone();
+                        // schedule potentially new message
+                        self.schedule_it(proc_region, to_send);
+                    }
+                    ScheduleAction::SendToClient(client_id, cmd_result) => {
+                        // route to client
+                        let to_send = self
+                            .router
+                            .route_to_client(client_id, cmd_result, &self.time);
+                        // get client id and its region
+                        // TODO can we avoid cloning here?
+                        let client_region = self
+                            .client_to_region
+                            .get(&client_id)
+                            .expect("client region should be known")
+                            .clone();
+                        // schedule potentially new message
+                        self.schedule_it(client_region, to_send);
+                    }
+                }
+            })
+        }
     }
 
     /// Schedule a `ToSend`. When scheduling, we shoud never route!
-    fn schedule(&mut self, from: Region, to_send: ToSend) {
+    fn schedule_it(&mut self, from: Region, to_send: ToSend) {
         match to_send {
             ToSend::Procs(msg, target) => {
                 // for each process in target, schedule message delivery
