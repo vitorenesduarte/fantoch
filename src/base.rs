@@ -1,11 +1,7 @@
 use crate::config::Config;
-use crate::id::{Id, IdGen};
+use crate::id::{Dot, DotGen, ProcId};
 use crate::planet::{Planet, Region};
 use crate::util;
-
-pub type ProcId = u64;
-pub type Dot = Id<ProcId>;
-type DotGen = IdGen<ProcId>;
 
 // a `BaseProc` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProc {

@@ -8,19 +8,13 @@ pub mod pending;
 pub use pending::Pending;
 pub use workload::Workload;
 
-use crate::base::ProcId;
 use crate::command::{Command, CommandResult};
-use crate::id::{Id, IdGen};
+use crate::id::ProcId;
+use crate::id::{ClientId, RiflGen};
 use crate::planet::{Planet, Region};
 use crate::stats::Stats;
 use crate::time::SysTime;
 use crate::util;
-
-pub type ClientId = u64;
-
-// for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
-pub type Rifl = Id<ClientId>;
-pub type RiflGen = IdGen<ClientId>;
 
 pub struct Client {
     /// id of this client

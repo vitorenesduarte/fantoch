@@ -1,4 +1,4 @@
-use crate::base::ProcId;
+use crate::id::ProcId;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 

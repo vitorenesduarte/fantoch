@@ -1,3 +1,14 @@
+// proc ids
+pub type ProcId = u64;
+pub type Dot = Id<ProcId>;
+pub type DotGen = IdGen<ProcId>;
+
+// client ids
+// for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
+pub type ClientId = u64;
+pub type Rifl = Id<ClientId>;
+pub type RiflGen = IdGen<ClientId>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id<S> {
     source: S,

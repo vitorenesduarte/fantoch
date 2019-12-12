@@ -1,4 +1,4 @@
-use crate::base::ProcId;
+use crate::id::ProcId;
 use crate::command::Command;
 use crate::kvs::Key;
 use std::collections::btree_map::{self, BTreeMap};
@@ -105,7 +105,7 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::Rifl;
+    use crate::id::Rifl;
     use crate::newt::clocks::KeysClocks;
     use std::cmp::max;
 

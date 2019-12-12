@@ -1,15 +1,19 @@
 use crate::client::{Client, Workload};
 use crate::config::Config;
-use crate::newt::Message;
+use crate::id::{ClientId, ProcId};
 use crate::newt::Newt;
+use crate::newt::{Message, ToSend};
 use crate::planet::{Planet, Region};
 use crate::sim::Router;
 use crate::time::SimTime;
+use std::collections::HashMap;
 
 #[allow(dead_code)]
 pub struct Runner {
     time: SimTime,
     router: Router,
+    proc_to_region: HashMap<ProcId, Region>,
+    client_to_region: HashMap<ClientId, Region>,
 }
 
 #[allow(dead_code)]
@@ -47,21 +51,32 @@ impl Runner {
             })
             .collect();
 
+        // create proc to region
+        let proc_to_region = procs.clone().into_iter().collect();
+
         // register clients
-        client_regions
+        let client_to_region = client_regions
             .into_iter()
             .enumerate()
-            .for_each(|(client_id, region)| {
+            .map(|(client_id, region)| {
+                let client_id = client_id as u64;
                 // create client
-                let mut client = Client::new(client_id as u64, region, planet.clone(), workload);
+                let mut client = Client::new(client_id, region.clone(), planet.clone(), workload);
                 // discover `procs`
                 client.discover(procs.clone());
                 // and register it
                 router.register_client(client);
-            });
+                (client_id, region)
+            })
+            .collect();
 
         // create runner
-        Self { time, router }
+        Self {
+            time,
+            router,
+            proc_to_region,
+            client_to_region,
+        }
     }
 
     /// Run the simulation.
@@ -74,16 +89,45 @@ impl Runner {
                 // start all clients at time 0
                 client.start(time)
             })
-            // TODO can we avoid collecting here? borrow checker complains if we don't
+            // TODO can we avoid collecting here?
             .collect::<Vec<_>>()
             .into_iter()
-            .map(|(proc_id, cmd)| {
+            .for_each(|(proc_id, cmd)| {
                 // create submit message
                 let submit = Message::Submit { cmd };
-                self.router.route_to_proc(proc_id, submit);
-            })
-            .for_each(|x| {
-                println!("{:?}", x);
+                // route it to the correct process
+                let to_send = self.router.route_to_proc(proc_id, submit);
+                // and schedule its output
+                self.schedule(to_send);
             });
+    }
+
+    /// Schedule a `ToSend`.
+    fn schedule(&mut self, to_send: ToSend) {
+        match to_send {
+            ToSend::Procs(msg, target) => {
+                // nothing new to send
+            }
+            ToSend::Clients(cmd_results) => {
+                // route command results to clients:
+                // - if there are new commands to be submitted, schedule their arrival in
+                //   coordinators
+                // - we need to schedule because the client maybe be connected to a coordinator that
+                //   is far away from the client
+                cmd_results
+                    .into_iter()
+                    .map(|cmd_result| {
+                        // route each command result to the corresponding client
+                        self.router.route_to_client(cmd_result, &self.time)
+                    })
+                    // TODO can we avoid collecting here?
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .for_each(|to_send| self.schedule(to_send))
+            }
+            ToSend::Nothing => {
+                // nothing to do
+            }
+        }
     }
 }

@@ -7,10 +7,10 @@ mod votes_table;
 // This module contains the definition of `KeyClocks` and `QuorumClocks`.
 mod clocks;
 
-use crate::base::{BaseProc, Dot, ProcId};
-use crate::client::Rifl;
+use crate::base::BaseProc;
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
+use crate::id::{Dot, ProcId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
 use crate::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::newt::votes::{ProcVotes, Votes};
@@ -366,30 +366,6 @@ pub enum ToSend {
     Clients(Vec<CommandResult>),
 }
 
-#[allow(dead_code)] // TODO remove me
-impl ToSend {
-    /// Check if there's nothing to be sent.
-    fn nothing(&self) -> bool {
-        *self == ToSend::Nothing
-    }
-
-    /// Check if there's something to be sent to processes.
-    fn to_procs(&self) -> bool {
-        match *self {
-            ToSend::Procs(_, _) => true,
-            _ => false,
-        }
-    }
-
-    /// Check if there's something to be sent to clients.
-    fn to_clients(&self) -> bool {
-        match *self {
-            ToSend::Clients(_) => true,
-            _ => false,
-        }
-    }
-}
-
 // `Newt` protocol messages
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
@@ -431,6 +407,32 @@ mod tests {
     use crate::client::{Client, Workload};
     use crate::sim::Router;
     use crate::time::SimTime;
+
+    impl ToSend {
+        /// Check if there's nothing to be sent.
+        pub fn is_nothing(&self) -> bool {
+            match *self {
+                ToSend::Nothing => true,
+                _ => false,
+            }
+        }
+
+        /// Check if there's something to be sent to processes.
+        pub fn is_procs(&self) -> bool {
+            match *self {
+                ToSend::Procs(_, _) => true,
+                _ => false,
+            }
+        }
+
+        /// Check if there's something to be sent to clients.
+        pub fn is_clients(&self) -> bool {
+            match *self {
+                ToSend::Clients(_) => true,
+                _ => false,
+            }
+        }
+    }
 
     #[test]
     fn newt_parameters() {
@@ -528,7 +530,7 @@ mod tests {
         let mcollects = router.route_to_proc(target_proc, msubmit);
 
         // check that the mcollect is being sent to 2 processes
-        assert!(mcollects.to_procs());
+        assert!(mcollects.is_procs());
         if let ToSend::Procs(_, to) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
         } else {
@@ -540,20 +542,20 @@ mod tests {
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
-        assert!(mcollectacks.iter().all(|to_send| to_send.to_procs()));
+        assert!(mcollectacks.iter().all(|to_send| to_send.is_procs()));
 
         // handle the first mcollectack
         let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
         let mcommit_tosend = mcommits.pop().unwrap();
         // no mcommit yet
-        assert!(mcommit_tosend.nothing());
+        assert!(mcommit_tosend.is_nothing());
 
         // handle the second mcollectack
         let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
-        assert!(mcommit_tosend.to_procs());
+        assert!(mcommit_tosend.is_procs());
         if let ToSend::Procs(_, to) = mcommit_tosend.clone() {
             assert_eq!(to.len(), n);
         } else {
@@ -564,14 +566,14 @@ mod tests {
         let mut nothings = router.route(mcommit_tosend, &time).into_iter();
         // the first one has a reply to a client, the remaining two are nothings
         let to_client = nothings.next().unwrap();
-        assert!(to_client.to_clients());
+        assert!(to_client.is_clients());
         assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
         assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
         assert_eq!(nothings.next(), None);
 
         // handle what was sent to client
         let new_submit = router.route(to_client, &time).into_iter().next().unwrap();
-        assert!(new_submit.to_procs());
+        assert!(new_submit.is_procs());
 
         let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
         if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect {

@@ -1,4 +1,4 @@
-use crate::base::ProcId;
+use crate::id::ProcId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 

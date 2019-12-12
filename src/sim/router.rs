@@ -1,12 +1,11 @@
-use crate::base::ProcId;
-use crate::client::{Client, ClientId};
-use crate::command::{Command, CommandResult};
+use crate::client::Client;
+use crate::command::CommandResult;
+use crate::id::{ClientId, ProcId};
 use crate::newt::{Message, Newt, ToSend};
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-#[allow(dead_code)] // TODO remove me
 #[derive(Default)]
 pub struct Router {
     procs: HashMap<ProcId, Cell<Newt>>,
@@ -59,11 +58,7 @@ impl Router {
                 .collect(),
             ToSend::Clients(results) => results
                 .into_iter()
-                .filter_map(|cmd_result| {
-                    let client = cmd_result.rifl().source();
-                    self.route_to_client(client, cmd_result, time)
-                })
-                .map(|(proc_id, cmd)| ToSend::Procs(Message::Submit { cmd }, vec![proc_id]))
+                .map(|cmd_result| self.route_to_client(cmd_result, time))
                 .collect(),
         }
     }
@@ -80,12 +75,10 @@ impl Router {
     }
 
     /// Route a message to some client.
-    pub fn route_to_client(
-        &mut self,
-        client_id: ClientId,
-        cmd_result: CommandResult,
-        time: &dyn SysTime,
-    ) -> Option<(ProcId, Command)> {
+    pub fn route_to_client(&mut self, cmd_result: CommandResult, time: &dyn SysTime) -> ToSend {
+        // get client id
+        let client_id = cmd_result.rifl().source();
+        // route command result
         self.clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
@@ -93,5 +86,8 @@ impl Router {
             })
             .get_mut()
             .handle(cmd_result, time)
+            .map_or(ToSend::Nothing, |(proc_id, cmd)| {
+                ToSend::Procs(Message::Submit { cmd }, vec![proc_id])
+            })
     }
 }

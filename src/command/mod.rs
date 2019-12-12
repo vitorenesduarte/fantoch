@@ -4,7 +4,7 @@ pub mod pending;
 // Re-exports.
 pub use pending::Pending;
 
-use crate::client::Rifl;
+use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, Key, Value};
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::HashMap;

@@ -1,5 +1,5 @@
-use crate::base::ProcId;
 use crate::command::Command;
+use crate::id::ProcId;
 use crate::kvs::Key;
 use crate::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
@@ -63,7 +63,7 @@ impl KeysClocks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::Rifl;
+    use crate::id::Rifl;
 
     #[test]
     fn keys_clocks_flow() {
