@@ -16,11 +16,14 @@ pub enum ScheduleAction {
 }
 
 pub struct Runner {
-    time: SimTime,
+    planet: Planet,
     router: Router,
-    proc_to_region: HashMap<ProcId, Region>,
-    client_to_region: HashMap<ClientId, Region>,
+    time: SimTime,
     schedule: Schedule<ScheduleAction>,
+    // mapping from process identifier to its region
+    proc_to_region: HashMap<ProcId, Region>,
+    // mapping from client identifier to its region
+    client_to_region: HashMap<ClientId, Region>,
 }
 
 impl Runner {
@@ -75,11 +78,12 @@ impl Runner {
 
         // create runner
         Self {
-            time: SimTime::new(),
+            planet,
             router,
+            time: SimTime::new(),
+            schedule: Schedule::new(),
             proc_to_region,
             client_to_region,
-            schedule: Schedule::new(),
         }
     }
 
@@ -94,45 +98,53 @@ impl Runner {
             });
     }
 
-    /// Schedule a `ToSend`.
+    /// Schedule a `ToSend`. When scheduling, we shoud never route!
     fn schedule(&mut self, from: Region, to_send: ToSend) {
         match to_send {
             ToSend::Procs(msg, target) => {
-                // nothing new to send
+                // for each process in target, schedule message delivery
+                target.into_iter().for_each(|proc_id| {
+                    // get process region
+                    // TODO can we avoid cloning here?
+                    let proc_region = self
+                        .proc_to_region
+                        .get(&proc_id)
+                        .expect("process region should be known")
+                        .clone();
+
+                    // compute distance between regions, create action and schedule it
+                    let distance = self.distance(&from, &proc_region);
+                    let action = ScheduleAction::SendToProc(proc_id, msg.clone());
+                    self.schedule.schedule(&self.time, distance, action);
+                });
             }
             ToSend::Clients(cmd_results) => {
-                // route command results to clients:
-                // - if there are new commands to be submitted, schedule their arrival in
-                //   coordinators
-                // - we need to schedule because the client maybe be connected to a coordinator that
-                //   is far away from the client
-                // - for the same reason, the handling of `cmd_results` also needs to be scheduled
-                cmd_results
-                    .into_iter()
-                    .map(|cmd_result| {
-                        // get client id
-                        let client_id = cmd_result.rifl().source();
-                        // get client region
-                        // TODO can we avoid cloning here?
-                        let client_region = self
-                            .client_to_region
-                            .get(&client_id)
-                            .expect("client region should be known")
-                            .clone();
-                        // route command result to the corresponding client
-                        let to_send = self
-                            .router
-                            .route_to_client(client_id, cmd_result, &self.time);
-                        (client_region, to_send)
-                    })
-                    // TODO can we avoid collecting here?
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .for_each(|(client_region, to_send)| self.schedule(client_region, to_send))
+                // for each command result, schedule its delivery
+                cmd_results.into_iter().for_each(|cmd_result| {
+                    // get client id and its region
+                    // TODO can we avoid cloning here?
+                    let client_id = cmd_result.rifl().source();
+                    let client_region = self
+                        .client_to_region
+                        .get(&client_id)
+                        .expect("client region should be known")
+                        .clone();
+
+                    // route command result to the corresponding client
+                    let distance = self.distance(&from, &client_region);
+                    let action = ScheduleAction::SendToClient(client_id, cmd_result);
+                    self.schedule.schedule(&self.time, distance, action);
+                });
             }
             ToSend::Nothing => {
                 // nothing to do
             }
         }
+    }
+
+    fn distance(&self, from: &Region, to: &Region) -> u64 {
+        self.planet
+            .latency(from, to)
+            .expect("both regions should exist on the planet")
     }
 }

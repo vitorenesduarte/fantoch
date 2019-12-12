@@ -1,5 +1,5 @@
-use crate::id::RiflGen;
 use crate::command::Command;
+use crate::id::RiflGen;
 use crate::kvs::Key;
 use rand::Rng;
 

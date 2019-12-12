@@ -9,5 +9,5 @@ pub mod runner;
 
 // Re-exports.
 pub use router::Router;
-pub use schedule::Schedule;
 pub use runner::Runner;
+pub use schedule::Schedule;
