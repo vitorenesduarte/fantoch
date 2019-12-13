@@ -152,19 +152,15 @@ where
 
     /// Get client's stats.
     /// TODO does this need to be mut?
-    /// TODO use iterators
-    pub fn stats(&mut self) -> HashMap<&Region, Stats> {
-        // create stats
-        let mut stats = HashMap::with_capacity(self.client_to_region.len());
-
-        // get stats from each client
-        for (client_id, region) in self.client_to_region.iter() {
-            let client_stats = self.router.client_stats(*client_id);
-            stats.insert(region, client_stats);
-        }
-
-        // return stats
-        stats
+    pub fn clients_stats(&mut self) -> HashMap<&Region, Stats> {
+        let router = &mut self.router;
+        self.client_to_region
+            .iter()
+            .map(|(client_id, region)| {
+                let client_stats = router.client_stats(*client_id);
+                (region, client_stats)
+            })
+            .collect()
     }
 
     /// Try to schedule a `ToSend`. When scheduling, we shoud never route!
@@ -234,6 +230,13 @@ where
             .planet
             .ping_latency(from, to)
             .expect("both regions should exist on the planet");
+        println!(
+            "{:?} -> {:?}: ping {} | distance {}",
+            from,
+            to,
+            ping_latency,
+            ping_latency / 2
+        );
         // distance is half the ping latency
         ping_latency / 2
     }
@@ -252,21 +255,25 @@ mod tests {
         Pong(Rifl),
     }
 
-    // Protocol that pings the closest process (that is not self) and returns reply to client.
+    // Protocol that pings the closest f + 1 processes and returns reply to client.
     struct PingPong {
         bp: BaseProcess,
+        acks: HashMap<Rifl, usize>,
     }
 
     impl Process for PingPong {
         type Message = Message;
 
         fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-            // quorum size is 1
-            let q = 2;
+            // quorum size is f + 1
+            let q = config.f() + 1;
             let bp = BaseProcess::new(process_id, region, planet, config, q);
 
             // create `PingPong`
-            Self { bp }
+            Self {
+                bp,
+                acks: HashMap::new(),
+            }
         }
 
         fn id(&self) -> ProcessId {
@@ -278,14 +285,20 @@ mod tests {
         }
 
         fn submit(&mut self, cmd: Command) -> ToSend<Self::Message> {
+            // get rifl
+            let rifl = cmd.rifl();
+            // create entry in acks
+            self.acks.insert(rifl, 0);
+
             // create message
-            let msg = Message::Ping(self.id(), cmd.rifl());
+            let msg = Message::Ping(self.id(), rifl);
             // clone the fast quorum
             let fast_quorum = self
                 .bp
                 .fast_quorum
                 .clone()
                 .expect("should have a valid fast quorum upon submit");
+
             // send message to fast quorum
             ToSend::ToProcesses(fast_quorum, msg)
         }
@@ -293,34 +306,41 @@ mod tests {
         fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
             match msg {
                 Message::Ping(from, rifl) => {
-                    // ignore ping from self
-                    if from == self.id() {
-                        ToSend::Nothing
-                    } else {
-                        // create msg
-                        let msg = Message::Pong(rifl);
-                        // reply back
-                        ToSend::ToProcesses(vec![from], msg)
-                    }
+                    // create msg
+                    let msg = Message::Pong(rifl);
+                    // reply back
+                    ToSend::ToProcesses(vec![from], msg)
                 }
                 Message::Pong(rifl) => {
-                    // create fake command result
-                    let cmd_result = CommandResult::new(rifl, 0);
-                    // notify client
-                    ToSend::ToClients(vec![cmd_result])
+                    // increase ack count
+                    let ack_count = self
+                        .acks
+                        .get_mut(&rifl)
+                        .expect("there should be an ack count for this rifl");
+                    *ack_count += 1;
+
+                    // notify client if enough acks
+                    if *ack_count == self.bp.q {
+                        // remove from acks
+                        self.acks.remove(&rifl);
+                        // create fake command result
+                        let cmd_result = CommandResult::new(rifl, 0);
+                        // notify client
+                        ToSend::ToClients(vec![cmd_result])
+                    } else {
+                        ToSend::Nothing
+                    }
                 }
             }
         }
     }
 
-    #[test]
-    fn runner_flow() {
+    fn run(f: usize) -> (Stats, Stats) {
         // planet
         let planet = Planet::new("latency/");
 
         // config
         let n = 3;
-        let f = 1;
         let config = Config::new(n, f);
 
         // function that creates ping pong processes
@@ -352,28 +372,44 @@ mod tests {
             client_regions,
         );
 
-        // run simulation
+        // run simulation and return stats
         runner.run();
-
-        // get stats
-        let stats = runner.stats();
-
-        // check us-west1 stats
-        // since us-west1 is a process, from client's perspective it should be the latency of
-        // accessing the coordinator (0ms) plus the latency of accessing the closest region
-        // (us-central1)
-        let us_west1_stats = stats
-            .get(&Region::new("us-west1"))
+        let mut stats = runner.clients_stats();
+        let us_west1 = stats
+            .remove(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
-        assert_eq!(us_west1_stats.mean(), F64::new(34.0));
-
-        // check us-west2 stats
-        // since us-west2 is _not_ a process, from client's perspective it should be the latency of
-        // accessing the coordinator (us-west1) plus the latency of accessing the closest region
-        // (us-central1)
-        let us_west2_stats = stats
-            .get(&Region::new("us-west2"))
+        let us_west2 = stats
+            .remove(&Region::new("us-west2"))
             .expect("there should stats from us-west2 region");
-        assert_eq!(us_west2_stats.mean(), F64::new(58.0));
+        (us_west1, us_west2)
+    }
+
+    #[test]
+    fn runner_flow() {
+        // expected stats:
+        // - client us-west1: since us-west1 is a process, from client's perspective it should be
+        //   the latency of accessing the coordinator (0ms) plus the latency of accessing the
+        //   closest fast quorum
+        // - client us-west2: since us-west2 is _not_ a process, from client's perspective it should
+        //   be the latency of accessing the coordinator us-west1 (12ms + 12ms) plus the latency of
+        //   accessing the closest fast quorum
+
+        // f = 0
+        let f = 0;
+        let (us_west1, us_west2) = run(f);
+        assert_eq!(us_west1.mean(), F64::new(0.0));
+        assert_eq!(us_west2.mean(), F64::new(24.0));
+
+        // f = 1
+        let f = 1;
+        let (us_west1, us_west2) = run(f);
+        assert_eq!(us_west1.mean(), F64::new(34.0));
+        assert_eq!(us_west2.mean(), F64::new(58.0));
+
+        // f = 2
+        let f = 2;
+        let (us_west1, us_west2) = run(f);
+        assert_eq!(us_west1.mean(), F64::new(118.0));
+        assert_eq!(us_west2.mean(), F64::new(142.0));
     }
 }
