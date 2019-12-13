@@ -1,9 +1,8 @@
-use crate::bote::float::F64;
-use crate::bote::protocol::ClientPlacement;
 use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
-use crate::bote::stats::{AllStats, StatsSortBy};
+use crate::bote::protocol::{ClientPlacement, ProtocolStats};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
+use crate::stats::{StatsKind, F64};
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,7 +24,7 @@ macro_rules! timed {
 }
 
 // config and stats
-type ConfigAndStats = (BTreeSet<Region>, AllStats);
+type ConfigAndStats = (BTreeSet<Region>, ProtocolStats);
 
 // configs: mapping from `n` to list of configurations of such size
 type Configs = HashMap<usize, Vec<ConfigAndStats>>;
@@ -146,7 +145,7 @@ impl Search {
             .collect()
     }
 
-    pub fn stats_fmt(stats: &AllStats, n: usize) -> String {
+    pub fn stats_fmt(stats: &ProtocolStats, n: usize) -> String {
         ClientPlacement::all()
             .map(|placement| {
                 // shows stats for all possible f
@@ -226,16 +225,16 @@ impl Search {
             .collect()
     }
 
-    pub fn compute_stats(config: &[Region], all_clients: &[Region], bote: &Bote) -> AllStats {
+    pub fn compute_stats(config: &[Region], all_clients: &[Region], bote: &Bote) -> ProtocolStats {
         // compute n
         let n = config.len();
-        let mut stats = AllStats::new();
+        let mut stats = ProtocolStats::new();
 
         // compute best cov fpaxos f=1 leader
         // - this leader will then be used for both f=1 and f=2 stats
         let f = 1;
         let quorum_size = FPaxos.quorum_size(n, f);
-        let (leader, _) = bote.best_leader(config, all_clients, quorum_size, StatsSortBy::COV);
+        let (leader, _) = bote.best_leader(config, all_clients, quorum_size, StatsKind::COV);
 
         // compute stats for both `clients` and colocated clients i.e. `config`
         let which_clients = vec![
@@ -350,8 +349,8 @@ impl Search {
     /// Compute the mean latency decrease for Atlas f = 1 when the number of
     /// sites increases.
     fn min_mean_decrease(
-        stats: &AllStats,
-        prev_stats: &AllStats,
+        stats: &ProtocolStats,
+        prev_stats: &ProtocolStats,
         n: usize,
         params: &RankingParams,
     ) -> bool {
@@ -367,7 +366,7 @@ impl Search {
         })
     }
 
-    fn compute_score(n: usize, stats: &AllStats, params: &RankingParams) -> (bool, F64) {
+    fn compute_score(n: usize, stats: &ProtocolStats, params: &RankingParams) -> (bool, F64) {
         // compute score and check if it is a valid configuration
         let mut valid = true;
         let mut score = F64::zero();
@@ -449,7 +448,6 @@ impl Search {
 }
 
 /// identifies which regions considered for the search
-#[allow(dead_code)]
 pub enum SearchInput {
     /// search within selected 13 regions, clients deployed in the 13 regions
     R13C13,
@@ -578,7 +576,6 @@ impl RankingParams {
 }
 
 /// metric considered for fault tolerance
-#[allow(dead_code)]
 pub enum FTMetric {
     F1,
     F1F2,
@@ -655,13 +652,13 @@ mod tests {
             // check stats_fmt for n = 5
             let n = 5;
             if config.len() == n {
-                let expected = "af1=(272, 0.20, 46.33) ff1=(419, 0.24, 72.31) af2=(315, 0.13, 36.73) ff2=(428, 0.23, 72.31) e=(272, 0.20, 46.33) af1C=(235, 0.15, 30.96) ff1C=(410, 0.31, 85.04) af2C=(281, 0.05, 11.12) ff2C=(419, 0.30, 85.04) eC=(235, 0.15, 30.96) ";
+                let expected = "af1=(271, 0.20, 46.59) ff1=(419, 0.24, 72.37) af2=(314, 0.13, 37.09) ff2=(428, 0.23, 72.37) e=(271, 0.20, 46.59) af1C=(234, 0.15, 30.96) ff1C=(410, 0.31, 85.28) af2C=(280, 0.05, 11.12) ff2C=(419, 0.31, 85.28) eC=(234, 0.15, 30.96) ";
                 assert_eq!(Search::stats_fmt(stats, n), expected);
             }
         }
 
         // check score
-        let expected_score = "10354.0";
+        let expected_score = "10360.3";
         assert_eq!(score.round(), expected_score);
 
         // check config

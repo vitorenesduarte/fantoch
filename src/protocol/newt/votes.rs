@@ -1,11 +1,11 @@
-use crate::base::ProcId;
 use crate::command::Command;
+use crate::id::ProcessId;
 use crate::kvs::Key;
 use std::collections::btree_map::{self, BTreeMap};
 use std::fmt;
 
-/// `ProcVotes` are the Votes by some process on some command.
-pub type ProcVotes = BTreeMap<Key, Option<VoteRange>>;
+/// `ProcessVotes` are the Votes by some process on some command.
+pub type ProcessVotes = BTreeMap<Key, Option<VoteRange>>;
 
 /// Votes are all Votes on some command.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -29,10 +29,12 @@ impl Votes {
         });
     }
 
-    /// Add `ProcVotes` to `Votes`.
-    pub fn add(&mut self, proc_votes: ProcVotes) {
-        self.votes.iter_mut().zip(proc_votes.into_iter()).for_each(
-            |((key, current_votes), (vote_key, vote))| {
+    /// Add `ProcessVotes` to `Votes`.
+    pub fn add(&mut self, process_votes: ProcessVotes) {
+        self.votes
+            .iter_mut()
+            .zip(process_votes.into_iter())
+            .for_each(|((key, current_votes), (vote_key, vote))| {
                 // each item from zip should be about the same key
                 assert_eq!(*key, vote_key);
 
@@ -40,8 +42,7 @@ impl Votes {
                 if let Some(vote) = vote {
                     current_votes.push(vote);
                 }
-            },
-        );
+            });
     }
 }
 
@@ -59,20 +60,20 @@ impl IntoIterator for Votes {
 // - this will be used to fill the `VotesTable`
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VoteRange {
-    by: ProcId,
+    by: ProcessId,
     start: u64,
     end: u64,
 }
 
 impl VoteRange {
     /// Create a new `VoteRange` instance.
-    pub fn new(by: ProcId, start: u64, end: u64) -> Self {
+    pub fn new(by: ProcessId, start: u64, end: u64) -> Self {
         assert!(start <= end);
         Self { by, start, end }
     }
 
     /// Get which process voted.
-    pub fn voter(&self) -> ProcId {
+    pub fn voter(&self) -> ProcessId {
         self.by
     }
 
@@ -84,11 +85,6 @@ impl VoteRange {
     /// Get range end.
     pub fn end(&self) -> u64 {
         self.end
-    }
-
-    /// Get all votes in this range.
-    pub fn votes(&self) -> Vec<u64> {
-        (self.start..=self.end).collect()
     }
 }
 
@@ -105,9 +101,16 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::Rifl;
-    use crate::newt::clocks::KeysClocks;
+    use crate::id::Rifl;
+    use crate::protocol::newt::clocks::KeysClocks;
     use std::cmp::max;
+
+    impl VoteRange {
+        /// Get all votes in this range.
+        fn votes(&self) -> Vec<u64> {
+            (self.start..=self.end).collect()
+        }
+    }
 
     #[test]
     fn votes_flow() {
@@ -143,7 +146,7 @@ mod tests {
         // ------------------------
         // (local) MCollect handle by p0 (command a)
         let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
-        let proc_votes_a_p0 = clocks_p0.proc_votes(&cmd_a, clock_a_p0);
+        let process_votes_a_p0 = clocks_p0.process_votes(&cmd_a, clock_a_p0);
 
         // -------------------------
         // submit command ab by p1
@@ -153,22 +156,22 @@ mod tests {
         // -------------------------
         // (local) MCollect handle by p1 (command ab)
         let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
-        let proc_votes_ab_p1 = clocks_p1.proc_votes(&cmd_ab, clock_ab_p1);
+        let process_votes_ab_p1 = clocks_p1.process_votes(&cmd_ab, clock_ab_p1);
 
         // -------------------------
         // (remote) MCollect handle by p1 (command a)
         let clock_a_p1 = max(clock_a, clocks_p1.clock(&cmd_a) + 1);
-        let proc_votes_a_p1 = clocks_p1.proc_votes(&cmd_a, clock_a_p1);
+        let process_votes_a_p1 = clocks_p1.process_votes(&cmd_a, clock_a_p1);
 
         // -------------------------
         // (remote) MCollect handle by p0 (command ab)
         let clock_ab_p0 = max(clock_ab, clocks_p0.clock(&cmd_ab) + 1);
-        let proc_votes_ab_p0 = clocks_p0.proc_votes(&cmd_ab, clock_ab_p0);
+        let process_votes_ab_p0 = clocks_p0.process_votes(&cmd_ab, clock_ab_p0);
 
         // -------------------------
         // MCollectAck handles by p0 (command a)
-        votes_a.add(proc_votes_a_p0);
-        votes_a.add(proc_votes_a_p1);
+        votes_a.add(process_votes_a_p0);
+        votes_a.add(process_votes_a_p1);
 
         // there's a single key
         assert_eq!(votes_a.votes.len(), 1);
@@ -190,8 +193,8 @@ mod tests {
 
         // -------------------------
         // MCollectAck handles by p1 (command ab)
-        votes_ab.add(proc_votes_ab_p1);
-        votes_ab.add(proc_votes_ab_p0);
+        votes_ab.add(process_votes_ab_p1);
+        votes_ab.add(process_votes_ab_p0);
 
         // there are two keys
         assert_eq!(votes_ab.votes.len(), 2);

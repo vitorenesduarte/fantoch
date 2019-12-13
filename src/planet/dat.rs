@@ -29,7 +29,7 @@ impl Dat {
     /// Computes, based on the `Dat` file, the latency from this region to all
     /// other regions.
     /// The local latency (within the same region) will always be 1.
-    pub fn latencies(&self) -> HashMap<Region, usize> {
+    pub fn latencies(&self) -> HashMap<Region, u64> {
         // open the file in read-only mode (ignoring errors)
         let file = std::fs::File::open(self.filename.clone()).unwrap();
 
@@ -37,14 +37,14 @@ impl Dat {
         let this_region = self.region();
 
         // for each line in the file, compute a pair (region, latency)
-        // - intra-region latency is assumed to be 1
+        // - intra-region latency is assumed to be 0
         BufReader::new(file)
             .lines()
             .map(|line| line.unwrap())
             .map(Dat::latency)
             .map(|(region, latency)| {
                 if region == this_region {
-                    (region, 1)
+                    (region, 0)
                 } else {
                     (region, latency)
                 }
@@ -54,15 +54,15 @@ impl Dat {
 
     /// Extracts from a line of the `Dat` file, the region's name and the
     /// average latency to it.
-    fn latency(line: String) -> (Region, usize) {
+    fn latency(line: String) -> (Region, u64) {
         let mut iter = line.split(|c| c == '/' || c == ':');
 
         // latency is in the second entry
         let latency = iter.nth(1).unwrap();
-        // convert it to f32
-        let latency = f32::from_str(latency).unwrap();
-        // convert it to usize (it always rounds down)
-        let latency = latency as usize;
+        // convert it to f64
+        let latency = f64::from_str(latency).unwrap();
+        // convert it to u64 (it always rounds down)
+        let latency = latency as u64;
 
         // region is the last entry
         let region = iter.last().unwrap();
@@ -129,7 +129,7 @@ mod tests {
 
         // create expected latencies
         let mut expected = HashMap::new();
-        expected.insert(Region::new("europe-west3"), 1);
+        expected.insert(Region::new("europe-west3"), 0);
         expected.insert(Region::new("europe-west4"), 7);
         expected.insert(Region::new("europe-west6"), 7);
         expected.insert(Region::new("europe-west1"), 8);

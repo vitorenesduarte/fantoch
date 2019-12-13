@@ -1,3 +1,14 @@
+// process ids
+pub type ProcessId = u64;
+pub type Dot = Id<ProcessId>;
+pub type DotGen = IdGen<ProcessId>;
+
+// client ids
+// for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
+pub type ClientId = u64;
+pub type Rifl = Id<ClientId>;
+pub type RiflGen = IdGen<ClientId>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id<S> {
     source: S,
@@ -36,6 +47,11 @@ where
         }
     }
 
+    /// Retrives source.
+    pub fn source(&self) -> S {
+        self.source
+    }
+
     /// Generates the next `Id`.
     pub fn next_id(&mut self) -> Id<S> {
         self.last_seq += 1;
@@ -54,6 +70,9 @@ mod tests {
         // create id generator
         let source = 10;
         let mut gen = MyGen::new(source);
+
+        // check source
+        assert_eq!(gen.source(), source);
 
         // generate `n` ids and check the `id` generated
         let n = 100;

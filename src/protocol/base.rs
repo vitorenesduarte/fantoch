@@ -1,82 +1,66 @@
 use crate::config::Config;
-use crate::id::{Id, IdGen};
+use crate::id::{Dot, DotGen, ProcessId};
 use crate::planet::{Planet, Region};
-use std::collections::HashMap;
+use crate::util;
 
-pub type ProcId = u64;
-pub type Dot = Id<ProcId>;
-type DotGen = IdGen<ProcId>;
-
-// a `BaseProc` has all functionalities shared by Atlas, Newt, ...
-pub struct BaseProc {
-    pub id: ProcId,
+// a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
+pub struct BaseProcess {
+    pub process_id: ProcessId,
     pub region: Region,
     pub planet: Planet,
     pub config: Config,
     // fast quorum size
     pub q: usize,
-    pub all_procs: Option<Vec<ProcId>>,
-    pub fast_quorum: Option<Vec<ProcId>>,
+    pub all_processes: Option<Vec<ProcessId>>,
+    pub fast_quorum: Option<Vec<ProcessId>>,
     dot_gen: DotGen,
 }
 
-impl BaseProc {
-    /// Creates a new `BaseProc`.
-    pub fn new(id: ProcId, region: Region, planet: Planet, config: Config, q: usize) -> Self {
+impl BaseProcess {
+    /// Creates a new `BaseProcess`.
+    pub fn new(
+        process_id: ProcessId,
+        region: Region,
+        planet: Planet,
+        config: Config,
+        q: usize,
+    ) -> Self {
         // since processes lead with ballot `id` when taking the slow path and
         // we may rely on the fact that a zero accepted ballot means the process
         // has never been through Paxos phase-2, all ids must non-zero
-        assert!(id != 0);
-        Self {
-            id,
+        assert!(process_id != 0);
+        BaseProcess {
+            process_id,
             region,
             planet,
             config,
             q,
-            all_procs: None,
+            all_processes: None,
             fast_quorum: None,
-            dot_gen: DotGen::new(id),
+            dot_gen: DotGen::new(process_id),
         }
     }
 
     /// Updates the processes known by this process.
-    pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) {
-        // TODO the following computation could be cached
-        let indexes: HashMap<_, _> = self
-            .planet
-            // get all regions sorted by distance from `self.region`
-            .sorted(&self.region)
-            .expect("region should be part of planet")
-            .iter()
-            // create a mapping from region to its index
-            .enumerate()
-            .map(|(index, (_distance, region))| (region, index))
-            .collect();
-
-        // use the region order index (based on distance) to order `procs`
-        // - if two `procs` are from the same region, they're sorted by id
-        procs.sort_unstable_by(|(id_a, a), (id_b, b)| {
-            if a == b {
-                id_a.cmp(id_b)
-            } else {
-                let index_a = indexes.get(a).expect("region should exist");
-                let index_b = indexes.get(b).expect("region should exist");
-                index_a.cmp(index_b)
-            }
-        });
-
-        // create all procs
-        let all_procs: Vec<_> = procs.into_iter().map(|(id, _)| id).collect();
+    pub fn discover(&mut self, mut processes: Vec<(ProcessId, Region)>) -> bool {
+        // create all processes
+        util::sort_processes_by_distance(&self.region, &self.planet, &mut processes);
+        let all_processes: Vec<_> = processes.into_iter().map(|(id, _)| id).collect();
 
         // create fast quorum by taking the first `q` elements
-        let fast_quorum = all_procs.clone().into_iter().take(self.q).collect();
+        let fast_quorum: Vec<_> = all_processes.clone().into_iter().take(self.q).collect();
 
-        // set fast quorum and all procs
-        self.all_procs = Some(all_procs);
+        // check if we have enough fast quorum processes
+        let connected = fast_quorum.len() == self.q;
+
+        // set fast quorum and all processes
+        self.all_processes = Some(all_processes);
         self.fast_quorum = Some(fast_quorum);
+
+        connected
     }
 
-    /// Increments `cmd_count` and returns the next dot.
+    // Returns the next dot.
     pub fn next_dot(&mut self) -> Dot {
         self.dot_gen.next_id()
     }
@@ -88,8 +72,8 @@ mod tests {
 
     #[test]
     fn discover() {
-        // procs
-        let procs = vec![
+        // processes
+        let processes = vec![
             (0, Region::new("asia-east1")),
             (1, Region::new("asia-northeast1")),
             (2, Region::new("asia-south1")),
@@ -119,17 +103,17 @@ mod tests {
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
         let q = 6;
-        let mut bp = BaseProc::new(id, region, planet, config, q);
+        let mut bp = BaseProcess::new(id, region, planet, config, q);
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
-        assert_eq!(bp.all_procs, None);
+        assert_eq!(bp.all_processes, None);
 
-        // discover procs
-        bp.discover(procs);
+        // discover processes
+        bp.discover(processes);
 
         assert_eq!(
-            bp.all_procs,
+            bp.all_processes,
             Some(vec![
                 8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
             ])
@@ -139,8 +123,8 @@ mod tests {
 
     #[test]
     fn discover_same_region() {
-        // procs
-        let procs = vec![
+        // processes
+        let processes = vec![
             (0, Region::new("asia-east1")),
             (1, Region::new("asia-east1")),
             (2, Region::new("europe-north1")),
@@ -158,12 +142,12 @@ mod tests {
         let region = Region::new("europe-north1");
         let planet = Planet::new("latency/");
         let q = 3;
-        let mut bp = BaseProc::new(id, region, planet, config, q);
+        let mut bp = BaseProcess::new(id, region, planet, config, q);
 
-        // discover procs
-        bp.discover(procs);
+        // discover processes
+        bp.discover(processes);
 
-        assert_eq!(bp.all_procs, Some(vec![2, 3, 4, 0, 1]));
+        assert_eq!(bp.all_processes, Some(vec![2, 3, 4, 0, 1]));
         assert_eq!(bp.fast_quorum, Some(vec![2, 3, 4]));
     }
 }

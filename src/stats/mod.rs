@@ -1,10 +1,13 @@
-use crate::bote::float::F64;
-use crate::bote::protocol::{ClientPlacement, Protocol};
+// This module contains the definition of `F64`.
+pub mod float;
+
+// Re-exports.
+pub use float::F64;
+
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::fmt;
 
-pub enum StatsSortBy {
+pub enum StatsKind {
     Mean,
     COV,
     MDTM,
@@ -30,7 +33,7 @@ impl fmt::Debug for Stats {
 }
 
 impl Stats {
-    pub fn from(latencies: &[usize]) -> Self {
+    pub fn from(latencies: &[u64]) -> Self {
         let (mean, cov, mdtm) = Stats::compute_stats(&latencies);
         Self { mean, cov, mdtm }
     }
@@ -71,7 +74,7 @@ impl Stats {
         self.mdtm().round()
     }
 
-    fn compute_stats(xs: &[usize]) -> (F64, F64, F64) {
+    fn compute_stats(xs: &[u64]) -> (F64, F64, F64) {
         // transform `usize`s in `f64`s
         let xs: Vec<f64> = xs.iter().map(|&x| x as f64).collect();
 
@@ -133,53 +136,6 @@ impl Stats {
     }
 }
 
-/// Mapping from protocol name to its stats.
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize, Default)]
-pub struct AllStats(BTreeMap<String, Stats>);
-
-impl AllStats {
-    pub fn new() -> AllStats {
-        Default::default()
-    }
-
-    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Stats {
-        let key = Self::key(protocol, f, placement);
-        self.get_and_unwrap(&key)
-    }
-
-    pub fn insert(
-        &mut self,
-        protocol: Protocol,
-        f: usize,
-        placement: ClientPlacement,
-        stats: Stats,
-    ) {
-        let key = Self::key(protocol, f, placement);
-        self.0.insert(key, stats);
-    }
-
-    pub fn fmt(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> String {
-        let key = Self::key(protocol, f, placement);
-        let stats = self.get_and_unwrap(&key);
-        format!("{}={:?}", key, stats)
-    }
-
-    fn key(protocol: Protocol, f: usize, placement: ClientPlacement) -> String {
-        let prefix = match protocol {
-            Protocol::EPaxos => String::from(protocol.short_name()),
-            _ => format!("{}f{}", protocol.short_name(), f),
-        };
-        let suffix = placement.short_name();
-        format!("{}{}", prefix, suffix)
-    }
-
-    fn get_and_unwrap(&self, key: &str) -> &Stats {
-        self.0.get(key).unwrap_or_else(|| {
-            panic!("stats with key {} not found", key);
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,24 +192,5 @@ mod tests {
         let stats_a = Stats::from(&vec![1, 1, 1]);
         let stats_b = Stats::from(&vec![10, 20]);
         assert_eq!(stats_a.mdtm_improv(&stats_b), F64::new(-5.0));
-    }
-
-    #[test]
-    fn all_stats() {
-        let stats = Stats::from(&vec![10, 20, 40, 10]);
-        let f = 1;
-        let placement = ClientPlacement::Colocated;
-        let mut all_stats = AllStats::new();
-        all_stats.insert(Protocol::Atlas, f, placement, stats.clone());
-        assert_eq!(all_stats.get(Protocol::Atlas, f, placement), &stats);
-    }
-
-    #[test]
-    #[should_panic]
-    fn all_stats_panic() {
-        let f = 1;
-        let placement = ClientPlacement::Colocated;
-        let all_stats = AllStats::new();
-        all_stats.get(Protocol::Atlas, f, placement);
     }
 }

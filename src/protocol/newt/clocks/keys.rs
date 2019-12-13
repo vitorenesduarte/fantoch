@@ -1,17 +1,17 @@
-use crate::base::ProcId;
 use crate::command::Command;
+use crate::id::ProcessId;
 use crate::kvs::Key;
-use crate::newt::votes::{ProcVotes, VoteRange};
+use crate::protocol::newt::votes::{ProcessVotes, VoteRange};
 use std::collections::HashMap;
 
 pub struct KeysClocks {
-    id: ProcId,
+    id: ProcessId,
     clocks: HashMap<Key, u64>,
 }
 
 impl KeysClocks {
     /// Create a new `KeysClocks` instance.
-    pub fn new(id: ProcId) -> Self {
+    pub fn new(id: ProcessId) -> Self {
         Self {
             id,
             clocks: HashMap::new(),
@@ -29,7 +29,7 @@ impl KeysClocks {
     }
 
     /// Computes the votes consumed by this command.
-    pub fn proc_votes(&mut self, cmd: &Command, highest: u64) -> ProcVotes {
+    pub fn process_votes(&mut self, cmd: &Command, highest: u64) -> ProcessVotes {
         cmd.keys()
             .map(|key| {
                 // vote from the current clock value + 1 until the highest vote
@@ -63,7 +63,7 @@ impl KeysClocks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::Rifl;
+    use crate::id::Rifl;
 
     #[test]
     fn keys_clocks_flow() {
@@ -87,8 +87,10 @@ mod tests {
         let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // closure to retrieve the votes on some key
-        let get_key_votes =
-            |votes: &ProcVotes, key: &Key| votes.get(key).unwrap().as_ref().unwrap().votes();
+        let get_key_votes = |votes: &ProcessVotes, key: &Key| {
+            let vr = votes.get(key).unwrap().as_ref().unwrap();
+            (vr.start()..=vr.end()).collect::<Vec<_>>()
+        };
 
         // -------------------------
         // first clock for command a
@@ -98,10 +100,10 @@ mod tests {
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
-        // get proc votes
-        let proc_votes = clocks.proc_votes(&cmd_a, clock);
-        assert_eq!(proc_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![1]);
+        // get process votes
+        let process_votes = clocks.process_votes(&cmd_a, clock);
+        assert_eq!(process_votes.len(), 1); // single key
+        assert_eq!(get_key_votes(&process_votes, &key_a), vec![1]);
 
         // -------------------------
         // second clock for command a
@@ -111,10 +113,10 @@ mod tests {
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
-        // get proc votes
-        let proc_votes = clocks.proc_votes(&cmd_a, clock);
-        assert_eq!(proc_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![2]);
+        // get process votes
+        let process_votes = clocks.process_votes(&cmd_a, clock);
+        assert_eq!(process_votes.len(), 1); // single key
+        assert_eq!(get_key_votes(&process_votes, &key_a), vec![2]);
 
         // -------------------------
         // first clock for command ab
@@ -124,11 +126,11 @@ mod tests {
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
-        // get proc votes
-        let proc_votes = clocks.proc_votes(&cmd_ab, clock);
-        assert_eq!(proc_votes.len(), 2); // two keys
-        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![3]);
-        assert_eq!(get_key_votes(&proc_votes, &key_b), vec![1, 2, 3]);
+        // get process votes
+        let process_votes = clocks.process_votes(&cmd_ab, clock);
+        assert_eq!(process_votes.len(), 2); // two keys
+        assert_eq!(get_key_votes(&process_votes, &key_a), vec![3]);
+        assert_eq!(get_key_votes(&process_votes, &key_b), vec![1, 2, 3]);
 
         // -------------------------
         // first clock for command b
@@ -138,9 +140,9 @@ mod tests {
         // newt behaviour: current clock + 1
         let clock = clock + 1;
 
-        // get proc votes
-        let proc_votes = clocks.proc_votes(&cmd_a, clock);
-        assert_eq!(proc_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&proc_votes, &key_a), vec![4]);
+        // get process votes
+        let process_votes = clocks.process_votes(&cmd_a, clock);
+        assert_eq!(process_votes.len(), 1); // single key
+        assert_eq!(get_key_votes(&process_votes, &key_a), vec![4]);
     }
 }

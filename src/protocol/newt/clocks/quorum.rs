@@ -1,4 +1,4 @@
-use crate::base::ProcId;
+use crate::id::ProcessId;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
@@ -6,7 +6,7 @@ pub struct QuorumClocks {
     // fast quorum size
     q: usize,
     // set of processes that have participated in this computation
-    participants: HashSet<ProcId>,
+    participants: HashSet<ProcessId>,
     // cache current max clock
     max_clock: u64,
     // number of times the maximum clock has been reported
@@ -24,18 +24,18 @@ impl QuorumClocks {
         }
     }
 
-    /// Check if we have a clock from a given `ProcId`.
-    pub fn contains(&self, proc_id: ProcId) -> bool {
-        self.participants.contains(&proc_id)
+    /// Check if we have a clock from a given `ProcessId`.
+    pub fn contains(&self, process_id: ProcessId) -> bool {
+        self.participants.contains(&process_id)
     }
 
-    /// Sets the new clock reported by `ProcId` and returns the maximum clock
+    /// Sets the new clock reported by `ProcessId` and returns the maximum clock
     /// seen until now.
-    pub fn add(&mut self, proc_id: ProcId, clock: u64) -> (u64, usize) {
+    pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
         assert!(self.participants.len() < self.q);
 
         // record new participant
-        self.participants.insert(proc_id);
+        self.participants.insert(process_id);
 
         // update max clock and max clock count
         match self.max_clock.cmp(&clock) {
