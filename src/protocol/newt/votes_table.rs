@@ -1,5 +1,5 @@
 use crate::command::Command;
-use crate::id::{ProcessId, Rifl};
+use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
 use crate::protocol::newt::votes::{VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};
@@ -27,7 +27,7 @@ impl MultiVotesTable {
     /// `Command` internal data structure.
     pub fn add(
         &mut self,
-        process_id: ProcessId,
+        dot: Dot,
         cmd: Option<Command>,
         clock: u64,
         votes: Votes,
@@ -40,8 +40,8 @@ impl MultiVotesTable {
         let rifl = cmd.rifl();
 
         // create sort identifier:
-        // - if two ops got assigned the same clock, they will be ordered by the process id
-        let sort_id = (clock, process_id);
+        // - if two ops got assigned the same clock, they will be ordered by dot
+        let sort_id = (clock, dot);
 
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
@@ -77,14 +77,14 @@ impl MultiVotesTable {
     }
 }
 
-type SortId = (u64, ProcessId);
+type SortId = (u64, Dot);
 
 struct VotesTable {
     n: usize,
     stability_threshold: usize,
-    // `votes` collects all votes seen until now so that we can compute which
+    // `votes_clock` collects all votes seen until now so that we can compute which
     // timestamp is stable
-    votes: AEClock<ProcessId>,
+    votes_clock: AEClock<ProcessId>,
     ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
 
@@ -92,11 +92,11 @@ impl VotesTable {
     fn new(n: usize, stability_threshold: usize) -> Self {
         // compute process identifiers, making sure ids are non-zero
         let ids = (1..=n).map(|id| id as u64);
-        let votes = AEClock::with(ids);
+        let votes_clock = AEClock::with(ids);
         Self {
             n,
             stability_threshold,
-            votes,
+            votes_clock,
             ops: BTreeMap::new(),
         }
     }
@@ -110,18 +110,25 @@ impl VotesTable {
         // update votes with the votes used on this command
         vote_ranges.into_iter().for_each(|range| {
             // assert there's at least one new vote
+            println!(
+                "clock: {:?} | voter: {} | start: {} | end: {}",
+                self.votes_clock,
+                range.voter(),
+                range.start(),
+                range.end()
+            );
             assert!(self
-                .votes
+                .votes_clock
                 .add_range(&range.voter(), range.start(), range.end()));
             // assert that the clock size didn't change
-            assert_eq!(self.votes.len(), self.n);
+            assert_eq!(self.votes_clock.len(), self.n);
         });
     }
 
     fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
         // compute the (potentially) new stable clock for this key
         let stable_clock = self
-            .votes
+            .votes_clock
             .frontier_threshold(self.stability_threshold)
             .expect("stability threshold must always be smaller than the number of processes");
 
@@ -130,11 +137,13 @@ impl VotesTable {
         // - if id with `(11,0)` is also part of this local structure, we can also execute it
         //   without 11 being stable, because, once 11 is stable, it will be the first to be
         //   executed either way
-        let stable_sort_id = (stable_clock + 1, 0);
+        let first_dot = Dot::new(1, 0);
+        let stable_sort_id = (stable_clock + 1, first_dot);
 
         // in fact, in the above example, if `(11,0)` is executed, we can also
         // execute `(11,1)`, and with that, execute `(11,2)` and so on
         // TODO loop while the previous flow is true and also return those ops
+        // ACTUALLY maybe we can't since now we need to use dots (and not process ids) to break ties
 
         // compute the list of ops that can be executed now
         let stable = {
@@ -178,7 +187,7 @@ mod tests {
         // process
         let a1_rifl = Rifl::new(process_id_1, 1);
         // p1, final clock = 1
-        let a1_sort_id = (1, process_id_1);
+        let a1_sort_id = (1, Dot::new(process_id_1, 1));
         // p1, p2 and p3 voted with 1
         let a1_votes = vec![
             VoteRange::new(process_id_1, 1, 1),
@@ -190,7 +199,7 @@ mod tests {
         let c1 = KVOp::Put(String::from("C1"));
         let c1_rifl = Rifl::new(process_id_3, 1);
         // p3, final clock = 3
-        let c1_sort_id = (3, process_id_3);
+        let c1_sort_id = (3, Dot::new(process_id_3, 1));
         // p1 voted with 2, p2 voted with 3 and p3 voted with 2
         let c1_votes = vec![
             VoteRange::new(process_id_1, 2, 2),
@@ -202,7 +211,7 @@ mod tests {
         let d1 = KVOp::Put(String::from("D1"));
         let d1_rifl = Rifl::new(process_id_4, 1);
         // p4, final clock = 3
-        let d1_sort_id = (3, process_id_4);
+        let d1_sort_id = (3, Dot::new(process_id_4, 1));
         // p2 voted with 2, p3 voted with 3 and p4 voted with 1-3
         let d1_votes = vec![
             VoteRange::new(process_id_2, 2, 2),
@@ -214,7 +223,7 @@ mod tests {
         let e1 = KVOp::Put(String::from("E1"));
         let e1_rifl = Rifl::new(process_id_5, 1);
         // p5, final clock = 4
-        let e1_sort_id = (4, process_id_5);
+        let e1_sort_id = (4, Dot::new(process_id_5, 1));
         // p1 voted with 3, p4 voted with 4 and p5 voted with 1-4
         let e1_votes = vec![
             VoteRange::new(process_id_1, 3, 3),
@@ -226,7 +235,7 @@ mod tests {
         let e2 = KVOp::Put(String::from("E2"));
         let e2_rifl = Rifl::new(process_id_5, 2);
         // p5, final clock = 5
-        let e2_sort_id = (5, process_id_5);
+        let e2_sort_id = (5, Dot::new(process_id_5, 1));
         // p1 voted with 4-5, p4 voted with 5 and p5 voted with 5
         let e2_votes = vec![
             VoteRange::new(process_id_1, 4, 5),

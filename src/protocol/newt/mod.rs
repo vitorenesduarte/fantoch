@@ -282,7 +282,7 @@ impl Newt {
         // update votes table and get commands that can be executed
         let to_execute = self
             .table
-            .add(dot.source(), info.cmd.clone(), info.clock, votes);
+            .add(dot, info.cmd.clone(), info.clock, votes);
 
         // execute commands
         if let Some(to_execute) = to_execute {

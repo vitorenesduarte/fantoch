@@ -9,7 +9,7 @@ pub type ClientId = u64;
 pub type Rifl = Id<ClientId>;
 pub type RiflGen = IdGen<ClientId>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id<S> {
     source: S,
     seq: u64,

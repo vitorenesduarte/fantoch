@@ -1,11 +1,11 @@
+use planet_sim::client::Workload;
+use planet_sim::config::Config;
 use planet_sim::planet::{Planet, Region};
-
-// directory that contains all dat files
-const LAT_DIR: &str = "latency/";
+use planet_sim::protocol::{Newt, Process};
+use planet_sim::sim::Runner;
 
 fn main() {
-    let planet = Planet::new(LAT_DIR);
-    let regions = vec![
+    let regions13 = vec![
         Region::new("asia-southeast1"),
         Region::new("europe-west4"),
         Region::new("southamerica-east1"),
@@ -20,7 +20,52 @@ fn main() {
         Region::new("europe-west3"),
         Region::new("us-central1"),
     ];
-    if let Ok(matrix) = planet.distance_matrix(regions) {
-        println!("{}", matrix);
+
+    // planet
+    let planet = Planet::new("latency/");
+
+    // f
+    let f = 1;
+
+    // clients workload
+    let conflict_rate = 2;
+    let total_commands = 500;
+    let workload = Workload::new(conflict_rate, total_commands);
+
+    // clients per region
+    let clients_per_region = 1000 / 13;
+    assert_eq!(clients_per_region, 76);
+
+    for n in vec![3, 5, 7, 9, 11, 13] {
+        // config
+        let config = Config::new(n, f);
+
+        // function that creates ping pong processes
+        let create_process =
+            |process_id, region, planet, config| Newt::new(process_id, region, planet, config);
+
+        // process regions
+        let process_regions = regions13.clone().into_iter().take(n).collect();
+
+        // client regions
+        let client_regions = regions13.clone();
+
+        // create runner
+        let mut runner = Runner::new(
+            planet.clone(),
+            config,
+            create_process,
+            workload,
+            clients_per_region,
+            process_regions,
+            client_regions,
+        );
+
+        // run simulation and get stats
+        runner.run();
+        let stats = runner.clients_stats();
+
+        println!("n={}", n);
+        println!("{:?}", stats);
     }
 }

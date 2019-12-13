@@ -241,13 +241,13 @@ where
             .planet
             .ping_latency(from, to)
             .expect("both regions should exist on the planet");
-        println!(
-            "{:?} -> {:?}: ping {} | distance {}",
-            from,
-            to,
-            ping_latency,
-            ping_latency / 2
-        );
+        // println!(
+        //     "{:?} -> {:?}: ping {} | distance {}",
+        //     from,
+        //     to,
+        //     ping_latency,
+        //     ping_latency / 2
+        // );
         // distance is half the ping latency
         ping_latency / 2
     }
