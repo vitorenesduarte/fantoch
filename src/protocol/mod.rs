@@ -19,7 +19,7 @@ use crate::planet::{Planet, Region};
 pub trait Process {
     type Message: Clone;
 
-    fn new(id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;
+    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;
 
     fn id(&self) -> ProcessId;
 

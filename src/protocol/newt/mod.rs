@@ -31,7 +31,7 @@ impl Process for Newt {
     type Message = Message;
 
     /// Creates a new `Newt` process.
-    fn new(id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
+    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size and stability threshold
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
@@ -40,8 +40,8 @@ impl Process for Newt {
         let table = MultiVotesTable::new(config.n(), stability_threshold);
 
         // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
-        let bp = BaseProcess::new(id, region, planet, config, q);
-        let keys_clocks = KeysClocks::new(id);
+        let bp = BaseProcess::new(process_id, region, planet, config, q);
+        let keys_clocks = KeysClocks::new(process_id);
         let cmds_info = CommandsInfo::new(q);
         let store = KVStore::new();
         let pending = Pending::new();
