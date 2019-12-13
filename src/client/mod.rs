@@ -12,7 +12,6 @@ use crate::command::{Command, CommandResult};
 use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
 use crate::planet::{Planet, Region};
-use crate::stats::Stats;
 use crate::time::SysTime;
 use crate::util;
 
@@ -96,8 +95,8 @@ impl Client {
     }
 
     /// Computes `Stats` from latencies registered until now.
-    pub fn stats(&self) -> Stats {
-        Stats::from(&self.latencies)
+    pub fn latencies(&self) -> &Vec<u64> {
+        &self.latencies
     }
 
     fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
@@ -115,7 +114,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stats::F64;
+    use crate::stats::{Stats, F64};
     use crate::time::SimTime;
 
     // Generates some client.
@@ -214,10 +213,10 @@ mod tests {
         assert!(next.is_none());
 
         // check latencies
-        assert_eq!(client.latencies, vec![10, 5]);
+        assert_eq!(client.latencies(), &vec![10, 5]);
 
         // check stats
-        let stats = client.stats();
+        let stats = Stats::from(client.latencies());
         assert_eq!(stats.mean(), F64::new(7.5));
     }
 }

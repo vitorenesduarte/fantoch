@@ -39,6 +39,7 @@ where
         config: Config,
         create_process: F,
         workload: Workload,
+        clients_per_region: usize,
         process_regions: Vec<Region>,
         client_regions: Vec<Region>,
     ) -> Self
@@ -46,9 +47,7 @@ where
         F: Fn(ProcessId, Region, Planet, Config) -> P,
     {
         // check that we have the correct number of `process_regions`
-        let process_count = process_regions.len();
-        let client_count = client_regions.len();
-        assert_eq!(process_count, config.n());
+        assert_eq!(process_regions.len(), config.n());
 
         // create router
         let mut router = Router::new();
@@ -57,7 +56,7 @@ where
         // create processes
         let to_discover: Vec<_> = process_regions
             .into_iter()
-            .zip(1..=process_count)
+            .zip(1..=config.n())
             .map(|(region, process_id)| {
                 let process_id = process_id as u64;
                 // create process and save it
@@ -80,20 +79,20 @@ where
         });
 
         // register clients and create client to region mapping
-        let client_to_region = client_regions
-            .into_iter()
-            .zip(1..=client_count)
-            .map(|(region, client_id)| {
-                let client_id = client_id as u64;
+        let mut client_id = 0;
+        let mut client_to_region = HashMap::new();
+        for region in client_regions {
+            for _ in 1..=clients_per_region {
                 // create client
+                client_id += 1;
                 let mut client = Client::new(client_id, region.clone(), planet.clone(), workload);
                 // discover
                 assert!(client.discover(to_discover.clone()));
                 // and register it
                 router.register_client(client);
-                (client_id, region)
-            })
-            .collect();
+                client_to_region.insert(client_id, region.clone());
+            }
+        }
 
         // create runner
         Self {
@@ -154,11 +153,23 @@ where
     /// TODO does this need to be mut?
     pub fn clients_stats(&mut self) -> HashMap<&Region, Stats> {
         let router = &mut self.router;
-        self.client_to_region
-            .iter()
-            .map(|(client_id, region)| {
-                let client_stats = router.client_stats(*client_id);
-                (region, client_stats)
+        let mut region_to_latencies: HashMap<&Region, Vec<u64>> = HashMap::new();
+
+        for (client_id, region) in self.client_to_region.iter() {
+            // get client's latencies
+            let latencies = router.client_latencies(*client_id);
+            // get current latencies from this region
+            let current_latencies = region_to_latencies.entry(region).or_insert_with(Vec::new);
+
+            current_latencies.extend(latencies);
+        }
+
+        // compute stats for each region
+        region_to_latencies
+            .into_iter()
+            .map(|(region, latencies)| {
+                let stats = Stats::from(&latencies);
+                (region, stats)
             })
             .collect()
     }
@@ -335,7 +346,7 @@ mod tests {
         }
     }
 
-    fn run(f: usize) -> (Stats, Stats) {
+    fn run(f: usize, clients_per_region: usize) -> (Stats, Stats) {
         // planet
         let planet = Planet::new("latency/");
 
@@ -368,6 +379,7 @@ mod tests {
             config,
             create_process,
             workload,
+            clients_per_region,
             process_regions,
             client_regions,
         );
@@ -385,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn runner_flow() {
+    fn runner_single_client_per_region() {
         // expected stats:
         // - client us-west1: since us-west1 is a process, from client's perspective it should be
         //   the latency of accessing the coordinator (0ms) plus the latency of accessing the
@@ -394,22 +406,42 @@ mod tests {
         //   be the latency of accessing the coordinator us-west1 (12ms + 12ms) plus the latency of
         //   accessing the closest fast quorum
 
+        // clients per region
+        let clients_per_region = 1;
+
         // f = 0
         let f = 0;
-        let (us_west1, us_west2) = run(f);
+        let (us_west1, us_west2) = run(f, clients_per_region);
         assert_eq!(us_west1.mean(), F64::new(0.0));
         assert_eq!(us_west2.mean(), F64::new(24.0));
 
         // f = 1
         let f = 1;
-        let (us_west1, us_west2) = run(f);
+        let (us_west1, us_west2) = run(f, clients_per_region);
         assert_eq!(us_west1.mean(), F64::new(34.0));
         assert_eq!(us_west2.mean(), F64::new(58.0));
 
         // f = 2
         let f = 2;
-        let (us_west1, us_west2) = run(f);
+        let (us_west1, us_west2) = run(f, clients_per_region);
         assert_eq!(us_west1.mean(), F64::new(118.0));
         assert_eq!(us_west2.mean(), F64::new(142.0));
+    }
+
+    #[test]
+    fn runner_multiple_clients_per_region() {
+        // 1 client per region
+        let f = 1;
+        let clients_per_region = 1;
+        let (us_west1_with_one, us_west2_with_one) = run(f, clients_per_region);
+
+        // 10 clients per region
+        let f = 1;
+        let clients_per_region = 10;
+        let (us_west1_with_ten, us_west2_with_ten) = run(f, clients_per_region);
+
+        // check stats are the same
+        assert_eq!(us_west1_with_one, us_west1_with_ten);
+        assert_eq!(us_west2_with_one, us_west2_with_ten);
     }
 }

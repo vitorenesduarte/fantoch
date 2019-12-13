@@ -9,6 +9,7 @@ mod newt;
 
 // Re-exports.
 pub use base::BaseProcess;
+pub use newt::Newt;
 pub use tosend::ToSend;
 
 use crate::command::Command;

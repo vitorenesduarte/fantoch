@@ -3,7 +3,6 @@ use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::planet::Region;
 use crate::protocol::{Process, ToSend};
-use crate::stats::Stats;
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -142,13 +141,13 @@ where
 
     /// Retrieves client's stats.
     /// TODO does this need to be mut?
-    pub fn client_stats(&mut self, client_id: ClientId) -> Stats {
+    pub fn client_latencies(&mut self, client_id: ClientId) -> &Vec<u64> {
         self.clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
                 panic!("client {} should have been set before", client_id);
             })
             .get_mut()
-            .stats()
+            .latencies()
     }
 }
