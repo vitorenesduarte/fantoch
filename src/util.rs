@@ -1,9 +1,13 @@
-use crate::id::ProcId;
+use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 
 /// Updates the processes known by this process.
-pub fn sort_procs_by_distance(region: &Region, planet: &Planet, procs: &mut Vec<(ProcId, Region)>) {
+pub fn sort_processes_by_distance(
+    region: &Region,
+    planet: &Planet,
+    processes: &mut Vec<(ProcessId, Region)>,
+) {
     // TODO the following computation could be cached on `planet`
     let indexes: HashMap<_, _> = planet
         // get all regions sorted by distance from `region`
@@ -15,9 +19,9 @@ pub fn sort_procs_by_distance(region: &Region, planet: &Planet, procs: &mut Vec<
         .map(|(index, (_distance, region))| (region, index))
         .collect();
 
-    // use the region order index (based on distance) to order `procs`
-    // - if two `procs` are from the same region, they're sorted by id
-    procs.sort_unstable_by(|(id_a, a), (id_b, b)| {
+    // use the region order index (based on distance) to order `processes`
+    // - if two `processes` are from the same region, they're sorted by id
+    processes.sort_unstable_by(|(id_a, a), (id_b, b)| {
         if a == b {
             id_a.cmp(id_b)
         } else {
@@ -33,9 +37,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sort_procs_by_distance_test() {
-        // procs
-        let mut procs = vec![
+    fn sort_processes_by_distance_test() {
+        // processes
+        let mut processes = vec![
             (0, Region::new("asia-east1")),
             (1, Region::new("asia-northeast1")),
             (2, Region::new("asia-south1")),
@@ -55,17 +59,20 @@ mod tests {
             (16, Region::new("us-west2")),
         ];
 
-        // sort procs
+        // sort processes
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
-        sort_procs_by_distance(&region, &planet, &mut procs);
+        sort_processes_by_distance(&region, &planet, &mut processes);
 
         // get only processes ids
-        let proc_ids: Vec<_> = procs.into_iter().map(|(proc_id, _)| proc_id).collect();
+        let process_ids: Vec<_> = processes
+            .into_iter()
+            .map(|(process_id, _)| process_id)
+            .collect();
 
         assert_eq!(
             vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2],
-            proc_ids
+            process_ids
         );
     }
 }

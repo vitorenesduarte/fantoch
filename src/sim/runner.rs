@@ -1,79 +1,79 @@
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::id::{ClientId, ProcId};
+use crate::id::{ClientId, ProcessId};
 use crate::planet::{Planet, Region};
-use crate::proc::{Proc, ToSend};
+use crate::protocol::{Process, ToSend};
 use crate::sim::Router;
 use crate::sim::Schedule;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
-pub enum ScheduleAction<P: Proc> {
-    SubmitToProc(ProcId, Command),
-    SendToProc(ProcId, P::Message),
+pub enum ScheduleAction<P: Process> {
+    SubmitToProc(ProcessId, Command),
+    SendToProc(ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
 }
 
-pub struct Runner<P: Proc> {
+pub struct Runner<P: Process> {
     planet: Planet,
     router: Router<P>,
     time: SimTime,
     schedule: Schedule<ScheduleAction<P>>,
     // mapping from process identifier to its region
-    proc_to_region: HashMap<ProcId, Region>,
+    process_to_region: HashMap<ProcessId, Region>,
     // mapping from client identifier to its region
     client_to_region: HashMap<ClientId, Region>,
 }
 
 impl<P> Runner<P>
 where
-    P: Proc,
+    P: Process,
 {
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of regions:
-    /// - `proc_regions`: list of regions where processes are located
+    /// - `process_regions`: list of regions where processes are located
     /// - `client_regions`: list of regions where clients are located
     pub fn new<F>(
         planet: Planet,
         config: Config,
-        create_proc: F,
+        create_process: F,
         workload: Workload,
-        proc_regions: Vec<Region>,
+        process_regions: Vec<Region>,
         client_regions: Vec<Region>,
     ) -> Self
     where
-        F: Fn(ProcId, Region, Planet, Config) -> P,
+        F: Fn(ProcessId, Region, Planet, Config) -> P,
     {
-        // check that we have the correct number of `proc_regions`
-        assert_eq!(proc_regions.len(), config.n());
+        // check that we have the correct number of `process_regions`
+        assert_eq!(process_regions.len(), config.n());
 
         // create router
         let mut router = Router::new();
-        let mut procs = Vec::with_capacity(config.n());
+        let mut processes = Vec::with_capacity(config.n());
 
-        // create procs
-        let to_discover: Vec<_> = proc_regions
+        // create processes
+        let to_discover: Vec<_> = process_regions
             .into_iter()
             .enumerate()
-            .map(|(proc_id, region)| {
-                let proc_id = proc_id as u64;
-                // create proc and save it
-                let proc = create_proc(proc_id, region.clone(), planet.clone(), config);
-                procs.push(proc);
+            .map(|(process_id, region)| {
+                let process_id = process_id as u64;
+                // create process and save it
+                let process = create_process(process_id, region.clone(), planet.clone(), config);
+                processes.push(process);
 
-                (proc_id, region)
+                (process_id, region)
             })
             .collect();
 
-        // create proc to region mapping
-        let proc_to_region = to_discover.clone().into_iter().collect();
+        // create processs to region mapping
+        let process_to_region = to_discover.clone().into_iter().collect();
 
-        // register procs
-        procs.into_iter().for_each(|mut proc| {
-            // discover `procs`
-            assert!(proc.discover(to_discover.clone()));
+        // register processes
+        processes.into_iter().for_each(|mut process| {
+            // discover
+            assert!(process.discover(to_discover.clone()));
             // and register it
-            router.register_proc(proc);
+            router.register_process(process);
         });
 
         // register clients and create client to region mapping
@@ -84,7 +84,7 @@ where
                 let client_id = client_id as u64;
                 // create client
                 let mut client = Client::new(client_id, region.clone(), planet.clone(), workload);
-                // discover `procs`
+                // discover
                 assert!(client.discover(to_discover.clone()));
                 // and register it
                 router.register_client(client);
@@ -98,7 +98,7 @@ where
             router,
             time: SimTime::new(),
             schedule: Schedule::new(),
-            proc_to_region,
+            process_to_region,
             client_to_region,
         }
     }
@@ -119,19 +119,19 @@ where
             // for each scheduled action
             actions.into_iter().for_each(|action| {
                 match action {
-                    ScheduleAction::SubmitToProc(proc_id, cmd) => {
-                        // get proc's region
-                        let proc_region = self.proc_region(proc_id);
+                    ScheduleAction::SubmitToProc(process_id, cmd) => {
+                        // get process's region
+                        let process_region = self.process_region(process_id);
                         // submit to process and schedule output messages
-                        let to_send = self.router.submit_to_proc(proc_id, cmd);
-                        self.schedule_it(proc_region, to_send);
+                        let to_send = self.router.submit_to_process(process_id, cmd);
+                        self.schedule_it(process_region, to_send);
                     }
-                    ScheduleAction::SendToProc(proc_id, msg) => {
-                        // get proc's region
-                        let proc_region = self.proc_region(proc_id);
+                    ScheduleAction::SendToProc(process_id, msg) => {
+                        // get process's region
+                        let process_region = self.process_region(process_id);
                         // route to process and schedule output messages
-                        let to_send = self.router.route_to_proc(proc_id, msg);
-                        self.schedule_it(proc_region, to_send);
+                        let to_send = self.router.route_to_process(process_id, msg);
+                        self.schedule_it(process_region, to_send);
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
                         // get client's region
@@ -150,17 +150,17 @@ where
     /// Schedule a `ToSend`. When scheduling, we shoud never route!
     fn schedule_it(&mut self, from: Region, to_send: ToSend<P::Message>) {
         match to_send {
-            ToSend::ToCoordinator(proc_id, cmd) => {
+            ToSend::ToCoordinator(process_id, cmd) => {
                 // create action and schedule it
-                let action = ScheduleAction::SubmitToProc(proc_id, cmd);
-                self.schedule_it_to_proc(&from, proc_id, action);
+                let action = ScheduleAction::SubmitToProc(process_id, cmd);
+                self.schedule_it_to_process(&from, process_id, action);
             }
-            ToSend::ToProcs(target, msg) => {
+            ToSend::ToProcesses(target, msg) => {
                 // for each process in target, schedule message delivery
-                target.into_iter().for_each(|proc_id| {
+                target.into_iter().for_each(|process_id| {
                     // create action and schedule it
-                    let action = ScheduleAction::SendToProc(proc_id, msg.clone());
-                    self.schedule_it_to_proc(&from, proc_id, action);
+                    let action = ScheduleAction::SendToProc(process_id, msg.clone());
+                    self.schedule_it_to_process(&from, process_id, action);
                 });
             }
             ToSend::ToClients(cmd_results) => {
@@ -178,12 +178,17 @@ where
         }
     }
 
-    fn schedule_it_to_proc(&mut self, from: &Region, proc_id: ProcId, action: ScheduleAction<P>) {
-        // get proc's region
-        let proc_region = self.proc_region(proc_id);
+    fn schedule_it_to_process(
+        &mut self,
+        from: &Region,
+        process_id: ProcessId,
+        action: ScheduleAction<P>,
+    ) {
+        // get process's region
+        let process_region = self.process_region(process_id);
 
         // compute distance between regions and schedule action
-        let distance = self.distance(from, &proc_region);
+        let distance = self.distance(from, &process_region);
         self.schedule.schedule(&self.time, distance, action);
     }
 
@@ -201,11 +206,11 @@ where
         self.schedule.schedule(&self.time, distance, action);
     }
 
-    /// Retrieves the region of process with identifier `proc_id`.
+    /// Retrieves the region of process with identifier `process_id`.
     // TODO can we avoid cloning here?
-    fn proc_region(&self, proc_id: ProcId) -> Region {
-        self.proc_to_region
-            .get(&proc_id)
+    fn process_region(&self, process_id: ProcessId) -> Region {
+        self.process_to_region
+            .get(&process_id)
             .expect("process region should be known")
             .clone()
     }

@@ -1,4 +1,4 @@
-// This module contains the definition of `ProcVotes`, `Votes` and `VoteRange`.
+// This module contains the definition of `ProcessVotes`, `Votes` and `VoteRange`.
 mod votes;
 
 // This module contains the definition of `MultiVotesTable`.
@@ -9,17 +9,17 @@ mod clocks;
 
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
-use crate::id::{Dot, ProcId, Rifl};
+use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
 use crate::planet::{Planet, Region};
-use crate::proc::newt::clocks::{KeysClocks, QuorumClocks};
-use crate::proc::newt::votes::{ProcVotes, Votes};
-use crate::proc::newt::votes_table::MultiVotesTable;
-use crate::proc::{BaseProc, Proc, ToSend};
+use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
+use crate::protocol::newt::votes::{ProcessVotes, Votes};
+use crate::protocol::newt::votes_table::MultiVotesTable;
+use crate::protocol::{BaseProcess, Process, ToSend};
 use std::collections::HashMap;
 
 pub struct Newt {
-    bp: BaseProc,
+    bp: BaseProcess,
     keys_clocks: KeysClocks,
     cmds_info: CommandsInfo,
     table: MultiVotesTable,
@@ -27,11 +27,11 @@ pub struct Newt {
     pending: Pending,
 }
 
-impl Proc for Newt {
+impl Process for Newt {
     type Message = Message;
 
-    /// Creates a new `Newt` proc.
-    fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self {
+    /// Creates a new `Newt` process.
+    fn new(id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size and stability threshold
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
@@ -39,8 +39,8 @@ impl Proc for Newt {
         // create `MultiVotesTable`
         let table = MultiVotesTable::new(config.n(), stability_threshold);
 
-        // create `BaseProc`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
-        let bp = BaseProc::new(id, region, planet, config, q);
+        // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
+        let bp = BaseProcess::new(id, region, planet, config, q);
         let keys_clocks = KeysClocks::new(id);
         let cmds_info = CommandsInfo::new(q);
         let store = KVStore::new();
@@ -58,13 +58,13 @@ impl Proc for Newt {
     }
 
     /// Returns the process identifier.
-    fn id(&self) -> ProcId {
-        self.bp.id
+    fn id(&self) -> ProcessId {
+        self.bp.process_id
     }
 
     /// Updates the processes known by this process.
-    fn discover(&mut self, procs: Vec<(ProcId, Region)>) -> bool {
-        self.bp.discover(procs)
+    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool {
+        self.bp.discover(processes)
     }
 
     /// Submits a command issued by some client.
@@ -86,8 +86,8 @@ impl Proc for Newt {
                 from,
                 dot,
                 clock,
-                proc_votes,
-            } => self.handle_mcollectack(from, dot, clock, proc_votes),
+                process_votes,
+            } => self.handle_mcollectack(from, dot, clock, process_votes),
             Message::MCommit {
                 dot,
                 cmd,
@@ -130,7 +130,7 @@ impl Newt {
 
         // create `MCollect`
         let mcollect = Message::MCollect {
-            from: self.bp.id,
+            from: self.id(),
             dot,
             cmd,
             clock,
@@ -138,15 +138,15 @@ impl Newt {
         };
 
         // return `ToSend`
-        ToSend::ToProcs(fast_quorum, mcollect)
+        ToSend::ToProcesses(fast_quorum, mcollect)
     }
 
     fn handle_mcollect(
         &mut self,
-        from: ProcId,
+        from: ProcessId,
         dot: Dot,
         cmd: Command,
-        quorum: Vec<ProcId>,
+        quorum: Vec<ProcessId>,
         clock: u64,
     ) -> ToSend<Message> {
         // get cmd info
@@ -165,11 +165,11 @@ impl Newt {
 
         // compute votes consumed by this command
         // - this computation needs to occur before the next `bump_to`
-        let proc_votes = self.keys_clocks.proc_votes(&cmd, cmd_clock);
+        let process_votes = self.keys_clocks.process_votes(&cmd, cmd_clock);
 
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
-        if self.bp.id == dot.source() {
+        if self.bp.process_id == dot.source() {
             info.votes.set_keys(&cmd);
         }
 
@@ -184,22 +184,22 @@ impl Newt {
 
         // create `MCollectAck`
         let mcollectack = Message::MCollectAck {
-            from: self.bp.id,
+            from: self.bp.process_id,
             dot,
             clock: info.clock,
-            proc_votes,
+            process_votes,
         };
 
         // return `ToSend`
-        ToSend::ToProcs(vec![from], mcollectack)
+        ToSend::ToProcesses(vec![from], mcollectack)
     }
 
     fn handle_mcollectack(
         &mut self,
-        from: ProcId,
+        from: ProcessId,
         dot: Dot,
         clock: u64,
-        remote_proc_votes: ProcVotes,
+        remote_process_votes: ProcessVotes,
     ) -> ToSend<Message> {
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -211,7 +211,7 @@ impl Newt {
         }
 
         // update votes with remote votes
-        info.votes.add(remote_proc_votes);
+        info.votes.add(remote_process_votes);
 
         // update quorum clocks while computing max clock and its number of
         // occurences
@@ -222,10 +222,10 @@ impl Newt {
         //   when handling `MCollect` from other processes) that could potentially delay the
         //   execution of this command
         let cmd = info.cmd.as_ref().unwrap();
-        let local_proc_votes = self.keys_clocks.proc_votes(cmd, max_clock);
+        let local_process_votes = self.keys_clocks.process_votes(cmd, max_clock);
 
         // update votes with local votes
-        info.votes.add(local_proc_votes);
+        info.votes.add(local_process_votes);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
@@ -241,7 +241,7 @@ impl Newt {
                 };
 
                 // return `ToSend`
-                ToSend::ToProcs(self.bp.all_procs.clone().unwrap(), mcommit)
+                ToSend::ToProcesses(self.bp.all_processes.clone().unwrap(), mcommit)
             } else {
                 // TODO slow path
                 ToSend::Nothing
@@ -344,10 +344,10 @@ impl CommandsInfo {
 // `Command`
 struct CommandInfo {
     status: Status,
-    quorum: Vec<ProcId>,
+    quorum: Vec<ProcessId>,
     cmd: Option<Command>, // `None` if noOp
     clock: u64,
-    // `votes` is used by the coordinator to aggregate `ProcVotes` from fast
+    // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
     votes: Votes,
     // `quorum_clocks` is used by the coordinator to compute the highest clock
@@ -372,17 +372,17 @@ impl CommandInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     MCollect {
-        from: ProcId,
+        from: ProcessId,
         dot: Dot,
         cmd: Command,
-        quorum: Vec<ProcId>,
+        quorum: Vec<ProcessId>,
         clock: u64,
     },
     MCollectAck {
-        from: ProcId,
+        from: ProcessId,
         dot: Dot,
         clock: u64,
-        proc_votes: ProcVotes,
+        process_votes: ProcessVotes,
     },
     MCommit {
         dot: Dot,
@@ -420,16 +420,16 @@ mod tests {
 
     #[test]
     fn newt_flow() {
-        // procs ids
-        let proc_id_1 = 1;
-        let proc_id_2 = 2;
-        let proc_id_3 = 3;
+        // processes ids
+        let process_id_1 = 1;
+        let process_id_2 = 2;
+        let process_id_3 = 3;
 
-        // procs
-        let procs = vec![
-            (proc_id_1, Region::new("europe-west2")),
-            (proc_id_2, Region::new("europe-west3")),
-            (proc_id_3, Region::new("europe-west4")),
+        // processes
+        let processes = vec![
+            (process_id_1, Region::new("europe-west2")),
+            (process_id_2, Region::new("europe-west3")),
+            (process_id_3, Region::new("europe-west4")),
         ];
 
         // planet
@@ -445,36 +445,36 @@ mod tests {
 
         // newts
         let mut newt_1 = Newt::new(
-            proc_id_1,
+            process_id_1,
             Region::new("europe-west2"),
             planet.clone(),
             config,
         );
         let mut newt_2 = Newt::new(
-            proc_id_2,
+            process_id_2,
             Region::new("europe-west3"),
             planet.clone(),
             config,
         );
         let mut newt_3 = Newt::new(
-            proc_id_3,
+            process_id_3,
             Region::new("europe-west4"),
             planet.clone(),
             config,
         );
 
-        // discover procs in all newts
-        newt_1.discover(procs.clone());
-        newt_2.discover(procs.clone());
-        newt_3.discover(procs.clone());
+        // discover processes in all newts
+        newt_1.discover(processes.clone());
+        newt_2.discover(processes.clone());
+        newt_3.discover(processes.clone());
 
         // create msg router
         let mut router = Router::new();
 
         // register processes
-        router.register_proc(newt_1);
-        router.register_proc(newt_2);
-        router.register_proc(newt_3);
+        router.register_process(newt_1);
+        router.register_process(newt_2);
+        router.register_process(newt_3);
 
         // client workload
         let conflict_rate = 100;
@@ -487,26 +487,26 @@ mod tests {
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
 
         // discover processes in client 1
-        assert!(client_1.discover(procs));
+        assert!(client_1.discover(processes));
 
         // start client
-        let (target_proc, cmd) = client_1.start(&time);
+        let (target, cmd) = client_1.start(&time);
 
-        // check that `target_proc` is newt 1
-        assert_eq!(target_proc, proc_id_1);
+        // check that `target` is newt 1
+        assert_eq!(target, process_id_1);
 
         // register clients
         router.register_client(client_1);
 
         // submit it in newt_0
-        let mcollects = router.submit_to_proc(target_proc, cmd);
+        let mcollects = router.submit_to_process(target, cmd);
 
         // check that the mcollect is being sent to 2 processes
-        assert!(mcollects.to_procs());
-        if let ToSend::ToProcs(to, _) = mcollects.clone() {
+        assert!(mcollects.to_processes());
+        if let ToSend::ToProcesses(to, _) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
         } else {
-            panic!("ToSend::Procs not found!");
+            panic!("ToSend::ToProcesses not found!");
         }
 
         // handle in mcollects
@@ -514,7 +514,7 @@ mod tests {
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
-        assert!(mcollectacks.iter().all(|to_send| to_send.to_procs()));
+        assert!(mcollectacks.iter().all(|to_send| to_send.to_processes()));
 
         // handle the first mcollectack
         let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
@@ -527,11 +527,11 @@ mod tests {
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
-        assert!(mcommit_tosend.to_procs());
-        if let ToSend::ToProcs(to, _) = mcommit_tosend.clone() {
+        assert!(mcommit_tosend.to_processes());
+        if let ToSend::ToProcesses(to, _) = mcommit_tosend.clone() {
             assert_eq!(to.len(), n);
         } else {
-            panic!("ToSend::Procs not found!");
+            panic!("ToSend::ToProcesses not found!");
         }
 
         // all processes handle it
@@ -548,9 +548,9 @@ mod tests {
         assert!(new_submit.to_coordinator());
 
         let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
-        if let ToSend::ToProcs(_, Message::MCollect { from, dot, .. }) = mcollect {
-            assert_eq!(from, target_proc);
-            assert_eq!(dot, Dot::new(target_proc, 2));
+        if let ToSend::ToProcesses(_, Message::MCollect { from, dot, .. }) = mcollect {
+            assert_eq!(from, target);
+            assert_eq!(dot, Dot::new(target, 2));
         } else {
             panic!("Message::MCollect not found!");
         }

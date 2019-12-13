@@ -1,7 +1,7 @@
-// proc ids
-pub type ProcId = u64;
-pub type Dot = Id<ProcId>;
-pub type DotGen = IdGen<ProcId>;
+// process ids
+pub type ProcessId = u64;
+pub type Dot = Id<ProcessId>;
+pub type DotGen = IdGen<ProcessId>;
 
 // client ids
 // for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf

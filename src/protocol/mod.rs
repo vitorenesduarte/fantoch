@@ -1,29 +1,29 @@
 // This module contains the definition of `ToSend`.
 mod tosend;
 
-// This module contains the definition of `BaseProc`.
+// This module contains the definition of `BaseProcess`.
 mod base;
 
 // This module contains the definition of `Newt`.
 mod newt;
 
 // Re-exports.
-pub use base::BaseProc;
+pub use base::BaseProcess;
 pub use tosend::ToSend;
 
 use crate::command::Command;
 use crate::config::Config;
-use crate::id::ProcId;
+use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 
-pub trait Proc {
+pub trait Process {
     type Message: Clone;
 
-    fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self;
+    fn new(id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;
 
-    fn id(&self) -> ProcId;
+    fn id(&self) -> ProcessId;
 
-    fn discover(&mut self, procs: Vec<(ProcId, Region)>) -> bool;
+    fn discover(&mut self, procs: Vec<(ProcessId, Region)>) -> bool;
 
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
 

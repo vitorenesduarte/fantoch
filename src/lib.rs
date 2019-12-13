@@ -17,9 +17,9 @@ pub mod command;
 // This module contains the definition of `Config`.
 pub mod config;
 
-// This module contains the definition of `ToSend`, `Proc` and `BaseProc` and implementations of all
-// protocols supported.
-pub mod proc;
+// This module contains the definition of `ToSend`, `Process` and `BaseProcess` and implementations
+// of all protocols supported.
+pub mod protocol;
 
 // This module contains the definition of trait `SysTime` and its implementations.
 pub mod time;

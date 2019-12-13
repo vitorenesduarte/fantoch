@@ -1,12 +1,12 @@
 use crate::command::{Command, CommandResult};
-use crate::id::ProcId;
+use crate::id::ProcessId;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum ToSend<M> {
     // new command to be sent to a coordinator
-    ToCoordinator(ProcId, Command),
+    ToCoordinator(ProcessId, Command),
     // a protocol message to be sent to a list of processes
-    ToProcs(Vec<ProcId>, M),
+    ToProcesses(Vec<ProcessId>, M),
     // a list of command results to be sent to the issuing clients
     ToClients(Vec<CommandResult>),
     // nothing to send
@@ -23,9 +23,9 @@ impl<M> ToSend<M> {
     }
 
     /// Check if it' ssomething to be sent to processes.
-    pub fn to_procs(&self) -> bool {
+    pub fn to_processes(&self) -> bool {
         match *self {
-            ToSend::ToProcs(_, _) => true,
+            ToSend::ToProcesses(_, _) => true,
             _ => false,
         }
     }

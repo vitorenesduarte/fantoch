@@ -1,7 +1,7 @@
 use crate::command::Command;
-use crate::id::{ProcId, Rifl};
+use crate::id::{ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
-use crate::proc::newt::votes::{VoteRange, Votes};
+use crate::protocol::newt::votes::{VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
@@ -27,7 +27,7 @@ impl MultiVotesTable {
     /// `Command` internal data structure.
     pub fn add(
         &mut self,
-        proc_id: ProcId,
+        process_id: ProcessId,
         cmd: Option<Command>,
         clock: u64,
         votes: Votes,
@@ -41,7 +41,7 @@ impl MultiVotesTable {
 
         // create sort identifier:
         // - if two ops got assigned the same clock, they will be ordered by the process id
-        let sort_id = (clock, proc_id);
+        let sort_id = (clock, process_id);
 
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
@@ -77,14 +77,14 @@ impl MultiVotesTable {
     }
 }
 
-type SortId = (u64, ProcId);
+type SortId = (u64, ProcessId);
 
 struct VotesTable {
     n: usize,
     stability_threshold: usize,
     // `votes` collects all votes seen until now so that we can compute which
     // timestamp is stable
-    votes: AEClock<ProcId>,
+    votes: AEClock<ProcessId>,
     ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
 
@@ -157,12 +157,12 @@ mod tests {
 
     #[test]
     fn votes_table_flow() {
-        // procs ids
-        let proc_id_1 = 1;
-        let proc_id_2 = 2;
-        let proc_id_3 = 3;
-        let proc_id_4 = 4;
-        let proc_id_5 = 5;
+        // process ids
+        let process_id_1 = 1;
+        let process_id_2 = 2;
+        let process_id_3 = 3;
+        let process_id_4 = 4;
+        let process_id_5 = 5;
 
         // let's consider that n = 5 and q = 3
         // so the threshold should be n - q + 1 = 3
@@ -176,62 +176,62 @@ mod tests {
         let a1 = KVOp::Put(String::from("A1"));
         // assumes a single client per process that has the same id as the
         // process
-        let a1_rifl = Rifl::new(proc_id_1, 1);
+        let a1_rifl = Rifl::new(process_id_1, 1);
         // p1, final clock = 1
-        let a1_sort_id = (1, proc_id_1);
+        let a1_sort_id = (1, process_id_1);
         // p1, p2 and p3 voted with 1
         let a1_votes = vec![
-            VoteRange::new(proc_id_1, 1, 1),
-            VoteRange::new(proc_id_2, 1, 1),
-            VoteRange::new(proc_id_3, 1, 1),
+            VoteRange::new(process_id_1, 1, 1),
+            VoteRange::new(process_id_2, 1, 1),
+            VoteRange::new(process_id_3, 1, 1),
         ];
 
         // c1
         let c1 = KVOp::Put(String::from("C1"));
-        let c1_rifl = Rifl::new(proc_id_3, 1);
+        let c1_rifl = Rifl::new(process_id_3, 1);
         // p3, final clock = 3
-        let c1_sort_id = (3, proc_id_3);
+        let c1_sort_id = (3, process_id_3);
         // p1 voted with 2, p2 voted with 3 and p3 voted with 2
         let c1_votes = vec![
-            VoteRange::new(proc_id_1, 2, 2),
-            VoteRange::new(proc_id_2, 3, 3),
-            VoteRange::new(proc_id_3, 2, 2),
+            VoteRange::new(process_id_1, 2, 2),
+            VoteRange::new(process_id_2, 3, 3),
+            VoteRange::new(process_id_3, 2, 2),
         ];
 
         // d1
         let d1 = KVOp::Put(String::from("D1"));
-        let d1_rifl = Rifl::new(proc_id_4, 1);
+        let d1_rifl = Rifl::new(process_id_4, 1);
         // p4, final clock = 3
-        let d1_sort_id = (3, proc_id_4);
+        let d1_sort_id = (3, process_id_4);
         // p2 voted with 2, p3 voted with 3 and p4 voted with 1-3
         let d1_votes = vec![
-            VoteRange::new(proc_id_2, 2, 2),
-            VoteRange::new(proc_id_3, 3, 3),
-            VoteRange::new(proc_id_4, 1, 3),
+            VoteRange::new(process_id_2, 2, 2),
+            VoteRange::new(process_id_3, 3, 3),
+            VoteRange::new(process_id_4, 1, 3),
         ];
 
         // e1
         let e1 = KVOp::Put(String::from("E1"));
-        let e1_rifl = Rifl::new(proc_id_5, 1);
+        let e1_rifl = Rifl::new(process_id_5, 1);
         // p5, final clock = 4
-        let e1_sort_id = (4, proc_id_5);
+        let e1_sort_id = (4, process_id_5);
         // p1 voted with 3, p4 voted with 4 and p5 voted with 1-4
         let e1_votes = vec![
-            VoteRange::new(proc_id_1, 3, 3),
-            VoteRange::new(proc_id_4, 4, 4),
-            VoteRange::new(proc_id_5, 1, 4),
+            VoteRange::new(process_id_1, 3, 3),
+            VoteRange::new(process_id_4, 4, 4),
+            VoteRange::new(process_id_5, 1, 4),
         ];
 
         // e2
         let e2 = KVOp::Put(String::from("E2"));
-        let e2_rifl = Rifl::new(proc_id_5, 2);
+        let e2_rifl = Rifl::new(process_id_5, 2);
         // p5, final clock = 5
-        let e2_sort_id = (5, proc_id_5);
+        let e2_sort_id = (5, process_id_5);
         // p1 voted with 4-5, p4 voted with 5 and p5 voted with 5
         let e2_votes = vec![
-            VoteRange::new(proc_id_1, 4, 5),
-            VoteRange::new(proc_id_4, 5, 5),
-            VoteRange::new(proc_id_5, 5, 5),
+            VoteRange::new(process_id_1, 4, 5),
+            VoteRange::new(process_id_4, 5, 5),
+            VoteRange::new(process_id_5, 5, 5),
         ];
 
         // add a1 to table
