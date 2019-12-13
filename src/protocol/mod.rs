@@ -28,5 +28,5 @@ pub trait Process {
 
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
 
-    fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message>;
+    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message>;
 }

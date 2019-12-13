@@ -77,9 +77,9 @@ where
                 let to_send = self.process_submit(process_id, cmd);
                 vec![to_send]
             }
-            ToSend::ToProcesses(procs, msg) => procs
+            ToSend::ToProcesses(from, processes, msg) => processes
                 .into_iter()
-                .map(|process_id| self.route_to_process(process_id, msg.clone()))
+                .map(|process_id| self.route_to_process(from, process_id, msg.clone()))
                 .collect(),
             ToSend::ToClients(results) => results
                 .into_iter()
@@ -96,6 +96,7 @@ where
     /// Route a message to some process.
     pub fn route_to_process(
         &mut self,
+        from: ProcessId,
         process_id: ProcessId,
         msg: P::Message,
     ) -> ToSend<P::Message> {
@@ -105,7 +106,7 @@ where
                 panic!("proc {} should have been set before", process_id);
             })
             .get_mut()
-            .handle(msg)
+            .handle(from, msg)
     }
 
     /// Submit a command to some process.

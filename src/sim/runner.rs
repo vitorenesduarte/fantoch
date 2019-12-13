@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 pub enum ScheduleAction<P: Process> {
     SubmitToProc(ProcessId, Command),
-    SendToProc(ProcessId, P::Message),
+    SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
 }
 
@@ -128,11 +128,11 @@ where
                         let to_send = self.router.process_submit(process_id, cmd);
                         self.try_to_schedule(process_region, to_send);
                     }
-                    ScheduleAction::SendToProc(process_id, msg) => {
+                    ScheduleAction::SendToProc(from, process_id, msg) => {
                         // get process's region
                         let process_region = self.process_region(process_id);
                         // route to process and schedule output messages
-                        let to_send = self.router.route_to_process(process_id, msg);
+                        let to_send = self.router.route_to_process(from, process_id, msg);
                         self.try_to_schedule(process_region, to_send);
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
@@ -174,24 +174,32 @@ where
             .collect()
     }
 
-    /// Try to schedule a `ToSend`. When scheduling, we shoud never route!
-    fn try_to_schedule(&mut self, from: Region, to_send: ToSend<P::Message>) {
+    /// Try to schedule a `ToSend`.
+    /// Most times the thing that needs to be sent will be scheduled.
+    /// The only exception is when a process is sending a message to itself.
+    fn try_to_schedule(&mut self, from_region: Region, to_send: ToSend<P::Message>) {
         match to_send {
             ToSend::ToCoordinator(process_id, cmd) => {
                 // create action and schedule it
                 let action = ScheduleAction::SubmitToProc(process_id, cmd);
                 // get process's region
-                let to = self.process_region(process_id);
-                self.schedule_it(&from, &to, action);
+                let to_region = self.process_region(process_id);
+                self.schedule_it(&from_region, &to_region, action);
             }
-            ToSend::ToProcesses(target, msg) => {
+            ToSend::ToProcesses(from, target, msg) => {
                 // for each process in target, schedule message delivery
                 target.into_iter().for_each(|process_id| {
-                    // create action and schedule it
-                    let action = ScheduleAction::SendToProc(process_id, msg.clone());
-                    // get process's region
-                    let to = self.process_region(process_id);
-                    self.schedule_it(&from, &to, action);
+                    let message_to_self = from == process_id;
+                    if message_to_self {
+                        // route immediately if message to self
+                        self.router.route_to_process(from, process_id, msg.clone());
+                    } else {
+                        // othewise, create action and schedule it
+                        let action = ScheduleAction::SendToProc(from, process_id, msg.clone());
+                        // get process's region
+                        let to_region = self.process_region(process_id);
+                        self.schedule_it(&from_region, &to_region, action);
+                    }
                 });
             }
             ToSend::ToClients(cmd_results) => {
@@ -201,8 +209,8 @@ where
                     let client_id = cmd_result.rifl().source();
                     let action = ScheduleAction::SendToClient(client_id, cmd_result);
                     // get client's region
-                    let to = self.client_region(client_id);
-                    self.schedule_it(&from, &to, action);
+                    let to_region = self.client_region(client_id);
+                    self.schedule_it(&from_region, &to_region, action);
                 });
             }
             ToSend::Nothing => {
@@ -241,13 +249,6 @@ where
             .planet
             .ping_latency(from, to)
             .expect("both regions should exist on the planet");
-        // println!(
-        //     "{:?} -> {:?}: ping {} | distance {}",
-        //     from,
-        //     to,
-        //     ping_latency,
-        //     ping_latency / 2
-        // );
         // distance is half the ping latency
         ping_latency / 2
     }
@@ -262,7 +263,7 @@ mod tests {
 
     #[derive(Clone)]
     enum Message {
-        Ping(ProcessId, Rifl),
+        Ping(Rifl),
         Pong(Rifl),
     }
 
@@ -302,7 +303,7 @@ mod tests {
             self.acks.insert(rifl, 0);
 
             // create message
-            let msg = Message::Ping(self.id(), rifl);
+            let msg = Message::Ping(rifl);
             // clone the fast quorum
             let fast_quorum = self
                 .bp
@@ -311,16 +312,16 @@ mod tests {
                 .expect("should have a valid fast quorum upon submit");
 
             // send message to fast quorum
-            ToSend::ToProcesses(fast_quorum, msg)
+            ToSend::ToProcesses(self.id(), fast_quorum, msg)
         }
 
-        fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
+        fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
             match msg {
-                Message::Ping(from, rifl) => {
+                Message::Ping(rifl) => {
                     // create msg
                     let msg = Message::Pong(rifl);
                     // reply back
-                    ToSend::ToProcesses(vec![from], msg)
+                    ToSend::ToProcesses(self.id(), vec![from], msg)
                 }
                 Message::Pong(rifl) => {
                     // increase ack count

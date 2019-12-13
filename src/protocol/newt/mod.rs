@@ -73,17 +73,15 @@ impl Process for Newt {
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
+    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
         match msg {
             Message::MCollect {
-                from,
                 dot,
                 cmd,
                 quorum,
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck {
-                from,
                 dot,
                 clock,
                 process_votes,
@@ -134,7 +132,6 @@ impl Newt {
 
         // create `MCollect`
         let mcollect = Message::MCollect {
-            from: self.id(),
             dot,
             cmd,
             clock,
@@ -142,7 +139,7 @@ impl Newt {
         };
 
         // return `ToSend`
-        ToSend::ToProcesses(fast_quorum, mcollect)
+        ToSend::ToProcesses(self.id(), fast_quorum, mcollect)
     }
 
     fn handle_mcollect(
@@ -188,14 +185,13 @@ impl Newt {
 
         // create `MCollectAck`
         let mcollectack = Message::MCollectAck {
-            from: self.bp.process_id,
             dot,
             clock: info.clock,
             process_votes,
         };
 
         // return `ToSend`
-        ToSend::ToProcesses(vec![from], mcollectack)
+        ToSend::ToProcesses(self.id(), vec![from], mcollectack)
     }
 
     fn handle_mcollectack(
@@ -227,6 +223,7 @@ impl Newt {
         //   execution of this command
         let cmd = info.cmd.as_ref().unwrap();
         let local_process_votes = self.keys_clocks.process_votes(cmd, max_clock);
+        println!("dot {:?} local votes {:?}", dot, local_process_votes);
 
         // update votes with local votes
         info.votes.add(local_process_votes);
@@ -245,7 +242,12 @@ impl Newt {
                 };
 
                 // return `ToSend`
-                ToSend::ToProcesses(self.bp.all_processes.clone().unwrap(), mcommit)
+                let all_processes = self
+                    .bp
+                    .all_processes
+                    .clone()
+                    .expect("the set of all processes should be known");
+                ToSend::ToProcesses(self.id(), all_processes, mcommit)
             } else {
                 // TODO slow path
                 ToSend::Nothing
@@ -280,9 +282,11 @@ impl Newt {
         // local key's clock
 
         // update votes table and get commands that can be executed
-        let to_execute = self
-            .table
-            .add(dot, info.cmd.clone(), info.clock, votes);
+        println!(
+            "dot {:?} committed at {} with votes {:?}",
+            dot, self.bp.process_id, votes
+        );
+        let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
 
         // execute commands
         if let Some(to_execute) = to_execute {
@@ -376,14 +380,12 @@ impl CommandInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     MCollect {
-        from: ProcessId,
         dot: Dot,
         cmd: Command,
         quorum: Vec<ProcessId>,
         clock: u64,
     },
     MCollectAck {
-        from: ProcessId,
         dot: Dot,
         clock: u64,
         process_votes: ProcessVotes,
@@ -507,7 +509,7 @@ mod tests {
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_processes());
-        if let ToSend::ToProcesses(to, _) = mcollects.clone() {
+        if let ToSend::ToProcesses(_, to, _) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
         } else {
             panic!("ToSend::ToProcesses not found!");
@@ -532,7 +534,7 @@ mod tests {
 
         // check that there is an mcommit sent to everyone
         assert!(mcommit_tosend.to_processes());
-        if let ToSend::ToProcesses(to, _) = mcommit_tosend.clone() {
+        if let ToSend::ToProcesses(_, to, _) = mcommit_tosend.clone() {
             assert_eq!(to.len(), n);
         } else {
             panic!("ToSend::ToProcesses not found!");
@@ -552,7 +554,7 @@ mod tests {
         assert!(new_submit.to_coordinator());
 
         let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
-        if let ToSend::ToProcesses(_, Message::MCollect { from, dot, .. }) = mcollect {
+        if let ToSend::ToProcesses(from, _, Message::MCollect { dot, .. }) = mcollect {
             assert_eq!(from, target);
             assert_eq!(dot, Dot::new(target, 2));
         } else {
