@@ -4,6 +4,9 @@ mod tosend;
 // This module contains the definition of `BaseProc`.
 mod base;
 
+// This module contains the definition of `Newt`.
+mod newt;
+
 // Re-exports.
 pub use base::BaseProc;
 pub use tosend::ToSend;

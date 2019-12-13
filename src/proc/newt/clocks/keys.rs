@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::id::ProcId;
 use crate::kvs::Key;
-use crate::newt::votes::{ProcVotes, VoteRange};
+use crate::proc::newt::votes::{ProcVotes, VoteRange};
 use std::collections::HashMap;
 
 pub struct KeysClocks {

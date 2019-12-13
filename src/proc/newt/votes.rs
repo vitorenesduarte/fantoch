@@ -106,7 +106,7 @@ impl fmt::Debug for VoteRange {
 mod tests {
     use super::*;
     use crate::id::Rifl;
-    use crate::newt::clocks::KeysClocks;
+    use crate::proc::newt::clocks::KeysClocks;
     use std::cmp::max;
 
     #[test]

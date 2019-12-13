@@ -11,10 +11,10 @@ use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::id::{Dot, ProcId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
-use crate::newt::clocks::{KeysClocks, QuorumClocks};
-use crate::newt::votes::{ProcVotes, Votes};
-use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
+use crate::proc::newt::clocks::{KeysClocks, QuorumClocks};
+use crate::proc::newt::votes::{ProcVotes, Votes};
+use crate::proc::newt::votes_table::MultiVotesTable;
 use crate::proc::{BaseProc, Proc, ToSend};
 use std::collections::HashMap;
 

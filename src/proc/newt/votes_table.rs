@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::id::{ProcId, Rifl};
 use crate::kvs::{KVOp, Key};
-use crate::newt::votes::{VoteRange, Votes};
+use crate::proc::newt::votes::{VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
