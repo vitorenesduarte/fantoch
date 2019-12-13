@@ -228,11 +228,14 @@ where
             .clone()
     }
 
-    /// Computes the distance between two regions.
+    /// Computes the distance between two regions which is half the ping latency.
     fn distance(&self, from: &Region, to: &Region) -> u64 {
-        self.planet
-            .latency(from, to)
-            .expect("both regions should exist on the planet")
+        let ping_latency = self
+            .planet
+            .ping_latency(from, to)
+            .expect("both regions should exist on the planet");
+        // distance is half the ping latency
+        ping_latency / 2
     }
 }
 
@@ -249,7 +252,7 @@ mod tests {
         Pong(Rifl),
     }
 
-    // Protocol that pings the closest process and returns reply to client.
+    // Protocol that pings the closest process (that is not self) and returns reply to client.
     struct PingPong {
         bp: BaseProcess,
     }
@@ -259,7 +262,7 @@ mod tests {
 
         fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
             // quorum size is 1
-            let q = 1;
+            let q = 2;
             let bp = BaseProcess::new(process_id, region, planet, config, q);
 
             // create `PingPong`
@@ -290,10 +293,15 @@ mod tests {
         fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
             match msg {
                 Message::Ping(from, rifl) => {
-                    // create msg
-                    let msg = Message::Pong(rifl);
-                    // reply back
-                    ToSend::ToProcesses(vec![from], msg)
+                    // ignore ping from self
+                    if from == self.id() {
+                        ToSend::Nothing
+                    } else {
+                        // create msg
+                        let msg = Message::Pong(rifl);
+                        // reply back
+                        ToSend::ToProcesses(vec![from], msg)
+                    }
                 }
                 Message::Pong(rifl) => {
                     // create fake command result
@@ -312,7 +320,7 @@ mod tests {
 
         // config
         let n = 3;
-        let f = 0;
+        let f = 1;
         let config = Config::new(n, f);
 
         // function that creates ping pong processes
@@ -352,12 +360,12 @@ mod tests {
 
         // check us-west1 stats
         // since us-west1 is a process, from client's perspective it should be the latency of
-        // accessing the coordinator (1ms) plus the latency of accessing the closest region
+        // accessing the coordinator (0ms) plus the latency of accessing the closest region
         // (us-central1)
         let us_west1_stats = stats
             .get(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
-        assert_eq!(us_west1_stats.mean(), F64::new(35.0));
+        assert_eq!(us_west1_stats.mean(), F64::new(34.0));
 
         // check us-west2 stats
         // since us-west2 is _not_ a process, from client's perspective it should be the latency of
@@ -366,6 +374,6 @@ mod tests {
         let us_west2_stats = stats
             .get(&Region::new("us-west2"))
             .expect("there should stats from us-west2 region");
-        assert_eq!(us_west2_stats.mean(), F64::new(59.0));
+        assert_eq!(us_west2_stats.mean(), F64::new(58.0));
     }
 }

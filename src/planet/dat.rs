@@ -37,14 +37,14 @@ impl Dat {
         let this_region = self.region();
 
         // for each line in the file, compute a pair (region, latency)
-        // - intra-region latency is assumed to be 1
+        // - intra-region latency is assumed to be 0
         BufReader::new(file)
             .lines()
             .map(|line| line.unwrap())
             .map(Dat::latency)
             .map(|(region, latency)| {
                 if region == this_region {
-                    (region, 1)
+                    (region, 0)
                 } else {
                     (region, latency)
                 }
@@ -129,7 +129,7 @@ mod tests {
 
         // create expected latencies
         let mut expected = HashMap::new();
-        expected.insert(Region::new("europe-west3"), 1);
+        expected.insert(Region::new("europe-west3"), 0);
         expected.insert(Region::new("europe-west4"), 7);
         expected.insert(Region::new("europe-west6"), 7);
         expected.insert(Region::new("europe-west1"), 8);

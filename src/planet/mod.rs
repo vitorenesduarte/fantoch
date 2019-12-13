@@ -41,7 +41,7 @@ impl Planet {
     }
 
     /// Retrieves the distance between the two regions passed as argument.
-    pub fn latency(&self, from: &Region, to: &Region) -> Option<u64> {
+    pub fn ping_latency(&self, from: &Region, to: &Region) -> Option<u64> {
         // get from's entries
         let entries = self.latencies.get(from)?;
 
@@ -101,7 +101,7 @@ impl Planet {
 
             // compute latency from a to every other region b
             for b in regions.iter() {
-                let lat = self.latency(a, b).unwrap();
+                let lat = self.ping_latency(a, b).unwrap();
                 write!(&mut output, " {} |", lat)?;
             }
             writeln!(&mut output)?;
@@ -129,11 +129,11 @@ mod tests {
         let eu_w4 = Region::new("europe-west4");
         let us_c1 = Region::new("us-central1");
 
-        assert_eq!(planet.latency(&eu_w3, &eu_w4).unwrap(), 7);
+        assert_eq!(planet.ping_latency(&eu_w3, &eu_w4).unwrap(), 7);
 
         // most times latency is symmetric
-        assert_eq!(planet.latency(&eu_w3, &us_c1).unwrap(), 105);
-        assert_eq!(planet.latency(&us_c1, &eu_w3).unwrap(), 105);
+        assert_eq!(planet.ping_latency(&eu_w3, &us_c1).unwrap(), 105);
+        assert_eq!(planet.ping_latency(&us_c1, &eu_w3).unwrap(), 105);
     }
 
     #[test]
