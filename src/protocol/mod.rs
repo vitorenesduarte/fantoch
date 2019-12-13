@@ -23,7 +23,7 @@ pub trait Process {
 
     fn id(&self) -> ProcessId;
 
-    fn discover(&mut self, procs: Vec<(ProcessId, Region)>) -> bool;
+    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool;
 
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
 

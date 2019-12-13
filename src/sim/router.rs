@@ -3,6 +3,7 @@ use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::planet::Region;
 use crate::protocol::{Process, ToSend};
+use crate::stats::Stats;
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -74,7 +75,7 @@ where
     ) -> Vec<ToSend<P::Message>> {
         match to_send {
             ToSend::ToCoordinator(process_id, cmd) => {
-                let to_send = self.submit_to_process(process_id, cmd);
+                let to_send = self.process_submit(process_id, cmd);
                 vec![to_send]
             }
             ToSend::ToProcesses(procs, msg) => procs
@@ -109,7 +110,7 @@ where
     }
 
     /// Submit a command to some process.
-    pub fn submit_to_process(&mut self, process_id: ProcessId, cmd: Command) -> ToSend<P::Message> {
+    pub fn process_submit(&mut self, process_id: ProcessId, cmd: Command) -> ToSend<P::Message> {
         self.processes
             .get_mut(&process_id)
             .unwrap_or_else(|| {
@@ -137,5 +138,17 @@ where
             .map_or(ToSend::Nothing, |(process_id, cmd)| {
                 ToSend::ToCoordinator(process_id, cmd)
             })
+    }
+
+    /// Retrieves client's stats.
+    /// TODO does this need to be mut?
+    pub fn client_stats(&mut self, client_id: ClientId) -> Stats {
+        self.clients
+            .get_mut(&client_id)
+            .unwrap_or_else(|| {
+                panic!("client {} should have been set before", client_id);
+            })
+            .get_mut()
+            .stats()
     }
 }

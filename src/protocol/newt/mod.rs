@@ -126,7 +126,11 @@ impl Newt {
         let clock = self.keys_clocks.clock(&cmd) + 1;
 
         // clone the fast quorum
-        let fast_quorum = self.bp.fast_quorum.clone().unwrap();
+        let fast_quorum = self
+            .bp
+            .fast_quorum
+            .clone()
+            .expect("should have a valid fast quorum upon submit");
 
         // create `MCollect`
         let mcollect = Message::MCollect {
@@ -499,7 +503,7 @@ mod tests {
         router.register_client(client_1);
 
         // submit it in newt_0
-        let mcollects = router.submit_to_process(target, cmd);
+        let mcollects = router.process_submit(target, cmd);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_processes());
