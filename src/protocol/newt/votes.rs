@@ -86,11 +86,6 @@ impl VoteRange {
     pub fn end(&self) -> u64 {
         self.end
     }
-
-    /// Get all votes in this range.
-    pub fn votes(&self) -> Vec<u64> {
-        (self.start..=self.end).collect()
-    }
 }
 
 impl fmt::Debug for VoteRange {
@@ -109,6 +104,13 @@ mod tests {
     use crate::id::Rifl;
     use crate::protocol::newt::clocks::KeysClocks;
     use std::cmp::max;
+
+    impl VoteRange {
+        /// Get all votes in this range.
+        fn votes(&self) -> Vec<u64> {
+            (self.start..=self.end).collect()
+        }
+    }
 
     #[test]
     fn votes_flow() {

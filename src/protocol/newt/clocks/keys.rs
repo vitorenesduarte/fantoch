@@ -87,8 +87,10 @@ mod tests {
         let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // closure to retrieve the votes on some key
-        let get_key_votes =
-            |votes: &ProcessVotes, key: &Key| votes.get(key).unwrap().as_ref().unwrap().votes();
+        let get_key_votes = |votes: &ProcessVotes, key: &Key| {
+            let vr = votes.get(key).unwrap().as_ref().unwrap();
+            (vr.start()..=vr.end()).collect::<Vec<_>>()
+        };
 
         // -------------------------
         // first clock for command a
