@@ -7,7 +7,6 @@ mod votes_table;
 // This module contains the definition of `KeyClocks` and `QuorumClocks`.
 mod clocks;
 
-use crate::proc::BaseProc;
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::id::{Dot, ProcId, Rifl};
@@ -16,6 +15,7 @@ use crate::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::newt::votes::{ProcVotes, Votes};
 use crate::newt::votes_table::MultiVotesTable;
 use crate::planet::{Planet, Region};
+use crate::proc::{BaseProc, Proc, ToSend};
 use std::collections::HashMap;
 
 pub struct Newt {
@@ -27,9 +27,11 @@ pub struct Newt {
     pending: Pending,
 }
 
-impl Newt {
+impl Proc for Newt {
+    type Message = Message;
+
     /// Creates a new `Newt` proc.
-    pub fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self {
+    fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size and stability threshold
         let q = Newt::fast_quorum_size(&config);
         let stability_threshold = Newt::stability_threshold(&config);
@@ -56,29 +58,23 @@ impl Newt {
     }
 
     /// Returns the process identifier.
-    pub fn id(&self) -> ProcId {
+    fn id(&self) -> ProcId {
         self.bp.id
     }
 
-    /// Computes `Newt` fast quorum size.
-    fn fast_quorum_size(config: &Config) -> usize {
-        2 * config.f()
+    /// Updates the processes known by this process.
+    fn discover(&mut self, procs: Vec<(ProcId, Region)>) -> bool {
+        self.bp.discover(procs)
     }
 
-    /// Computes `Newt` stability threshold.
-    /// Typically the threshold should be n - q + 1, where n is the number of
-    /// processes and q the size of the write quorum. In `Newt`, although
-    /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
-    /// The quorum size of 2f ensures that all clocks are computed from f + 1
-    /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
-    fn stability_threshold(config: &Config) -> usize {
-        config.n() - config.f()
+    /// Submits a command issued by some client.
+    fn submit(&mut self, cmd: Command) -> ToSend<Self::Message> {
+        self.handle_submit(cmd)
     }
 
-    /// Handles messages by forwarding them to the respective handler.
-    pub fn handle(&mut self, msg: Message) -> ToSend {
+    /// Handles protocol messages.
+    fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
         match msg {
-            Message::Submit { cmd } => self.handle_submit(cmd),
             Message::MCollect {
                 from,
                 dot,
@@ -100,9 +96,26 @@ impl Newt {
             } => self.handle_mcommit(dot, cmd, clock, votes),
         }
     }
+}
+
+impl Newt {
+    /// Computes `Newt` fast quorum size.
+    fn fast_quorum_size(config: &Config) -> usize {
+        2 * config.f()
+    }
+
+    /// Computes `Newt` stability threshold.
+    /// Typically the threshold should be n - q + 1, where n is the number of
+    /// processes and q the size of the write quorum. In `Newt`, although
+    /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
+    /// The quorum size of 2f ensures that all clocks are computed from f + 1
+    /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
+    fn stability_threshold(config: &Config) -> usize {
+        config.n() - config.f()
+    }
 
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend {
+    fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
         // start command in `Pending`
         self.pending.start(&cmd);
 
@@ -125,7 +138,7 @@ impl Newt {
         };
 
         // return `ToSend`
-        ToSend::Procs(mcollect, fast_quorum)
+        ToSend::ToProcs(fast_quorum, mcollect)
     }
 
     fn handle_mcollect(
@@ -135,7 +148,7 @@ impl Newt {
         cmd: Command,
         quorum: Vec<ProcId>,
         clock: u64,
-    ) -> ToSend {
+    ) -> ToSend<Message> {
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -178,7 +191,7 @@ impl Newt {
         };
 
         // return `ToSend`
-        ToSend::Procs(mcollectack, vec![from])
+        ToSend::ToProcs(vec![from], mcollectack)
     }
 
     fn handle_mcollectack(
@@ -187,7 +200,7 @@ impl Newt {
         dot: Dot,
         clock: u64,
         remote_proc_votes: ProcVotes,
-    ) -> ToSend {
+    ) -> ToSend<Message> {
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -228,7 +241,7 @@ impl Newt {
                 };
 
                 // return `ToSend`
-                ToSend::Procs(mcommit, self.bp.all_procs.clone().unwrap())
+                ToSend::ToProcs(self.bp.all_procs.clone().unwrap(), mcommit)
             } else {
                 // TODO slow path
                 ToSend::Nothing
@@ -244,7 +257,7 @@ impl Newt {
         cmd: Option<Command>,
         clock: u64,
         votes: Votes,
-    ) -> ToSend {
+    ) -> ToSend<Message> {
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -274,7 +287,7 @@ impl Newt {
             if ready.is_empty() {
                 ToSend::Nothing
             } else {
-                ToSend::Clients(ready)
+                ToSend::ToClients(ready)
             }
         } else {
             // no message to be sent
@@ -355,23 +368,9 @@ impl CommandInfo {
     }
 }
 
-// every handle returns a `ToSend`
-#[derive(Debug, Clone, PartialEq)]
-pub enum ToSend {
-    // nothing to send
-    Nothing,
-    // a protocol message to be sent to some processes
-    Procs(Message, Vec<ProcId>),
-    // a list of command results to be sent to the issuing client
-    Clients(Vec<CommandResult>),
-}
-
 // `Newt` protocol messages
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    Submit {
-        cmd: Command,
-    },
     MCollect {
         from: ProcId,
         dot: Dot,
@@ -407,32 +406,6 @@ mod tests {
     use crate::client::{Client, Workload};
     use crate::sim::Router;
     use crate::time::SimTime;
-
-    impl ToSend {
-        /// Check if there's nothing to be sent.
-        pub fn is_nothing(&self) -> bool {
-            match *self {
-                ToSend::Nothing => true,
-                _ => false,
-            }
-        }
-
-        /// Check if there's something to be sent to processes.
-        pub fn is_procs(&self) -> bool {
-            match *self {
-                ToSend::Procs(_, _) => true,
-                _ => false,
-            }
-        }
-
-        /// Check if there's something to be sent to clients.
-        pub fn is_clients(&self) -> bool {
-            match *self {
-                ToSend::Clients(_) => true,
-                _ => false,
-            }
-        }
-    }
 
     #[test]
     fn newt_parameters() {
@@ -491,9 +464,9 @@ mod tests {
         );
 
         // discover procs in all newts
-        newt_1.bp.discover(procs.clone());
-        newt_2.bp.discover(procs.clone());
-        newt_3.bp.discover(procs.clone());
+        newt_1.discover(procs.clone());
+        newt_2.discover(procs.clone());
+        newt_3.discover(procs.clone());
 
         // create msg router
         let mut router = Router::new();
@@ -526,12 +499,11 @@ mod tests {
         router.register_client(client_1);
 
         // submit it in newt_0
-        let msubmit = Message::Submit { cmd };
-        let mcollects = router.route_to_proc(target_proc, msubmit);
+        let mcollects = router.submit_to_proc(target_proc, cmd);
 
         // check that the mcollect is being sent to 2 processes
-        assert!(mcollects.is_procs());
-        if let ToSend::Procs(_, to) = mcollects.clone() {
+        assert!(mcollects.to_procs());
+        if let ToSend::ToProcs(to, _) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
         } else {
             panic!("ToSend::Procs not found!");
@@ -542,7 +514,7 @@ mod tests {
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
-        assert!(mcollectacks.iter().all(|to_send| to_send.is_procs()));
+        assert!(mcollectacks.iter().all(|to_send| to_send.to_procs()));
 
         // handle the first mcollectack
         let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
@@ -555,8 +527,8 @@ mod tests {
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
-        assert!(mcommit_tosend.is_procs());
-        if let ToSend::Procs(_, to) = mcommit_tosend.clone() {
+        assert!(mcommit_tosend.to_procs());
+        if let ToSend::ToProcs(to, _) = mcommit_tosend.clone() {
             assert_eq!(to.len(), n);
         } else {
             panic!("ToSend::Procs not found!");
@@ -566,17 +538,17 @@ mod tests {
         let mut nothings = router.route(mcommit_tosend, &time).into_iter();
         // the first one has a reply to a client, the remaining two are nothings
         let to_client = nothings.next().unwrap();
-        assert!(to_client.is_clients());
+        assert!(to_client.to_clients());
         assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
         assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
         assert_eq!(nothings.next(), None);
 
         // handle what was sent to client
         let new_submit = router.route(to_client, &time).into_iter().next().unwrap();
-        assert!(new_submit.is_procs());
+        assert!(new_submit.to_coordinator());
 
         let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
-        if let ToSend::Procs(Message::MCollect { from, dot, .. }, _) = mcollect {
+        if let ToSend::ToProcs(_, Message::MCollect { from, dot, .. }) = mcollect {
             assert_eq!(from, target_proc);
             assert_eq!(dot, Dot::new(target_proc, 2));
         } else {

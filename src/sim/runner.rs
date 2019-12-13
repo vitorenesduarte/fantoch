@@ -33,37 +33,50 @@ where
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of regions:
     /// - `proc_regions`: list of regions where processes are located
     /// - `client_regions`: list of regions where clients are located
-    pub fn new(
-        proc_regions: Vec<Region>,
-        client_regions: Vec<Region>,
+    pub fn new<F>(
         planet: Planet,
         config: Config,
+        create_proc: F,
         workload: Workload,
-    ) -> Self {
+        proc_regions: Vec<Region>,
+        client_regions: Vec<Region>,
+    ) -> Self
+    where
+        F: Fn(ProcId, Region, Planet, Config) -> P,
+    {
         // check that we have the correct number of `proc_regions`
         assert_eq!(proc_regions.len(), config.n());
 
         // create router
         let mut router = Router::new();
+        let mut procs = Vec::with_capacity(config.n());
 
-        // register procs
-        let procs: Vec<_> = proc_regions
+        // create procs
+        let to_discover: Vec<_> = proc_regions
             .into_iter()
             .enumerate()
             .map(|(proc_id, region)| {
                 let proc_id = proc_id as u64;
-                // create proc
-                let proc = P::new(proc_id, region.clone(), planet.clone(), config);
-                // and register it
-                router.register_proc(proc);
+                // create proc and save it
+                let proc = create_proc(proc_id, region.clone(), planet.clone(), config);
+                procs.push(proc);
+
                 (proc_id, region)
             })
             .collect();
 
-        // create proc to region
-        let proc_to_region = procs.clone().into_iter().collect();
+        // create proc to region mapping
+        let proc_to_region = to_discover.clone().into_iter().collect();
 
-        // register clients
+        // register procs
+        procs.into_iter().for_each(|mut proc| {
+            // discover `procs`
+            assert!(proc.discover(to_discover.clone()));
+            // and register it
+            router.register_proc(proc);
+        });
+
+        // register clients and create client to region mapping
         let client_to_region = client_regions
             .into_iter()
             .enumerate()
@@ -72,7 +85,7 @@ where
                 // create client
                 let mut client = Client::new(client_id, region.clone(), planet.clone(), workload);
                 // discover `procs`
-                client.discover(procs.clone());
+                assert!(client.discover(to_discover.clone()));
                 // and register it
                 router.register_client(client);
                 (client_id, region)
@@ -100,6 +113,7 @@ where
                 // schedule client commands
                 self.schedule_it(client_region, to_send);
             });
+
         // run the simulation while there are things scheduled
         while let Some(actions) = self.schedule.next_actions(&mut self.time) {
             // for each scheduled action

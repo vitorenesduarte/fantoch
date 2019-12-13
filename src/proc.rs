@@ -4,6 +4,7 @@ use crate::id::{Dot, DotGen, ProcId};
 use crate::planet::{Planet, Region};
 use crate::util;
 
+#[derive(Clone, PartialEq, Debug)]
 pub enum ToSend<M> {
     // new command to be sent to a coordinator
     ToCoordinator(ProcId, Command),
@@ -15,11 +16,46 @@ pub enum ToSend<M> {
     Nothing,
 }
 
+impl<M> ToSend<M> {
+    /// Check if it's something to be sent to a coordinator.
+    pub fn to_coordinator(&self) -> bool {
+        match *self {
+            ToSend::ToCoordinator(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if it' ssomething to be sent to processes.
+    pub fn to_procs(&self) -> bool {
+        match *self {
+            ToSend::ToProcs(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if it's something to be sent to clients.
+    pub fn to_clients(&self) -> bool {
+        match *self {
+            ToSend::ToClients(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if there's nothing to be sent.
+    pub fn is_nothing(&self) -> bool {
+        match *self {
+            ToSend::Nothing => true,
+            _ => false,
+        }
+    }
+}
+
 pub trait Proc {
     type Message: Clone;
 
     fn new(id: ProcId, region: Region, planet: Planet, config: Config) -> Self;
     fn id(&self) -> ProcId;
+    fn discover(&mut self, procs: Vec<(ProcId, Region)>) -> bool;
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
     fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message>;
 }
@@ -57,20 +93,25 @@ impl BaseProc {
     }
 
     /// Updates the processes known by this process.
-    pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) {
+    pub fn discover(&mut self, mut procs: Vec<(ProcId, Region)>) -> bool {
         // create all procs
         util::sort_procs_by_distance(&self.region, &self.planet, &mut procs);
         let all_procs: Vec<_> = procs.into_iter().map(|(id, _)| id).collect();
 
         // create fast quorum by taking the first `q` elements
-        let fast_quorum = all_procs.clone().into_iter().take(self.q).collect();
+        let fast_quorum: Vec<_> = all_procs.clone().into_iter().take(self.q).collect();
+
+        // check if we have enough fast quorum processes
+        let connected = fast_quorum.len() == self.q;
 
         // set fast quorum and all procs
         self.all_procs = Some(all_procs);
         self.fast_quorum = Some(fast_quorum);
+
+        connected
     }
 
-    /// Increments `cmd_count` and returns the next dot.
+    // Returns the next dot.
     pub fn next_dot(&mut self) -> Dot {
         self.dot_gen.next_id()
     }
