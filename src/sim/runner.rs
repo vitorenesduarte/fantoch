@@ -192,7 +192,8 @@ where
                     let message_to_self = from == process_id;
                     if message_to_self {
                         // route immediately if message to self
-                        self.router.route_to_process(from, process_id, msg.clone());
+                        let to_send = self.router.route_to_process(from, process_id, msg.clone());
+                        self.try_to_schedule(from_region.clone(), to_send);
                     } else {
                         // othewise, create action and schedule it
                         let action = ScheduleAction::SendToProc(from, process_id, msg.clone());
