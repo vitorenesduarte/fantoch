@@ -111,7 +111,7 @@ where
             .into_iter()
             .for_each(|(client_region, to_send)| {
                 // schedule client commands
-                self.schedule_it(client_region, to_send);
+                self.try_to_schedule(client_region, to_send);
             });
 
         // run the simulation while there are things scheduled
@@ -124,14 +124,14 @@ where
                         let process_region = self.process_region(process_id);
                         // submit to process and schedule output messages
                         let to_send = self.router.submit_to_process(process_id, cmd);
-                        self.schedule_it(process_region, to_send);
+                        self.try_to_schedule(process_region, to_send);
                     }
                     ScheduleAction::SendToProc(process_id, msg) => {
                         // get process's region
                         let process_region = self.process_region(process_id);
                         // route to process and schedule output messages
                         let to_send = self.router.route_to_process(process_id, msg);
-                        self.schedule_it(process_region, to_send);
+                        self.try_to_schedule(process_region, to_send);
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
                         // get client's region
@@ -140,27 +140,31 @@ where
                         let to_send = self
                             .router
                             .route_to_client(client_id, cmd_result, &self.time);
-                        self.schedule_it(client_region, to_send);
+                        self.try_to_schedule(client_region, to_send);
                     }
                 }
             })
         }
     }
 
-    /// Schedule a `ToSend`. When scheduling, we shoud never route!
-    fn schedule_it(&mut self, from: Region, to_send: ToSend<P::Message>) {
+    /// Try to schedule a `ToSend`. When scheduling, we shoud never route!
+    fn try_to_schedule(&mut self, from: Region, to_send: ToSend<P::Message>) {
         match to_send {
             ToSend::ToCoordinator(process_id, cmd) => {
                 // create action and schedule it
                 let action = ScheduleAction::SubmitToProc(process_id, cmd);
-                self.schedule_it_to_process(&from, process_id, action);
+                // get process's region
+                let to = self.process_region(process_id);
+                self.schedule_it(&from, &to, action);
             }
             ToSend::ToProcesses(target, msg) => {
                 // for each process in target, schedule message delivery
                 target.into_iter().for_each(|process_id| {
                     // create action and schedule it
                     let action = ScheduleAction::SendToProc(process_id, msg.clone());
-                    self.schedule_it_to_process(&from, process_id, action);
+                    // get process's region
+                    let to = self.process_region(process_id);
+                    self.schedule_it(&from, &to, action);
                 });
             }
             ToSend::ToClients(cmd_results) => {
@@ -169,7 +173,9 @@ where
                     // create action and schedule it
                     let client_id = cmd_result.rifl().source();
                     let action = ScheduleAction::SendToClient(client_id, cmd_result);
-                    self.schedule_it_to_client(&from, client_id, action);
+                    // get client's region
+                    let to = self.client_region(client_id);
+                    self.schedule_it(&from, &to, action);
                 });
             }
             ToSend::Nothing => {
@@ -178,31 +184,9 @@ where
         }
     }
 
-    fn schedule_it_to_process(
-        &mut self,
-        from: &Region,
-        process_id: ProcessId,
-        action: ScheduleAction<P>,
-    ) {
-        // get process's region
-        let process_region = self.process_region(process_id);
-
+    fn schedule_it(&mut self, from: &Region, to: &Region, action: ScheduleAction<P>) {
         // compute distance between regions and schedule action
-        let distance = self.distance(from, &process_region);
-        self.schedule.schedule(&self.time, distance, action);
-    }
-
-    fn schedule_it_to_client(
-        &mut self,
-        from: &Region,
-        client_id: ClientId,
-        action: ScheduleAction<P>,
-    ) {
-        // get client's region
-        let client_region = self.client_region(client_id);
-
-        // compute distance between regions and schedule action
-        let distance = self.distance(from, &client_region);
+        let distance = self.distance(from, to);
         self.schedule.schedule(&self.time, distance, action);
     }
 
