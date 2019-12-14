@@ -99,6 +99,11 @@ impl Client {
         &self.latencies
     }
 
+    /// Returns the number of commands already issued.
+    pub fn issued_commands(&self) -> usize {
+        self.workload.issued_commands()
+    }
+
     fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
         self.process_id.and_then(|process_id| {
             // generate next command in the workload if some process_id

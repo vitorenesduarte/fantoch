@@ -37,6 +37,8 @@ fn main() {
     assert_eq!(clients_per_region, 76);
 
     for n in vec![3, 5, 7, 9, 11, 13] {
+        println!("running simulation for n={}", n);
+        println!();
         // config
         let config = Config::new(n, f);
 
@@ -62,10 +64,15 @@ fn main() {
         );
 
         // run simulation and get stats
-        runner.run();
-        let stats = runner.clients_stats();
+        let stats = runner.run();
 
-        println!("n={}", n);
+        let stats_count = stats.len();
+        let mean = stats
+            .iter()
+            .map(|(_, (region_issued, region_stats))| region_stats.mean().value())
+            .sum::<f64>()
+            / (stats_count as f64);
+        println!("n={} | {}", n, mean as u64);
         println!("{:?}", stats);
     }
 }

@@ -48,7 +48,7 @@ where
         assert!(res.is_none())
     }
 
-    /// Returns an iterator of mutable references to each registered client.
+    /// Starts all clients registered in the router.
     pub fn start_clients(&mut self, time: &dyn SysTime) -> Vec<(Region, ToSend<P::Message>)> {
         self.clients
             .iter_mut()
@@ -74,7 +74,7 @@ where
     ) -> Vec<ToSend<P::Message>> {
         match to_send {
             ToSend::ToCoordinator(process_id, cmd) => {
-                let to_send = self.process_submit(process_id, cmd);
+                let to_send = self.submit_to_process(process_id, cmd);
                 vec![to_send]
             }
             ToSend::ToProcesses(from, processes, msg) => processes
@@ -93,6 +93,11 @@ where
         }
     }
 
+    /// Submits a command in some process.
+    pub fn submit_to_process(&mut self, process_id: ProcessId, cmd: Command) -> ToSend<P::Message> {
+        self.get_process(process_id).submit(cmd)
+    }
+
     /// Route a message to some process.
     pub fn route_to_process(
         &mut self,
@@ -100,24 +105,7 @@ where
         process_id: ProcessId,
         msg: P::Message,
     ) -> ToSend<P::Message> {
-        self.processes
-            .get_mut(&process_id)
-            .unwrap_or_else(|| {
-                panic!("proc {} should have been set before", process_id);
-            })
-            .get_mut()
-            .handle(from, msg)
-    }
-
-    /// Submit a command to some process.
-    pub fn process_submit(&mut self, process_id: ProcessId, cmd: Command) -> ToSend<P::Message> {
-        self.processes
-            .get_mut(&process_id)
-            .unwrap_or_else(|| {
-                panic!("proc {} should have been set before", process_id);
-            })
-            .get_mut()
-            .submit(cmd)
+        self.get_process(process_id).handle(from, msg)
     }
 
     /// Route a message to some client.
@@ -128,27 +116,32 @@ where
         time: &dyn SysTime,
     ) -> ToSend<P::Message> {
         // route command result
-        self.clients
-            .get_mut(&client_id)
-            .unwrap_or_else(|| {
-                panic!("client {} should have been set before", client_id);
-            })
-            .get_mut()
+        self.get_client(client_id)
             .handle(cmd_result, time)
             .map_or(ToSend::Nothing, |(process_id, cmd)| {
                 ToSend::ToCoordinator(process_id, cmd)
             })
     }
 
-    /// Retrieves client's stats.
-    /// TODO does this need to be mut?
-    pub fn client_latencies(&mut self, client_id: ClientId) -> &Vec<u64> {
+    /// Returns the process registered with this identifier.
+    /// It panics if the process is not registered.
+    pub fn get_process(&mut self, process_id: ProcessId) -> &mut P {
+        self.processes
+            .get_mut(&process_id)
+            .unwrap_or_else(|| {
+                panic!("proc {} should have been set before", process_id);
+            })
+            .get_mut()
+    }
+
+    /// Returns the client registered with this identifier.
+    /// It panics if the client is not registered.
+    pub fn get_client(&mut self, client_id: ClientId) -> &mut Client {
         self.clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
                 panic!("client {} should have been set before", client_id);
             })
             .get_mut()
-            .latencies()
     }
 }

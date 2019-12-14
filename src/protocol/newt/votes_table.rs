@@ -110,13 +110,13 @@ impl VotesTable {
         // update votes with the votes used on this command
         vote_ranges.into_iter().for_each(|range| {
             // assert there's at least one new vote
-            println!(
-                "clock: {:?} | voter: {} | start: {} | end: {}",
-                self.votes_clock,
-                range.voter(),
-                range.start(),
-                range.end()
-            );
+            // println!(
+            //     "clock: {:?} | voter: {} | start: {} | end: {}",
+            //     self.votes_clock,
+            //     range.voter(),
+            //     range.start(),
+            //     range.end()
+            // );
             assert!(self
                 .votes_clock
                 .add_range(&range.voter(), range.start(), range.end()));

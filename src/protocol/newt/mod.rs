@@ -217,16 +217,19 @@ impl Newt {
         // occurences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
-        // optimization: bump all keys clocks in `cmd` to be `max_clock`
-        // - this prevents us from generating votes (either when clients submit new operations or
-        //   when handling `MCollect` from other processes) that could potentially delay the
-        //   execution of this command
-        let cmd = info.cmd.as_ref().unwrap();
-        let local_process_votes = self.keys_clocks.process_votes(cmd, max_clock);
-        println!("dot {:?} local votes {:?}", dot, local_process_votes);
+        // // optimization: bump all keys clocks in `cmd` to be `max_clock`
+        // // - this prevents us from generating votes (either when clients submit new operations or
+        // //   when handling `MCollect` from other processes) that could potentially delay the
+        // //   execution of this command
+        // let cmd = info.cmd.as_ref().unwrap();
+        // let local_process_votes = self.keys_clocks.process_votes(cmd, max_clock);
+        // println!(
+        //     "{}: dot {:?} local votes {:?}",
+        //     self.bp.process_id, dot, local_process_votes
+        // );
 
-        // update votes with local votes
-        info.votes.add(local_process_votes);
+        // // update votes with local votes
+        // info.votes.add(local_process_votes);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
@@ -250,7 +253,7 @@ impl Newt {
                 ToSend::ToProcesses(self.id(), all_processes, mcommit)
             } else {
                 // TODO slow path
-                ToSend::Nothing
+                unimplemented!("slow path not implemented yet")
             }
         } else {
             ToSend::Nothing
@@ -282,10 +285,10 @@ impl Newt {
         // local key's clock
 
         // update votes table and get commands that can be executed
-        println!(
-            "dot {:?} committed at {} with votes {:?}",
-            dot, self.bp.process_id, votes
-        );
+        // println!(
+        //     "{}: dot {:?} committed with votes {:?}",
+        //     self.bp.process_id, dot, votes
+        // );
         let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
 
         // execute commands
@@ -505,7 +508,7 @@ mod tests {
         router.register_client(client_1);
 
         // submit it in newt_0
-        let mcollects = router.process_submit(target, cmd);
+        let mcollects = router.submit_to_process(target, cmd);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_processes());

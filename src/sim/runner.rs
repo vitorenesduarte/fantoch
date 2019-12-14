@@ -106,7 +106,7 @@ where
     }
 
     /// Run the simulation.
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> HashMap<&Region, (usize, Stats)> {
         // start clients
         self.router
             .start_clients(&self.time)
@@ -125,7 +125,7 @@ where
                         // get process's region
                         let process_region = self.process_region(process_id);
                         // submit to process and schedule output messages
-                        let to_send = self.router.process_submit(process_id, cmd);
+                        let to_send = self.router.submit_to_process(process_id, cmd);
                         self.try_to_schedule(process_region, to_send);
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
@@ -147,29 +147,43 @@ where
                 }
             })
         }
+
+        // return clients stats
+        self.clients_stats()
     }
 
     /// Get client's stats.
     /// TODO does this need to be mut?
-    pub fn clients_stats(&mut self) -> HashMap<&Region, Stats> {
+    fn clients_stats(&mut self) -> HashMap<&Region, (usize, Stats)> {
         let router = &mut self.router;
-        let mut region_to_latencies: HashMap<&Region, Vec<u64>> = HashMap::new();
+        let mut region_to_latencies = HashMap::new();
 
         for (client_id, region) in self.client_to_region.iter() {
-            // get client's latencies
-            let latencies = router.client_latencies(*client_id);
-            // get current latencies from this region
-            let current_latencies = region_to_latencies.entry(region).or_insert_with(Vec::new);
+            // get client from router
+            let client = router.get_client(*client_id);
+            // check client's issued commands and latencies
+            let issued_commands = client.issued_commands();
+            let latencies = client.latencies();
+            // if the number of latencies is not the number of issued commands, the client has not
+            // finished its workload
+            if latencies.len() != issued_commands {
+                println!("client {} has not finished: {}", client_id, issued_commands);
+            }
 
+            // get current metrics from this region
+            let (total_issued_commands, current_latencies) =
+                region_to_latencies.entry(region).or_insert((0, Vec::new()));
+            // update metrics
+            *total_issued_commands += issued_commands;
             current_latencies.extend(latencies);
         }
 
         // compute stats for each region
         region_to_latencies
             .into_iter()
-            .map(|(region, latencies)| {
+            .map(|(region, (total_issued_commands, latencies))| {
                 let stats = Stats::from(&latencies);
-                (region, stats)
+                (region, (total_issued_commands, stats))
             })
             .collect()
     }
@@ -389,12 +403,19 @@ mod tests {
         // run simulation and return stats
         runner.run();
         let mut stats = runner.clients_stats();
-        let us_west1 = stats
+        let (us_west1_issued, us_west1) = stats
             .remove(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
-        let us_west2 = stats
+        let (us_west2_issued, us_west2) = stats
             .remove(&Region::new("us-west2"))
             .expect("there should stats from us-west2 region");
+
+        // check the number of issued commands
+        let expected = total_commands * clients_per_region;
+        assert_eq!(us_west1_issued, expected);
+        assert_eq!(us_west2_issued, expected);
+
+        // return stats for both regions
         (us_west1, us_west2)
     }
 

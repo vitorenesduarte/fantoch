@@ -40,6 +40,11 @@ impl Workload {
         }
     }
 
+    /// Returns the number of commands already issued.
+    pub fn issued_commands(&self) -> usize {
+        self.command_count
+    }
+
     /// Generate a command.
     fn gen_cmd(&mut self, rifl_gen: &mut RiflGen) -> Command {
         // generate rifl, key and value
@@ -112,15 +117,15 @@ mod tests {
             assert!(workload.next_cmd(&mut rifl_gen).is_some());
         }
 
-        // at this point, the number of commands generated equals `total_commands`
-        assert_eq!(workload.command_count, total_commands);
+        // check the workload is finished
+        assert_eq!(workload.issued_commands(), total_commands);
 
         // after this, no more commands are generated
         for _ in 1..=10 {
             assert!(workload.next_cmd(&mut rifl_gen).is_none());
         }
 
-        // at the number of commands generated is still `total_commands`
-        assert_eq!(workload.command_count, total_commands);
+        // check the workload is still finished
+        assert_eq!(workload.issued_commands(), total_commands);
     }
 }
