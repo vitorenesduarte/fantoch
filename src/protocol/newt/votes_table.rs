@@ -165,7 +165,7 @@ mod tests {
     use permutator::Permutation;
 
     #[test]
-    fn votes_table_flow() {
+    fn votes_table_majority_quorums() {
         // process ids
         let process_id_1 = 1;
         let process_id_2 = 2;
@@ -302,5 +302,119 @@ mod tests {
                 .collect();
             assert_eq!(total_order, permutation_total_order);
         });
+    }
+
+    #[test]
+    fn votes_table_tiny_quorums() {
+        // process ids
+        let process_id_1 = 1;
+        let process_id_2 = 2;
+        let process_id_3 = 3;
+        let process_id_4 = 4;
+        let process_id_5 = 5;
+
+        // let's consider that n = 5 and f = 1 and we're using write quorums of size f + 1
+        // so the threshold should be n - f = 4;
+        let n = 5;
+        let f = 1;
+        let stability_threshold = n - f;
+        let mut table = VotesTable::new(n, stability_threshold);
+
+        // in this example we'll use the dot as rifl
+
+        // a1
+        let a1 = KVOp::Put(String::from("A1"));
+        let a1_rifl = Rifl::new(process_id_1, 1);
+        // p1, final clock = 1
+        let a1_sort_id = (1, Dot::new(process_id_1, 1));
+        // p1, p2 voted with  1
+        let a1_votes = vec![
+            VoteRange::new(process_id_1, 1, 1),
+            VoteRange::new(process_id_2, 1, 1),
+        ];
+
+        // add a1 to table
+        table.add(a1_sort_id, a1_rifl, a1.clone(), a1_votes.clone());
+        // get stable: none
+        let stable: Vec<_> = table.stable_ops().collect();
+        assert_eq!(stable, vec![]);
+
+        // c1
+        let c1 = KVOp::Put(String::from("C1"));
+        let c1_rifl = Rifl::new(process_id_3, 1);
+        // p3, final clock = 2
+        let c1_sort_id = (2, Dot::new(process_id_3, 1));
+        // p2 voted with 2, p3 voted with 1-2
+        let c1_votes = vec![
+            VoteRange::new(process_id_3, 1, 1),
+            VoteRange::new(process_id_2, 2, 2),
+            VoteRange::new(process_id_3, 2, 2),
+        ];
+
+        // add c1 to table
+        table.add(c1_sort_id, c1_rifl, c1.clone(), c1_votes.clone());
+        // get stable: none
+        let stable: Vec<_> = table.stable_ops().collect();
+        assert_eq!(stable, vec![]);
+
+        // e1
+        let e1 = KVOp::Put(String::from("E1"));
+        let e1_rifl = Rifl::new(process_id_5, 1);
+        // p5, final clock = 1
+        let e1_sort_id = (1, Dot::new(process_id_5, 1));
+        // p5 and p4 voted with 1
+        let e1_votes = vec![
+            VoteRange::new(process_id_5, 1, 1),
+            VoteRange::new(process_id_4, 1, 1),
+        ];
+
+        // add e1 to table
+        table.add(e1_sort_id, e1_rifl, e1.clone(), e1_votes.clone());
+        // get stable: a1 and e1
+        let stable: Vec<_> = table.stable_ops().collect();
+        assert_eq!(stable, vec![(a1_rifl, a1.clone()), (e1_rifl, e1.clone())]);
+
+        // a2
+        let a2 = KVOp::Put(String::from("A2"));
+        let a2_rifl = Rifl::new(process_id_1, 2);
+        // p1, final clock = 3
+        let a2_sort_id = (3, Dot::new(process_id_1, 2));
+        // p1 voted with 2-3 and p2 voted with 3
+        let a2_votes = vec![
+            VoteRange::new(process_id_1, 2, 2),
+            VoteRange::new(process_id_2, 3, 3),
+            VoteRange::new(process_id_1, 3, 3),
+        ];
+
+        // add a2 to table
+        table.add(a2_sort_id, a2_rifl, a2.clone(), a2_votes.clone());
+        // get stable: none
+        let stable: Vec<_> = table.stable_ops().collect();
+        assert_eq!(stable, vec![]);
+
+        // d1
+        let d1 = KVOp::Put(String::from("D1"));
+        let d1_rifl = Rifl::new(process_id_4, 1);
+        // p4, final clock = 3
+        let d1_sort_id = (3, Dot::new(process_id_4, 1));
+        // p4 voted with 2-3 and p3 voted with 3
+        let d1_votes = vec![
+            VoteRange::new(process_id_4, 2, 2),
+            VoteRange::new(process_id_3, 3, 3),
+            VoteRange::new(process_id_4, 3, 3),
+        ];
+
+        // add d1 to table
+        table.add(d1_sort_id, d1_rifl, d1.clone(), d1_votes.clone());
+        // get stable: none
+        let stable: Vec<_> = table.stable_ops().collect();
+        assert_eq!(
+            stable,
+            vec![
+                (c1_rifl, c1.clone()),
+                (a2_rifl, a2.clone()),
+                (d1_rifl, d1.clone())
+            ]
+        );
     }
 }
