@@ -1,16 +1,16 @@
 use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
-use std::collections::btree_map::{self, BTreeMap};
+use std::collections::hash_map::{self, HashMap};
 use std::fmt;
 
 /// `ProcessVotes` are the Votes by some process on some command.
-pub type ProcessVotes = BTreeMap<Key, Option<VoteRange>>;
+pub type ProcessVotes = HashMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Votes {
-    votes: BTreeMap<Key, Vec<VoteRange>>,
+    votes: HashMap<Key, Vec<VoteRange>>,
 }
 
 impl Votes {
@@ -31,26 +31,27 @@ impl Votes {
 
     /// Add `ProcessVotes` to `Votes`.
     pub fn add(&mut self, process_votes: ProcessVotes) {
-        self.votes
-            .iter_mut()
-            .zip(process_votes.into_iter())
-            .for_each(|((key, current_votes), (vote_key, vote))| {
-                // each item from zip should be about the same key
-                assert_eq!(*key, vote_key);
-
-                // add vote to this key's votes
-                if let Some(vote) = vote {
-                    current_votes.push(vote);
-                }
-            });
+        // TODO in the past `self.votes` was ordered and if `process_votes` contains all keys, we
+        // can implement this method efficiently with `iter_mut()` zipped with `process_votes`
+        // - the reason we have this implementation now is because maybe sometimes processes don't
+        //   want to vote on all keys, for example, when generating phantom votes upon commit
+        process_votes.into_iter().for_each(|(key, vote)| {
+            // get current votes
+            let current_votes = self
+                .votes
+                .get_mut(&key)
+                .expect("voted key should be part of votes already");
+            // add new vote
+            current_votes.push(vote);
+        });
     }
 }
 
 impl IntoIterator for Votes {
     type Item = (Key, Vec<VoteRange>);
-    type IntoIter = btree_map::IntoIter<Key, Vec<VoteRange>>;
+    type IntoIter = hash_map::IntoIter<Key, Vec<VoteRange>>;
 
-    /// Returns a `Votes` into-iterator ordered by `Key` (ASC).
+    /// Returns a `Votes` into-iterator.
     fn into_iter(self) -> Self::IntoIter {
         self.votes.into_iter()
     }

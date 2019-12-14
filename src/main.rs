@@ -65,14 +65,23 @@ fn main() {
 
         // run simulation and get stats
         let stats = runner.run();
+        println!("{:?}", stats);
 
         let stats_count = stats.len();
+        let expected_commands_per_region = total_commands * clients_per_region;
         let mean = stats
             .iter()
-            .map(|(_, (region_issued, region_stats))| region_stats.mean().value())
+            .map(|(region, (region_issued_commands, region_stats))| {
+                if *region_issued_commands != expected_commands_per_region {
+                    panic!(
+                        "region {:?} has only issued {} out of {} commands",
+                        region, region_issued_commands, expected_commands_per_region
+                    );
+                }
+                region_stats.mean().value()
+            })
             .sum::<f64>()
             / (stats_count as f64);
         println!("n={} | {}", n, mean as u64);
-        println!("{:?}", stats);
     }
 }

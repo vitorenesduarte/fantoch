@@ -281,6 +281,9 @@ impl Newt {
         info.cmd = cmd;
         info.clock = clock;
 
+        let cmd = info.cmd.as_ref().unwrap();
+        let local_process_votes = self.keys_clocks.process_votes(cmd, info.clock);
+
         // TODO generate phantom votes if committed clock is higher than the
         // local key's clock
 

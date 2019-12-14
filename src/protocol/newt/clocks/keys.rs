@@ -31,19 +31,18 @@ impl KeysClocks {
     /// Computes the votes consumed by this command.
     pub fn process_votes(&mut self, cmd: &Command, highest: u64) -> ProcessVotes {
         cmd.keys()
-            .map(|key| {
+            .filter_map(|key| {
                 // vote from the current clock value + 1 until the highest vote
                 // (i.e. the maximum between all key's clocks)
                 let previous = self.key_clock_swap(key, highest);
 
                 // create vote if we should
-                let vote = if previous < highest {
+                if previous < highest {
                     let vr = VoteRange::new(self.id, previous + 1, highest);
-                    Some(vr)
+                    Some((key.clone(), vr))
                 } else {
                     None
-                };
-                (key.clone(), vote)
+                }
             })
             .collect()
     }
@@ -88,7 +87,9 @@ mod tests {
 
         // closure to retrieve the votes on some key
         let get_key_votes = |votes: &ProcessVotes, key: &Key| {
-            let vr = votes.get(key).unwrap().as_ref().unwrap();
+            let vr = votes
+                .get(key)
+                .expect("process should have voted on this key");
             (vr.start()..=vr.end()).collect::<Vec<_>>()
         };
 
