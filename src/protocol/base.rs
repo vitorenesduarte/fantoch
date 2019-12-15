@@ -50,19 +50,37 @@ impl BaseProcess {
         // create fast quorum by taking the first `q` elements
         let fast_quorum: Vec<_> = all_processes.clone().into_iter().take(self.q).collect();
 
-        // check if we have enough fast quorum processes
-        let connected = fast_quorum.len() == self.q;
+        // set fast quorum if we have enough fast quorum processes
+        self.fast_quorum = if fast_quorum.len() == self.q {
+            Some(fast_quorum)
+        } else {
+            None
+        };
 
-        // set fast quorum and all processes
+        // set all processes
         self.all_processes = Some(all_processes);
-        self.fast_quorum = Some(fast_quorum);
 
-        connected
+        // we're connected if we have a fast quorum
+        self.fast_quorum.is_some()
     }
 
     // Returns the next dot.
     pub fn next_dot(&mut self) -> Dot {
         self.dot_gen.next_id()
+    }
+
+    // Returns all processes.
+    pub fn all(&self) -> Vec<ProcessId> {
+        self.all_processes
+            .clone()
+            .expect("the set of all processes should be known")
+    }
+
+    // Returns the fast quorum.
+    pub fn fast_quorum(&self) -> Vec<ProcessId> {
+        self.fast_quorum
+            .clone()
+            .expect("the fast quorum should be known")
     }
 }
 

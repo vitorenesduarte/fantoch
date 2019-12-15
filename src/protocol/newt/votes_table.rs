@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
-use crate::protocol::newt::votes::{VoteRange, Votes};
+use crate::protocol::newt::votes::{ProcessVotes, VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};
 use threshold::AEClock;
 
@@ -20,6 +20,17 @@ impl MultiVotesTable {
             tables: HashMap::new(),
         }
     }
+
+    // pub fn add_process_votes(
+    //     &mut self,
+    //     dot: Dot,
+    //     process_votes: ProcessVotes,
+    // ) -> Option<Vec<(Key, Vec<(Rifl, KVOp)>)>> {
+    //     process_votes.into_iter().map(|(key, vote_range)| {
+
+    //     });
+    //     None
+    // }
 
     /// Add a new command, its clock and votes to the votes table.
     /// TODO Here we can't return a `Command` because it assumes one

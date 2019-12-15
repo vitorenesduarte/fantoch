@@ -25,6 +25,7 @@ pub struct Newt {
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
+    commands_ready: Vec<CommandResult>,
 }
 
 impl Process for Newt {
@@ -45,6 +46,7 @@ impl Process for Newt {
         let cmds_info = CommandsInfo::new(q);
         let store = KVStore::new();
         let pending = Pending::new();
+        let commands_ready = Vec::new();
 
         // create `Newt`
         Self {
@@ -54,6 +56,7 @@ impl Process for Newt {
             table,
             store,
             pending,
+            commands_ready,
         }
     }
 
@@ -92,7 +95,15 @@ impl Process for Newt {
                 clock,
                 votes,
             } => self.handle_mcommit(dot, cmd, clock, votes),
+            Message::MPhantom { dot, process_votes } => self.handle_mphantom(dot, process_votes),
         }
+    }
+
+    /// Returns new commands results to be sent to clients.
+    fn commands_ready(&mut self) -> Vec<CommandResult> {
+        let mut ready = Vec::new();
+        std::mem::swap(&mut ready, &mut self.commands_ready);
+        ready
     }
 }
 
@@ -123,12 +134,8 @@ impl Newt {
         // compute its clock
         let clock = self.keys_clocks.clock(&cmd) + 1;
 
-        // clone the fast quorum
-        let fast_quorum = self
-            .bp
-            .fast_quorum
-            .clone()
-            .expect("should have a valid fast quorum upon submit");
+        // get the fast quorum
+        let fast_quorum = self.bp.fast_quorum();
 
         // create `MCollect`
         let mcollect = Message::MCollect {
@@ -158,8 +165,7 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // TODO can we somehow combine a subset of the next 3 operations in
-        // order to save HashMap operations?
+        // TODO can we somehow combine the next 2 operations in order to save map lookups?
 
         // compute command clock
         let cmd_clock = std::cmp::max(clock, self.keys_clocks.clock(&cmd) + 1);
@@ -167,6 +173,8 @@ impl Newt {
         // compute votes consumed by this command
         // - this computation needs to occur before the next `bump_to`
         let process_votes = self.keys_clocks.process_votes(&cmd, cmd_clock);
+        // check that there's one vote per key
+        assert_eq!(process_votes.len(), cmd.key_count());
 
         // if coordinator, set keys in `info.votes`
         // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
@@ -222,14 +230,14 @@ impl Newt {
         // //   when handling `MCollect` from other processes) that could potentially delay the
         // //   execution of this command
         // let cmd = info.cmd.as_ref().unwrap();
-        // let local_process_votes = self.keys_clocks.process_votes(cmd, max_clock);
+        // let process_votes = self.keys_clocks.process_votes(cmd, max_clock);
         // println!(
         //     "{}: dot {:?} local votes {:?}",
-        //     self.bp.process_id, dot, local_process_votes
+        //     self.bp.process_id, dot, process_votes
         // );
 
         // // update votes with local votes
-        // info.votes.add(local_process_votes);
+        // info.votes.add(process_votes);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
@@ -245,12 +253,7 @@ impl Newt {
                 };
 
                 // return `ToSend`
-                let all_processes = self
-                    .bp
-                    .all_processes
-                    .clone()
-                    .expect("the set of all processes should be known");
-                ToSend::ToProcesses(self.id(), all_processes, mcommit)
+                ToSend::ToProcesses(self.id(), self.bp.all(), mcommit)
             } else {
                 // TODO slow path
                 unimplemented!("slow path not implemented yet")
@@ -281,11 +284,20 @@ impl Newt {
         info.cmd = cmd;
         info.clock = clock;
 
-        let cmd = info.cmd.as_ref().unwrap();
-        let local_process_votes = self.keys_clocks.process_votes(cmd, info.clock);
-
-        // TODO generate phantom votes if committed clock is higher than the
-        // local key's clock
+        // generate phantom votes if committed clock is higher than the local key's clock
+        let to_send = if let Some(cmd) = info.cmd.as_ref() {
+            // if not a no op, check if we can generate more votes that can speed-up execution
+            let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
+            // create `MPhantom` if there are new votes
+            if process_votes.is_empty() {
+                ToSend::Nothing
+            } else {
+                let mphantom = Message::MPhantom { dot, process_votes };
+                ToSend::ToProcesses(self.bp.process_id, self.bp.all(), mphantom)
+            }
+        } else {
+            ToSend::Nothing
+        };
 
         // update votes table and get commands that can be executed
         // println!(
@@ -297,34 +309,58 @@ impl Newt {
         // execute commands
         if let Some(to_execute) = to_execute {
             let ready = self.execute(to_execute);
-            // if there ready commands, forward them to clients
-            if ready.is_empty() {
-                ToSend::Nothing
-            } else {
-                ToSend::ToClients(ready)
-            }
-        } else {
-            // no message to be sent
-            ToSend::Nothing
+            self.commands_ready.extend(ready);
         }
+
+        // return `ToSend`
+        to_send
+    }
+
+    fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
+        // get cmd info
+        let info = self.cmds_info.get(dot);
+
+        // TODO if there's ever a Status::EXECUTE, this check might be incorrect
+        if info.status != Status::COMMIT {
+            // only accept new votes for this command if it has already been committed
+            // - if no messages are lost, this should always be the case
+            // - otherwise, we should simply execute recovery
+            return ToSend::Nothing;
+        }
+
+        // let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
+
+        // // execute commands
+        // if let Some(to_execute) = to_execute {
+        //     let ready = self.execute(to_execute);
+        //     // if there ready commands, forward them to clients
+        //     if ready.is_empty() {
+        //         ToSend::Nothing
+        //     } else {
+        //         ToSend::ToClients(ready)
+        //     }
+        // } else {
+        //     // no message to be sent
+        //     ToSend::Nothing
+        // }
+        ToSend::Nothing
     }
 
     fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) -> Vec<CommandResult> {
-        let mut ready = Vec::new();
-        for (key, ops) in to_execute {
-            for (rifl, op) in ops {
+        to_execute
+            .into_iter()
+            .flat_map(|(key, ops)| {
+                ops.into_iter()
+                    .map(move |(rifl, op)| (key.clone(), rifl, op))
+            })
+            .filter_map(|(key, rifl, op)| {
                 // execute op in the `KVStore`
                 let op_result = self.store.execute(&key, op);
 
                 // add partial result to `Pending`
-                let cmd_result = self.pending.add_partial(rifl, key.clone(), op_result);
-
-                if let Some(cmd_result) = cmd_result {
-                    ready.push(cmd_result);
-                }
-            }
-        }
-        ready
+                self.pending.add_partial(rifl, key, op_result)
+            })
+            .collect()
     }
 }
 
@@ -402,6 +438,10 @@ pub enum Message {
         clock: u64,
         votes: Votes,
     },
+    MPhantom {
+        dot: Dot,
+        process_votes: ProcessVotes,
+    },
 }
 
 /// `Status` of commands.
@@ -416,7 +456,7 @@ enum Status {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
-    use crate::sim::Router;
+    use crate::sim::Simulation;
     use crate::time::SimTime;
 
     #[test]
@@ -437,11 +477,16 @@ mod tests {
         let process_id_2 = 2;
         let process_id_3 = 3;
 
+        // regions
+        let europe_west2 = Region::new("europe-west2");
+        let europe_west3 = Region::new("europe-west2");
+        let us_west1 = Region::new("europe-west2");
+
         // processes
         let processes = vec![
-            (process_id_1, Region::new("europe-west2")),
-            (process_id_2, Region::new("europe-west3")),
-            (process_id_3, Region::new("europe-west4")),
+            (process_id_1, europe_west2.clone()),
+            (process_id_2, europe_west3.clone()),
+            (process_id_3, us_west1.clone()),
         ];
 
         // planet
@@ -456,37 +501,22 @@ mod tests {
         let config = Config::new(n, f);
 
         // newts
-        let mut newt_1 = Newt::new(
-            process_id_1,
-            Region::new("europe-west2"),
-            planet.clone(),
-            config,
-        );
-        let mut newt_2 = Newt::new(
-            process_id_2,
-            Region::new("europe-west3"),
-            planet.clone(),
-            config,
-        );
-        let mut newt_3 = Newt::new(
-            process_id_3,
-            Region::new("europe-west4"),
-            planet.clone(),
-            config,
-        );
+        let mut newt_1 = Newt::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut newt_2 = Newt::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut newt_3 = Newt::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
         // discover processes in all newts
         newt_1.discover(processes.clone());
         newt_2.discover(processes.clone());
         newt_3.discover(processes.clone());
 
-        // create msg router
-        let mut router = Router::new();
+        // create simulation
+        let mut simulation = Simulation::new();
 
         // register processes
-        router.register_process(newt_1);
-        router.register_process(newt_2);
-        router.register_process(newt_3);
+        simulation.register_process(newt_1);
+        simulation.register_process(newt_2);
+        simulation.register_process(newt_3);
 
         // client workload
         let conflict_rate = 100;
@@ -495,7 +525,7 @@ mod tests {
 
         // create client 1 that is connected to newt 1
         let client_id = 1;
-        let client_region = Region::new("europe-west2");
+        let client_region = europe_west2.clone();
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
 
         // discover processes in client 1
@@ -508,34 +538,35 @@ mod tests {
         assert_eq!(target, process_id_1);
 
         // register clients
-        router.register_client(client_1);
+        simulation.register_client(client_1);
 
         // submit it in newt_0
-        let mcollects = router.submit_to_process(target, cmd);
+        let mcollects = simulation.get_process(target).submit(cmd);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_processes());
         if let ToSend::ToProcesses(_, to, _) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
+            assert_eq!(to, vec![1, 2]);
         } else {
             panic!("ToSend::ToProcesses not found!");
         }
 
         // handle in mcollects
-        let mut mcollectacks = router.route(mcollects, &time);
+        let mut mcollectacks = simulation.forward_to_processes(mcollects);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
         assert!(mcollectacks.iter().all(|to_send| to_send.to_processes()));
 
         // handle the first mcollectack
-        let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
+        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
         // no mcommit yet
         assert!(mcommit_tosend.is_nothing());
 
         // handle the second mcollectack
-        let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
+        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
@@ -547,19 +578,38 @@ mod tests {
         }
 
         // all processes handle it
-        let mut nothings = router.route(mcommit_tosend, &time).into_iter();
-        // the first one has a reply to a client, the remaining two are nothings
-        let to_client = nothings.next().unwrap();
-        assert!(to_client.to_clients());
-        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
-        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
-        assert_eq!(nothings.next(), None);
+        let to_sends = simulation.forward_to_processes(mcommit_tosend);
+        // get the single mphantom from process 3
+        let to_sends = to_sends
+            .into_iter()
+            .filter(|to_send| to_send.to_processes())
+            .collect::<Vec<_>>();
+        assert_eq!(to_sends.len(), 1);
+        match to_sends.into_iter().next().unwrap() {
+            ToSend::ToProcesses(from, target, Message::MPhantom { .. }) => {
+                assert_eq!(from, process_id_3);
+                assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
+            }
+            _ => panic!("Message::MPhantom not found!"),
+        }
+
+        // process 1 should have a result to the client
+        let commands_ready = simulation.get_process(process_id_1).commands_ready();
+        assert_eq!(commands_ready.len(), 1);
 
         // handle what was sent to client
-        let new_submit = router.route(to_client, &time).into_iter().next().unwrap();
+        let new_submit = simulation
+            .forward_to_clients(commands_ready, &time)
+            .into_iter()
+            .next()
+            .unwrap();
         assert!(new_submit.to_coordinator());
 
-        let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
+        let mcollect = simulation
+            .forward_to_processes(new_submit)
+            .into_iter()
+            .next()
+            .unwrap();
         if let ToSend::ToProcesses(from, _, Message::MCollect { dot, .. }) = mcollect {
             assert_eq!(from, target);
             assert_eq!(dot, Dot::new(target, 2));

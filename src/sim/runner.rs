@@ -4,8 +4,7 @@ use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
-use crate::sim::Router;
-use crate::sim::Schedule;
+use crate::sim::{Schedule, Simulation};
 use crate::stats::Stats;
 use crate::time::SimTime;
 use std::collections::HashMap;
@@ -18,7 +17,7 @@ pub enum ScheduleAction<P: Process> {
 
 pub struct Runner<P: Process> {
     planet: Planet,
-    router: Router<P>,
+    simulation: Simulation<P>,
     time: SimTime,
     schedule: Schedule<ScheduleAction<P>>,
     // mapping from process identifier to its region
@@ -49,8 +48,8 @@ where
         // check that we have the correct number of `process_regions`
         assert_eq!(process_regions.len(), config.n());
 
-        // create router
-        let mut router = Router::new();
+        // create simulation
+        let mut simulation = Simulation::new();
         let mut processes = Vec::with_capacity(config.n());
 
         // create processes
@@ -75,7 +74,7 @@ where
             // discover
             assert!(process.discover(to_discover.clone()));
             // and register it
-            router.register_process(process);
+            simulation.register_process(process);
         });
 
         // register clients and create client to region mapping
@@ -89,7 +88,7 @@ where
                 // discover
                 assert!(client.discover(to_discover.clone()));
                 // and register it
-                router.register_client(client);
+                simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
             }
         }
@@ -97,7 +96,7 @@ where
         // create runner
         Self {
             planet,
-            router,
+            simulation,
             time: SimTime::new(),
             schedule: Schedule::new(),
             process_to_region,
@@ -108,10 +107,12 @@ where
     /// Run the simulation.
     pub fn run(&mut self) -> HashMap<&Region, (usize, Stats)> {
         // start clients
-        self.router
+        self.simulation
             .start_clients(&self.time)
             .into_iter()
-            .for_each(|(client_region, to_send)| {
+            .for_each(|(client_id, to_send)| {
+                // get client's region
+                let client_region = self.client_region(client_id);
                 // schedule client commands
                 self.try_to_schedule(client_region, to_send);
             });
@@ -125,23 +126,19 @@ where
                         // get process's region
                         let process_region = self.process_region(process_id);
                         // submit to process and schedule output messages
-                        let to_send = self.router.submit_to_process(process_id, cmd);
+                        let to_send = self.simulation.get_process(process_id).submit(cmd);
                         self.try_to_schedule(process_region, to_send);
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
-                        // get process's region
-                        let process_region = self.process_region(process_id);
-                        // route to process and schedule output messages
-                        let to_send = self.router.route_to_process(from, process_id, msg);
-                        self.try_to_schedule(process_region, to_send);
+                        self.handle_in_process(process_id, from, msg);
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
                         // get client's region
                         let client_region = self.client_region(client_id);
                         // route to client and schedule output command
                         let to_send = self
-                            .router
-                            .route_to_client(client_id, cmd_result, &self.time);
+                            .simulation
+                            .forward_to_client(client_id, cmd_result, &self.time);
                         self.try_to_schedule(client_region, to_send);
                     }
                 }
@@ -152,15 +149,40 @@ where
         self.clients_stats()
     }
 
+    fn handle_in_process(&mut self, process_id: ProcessId, from: ProcessId, msg: P::Message) {
+        // get process
+        let process = self.simulation.get_process(process_id);
+        // handle message and get new ready commands
+        let to_send = process.handle(from, msg);
+        let commands_ready = process.commands_ready();
+
+        // schedule `ToSend`
+        let process_region = self.process_region(process_id);
+        self.try_to_schedule(process_region, to_send);
+
+        // TODO avoid this
+        let process_region = self.process_region(process_id);
+
+        // and schedule new command results
+        commands_ready.into_iter().for_each(|cmd_result| {
+            // create action and schedule it
+            let client_id = cmd_result.rifl().source();
+            let action = ScheduleAction::SendToClient(client_id, cmd_result);
+            // get client's region
+            let to_region = self.client_region(client_id);
+            self.schedule_it(&process_region, &to_region, action);
+        });
+    }
+
     /// Get client's stats.
     /// TODO does this need to be mut?
     fn clients_stats(&mut self) -> HashMap<&Region, (usize, Stats)> {
-        let router = &mut self.router;
+        let simulation = &mut self.simulation;
         let mut region_to_latencies = HashMap::new();
 
         for (client_id, region) in self.client_to_region.iter() {
-            // get client from router
-            let client = router.get_client(*client_id);
+            // get client from simulation
+            let client = simulation.get_client(*client_id);
             // check client's issued commands and latencies
             let issued_commands = client.issued_commands();
             let latencies = client.latencies();
@@ -205,9 +227,8 @@ where
                 target.into_iter().for_each(|process_id| {
                     let message_to_self = from == process_id;
                     if message_to_self {
-                        // route immediately if message to self
-                        let to_send = self.router.route_to_process(from, process_id, msg.clone());
-                        self.try_to_schedule(from_region.clone(), to_send);
+                        // handle it immediately
+                        self.handle_in_process(process_id, process_id, msg.clone());
                     } else {
                         // othewise, create action and schedule it
                         let action = ScheduleAction::SendToProc(from, process_id, msg.clone());
@@ -217,17 +238,9 @@ where
                     }
                 });
             }
-            ToSend::ToClients(cmd_results) => {
-                // for each command result, schedule its delivery
-                cmd_results.into_iter().for_each(|cmd_result| {
-                    // create action and schedule it
-                    let client_id = cmd_result.rifl().source();
-                    let action = ScheduleAction::SendToClient(client_id, cmd_result);
-                    // get client's region
-                    let to_region = self.client_region(client_id);
-                    self.schedule_it(&from_region, &to_region, action);
-                });
-            }
+            // ToSend::ToClients(cmd_results) => {
+            //     // for each command result, schedule its delivery
+            // }
             ToSend::Nothing => {
                 // nothing to do
             }
@@ -286,6 +299,7 @@ mod tests {
     struct PingPong {
         bp: BaseProcess,
         acks: HashMap<Rifl, usize>,
+        commands_ready: Vec<CommandResult>,
     }
 
     impl Process for PingPong {
@@ -300,6 +314,7 @@ mod tests {
             Self {
                 bp,
                 acks: HashMap::new(),
+                commands_ready: Vec::new(),
             }
         }
 
@@ -352,13 +367,21 @@ mod tests {
                         self.acks.remove(&rifl);
                         // create fake command result
                         let cmd_result = CommandResult::new(rifl, 0);
-                        // notify client
-                        ToSend::ToClients(vec![cmd_result])
-                    } else {
-                        ToSend::Nothing
+                        // save new ready command
+                        self.commands_ready.push(cmd_result);
                     }
+
+                    // nothing to send
+                    ToSend::Nothing
                 }
             }
+        }
+
+        /// Returns new commands results to be sent to clients.
+        fn commands_ready(&mut self) -> Vec<CommandResult> {
+            let mut ready = Vec::new();
+            std::mem::swap(&mut ready, &mut self.commands_ready);
+            ready
         }
     }
 
