@@ -223,12 +223,13 @@ where
                 self.schedule_it(&from_region, &to_region, action);
             }
             ToSend::ToProcesses(from, target, msg) => {
+                let mut deliver_locally = false;
                 // for each process in target, schedule message delivery
                 target.into_iter().for_each(|process_id| {
                     let message_to_self = from == process_id;
                     if message_to_self {
-                        // handle it immediately
-                        self.handle_in_process(process_id, process_id, msg.clone());
+                        // do not schedule if message to self
+                        deliver_locally = true;
                     } else {
                         // othewise, create action and schedule it
                         let action = ScheduleAction::SendToProc(from, process_id, msg.clone());
@@ -237,10 +238,15 @@ where
                         self.schedule_it(&from_region, &to_region, action);
                     }
                 });
+
+                // handle now if `deliver_locally`
+                // NOTE that this needs to be done after scheduling the delivery in other processes
+                // so that any message that results from handling this message is schedule to arrive
+                // after the messages above!
+                if deliver_locally {
+                    self.handle_in_process(from, from, msg);
+                }
             }
-            // ToSend::ToClients(cmd_results) => {
-            //     // for each command result, schedule its delivery
-            // }
             ToSend::Nothing => {
                 // nothing to do
             }

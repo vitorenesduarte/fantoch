@@ -307,6 +307,10 @@ impl Newt {
             if process_votes.is_empty() {
                 ToSend::Nothing
             } else {
+                // println!(
+                //     "p{}: MPhantom for {:?} genereated!",
+                //     self.bp.process_id, dot
+                // );
                 let mphantom = Message::MPhantom { dot, process_votes };
                 ToSend::ToProcesses(self.bp.process_id, self.bp.all(), mphantom)
             }
@@ -357,6 +361,8 @@ impl Newt {
                 let ready = self.execute(to_execute);
                 self.commands_ready.extend(ready);
             }
+        } else {
+            println!("mphantom ignored");
         }
         ToSend::Nothing
     }
