@@ -21,21 +21,37 @@ impl MultiVotesTable {
         }
     }
 
-    // pub fn add_process_votes(
-    //     &mut self,
-    //     dot: Dot,
-    //     process_votes: ProcessVotes,
-    // ) -> Option<Vec<(Key, Vec<(Rifl, KVOp)>)>> {
-    //     process_votes.into_iter().map(|(key, vote_range)| {
+    #[must_use]
+    pub fn add_process_votes(
+        &mut self,
+        process_votes: ProcessVotes,
+    ) -> Option<Vec<(Key, Vec<(Rifl, KVOp)>)>> {
+        let to_execute = process_votes
+            .into_iter()
+            .map(|(key, range)| {
+                // TODO the borrow checker complains if `self.n` or
+                // `self.stability_threshold` is passed to `VotesTable::new`
+                let n = self.n;
+                let stability_threshold = self.stability_threshold;
+                // get this key's table
+                let table = self
+                    .tables
+                    .entry(key.clone())
+                    .or_insert_with(|| VotesTable::new(n, stability_threshold));
 
-    //     });
-    //     None
-    // }
+                // add op and votes to the table
+                table.add_vote_range(range);
+
+                // get new ops to be executed
+                let stable_ops = table.stable_ops().collect();
+                (key, stable_ops)
+            })
+            .collect();
+        Some(to_execute)
+    }
 
     /// Add a new command, its clock and votes to the votes table.
-    /// TODO Here we can't return a `Command` because it assumes one
-    /// command per key. Also, we don't really need the order enforced by
-    /// `Command` internal data structure.
+    #[must_use]
     pub fn add(
         &mut self,
         dot: Dot,
@@ -119,21 +135,25 @@ impl VotesTable {
         assert!(res.is_none());
 
         // update votes with the votes used on this command
-        vote_ranges.into_iter().for_each(|range| {
-            // assert there's at least one new vote
-            // println!(
-            //     "clock: {:?} | voter: {} | start: {} | end: {}",
-            //     self.votes_clock,
-            //     range.voter(),
-            //     range.start(),
-            //     range.end()
-            // );
-            assert!(self
-                .votes_clock
-                .add_range(&range.voter(), range.start(), range.end()));
-            // assert that the clock size didn't change
-            assert_eq!(self.votes_clock.len(), self.n);
-        });
+        vote_ranges
+            .into_iter()
+            .for_each(|range| self.add_vote_range(range));
+    }
+
+    fn add_vote_range(&mut self, range: VoteRange) {
+        // assert there's at least one new vote
+        // println!(
+        //     "clock: {:?} | voter: {} | start: {} | end: {}",
+        //     self.votes_clock,
+        //     range.voter(),
+        //     range.start(),
+        //     range.end()
+        // );
+        assert!(self
+            .votes_clock
+            .add_range(&range.voter(), range.start(), range.end()));
+        // assert that the clock size didn't change
+        assert_eq!(self.votes_clock.len(), self.n);
     }
 
     fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {

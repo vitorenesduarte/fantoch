@@ -321,34 +321,26 @@ impl Newt {
         let info = self.cmds_info.get(dot);
 
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
-        if info.status != Status::COMMIT {
+        if info.status == Status::COMMIT {
             // only accept new votes for this command if it has already been committed
             // - if no messages are lost, this should always be the case
             // - otherwise, we should simply execute recovery
-            return ToSend::Nothing;
+
+            let to_execute = self.table.add_process_votes(process_votes);
+            // execute commands
+            if let Some(to_execute) = to_execute {
+                let ready = self.execute(to_execute);
+                self.commands_ready.extend(ready);
+            }
         }
-
-        // let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
-
-        // // execute commands
-        // if let Some(to_execute) = to_execute {
-        //     let ready = self.execute(to_execute);
-        //     // if there ready commands, forward them to clients
-        //     if ready.is_empty() {
-        //         ToSend::Nothing
-        //     } else {
-        //         ToSend::ToClients(ready)
-        //     }
-        // } else {
-        //     // no message to be sent
-        //     ToSend::Nothing
-        // }
         ToSend::Nothing
     }
 
+    #[must_use]
     fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) -> Vec<CommandResult> {
         to_execute
             .into_iter()
+            // flatten each pair with a key and list of ready partial operations
             .flat_map(|(key, ops)| {
                 ops.into_iter()
                     .map(move |(rifl, op)| (key.clone(), rifl, op))
