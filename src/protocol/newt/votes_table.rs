@@ -141,7 +141,6 @@ impl VotesTable {
     }
 
     fn add_vote_range(&mut self, range: VoteRange) {
-        // assert there's at least one new vote
         // println!(
         //     "clock: {:?} | voter: {} | start: {} | end: {}",
         //     self.votes_clock,
@@ -149,6 +148,7 @@ impl VotesTable {
         //     range.start(),
         //     range.end()
         // );
+        // assert there's at least one new vote
         assert!(self
             .votes_clock
             .add_range(&range.voter(), range.start(), range.end()));

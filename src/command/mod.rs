@@ -7,9 +7,10 @@ pub use pending::Pending;
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, Key, Value};
 use std::collections::hash_map::{self, HashMap};
+use std::fmt;
 use std::iter::{self, FromIterator};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Command {
     rifl: Rifl,
     ops: HashMap<Key, KVOp>,
@@ -65,6 +66,12 @@ impl IntoIterator for Command {
     /// Returns a `Command` into-iterator.
     fn into_iter(self) -> Self::IntoIter {
         self.ops.into_iter()
+    }
+}
+
+impl fmt::Debug for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:?} -> {:?})", self.rifl, self.ops.keys())
     }
 }
 

@@ -157,6 +157,11 @@ impl Newt {
         quorum: Vec<ProcessId>,
         clock: u64,
     ) -> ToSend<Message> {
+        // println!(
+        //     "p{}: MCollect({:?}, {:?}, {}) from {}",
+        //     self.bp.process_id, dot, cmd, clock, from
+        // );
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -209,6 +214,11 @@ impl Newt {
         clock: u64,
         remote_process_votes: ProcessVotes,
     ) -> ToSend<Message> {
+        // println!(
+        //     "p{}: MCollectAck({:?}, {}, {:?}) from {}",
+        //     self.bp.process_id, dot, clock, remote_process_votes, from
+        // );
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -270,6 +280,11 @@ impl Newt {
         clock: u64,
         votes: Votes,
     ) -> ToSend<Message> {
+        // println!(
+        //     "p{}: MCommit({:?}, {}, {:?})",
+        //     self.bp.process_id, dot, clock, votes
+        // );
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -317,6 +332,11 @@ impl Newt {
     }
 
     fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
+        // println!(
+        //     "p{}: MPhantom({:?}, {:?})",
+        //     self.bp.process_id, dot, process_votes
+        // );
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -325,6 +345,11 @@ impl Newt {
             // only accept new votes for this command if it has already been committed
             // - if no messages are lost, this should always be the case
             // - otherwise, we should simply execute recovery
+
+            // println!(
+            //     "{}: dot {:?} with more votes {:?}",
+            //     self.bp.process_id, dot, process_votes
+            // );
 
             let to_execute = self.table.add_process_votes(process_votes);
             // execute commands
