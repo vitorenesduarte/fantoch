@@ -21,9 +21,8 @@ impl Votes {
     /// Add `ProcessVotes` to `Votes`.
     pub fn add(&mut self, process_votes: ProcessVotes) {
         process_votes.into_iter().for_each(|(key, vote)| {
-            // get current votes
-            let current_votes = self.votes.entry(key).or_insert_with(Vec::new);
-            // add new vote
+            // add new vote to current set of votes
+            let current_votes = self.get_key_votes(key);
             current_votes.push(vote);
         });
     }
@@ -33,11 +32,14 @@ impl Votes {
     /// opposite.
     pub fn merge(&mut self, remote_votes: Votes) {
         remote_votes.into_iter().for_each(|(key, key_votes)| {
-            // get current votes
-            let current_votes = self.votes.entry(key).or_insert_with(Vec::new);
-            // add new votes
+            // add new votes to current set of votes
+            let current_votes = self.get_key_votes(key);
             current_votes.extend(key_votes);
         });
+    }
+
+    fn get_key_votes(&mut self, key: Key) -> &mut Vec<VoteRange> {
+        self.votes.entry(key).or_insert_with(Vec::new)
     }
 }
 
