@@ -22,13 +22,7 @@ pub struct Stats {
 
 impl fmt::Debug for Stats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "({:.0}, {:.2}, {:.2})",
-            self.mean.value(),
-            self.cov.value(),
-            self.mdtm.value()
-        )
+        write!(f, "({:.0}, {:.2})", self.mean.value(), self.cov.value(),)
     }
 }
 
