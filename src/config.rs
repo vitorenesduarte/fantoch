@@ -4,6 +4,8 @@ pub struct Config {
     n: usize,
     /// number of tolerated faults
     f: usize,
+    /// defines whether newt should employ tiny quorums or not
+    newt_tiny_quorums: bool,
 }
 
 impl Config {
@@ -15,7 +17,13 @@ impl Config {
         if f > n / 2 {
             println!("WARNING: f={} is larger than a majority with n={}", f, n);
         }
-        Self { n, f }
+        // by default, `tiny_quorums = false`
+        let newt_tiny_quorums = false;
+        Self {
+            n,
+            f,
+            newt_tiny_quorums,
+        }
     }
 
     /// Retrieve the number of processes.
@@ -26,6 +34,16 @@ impl Config {
     /// Retrieve the number of faults tolerated.
     pub fn f(&self) -> usize {
         self.f
+    }
+
+    /// Checks whether newt tiny quorums is enabled or not.
+    pub fn newt_tiny_quorums(&self) -> bool {
+        self.newt_tiny_quorums
+    }
+
+    /// Changes the value of `newt_tiny_quorums`.
+    pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
+        self.newt_tiny_quorums = newt_tiny_quorums;
     }
 }
 
@@ -44,5 +62,26 @@ mod tests {
 
         assert_eq!(config.n(), n);
         assert_eq!(config.f(), f);
+    }
+
+    #[test]
+    fn newt_tiny_quorums() {
+        // n and f
+        let n = 5;
+        let f = 1;
+
+        // config
+        let mut config = Config::new(n, f);
+
+        // by default, false
+        assert!(!config.newt_tiny_quorums());
+
+        // if we change it to false, remains false
+        config.set_newt_tiny_quorums(false);
+        assert!(!config.newt_tiny_quorums());
+
+        // if we change it to true, it becomes true
+        config.set_newt_tiny_quorums(true);
+        assert!(config.newt_tiny_quorums());
     }
 }

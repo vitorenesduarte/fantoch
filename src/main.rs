@@ -26,9 +26,10 @@ fn main() {
 
     // f
     let f = 1;
+    let tiny_quorums = false;
 
     // clients workload
-    let conflict_rate = 2;
+    let conflict_rate = 0;
     let total_commands = 500;
     let workload = Workload::new(conflict_rate, total_commands);
 
@@ -40,7 +41,8 @@ fn main() {
         println!("running simulation for n={}", n);
         println!();
         // config
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
+        config.set_newt_tiny_quorums(tiny_quorums);
 
         // function that creates ping pong processes
         let create_process =

@@ -35,8 +35,7 @@ impl Process for Newt {
     /// Creates a new `Newt` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size and stability threshold
-        let q = Newt::fast_quorum_size(&config);
-        let stability_threshold = Newt::stability_threshold(&config);
+        let (stability_threshold, q) = Newt::read_write_quorum_sizes(&config);
 
         // create `MultiVotesTable`
         let table = MultiVotesTable::new(config.n(), stability_threshold);
@@ -109,19 +108,24 @@ impl Process for Newt {
 }
 
 impl Newt {
-    /// Computes `Newt` fast quorum size.
-    fn fast_quorum_size(config: &Config) -> usize {
-        2 * config.f()
-    }
-
-    /// Computes `Newt` stability threshold.
+    /// Computes `Newt` stability threshold and fast quorum size.
     /// Typically the threshold should be n - q + 1, where n is the number of
-    /// processes and q the size of the write quorum. In `Newt`, although
+    /// processes and q the size of the write quorum. In `Newt` e.g. with tiny quorums, although
     /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
     /// The quorum size of 2f ensures that all clocks are computed from f + 1
     /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
-    fn stability_threshold(config: &Config) -> usize {
-        config.n() - config.f()
+    fn read_write_quorum_sizes(config: &Config) -> (usize, usize) {
+        let n = config.n();
+        let f = config.f();
+        if config.newt_tiny_quorums() {
+            let stability_threshold = n - f;
+            let fast_quorum_size = 2 * f;
+            (stability_threshold, fast_quorum_size)
+        } else {
+            let stability_threshold = (n / 2) + 1;
+            let fast_quorum_size = (n / 2) + f;
+            (stability_threshold, fast_quorum_size)
+        }
     }
 
     /// Handles a submit operation by a client.
@@ -486,13 +490,31 @@ mod tests {
 
     #[test]
     fn newt_parameters() {
-        let config = Config::new(7, 1);
-        assert_eq!(Newt::fast_quorum_size(&config), 2);
-        assert_eq!(Newt::stability_threshold(&config), 6);
+        // tiny quorums = false
+        let mut config = Config::new(7, 1);
+        config.set_newt_tiny_quorums(false);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 4);
+        assert_eq!(w, 4);
 
-        let config = Config::new(7, 2);
-        assert_eq!(Newt::fast_quorum_size(&config), 4);
-        assert_eq!(Newt::stability_threshold(&config), 5);
+        let mut config = Config::new(7, 2);
+        config.set_newt_tiny_quorums(false);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 4);
+        assert_eq!(w, 5);
+
+        // tiny quorums = true
+        let mut config = Config::new(7, 1);
+        config.set_newt_tiny_quorums(true);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 6);
+        assert_eq!(w, 2);
+
+        let mut config = Config::new(7, 2);
+        config.set_newt_tiny_quorums(true);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 5);
+        assert_eq!(w, 4);
     }
 
     #[test]
