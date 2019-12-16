@@ -39,8 +39,8 @@ impl Votes {
     }
 
     /// Removes the votes on some key.
-    pub fn remove_key_votes(&mut self, key: &Key) -> Option<(Key, Vec<VoteRange>)> {
-        self.votes.remove_entry(key)
+    pub fn remove_votes(&mut self, key: &Key) -> Option<Vec<VoteRange>> {
+        self.votes.remove(key)
     }
 
     fn get_key_votes(&mut self, key: Key) -> &mut Vec<VoteRange> {

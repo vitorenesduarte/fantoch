@@ -63,13 +63,13 @@ impl MultiVotesTable {
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
         cmd.into_iter()
-            .map(|(op_key, op)| {
+            .map(|(key, op)| {
                 // get votes on this key
-                let (key, vote_ranges) = votes
-                    .remove_key_votes(&op_key)
+                let vote_ranges = votes
+                    .remove_votes(&key)
                     .expect("key should have been voted on");
 
-                let stable_ops = self.update_table(&op_key, |table| {
+                let stable_ops = self.update_table(&key, |table| {
                     // add op and votes to the table
                     table.add(sort_id, rifl, op, vote_ranges);
                 });
@@ -78,7 +78,6 @@ impl MultiVotesTable {
             .collect()
     }
 
-    //
     #[must_use]
     fn update_table<F>(&mut self, key: &Key, update: F) -> Vec<(Rifl, KVOp)>
     where
