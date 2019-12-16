@@ -24,8 +24,10 @@ fn main() {
     // planet
     let planet = Planet::new("latency/");
 
-    // f
+    // n and f
+    let ns = vec![3, 5, 7, 9, 11, 13];
     let f = 1;
+
     // let tiny_quorums_configs = vec![false, true];
     let tiny_quorums_configs = vec![false];
 
@@ -40,7 +42,7 @@ fn main() {
 
     for tiny_quorums in tiny_quorums_configs {
         println!("TINY QUORUMS: {}", tiny_quorums);
-        for n in vec![3, 5, 7, 9, 11, 13] {
+        for &n in &ns {
             println!("running simulation for n={}", n);
             println!();
             // config

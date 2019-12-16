@@ -79,7 +79,7 @@ impl Stats {
 
     fn compute_stats(values: &[u64]) -> (F64, F64, F64) {
         // transform `u64`s in `f64`s
-        let values: Vec<f64> = values.into_iter().map(|x| *x as f64).collect();
+        let values: Vec<f64> = values.iter().map(|x| *x as f64).collect();
 
         // compute mean
         let mean = Self::compute_mean(&values);

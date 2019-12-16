@@ -8,6 +8,7 @@ pub struct Schedule<A> {
 }
 
 impl<A> Schedule<A> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             schedule: BTreeMap::new(),

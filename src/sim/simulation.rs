@@ -16,6 +16,7 @@ where
     P: Process,
 {
     /// Create a new `Simulation`.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Simulation {
             processes: HashMap::new(),
