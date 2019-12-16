@@ -242,19 +242,17 @@ impl Newt {
         // occurences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
-        // // optimization: bump all keys clocks in `cmd` to be `max_clock`
-        // // - this prevents us from generating votes (either when clients submit new operations or
-        // //   when handling `MCollect` from other processes) that could potentially delay the
-        // //   execution of this command
-        // let cmd = info.cmd.as_ref().unwrap();
-        // let process_votes = self.keys_clocks.process_votes(cmd, max_clock);
-        // println!(
-        //     "{}: dot {:?} local votes {:?}",
-        //     self.bp.process_id, dot, process_votes
-        // );
-
-        // // update votes with local votes
-        // info.votes.add(process_votes);
+        // optimization: bump all keys clocks in `cmd` to be `max_clock`
+        // - this prevents us from generating votes (either when clients submit new operations or
+        //   when handling `MCollect` from other processes) that could potentially delay the
+        //   execution of this command
+        let cmd = info
+            .cmd
+            .as_ref()
+            .expect("there should be a command payload in the MCollectAck handler");
+        let process_votes = self.keys_clocks.process_votes(cmd, max_clock);
+        // update votes with local votes
+        info.votes.add(process_votes);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
