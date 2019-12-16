@@ -72,9 +72,8 @@ fn main() {
             let stats = runner.run();
             println!("{:?}", stats);
 
-            let stats_count = stats.len();
             let expected_commands_per_region = total_commands * clients_per_region;
-            let mean = stats
+            let (mean_sum, p5_sum, p95_sum, p99_sum) = stats
                 .iter()
                 .map(|(region, (region_issued_commands, region_stats))| {
                     if *region_issued_commands != expected_commands_per_region {
@@ -83,11 +82,29 @@ fn main() {
                             region, region_issued_commands, expected_commands_per_region
                         );
                     }
-                    region_stats.mean().value()
+                    (
+                        region_stats.mean().value(),
+                        region_stats.percentile(0.5).value(),
+                        region_stats.percentile(0.95).value(),
+                        region_stats.percentile(0.99).value(),
+                    )
                 })
-                .sum::<f64>()
-                / (stats_count as f64);
-            println!("n={} | {}", n, mean as u64);
+                .fold(
+                    (0.0, 0.0, 0.0, 0.0),
+                    |(mean_acc, p5_acc, p95_acc, p99_acc), (mean, p5, p95, p99)| {
+                        (mean_acc + mean, p5_acc + p5, p95_acc + p95, p99_acc + p99)
+                    },
+                );
+            // TODO averaging of percentiles is just wrong, but we'll do it for now
+            let stats_count = stats.len() as f64;
+            println!(
+                "n={} | avg={} p5={} p95={} p99={}",
+                n,
+                mean_sum / stats_count,
+                p5_sum / stats_count,
+                p95_sum / stats_count,
+                p99_sum / stats_count
+            );
         }
     }
 }
