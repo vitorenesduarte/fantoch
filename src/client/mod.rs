@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(client.latencies(), &vec![10, 5]);
 
         // check stats
-        let stats = Stats::from(client.latencies());
+        let stats = Stats::from(client.latencies().to_vec());
         assert_eq!(stats.mean(), F64::new(7.5));
     }
 }

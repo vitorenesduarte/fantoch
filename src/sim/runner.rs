@@ -204,7 +204,7 @@ where
         region_to_latencies
             .into_iter()
             .map(|(region, (total_issued_commands, latencies))| {
-                let stats = Stats::from(&latencies);
+                let stats = Stats::from(latencies);
                 (region, (total_issued_commands, stats))
             })
             .collect()
