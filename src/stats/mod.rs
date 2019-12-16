@@ -234,5 +234,6 @@ mod tests {
 
         assert_eq!(stats.percentile(0.9), F64::new(98.0));
         assert_eq!(stats.percentile(0.5), F64::new(77.0));
+        assert_eq!(stats.percentile(0.2), F64::new(64.0));
     }
 }
