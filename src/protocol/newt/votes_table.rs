@@ -3,6 +3,7 @@ use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
 use crate::protocol::newt::votes::{ProcessVotes, VoteRange, Votes};
 use std::collections::{BTreeMap, HashMap};
+use std::mem;
 use threshold::AEClock;
 
 pub struct MultiVotesTable {
@@ -19,23 +20,6 @@ impl MultiVotesTable {
             stability_threshold,
             tables: HashMap::new(),
         }
-    }
-
-    #[must_use]
-    pub fn add_process_votes(
-        &mut self,
-        process_votes: ProcessVotes,
-    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
-        process_votes
-            .into_iter()
-            .map(|(key, range)| {
-                let stable_ops = self.update_table(&key, |table| {
-                    // add range to table
-                    table.add_vote_range(range);
-                });
-                (key, stable_ops)
-            })
-            .collect()
     }
 
     /// Add a new command, its clock and votes to the votes table.
@@ -78,10 +62,29 @@ impl MultiVotesTable {
             .collect()
     }
 
+    /// Adds phantom votes to the votes table.
+    #[must_use]
+    pub fn add_phantom_votes(
+        &mut self,
+        process_votes: ProcessVotes,
+    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
+        process_votes
+            .into_iter()
+            .map(|(key, range)| {
+                let stable_ops = self.update_table(&key, |table| {
+                    // add range to table
+                    table.add_vote_range(range);
+                });
+                (key, stable_ops)
+            })
+            .collect()
+    }
+
+    // Generic function to be used when updating some votes table.
     #[must_use]
     fn update_table<F>(&mut self, key: &Key, update: F) -> Vec<(Rifl, KVOp)>
     where
-        F: FnOnce(&mut VotesTable) -> (),
+        F: FnOnce(&mut VotesTable),
     {
         let table = match self.tables.get_mut(key) {
             Some(table) => table,
@@ -134,13 +137,6 @@ impl VotesTable {
     }
 
     fn add_vote_range(&mut self, range: VoteRange) {
-        // println!(
-        //     "clock: {:?} | voter: {} | start: {} | end: {}",
-        //     self.votes_clock,
-        //     range.voter(),
-        //     range.start(),
-        //     range.end()
-        // );
         // assert there's at least one new vote
         assert!(self
             .votes_clock
@@ -173,7 +169,7 @@ impl VotesTable {
         let stable = {
             let mut unstable = self.ops.split_off(&stable_sort_id);
             // swap unstable with self.cmds
-            std::mem::swap(&mut unstable, &mut self.ops);
+            mem::swap(&mut unstable, &mut self.ops);
             // now unstable contains in fact the stable
             unstable
         };

@@ -336,7 +336,7 @@ impl Newt {
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
             // only incorporate votes in the command votes table if the command has been committed
-            let to_execute = self.table.add_process_votes(process_votes);
+            let to_execute = self.table.add_phantom_votes(process_votes);
             self.execute(to_execute);
         } else {
             // if not committed yet, update votes with remote votes
