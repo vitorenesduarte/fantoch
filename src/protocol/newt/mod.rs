@@ -11,6 +11,7 @@ use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
+use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::protocol::newt::votes::{ProcessVotes, Votes};
@@ -157,10 +158,14 @@ impl Newt {
         quorum: Vec<ProcessId>,
         clock: u64,
     ) -> ToSend<Message> {
-        // println!(
-        //     "p{}: MCollect({:?}, {:?}, {}) from {}",
-        //     self.bp.process_id, dot, cmd, clock, from
-        // );
+        log!(
+            "p{}: MCollect({:?}, {:?}, {}) from {}",
+            self.bp.process_id,
+            dot,
+            cmd,
+            clock,
+            from
+        );
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -180,12 +185,6 @@ impl Newt {
         let process_votes = self.keys_clocks.process_votes(&cmd, cmd_clock);
         // check that there's one vote per key
         assert_eq!(process_votes.len(), cmd.key_count());
-
-        // if coordinator, set keys in `info.votes`
-        // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
-        if self.bp.process_id == dot.source() {
-            info.votes.set_keys(&cmd);
-        }
 
         // update command info:
         // - change status to collect
@@ -214,10 +213,14 @@ impl Newt {
         clock: u64,
         remote_process_votes: ProcessVotes,
     ) -> ToSend<Message> {
-        // println!(
-        //     "p{}: MCollectAck({:?}, {}, {:?}) from {}",
-        //     self.bp.process_id, dot, clock, remote_process_votes, from
-        // );
+        log!(
+            "p{}: MCollectAck({:?}, {}, {:?}) from {}",
+            self.bp.process_id,
+            dot,
+            clock,
+            remote_process_votes,
+            from
+        );
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -254,12 +257,17 @@ impl Newt {
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
+                // reset local votes as we're going to receive them right away at the same time
+                // avoiding a `info.votes.clone()`
+                let mut votes = Votes::new();
+                std::mem::swap(&mut info.votes, &mut votes);
+
                 // create `MCommit`
                 let mcommit = Message::MCommit {
                     dot,
                     cmd: info.cmd.clone(),
                     clock: max_clock,
-                    votes: info.votes.clone(),
+                    votes,
                 };
 
                 // return `ToSend`
@@ -278,12 +286,15 @@ impl Newt {
         dot: Dot,
         cmd: Option<Command>,
         clock: u64,
-        votes: Votes,
+        mut votes: Votes,
     ) -> ToSend<Message> {
-        // println!(
-        //     "p{}: MCommit({:?}, {}, {:?})",
-        //     self.bp.process_id, dot, clock, votes
-        // );
+        log!(
+            "p{}: MCommit({:?}, {}, {:?})",
+            self.bp.process_id,
+            dot,
+            clock,
+            votes
+        );
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -299,6 +310,12 @@ impl Newt {
         info.cmd = cmd;
         info.clock = clock;
 
+        // get local votes
+        let mut local_votes = Votes::new();
+        std::mem::swap(&mut info.votes, &mut local_votes);
+        // merge local votes (probably from phantom messages) with received votes
+        votes.merge(local_votes);
+
         // generate phantom votes if committed clock is higher than the local key's clock
         let to_send = if let Some(cmd) = info.cmd.as_ref() {
             // if not a no op, check if we can generate more votes that can speed-up execution
@@ -307,10 +324,6 @@ impl Newt {
             if process_votes.is_empty() {
                 ToSend::Nothing
             } else {
-                // println!(
-                //     "p{}: MPhantom for {:?} genereated!",
-                //     self.bp.process_id, dot
-                // );
                 let mphantom = Message::MPhantom { dot, process_votes };
                 ToSend::ToProcesses(self.bp.process_id, self.bp.all(), mphantom)
             }
@@ -318,72 +331,61 @@ impl Newt {
             ToSend::Nothing
         };
 
-        // update votes table and get commands that can be executed
-        // println!(
-        //     "{}: dot {:?} committed with votes {:?}",
-        //     self.bp.process_id, dot, votes
-        // );
+        // update votes table and execute commands that can be executed
         let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
-
-        // execute commands
-        if let Some(to_execute) = to_execute {
-            let ready = self.execute(to_execute);
-            self.commands_ready.extend(ready);
-        }
+        self.execute(to_execute);
 
         // return `ToSend`
         to_send
     }
 
     fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
-        // println!(
-        //     "p{}: MPhantom({:?}, {:?})",
-        //     self.bp.process_id, dot, process_votes
-        // );
+        log!(
+            "p{}: MPhantom({:?}, {:?})",
+            self.bp.process_id,
+            dot,
+            process_votes
+        );
 
         // get cmd info
         let info = self.cmds_info.get(dot);
 
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
-            // only accept new votes for this command if it has already been committed
-            // - if no messages are lost, this should always be the case
-            // - otherwise, we should simply execute recovery
-
-            // println!(
-            //     "{}: dot {:?} with more votes {:?}",
-            //     self.bp.process_id, dot, process_votes
-            // );
-
+            // only incorporate votes in the command votes table if the command has been committed
             let to_execute = self.table.add_process_votes(process_votes);
-            // execute commands
-            if let Some(to_execute) = to_execute {
-                let ready = self.execute(to_execute);
-                self.commands_ready.extend(ready);
-            }
+            self.execute(to_execute);
         } else {
-            println!("mphantom ignored");
+            // if not committed yet, update votes with remote votes
+            info.votes.add(process_votes);
         }
         ToSend::Nothing
     }
 
-    #[must_use]
-    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) -> Vec<CommandResult> {
-        to_execute
-            .into_iter()
-            // flatten each pair with a key and list of ready partial operations
-            .flat_map(|(key, ops)| {
-                ops.into_iter()
-                    .map(move |(rifl, op)| (key.clone(), rifl, op))
-            })
-            .filter_map(|(key, rifl, op)| {
-                // execute op in the `KVStore`
-                let op_result = self.store.execute(&key, op);
+    fn execute(&mut self, to_execute: Option<Vec<(Key, Vec<(Rifl, KVOp)>)>>) {
+        if let Some(to_execute) = to_execute {
+            // borrow everything we'll need
+            let commands_ready = &mut self.commands_ready;
+            let store = &mut self.store;
+            let pending = &mut self.pending;
 
-                // add partial result to `Pending`
-                self.pending.add_partial(rifl, key, op_result)
-            })
-            .collect()
+            // get more commands that are ready to be executed
+            let ready = to_execute
+                .into_iter()
+                // flatten each pair with a key and list of ready partial operations
+                .flat_map(|(key, ops)| {
+                    ops.into_iter()
+                        .map(move |(rifl, op)| (key.clone(), rifl, op))
+                })
+                .filter_map(|(key, rifl, op)| {
+                    // execute op in the `KVStore`
+                    let op_result = store.execute(&key, op);
+
+                    // add partial result to `Pending`
+                    pending.add_partial(rifl, key, op_result)
+                });
+            commands_ready.extend(ready);
+        }
     }
 }
 

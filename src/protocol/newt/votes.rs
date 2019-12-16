@@ -1,4 +1,3 @@
-use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
 use std::collections::hash_map::{self, HashMap};
@@ -19,30 +18,25 @@ impl Votes {
         Default::default()
     }
 
-    /// Initializes `Votes` instance.
-    pub fn set_keys(&mut self, cmd: &Command) {
-        // insert an empty set of votes for each key
-        cmd.keys().for_each(|key| {
-            // TODO use `Vec::with_capacity` here if we can
-            let empty_votes = vec![];
-            self.votes.insert(key.clone(), empty_votes);
+    /// Add `ProcessVotes` to `Votes`.
+    pub fn add(&mut self, process_votes: ProcessVotes) {
+        process_votes.into_iter().for_each(|(key, vote)| {
+            // get current votes
+            let current_votes = self.votes.entry(key).or_insert_with(Vec::new);
+            // add new vote
+            current_votes.push(vote);
         });
     }
 
-    /// Add `ProcessVotes` to `Votes`.
-    pub fn add(&mut self, process_votes: ProcessVotes) {
-        // TODO in the past `self.votes` was ordered and if `process_votes` contains all keys, we
-        // can implement this method efficiently with `iter_mut()` zipped with `process_votes`
-        // - the reason we have this implementation now is because maybe sometimes processes don't
-        //   want to vote on all keys, for example, when generating phantom votes upon commit
-        process_votes.into_iter().for_each(|(key, vote)| {
+    /// Merge with another `Votes`.
+    /// Performance should be better if `self.votes.len() > remote_votes.len()` than with the
+    /// opposite.
+    pub fn merge(&mut self, remote_votes: Votes) {
+        remote_votes.into_iter().for_each(|(key, key_votes)| {
             // get current votes
-            let current_votes = self
-                .votes
-                .get_mut(&key)
-                .expect("voted key should be part of votes already");
-            // add new vote
-            current_votes.push(vote);
+            let current_votes = self.votes.entry(key).or_insert_with(Vec::new);
+            // add new votes
+            current_votes.extend(key_votes);
         });
     }
 }
@@ -102,6 +96,7 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
     use crate::id::Rifl;
     use crate::protocol::newt::clocks::KeysClocks;
     use std::cmp::max;
@@ -127,13 +122,11 @@ mod tests {
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
         let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
         let mut votes_a = Votes::new();
-        votes_a.set_keys(&cmd_a);
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::new();
-        votes_ab.set_keys(&cmd_ab);
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)
