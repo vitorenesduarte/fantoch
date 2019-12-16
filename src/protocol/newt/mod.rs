@@ -616,13 +616,18 @@ mod tests {
             .filter(|to_send| to_send.to_processes())
             .collect::<Vec<_>>();
         assert_eq!(to_sends.len(), 1);
-        match to_sends.into_iter().next().unwrap() {
+
+        let to_send = to_sends.into_iter().next().unwrap();
+        match to_send.clone() {
             ToSend::ToProcesses(from, target, Message::MPhantom { .. }) => {
                 assert_eq!(from, process_id_3);
                 assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
             }
             _ => panic!("Message::MPhantom not found!"),
         }
+
+        let nothings = simulation.forward_to_processes(to_send);
+        assert!(nothings.into_iter().all(|to_send| to_send.is_nothing()));
 
         // process 1 should have a result to the client
         let commands_ready = simulation.get_process(process_id_1).commands_ready();
