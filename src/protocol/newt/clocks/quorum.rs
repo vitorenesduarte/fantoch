@@ -29,13 +29,12 @@ impl QuorumClocks {
         self.participants.contains(&process_id)
     }
 
-    /// Sets the new clock reported by `ProcessId` and returns the maximum clock
-    /// seen until now.
+    /// Sets the new clock reported by `ProcessId` and returns the maximum clock seen until now.
     pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
         assert!(self.participants.len() < self.q);
 
-        // record new participant
-        self.participants.insert(process_id);
+        // record new participant and check it's a new entry
+        assert!(self.participants.insert(process_id));
 
         // update max clock and max clock count
         match self.max_clock.cmp(&clock) {

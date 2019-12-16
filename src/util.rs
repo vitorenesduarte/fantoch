@@ -2,6 +2,22 @@ use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 
+// Debug version
+#[cfg(debug_assertions)]
+#[macro_export]
+macro_rules! log {
+    ($( $args:expr ),*) => { println!( $( $args ),* ); }
+}
+
+// Non-debug version
+#[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! log {
+    ($( $args:expr ),*) => {
+        ()
+    };
+}
+
 /// Updates the processes known by this process.
 pub fn sort_processes_by_distance(
     region: &Region,

@@ -28,35 +28,37 @@ impl KeysClocks {
             .expect("there must be at least one key in the command")
     }
 
-    /// Computes the votes consumed by this command.
-    pub fn process_votes(&mut self, cmd: &Command, highest: u64) -> ProcessVotes {
+    /// Vote up-to `clock`.
+    pub fn process_votes(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
         cmd.keys()
-            .map(|key| {
-                // vote from the current clock value + 1 until the highest vote
-                // (i.e. the maximum between all key's clocks)
-                let previous = self.key_clock_swap(key, highest);
+            .filter_map(|key| {
+                // get a mutable reference to current clock value
+                // TODO refactoring the following match block into a function will not work due to
+                // limitations in the borrow-checker
+                // - see: https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
+                // - this is supposed to be fixed by polonius: http://smallcultfollowing.com/babysteps/blog/2018/06/15/mir-based-borrow-check-nll-status-update/#polonius
+                let current = match self.clocks.get_mut(key) {
+                    Some(value) => value,
+                    None => self.clocks.entry(key.clone()).or_insert(0),
+                };
 
-                // create vote if we should
-                let vote = if previous < highest {
-                    let vr = VoteRange::new(self.id, previous + 1, highest);
-                    Some(vr)
+                // if we should vote
+                if *current < clock {
+                    // vote from the current clock value + 1 until `clock`
+                    let vr = VoteRange::new(self.id, *current + 1, clock);
+                    // update current clock to be `clock`
+                    *current = clock;
+                    Some((key.clone(), vr))
                 } else {
                     None
-                };
-                (key.clone(), vote)
+                }
             })
             .collect()
     }
 
-    /// Retrieves the current clock for a single `key`.
+    /// Retrieves the current clock for `key`.
     fn key_clock(&self, key: &Key) -> u64 {
         self.clocks.get(key).cloned().unwrap_or(0)
-    }
-
-    /// Updates the clock of this `key` to be `value` and returns the previous
-    /// clock value.
-    fn key_clock_swap(&mut self, key: &Key, value: u64) -> u64 {
-        self.clocks.insert(key.clone(), value).unwrap_or(0)
     }
 }
 
@@ -64,6 +66,14 @@ impl KeysClocks {
 mod tests {
     use super::*;
     use crate::id::Rifl;
+
+    // Returns the list of votes on some key.
+    fn get_key_votes(key: &Key, votes: &ProcessVotes) -> Vec<u64> {
+        let vr = votes
+            .get(key)
+            .expect("process should have voted on this key");
+        (vr.start()..=vr.end()).collect()
+    }
 
     #[test]
     fn keys_clocks_flow() {
@@ -86,12 +96,6 @@ mod tests {
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
         let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
-        // closure to retrieve the votes on some key
-        let get_key_votes = |votes: &ProcessVotes, key: &Key| {
-            let vr = votes.get(key).unwrap().as_ref().unwrap();
-            (vr.start()..=vr.end()).collect::<Vec<_>>()
-        };
-
         // -------------------------
         // first clock for command a
         let clock = clocks.clock(&cmd_a);
@@ -103,7 +107,7 @@ mod tests {
         // get process votes
         let process_votes = clocks.process_votes(&cmd_a, clock);
         assert_eq!(process_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&process_votes, &key_a), vec![1]);
+        assert_eq!(get_key_votes(&key_a, &process_votes), vec![1]);
 
         // -------------------------
         // second clock for command a
@@ -116,7 +120,7 @@ mod tests {
         // get process votes
         let process_votes = clocks.process_votes(&cmd_a, clock);
         assert_eq!(process_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&process_votes, &key_a), vec![2]);
+        assert_eq!(get_key_votes(&key_a, &process_votes), vec![2]);
 
         // -------------------------
         // first clock for command ab
@@ -129,8 +133,8 @@ mod tests {
         // get process votes
         let process_votes = clocks.process_votes(&cmd_ab, clock);
         assert_eq!(process_votes.len(), 2); // two keys
-        assert_eq!(get_key_votes(&process_votes, &key_a), vec![3]);
-        assert_eq!(get_key_votes(&process_votes, &key_b), vec![1, 2, 3]);
+        assert_eq!(get_key_votes(&key_a, &process_votes), vec![3]);
+        assert_eq!(get_key_votes(&key_b, &process_votes), vec![1, 2, 3]);
 
         // -------------------------
         // first clock for command b
@@ -143,6 +147,44 @@ mod tests {
         // get process votes
         let process_votes = clocks.process_votes(&cmd_a, clock);
         assert_eq!(process_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&process_votes, &key_a), vec![4]);
+        assert_eq!(get_key_votes(&key_a, &process_votes), vec![4]);
+    }
+
+    #[test]
+    fn keys_clocks_no_double_votes() {
+        // create key clocks
+        let mut clocks = KeysClocks::new(1);
+
+        // command
+        let key = String::from("A");
+        let cmd_rifl = Rifl::new(100, 1);
+        let cmd = Command::get(cmd_rifl, key.clone());
+
+        // get process votes up to 5
+        let process_votes = clocks.process_votes(&cmd, 5);
+        assert_eq!(process_votes.len(), 1); // single key
+        assert_eq!(get_key_votes(&key, &process_votes), vec![1, 2, 3, 4, 5]);
+
+        // get process votes up to 5 again: should get no votes
+        let process_votes = clocks.process_votes(&cmd, 5);
+        assert!(process_votes.is_empty());
+
+        // get process votes up to 6
+        let process_votes = clocks.process_votes(&cmd, 6);
+        assert_eq!(process_votes.len(), 1); // single key
+        assert_eq!(get_key_votes(&key, &process_votes), vec![6]);
+
+        // get process votes up to 2: should get no votes
+        let process_votes = clocks.process_votes(&cmd, 2);
+        assert!(process_votes.is_empty());
+
+        // get process votes up to 3: should get no votes
+        let process_votes = clocks.process_votes(&cmd, 3);
+        assert!(process_votes.is_empty());
+
+        // get process votes up to 10
+        let process_votes = clocks.process_votes(&cmd, 10);
+        assert_eq!(process_votes.len(), 1); // single key
+        assert_eq!(get_key_votes(&key, &process_votes), vec![7, 8, 9, 10]);
     }
 }

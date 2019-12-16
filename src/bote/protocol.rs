@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn protocol_stats() {
-        let stats = Stats::from(&vec![10, 20, 40, 10]);
+        let stats = Stats::from(vec![10, 20, 40, 10]);
         let f = 1;
         let placement = ClientPlacement::Colocated;
         let mut all_stats = ProtocolStats::new();

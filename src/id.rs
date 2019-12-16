@@ -1,3 +1,5 @@
+use std::fmt;
+
 // process ids
 pub type ProcessId = u64;
 pub type Dot = Id<ProcessId>;
@@ -9,7 +11,7 @@ pub type ClientId = u64;
 pub type Rifl = Id<ClientId>;
 pub type RiflGen = IdGen<ClientId>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id<S> {
     source: S,
     seq: u64,
@@ -27,6 +29,15 @@ where
     /// Retrieves the source that created this `Id`.
     pub fn source(&self) -> S {
         self.source
+    }
+}
+
+impl<S> fmt::Debug for Id<S>
+where
+    S: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:?}, {})", self.source, self.seq)
     }
 }
 

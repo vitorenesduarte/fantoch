@@ -11,12 +11,15 @@ use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
+use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::protocol::newt::votes::{ProcessVotes, Votes};
 use crate::protocol::newt::votes_table::MultiVotesTable;
 use crate::protocol::{BaseProcess, Process, ToSend};
+use std::cmp;
 use std::collections::HashMap;
+use std::mem;
 
 pub struct Newt {
     bp: BaseProcess,
@@ -25,6 +28,7 @@ pub struct Newt {
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
+    commands_ready: Vec<CommandResult>,
 }
 
 impl Process for Newt {
@@ -33,8 +37,7 @@ impl Process for Newt {
     /// Creates a new `Newt` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size and stability threshold
-        let q = Newt::fast_quorum_size(&config);
-        let stability_threshold = Newt::stability_threshold(&config);
+        let (stability_threshold, q) = Newt::read_write_quorum_sizes(&config);
 
         // create `MultiVotesTable`
         let table = MultiVotesTable::new(config.n(), stability_threshold);
@@ -45,6 +48,7 @@ impl Process for Newt {
         let cmds_info = CommandsInfo::new(q);
         let store = KVStore::new();
         let pending = Pending::new();
+        let commands_ready = Vec::new();
 
         // create `Newt`
         Self {
@@ -54,6 +58,7 @@ impl Process for Newt {
             table,
             store,
             pending,
+            commands_ready,
         }
     }
 
@@ -73,17 +78,15 @@ impl Process for Newt {
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
+    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
         match msg {
             Message::MCollect {
-                from,
                 dot,
                 cmd,
                 quorum,
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck {
-                from,
                 dot,
                 clock,
                 process_votes,
@@ -94,24 +97,32 @@ impl Process for Newt {
                 clock,
                 votes,
             } => self.handle_mcommit(dot, cmd, clock, votes),
+            Message::MPhantom { dot, process_votes } => self.handle_mphantom(dot, process_votes),
         }
+    }
+
+    /// Returns new commands results to be sent to clients.
+    fn commands_ready(&mut self) -> Vec<CommandResult> {
+        let mut ready = Vec::new();
+        mem::swap(&mut ready, &mut self.commands_ready);
+        ready
     }
 }
 
 impl Newt {
-    /// Computes `Newt` fast quorum size.
-    fn fast_quorum_size(config: &Config) -> usize {
-        2 * config.f()
-    }
-
-    /// Computes `Newt` stability threshold.
-    /// Typically the threshold should be n - q + 1, where n is the number of
-    /// processes and q the size of the write quorum. In `Newt`, although
-    /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
-    /// The quorum size of 2f ensures that all clocks are computed from f + 1
-    /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
-    fn stability_threshold(config: &Config) -> usize {
-        config.n() - config.f()
+    /// Computes `Newt` stability threshold (read quorum size) and fast quorum size (write quorum
+    /// size). Typically the threshold should be n - q + 1, where n is the number of processes and q
+    /// the size of the write quorum. In `Newt` e.g. with tiny quorums, although the fast quorum is
+    /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
+    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
+    fn read_write_quorum_sizes(config: &Config) -> (usize, usize) {
+        let n = config.n();
+        let f = config.f();
+        if config.newt_tiny_quorums() {
+            (n - f, 2 * f)
+        } else {
+            ((n / 2) + 1, (n / 2) + f)
+        }
     }
 
     /// Handles a submit operation by a client.
@@ -125,24 +136,17 @@ impl Newt {
         // compute its clock
         let clock = self.keys_clocks.clock(&cmd) + 1;
 
-        // clone the fast quorum
-        let fast_quorum = self
-            .bp
-            .fast_quorum
-            .clone()
-            .expect("should have a valid fast quorum upon submit");
-
-        // create `MCollect`
+        // create `MCollect` and target
         let mcollect = Message::MCollect {
-            from: self.id(),
             dot,
             cmd,
             clock,
-            quorum: fast_quorum.clone(),
+            quorum: self.bp.fast_quorum(),
         };
+        let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        ToSend::ToProcesses(fast_quorum, mcollect)
+        ToSend::ToProcesses(self.id(), target, mcollect)
     }
 
     fn handle_mcollect(
@@ -151,8 +155,17 @@ impl Newt {
         dot: Dot,
         cmd: Command,
         quorum: Vec<ProcessId>,
-        clock: u64,
+        remote_clock: u64,
     ) -> ToSend<Message> {
+        log!(
+            "p{}: MCollect({:?}, {:?}, {}) from {}",
+            self.id(),
+            dot,
+            cmd,
+            remote_clock,
+            from
+        );
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -161,41 +174,31 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // TODO can we somehow combine a subset of the next 3 operations in
-        // order to save HashMap operations?
+        // TODO can we somehow combine the next 2 operations in order to save map lookups?
 
         // compute command clock
-        let cmd_clock = std::cmp::max(clock, self.keys_clocks.clock(&cmd) + 1);
-
+        let clock = cmp::max(remote_clock, self.keys_clocks.clock(&cmd) + 1);
         // compute votes consumed by this command
-        // - this computation needs to occur before the next `bump_to`
-        let process_votes = self.keys_clocks.process_votes(&cmd, cmd_clock);
+        let process_votes = self.keys_clocks.process_votes(&cmd, clock);
+        // check that there's one vote per key
+        assert_eq!(process_votes.len(), cmd.key_count());
 
-        // if coordinator, set keys in `info.votes`
-        // (`info.quorum_clocks` is initialized in `self.cmds_info.get`)
-        if self.bp.process_id == dot.source() {
-            info.votes.set_keys(&cmd);
-        }
-
-        // update command info:
-        // - change status to collect
-        // - save command and quorum
-        // - set command clock
+        // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
         info.quorum = quorum;
-        info.clock = cmd_clock;
+        info.clock = clock;
 
-        // create `MCollectAck`
+        // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck {
-            from: self.bp.process_id,
             dot,
-            clock: info.clock,
+            clock,
             process_votes,
         };
+        let target = vec![from];
 
         // return `ToSend`
-        ToSend::ToProcesses(vec![from], mcollectack)
+        ToSend::ToProcesses(self.id(), target, mcollectack)
     }
 
     fn handle_mcollectack(
@@ -203,52 +206,71 @@ impl Newt {
         from: ProcessId,
         dot: Dot,
         clock: u64,
-        remote_process_votes: ProcessVotes,
+        remote_votes: ProcessVotes,
     ) -> ToSend<Message> {
+        log!(
+            "p{}: MCollectAck({:?}, {}, {:?}) from {}",
+            self.id(),
+            dot,
+            clock,
+            remote_votes,
+            from
+        );
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
         if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
-            // do nothing if we're no longer COLLECT or if this is a
-            // duplicated message
+            // do nothing if we're no longer COLLECT or if this is a duplicated message
             return ToSend::Nothing;
         }
 
         // update votes with remote votes
-        info.votes.add(remote_process_votes);
+        info.votes.add(remote_votes);
 
-        // update quorum clocks while computing max clock and its number of
-        // occurences
+        // update quorum clocks while computing max clock and its number of occurences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
         // - this prevents us from generating votes (either when clients submit new operations or
         //   when handling `MCollect` from other processes) that could potentially delay the
         //   execution of this command
-        let cmd = info.cmd.as_ref().unwrap();
-        let local_process_votes = self.keys_clocks.process_votes(cmd, max_clock);
-
-        // update votes with local votes
-        info.votes.add(local_process_votes);
+        match info.cmd.as_ref() {
+            Some(cmd) => {
+                let local_votes = self.keys_clocks.process_votes(cmd, max_clock);
+                // update votes with local votes
+                info.votes.add(local_votes);
+            }
+            None => {
+                panic!("there should be a command payload in the MCollectAck handler");
+            }
+        }
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
-                // create `MCommit`
+                // reset local votes as we're going to receive them right away; this also prevents a
+                // `info.votes.clone()`
+                let votes = Self::reset_votes(&mut info.votes);
+
+                // create `MCommit` and target
+                // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
+                // members, or send the payload to all in a slim-MConsensus
                 let mcommit = Message::MCommit {
                     dot,
                     cmd: info.cmd.clone(),
                     clock: max_clock,
-                    votes: info.votes.clone(),
+                    votes,
                 };
+                let target = self.bp.all();
 
                 // return `ToSend`
-                ToSend::ToProcesses(self.bp.all_processes.clone().unwrap(), mcommit)
+                ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
                 // TODO slow path
-                ToSend::Nothing
+                unimplemented!("slow path not implemented yet")
             }
         } else {
             ToSend::Nothing
@@ -260,8 +282,10 @@ impl Newt {
         dot: Dot,
         cmd: Option<Command>,
         clock: u64,
-        votes: Votes,
+        mut votes: Votes,
     ) -> ToSend<Message> {
+        log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
@@ -276,45 +300,80 @@ impl Newt {
         info.cmd = cmd;
         info.clock = clock;
 
-        // TODO generate phantom votes if committed clock is higher than the
-        // local key's clock
+        // get current votes (probably from phantom messages) merge them with received votes so that
+        // all together can be added to a votes table
+        let current_votes = Self::reset_votes(&mut info.votes);
+        votes.merge(current_votes);
 
-        // update votes table and get commands that can be executed
-        let to_execute = self
-            .table
-            .add(dot.source(), info.cmd.clone(), info.clock, votes);
+        // generate phantom votes if committed clock is higher than the local key's clock
+        let mut to_send = ToSend::Nothing;
+        if let Some(cmd) = info.cmd.as_ref() {
+            // if not a no op, check if we can generate more votes that can speed-up execution
+            let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
 
-        // execute commands
-        if let Some(to_execute) = to_execute {
-            let ready = self.execute(to_execute);
-            // if there ready commands, forward them to clients
-            if ready.is_empty() {
-                ToSend::Nothing
-            } else {
-                ToSend::ToClients(ready)
+            // create `MPhantom` if there are new votes
+            if !process_votes.is_empty() {
+                let mphantom = Message::MPhantom { dot, process_votes };
+                let target = self.bp.all();
+                to_send = ToSend::ToProcesses(self.bp.process_id, target, mphantom)
             }
-        } else {
-            // no message to be sent
-            ToSend::Nothing
         }
+
+        // update votes table and execute commands that can be executed
+        let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
+        self.execute(to_execute);
+
+        // return `ToSend`
+        to_send
     }
 
-    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) -> Vec<CommandResult> {
-        let mut ready = Vec::new();
-        for (key, ops) in to_execute {
-            for (rifl, op) in ops {
+    fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
+        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
+
+        // get cmd info
+        let info = self.cmds_info.get(dot);
+
+        // TODO if there's ever a Status::EXECUTE, this check might be incorrect
+        if info.status == Status::COMMIT {
+            // only incorporate votes in the command votes table if the command has been committed
+            let to_execute = self.table.add_phantom_votes(process_votes);
+            self.execute(to_execute);
+        } else {
+            // if not committed yet, update votes with remote votes
+            info.votes.add(process_votes);
+        }
+        ToSend::Nothing
+    }
+
+    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) {
+        // borrow everything we'll need
+        let commands_ready = &mut self.commands_ready;
+        let store = &mut self.store;
+        let pending = &mut self.pending;
+
+        // get more commands that are ready to be executed
+        let ready = to_execute
+            .into_iter()
+            // flatten each pair with a key and list of ready partial operations
+            .flat_map(|(key, ops)| {
+                ops.into_iter()
+                    .map(move |(rifl, op)| (key.clone(), rifl, op))
+            })
+            .filter_map(|(key, rifl, op)| {
                 // execute op in the `KVStore`
-                let op_result = self.store.execute(&key, op);
+                let op_result = store.execute(&key, op);
 
                 // add partial result to `Pending`
-                let cmd_result = self.pending.add_partial(rifl, key.clone(), op_result);
+                pending.add_partial(rifl, key, op_result)
+            });
+        commands_ready.extend(ready);
+    }
 
-                if let Some(cmd_result) = cmd_result {
-                    ready.push(cmd_result);
-                }
-            }
-        }
-        ready
+    // Replaces the value `local_votes` with empty votes, returning the previous votes.
+    fn reset_votes(local_votes: &mut Votes) -> Votes {
+        let mut votes = Votes::new();
+        mem::swap(&mut votes, local_votes);
+        votes
     }
 }
 
@@ -376,14 +435,12 @@ impl CommandInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     MCollect {
-        from: ProcessId,
         dot: Dot,
         cmd: Command,
         quorum: Vec<ProcessId>,
         clock: u64,
     },
     MCollectAck {
-        from: ProcessId,
         dot: Dot,
         clock: u64,
         process_votes: ProcessVotes,
@@ -393,6 +450,10 @@ pub enum Message {
         cmd: Option<Command>,
         clock: u64,
         votes: Votes,
+    },
+    MPhantom {
+        dot: Dot,
+        process_votes: ProcessVotes,
     },
 }
 
@@ -408,18 +469,36 @@ enum Status {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
-    use crate::sim::Router;
+    use crate::sim::Simulation;
     use crate::time::SimTime;
 
     #[test]
     fn newt_parameters() {
-        let config = Config::new(7, 1);
-        assert_eq!(Newt::fast_quorum_size(&config), 2);
-        assert_eq!(Newt::stability_threshold(&config), 6);
+        // tiny quorums = false
+        let mut config = Config::new(7, 1);
+        config.set_newt_tiny_quorums(false);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 4);
+        assert_eq!(w, 4);
 
-        let config = Config::new(7, 2);
-        assert_eq!(Newt::fast_quorum_size(&config), 4);
-        assert_eq!(Newt::stability_threshold(&config), 5);
+        let mut config = Config::new(7, 2);
+        config.set_newt_tiny_quorums(false);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 4);
+        assert_eq!(w, 5);
+
+        // tiny quorums = true
+        let mut config = Config::new(7, 1);
+        config.set_newt_tiny_quorums(true);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 6);
+        assert_eq!(w, 2);
+
+        let mut config = Config::new(7, 2);
+        config.set_newt_tiny_quorums(true);
+        let (r, w) = Newt::read_write_quorum_sizes(&config);
+        assert_eq!(r, 5);
+        assert_eq!(w, 4);
     }
 
     #[test]
@@ -429,11 +508,16 @@ mod tests {
         let process_id_2 = 2;
         let process_id_3 = 3;
 
+        // regions
+        let europe_west2 = Region::new("europe-west2");
+        let europe_west3 = Region::new("europe-west2");
+        let us_west1 = Region::new("europe-west2");
+
         // processes
         let processes = vec![
-            (process_id_1, Region::new("europe-west2")),
-            (process_id_2, Region::new("europe-west3")),
-            (process_id_3, Region::new("europe-west4")),
+            (process_id_1, europe_west2.clone()),
+            (process_id_2, europe_west3.clone()),
+            (process_id_3, us_west1.clone()),
         ];
 
         // planet
@@ -448,37 +532,22 @@ mod tests {
         let config = Config::new(n, f);
 
         // newts
-        let mut newt_1 = Newt::new(
-            process_id_1,
-            Region::new("europe-west2"),
-            planet.clone(),
-            config,
-        );
-        let mut newt_2 = Newt::new(
-            process_id_2,
-            Region::new("europe-west3"),
-            planet.clone(),
-            config,
-        );
-        let mut newt_3 = Newt::new(
-            process_id_3,
-            Region::new("europe-west4"),
-            planet.clone(),
-            config,
-        );
+        let mut newt_1 = Newt::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut newt_2 = Newt::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut newt_3 = Newt::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
         // discover processes in all newts
         newt_1.discover(processes.clone());
         newt_2.discover(processes.clone());
         newt_3.discover(processes.clone());
 
-        // create msg router
-        let mut router = Router::new();
+        // create simulation
+        let mut simulation = Simulation::new();
 
         // register processes
-        router.register_process(newt_1);
-        router.register_process(newt_2);
-        router.register_process(newt_3);
+        simulation.register_process(newt_1);
+        simulation.register_process(newt_2);
+        simulation.register_process(newt_3);
 
         // client workload
         let conflict_rate = 100;
@@ -487,7 +556,7 @@ mod tests {
 
         // create client 1 that is connected to newt 1
         let client_id = 1;
-        let client_region = Region::new("europe-west2");
+        let client_region = europe_west2.clone();
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
 
         // discover processes in client 1
@@ -500,59 +569,84 @@ mod tests {
         assert_eq!(target, process_id_1);
 
         // register clients
-        router.register_client(client_1);
+        simulation.register_client(client_1);
 
         // submit it in newt_0
-        let mcollects = router.process_submit(target, cmd);
+        let mcollects = simulation.get_process(target).submit(cmd);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_processes());
-        if let ToSend::ToProcesses(to, _) = mcollects.clone() {
+        if let ToSend::ToProcesses(_, to, _) = mcollects.clone() {
             assert_eq!(to.len(), 2 * f);
+            assert_eq!(to, vec![1, 2]);
         } else {
             panic!("ToSend::ToProcesses not found!");
         }
 
         // handle in mcollects
-        let mut mcollectacks = router.route(mcollects, &time);
+        let mut mcollectacks = simulation.forward_to_processes(mcollects);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
         assert!(mcollectacks.iter().all(|to_send| to_send.to_processes()));
 
         // handle the first mcollectack
-        let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
+        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
         // no mcommit yet
         assert!(mcommit_tosend.is_nothing());
 
         // handle the second mcollectack
-        let mut mcommits = router.route(mcollectacks.pop().unwrap(), &time);
+        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
         assert!(mcommit_tosend.to_processes());
-        if let ToSend::ToProcesses(to, _) = mcommit_tosend.clone() {
+        if let ToSend::ToProcesses(_, to, _) = mcommit_tosend.clone() {
             assert_eq!(to.len(), n);
         } else {
             panic!("ToSend::ToProcesses not found!");
         }
 
         // all processes handle it
-        let mut nothings = router.route(mcommit_tosend, &time).into_iter();
-        // the first one has a reply to a client, the remaining two are nothings
-        let to_client = nothings.next().unwrap();
-        assert!(to_client.to_clients());
-        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
-        assert_eq!(nothings.next().unwrap(), ToSend::Nothing);
-        assert_eq!(nothings.next(), None);
+        let to_sends = simulation.forward_to_processes(mcommit_tosend);
+        // get the single mphantom from process 3
+        let to_sends = to_sends
+            .into_iter()
+            .filter(|to_send| to_send.to_processes())
+            .collect::<Vec<_>>();
+        assert_eq!(to_sends.len(), 1);
+
+        let to_send = to_sends.into_iter().next().unwrap();
+        match to_send.clone() {
+            ToSend::ToProcesses(from, target, Message::MPhantom { .. }) => {
+                assert_eq!(from, process_id_3);
+                assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
+            }
+            _ => panic!("Message::MPhantom not found!"),
+        }
+
+        let nothings = simulation.forward_to_processes(to_send);
+        assert!(nothings.into_iter().all(|to_send| to_send.is_nothing()));
+
+        // process 1 should have a result to the client
+        let commands_ready = simulation.get_process(process_id_1).commands_ready();
+        assert_eq!(commands_ready.len(), 1);
 
         // handle what was sent to client
-        let new_submit = router.route(to_client, &time).into_iter().next().unwrap();
+        let new_submit = simulation
+            .forward_to_clients(commands_ready, &time)
+            .into_iter()
+            .next()
+            .unwrap();
         assert!(new_submit.to_coordinator());
 
-        let mcollect = router.route(new_submit, &time).into_iter().next().unwrap();
-        if let ToSend::ToProcesses(_, Message::MCollect { from, dot, .. }) = mcollect {
+        let mcollect = simulation
+            .forward_to_processes(new_submit)
+            .into_iter()
+            .next()
+            .unwrap();
+        if let ToSend::ToProcesses(from, _, Message::MCollect { dot, .. }) = mcollect {
             assert_eq!(from, target);
             assert_eq!(dot, Dot::new(target, 2));
         } else {

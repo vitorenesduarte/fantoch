@@ -47,7 +47,7 @@ impl Bote {
             .collect();
 
         // compute stats from these client perceived latencies
-        Stats::from(&latencies)
+        Stats::from(latencies)
     }
 
     /// Computes `Stats` for a leader-based protocol with a given
@@ -78,7 +78,7 @@ impl Bote {
             .collect();
 
         // compute stats from these client perceived latencies
-        Stats::from(&latencies)
+        Stats::from(latencies)
     }
 
     /// Computes the best leader (for some criteria) and its `Stats` for a

@@ -1,16 +1,15 @@
-use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
-use std::collections::btree_map::{self, BTreeMap};
+use std::collections::hash_map::{self, HashMap};
 use std::fmt;
 
 /// `ProcessVotes` are the Votes by some process on some command.
-pub type ProcessVotes = BTreeMap<Key, Option<VoteRange>>;
+pub type ProcessVotes = HashMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Votes {
-    votes: BTreeMap<Key, Vec<VoteRange>>,
+    votes: HashMap<Key, Vec<VoteRange>>,
 }
 
 impl Votes {
@@ -19,38 +18,41 @@ impl Votes {
         Default::default()
     }
 
-    /// Initializes `Votes` instance.
-    pub fn set_keys(&mut self, cmd: &Command) {
-        // insert an empty set of votes for each key
-        cmd.keys().for_each(|key| {
-            // TODO use `Vec::with_capacity` here if we can
-            let empty_votes = vec![];
-            self.votes.insert(key.clone(), empty_votes);
+    /// Add `ProcessVotes` to `Votes`.
+    pub fn add(&mut self, process_votes: ProcessVotes) {
+        process_votes.into_iter().for_each(|(key, vote)| {
+            // add new vote to current set of votes
+            let current_votes = self.get_key_votes(key);
+            current_votes.push(vote);
         });
     }
 
-    /// Add `ProcessVotes` to `Votes`.
-    pub fn add(&mut self, process_votes: ProcessVotes) {
-        self.votes
-            .iter_mut()
-            .zip(process_votes.into_iter())
-            .for_each(|((key, current_votes), (vote_key, vote))| {
-                // each item from zip should be about the same key
-                assert_eq!(*key, vote_key);
+    /// Merge with another `Votes`.
+    /// Performance should be better if `self.votes.len() > remote_votes.len()` than with the
+    /// opposite.
+    pub fn merge(&mut self, remote_votes: Votes) {
+        remote_votes.into_iter().for_each(|(key, key_votes)| {
+            // add new votes to current set of votes
+            let current_votes = self.get_key_votes(key);
+            current_votes.extend(key_votes);
+        });
+    }
 
-                // add vote to this key's votes
-                if let Some(vote) = vote {
-                    current_votes.push(vote);
-                }
-            });
+    /// Removes the votes on some key.
+    pub fn remove_votes(&mut self, key: &Key) -> Option<Vec<VoteRange>> {
+        self.votes.remove(key)
+    }
+
+    fn get_key_votes(&mut self, key: Key) -> &mut Vec<VoteRange> {
+        self.votes.entry(key).or_insert_with(Vec::new)
     }
 }
 
 impl IntoIterator for Votes {
     type Item = (Key, Vec<VoteRange>);
-    type IntoIter = btree_map::IntoIter<Key, Vec<VoteRange>>;
+    type IntoIter = hash_map::IntoIter<Key, Vec<VoteRange>>;
 
-    /// Returns a `Votes` into-iterator ordered by `Key` (ASC).
+    /// Returns a `Votes` into-iterator.
     fn into_iter(self) -> Self::IntoIter {
         self.votes.into_iter()
     }
@@ -101,6 +103,7 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
     use crate::id::Rifl;
     use crate::protocol::newt::clocks::KeysClocks;
     use std::cmp::max;
@@ -126,13 +129,11 @@ mod tests {
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
         let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
         let mut votes_a = Votes::new();
-        votes_a.set_keys(&cmd_a);
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::new();
-        votes_ab.set_keys(&cmd_ab);
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)

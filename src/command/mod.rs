@@ -6,25 +6,25 @@ pub use pending::Pending;
 
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, Key, Value};
-use std::collections::btree_map::{self, BTreeMap};
-use std::collections::HashMap;
+use std::collections::hash_map::{self, HashMap};
+use std::fmt;
 use std::iter::{self, FromIterator};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Command {
     rifl: Rifl,
-    ops: BTreeMap<Key, KVOp>,
+    ops: HashMap<Key, KVOp>,
 }
 
 impl Command {
     /// Create a new `Command`.
-    pub fn new(rifl: Rifl, ops: BTreeMap<Key, KVOp>) -> Self {
+    pub fn new(rifl: Rifl, ops: HashMap<Key, KVOp>) -> Self {
         Self { rifl, ops }
     }
 
     /// Create a new `Command` from an iterator.
     pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(rifl: Rifl, iter: I) -> Self {
-        Self::new(rifl, BTreeMap::from_iter(iter))
+        Self::new(rifl, HashMap::from_iter(iter))
     }
 
     /// Creates a get command.
@@ -61,11 +61,17 @@ impl Command {
 
 impl IntoIterator for Command {
     type Item = (Key, KVOp);
-    type IntoIter = btree_map::IntoIter<Key, KVOp>;
+    type IntoIter = hash_map::IntoIter<Key, KVOp>;
 
-    /// Returns a `Command` into-iterator ordered by `Key` (ASC).
+    /// Returns a `Command` into-iterator.
     fn into_iter(self) -> Self::IntoIter {
         self.ops.into_iter()
+    }
+}
+
+impl fmt::Debug for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:?} -> {:?})", self.rifl, self.ops.keys())
     }
 }
 

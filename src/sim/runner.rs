@@ -4,21 +4,26 @@ use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
-use crate::sim::Router;
-use crate::sim::Schedule;
+use crate::sim::{Schedule, Simulation};
 use crate::stats::Stats;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
-pub enum ScheduleAction<P: Process> {
+enum ScheduleAction<P: Process> {
     SubmitToProc(ProcessId, Command),
-    SendToProc(ProcessId, P::Message),
+    SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
+}
+
+#[derive(Clone)]
+enum MessageRegion {
+    Process(ProcessId),
+    Client(ClientId),
 }
 
 pub struct Runner<P: Process> {
     planet: Planet,
-    router: Router<P>,
+    simulation: Simulation<P>,
     time: SimTime,
     schedule: Schedule<ScheduleAction<P>>,
     // mapping from process identifier to its region
@@ -49,8 +54,8 @@ where
         // check that we have the correct number of `process_regions`
         assert_eq!(process_regions.len(), config.n());
 
-        // create router
-        let mut router = Router::new();
+        // create simulation
+        let mut simulation = Simulation::new();
         let mut processes = Vec::with_capacity(config.n());
 
         // create processes
@@ -75,7 +80,7 @@ where
             // discover
             assert!(process.discover(to_discover.clone()));
             // and register it
-            router.register_process(process);
+            simulation.register_process(process);
         });
 
         // register clients and create client to region mapping
@@ -89,7 +94,7 @@ where
                 // discover
                 assert!(client.discover(to_discover.clone()));
                 // and register it
-                router.register_client(client);
+                simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
             }
         }
@@ -97,7 +102,7 @@ where
         // create runner
         Self {
             planet,
-            router,
+            simulation,
             time: SimTime::new(),
             schedule: Schedule::new(),
             process_to_region,
@@ -106,103 +111,83 @@ where
     }
 
     /// Run the simulation.
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> HashMap<&Region, (usize, Stats)> {
         // start clients
-        self.router
+        self.simulation
             .start_clients(&self.time)
             .into_iter()
-            .for_each(|(client_region, to_send)| {
+            .for_each(|(client_id, to_send)| {
                 // schedule client commands
-                self.try_to_schedule(client_region, to_send);
+                self.try_to_schedule(MessageRegion::Client(client_id), to_send);
             });
 
+        // run simulation loop
+        self.simulation_loop();
+
+        // return clients stats
+        self.clients_stats()
+    }
+
+    fn simulation_loop(&mut self) {
         // run the simulation while there are things scheduled
         while let Some(actions) = self.schedule.next_actions(&mut self.time) {
             // for each scheduled action
             actions.into_iter().for_each(|action| {
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
-                        // get process's region
-                        let process_region = self.process_region(process_id);
                         // submit to process and schedule output messages
-                        let to_send = self.router.process_submit(process_id, cmd);
-                        self.try_to_schedule(process_region, to_send);
+                        let to_send = self.simulation.get_process(process_id).submit(cmd);
+                        self.try_to_schedule(MessageRegion::Process(process_id), to_send);
                     }
-                    ScheduleAction::SendToProc(process_id, msg) => {
-                        // get process's region
-                        let process_region = self.process_region(process_id);
-                        // route to process and schedule output messages
-                        let to_send = self.router.route_to_process(process_id, msg);
-                        self.try_to_schedule(process_region, to_send);
+                    ScheduleAction::SendToProc(from, process_id, msg) => {
+                        // get process
+                        let process = self.simulation.get_process(process_id);
+
+                        // handle message and get ready commands
+                        let to_send = process.handle(from, msg);
+                        let ready = process.commands_ready();
+
+                        // schedule new messages
+                        self.try_to_schedule(MessageRegion::Process(process_id), to_send);
+
+                        // schedule new command results
+                        ready.into_iter().for_each(|cmd_result| {
+                            // create action and schedule it
+                            let client_id = cmd_result.rifl().source();
+                            let action = ScheduleAction::SendToClient(client_id, cmd_result);
+                            self.schedule_it(
+                                MessageRegion::Process(process_id),
+                                MessageRegion::Client(client_id),
+                                action,
+                            );
+                        });
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
-                        // get client's region
-                        let client_region = self.client_region(client_id);
                         // route to client and schedule output command
                         let to_send = self
-                            .router
-                            .route_to_client(client_id, cmd_result, &self.time);
-                        self.try_to_schedule(client_region, to_send);
+                            .simulation
+                            .forward_to_client(client_id, cmd_result, &self.time);
+                        self.try_to_schedule(MessageRegion::Client(client_id), to_send);
                     }
                 }
             })
         }
     }
 
-    /// Get client's stats.
-    /// TODO does this need to be mut?
-    pub fn clients_stats(&mut self) -> HashMap<&Region, Stats> {
-        let router = &mut self.router;
-        let mut region_to_latencies: HashMap<&Region, Vec<u64>> = HashMap::new();
-
-        for (client_id, region) in self.client_to_region.iter() {
-            // get client's latencies
-            let latencies = router.client_latencies(*client_id);
-            // get current latencies from this region
-            let current_latencies = region_to_latencies.entry(region).or_insert_with(Vec::new);
-
-            current_latencies.extend(latencies);
-        }
-
-        // compute stats for each region
-        region_to_latencies
-            .into_iter()
-            .map(|(region, latencies)| {
-                let stats = Stats::from(&latencies);
-                (region, stats)
-            })
-            .collect()
-    }
-
-    /// Try to schedule a `ToSend`. When scheduling, we shoud never route!
-    fn try_to_schedule(&mut self, from: Region, to_send: ToSend<P::Message>) {
+    /// Try to schedule a `ToSend`.
+    fn try_to_schedule(&mut self, from_region: MessageRegion, to_send: ToSend<P::Message>) {
         match to_send {
             ToSend::ToCoordinator(process_id, cmd) => {
                 // create action and schedule it
                 let action = ScheduleAction::SubmitToProc(process_id, cmd);
-                // get process's region
-                let to = self.process_region(process_id);
-                self.schedule_it(&from, &to, action);
+                self.schedule_it(from_region, MessageRegion::Process(process_id), action);
             }
-            ToSend::ToProcesses(target, msg) => {
+            ToSend::ToProcesses(from, target, msg) => {
                 // for each process in target, schedule message delivery
-                target.into_iter().for_each(|process_id| {
-                    // create action and schedule it
-                    let action = ScheduleAction::SendToProc(process_id, msg.clone());
-                    // get process's region
-                    let to = self.process_region(process_id);
-                    self.schedule_it(&from, &to, action);
-                });
-            }
-            ToSend::ToClients(cmd_results) => {
-                // for each command result, schedule its delivery
-                cmd_results.into_iter().for_each(|cmd_result| {
-                    // create action and schedule it
-                    let client_id = cmd_result.rifl().source();
-                    let action = ScheduleAction::SendToClient(client_id, cmd_result);
-                    // get client's region
-                    let to = self.client_region(client_id);
-                    self.schedule_it(&from, &to, action);
+                target.into_iter().for_each(|to| {
+                    // otherwise, create action and schedule it
+                    let action = ScheduleAction::SendToProc(from, to, msg.clone());
+                    self.schedule_it(from_region.clone(), MessageRegion::Process(to), action);
                 });
             }
             ToSend::Nothing => {
@@ -211,28 +196,33 @@ where
         }
     }
 
-    fn schedule_it(&mut self, from: &Region, to: &Region, action: ScheduleAction<P>) {
-        // compute distance between regions and schedule action
+    fn schedule_it(
+        &mut self,
+        from_region: MessageRegion,
+        to_region: MessageRegion,
+        action: ScheduleAction<P>,
+    ) {
+        // get actual regions
+        let from = self.compute_region(from_region);
+        let to = self.compute_region(to_region);
+        // compute distance between regions
         let distance = self.distance(from, to);
+        // schedule action
         self.schedule.schedule(&self.time, distance, action);
     }
 
-    /// Retrieves the region of process with identifier `process_id`.
-    // TODO can we avoid cloning here?
-    fn process_region(&self, process_id: ProcessId) -> Region {
-        self.process_to_region
-            .get(&process_id)
-            .expect("process region should be known")
-            .clone()
-    }
-
-    /// Retrieves the region of client with identifier `client_id`.
-    // TODO can we avoid cloning here?
-    fn client_region(&self, client_id: ClientId) -> Region {
-        self.client_to_region
-            .get(&client_id)
-            .expect("client region should be known")
-            .clone()
+    /// Retrieves the region of some process/client.
+    fn compute_region(&self, message_region: MessageRegion) -> &Region {
+        match message_region {
+            MessageRegion::Process(process_id) => self
+                .process_to_region
+                .get(&process_id)
+                .expect("process region should be known"),
+            MessageRegion::Client(client_id) => self
+                .client_to_region
+                .get(&client_id)
+                .expect("client region should be known"),
+        }
     }
 
     /// Computes the distance between two regions which is half the ping latency.
@@ -241,15 +231,39 @@ where
             .planet
             .ping_latency(from, to)
             .expect("both regions should exist on the planet");
-        println!(
-            "{:?} -> {:?}: ping {} | distance {}",
-            from,
-            to,
-            ping_latency,
-            ping_latency / 2
-        );
         // distance is half the ping latency
         ping_latency / 2
+    }
+
+    /// Get client's stats.
+    /// TODO does this need to be mut?
+    fn clients_stats(&mut self) -> HashMap<&Region, (usize, Stats)> {
+        let simulation = &mut self.simulation;
+        let mut region_to_latencies = HashMap::new();
+
+        for (&client_id, region) in self.client_to_region.iter() {
+            // get client from simulation
+            let client = simulation.get_client(client_id);
+            // get client's issued commands and latencies
+            let issued_commands = client.issued_commands();
+            let latencies = client.latencies();
+
+            // get current metrics from this region
+            let (total_issued_commands, current_latencies) =
+                region_to_latencies.entry(region).or_insert((0, Vec::new()));
+            // update metrics
+            *total_issued_commands += issued_commands;
+            current_latencies.extend(latencies);
+        }
+
+        // compute stats for each region
+        region_to_latencies
+            .into_iter()
+            .map(|(region, (total_issued_commands, latencies))| {
+                let stats = Stats::from(latencies);
+                (region, (total_issued_commands, stats))
+            })
+            .collect()
     }
 }
 
@@ -259,10 +273,11 @@ mod tests {
     use crate::id::{ProcessId, Rifl};
     use crate::protocol::BaseProcess;
     use crate::stats::F64;
+    use std::mem;
 
     #[derive(Clone)]
     enum Message {
-        Ping(ProcessId, Rifl),
+        Ping(Rifl),
         Pong(Rifl),
     }
 
@@ -270,6 +285,7 @@ mod tests {
     struct PingPong {
         bp: BaseProcess,
         acks: HashMap<Rifl, usize>,
+        commands_ready: Vec<CommandResult>,
     }
 
     impl Process for PingPong {
@@ -284,6 +300,7 @@ mod tests {
             Self {
                 bp,
                 acks: HashMap::new(),
+                commands_ready: Vec::new(),
             }
         }
 
@@ -302,7 +319,7 @@ mod tests {
             self.acks.insert(rifl, 0);
 
             // create message
-            let msg = Message::Ping(self.id(), rifl);
+            let msg = Message::Ping(rifl);
             // clone the fast quorum
             let fast_quorum = self
                 .bp
@@ -311,16 +328,16 @@ mod tests {
                 .expect("should have a valid fast quorum upon submit");
 
             // send message to fast quorum
-            ToSend::ToProcesses(fast_quorum, msg)
+            ToSend::ToProcesses(self.id(), fast_quorum, msg)
         }
 
-        fn handle(&mut self, msg: Self::Message) -> ToSend<Self::Message> {
+        fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
             match msg {
-                Message::Ping(from, rifl) => {
+                Message::Ping(rifl) => {
                     // create msg
                     let msg = Message::Pong(rifl);
                     // reply back
-                    ToSend::ToProcesses(vec![from], msg)
+                    ToSend::ToProcesses(self.id(), vec![from], msg)
                 }
                 Message::Pong(rifl) => {
                     // increase ack count
@@ -336,13 +353,21 @@ mod tests {
                         self.acks.remove(&rifl);
                         // create fake command result
                         let cmd_result = CommandResult::new(rifl, 0);
-                        // notify client
-                        ToSend::ToClients(vec![cmd_result])
-                    } else {
-                        ToSend::Nothing
+                        // save new ready command
+                        self.commands_ready.push(cmd_result);
                     }
+
+                    // nothing to send
+                    ToSend::Nothing
                 }
             }
+        }
+
+        /// Returns new commands results to be sent to clients.
+        fn commands_ready(&mut self) -> Vec<CommandResult> {
+            let mut ready = Vec::new();
+            mem::swap(&mut ready, &mut self.commands_ready);
+            ready
         }
     }
 
@@ -387,12 +412,19 @@ mod tests {
         // run simulation and return stats
         runner.run();
         let mut stats = runner.clients_stats();
-        let us_west1 = stats
+        let (us_west1_issued, us_west1) = stats
             .remove(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
-        let us_west2 = stats
+        let (us_west2_issued, us_west2) = stats
             .remove(&Region::new("us-west2"))
             .expect("there should stats from us-west2 region");
+
+        // check the number of issued commands
+        let expected = total_commands * clients_per_region;
+        assert_eq!(us_west1_issued, expected);
+        assert_eq!(us_west2_issued, expected);
+
+        // return stats for both regions
         (us_west1, us_west2)
     }
 
@@ -441,7 +473,9 @@ mod tests {
         let (us_west1_with_ten, us_west2_with_ten) = run(f, clients_per_region);
 
         // check stats are the same
-        assert_eq!(us_west1_with_one, us_west1_with_ten);
-        assert_eq!(us_west2_with_one, us_west2_with_ten);
+        assert_eq!(us_west1_with_one.mean(), us_west1_with_ten.mean());
+        assert_eq!(us_west1_with_one.cov(), us_west1_with_ten.cov());
+        assert_eq!(us_west2_with_one.mean(), us_west2_with_ten.mean());
+        assert_eq!(us_west2_with_one.cov(), us_west2_with_ten.cov());
     }
 }

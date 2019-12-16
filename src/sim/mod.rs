@@ -1,5 +1,5 @@
-// This module contains the definition of `Router`.
-pub mod router;
+// This module contains the definition of `Simulation`.
+pub mod simulation;
 
 // This module contains the definition of `Schedule`.
 pub mod schedule;
@@ -8,6 +8,6 @@ pub mod schedule;
 pub mod runner;
 
 // Re-exports.
-pub use router::Router;
 pub use runner::Runner;
 pub use schedule::Schedule;
+pub use simulation::Simulation;
