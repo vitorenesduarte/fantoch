@@ -1,6 +1,7 @@
 use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
+use std::hash::Hash;
 
 // Debug version
 #[cfg(debug_assertions)]
@@ -16,6 +17,16 @@ macro_rules! log {
     ($( $args:expr ),*) => {
         ()
     };
+}
+
+pub fn get_mut_with<K, V>(map: &mut HashMap<K, V>, key: K, default: V) -> &mut V
+where
+    K: Eq + Hash + Clone,
+{
+    if map.contains_key(&key) {
+        return map.get_mut(&key).unwrap();
+    }
+    return map.entry(key).or_insert(default);
 }
 
 /// Updates the processes known by this process.

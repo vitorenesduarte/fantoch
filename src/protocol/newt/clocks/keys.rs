@@ -32,15 +32,20 @@ impl KeysClocks {
     pub fn process_votes(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
         cmd.keys()
             .filter_map(|key| {
-                // get id
-                let id = self.id;
-                // get current clock value
-                let current = self.key_clock_mut(key.clone());
+                // get a mutable reference to current clock value
+                // TODO refactoring the following match block into a function will not work due to
+                // limitations in the borrow-checker
+                // - see: https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
+                // - this is supposed to be fixed by polonius: http://smallcultfollowing.com/babysteps/blog/2018/06/15/mir-based-borrow-check-nll-status-update/#polonius
+                let current = match self.clocks.get_mut(key) {
+                    Some(value) => value,
+                    None => self.clocks.entry(key.clone()).or_insert(0),
+                };
 
                 // if we should vote
                 if *current < clock {
                     // vote from the current clock value + 1 until `clock`
-                    let vr = VoteRange::new(id, *current + 1, clock);
+                    let vr = VoteRange::new(self.id, *current + 1, clock);
                     // update current clock to be `clock`
                     *current = clock;
                     Some((key.clone(), vr))
@@ -54,11 +59,6 @@ impl KeysClocks {
     /// Retrieves the current clock for `key`.
     fn key_clock(&self, key: &Key) -> u64 {
         self.clocks.get(key).cloned().unwrap_or(0)
-    }
-
-    /// Retrieves a mutable reference to current clock for `key`.
-    fn key_clock_mut(&mut self, key: Key) -> &mut u64 {
-        self.clocks.entry(key).or_insert(0)
     }
 }
 
