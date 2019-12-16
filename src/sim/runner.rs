@@ -241,9 +241,9 @@ where
         let simulation = &mut self.simulation;
         let mut region_to_latencies = HashMap::new();
 
-        for (client_id, region) in self.client_to_region.iter() {
+        for (&client_id, region) in self.client_to_region.iter() {
             // get client from simulation
-            let client = simulation.get_client(*client_id);
+            let client = simulation.get_client(client_id);
             // get client's issued commands and latencies
             let issued_commands = client.issued_commands();
             let latencies = client.latencies();
