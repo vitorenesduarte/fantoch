@@ -183,14 +183,9 @@ where
         for (client_id, region) in self.client_to_region.iter() {
             // get client from simulation
             let client = simulation.get_client(*client_id);
-            // check client's issued commands and latencies
+            // get client's issued commands and latencies
             let issued_commands = client.issued_commands();
             let latencies = client.latencies();
-            // if the number of latencies is not the number of issued commands, the client has not
-            // finished its workload
-            if latencies.len() != issued_commands {
-                println!("client {} has not finished: {}", client_id, issued_commands);
-            }
 
             // get current metrics from this region
             let (total_issued_commands, current_latencies) =
@@ -493,7 +488,9 @@ mod tests {
         let (us_west1_with_ten, us_west2_with_ten) = run(f, clients_per_region);
 
         // check stats are the same
-        assert_eq!(us_west1_with_one, us_west1_with_ten);
-        assert_eq!(us_west2_with_one, us_west2_with_ten);
+        assert_eq!(us_west1_with_one.mean(), us_west1_with_ten.mean());
+        assert_eq!(us_west1_with_one.cov(), us_west1_with_ten.cov());
+        assert_eq!(us_west2_with_one.mean(), us_west2_with_ten.mean());
+        assert_eq!(us_west2_with_one.cov(), us_west2_with_ten.cov());
     }
 }
