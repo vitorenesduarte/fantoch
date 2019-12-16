@@ -96,7 +96,7 @@ impl MultiVotesTable {
         };
         // update table and get new ops to be executed
         update(table);
-        table.stable_ops().collect()
+        table.stable_ops()
     }
 }
 
@@ -145,7 +145,7 @@ impl VotesTable {
         assert_eq!(self.votes_clock.len(), self.n);
     }
 
-    fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
+    fn stable_ops(&mut self) -> Vec<(Rifl, KVOp)> {
         // compute the (potentially) new stable clock for this key
         let stable_clock = self
             .votes_clock
@@ -175,7 +175,10 @@ impl VotesTable {
         };
 
         // return stable ops
-        stable.into_iter().map(|(_, id_and_action)| id_and_action)
+        stable
+            .into_iter()
+            .map(|(_, id_and_action)| id_and_action)
+            .collect()
     }
 }
 
@@ -266,31 +269,31 @@ mod tests {
         // add a1 to table
         table.add(a1_sort_id, a1_rifl, a1.clone(), a1_votes.clone());
         // get stable: a1
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![(a1_rifl, a1.clone())]);
 
         // add d1 to table
         table.add(d1_sort_id, d1_rifl, d1.clone(), d1_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![]);
 
         // add c1 to table
         table.add(c1_sort_id, c1_rifl, c1.clone(), c1_votes.clone());
         // get stable: c1 then d1
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![(c1_rifl, c1.clone()), (d1_rifl, d1.clone())]);
 
         // add e2 to table
         table.add(e2_sort_id, e2_rifl, e2.clone(), e2_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![]);
 
         // add e1 to table
         table.add(e1_sort_id, e1_rifl, e1.clone(), e1_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![(e1_rifl, e1.clone()), (e2_rifl, e2.clone())]);
 
         // run all the permutations of the above and check that the final total
@@ -356,7 +359,7 @@ mod tests {
         // add a1 to table
         table.add(a1_sort_id, a1_rifl, a1.clone(), a1_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![]);
 
         // c1
@@ -374,7 +377,7 @@ mod tests {
         // add c1 to table
         table.add(c1_sort_id, c1_rifl, c1.clone(), c1_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![]);
 
         // e1
@@ -391,7 +394,7 @@ mod tests {
         // add e1 to table
         table.add(e1_sort_id, e1_rifl, e1.clone(), e1_votes.clone());
         // get stable: a1 and e1
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![(a1_rifl, a1.clone()), (e1_rifl, e1.clone())]);
 
         // a2
@@ -409,7 +412,7 @@ mod tests {
         // add a2 to table
         table.add(a2_sort_id, a2_rifl, a2.clone(), a2_votes.clone());
         // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        let stable = table.stable_ops();
         assert_eq!(stable, vec![]);
 
         // d1
@@ -426,8 +429,8 @@ mod tests {
 
         // add d1 to table
         table.add(d1_sort_id, d1_rifl, d1.clone(), d1_votes.clone());
-        // get stable: none
-        let stable: Vec<_> = table.stable_ops().collect();
+        // get stable
+        let stable = table.stable_ops();
         assert_eq!(
             stable,
             vec![
