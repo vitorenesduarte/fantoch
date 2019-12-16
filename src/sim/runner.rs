@@ -9,10 +9,16 @@ use crate::stats::Stats;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
-pub enum ScheduleAction<P: Process> {
+enum ScheduleAction<P: Process> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
+}
+
+#[derive(Clone)]
+enum MessageRegion {
+    Process(ProcessId),
+    Client(ClientId),
 }
 
 pub struct Runner<P: Process> {
@@ -111,67 +117,122 @@ where
             .start_clients(&self.time)
             .into_iter()
             .for_each(|(client_id, to_send)| {
-                // get client's region
-                let client_region = self.client_region(client_id);
                 // schedule client commands
-                self.try_to_schedule(client_region, to_send);
+                self.try_to_schedule(MessageRegion::Client(client_id), to_send);
             });
 
+        // run simulation loop
+        self.simulation_loop();
+
+        // return clients stats
+        self.clients_stats()
+    }
+
+    fn simulation_loop(&mut self) {
         // run the simulation while there are things scheduled
         while let Some(actions) = self.schedule.next_actions(&mut self.time) {
             // for each scheduled action
             actions.into_iter().for_each(|action| {
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
-                        // get process's region
-                        let process_region = self.process_region(process_id);
                         // submit to process and schedule output messages
                         let to_send = self.simulation.get_process(process_id).submit(cmd);
-                        self.try_to_schedule(process_region, to_send);
+                        self.try_to_schedule(MessageRegion::Process(process_id), to_send);
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
-                        self.handle_in_process(process_id, from, msg);
+                        // get process
+                        let process = self.simulation.get_process(process_id);
+
+                        // handle message and get ready commands
+                        let to_send = process.handle(from, msg);
+                        let ready = process.commands_ready();
+
+                        // schedule new messages
+                        self.try_to_schedule(MessageRegion::Process(process_id), to_send);
+
+                        // schedule new command results
+                        ready.into_iter().for_each(|cmd_result| {
+                            // create action and schedule it
+                            let client_id = cmd_result.rifl().source();
+                            let action = ScheduleAction::SendToClient(client_id, cmd_result);
+                            self.schedule_it(
+                                MessageRegion::Process(process_id),
+                                MessageRegion::Client(client_id),
+                                action,
+                            );
+                        });
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
-                        // get client's region
-                        let client_region = self.client_region(client_id);
                         // route to client and schedule output command
                         let to_send = self
                             .simulation
                             .forward_to_client(client_id, cmd_result, &self.time);
-                        self.try_to_schedule(client_region, to_send);
+                        self.try_to_schedule(MessageRegion::Client(client_id), to_send);
                     }
                 }
             })
         }
-
-        // return clients stats
-        self.clients_stats()
     }
 
-    fn handle_in_process(&mut self, process_id: ProcessId, from: ProcessId, msg: P::Message) {
-        // get process
-        let process = self.simulation.get_process(process_id);
-        // handle message and get new ready commands
-        let to_send = process.handle(from, msg);
-        let commands_ready = process.commands_ready();
+    /// Try to schedule a `ToSend`.
+    fn try_to_schedule(&mut self, from_region: MessageRegion, to_send: ToSend<P::Message>) {
+        match to_send {
+            ToSend::ToCoordinator(process_id, cmd) => {
+                // create action and schedule it
+                let action = ScheduleAction::SubmitToProc(process_id, cmd);
+                self.schedule_it(from_region, MessageRegion::Process(process_id), action);
+            }
+            ToSend::ToProcesses(from, target, msg) => {
+                // for each process in target, schedule message delivery
+                target.into_iter().for_each(|to| {
+                    // otherwise, create action and schedule it
+                    let action = ScheduleAction::SendToProc(from, to, msg.clone());
+                    self.schedule_it(from_region.clone(), MessageRegion::Process(to), action);
+                });
+            }
+            ToSend::Nothing => {
+                // nothing to do
+            }
+        }
+    }
 
-        // schedule `ToSend`
-        let process_region = self.process_region(process_id);
-        self.try_to_schedule(process_region, to_send);
+    fn schedule_it(
+        &mut self,
+        from_region: MessageRegion,
+        to_region: MessageRegion,
+        action: ScheduleAction<P>,
+    ) {
+        // get actual regions
+        let from = self.compute_region(from_region);
+        let to = self.compute_region(to_region);
+        // compute distance between regions
+        let distance = self.distance(from, to);
+        // schedule action
+        self.schedule.schedule(&self.time, distance, action);
+    }
 
-        // TODO avoid this
-        let process_region = self.process_region(process_id);
+    /// Retrieves the region of some process/client.
+    fn compute_region(&self, message_region: MessageRegion) -> &Region {
+        match message_region {
+            MessageRegion::Process(process_id) => self
+                .process_to_region
+                .get(&process_id)
+                .expect("process region should be known"),
+            MessageRegion::Client(client_id) => self
+                .client_to_region
+                .get(&client_id)
+                .expect("client region should be known"),
+        }
+    }
 
-        // and schedule new command results
-        commands_ready.into_iter().for_each(|cmd_result| {
-            // create action and schedule it
-            let client_id = cmd_result.rifl().source();
-            let action = ScheduleAction::SendToClient(client_id, cmd_result);
-            // get client's region
-            let to_region = self.client_region(client_id);
-            self.schedule_it(&process_region, &to_region, action);
-        });
+    /// Computes the distance between two regions which is half the ping latency.
+    fn distance(&self, from: &Region, to: &Region) -> u64 {
+        let ping_latency = self
+            .planet
+            .ping_latency(from, to)
+            .expect("both regions should exist on the planet");
+        // distance is half the ping latency
+        ping_latency / 2
     }
 
     /// Get client's stats.
@@ -204,83 +265,6 @@ where
             })
             .collect()
     }
-
-    /// Try to schedule a `ToSend`.
-    /// Most times the thing that needs to be sent will be scheduled.
-    /// The only exception is when a process is sending a message to itself.
-    fn try_to_schedule(&mut self, from_region: Region, to_send: ToSend<P::Message>) {
-        match to_send {
-            ToSend::ToCoordinator(process_id, cmd) => {
-                // create action and schedule it
-                let action = ScheduleAction::SubmitToProc(process_id, cmd);
-                // get process's region
-                let to_region = self.process_region(process_id);
-                self.schedule_it(&from_region, &to_region, action);
-            }
-            ToSend::ToProcesses(from, target, msg) => {
-                let mut deliver_locally = false;
-                // for each process in target, schedule message delivery
-                target.into_iter().for_each(|process_id| {
-                    let message_to_self = from == process_id;
-                    if message_to_self {
-                        // do not schedule if message to self
-                        deliver_locally = true;
-                    } else {
-                        // othewise, create action and schedule it
-                        let action = ScheduleAction::SendToProc(from, process_id, msg.clone());
-                        // get process's region
-                        let to_region = self.process_region(process_id);
-                        self.schedule_it(&from_region, &to_region, action);
-                    }
-                });
-
-                // handle now if `deliver_locally`
-                // NOTE that this needs to be done after scheduling the delivery in other processes
-                // so that any message that results from handling this message is schedule to arrive
-                // after the messages above!
-                if deliver_locally {
-                    self.handle_in_process(from, from, msg);
-                }
-            }
-            ToSend::Nothing => {
-                // nothing to do
-            }
-        }
-    }
-
-    fn schedule_it(&mut self, from: &Region, to: &Region, action: ScheduleAction<P>) {
-        // compute distance between regions and schedule action
-        let distance = self.distance(from, to);
-        self.schedule.schedule(&self.time, distance, action);
-    }
-
-    /// Retrieves the region of process with identifier `process_id`.
-    // TODO can we avoid cloning here?
-    fn process_region(&self, process_id: ProcessId) -> Region {
-        self.process_to_region
-            .get(&process_id)
-            .expect("process region should be known")
-            .clone()
-    }
-
-    /// Retrieves the region of client with identifier `client_id`.
-    // TODO can we avoid cloning here?
-    fn client_region(&self, client_id: ClientId) -> Region {
-        self.client_to_region
-            .get(&client_id)
-            .expect("client region should be known")
-            .clone()
-    }
-
-    /// Computes the distance between two regions which is half the ping latency.
-    fn distance(&self, from: &Region, to: &Region) -> u64 {
-        let ping_latency = self
-            .planet
-            .ping_latency(from, to)
-            .expect("both regions should exist on the planet");
-        // distance is half the ping latency
-        ping_latency / 2
-    }
 }
 
 #[cfg(test)]
@@ -289,6 +273,7 @@ mod tests {
     use crate::id::{ProcessId, Rifl};
     use crate::protocol::BaseProcess;
     use crate::stats::F64;
+    use std::mem;
 
     #[derive(Clone)]
     enum Message {
@@ -381,7 +366,7 @@ mod tests {
         /// Returns new commands results to be sent to clients.
         fn commands_ready(&mut self) -> Vec<CommandResult> {
             let mut ready = Vec::new();
-            std::mem::swap(&mut ready, &mut self.commands_ready);
+            mem::swap(&mut ready, &mut self.commands_ready);
             ready
         }
     }
