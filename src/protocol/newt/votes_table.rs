@@ -47,17 +47,16 @@ impl MultiVotesTable {
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
         cmd.into_iter()
-            .map(|(key, op)| {
+            .filter_map(|(key, op)| {
                 // get votes on this key
                 let vote_ranges = votes
                     .remove_votes(&key)
                     .expect("key should have been voted on");
 
-                let stable_ops = self.update_table(&key, |table| {
+                self.update_table(key, |table| {
                     // add op and votes to the table
                     table.add(sort_id, rifl, op, vote_ranges);
-                });
-                (key, stable_ops)
+                })
             })
             .collect()
     }
@@ -70,23 +69,22 @@ impl MultiVotesTable {
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         process_votes
             .into_iter()
-            .map(|(key, range)| {
-                let stable_ops = self.update_table(&key, |table| {
+            .filter_map(|(key, range)| {
+                self.update_table(key, |table| {
                     // add range to table
                     table.add_vote_range(range);
-                });
-                (key, stable_ops)
+                })
             })
             .collect()
     }
 
     // Generic function to be used when updating some votes table.
     #[must_use]
-    fn update_table<F>(&mut self, key: &Key, update: F) -> Vec<(Rifl, KVOp)>
+    fn update_table<F>(&mut self, key: Key, update: F) -> Option<(Key, Vec<(Rifl, KVOp)>)>
     where
         F: FnOnce(&mut VotesTable),
     {
-        let table = match self.tables.get_mut(key) {
+        let table = match self.tables.get_mut(&key) {
             Some(table) => table,
             None => {
                 // table does not exist, let's create a new one and insert it
@@ -96,7 +94,12 @@ impl MultiVotesTable {
         };
         // update table and get new ops to be executed
         update(table);
-        table.stable_ops()
+        let stable_ops = table.stable_ops();
+        if stable_ops.is_empty() {
+            None
+        } else {
+            Some((key, stable_ops))
+        }
     }
 }
 
@@ -146,17 +149,12 @@ impl VotesTable {
     }
 
     fn stable_ops(&mut self) -> Vec<(Rifl, KVOp)> {
-        // compute the (potentially) new stable clock for this key
-        let stable_clock = self
-            .votes_clock
-            .frontier_threshold(self.stability_threshold)
-            .expect("stability threshold must always be smaller than the number of processes");
-
         // compute stable sort id:
         // - if clock 10 is stable, then we can execute all ops with an id smaller than `(11,0)`
         // - if id with `(11,0)` is also part of this local structure, we can also execute it
         //   without 11 being stable, because, once 11 is stable, it will be the first to be
         //   executed either way
+        let stable_clock = self.stable_clock();
         let first_dot = Dot::new(1, 0);
         let stable_sort_id = (stable_clock + 1, first_dot);
 
@@ -179,6 +177,13 @@ impl VotesTable {
             .into_iter()
             .map(|(_, id_and_action)| id_and_action)
             .collect()
+    }
+
+    // Computes the (potentially) new stable clock in this table.
+    fn stable_clock(&self) -> u64 {
+        self.votes_clock
+            .frontier_threshold(self.stability_threshold)
+            .expect("stability threshold must always be smaller than the number of processes")
     }
 }
 
@@ -439,5 +444,70 @@ mod tests {
                 (d1_rifl, d1.clone())
             ]
         );
+    }
+
+    #[test]
+    fn phantom_votes() {
+        use std::iter::FromIterator;
+
+        // create table
+        let n = 5;
+        let stability_threshold = 3;
+        let mut table = MultiVotesTable::new(n, stability_threshold);
+
+        // create keys
+        let key_a = String::from("A");
+        let key_b = String::from("B");
+
+        // closure to compute the stable clock for some key
+        let stable_clock = |table: &MultiVotesTable, key: &Key| {
+            table
+                .tables
+                .get(key)
+                .expect("table for this key should exist")
+                .stable_clock()
+        };
+
+        // p1 votes on keys A and B
+        let process_id = 1;
+        let process_votes = vec![
+            (key_a.clone(), VoteRange::new(process_id, 1, 1)),
+            (key_b.clone(), VoteRange::new(process_id, 1, 1)),
+        ];
+        // check stable clocks
+        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        assert!(stable.is_empty());
+        assert_eq!(stable_clock(&table, &key_a), 0);
+        assert_eq!(stable_clock(&table, &key_b), 0);
+
+        // p2 votes on key A
+        let process_id = 2;
+        let process_votes = vec![(key_a.clone(), VoteRange::new(process_id, 1, 1))];
+        // check stable clocks
+        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        assert!(stable.is_empty());
+        assert_eq!(stable_clock(&table, &key_a), 0);
+        assert_eq!(stable_clock(&table, &key_b), 0);
+
+        // p3 votes on keys A and B
+        let process_id = 3;
+        let process_votes = vec![
+            (key_a.clone(), VoteRange::new(process_id, 1, 1)),
+            (key_b.clone(), VoteRange::new(process_id, 1, 1)),
+        ];
+        // check stable clocks
+        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        assert!(stable.is_empty());
+        assert_eq!(stable_clock(&table, &key_a), 1);
+        assert_eq!(stable_clock(&table, &key_b), 0);
+
+        // p4 votes on key B
+        let process_id = 4;
+        let process_votes = vec![(key_b.clone(), VoteRange::new(process_id, 1, 1))];
+        // check stable clocks
+        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        assert!(stable.is_empty());
+        assert_eq!(stable_clock(&table, &key_a), 1);
+        assert_eq!(stable_clock(&table, &key_b), 1);
     }
 }
