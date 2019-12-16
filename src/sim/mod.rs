@@ -8,6 +8,6 @@ pub mod schedule;
 pub mod runner;
 
 // Re-exports.
-pub use simulation::Simulation;
 pub use runner::Runner;
 pub use schedule::Schedule;
+pub use simulation::Simulation;

@@ -17,7 +17,9 @@ use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::protocol::newt::votes::{ProcessVotes, Votes};
 use crate::protocol::newt::votes_table::MultiVotesTable;
 use crate::protocol::{BaseProcess, Process, ToSend};
+use std::cmp;
 use std::collections::HashMap;
+use std::mem;
 
 pub struct Newt {
     bp: BaseProcess,
@@ -102,29 +104,24 @@ impl Process for Newt {
     /// Returns new commands results to be sent to clients.
     fn commands_ready(&mut self) -> Vec<CommandResult> {
         let mut ready = Vec::new();
-        std::mem::swap(&mut ready, &mut self.commands_ready);
+        mem::swap(&mut ready, &mut self.commands_ready);
         ready
     }
 }
 
 impl Newt {
-    /// Computes `Newt` stability threshold and fast quorum size.
-    /// Typically the threshold should be n - q + 1, where n is the number of
-    /// processes and q the size of the write quorum. In `Newt` e.g. with tiny quorums, although
-    /// the fast quorum is 2f (which would suggest q = 2f), in fact q = f + 1.
-    /// The quorum size of 2f ensures that all clocks are computed from f + 1
-    /// processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
+    /// Computes `Newt` stability threshold (read quorum size) and fast quorum size (write quorum
+    /// size). Typically the threshold should be n - q + 1, where n is the number of processes and q
+    /// the size of the write quorum. In `Newt` e.g. with tiny quorums, although the fast quorum is
+    /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
+    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
     fn read_write_quorum_sizes(config: &Config) -> (usize, usize) {
         let n = config.n();
         let f = config.f();
         if config.newt_tiny_quorums() {
-            let stability_threshold = n - f;
-            let fast_quorum_size = 2 * f;
-            (stability_threshold, fast_quorum_size)
+            (n - f, 2 * f)
         } else {
-            let stability_threshold = (n / 2) + 1;
-            let fast_quorum_size = (n / 2) + f;
-            (stability_threshold, fast_quorum_size)
+            ((n / 2) + 1, (n / 2) + f)
         }
     }
 
@@ -139,19 +136,17 @@ impl Newt {
         // compute its clock
         let clock = self.keys_clocks.clock(&cmd) + 1;
 
-        // get the fast quorum
-        let fast_quorum = self.bp.fast_quorum();
-
-        // create `MCollect`
+        // create `MCollect` and target
         let mcollect = Message::MCollect {
             dot,
             cmd,
             clock,
-            quorum: fast_quorum.clone(),
+            quorum: self.bp.fast_quorum(),
         };
+        let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), fast_quorum, mcollect)
+        ToSend::ToProcesses(self.id(), target, mcollect)
     }
 
     fn handle_mcollect(
@@ -160,14 +155,14 @@ impl Newt {
         dot: Dot,
         cmd: Command,
         quorum: Vec<ProcessId>,
-        clock: u64,
+        remote_clock: u64,
     ) -> ToSend<Message> {
         log!(
             "p{}: MCollect({:?}, {:?}, {}) from {}",
-            self.bp.process_id,
+            self.id(),
             dot,
             cmd,
-            clock,
+            remote_clock,
             from
         );
 
@@ -182,32 +177,28 @@ impl Newt {
         // TODO can we somehow combine the next 2 operations in order to save map lookups?
 
         // compute command clock
-        let cmd_clock = std::cmp::max(clock, self.keys_clocks.clock(&cmd) + 1);
-
+        let clock = cmp::max(remote_clock, self.keys_clocks.clock(&cmd) + 1);
         // compute votes consumed by this command
-        // - this computation needs to occur before the next `bump_to`
-        let process_votes = self.keys_clocks.process_votes(&cmd, cmd_clock);
+        let process_votes = self.keys_clocks.process_votes(&cmd, clock);
         // check that there's one vote per key
         assert_eq!(process_votes.len(), cmd.key_count());
 
-        // update command info:
-        // - change status to collect
-        // - save command and quorum
-        // - set command clock
+        // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
         info.quorum = quorum;
-        info.clock = cmd_clock;
+        info.clock = clock;
 
-        // create `MCollectAck`
+        // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck {
             dot,
-            clock: info.clock,
+            clock,
             process_votes,
         };
+        let target = vec![from];
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), vec![from], mcollectack)
+        ToSend::ToProcesses(self.id(), target, mcollectack)
     }
 
     fn handle_mcollectack(
@@ -215,14 +206,14 @@ impl Newt {
         from: ProcessId,
         dot: Dot,
         clock: u64,
-        remote_process_votes: ProcessVotes,
+        remote_votes: ProcessVotes,
     ) -> ToSend<Message> {
         log!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {}",
-            self.bp.process_id,
+            self.id(),
             dot,
             clock,
-            remote_process_votes,
+            remote_votes,
             from
         );
 
@@ -230,50 +221,53 @@ impl Newt {
         let info = self.cmds_info.get(dot);
 
         if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
-            // do nothing if we're no longer COLLECT or if this is a
-            // duplicated message
+            // do nothing if we're no longer COLLECT or if this is a duplicated message
             return ToSend::Nothing;
         }
 
         // update votes with remote votes
-        info.votes.add(remote_process_votes);
+        info.votes.add(remote_votes);
 
-        // update quorum clocks while computing max clock and its number of
-        // occurences
+        // update quorum clocks while computing max clock and its number of occurences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
         // - this prevents us from generating votes (either when clients submit new operations or
         //   when handling `MCollect` from other processes) that could potentially delay the
         //   execution of this command
-        let cmd = info
-            .cmd
-            .as_ref()
-            .expect("there should be a command payload in the MCollectAck handler");
-        let process_votes = self.keys_clocks.process_votes(cmd, max_clock);
-        // update votes with local votes
-        info.votes.add(process_votes);
+        match info.cmd.as_ref() {
+            Some(cmd) => {
+                let local_votes = self.keys_clocks.process_votes(cmd, max_clock);
+                // update votes with local votes
+                info.votes.add(local_votes);
+            }
+            None => {
+                panic!("there should be a command payload in the MCollectAck handler");
+            }
+        }
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
-                // reset local votes as we're going to receive them right away at the same time
-                // avoiding a `info.votes.clone()`
-                let mut votes = Votes::new();
-                std::mem::swap(&mut info.votes, &mut votes);
+                // reset local votes as we're going to receive them right away; this also prevents a
+                // `info.votes.clone()`
+                let votes = Self::reset_votes(&mut info.votes);
 
-                // create `MCommit`
+                // create `MCommit` and target
+                // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
+                // members, or send the payload to all in a slim-MConsensus
                 let mcommit = Message::MCommit {
                     dot,
                     cmd: info.cmd.clone(),
                     clock: max_clock,
                     votes,
                 };
+                let target = self.bp.all();
 
                 // return `ToSend`
-                ToSend::ToProcesses(self.id(), self.bp.all(), mcommit)
+                ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
                 // TODO slow path
                 unimplemented!("slow path not implemented yet")
@@ -290,13 +284,7 @@ impl Newt {
         clock: u64,
         mut votes: Votes,
     ) -> ToSend<Message> {
-        log!(
-            "p{}: MCommit({:?}, {}, {:?})",
-            self.bp.process_id,
-            dot,
-            clock,
-            votes
-        );
+        log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -312,26 +300,24 @@ impl Newt {
         info.cmd = cmd;
         info.clock = clock;
 
-        // get local votes
-        let mut local_votes = Votes::new();
-        std::mem::swap(&mut info.votes, &mut local_votes);
-        // merge local votes (probably from phantom messages) with received votes
-        votes.merge(local_votes);
+        // get current votes (probably from phantom messages) merge them with received votes so that
+        // all together can be added to a votes table
+        let current_votes = Self::reset_votes(&mut info.votes);
+        votes.merge(current_votes);
 
         // generate phantom votes if committed clock is higher than the local key's clock
-        let to_send = if let Some(cmd) = info.cmd.as_ref() {
+        let mut to_send = ToSend::Nothing;
+        if let Some(cmd) = info.cmd.as_ref() {
             // if not a no op, check if we can generate more votes that can speed-up execution
             let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
+
             // create `MPhantom` if there are new votes
-            if process_votes.is_empty() {
-                ToSend::Nothing
-            } else {
+            if !process_votes.is_empty() {
                 let mphantom = Message::MPhantom { dot, process_votes };
-                ToSend::ToProcesses(self.bp.process_id, self.bp.all(), mphantom)
+                let target = self.bp.all();
+                to_send = ToSend::ToProcesses(self.bp.process_id, target, mphantom)
             }
-        } else {
-            ToSend::Nothing
-        };
+        }
 
         // update votes table and execute commands that can be executed
         let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
@@ -342,12 +328,7 @@ impl Newt {
     }
 
     fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
-        log!(
-            "p{}: MPhantom({:?}, {:?})",
-            self.bp.process_id,
-            dot,
-            process_votes
-        );
+        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -364,30 +345,35 @@ impl Newt {
         ToSend::Nothing
     }
 
-    fn execute(&mut self, to_execute: Option<Vec<(Key, Vec<(Rifl, KVOp)>)>>) {
-        if let Some(to_execute) = to_execute {
-            // borrow everything we'll need
-            let commands_ready = &mut self.commands_ready;
-            let store = &mut self.store;
-            let pending = &mut self.pending;
+    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) {
+        // borrow everything we'll need
+        let commands_ready = &mut self.commands_ready;
+        let store = &mut self.store;
+        let pending = &mut self.pending;
 
-            // get more commands that are ready to be executed
-            let ready = to_execute
-                .into_iter()
-                // flatten each pair with a key and list of ready partial operations
-                .flat_map(|(key, ops)| {
-                    ops.into_iter()
-                        .map(move |(rifl, op)| (key.clone(), rifl, op))
-                })
-                .filter_map(|(key, rifl, op)| {
-                    // execute op in the `KVStore`
-                    let op_result = store.execute(&key, op);
+        // get more commands that are ready to be executed
+        let ready = to_execute
+            .into_iter()
+            // flatten each pair with a key and list of ready partial operations
+            .flat_map(|(key, ops)| {
+                ops.into_iter()
+                    .map(move |(rifl, op)| (key.clone(), rifl, op))
+            })
+            .filter_map(|(key, rifl, op)| {
+                // execute op in the `KVStore`
+                let op_result = store.execute(&key, op);
 
-                    // add partial result to `Pending`
-                    pending.add_partial(rifl, key, op_result)
-                });
-            commands_ready.extend(ready);
-        }
+                // add partial result to `Pending`
+                pending.add_partial(rifl, key, op_result)
+            });
+        commands_ready.extend(ready);
+    }
+
+    // Replaces the value `local_votes` with empty votes, returning the previous votes.
+    fn reset_votes(local_votes: &mut Votes) -> Votes {
+        let mut votes = Votes::new();
+        mem::swap(&mut votes, local_votes);
+        votes
     }
 }
 

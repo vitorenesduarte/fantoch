@@ -25,29 +25,17 @@ impl MultiVotesTable {
     pub fn add_process_votes(
         &mut self,
         process_votes: ProcessVotes,
-    ) -> Option<Vec<(Key, Vec<(Rifl, KVOp)>)>> {
-        let to_execute = process_votes
+    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
+        process_votes
             .into_iter()
             .map(|(key, range)| {
-                // TODO the borrow checker complains if `self.n` or
-                // `self.stability_threshold` is passed to `VotesTable::new`
-                let n = self.n;
-                let stability_threshold = self.stability_threshold;
-                // get this key's table
-                let table = self
-                    .tables
-                    .entry(key.clone())
-                    .or_insert_with(|| VotesTable::new(n, stability_threshold));
-
-                // add op and votes to the table
-                table.add_vote_range(range);
-
-                // get new ops to be executed
-                let stable_ops = table.stable_ops().collect();
+                let stable_ops = self.update_table(&key, |table| {
+                    // add range to table
+                    table.add_vote_range(range);
+                });
                 (key, stable_ops)
             })
-            .collect();
-        Some(to_execute)
+            .collect()
     }
 
     /// Add a new command, its clock and votes to the votes table.
@@ -57,13 +45,15 @@ impl MultiVotesTable {
         dot: Dot,
         cmd: Option<Command>,
         clock: u64,
-        votes: Votes,
-    ) -> Option<Vec<(Key, Vec<(Rifl, KVOp)>)>> {
+        mut votes: Votes,
+    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         // if noOp, do nothing;
-        // else, get its id and create an iterator of (Key, KVOp)
         // TODO if noOp, should we add `Votes` to the table, or there will be no
         // votes?
-        let cmd = cmd?;
+        let cmd = match cmd {
+            Some(cmd) => cmd,
+            None => return Vec::new(),
+        };
         let rifl = cmd.rifl();
 
         // create sort identifier:
@@ -72,35 +62,39 @@ impl MultiVotesTable {
 
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
-        let to_execute = votes
-            .into_iter()
-            .zip(cmd.into_iter())
-            .map(|((key, vote_ranges), (op_key, op))| {
-                // each item from zip should be about the same key
-                assert_eq!(key, op_key);
+        cmd.into_iter()
+            .map(|(op_key, op)| {
+                // get votes on this key
+                let (key, vote_ranges) = votes
+                    .remove_key_votes(&op_key)
+                    .expect("key should have been voted on");
 
-                // TODO the borrow checker complains if `self.n` or
-                // `self.stability_threshold` is passed to `VotesTable::new`
-                let n = self.n;
-                let stability_threshold = self.stability_threshold;
-
-                // get this key's table
-                let table = self
-                    .tables
-                    .entry(key)
-                    .or_insert_with(|| VotesTable::new(n, stability_threshold));
-
-                // add op and votes to the table
-                table.add(sort_id, rifl, op, vote_ranges);
-
-                // get new ops to be executed
-                let stable_ops = table.stable_ops().collect();
-                (op_key, stable_ops)
+                let stable_ops = self.update_table(&op_key, |table| {
+                    // add op and votes to the table
+                    table.add(sort_id, rifl, op, vote_ranges);
+                });
+                (key, stable_ops)
             })
-            .collect();
+            .collect()
+    }
 
-        // return ops to be executed
-        Some(to_execute)
+    //
+    #[must_use]
+    fn update_table<F>(&mut self, key: &Key, update: F) -> Vec<(Rifl, KVOp)>
+    where
+        F: FnOnce(&mut VotesTable) -> (),
+    {
+        let table = match self.tables.get_mut(key) {
+            Some(table) => table,
+            None => {
+                // table does not exist, let's create a new one and insert it
+                let table = VotesTable::new(self.n, self.stability_threshold);
+                self.tables.entry(key.clone()).or_insert(table)
+            }
+        };
+        // update table and get new ops to be executed
+        update(table);
+        table.stable_ops().collect()
     }
 }
 

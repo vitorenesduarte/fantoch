@@ -1,5 +1,5 @@
 use crate::client::Client;
-use crate::command::{CommandResult};
+use crate::command::CommandResult;
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Process, ToSend};
 use crate::time::SysTime;
