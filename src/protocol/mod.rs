@@ -4,7 +4,11 @@ mod base;
 // This module contains the definition of `Newt`.
 mod newt;
 
+// This module contains the definition of `Atlas`.
+mod atlas;
+
 // Re-exports.
+pub use atlas::Atlas;
 pub use base::BaseProcess;
 pub use newt::Newt;
 

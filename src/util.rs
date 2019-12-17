@@ -18,6 +18,12 @@ macro_rules! log {
     };
 }
 
+/// Returns an iterator with all process identifiers in a system with `n` processes.
+pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
+    // compute process identifiers, making sure ids are non-zero
+    (1..=n).map(|id| id as u64)
+}
+
 /// Updates the processes known by this process.
 pub fn sort_processes_by_distance(
     region: &Region,
@@ -51,6 +57,15 @@ pub fn sort_processes_by_distance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_ids_test() {
+        let n = 3;
+        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3]);
+
+        let n = 5;
+        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+    }
 
     #[test]
     fn sort_processes_by_distance_test() {

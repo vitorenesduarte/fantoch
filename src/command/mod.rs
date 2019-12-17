@@ -43,6 +43,12 @@ impl Command {
         Self::from(rifl, iter::once((key, KVOp::Put(value))))
     }
 
+    /// Creates a multi-put command.
+    pub fn multi_put(rifl: Rifl, kvs: Vec<(Key, Value)>) -> Self {
+        let commands = kvs.into_iter().map(|(key, value)| (key, KVOp::Put(value)));
+        Self::from(rifl, commands)
+    }
+
     /// Returns the command identifier.
     pub fn rifl(&self) -> Rifl {
         self.rifl

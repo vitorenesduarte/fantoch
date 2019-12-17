@@ -2,6 +2,7 @@ use crate::command::Command;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
 use crate::protocol::newt::votes::{ProcessVotes, VoteRange, Votes};
+use crate::util;
 use std::collections::{BTreeMap, HashMap};
 use std::mem;
 use threshold::AEClock;
@@ -116,8 +117,7 @@ struct VotesTable {
 
 impl VotesTable {
     fn new(n: usize, stability_threshold: usize) -> Self {
-        // compute process identifiers, making sure ids are non-zero
-        let ids = (1..=n).map(|id| id as u64);
+        let ids = util::process_ids(n);
         let votes_clock = AEClock::with(ids);
         Self {
             n,
