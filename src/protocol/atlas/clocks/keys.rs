@@ -90,16 +90,6 @@ impl KeysClocks {
 mod tests {
     use super::*;
     use crate::id::{DotGen, Rifl};
-    use threshold::{Clock, EventSet, MaxSet};
-
-    fn vclock<I: IntoIterator<Item = u64>>(iter: I) -> VClock<ProcessId> {
-        Clock::from(
-            iter.into_iter()
-                .enumerate()
-                .map(|(actor, seq)| ((actor + 1) as u64, seq)) // make ids 1..=n
-                .map(|(actor, seq)| (actor, MaxSet::from_event(seq))),
-        )
-    }
 
     #[test]
     fn keys_clocks_flow() {
@@ -144,7 +134,7 @@ mod tests {
 
         // empty conf for A
         let conf = clocks.conf(&cmd_a);
-        assert_eq!(conf, vclock(vec![0]));
+        assert_eq!(conf, util::vclock(vec![0]));
 
         // add A with {1,1}
         clocks.add(dot_gen.next_id(), &cmd_a);
@@ -154,21 +144,21 @@ mod tests {
         // 3. conf with {1,1} for A-B
         // 4. empty conf for C
         // 5. conf with {1,1} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![1]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![0]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![1]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![0]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![1]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![1]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![0]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![1]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![0]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![1]));
 
         // add noop with {1,2}
         clocks.add(dot_gen.next_id(), &noop);
 
         // conf with {1,2} for A, B, A-B, C and noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![2]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![2]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![2]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![2]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![2]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![2]));
 
         // add B with {1,3}
         clocks.add(dot_gen.next_id(), &cmd_b);
@@ -178,11 +168,11 @@ mod tests {
         // 3. conf with {1,3} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,3} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![2]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![3]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![3]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![2]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![3]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![3]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![3]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![3]));
 
         // add B with {1,4}
         clocks.add(dot_gen.next_id(), &cmd_b);
@@ -192,11 +182,11 @@ mod tests {
         // 3. conf with {1,4} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,4} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![2]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![4]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![4]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![2]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![4]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![4]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![4]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![4]));
 
         // add A-B with {1,5}
         clocks.add(dot_gen.next_id(), &cmd_ab);
@@ -206,11 +196,11 @@ mod tests {
         // 3. conf with {1,5} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,5} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![5]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![5]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![5]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![2]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![5]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![5]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![5]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![5]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![5]));
 
         // add A with {1,6}
         clocks.add(dot_gen.next_id(), &cmd_a);
@@ -220,11 +210,11 @@ mod tests {
         // 3. conf with {1,6} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,6} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![6]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![5]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![6]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![2]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![6]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![6]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![5]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![6]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![2]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![6]));
 
         // add C with {1,7}
         clocks.add(dot_gen.next_id(), &cmd_c);
@@ -234,21 +224,21 @@ mod tests {
         // 3. conf with {1,1} for A-B
         // 4. conf with {1,7} for C
         // 5. conf with {1,7} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![6]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![5]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![6]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![7]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![7]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![6]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![5]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![6]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![7]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![7]));
 
         // add noop with {1,8}
         clocks.add(dot_gen.next_id(), &noop);
 
         // conf with {1,8} for A, B, A-B, C and noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![8]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![8]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![8]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![8]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![8]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![8]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![8]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![8]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![8]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![8]));
 
         // add B with {1,9}
         clocks.add(dot_gen.next_id(), &cmd_b);
@@ -258,10 +248,10 @@ mod tests {
         // 3. conf with {1,9} for A-B
         // 4. conf with {1,8} for C
         // 5. conf with {1,9} for noop
-        assert_eq!(clocks.conf(&cmd_a), vclock(vec![8]));
-        assert_eq!(clocks.conf(&cmd_b), vclock(vec![9]));
-        assert_eq!(clocks.conf(&cmd_ab), vclock(vec![9]));
-        assert_eq!(clocks.conf(&cmd_c), vclock(vec![8]));
-        assert_eq!(clocks.conf(&noop), vclock(vec![9]));
+        assert_eq!(clocks.conf(&cmd_a), util::vclock(vec![8]));
+        assert_eq!(clocks.conf(&cmd_b), util::vclock(vec![9]));
+        assert_eq!(clocks.conf(&cmd_ab), util::vclock(vec![9]));
+        assert_eq!(clocks.conf(&cmd_c), util::vclock(vec![8]));
+        assert_eq!(clocks.conf(&noop), util::vclock(vec![9]));
     }
 }

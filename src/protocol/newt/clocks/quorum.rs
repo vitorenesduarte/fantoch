@@ -29,7 +29,7 @@ impl QuorumClocks {
         self.participants.contains(&process_id)
     }
 
-    /// Sets the new clock reported by `ProcessId` and returns the maximum clock seen until now.
+    /// Adds a new `clock` reported by `process_id` and returns the maximum clock seen until now.
     pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
         assert!(self.participants.len() < self.q);
 
@@ -73,20 +73,20 @@ mod tests {
         let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
-        quorum_clocks.add(0, 10);
-        assert!(quorum_clocks.contains(0));
-        assert!(!quorum_clocks.contains(1));
-        assert!(!quorum_clocks.contains(2));
-
         quorum_clocks.add(1, 10);
-        assert!(quorum_clocks.contains(0));
         assert!(quorum_clocks.contains(1));
         assert!(!quorum_clocks.contains(2));
+        assert!(!quorum_clocks.contains(3));
 
         quorum_clocks.add(2, 10);
-        assert!(quorum_clocks.contains(0));
         assert!(quorum_clocks.contains(1));
         assert!(quorum_clocks.contains(2));
+        assert!(!quorum_clocks.contains(3));
+
+        quorum_clocks.add(3, 10);
+        assert!(quorum_clocks.contains(1));
+        assert!(quorum_clocks.contains(2));
+        assert!(quorum_clocks.contains(3));
     }
 
     #[test]
@@ -96,11 +96,11 @@ mod tests {
         let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
-        quorum_clocks.add(0, 10);
-        assert!(!quorum_clocks.all());
         quorum_clocks.add(1, 10);
         assert!(!quorum_clocks.all());
         quorum_clocks.add(2, 10);
+        assert!(!quorum_clocks.all());
+        quorum_clocks.add(3, 10);
         assert!(quorum_clocks.all());
     }
 
@@ -112,9 +112,9 @@ mod tests {
         let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
-        assert_eq!(quorum_clocks.add(0, 10), (10, 1));
-        assert_eq!(quorum_clocks.add(1, 10), (10, 2));
-        assert_eq!(quorum_clocks.add(2, 10), (10, 3));
+        assert_eq!(quorum_clocks.add(1, 10), (10, 1));
+        assert_eq!(quorum_clocks.add(2, 10), (10, 2));
+        assert_eq!(quorum_clocks.add(3, 10), (10, 3));
 
         // -------------
         // quorum clocks
@@ -122,15 +122,15 @@ mod tests {
         let mut quorum_clocks = QuorumClocks::new(q);
 
         // add clocks and check they're there
-        assert_eq!(quorum_clocks.add(0, 10), (10, 1));
-        assert_eq!(quorum_clocks.add(1, 9), (10, 1));
-        assert_eq!(quorum_clocks.add(2, 10), (10, 2));
-        assert_eq!(quorum_clocks.add(3, 9), (10, 2));
+        assert_eq!(quorum_clocks.add(1, 10), (10, 1));
+        assert_eq!(quorum_clocks.add(2, 9), (10, 1));
+        assert_eq!(quorum_clocks.add(3, 10), (10, 2));
         assert_eq!(quorum_clocks.add(4, 9), (10, 2));
-        assert_eq!(quorum_clocks.add(5, 12), (12, 1));
-        assert_eq!(quorum_clocks.add(6, 12), (12, 2));
-        assert_eq!(quorum_clocks.add(7, 10), (12, 2));
-        assert_eq!(quorum_clocks.add(8, 12), (12, 3));
-        assert_eq!(quorum_clocks.add(9, 13), (13, 1));
+        assert_eq!(quorum_clocks.add(5, 9), (10, 2));
+        assert_eq!(quorum_clocks.add(6, 12), (12, 1));
+        assert_eq!(quorum_clocks.add(7, 12), (12, 2));
+        assert_eq!(quorum_clocks.add(8, 10), (12, 2));
+        assert_eq!(quorum_clocks.add(9, 12), (12, 3));
+        assert_eq!(quorum_clocks.add(10, 13), (13, 1));
     }
 }

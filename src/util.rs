@@ -1,6 +1,7 @@
 use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
+use threshold::{Clock, EventSet, MaxSet, VClock};
 
 // Debug version
 #[cfg(debug_assertions)]
@@ -22,6 +23,16 @@ macro_rules! log {
 pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
     (1..=n).map(|id| id as u64)
+}
+
+/// Returns a new `VClock` setting its frontier with the sequences in the iterator.
+pub fn vclock<I: IntoIterator<Item = u64>>(iter: I) -> VClock<ProcessId> {
+    Clock::from(
+        iter.into_iter()
+            .enumerate()
+            .map(|(actor, seq)| ((actor + 1) as u64, seq)) // make ids 1..=n
+            .map(|(actor, seq)| (actor, MaxSet::from_event(seq))),
+    )
 }
 
 /// Updates the processes known by this process.

@@ -2,8 +2,8 @@
 mod keys;
 
 // // This module contains the definition of `QuorumClocks`.
-// mod quorum;
+mod quorum;
 
-// // Re-export `KeysClocks` and `QuorumClocks`.
-// pub use keys::KeysClocks;
-// pub use quorum::QuorumClocks;
+// Re-export `KeysClocks` and `QuorumClocks`.
+pub use keys::KeysClocks;
+pub use quorum::QuorumClocks;
