@@ -58,7 +58,7 @@ script: |
     # </tarpaulin>
 
     # <travis>
-    cargo coveralls --lib --release
+    cargo coveralls --lib
     # </travis>
 
   fi
