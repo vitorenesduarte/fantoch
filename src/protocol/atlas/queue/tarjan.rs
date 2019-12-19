@@ -37,7 +37,7 @@ impl TarjanSCCFinder {
     pub fn finalize(self, vertex_index: &VertexIndex) -> Vec<SCC> {
         // reset the id of each dot in the stack
         self.stack.into_iter().for_each(|dot| {
-            // println!("removing {:?} from stack", dot);
+            println!("removing {:?} from stack", dot);
             // find vertex
             let vertex = vertex_index
                 .get_mut(&dot)
@@ -56,7 +56,7 @@ impl TarjanSCCFinder {
         executed_clock: &AEClock<ProcessId>,
         vertex_index: &VertexIndex,
     ) -> FinderResult {
-        // println!("Finder::strong_connect {:?}", dot);
+        println!("Finder::strong_connect {:?}", dot);
         // get the vertex
         let vertex = vertex_index.get_mut(&dot).expect("root vertex must exist");
 
@@ -67,12 +67,12 @@ impl TarjanSCCFinder {
         vertex.set_id(self.id);
         vertex.update_low(|_| self.id);
 
-        // println!(
-        //     "self.id {} | vertex id {} | vertex low {}",
-        //     self.id,
-        //     vertex.id(),
-        //     vertex.low()
-        // );
+        println!(
+            "self.id {} | vertex id {} | vertex low {}",
+            self.id,
+            vertex.id(),
+            vertex.low()
+        );
 
         // add to the stack
         vertex.set_on_stack(true);
@@ -84,42 +84,42 @@ impl TarjanSCCFinder {
             for dep in vertex.clock().subtract_iter(&process_id, eset) {
                 // create dot and find vertex
                 let dep_dot = Dot::new(process_id, dep);
-                // println!("dep: {:?}", dep_dot);
+                println!("dep: {:?}", dep_dot);
                 match vertex_index.get(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may not conflict
                         // with `dot` but we can't be sure until we have it locally
-                        // println!("missing dep: {:?}", dep_dot);
+                        println!("missing dep: {:?}", dep_dot);
                         return FinderResult::MissingDependency;
                     }
                     Some(dep_vertex) => {
                         // ignore non-conflicting commands
                         if !vertex.conflicts(&dep_vertex) {
-                            // println!("not a conflict: {:?}", dep_dot);
+                            println!("not a conflict: {:?}", dep_dot);
                             continue;
                         }
 
                         // if not visited, visit
                         if dep_vertex.id() == 0 {
-                            // println!("not visited yet: {:?}", dep_dot);
+                            println!("not visited yet: {:?}", dep_dot);
                             let result = self.strong_connect(dep_dot, executed_clock, vertex_index);
                             if result == FinderResult::MissingDependency {
                                 return result;
                             }
 
-                            // println!("min low with dep low: {}", dep_vertex.low());
-                            // println!("low before: {}", vertex.low());
+                            println!("min low with dep low: {}", dep_vertex.low());
+                            println!("low before: {}", vertex.low());
                             // min low with dep low
                             vertex.update_low(|low| cmp::min(low, dep_vertex.low()));
-                        // println!("low after: {}", vertex.low());
+                        println!("low after: {}", vertex.low());
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack() {
-                                // println!("min low with dep id: {}", dep_vertex.id());
-                                // println!("low before: {}", vertex.low());
+                                println!("min low with dep id: {}", dep_vertex.id());
+                                println!("low before: {}", vertex.low());
                                 // min low with dep id
                                 vertex.update_low(|low| cmp::min(low, dep_vertex.id()));
-                                // println!("low after: {}", vertex.low());
+                                println!("low after: {}", vertex.low());
                             }
                         }
                     }
@@ -139,7 +139,7 @@ impl TarjanSCCFinder {
                     .pop_front()
                     .expect("there should be an SCC member on the stack");
 
-                // println!("new scc member: {:?}", member_dot);
+                println!("new scc member: {:?}", member_dot);
 
                 // get its vertex and change its `on_stack` value
                 let member_vertex = vertex_index

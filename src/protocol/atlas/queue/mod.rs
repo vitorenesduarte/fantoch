@@ -54,7 +54,7 @@ impl Queue {
     /// Add a new command with its clock to the queue.
     #[allow(dead_code)]
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        // println!("Queue::add {:?} {:?}", dot, clock);
+        println!("Queue::add {:?} {:?}", dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
@@ -74,6 +74,10 @@ impl Queue {
     }
 
     fn find_scc(&mut self, dot: Dot) {
+        if self.executed_clock.contains(&dot.source(), dot.sequence()) {
+            return;
+        }
+        println!("FIND SCC {:?}", dot);
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
         let finder_result = finder.strong_connect(dot, &self.executed_clock, &self.vertex_index);
@@ -98,6 +102,8 @@ impl Queue {
         scc.into_iter().for_each(|dot| {
             // update executed clock
             self.executed_clock.add(&dot.source(), dot.sequence());
+
+            println!("removing from indexes: {:?}", dot);
 
             // remove from vertex index
             let vertex = self
@@ -405,11 +411,12 @@ mod tests {
 
     fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
         let total_order = check_termination(n, args.clone());
+        println!("initial TO: {:?}", total_order);
         let permutation_count = args.permutation().count();
         let mut i = 0;
         args.permutation().for_each(|permutation| {
             i += 1;
-            if i % 1000 == 0 {
+            if i % 1 == 0 {
                 println!("{} of {}", i, permutation_count);
             }
             let sorted = check_termination(n, permutation);
