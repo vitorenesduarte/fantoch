@@ -425,7 +425,7 @@ mod tests {
         let iterations = 10;
         let events_per_process = 3;
 
-        (0..iterations).for_each(|iteration| {
+        (0..iterations).for_each(|_| {
             let args = random_adds(n, events_per_process);
             shuffle_it(n, args);
         });
