@@ -6,88 +6,6 @@ use std::cmp;
 use std::collections::{BTreeSet, VecDeque};
 use threshold::{AEClock, VClock};
 
-pub struct Vertex {
-    dot: Dot,
-    cmd: Command,
-    clock: VClock<ProcessId>,
-    // specific to tarjan's algorithm
-    id: usize,
-    low: RefCell<usize>,
-    on_stack: bool,
-}
-
-impl Vertex {
-    pub fn new(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
-        Self {
-            dot,
-            cmd,
-            clock,
-            id: 0,
-            low: RefCell::new(0),
-            on_stack: false,
-        }
-    }
-
-    /// Consumes the vertex, returning its command.
-    pub fn into_command(self) -> Command {
-        self.cmd
-    }
-
-    /// Retrieves vertex's dot.
-    pub fn dot(&self) -> Dot {
-        self.dot
-    }
-
-    /// Retrieves vertex's command.
-    pub fn command(&self) -> &Command {
-        &self.cmd
-    }
-
-    /// Retrieves vertex's clock.
-    fn clock(&self) -> &VClock<ProcessId> {
-        &self.clock
-    }
-
-    /// Retrieves vertex's id.
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    /// Retrieves vertex's low.
-    fn low(&self) -> usize {
-        *self.low.borrow()
-    }
-
-    /// Check if vertex is on the stack.
-    fn on_stack(&self) -> bool {
-        self.on_stack
-    }
-
-    /// Sets vertex's id.
-    fn set_id(&mut self, id: usize) {
-        self.id = id;
-    }
-
-    /// Updates vertex's low.
-    fn update_low<F>(&self, update: F)
-    where
-        F: FnOnce(usize) -> usize,
-    {
-        let current_low = self.low();
-        *self.low.borrow_mut() = update(current_low);
-    }
-
-    /// Sets if vertex is on the stack or not.
-    fn set_on_stack(&mut self, on_stack: bool) {
-        self.on_stack = on_stack;
-    }
-
-    /// This vertex conflicts with another vertex by checking if their commands conflict.
-    fn conflicts(&self, other: &Vertex) -> bool {
-        self.cmd.conflicts(&other.cmd)
-    }
-}
-
 /// commands are sorted inside an SCC given their dot
 pub type SCC = BTreeSet<Dot>;
 
@@ -223,5 +141,87 @@ impl TarjanSCCFinder {
         }
 
         return FinderResult::NotFound;
+    }
+}
+
+pub struct Vertex {
+    dot: Dot,
+    cmd: Command,
+    clock: VClock<ProcessId>,
+    // specific to tarjan's algorithm
+    id: usize,
+    low: RefCell<usize>,
+    on_stack: bool,
+}
+
+impl Vertex {
+    pub fn new(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
+        Self {
+            dot,
+            cmd,
+            clock,
+            id: 0,
+            low: RefCell::new(0),
+            on_stack: false,
+        }
+    }
+
+    /// Consumes the vertex, returning its command.
+    pub fn into_command(self) -> Command {
+        self.cmd
+    }
+
+    /// Retrieves vertex's dot.
+    pub fn dot(&self) -> Dot {
+        self.dot
+    }
+
+    /// Retrieves vertex's command.
+    pub fn command(&self) -> &Command {
+        &self.cmd
+    }
+
+    /// Retrieves vertex's clock.
+    fn clock(&self) -> &VClock<ProcessId> {
+        &self.clock
+    }
+
+    /// Retrieves vertex's id.
+    fn id(&self) -> usize {
+        self.id
+    }
+
+    /// Retrieves vertex's low.
+    fn low(&self) -> usize {
+        *self.low.borrow()
+    }
+
+    /// Check if vertex is on the stack.
+    fn on_stack(&self) -> bool {
+        self.on_stack
+    }
+
+    /// Sets vertex's id.
+    fn set_id(&mut self, id: usize) {
+        self.id = id;
+    }
+
+    /// Updates vertex's low.
+    fn update_low<F>(&self, update: F)
+    where
+        F: FnOnce(usize) -> usize,
+    {
+        let current_low = self.low();
+        *self.low.borrow_mut() = update(current_low);
+    }
+
+    /// Sets if vertex is on the stack or not.
+    fn set_on_stack(&mut self, on_stack: bool) {
+        self.on_stack = on_stack;
+    }
+
+    /// This vertex conflicts with another vertex by checking if their commands conflict.
+    fn conflicts(&self, other: &Vertex) -> bool {
+        self.cmd.conflicts(&other.cmd)
     }
 }

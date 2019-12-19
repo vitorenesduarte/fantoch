@@ -54,6 +54,11 @@ impl PendingIndex {
         });
     }
 
+    /// Finds all pending dots for a given key.
+    pub fn pending(&self, key: &Key) -> Option<HashSet<Dot>> {
+        self.index.get(key).cloned()
+    }
+
     /// Removes a vertex from the index.
     pub fn remove(&mut self, vertex: &Vertex) {
         self.update_index(vertex, |pending| {

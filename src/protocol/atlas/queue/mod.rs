@@ -11,6 +11,7 @@ use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
 use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::util;
 use std::collections::HashSet;
+use std::mem;
 use threshold::{AEClock, VClock};
 
 #[allow(dead_code)]
@@ -41,21 +42,25 @@ impl Queue {
         }
     }
 
-    /// Add a new command with its clock to the queue.
+    /// Returns new commands ready to be executed.
     #[must_use]
+    pub fn to_execute(&mut self) -> Vec<Command> {
+        let mut ready = Vec::new();
+        mem::swap(&mut ready, &mut self.to_execute);
+        ready
+    }
+
+    /// Add a new command with its clock to the queue.
     #[allow(dead_code)]
-    pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Vec<Command> {
+    pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
         // index vertex
         self.index(vertex);
 
-        // find a new scc
-        let keys = self.find_scc(dot);
-
-        //
-        vec![]
+        // try to find a new scc
+        self.find_scc(dot);
     }
 
     fn index(&mut self, vertex: Vertex) {
@@ -66,7 +71,7 @@ impl Queue {
         assert!(self.vertex_index.index(vertex));
     }
 
-    fn find_scc(&mut self, dot: Dot) -> HashSet<Key> {
+    fn find_scc(&mut self, dot: Dot) {
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
         let finder_result = finder.strong_connect(dot, &self.executed_clock, &self.vertex_index);
@@ -83,7 +88,8 @@ impl Queue {
                 });
         }
 
-        keys
+        // try pending commands given the keys touched by ready SCCs
+        self.try_pending(keys);
     }
 
     fn save_scc(&mut self, scc: SCC, keys: &mut HashSet<Key>) {
@@ -107,5 +113,55 @@ impl Queue {
             // add vertex to commands to be executed
             self.to_execute.push(vertex.into_command())
         })
+    }
+
+    fn try_pending(&mut self, keys: HashSet<Key>) {
+        keys.into_iter().for_each(|key| {
+            // try to find SCCs for each pending dot that has the same color of any command in the
+            // ready SCCs
+            // TODO we could optimize this process by maintaining a list of visited dots, as it is
+            // done in the java implementation
+            let pending = self
+                .pending_index
+                .pending(&key)
+                .expect("key must exist in the pending index");
+
+            for dot in pending {
+                self.find_scc(dot);
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::id::Rifl;
+
+    #[test]
+    fn simple() {
+        // create key
+        let n = 2;
+        let mut queue = Queue::new(n);
+
+        // cmd 0
+        let dot_0 = Dot::new(1, 1);
+        let cmd_0 = Command::put(Rifl::new(1, 1), String::from("A"), String::new());
+        let clock_0 = util::vclock(vec![0, 1]);
+
+        // cmd 1
+        let dot_1 = Dot::new(2, 1);
+        let cmd_1 = Command::put(Rifl::new(2, 1), String::from("A"), String::new());
+        let clock_1 = util::vclock(vec![1, 0]);
+
+        // add cmd 0
+        queue.add(dot_0, cmd_0.clone(), clock_0);
+        // check commands ready to be executed
+        assert!(queue.to_execute().is_empty());
+
+        // add cmd 1
+        queue.add(dot_1, cmd_1.clone(), clock_1);
+        // check commands ready to be executed
+        assert_eq!(queue.to_execute(), vec![cmd_0, cmd_1]);
     }
 }
