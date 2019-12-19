@@ -7,6 +7,7 @@ mod index;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
+use crate::log;
 use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
 use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::util;
@@ -54,7 +55,7 @@ impl Queue {
     /// Add a new command with its clock to the queue.
     #[allow(dead_code)]
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        println!("Queue::add {:?} {:?}", dot, clock);
+        log!("Queue::add {:?} {:?}", dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
@@ -74,10 +75,11 @@ impl Queue {
     }
 
     fn find_scc(&mut self, dot: Dot) {
+        log!("Queue:find_scc {:?}", dot);
         if self.executed_clock.contains(&dot.source(), dot.sequence()) {
             return;
         }
-        println!("FIND SCC {:?}", dot);
+
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
         let finder_result = finder.strong_connect(dot, &self.executed_clock, &self.vertex_index);
@@ -100,10 +102,10 @@ impl Queue {
 
     fn save_scc(&mut self, scc: SCC, keys: &mut HashSet<Key>) {
         scc.into_iter().for_each(|dot| {
+            log!("Queue:save_scc removing {:?} from indexes", dot);
+
             // update executed clock
             self.executed_clock.add(&dot.source(), dot.sequence());
-
-            println!("removing from indexes: {:?}", dot);
 
             // remove from vertex index
             let vertex = self
@@ -411,14 +413,7 @@ mod tests {
 
     fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
         let total_order = check_termination(n, args.clone());
-        println!("initial TO: {:?}", total_order);
-        let permutation_count = args.permutation().count();
-        let mut i = 0;
         args.permutation().for_each(|permutation| {
-            i += 1;
-            if i % 1 == 0 {
-                println!("{} of {}", i, permutation_count);
-            }
             let sorted = check_termination(n, permutation);
             assert_eq!(total_order, sorted);
         });
