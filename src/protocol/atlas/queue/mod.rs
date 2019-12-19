@@ -43,6 +43,7 @@ impl Queue {
     }
 
     /// Returns new commands ready to be executed.
+    #[allow(dead_code)]
     #[must_use]
     pub fn to_execute(&mut self) -> Vec<Command> {
         let mut ready = Vec::new();
@@ -53,7 +54,7 @@ impl Queue {
     /// Add a new command with its clock to the queue.
     #[allow(dead_code)]
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        println!("Queue::add {:?} {:?}", dot, clock);
+        // println!("Queue::add {:?} {:?}", dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
@@ -138,10 +139,11 @@ impl Queue {
 mod tests {
     use super::*;
     use crate::id::Rifl;
+    use permutator::Permutation;
 
     #[test]
     fn simple() {
-        // create key
+        // create queue
         let n = 2;
         let mut queue = Queue::new(n);
 
@@ -164,5 +166,300 @@ mod tests {
         queue.add(dot_1, cmd_1.clone(), clock_1);
         // check commands ready to be executed
         assert_eq!(queue.to_execute(), vec![cmd_0, cmd_1]);
+    }
+    #[test]
+    fn test_add_1() {
+        // {1, 2}, [2, 2]
+        let dot_a = Dot::new(1, 2);
+        let clock_a = util::vclock(vec![2, 2]);
+
+        // {1, 1}, [3, 2]
+        let dot_b = Dot::new(1, 1);
+        let clock_b = util::vclock(vec![3, 2]);
+
+        // {1, 5}, [6, 2]
+        let dot_c = Dot::new(1, 5);
+        let clock_c = util::vclock(vec![6, 2]);
+
+        // {1, 6}, [6, 3]
+        let dot_d = Dot::new(1, 6);
+        let clock_d = util::vclock(vec![6, 3]);
+
+        // {1, 3}, [3, 3]
+        let dot_e = Dot::new(1, 3);
+        let clock_e = util::vclock(vec![3, 3]);
+
+        // {2, 2}, [0, 2]
+        let dot_f = Dot::new(2, 2);
+        let clock_f = util::vclock(vec![0, 2]);
+
+        // {2, 1}, [4, 3]
+        let dot_g = Dot::new(2, 1);
+        let clock_g = util::vclock(vec![4, 3]);
+
+        // {1, 4}, [6, 2]
+        let dot_h = Dot::new(1, 4);
+        let clock_h = util::vclock(vec![6, 2]);
+
+        // {2, 3}, [6, 3]
+        let dot_i = Dot::new(2, 3);
+        let clock_i = util::vclock(vec![6, 3]);
+
+        // create args
+        let args = vec![
+            (dot_a, clock_a),
+            (dot_b, clock_b),
+            (dot_c, clock_c),
+            (dot_d, clock_d),
+            (dot_e, clock_e),
+            (dot_f, clock_f),
+            (dot_g, clock_g),
+            (dot_h, clock_h),
+            (dot_i, clock_i),
+        ];
+
+        let n = 2;
+        shuffle_it(n, args);
+    }
+
+    #[test]
+    fn test_add_2() {
+        // {2, 4}, [3, 4]
+        let dot_a = Dot::new(2, 4);
+        let clock_a = util::vclock(vec![3, 4]);
+
+        // {2, 3}, [0, 3]
+        let dot_b = Dot::new(2, 3);
+        let clock_b = util::vclock(vec![0, 3]);
+
+        // {1, 3}, [3, 3]
+        let dot_c = Dot::new(1, 3);
+        let clock_c = util::vclock(vec![3, 3]);
+
+        // {1, 1}, [3, 4]
+        let dot_d = Dot::new(1, 1);
+        let clock_d = util::vclock(vec![3, 4]);
+
+        // {2, 2}, [0, 2]
+        let dot_e = Dot::new(2, 2);
+        let clock_e = util::vclock(vec![0, 2]);
+
+        // {1, 2}, [3, 3]
+        let dot_f = Dot::new(1, 2);
+        let clock_f = util::vclock(vec![3, 3]);
+
+        // {2, 1}, [3, 3]
+        let dot_g = Dot::new(2, 1);
+        let clock_g = util::vclock(vec![3, 3]);
+
+        // create args
+        let args = vec![
+            (dot_a, clock_a),
+            (dot_b, clock_b),
+            (dot_c, clock_c),
+            (dot_d, clock_d),
+            (dot_e, clock_e),
+            (dot_f, clock_f),
+            (dot_g, clock_g),
+        ];
+
+        let n = 2;
+        shuffle_it(n, args);
+    }
+
+    #[test]
+    fn test_add_3() {
+        // {3, 2}, [1, 0, 2]
+        let dot_a = Dot::new(3, 2);
+        let clock_a = util::vclock(vec![1, 0, 2]);
+
+        // {3, 3}, [1, 1, 3]
+        let dot_b = Dot::new(3, 3);
+        let clock_b = util::vclock(vec![1, 1, 3]);
+
+        // {3, 1}, [1, 1, 3]
+        let dot_c = Dot::new(3, 1);
+        let clock_c = util::vclock(vec![1, 1, 3]);
+
+        // {1, 1}, [1, 0, 0]
+        let dot_d = Dot::new(1, 1);
+        let clock_d = util::vclock(vec![1, 0, 0]);
+
+        // {2, 1}, [1, 1, 2]
+        let dot_e = Dot::new(2, 1);
+        let clock_e = util::vclock(vec![1, 1, 2]);
+
+        // create args
+        let args = vec![
+            (dot_a, clock_a),
+            (dot_b, clock_b),
+            (dot_c, clock_c),
+            (dot_d, clock_d),
+            (dot_e, clock_e),
+        ];
+
+        let n = 3;
+        shuffle_it(n, args);
+    }
+
+    #[test]
+    fn test_add_4() {
+        // {1, 5}, [5]
+        let dot_a = Dot::new(1, 5);
+        let clock_a = util::vclock(vec![5]);
+
+        // {1, 4}, [6]
+        let dot_b = Dot::new(1, 4);
+        let clock_b = util::vclock(vec![6]);
+
+        // {1, 1}, [5]
+        let dot_c = Dot::new(1, 1);
+        let clock_c = util::vclock(vec![5]);
+
+        // {1, 2}, [6]
+        let dot_d = Dot::new(1, 2);
+        let clock_d = util::vclock(vec![6]);
+
+        // {1, 3}, [5]
+        let dot_e = Dot::new(1, 3);
+        let clock_e = util::vclock(vec![5]);
+
+        // {1, 6}, [6]
+        let dot_f = Dot::new(1, 6);
+        let clock_f = util::vclock(vec![6]);
+
+        // create args
+        let args = vec![
+            (dot_a, clock_a),
+            (dot_b, clock_b),
+            (dot_c, clock_c),
+            (dot_d, clock_d),
+            (dot_e, clock_e),
+            (dot_f, clock_f),
+        ];
+
+        let n = 1;
+        shuffle_it(n, args);
+    }
+
+    #[test]
+    fn test_add_5() {
+        // {1, 1}, [1, 1]
+        let dot_a = Dot::new(1, 1);
+        let clock_a = util::vclock(vec![1, 1]);
+
+        // {1, 2}, [2, 0]
+        let dot_b = Dot::new(1, 2);
+        let clock_b = util::vclock(vec![2, 0]);
+
+        // {2, 1}, [1, 1]
+        let dot_c = Dot::new(2, 1);
+        let clock_c = util::vclock(vec![1, 1]);
+
+        // create args
+        let args = vec![(dot_a, clock_a), (dot_b, clock_b), (dot_c, clock_c)];
+
+        let n = 2;
+        shuffle_it(n, args);
+    }
+
+    #[test]
+    fn test_add_6() {
+        // {1, 1}, [1, 0]
+        let dot_a = Dot::new(1, 1);
+        let clock_a = util::vclock(vec![1, 0]);
+
+        // {1, 2}, [4, 1]
+        let dot_b = Dot::new(1, 2);
+        let clock_b = util::vclock(vec![4, 1]);
+
+        // {1, 3}, [3, 0]
+        let dot_c = Dot::new(1, 3);
+        let clock_c = util::vclock(vec![3, 0]);
+
+        // {1, 4}, [4, 0]
+        let dot_d = Dot::new(1, 4);
+        let clock_d = util::vclock(vec![4, 0]);
+
+        // {2, 1}, [0, 1]
+        let dot_e = Dot::new(2, 1);
+        let clock_e = util::vclock(vec![0, 1]);
+
+        // {2, 2}, [3, 2]
+        let dot_f = Dot::new(2, 2);
+        let clock_f = util::vclock(vec![3, 2]);
+
+        // create args
+        let args = vec![
+            (dot_a, clock_a),
+            (dot_b, clock_b),
+            (dot_c, clock_c),
+            (dot_d, clock_d),
+            (dot_e, clock_e),
+            (dot_f, clock_f),
+        ];
+
+        let n = 2;
+        shuffle_it(n, args);
+    }
+
+    fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
+        let total_order = check_termination(n, args.clone());
+        let permutation_count = args.permutation().count();
+        let mut i = 0;
+        args.permutation().for_each(|permutation| {
+            i += 1;
+            if i % 1000 == 0 {
+                println!("{} of {}", i, permutation_count);
+            }
+            let sorted = check_termination(n, permutation);
+            assert_eq!(total_order, sorted);
+        });
+    }
+
+    fn check_termination(n: usize, args: Vec<(Dot, VClock<ProcessId>)>) -> Vec<Rifl> {
+        // create queue
+        let mut queue = Queue::new(n);
+        let mut all_rifls = HashSet::new();
+        let mut sorted = Vec::new();
+
+        args.into_iter().for_each(|(dot, clock)| {
+            // create command rifl from its dot
+            let rifl = Rifl::new(dot.source(), dot.sequence());
+
+            // create command
+            let key = String::from("black");
+            let value = String::from("");
+            let cmd = Command::put(rifl, key, value);
+
+            // add to the set of all rifls
+            assert!(all_rifls.insert(rifl));
+
+            // add it to the queue
+            queue.add(dot, cmd, clock);
+
+            // get ready to execute
+            let to_execute = queue.to_execute();
+
+            // for each command ready to be executed
+            to_execute.iter().for_each(|cmd| {
+                // get its rifl
+                let rifl = cmd.rifl();
+
+                // remove it from the set of rifls
+                assert!(all_rifls.remove(&cmd.rifl()));
+
+                // and add it to the sorted results
+                sorted.push(rifl);
+            });
+        });
+
+        // the set of all rifls should be empty
+        if !all_rifls.is_empty() {
+            panic!("the set of all rifls should be empty");
+        }
+
+        // return sorted commands
+        sorted
     }
 }
