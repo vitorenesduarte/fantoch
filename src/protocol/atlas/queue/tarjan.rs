@@ -2,7 +2,6 @@ use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::protocol::atlas::queue::VertexIndex;
-use std::cell::RefCell;
 use std::cmp;
 use std::collections::{BTreeSet, VecDeque};
 use threshold::{AEClock, VClock};
@@ -161,7 +160,7 @@ pub struct Vertex {
     clock: VClock<ProcessId>,
     // specific to tarjan's algorithm
     id: usize,
-    low: RefCell<usize>,
+    low: usize,
     on_stack: bool,
 }
 
@@ -172,7 +171,7 @@ impl Vertex {
             cmd,
             clock,
             id: 0,
-            low: RefCell::new(0),
+            low: 0,
             on_stack: false,
         }
     }
@@ -204,7 +203,7 @@ impl Vertex {
 
     /// Retrieves vertex's low.
     fn low(&self) -> usize {
-        *self.low.borrow()
+        self.low
     }
 
     /// Check if vertex is on the stack.
@@ -218,12 +217,11 @@ impl Vertex {
     }
 
     /// Updates vertex's low.
-    fn update_low<F>(&self, update: F)
+    fn update_low<F>(&mut self, update: F)
     where
         F: FnOnce(usize) -> usize,
     {
-        let current_low = self.low();
-        *self.low.borrow_mut() = update(current_low);
+        self.low = update(self.low);
     }
 
     /// Sets if vertex is on the stack or not.
