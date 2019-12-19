@@ -76,6 +76,12 @@ impl Queue {
 
     fn find_scc(&mut self, dot: Dot) {
         log!("Queue:find_scc {:?}", dot);
+
+        // TODO the following check is needed for `test_add_3`
+        // - the way we're tracking pending commands may lead to a situation where we see two
+        //   commands pending, we start the finder with one of them, find an SCC where both are
+        //   there, and then we start a second finder with the second command; since this second
+        //   command was found to be in an SCC with the first one, it won't be indexed
         if self.executed_clock.contains(&dot.source(), dot.sequence()) {
             return;
         }
