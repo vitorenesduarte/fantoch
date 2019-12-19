@@ -1,11 +1,11 @@
+// This module contains the definition of `KeyClocks` and `QuorumClocks`.
+mod clocks;
+
 // This module contains the definition of `ProcessVotes`, `Votes` and `VoteRange`.
 mod votes;
 
 // This module contains the definition of `MultiVotesTable`.
 mod votes_table;
-
-// This module contains the definition of `KeyClocks` and `QuorumClocks`.
-mod clocks;
 
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;

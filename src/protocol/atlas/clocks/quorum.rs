@@ -2,8 +2,10 @@ use crate::id::ProcessId;
 use std::collections::HashSet;
 use threshold::{MaxSet, TClock, VClock};
 
+#[allow(dead_code)]
 type ThresholdClock = TClock<ProcessId, MaxSet>;
 
+#[allow(dead_code)]
 pub struct QuorumClocks {
     // fast quorum size
     q: usize,
@@ -15,6 +17,7 @@ pub struct QuorumClocks {
 
 impl QuorumClocks {
     /// Creates a `QuorumClocks` instance given the quorum size.
+    #[allow(dead_code)]
     pub fn new(q: usize) -> Self {
         Self {
             q,
@@ -24,11 +27,13 @@ impl QuorumClocks {
     }
 
     /// Check if we have a clock from a given `ProcessId`.
+    #[allow(dead_code)]
     pub fn contains(&self, process_id: ProcessId) -> bool {
         self.participants.contains(&process_id)
     }
 
     /// Adds a new `clock` reported by `process_id`.
+    #[allow(dead_code)]
     pub fn add(&mut self, process_id: ProcessId, clock: VClock<ProcessId>) {
         assert!(self.participants.len() < self.q);
 
@@ -40,11 +45,13 @@ impl QuorumClocks {
     }
 
     /// Check if we all fast quorum processes have reported their clock.
+    #[allow(dead_code)]
     pub fn all(&self) -> bool {
         self.participants.len() == self.q
     }
 
     /// Computes the threshold union.
+    #[allow(dead_code)]
     pub fn threshold_union(&self, threshold: usize) -> (VClock<ProcessId>, bool) {
         self.threshold_clock.threshold_union(threshold as u64)
     }
