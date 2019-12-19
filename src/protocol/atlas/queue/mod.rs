@@ -53,6 +53,7 @@ impl Queue {
     /// Add a new command with its clock to the queue.
     #[allow(dead_code)]
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
+        println!("Queue::add {:?} {:?}", dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
@@ -76,16 +77,16 @@ impl Queue {
         let mut finder = TarjanSCCFinder::new();
         let finder_result = finder.strong_connect(dot, &self.executed_clock, &self.vertex_index);
 
+        // get sccs
+        let sccs = finder.finalize(&self.vertex_index);
+
         // create set of keys in ready SCCs
         let mut keys = HashSet::new();
 
         if finder_result == FinderResult::Found {
-            finder
-                .finalize(&self.vertex_index)
-                .into_iter()
-                .for_each(|scc| {
-                    self.save_scc(scc, &mut keys);
-                });
+            sccs.into_iter().for_each(|scc| {
+                self.save_scc(scc, &mut keys);
+            });
         }
 
         // try pending commands given the keys touched by ready SCCs

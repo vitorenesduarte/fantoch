@@ -1,12 +1,12 @@
 use crate::id::Dot;
 use crate::kvs::Key;
 use crate::protocol::atlas::queue::Vertex;
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub struct VertexIndex {
-    index: HashMap<Dot, RefCell<Vertex>>,
+    index: HashMap<Dot, UnsafeCell<Vertex>>,
 }
 
 impl VertexIndex {
@@ -16,22 +16,27 @@ impl VertexIndex {
 
     /// Indexes a new vertex, returning whether a vertex with this dot was already indexed or not.
     pub fn index(&mut self, vertex: Vertex) -> bool {
-        let res = self.index.insert(vertex.dot(), RefCell::new(vertex));
+        println!("VertexIndex::index {:?}", vertex.dot());
+        let res = self.index.insert(vertex.dot(), UnsafeCell::new(vertex));
         res.is_none()
     }
 
-    /// Returns a mutable reference to an indexed vertex (if previously indexed).
-    pub fn get_mut(&self, dot: &Dot) -> Option<RefMut<Vertex>> {
-        self.index.get(dot).map(|cell| cell.borrow_mut())
+    /// Returns a reference to an indexed vertex (if previously indexed).
+    pub fn get(&self, dot: &Dot) -> Option<&Vertex> {
+        println!("VertexIndex::get {:?}", dot);
+        // TODO is this unsafe needed?
+        self.index.get(dot).map(|cell| unsafe { &*cell.get() })
     }
 
-    /// Returns a reference to an indexed vertex (if previously indexed).
-    pub fn get(&self, dot: &Dot) -> Option<Ref<Vertex>> {
-        self.index.get(dot).map(|cell| cell.borrow())
+    /// Returns a mutable reference to an indexed vertex (if previously indexed).
+    pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
+        println!("VertexIndex::get_mut {:?}", dot);
+        self.index.get(dot).map(|cell| unsafe { &mut *cell.get() })
     }
 
     /// Removes a vertex from the index.
     pub fn remove(&mut self, dot: &Dot) -> Option<Vertex> {
+        println!("VertexIndex::remove {:?}", dot);
         self.index.remove(dot).map(|cell| cell.into_inner())
     }
 }
