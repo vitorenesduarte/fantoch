@@ -387,9 +387,9 @@ mod tests {
         let dot_d = Dot::new(1, 4);
         let clock_d = util::vclock(vec![4, 0]);
 
-        // {2, 1}, [0, 1]
+        // {2, 1}, [1, 1]
         let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![0, 1]);
+        let clock_e = util::vclock(vec![1, 1]);
 
         // {2, 2}, [3, 2]
         let dot_f = Dot::new(2, 2);
