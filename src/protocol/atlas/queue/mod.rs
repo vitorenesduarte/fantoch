@@ -153,7 +153,9 @@ impl Queue {
 mod tests {
     use super::*;
     use crate::id::Rifl;
-    use permutator::Permutation;
+    use permutator::{Combination, Permutation};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
 
     #[test]
     fn simple() {
@@ -415,6 +417,80 @@ mod tests {
 
         let n = 2;
         shuffle_it(n, args);
+    }
+
+    #[test]
+    fn test_add_random() {
+        let n = 2;
+        let iterations = 10;
+        let events_per_process = 3;
+
+        (0..iterations).for_each(|iteration| {
+            let args = random_adds(n, events_per_process);
+            shuffle_it(n, args);
+        });
+    }
+
+    fn random_adds(n: usize, events_per_process: usize) -> Vec<(Dot, VClock<ProcessId>)> {
+        // create dots
+        let dots: Vec<_> = util::process_ids(n)
+            .flat_map(|process_id| {
+                (1..=events_per_process).map(move |event| Dot::new(process_id, event as u64))
+            })
+            .collect();
+
+        // create bottom clocks
+        let clocks: HashMap<_, _> = dots
+            .clone()
+            .into_iter()
+            .map(|dot| {
+                let clock = VClock::with(util::process_ids(n));
+                (dot, RefCell::new(clock))
+            })
+            .collect();
+
+        // for each pair of dots
+        dots.combination(2).for_each(|dots| {
+            let left = dots[0];
+            let right = dots[1];
+
+            // find their clocks
+            let mut left_clock = clocks
+                .get(left)
+                .expect("left clock must exist")
+                .borrow_mut();
+            let mut right_clock = clocks
+                .get(right)
+                .expect("right clock must exist")
+                .borrow_mut();
+
+            // and make sure at least one is a dependency of the other
+            match rand::random::<usize>() % 3 {
+                0 => {
+                    // left depends on right
+                    left_clock.add(&right.source(), right.sequence());
+                }
+                1 => {
+                    // right depends on left
+                    right_clock.add(&left.source(), left.sequence());
+                }
+                2 => {
+                    // both
+                    left_clock.add(&right.source(), right.sequence());
+                    right_clock.add(&left.source(), left.sequence());
+                }
+                _ => panic!("usize % 3 must < 3"),
+            }
+        });
+
+        // return mapping from dot to its clock
+        clocks
+            .into_iter()
+            .map(|(dot, clock_cell)| {
+                let clock = clock_cell.into_inner();
+                (dot, clock)
+            })
+            .collect()
     }
 
     fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
