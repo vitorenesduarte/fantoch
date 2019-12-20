@@ -54,15 +54,18 @@ impl KeysClocks {
     /// observed.
     #[allow(dead_code)]
     pub fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let mut clock = Self::bottom_clock(self.n);
-        self.clock_with_past(cmd, &mut clock);
-        clock
+        let clock = Self::bottom_clock(self.n);
+        self.clock_with_past(cmd, clock)
     }
 
     /// Computes a clock for some command representing the `Dot`s of all conflicting commands
     /// observed, given an initial clock already with conflicting commands (that we denote by past).
     #[allow(dead_code)]
-    pub fn clock_with_past(&self, cmd: &Option<Command>, past: &mut VClock<ProcessId>) {
+    pub fn clock_with_past(
+        &self,
+        cmd: &Option<Command>,
+        mut past: VClock<ProcessId>,
+    ) -> VClock<ProcessId> {
         // always join with `self.noop_conf`
         past.join(&self.noop_clock);
 
@@ -82,6 +85,8 @@ impl KeysClocks {
                 });
             }
         }
+
+        past
     }
 
     // Creates a bottom clock of size `n`.
