@@ -270,7 +270,7 @@ impl Newt {
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
                 // TODO slow path
-                unimplemented!("slow path not implemented yet")
+                todo!("slow path not implemented yet")
             }
         } else {
             ToSend::Nothing
