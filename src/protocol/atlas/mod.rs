@@ -6,7 +6,7 @@ mod queue;
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
@@ -14,7 +14,7 @@ use crate::protocol::atlas::clocks::{KeysClocks, QuorumClocks};
 use crate::protocol::atlas::queue::Queue;
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use threshold::VClock;
 
@@ -24,6 +24,7 @@ pub struct Atlas {
     cmds_info: CommandsInfo,
     queue: Queue,
     store: KVStore,
+    pending: HashSet<Rifl>,
     commands_ready: Vec<CommandResult>,
 }
 
@@ -38,11 +39,12 @@ impl Process for Atlas {
         // create `Queue`
         let queue = Queue::new(config.n());
 
-        // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore`.
+        // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProcess::new(process_id, region, planet, config, q);
         let keys_clocks = KeysClocks::new(config.n());
         let cmds_info = CommandsInfo::new(config.n(), q);
         let store = KVStore::new();
+        let pending = HashSet::new();
         let commands_ready = Vec::new();
 
         // create `Atlas`
@@ -52,6 +54,7 @@ impl Process for Atlas {
             cmds_info,
             queue,
             store,
+            pending,
             commands_ready,
         }
     }
@@ -103,6 +106,9 @@ impl Atlas {
 
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
+        // start command in `Pending`
+        assert!(self.pending.insert(cmd.rifl()));
+
         // compute the command identifier
         let dot = self.bp.next_dot();
 
@@ -263,9 +269,22 @@ impl Atlas {
         // borrow everything we'll need
         let commands_ready = &mut self.commands_ready;
         let store = &mut self.store;
+        let pending = &mut self.pending;
 
         // get more commands that are ready to be executed
-        let ready = to_execute.into_iter().map(|cmd| store.execute_command(cmd));
+        let ready = to_execute.into_iter().filter_map(|cmd| {
+            // get command rifl
+            let rifl = cmd.rifl();
+            // execute the command
+            let result = store.execute_command(cmd);
+
+            // if it was pending locally, then it's from a client of this process
+            if pending.remove(&rifl) {
+                Some(result)
+            } else {
+                None
+            }
+        });
         commands_ready.extend(ready);
     }
 }

@@ -107,7 +107,7 @@ impl Queue {
             log!("Queue:save_scc removing {:?} from indexes", dot);
 
             // update executed clock
-            self.executed_clock.add(&dot.source(), dot.sequence());
+            assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
 
             // remove from vertex index
             let vertex = self
