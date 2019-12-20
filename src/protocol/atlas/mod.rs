@@ -111,6 +111,7 @@ impl Atlas {
 
         // compute its clock
         let clock = self.keys_clocks.clock(&cmd);
+        self.keys_clocks.add(dot, &cmd);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -152,6 +153,7 @@ impl Atlas {
 
         // compute its clock
         let clock = self.keys_clocks.clock_with_past(&cmd, remote_clock);
+        self.keys_clocks.add(dot, &cmd);
 
         // update command info
         info.status = Status::COLLECT;

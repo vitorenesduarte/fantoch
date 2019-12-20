@@ -5,7 +5,6 @@ use crate::util;
 use std::collections::HashMap;
 use threshold::VClock;
 
-#[allow(dead_code)]
 pub struct KeysClocks {
     n: usize, // number of processes
     clocks: HashMap<Key, VClock<ProcessId>>,
@@ -14,7 +13,6 @@ pub struct KeysClocks {
 
 impl KeysClocks {
     /// Create a new `KeysClocks` instance.
-    #[allow(dead_code)]
     pub fn new(n: usize) -> Self {
         Self {
             n,
@@ -24,7 +22,6 @@ impl KeysClocks {
     }
 
     /// Adds a command's `Dot` to the clock of each key touched by the command.
-    #[allow(dead_code)]
     pub fn add(&mut self, dot: Dot, cmd: &Option<Command>) {
         match cmd {
             Some(cmd) => {
@@ -52,7 +49,6 @@ impl KeysClocks {
 
     /// Computes a clock for some command representing the `Dot`s of all conflicting commands
     /// observed.
-    #[allow(dead_code)]
     pub fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
         let clock = Self::bottom_clock(self.n);
         self.clock_with_past(cmd, clock)
@@ -60,7 +56,6 @@ impl KeysClocks {
 
     /// Computes a clock for some command representing the `Dot`s of all conflicting commands
     /// observed, given an initial clock already with conflicting commands (that we denote by past).
-    #[allow(dead_code)]
     pub fn clock_with_past(
         &self,
         cmd: &Option<Command>,

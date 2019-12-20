@@ -15,7 +15,6 @@ use std::collections::HashSet;
 use std::mem;
 use threshold::{AEClock, VClock};
 
-#[allow(dead_code)]
 pub struct Queue {
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
@@ -25,7 +24,6 @@ pub struct Queue {
 
 impl Queue {
     /// Create a new `Queue`.
-    #[allow(dead_code)]
     pub fn new(n: usize) -> Self {
         // create bottom executed clock
         let ids = util::process_ids(n);
@@ -44,7 +42,6 @@ impl Queue {
     }
 
     /// Returns new commands ready to be executed.
-    #[allow(dead_code)]
     #[must_use]
     pub fn to_execute(&mut self) -> Vec<Command> {
         let mut ready = Vec::new();
@@ -53,7 +50,6 @@ impl Queue {
     }
 
     /// Add a new command with its clock to the queue.
-    #[allow(dead_code)]
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
         log!("Queue::add {:?} {:?}", dot, clock);
         // create new vertex for this command
