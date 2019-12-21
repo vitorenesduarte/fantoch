@@ -78,7 +78,7 @@ impl PendingIndex {
             // get current set of pending commands for this key
             let pending = match self.index.get_mut(key) {
                 Some(pending) => pending,
-                None => self.index.entry(key.clone()).or_insert(HashSet::new()),
+                None => self.index.entry(key.clone()).or_insert_with(HashSet::new),
             };
             // update pending
             update(pending)

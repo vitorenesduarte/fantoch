@@ -261,7 +261,7 @@ impl Atlas {
         // add to queue if not a noop and execute commands that can be executed
         if let Some(cmd) = info.cmd.clone() {
             self.queue.add(dot, cmd, info.clock.clone());
-            let to_execute = self.queue.to_execute();
+            let to_execute = self.queue.commands_to_execute();
             self.execute(to_execute);
         }
 

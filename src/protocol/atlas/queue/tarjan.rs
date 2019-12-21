@@ -147,10 +147,10 @@ impl TarjanSCCFinder {
             }
             // add scc to to the set of sccs
             self.sccs.push(scc);
-            return FinderResult::Found;
+            FinderResult::Found
+        } else {
+            FinderResult::NotFound
         }
-
-        return FinderResult::NotFound;
     }
 }
 

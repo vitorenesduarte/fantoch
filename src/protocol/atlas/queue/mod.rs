@@ -53,7 +53,7 @@ impl Queue {
 
     /// Returns new commands ready to be executed.
     #[must_use]
-    pub fn to_execute(&mut self) -> Vec<Command> {
+    pub fn commands_to_execute(&mut self) -> Vec<Command> {
         let mut ready = Vec::new();
         mem::swap(&mut ready, &mut self.to_execute);
         ready
@@ -256,12 +256,12 @@ mod tests {
         // add cmd 0
         queue.add(dot_0, cmd_0.clone(), clock_0);
         // check commands ready to be executed
-        assert!(queue.to_execute().is_empty());
+        assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
         queue.add(dot_1, cmd_1.clone(), clock_1);
         // check commands ready to be executed
-        assert_eq!(queue.to_execute(), vec![cmd_0, cmd_1]);
+        assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
 
     #[test]
@@ -604,7 +604,7 @@ mod tests {
             queue.add(dot, cmd, clock);
 
             // get ready to execute
-            let to_execute = queue.to_execute();
+            let to_execute = queue.commands_to_execute();
 
             // for each command ready to be executed
             to_execute.iter().for_each(|cmd| {
