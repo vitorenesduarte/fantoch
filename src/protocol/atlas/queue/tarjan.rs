@@ -3,7 +3,7 @@ use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::protocol::atlas::queue::VertexIndex;
 use std::cmp;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeSet, HashSet, VecDeque};
 use threshold::{AEClock, VClock};
 
 /// commands are sorted inside an SCC given their dot
@@ -32,21 +32,29 @@ impl TarjanSCCFinder {
         }
     }
 
-    /// Returns a list with the SCCs found and resets the ids of all vertices still on the stack.
+    /// Returns a list with the SCCs found and a set with all dots visited.
+    /// It also resets the ids of all vertices still on the stack.
     #[must_use]
-    pub fn finalize(self, vertex_index: &VertexIndex) -> Vec<SCC> {
-        // reset the id of each dot in the stack
-        self.stack.into_iter().for_each(|dot| {
-            log!("Finder::finalize removing {:?} from stack", dot);
+    pub fn finalize(self, vertex_index: &VertexIndex) -> (Vec<SCC>, HashSet<Dot>) {
+        // reset the id of each dot in the stack, while computing the set of visited dots
+        let visited = self
+            .stack
+            .into_iter()
+            .map(|dot| {
+                log!("Finder::finalize removing {:?} from stack", dot);
 
-            // find vertex and reset its id
-            let vertex = vertex_index
-                .get_mut(&dot)
-                .expect("stack member should exist");
-            vertex.set_id(0);
-        });
-        // return SCCs found
-        self.sccs
+                // find vertex and reset its id
+                let vertex = vertex_index
+                    .get_mut(&dot)
+                    .expect("stack member should exist");
+                vertex.set_id(0);
+
+                // add dot to set of visited
+                dot
+            })
+            .collect();
+        // return SCCs found and visited dots
+        (self.sccs, visited)
     }
 
     /// Tries to find an SCC starting from root `dot`.

@@ -12,7 +12,7 @@ use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Verte
 use crate::stats::Stats;
 use crate::util;
 use crate::{elapsed, log};
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashSet};
 use std::mem;
 use std::time::Duration;
 use threshold::{AEClock, VClock};
@@ -23,6 +23,11 @@ pub struct Queue {
     pending_index: PendingIndex,
     to_execute: Vec<Command>,
     queue_metrics: QueueMetrics,
+}
+
+enum FinderInfo {
+    Found(BinaryHeap<Key>), // set of keys touched by found SCCs
+    NotFound(HashSet<Dot>), // set of dots visited while searching for SCCs
 }
 
 impl Queue {
@@ -69,12 +74,14 @@ impl Queue {
         self.index(vertex);
 
         // try to find a new SCC
-        let (duration, keys) = elapsed!(self.find_scc(dot));
+        let (duration, find_result) = elapsed!(self.find_scc(dot));
         self.queue_metrics.find_scc(duration);
 
-        // try pending to delivere other commands if new SCCs were found
-        let (duration, _) = elapsed!(self.try_pending(keys));
-        self.queue_metrics.try_pending(duration);
+        if let FinderInfo::Found(keys) = find_result {
+            // try pending to deliver other commands if new SCCs were found
+            let (duration, _) = elapsed!(self.try_pending(keys));
+            self.queue_metrics.try_pending(duration);
+        }
     }
 
     fn index(&mut self, vertex: Vertex) {
@@ -86,7 +93,7 @@ impl Queue {
     }
 
     #[must_use]
-    fn find_scc(&mut self, dot: Dot) -> BinaryHeap<Key> {
+    fn find_scc(&mut self, dot: Dot) -> FinderInfo {
         log!("Queue:find_scc {:?}", dot);
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
@@ -95,21 +102,23 @@ impl Queue {
         self.queue_metrics.strong_connect(duration);
 
         // get sccs
-        let sccs = finder.finalize(&self.vertex_index);
-
-        // create set of keys in ready SCCs
-        let mut keys = BinaryHeap::new();
+        let (sccs, visited) = finder.finalize(&self.vertex_index);
 
         // save new SCCs if any were found
         if finder_result == FinderResult::Found {
+            // create set of keys in ready SCCs
+            let mut keys = BinaryHeap::new();
+
+            // save new SCCs
             sccs.into_iter().for_each(|scc| {
                 self.queue_metrics.chain_size(scc.len());
                 self.save_scc(scc, &mut keys);
             });
-        }
 
-        // return the set of keys accessed by commands in the new SCCs
-        keys
+            FinderInfo::Found(keys)
+        } else {
+            FinderInfo::NotFound(visited)
+        }
     }
 
     fn save_scc(&mut self, scc: SCC, keys: &mut BinaryHeap<Key>) {
@@ -150,13 +159,23 @@ impl Queue {
                         .expect("key must exist in the pending index");
 
                     // try to find new SCCs for each of those commands
-                    for dot in pending {
-                        let new_keys = self.find_scc(dot);
+                    let mut visited = HashSet::new();
 
-                        // if new SCCs were found, restart the process
-                        if !new_keys.is_empty() {
-                            keys.extend(new_keys);
-                            return self.try_pending(keys);
+                    for dot in pending {
+                        if !visited.contains(&dot) {
+                            // only visit non-visited commands
+
+                            match self.find_scc(dot) {
+                                FinderInfo::Found(new_keys) => {
+                                    // if new SCCs were found, restart the process with new keys
+                                    keys.extend(new_keys);
+                                    return self.try_pending(keys);
+                                }
+                                FinderInfo::NotFound(new_visited) => {
+                                    // if no SCCs were found, keep trying pending commands
+                                    visited.extend(new_visited);
+                                }
+                            }
                         }
                     }
                 }

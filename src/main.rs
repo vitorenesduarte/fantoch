@@ -10,8 +10,8 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 fn main() {
     println!(">running atlas...");
     run_in_thread(|| increasing_load::<Atlas>());
-    println!(">running newt...");
-    run_in_thread(|| increasing_load::<Newt>());
+    // println!(">running newt...");
+    // run_in_thread(|| increasing_load::<Newt>());
 }
 
 fn increasing_load<P: Process>() {
