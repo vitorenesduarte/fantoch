@@ -80,12 +80,30 @@ impl TarjanSCCFinder {
         vertex.set_on_stack(true);
         self.stack.push_front(dot);
 
-        // for all deps
-        for (process_id, eset) in executed_clock.clone().into_iter() {
-            // compute non-executed deps for each process
-            for dep in vertex.clock().subtract_iter(&process_id, eset) {
+        // compute executed clock frontier
+        let executed_clock_frontier = executed_clock.frontier();
+
+        // compute non-executed deps for each process
+        for (process_id, to) in vertex.clock().clone().frontier() {
+            // get min non-dep
+            let from = executed_clock_frontier
+                .get(process_id)
+                .expect("process should exist in the executed clock");
+
+            // start from the highest dep to the lowest:
+            // - assuming we will give up, we give up faster this way
+            // THIS IS A HUGE OPTIMIZATION!!!
+            for dep in ((from + 1)..=to).rev() {
+                // ignore dependency if already executed:
+                // - we need this check because the clock may not be contiguous, i.e.
+                //   `executed_clock_frontier` is simply a safe approximation of what's been
+                //   executed
+                if executed_clock.contains(process_id, dep) {
+                    continue;
+                }
+
                 // create dot and find vertex
-                let dep_dot = Dot::new(process_id, dep);
+                let dep_dot = Dot::new(*process_id, dep);
                 log!("Finder::strong_connect non-executed {:?}", dep_dot);
 
                 match vertex_index.get(&dep_dot) {
