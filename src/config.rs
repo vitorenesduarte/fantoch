@@ -17,7 +17,7 @@ impl Config {
         if f > n / 2 {
             println!("WARNING: f={} is larger than a majority with n={}", f, n);
         }
-        // by default, `tiny_quorums = false`
+        // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;
         Self {
             n,
