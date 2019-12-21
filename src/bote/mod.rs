@@ -31,7 +31,12 @@ impl Bote {
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
     /// - one list being the regions where `clients` are
-    pub fn leaderless(&self, servers: &[Region], clients: &[Region], quorum_size: usize) -> Stats {
+    pub fn leaderless(
+        &self,
+        servers: &[Region],
+        clients: &[Region],
+        quorum_size: usize,
+    ) -> Stats<u64> {
         let latencies: Vec<_> = clients
             .iter()
             .map(|client| {
@@ -62,7 +67,7 @@ impl Bote {
         servers: &[Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Stats {
+    ) -> Stats<u64> {
         // compute the latency from leader to its closest quorum
         let leader_to_quorum = self.quorum_latency(leader, servers, quorum_size);
 
@@ -95,7 +100,7 @@ impl Bote {
         clients: &[Region],
         quorum_size: usize,
         stats_sort_by: StatsKind,
-    ) -> (&'a Region, Stats) {
+    ) -> (&'a Region, Stats<u64>) {
         // compute all stats
         let mut stats = self.all_leaders_stats(servers, clients, quorum_size);
 
@@ -121,7 +126,7 @@ impl Bote {
         servers: &'a [Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Vec<(&'a Region, Stats)> {
+    ) -> Vec<(&'a Region, Stats<u64>)> {
         // compute stats for each possible leader
         servers
             .iter()

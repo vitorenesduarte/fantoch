@@ -68,8 +68,8 @@ impl PendingIndex {
         });
     }
 
-    /// Generic function to be used to update a set of pending commands associated with each color
-    /// touched by a given command.
+    /// Generic function to update a set of pending commands associated with each color touched by a
+    /// given command.
     fn update_index<F>(&mut self, vertex: &Vertex, mut update: F)
     where
         F: FnMut(&mut HashSet<Dot>),

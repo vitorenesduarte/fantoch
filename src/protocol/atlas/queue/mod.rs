@@ -7,12 +7,14 @@ mod index;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
-use crate::log;
 use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
 use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
+use crate::stats::Stats;
 use crate::util;
+use crate::{elapsed, log};
 use std::collections::BinaryHeap;
 use std::mem;
+use std::time::Duration;
 use threshold::{AEClock, VClock};
 
 pub struct Queue {
@@ -20,6 +22,7 @@ pub struct Queue {
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     to_execute: Vec<Command>,
+    queue_metrics: QueueMetrics,
 }
 
 impl Queue {
@@ -33,12 +36,19 @@ impl Queue {
         let pending_index = PendingIndex::new();
         // create to execute
         let to_execute = Vec::new();
+        // create queue metrics
+        let queue_metrics = QueueMetrics::new();
         Self {
             executed_clock,
             vertex_index,
             pending_index,
             to_execute,
+            queue_metrics,
         }
+    }
+
+    pub fn show_stats(&self) {
+        self.queue_metrics.show_stats()
     }
 
     /// Returns new commands ready to be executed.
@@ -58,9 +68,13 @@ impl Queue {
         // index vertex
         self.index(vertex);
 
-        // try to find a new scc
-        let keys = self.find_scc(dot);
-        self.try_pending(keys);
+        // try to find a new SCC
+        let (duration, keys) = elapsed!(self.find_scc(dot));
+        self.queue_metrics.find_scc(duration);
+
+        // try pending to delivere other commands if new SCCs were found
+        let (duration, _) = elapsed!(self.try_pending(keys));
+        self.queue_metrics.try_pending(duration);
     }
 
     fn index(&mut self, vertex: Vertex) {
@@ -76,7 +90,9 @@ impl Queue {
         log!("Queue:find_scc {:?}", dot);
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
-        let finder_result = finder.strong_connect(dot, &self.executed_clock, &self.vertex_index);
+        let (duration, finder_result) =
+            elapsed!(finder.strong_connect(dot, &self.executed_clock, &self.vertex_index));
+        self.queue_metrics.strong_connect(duration);
 
         // get sccs
         let sccs = finder.finalize(&self.vertex_index);
@@ -87,6 +103,7 @@ impl Queue {
         // save new SCCs if any were found
         if finder_result == FinderResult::Found {
             sccs.into_iter().for_each(|scc| {
+                self.queue_metrics.chain_size(scc.len());
                 self.save_scc(scc, &mut keys);
             });
         }
@@ -153,6 +170,65 @@ impl Queue {
     }
 }
 
+#[derive(Default)]
+pub struct QueueMetrics {
+    chain_size: Vec<usize>,
+    find_scc: Vec<u128>,
+    try_pending: Vec<u128>,
+    strong_connect: Vec<u128>,
+}
+
+impl QueueMetrics {
+    fn new() -> Self {
+        Default::default()
+    }
+
+    fn chain_size(&mut self, size: usize) {
+        self.chain_size.push(size)
+    }
+
+    fn find_scc(&mut self, duration: Duration) {
+        self.find_scc.push(duration.as_micros());
+    }
+
+    fn try_pending(&mut self, duration: Duration) {
+        self.try_pending.push(duration.as_micros());
+    }
+
+    fn strong_connect(&mut self, duration: Duration) {
+        self.strong_connect.push(duration.as_micros());
+    }
+
+    fn show_stats(&self) {
+        // TODO can we avoid cloning here?
+        let chain_size_stats = Stats::from(self.chain_size.clone());
+        let find_scc_stats = Stats::from(self.find_scc.clone());
+        let try_pending_stats = Stats::from(self.try_pending.clone());
+        let strong_connect_stats = Stats::from(self.strong_connect.clone());
+
+        println!(
+            "chain_size: avg={} | cov={}",
+            chain_size_stats.show_mean(),
+            chain_size_stats.show_cov()
+        );
+        println!(
+            "find_scc: avg={} | cov={}",
+            find_scc_stats.show_mean(),
+            find_scc_stats.show_cov()
+        );
+        println!(
+            "try_pending: avg={} | cov={}",
+            try_pending_stats.show_mean(),
+            try_pending_stats.show_cov()
+        );
+        println!(
+            "strong_connect: avg={} | cov={}",
+            strong_connect_stats.show_mean(),
+            strong_connect_stats.show_cov()
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +263,7 @@ mod tests {
         // check commands ready to be executed
         assert_eq!(queue.to_execute(), vec![cmd_0, cmd_1]);
     }
+
     #[test]
     fn test_add_1() {
         // {1, 2}, [2, 2]

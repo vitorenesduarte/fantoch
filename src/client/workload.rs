@@ -25,14 +25,25 @@ impl Workload {
     /// Generate the next command.
     pub fn next_cmd(&mut self, rifl_gen: &mut RiflGen) -> Option<Command> {
         // check if we should generate more commands
-        if self.command_count < self.total_commands {
+        let result = if self.command_count < self.total_commands {
             // increment command count
             self.command_count += 1;
             // generate new command
             Some(self.gen_cmd(rifl_gen))
         } else {
             None
+        };
+
+        if self.command_count % 100 == 0 {
+            println!(
+                "client {:?}: {} of {}",
+                rifl_gen.source(),
+                self.command_count,
+                self.total_commands
+            );
         }
+
+        result
     }
 
     /// Returns the number of commands already issued.

@@ -18,6 +18,17 @@ macro_rules! log {
     };
 }
 
+#[macro_export]
+macro_rules! elapsed {
+    ( $x:expr ) => {{
+        use std::time::Instant;
+        let start = Instant::now();
+        let result = $x;
+        let time = start.elapsed();
+        (time, result)
+    }};
+}
+
 /// Returns an iterator with all process identifiers in a system with `n` processes.
 pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero

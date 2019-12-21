@@ -56,14 +56,14 @@ impl ClientPlacement {
 
 /// Mapping from protocol name to its stats.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize, Default)]
-pub struct ProtocolStats(BTreeMap<String, Stats>);
+pub struct ProtocolStats(BTreeMap<String, Stats<u64>>);
 
 impl ProtocolStats {
     pub fn new() -> ProtocolStats {
         Default::default()
     }
 
-    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Stats {
+    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Stats<u64> {
         let key = Self::key(protocol, f, placement);
         self.get_and_unwrap(&key)
     }
@@ -73,7 +73,7 @@ impl ProtocolStats {
         protocol: Protocol,
         f: usize,
         placement: ClientPlacement,
-        stats: Stats,
+        stats: Stats<u64>,
     ) {
         let key = Self::key(protocol, f, placement);
         self.0.insert(key, stats);
@@ -94,7 +94,7 @@ impl ProtocolStats {
         format!("{}{}", prefix, suffix)
     }
 
-    fn get_and_unwrap(&self, key: &str) -> &Stats {
+    fn get_and_unwrap(&self, key: &str) -> &Stats<u64> {
         self.0.get(key).unwrap_or_else(|| {
             panic!("stats with key {} not found", key);
         })

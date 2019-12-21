@@ -3,6 +3,7 @@ use crate::bote::protocol::{ClientPlacement, ProtocolStats};
 use crate::bote::Bote;
 use crate::planet::{Planet, Region};
 use crate::stats::{StatsKind, F64};
+use crate::elapsed;
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -11,13 +12,10 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::iter::FromIterator;
-use std::time::Instant;
 
 macro_rules! timed {
     ( $s:expr, $x:expr ) => {{
-        let start = Instant::now();
-        let result = $x;
-        let time = start.elapsed();
+        let (time, result) = elapsed!($x);
         println!("{}: {:?}", $s, time);
         result
     }};
