@@ -95,10 +95,16 @@ impl Queue {
     #[must_use]
     fn find_scc(&mut self, dot: Dot) -> FinderInfo {
         log!("Queue:find_scc {:?}", dot);
+        // get the vertex
+        let vertex = self
+            .vertex_index
+            .get_mut(&dot)
+            .expect("root vertex must exist");
+
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
         let (duration, finder_result) =
-            elapsed!(finder.strong_connect(dot, &self.executed_clock, &self.vertex_index));
+            elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
         self.queue_metrics.strong_connect(duration);
 
         // get sccs
@@ -161,8 +167,7 @@ impl Queue {
 
                     for dot in pending {
                         if !visited.contains(&dot) {
-                            // only visit non-visited commands
-
+                            // only try to find new SCCs from non-visited commands
                             match self.find_scc(dot) {
                                 FinderInfo::Found(new_keys) => {
                                     // if new SCCs were found, restart the process with new keys
@@ -170,7 +175,7 @@ impl Queue {
                                     return self.try_pending(keys);
                                 }
                                 FinderInfo::NotFound(new_visited) => {
-                                    // if no SCCs were found, keep trying pending commands
+                                    // if no SCCs were found, try other pending commands
                                     visited.extend(new_visited);
                                 }
                             }

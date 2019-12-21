@@ -3,7 +3,7 @@ use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::protocol::atlas::queue::VertexIndex;
 use std::cmp;
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashSet};
 use threshold::{AEClock, VClock};
 
 /// commands are sorted inside an SCC given their dot
@@ -18,7 +18,7 @@ pub enum FinderResult {
 
 pub struct TarjanSCCFinder {
     id: usize,
-    stack: VecDeque<Dot>,
+    stack: Vec<Dot>,
     sccs: Vec<SCC>,
 }
 
@@ -27,7 +27,7 @@ impl TarjanSCCFinder {
     pub fn new() -> Self {
         Self {
             id: 0,
-            stack: VecDeque::new(),
+            stack: Vec::new(),
             sccs: Vec::new(),
         }
     }
@@ -61,12 +61,10 @@ impl TarjanSCCFinder {
     pub fn strong_connect(
         &mut self,
         dot: Dot,
+        vertex: &mut Vertex,
         executed_clock: &AEClock<ProcessId>,
         vertex_index: &VertexIndex,
     ) -> FinderResult {
-        // get the vertex
-        let vertex = vertex_index.get_mut(&dot).expect("root vertex must exist");
-
         // update id
         self.id += 1;
 
@@ -78,7 +76,7 @@ impl TarjanSCCFinder {
 
         // add to the stack
         vertex.set_on_stack(true);
-        self.stack.push_front(dot);
+        self.stack.push(dot);
 
         // compute executed clock frontier
         let executed_clock_frontier = executed_clock.frontier();
@@ -86,14 +84,14 @@ impl TarjanSCCFinder {
         // compute non-executed deps for each process
         for (process_id, to) in vertex.clock().clone().frontier() {
             // get min non-dep
-            let from = executed_clock_frontier
+            let executed = executed_clock_frontier
                 .get(process_id)
                 .expect("process should exist in the executed clock");
 
-            // start from the highest dep to the lowest:
+            // OPTIMIZATION: start from the highest dep to the lowest:
             // - assuming we will give up, we give up faster this way
-            // THIS IS A HUGE OPTIMIZATION!!!
-            for dep in ((from + 1)..=to).rev() {
+            // THE BENEFITS ARE HUGE!!!
+            for dep in ((executed + 1)..=to).rev() {
                 // ignore dependency if already executed:
                 // - we need this check because the clock may not be contiguous, i.e.
                 //   `executed_clock_frontier` is simply a safe approximation of what's been
@@ -106,7 +104,7 @@ impl TarjanSCCFinder {
                 let dep_dot = Dot::new(*process_id, dep);
                 log!("Finder::strong_connect non-executed {:?}", dep_dot);
 
-                match vertex_index.get(&dep_dot) {
+                match vertex_index.get_mut(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may not conflict
                         // with `dot` but we can't be sure until we have it locally
@@ -123,7 +121,15 @@ impl TarjanSCCFinder {
                         // if not visited, visit
                         if dep_vertex.id() == 0 {
                             log!("Finder::strong_connect non-visited {:?}", dep_dot);
-                            let result = self.strong_connect(dep_dot, executed_clock, vertex_index);
+
+                            // OPTIMIZATION: passing the vertex as an argument to `strong_connect`
+                            // is also essential to avoid double look-up
+                            let result = self.strong_connect(
+                                dep_dot,
+                                dep_vertex,
+                                executed_clock,
+                                vertex_index,
+                            );
                             if result == FinderResult::MissingDependency {
                                 return result;
                             }
@@ -152,7 +158,7 @@ impl TarjanSCCFinder {
                 // pop an element from the stack
                 let member_dot = self
                     .stack
-                    .pop_front()
+                    .pop()
                     .expect("there should be an SCC member on the stack");
 
                 log!("Finder::strong_connect new SCC member {:?}", member_dot);
