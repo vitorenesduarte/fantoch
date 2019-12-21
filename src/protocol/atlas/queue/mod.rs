@@ -11,7 +11,7 @@ use crate::log;
 use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
 use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::util;
-use std::collections::HashSet;
+use std::collections::BinaryHeap;
 use std::mem;
 use threshold::{AEClock, VClock};
 
@@ -59,7 +59,8 @@ impl Queue {
         self.index(vertex);
 
         // try to find a new scc
-        self.find_scc(dot);
+        let keys = self.find_scc(dot);
+        self.try_pending(keys);
     }
 
     fn index(&mut self, vertex: Vertex) {
@@ -70,18 +71,9 @@ impl Queue {
         assert!(self.vertex_index.index(vertex));
     }
 
-    fn find_scc(&mut self, dot: Dot) {
+    #[must_use]
+    fn find_scc(&mut self, dot: Dot) -> BinaryHeap<Key> {
         log!("Queue:find_scc {:?}", dot);
-
-        // TODO the following check is needed for `test_add_3`
-        // - the way we're tracking pending commands may lead to a situation where we see two
-        //   commands pending, we start the finder with one of them, find an SCC where both are
-        //   there, and then we start a second finder with the second command; since this second
-        //   command was found to be in an SCC with the first one, it won't be indexed
-        if self.executed_clock.contains(&dot.source(), dot.sequence()) {
-            return;
-        }
-
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new();
         let finder_result = finder.strong_connect(dot, &self.executed_clock, &self.vertex_index);
@@ -90,19 +82,20 @@ impl Queue {
         let sccs = finder.finalize(&self.vertex_index);
 
         // create set of keys in ready SCCs
-        let mut keys = HashSet::new();
+        let mut keys = BinaryHeap::new();
 
+        // save new SCCs if any were found
         if finder_result == FinderResult::Found {
             sccs.into_iter().for_each(|scc| {
                 self.save_scc(scc, &mut keys);
             });
         }
 
-        // try pending commands given the keys touched by ready SCCs
-        self.try_pending(keys);
+        // return the set of keys accessed by commands in the new SCCs
+        keys
     }
 
-    fn save_scc(&mut self, scc: SCC, keys: &mut HashSet<Key>) {
+    fn save_scc(&mut self, scc: SCC, keys: &mut BinaryHeap<Key>) {
         scc.into_iter().for_each(|dot| {
             log!("Queue:save_scc removing {:?} from indexes", dot);
 
@@ -127,21 +120,36 @@ impl Queue {
         })
     }
 
-    fn try_pending(&mut self, keys: HashSet<Key>) {
-        keys.into_iter().for_each(|key| {
-            // try to find SCCs for each pending dot that has the same color of any command in the
-            // ready SCCs
-            // TODO we could optimize this process by maintaining a list of visited dots, as it is
-            // done in the java implementation
-            let pending = self
-                .pending_index
-                .pending(&key)
-                .expect("key must exist in the pending index");
+    // TODO we could optimize this process by maintaining a list of visited dots, as
+    // it is done in the java implementation
+    fn try_pending(&mut self, mut keys: BinaryHeap<Key>) {
+        loop {
+            match keys.pop() {
+                Some(key) => {
+                    // get pending commands that access this key
+                    let pending = self
+                        .pending_index
+                        .pending(&key)
+                        .expect("key must exist in the pending index");
 
-            for dot in pending {
-                self.find_scc(dot);
+                    // try to find new SCCs for each of those commands
+                    for dot in pending {
+                        let new_keys = self.find_scc(dot);
+
+                        // if new SCCs were found, restart the process
+                        if !new_keys.is_empty() {
+                            keys.extend(new_keys);
+                            return self.try_pending(keys);
+                        }
+                    }
+                }
+                None => {
+                    // once there are no more keys to try, no command in pending should be possible
+                    // to be executed, so we give up!
+                    return;
+                }
             }
-        });
+        }
     }
 }
 
@@ -151,7 +159,7 @@ mod tests {
     use crate::id::Rifl;
     use permutator::{Combination, Permutation};
     use std::cell::RefCell;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn simple() {
