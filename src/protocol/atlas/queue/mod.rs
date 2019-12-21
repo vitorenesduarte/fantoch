@@ -146,8 +146,6 @@ impl Queue {
         })
     }
 
-    // TODO we could optimize this process by maintaining a list of visited dots, as
-    // it is done in the java implementation
     fn try_pending(&mut self, mut keys: BinaryHeap<Key>) {
         loop {
             match keys.pop() {
