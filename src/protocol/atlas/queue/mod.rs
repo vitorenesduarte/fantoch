@@ -8,24 +8,15 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
+use crate::metrics::Metrics;
 use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
 use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
-use crate::metrics::Metrics;
 use crate::util;
 use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};
+use std::fmt;
 use std::mem;
 use threshold::{AEClock, VClock};
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-enum MetricsKind {
-    ChainSize,
-    FindSCC,
-    TryPending,
-    StrongConnect,
-}
-
-type QueueMetrics = Metrics<MetricsKind, u128>;
 
 pub struct Queue {
     transitive_conflicts: bool,
@@ -33,7 +24,7 @@ pub struct Queue {
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     to_execute: Vec<Command>,
-    queue_metrics: QueueMetrics,
+    queue_metrics: Metrics<MetricsKind, u128>,
 }
 
 enum FinderInfo {
@@ -53,7 +44,7 @@ impl Queue {
         // create to execute
         let to_execute = Vec::new();
         // create queue metrics
-        let queue_metrics = QueueMetrics::new();
+        let queue_metrics = Metrics::new();
         Self {
             transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
@@ -87,12 +78,14 @@ impl Queue {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.queue_metrics.add(MetricsKind::FindSCC, duration.as_micros());
+        self.queue_metrics
+            .add(MetricsKind::FindSCC, duration.as_micros());
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
             let (duration, _) = elapsed!(self.try_pending(keys));
-        self.queue_metrics.add(MetricsKind::TryPending, duration.as_micros());
+            self.queue_metrics
+                .add(MetricsKind::TryPending, duration.as_micros());
         }
     }
 
@@ -117,7 +110,8 @@ impl Queue {
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
         let (duration, finder_result) =
             elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
-        self.queue_metrics.add(MetricsKind::StrongConnect, duration.as_micros());
+        self.queue_metrics
+            .add(MetricsKind::StrongConnect, duration.as_micros());
 
         // get sccs
         let (sccs, visited) = finder.finalize(&self.vertex_index);
@@ -129,7 +123,8 @@ impl Queue {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-        self.queue_metrics.add(MetricsKind::ChainSize, scc.len() as u128);
+                self.queue_metrics
+                    .add(MetricsKind::ChainSize, scc.len() as u128);
                 self.save_scc(scc, &mut keys);
             });
 
@@ -200,6 +195,25 @@ impl Queue {
                     return;
                 }
             }
+        }
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum MetricsKind {
+    ChainSize,
+    FindSCC,
+    TryPending,
+    StrongConnect,
+}
+
+impl fmt::Debug for MetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MetricsKind::ChainSize => write!(f, "chain_size"),
+            MetricsKind::FindSCC => write!(f, "find_scc"),
+            MetricsKind::TryPending => write!(f, "try_pending"),
+            MetricsKind::StrongConnect => write!(f, "strong_connect"),
         }
     }
 }
