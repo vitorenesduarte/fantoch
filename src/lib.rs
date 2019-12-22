@@ -24,10 +24,10 @@ pub mod protocol;
 // This module contains the definition of trait `SysTime` and its implementations.
 pub mod time;
 
-// This module contains the definition of `Stats`.
-pub mod stats;
+// This module contains the definition of `F64`, `Stats` and `Metrics`.
+pub mod metrics;
 
-// This module contains the definition of `Router` and `Runner`.
+// This module contains the definition of `Simulation` and `Runner`.
 pub mod sim;
 
 // This module contains back-of-the-envelop calculations.

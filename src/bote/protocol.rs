@@ -1,4 +1,4 @@
-use crate::stats::Stats;
+use crate::metrics::Stats;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

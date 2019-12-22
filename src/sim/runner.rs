@@ -2,10 +2,10 @@ use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
+use crate::metrics::Stats;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
 use crate::sim::{Schedule, Simulation};
-use crate::stats::Stats;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
@@ -286,8 +286,8 @@ where
 mod tests {
     use super::*;
     use crate::id::{ProcessId, Rifl};
+    use crate::metrics::F64;
     use crate::protocol::BaseProcess;
-    use crate::stats::F64;
     use std::mem;
 
     #[derive(Clone)]

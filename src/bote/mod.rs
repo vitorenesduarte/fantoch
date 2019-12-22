@@ -7,8 +7,8 @@ pub mod search;
 // Re-exports.
 pub use search::Search;
 
+use crate::metrics::{Stats, StatsKind};
 use crate::planet::{Planet, Region};
-use crate::stats::{Stats, StatsKind};
 
 #[derive(Debug)]
 pub struct Bote {

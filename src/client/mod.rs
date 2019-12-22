@@ -114,7 +114,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stats::{Stats, F64};
+    use crate::metrics::{Stats, F64};
     use crate::time::SimTime;
 
     // Generates some client.

@@ -1,9 +1,4 @@
-// This module contains the definition of `F64`.
-pub mod float;
-
-// Re-exports.
-pub use float::F64;
-
+use crate::metrics::F64;
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use std::fmt;

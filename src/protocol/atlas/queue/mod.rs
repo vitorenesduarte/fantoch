@@ -10,13 +10,22 @@ use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
 use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
-use crate::stats::Stats;
+use crate::metrics::Metrics;
 use crate::util;
 use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};
 use std::mem;
-use std::time::Duration;
 use threshold::{AEClock, VClock};
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+enum MetricsKind {
+    ChainSize,
+    FindSCC,
+    TryPending,
+    StrongConnect,
+}
+
+type QueueMetrics = Metrics<MetricsKind, u128>;
 
 pub struct Queue {
     transitive_conflicts: bool,
@@ -78,12 +87,12 @@ impl Queue {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.queue_metrics.find_scc(duration);
+        self.queue_metrics.add(MetricsKind::FindSCC, duration.as_micros());
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
             let (duration, _) = elapsed!(self.try_pending(keys));
-            self.queue_metrics.try_pending(duration);
+        self.queue_metrics.add(MetricsKind::TryPending, duration.as_micros());
         }
     }
 
@@ -108,7 +117,7 @@ impl Queue {
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
         let (duration, finder_result) =
             elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
-        self.queue_metrics.strong_connect(duration);
+        self.queue_metrics.add(MetricsKind::StrongConnect, duration.as_micros());
 
         // get sccs
         let (sccs, visited) = finder.finalize(&self.vertex_index);
@@ -120,7 +129,7 @@ impl Queue {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.queue_metrics.chain_size(scc.len());
+        self.queue_metrics.add(MetricsKind::ChainSize, scc.len() as u128);
                 self.save_scc(scc, &mut keys);
             });
 
@@ -192,69 +201,6 @@ impl Queue {
                 }
             }
         }
-    }
-}
-
-#[derive(Default)]
-pub struct QueueMetrics {
-    chain_size: Vec<usize>,
-    find_scc: Vec<u128>,
-    try_pending: Vec<u128>,
-    strong_connect: Vec<u128>,
-}
-
-impl QueueMetrics {
-    fn new() -> Self {
-        Default::default()
-    }
-
-    fn chain_size(&mut self, size: usize) {
-        self.chain_size.push(size)
-    }
-
-    fn find_scc(&mut self, duration: Duration) {
-        self.find_scc.push(duration.as_micros());
-    }
-
-    fn try_pending(&mut self, duration: Duration) {
-        self.try_pending.push(duration.as_micros());
-    }
-
-    fn strong_connect(&mut self, duration: Duration) {
-        self.strong_connect.push(duration.as_micros());
-    }
-
-    fn show_stats(&self) {
-        // TODO can we avoid cloning here?
-        let chain_size_stats = Stats::from(self.chain_size.clone());
-        let find_scc_stats = Stats::from(self.find_scc.clone());
-        let try_pending_stats = Stats::from(self.try_pending.clone());
-        let strong_connect_stats = Stats::from(self.strong_connect.clone());
-
-        println!(
-            "chain_size: avg={} p95={} p99={}",
-            chain_size_stats.mean().round(),
-            chain_size_stats.percentile(0.95).round(),
-            chain_size_stats.percentile(0.99).round(),
-        );
-        println!(
-            "find_scc: avg={} p95={} p99={}",
-            find_scc_stats.mean().round(),
-            find_scc_stats.percentile(0.95).round(),
-            find_scc_stats.percentile(0.99).round(),
-        );
-        println!(
-            "try_pending: avg={} p95={} p99={}",
-            try_pending_stats.mean().round(),
-            try_pending_stats.percentile(0.95).round(),
-            try_pending_stats.percentile(0.99).round(),
-        );
-        println!(
-            "strong_connect: avg={} p95={} p99={}",
-            strong_connect_stats.mean().round(),
-            strong_connect_stats.percentile(0.95).round(),
-            strong_connect_stats.percentile(0.99).round(),
-        );
     }
 }
 

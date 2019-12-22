@@ -3,7 +3,7 @@ use crate::bote::protocol::{ClientPlacement, ProtocolStats};
 use crate::bote::Bote;
 use crate::elapsed;
 use crate::planet::{Planet, Region};
-use crate::stats::{StatsKind, F64};
+use crate::metrics::{StatsKind, F64};
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
