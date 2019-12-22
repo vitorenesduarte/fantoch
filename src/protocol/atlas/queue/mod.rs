@@ -24,7 +24,7 @@ pub struct Queue {
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     to_execute: Vec<Command>,
-    queue_metrics: Metrics<MetricsKind, u128>,
+    metrics: Metrics<MetricsKind, u128>,
 }
 
 enum FinderInfo {
@@ -44,19 +44,19 @@ impl Queue {
         // create to execute
         let to_execute = Vec::new();
         // create queue metrics
-        let queue_metrics = Metrics::new();
+        let metrics = Metrics::new();
         Self {
             transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
             vertex_index,
             pending_index,
             to_execute,
-            queue_metrics,
+            metrics,
         }
     }
 
     pub fn show_stats(&self) {
-        self.queue_metrics.show_stats()
+        self.metrics.show_stats()
     }
 
     /// Returns new commands ready to be executed.
@@ -78,13 +78,12 @@ impl Queue {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.queue_metrics
-            .add(MetricsKind::FindSCC, duration.as_micros());
+        self.metrics.add(MetricsKind::FindSCC, duration.as_micros());
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
             let (duration, _) = elapsed!(self.try_pending(keys));
-            self.queue_metrics
+            self.metrics
                 .add(MetricsKind::TryPending, duration.as_micros());
         }
     }
@@ -110,7 +109,7 @@ impl Queue {
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
         let (duration, finder_result) =
             elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
-        self.queue_metrics
+        self.metrics
             .add(MetricsKind::StrongConnect, duration.as_micros());
 
         // get sccs
@@ -123,8 +122,7 @@ impl Queue {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.queue_metrics
-                    .add(MetricsKind::ChainSize, scc.len() as u128);
+                self.metrics.add(MetricsKind::ChainSize, scc.len() as u128);
                 self.save_scc(scc, &mut keys);
             });
 

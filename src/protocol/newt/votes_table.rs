@@ -1,16 +1,22 @@
 use crate::command::Command;
+use crate::elapsed;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
+use crate::metrics::Metrics;
 use crate::protocol::newt::votes::{ProcessVotes, VoteRange, Votes};
 use crate::util;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::mem;
 use threshold::AEClock;
+
+type SortId = (u64, Dot);
 
 pub struct MultiVotesTable {
     n: usize,
     stability_threshold: usize,
     tables: HashMap<Key, VotesTable>,
+    metrics: Metrics<MetricsKind, u128>,
 }
 
 impl MultiVotesTable {
@@ -20,7 +26,12 @@ impl MultiVotesTable {
             n,
             stability_threshold,
             tables: HashMap::new(),
+            metrics: Metrics::new(),
         }
+    }
+
+    pub fn show_stats(&self) {
+        self.metrics.show_stats()
     }
 
     /// Add a new command, its clock and votes to the votes table.
@@ -30,7 +41,7 @@ impl MultiVotesTable {
         dot: Dot,
         cmd: Option<Command>,
         clock: u64,
-        mut votes: Votes,
+        votes: Votes,
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         // if noOp, do nothing;
         // TODO if noOp, should we add `Votes` to the table, or there will be no
@@ -39,7 +50,6 @@ impl MultiVotesTable {
             Some(cmd) => cmd,
             None => return Vec::new(),
         };
-        let rifl = cmd.rifl();
 
         // create sort identifier:
         // - if two ops got assigned the same clock, they will be ordered by dot
@@ -47,6 +57,32 @@ impl MultiVotesTable {
 
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
+        let (duration, result) = elapsed!(self.add_cmd_and_find(sort_id, cmd, votes));
+        self.metrics
+            .add(MetricsKind::AddCommand, duration.as_micros());
+        result
+    }
+
+    /// Adds phantom votes to the votes table.
+    #[must_use]
+    pub fn add_phantom_votes(
+        &mut self,
+        process_votes: ProcessVotes,
+    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
+        let (duration, result) = elapsed!(self.add_votes_and_find(process_votes));
+        self.metrics
+            .add(MetricsKind::AddPhantomVotes, duration.as_micros());
+        result
+    }
+
+    #[must_use]
+    fn add_cmd_and_find(
+        &mut self,
+        sort_id: SortId,
+        cmd: Command,
+        mut votes: Votes,
+    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
+        let rifl = cmd.rifl();
         cmd.into_iter()
             .filter_map(|(key, op)| {
                 // get votes on this key
@@ -62,12 +98,8 @@ impl MultiVotesTable {
             .collect()
     }
 
-    /// Adds phantom votes to the votes table.
     #[must_use]
-    pub fn add_phantom_votes(
-        &mut self,
-        process_votes: ProcessVotes,
-    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
+    fn add_votes_and_find(&mut self, process_votes: ProcessVotes) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         process_votes
             .into_iter()
             .filter_map(|(key, range)| {
@@ -104,7 +136,20 @@ impl MultiVotesTable {
     }
 }
 
-type SortId = (u64, Dot);
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum MetricsKind {
+    AddCommand,
+    AddPhantomVotes,
+}
+
+impl fmt::Debug for MetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MetricsKind::AddCommand => write!(f, "add_command"),
+            MetricsKind::AddPhantomVotes => write!(f, "add_phantom_votes"),
+        }
+    }
+}
 
 struct VotesTable {
     n: usize,

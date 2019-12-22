@@ -107,6 +107,10 @@ impl Process for Newt {
         mem::swap(&mut ready, &mut self.commands_ready);
         ready
     }
+
+    fn show_stats(&self) {
+        self.table.show_stats();
+    }
 }
 
 impl Newt {
