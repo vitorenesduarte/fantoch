@@ -5,6 +5,7 @@ mod tarjan;
 mod index;
 
 use crate::command::Command;
+use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
@@ -18,6 +19,7 @@ use std::time::Duration;
 use threshold::{AEClock, VClock};
 
 pub struct Queue {
+    transitive_conflicts: bool,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
@@ -32,9 +34,9 @@ enum FinderInfo {
 
 impl Queue {
     /// Create a new `Queue`.
-    pub fn new(n: usize) -> Self {
+    pub fn new(config: &Config) -> Self {
         // create bottom executed clock
-        let ids = util::process_ids(n);
+        let ids = util::process_ids(config.n());
         let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new();
@@ -44,6 +46,7 @@ impl Queue {
         // create queue metrics
         let queue_metrics = QueueMetrics::new();
         Self {
+            transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
             vertex_index,
             pending_index,
@@ -102,7 +105,7 @@ impl Queue {
             .expect("root vertex must exist");
 
         // execute tarjan's algorithm
-        let mut finder = TarjanSCCFinder::new();
+        let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
         let (duration, finder_result) =
             elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
         self.queue_metrics.strong_connect(duration);
@@ -263,7 +266,9 @@ mod tests {
     fn simple() {
         // create queue
         let n = 2;
-        let mut queue = Queue::new(n);
+        let f = 1;
+        let config = Config::new(n, f);
+        let mut queue = Queue::new(&config);
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -606,7 +611,9 @@ mod tests {
 
     fn check_termination(n: usize, args: Vec<(Dot, VClock<ProcessId>)>) -> Vec<Rifl> {
         // create queue
-        let mut queue = Queue::new(n);
+        let f = 1;
+        let config = Config::new(n, f);
+        let mut queue = Queue::new(&config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 

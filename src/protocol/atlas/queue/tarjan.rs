@@ -17,6 +17,7 @@ pub enum FinderResult {
 }
 
 pub struct TarjanSCCFinder {
+    transitive_conflicts: bool,
     id: usize,
     stack: Vec<Dot>,
     sccs: Vec<SCC>,
@@ -24,8 +25,9 @@ pub struct TarjanSCCFinder {
 
 impl TarjanSCCFinder {
     /// Creates a new SCC finder that employs Tarjan's algorithm.
-    pub fn new() -> Self {
+    pub fn new(transitive_conflicts: bool) -> Self {
         Self {
+            transitive_conflicts,
             id: 0,
             stack: Vec::new(),
             sccs: Vec::new(),
@@ -83,15 +85,24 @@ impl TarjanSCCFinder {
 
         // compute non-executed deps for each process
         for (process_id, to) in vertex.clock().clone().frontier() {
-            // get min non-dep
-            let executed = executed_clock_frontier
-                .get(process_id)
-                .expect("process should exist in the executed clock");
+            // get min event from which we need to start checking for dependencies
+            let from = if self.transitive_conflicts {
+                // if we can assume that conflicts are transitive, it is enough to check for the
+                // highest dependency
+                to
+            } else {
+                let executed = executed_clock_frontier
+                    .get(process_id)
+                    .expect("process should exist in the executed clock");
+                executed + 1
+            };
 
             // OPTIMIZATION: start from the highest dep to the lowest:
             // - assuming we will give up, we give up faster this way
             // THE BENEFITS ARE HUGE!!!
-            for dep in ((executed + 1)..=to).rev() {
+            // - obviously, this is only relevant when we can't assume that conflicts are transitive
+            // - when we can, the following loop has a single iteration
+            for dep in (from..=to).rev() {
                 // ignore dependency if already executed:
                 // - we need this check because the clock may not be contiguous, i.e.
                 //   `executed_clock_frontier` is simply a safe approximation of what's been
@@ -112,10 +123,14 @@ impl TarjanSCCFinder {
                         return FinderResult::MissingDependency;
                     }
                     Some(dep_vertex) => {
-                        // ignore non-conflicting commands
-                        if !vertex.conflicts(&dep_vertex) {
-                            log!("Finder::strong_connect non-conflicting {:?}", dep_dot);
-                            continue;
+                        // ignore non-conflicting commands:
+                        // - this check is only necesssary if we can't assume that conflicts are
+                        //   trnasitive
+                        if !self.transitive_conflicts {
+                            if !vertex.conflicts(&dep_vertex) {
+                                log!("Finder::strong_connect non-conflicting {:?}", dep_dot);
+                                continue;
+                            }
                         }
 
                         // if not visited, visit
@@ -130,6 +145,8 @@ impl TarjanSCCFinder {
                                 executed_clock,
                                 vertex_index,
                             );
+
+                            // if missing dependency, give up
                             if result == FinderResult::MissingDependency {
                                 return result;
                             }

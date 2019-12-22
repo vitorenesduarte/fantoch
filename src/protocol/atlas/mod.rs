@@ -37,7 +37,7 @@ impl Process for Atlas {
         let q = Atlas::fast_quorum_size(&config);
 
         // create `Queue`
-        let queue = Queue::new(config.n());
+        let queue = Queue::new(&config);
 
         // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProcess::new(process_id, region, planet, config, q);

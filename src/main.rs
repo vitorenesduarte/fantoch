@@ -29,7 +29,7 @@ fn increasing_load<P: Process>() {
     let config = Config::new(n, f);
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256, 512];
+    let cs = vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 
     // clients workload
     let conflict_rate = 10;
