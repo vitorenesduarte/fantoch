@@ -73,7 +73,7 @@ mod tests {
         let f = 1;
 
         // config
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
 
         assert_eq!(config.n(), n);
         assert_eq!(config.f(), f);

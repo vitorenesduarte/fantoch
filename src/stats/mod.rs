@@ -69,18 +69,6 @@ where
         self.mdtm
     }
 
-    pub fn show_mean(&self) -> String {
-        self.mean().round()
-    }
-
-    pub fn show_cov(&self) -> String {
-        self.cov().round()
-    }
-
-    pub fn show_mdtm(&self) -> String {
-        self.mdtm().round()
-    }
-
     fn compute_stats(values: &[I]) -> (F64, F64, F64) {
         // transform `u64`s in `f64`s
         let values: Vec<f64> = values
@@ -205,24 +193,24 @@ mod tests {
     #[test]
     fn stats_show() {
         let stats = Stats::from(vec![1, 1, 1]);
-        assert_eq!(stats.show_mean(), "1.0");
-        assert_eq!(stats.show_cov(), "0.0");
-        assert_eq!(stats.show_mdtm(), "0.0");
+        assert_eq!(stats.mean().round(), "1.0");
+        assert_eq!(stats.cov().round(), "0.0");
+        assert_eq!(stats.mdtm().round(), "0.0");
 
         let stats = Stats::from(vec![10, 20, 30]);
-        assert_eq!(stats.show_mean(), "20.0");
-        assert_eq!(stats.show_cov(), "0.5");
-        assert_eq!(stats.show_mdtm(), "6.7");
+        assert_eq!(stats.mean().round(), "20.0");
+        assert_eq!(stats.cov().round(), "0.5");
+        assert_eq!(stats.mdtm().round(), "6.7");
 
         let stats = Stats::from(vec![10, 20]);
-        assert_eq!(stats.show_mean(), "15.0");
-        assert_eq!(stats.show_cov(), "0.5");
-        assert_eq!(stats.show_mdtm(), "5.0");
+        assert_eq!(stats.mean().round(), "15.0");
+        assert_eq!(stats.cov().round(), "0.5");
+        assert_eq!(stats.mdtm().round(), "5.0");
 
         let stats = Stats::from(vec![10, 20, 40, 10]);
-        assert_eq!(stats.show_mean(), "20.0");
-        assert_eq!(stats.show_cov(), "0.7");
-        assert_eq!(stats.show_mdtm(), "10.0");
+        assert_eq!(stats.mean().round(), "20.0");
+        assert_eq!(stats.cov().round(), "0.7");
+        assert_eq!(stats.mdtm().round(), "10.0");
     }
 
     #[test]

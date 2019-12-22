@@ -232,24 +232,28 @@ impl QueueMetrics {
         let strong_connect_stats = Stats::from(self.strong_connect.clone());
 
         println!(
-            "chain_size: avg={} | cov={}",
-            chain_size_stats.show_mean(),
-            chain_size_stats.show_cov()
+            "chain_size: avg={} p95={} p99={}",
+            chain_size_stats.mean().round(),
+            chain_size_stats.percentile(0.95).round(),
+            chain_size_stats.percentile(0.99).round(),
         );
         println!(
-            "find_scc: avg={} | cov={}",
-            find_scc_stats.show_mean(),
-            find_scc_stats.show_cov()
+            "find_scc: avg={} p95={} p99={}",
+            find_scc_stats.mean().round(),
+            find_scc_stats.percentile(0.95).round(),
+            find_scc_stats.percentile(0.99).round(),
         );
         println!(
-            "try_pending: avg={} | cov={}",
-            try_pending_stats.show_mean(),
-            try_pending_stats.show_cov()
+            "try_pending: avg={} p95={} p99={}",
+            try_pending_stats.mean().round(),
+            try_pending_stats.percentile(0.95).round(),
+            try_pending_stats.percentile(0.99).round(),
         );
         println!(
-            "strong_connect: avg={} | cov={}",
-            strong_connect_stats.show_mean(),
-            strong_connect_stats.show_cov()
+            "strong_connect: avg={} p95={} p99={}",
+            strong_connect_stats.mean().round(),
+            strong_connect_stats.percentile(0.95).round(),
+            strong_connect_stats.percentile(0.99).round(),
         );
     }
 }
