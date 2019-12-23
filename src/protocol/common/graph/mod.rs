@@ -9,8 +9,8 @@ use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::metrics::Metrics;
-use crate::protocol::atlas::queue::index::{PendingIndex, VertexIndex};
-use crate::protocol::atlas::queue::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
+use crate::protocol::common::graph::index::{PendingIndex, VertexIndex};
+use crate::protocol::common::graph::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::util;
 use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};
@@ -18,7 +18,7 @@ use std::fmt;
 use std::mem;
 use threshold::{AEClock, VClock};
 
-pub struct Queue {
+pub struct DependencyGraph {
     transitive_conflicts: bool,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
@@ -32,7 +32,7 @@ enum FinderInfo {
     NotFound(HashSet<Dot>), // set of dots visited while searching for SCCs
 }
 
-impl Queue {
+impl DependencyGraph {
     /// Create a new `Queue`.
     pub fn new(config: &Config) -> Self {
         // create bottom executed clock
@@ -45,7 +45,7 @@ impl Queue {
         let to_execute = Vec::new();
         // create queue metrics
         let metrics = Metrics::new();
-        Self {
+        DependencyGraph {
             transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
             vertex_index,
@@ -230,7 +230,7 @@ mod tests {
         let n = 2;
         let f = 1;
         let config = Config::new(n, f);
-        let mut queue = Queue::new(&config);
+        let mut queue = DependencyGraph::new(&config);
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -575,7 +575,7 @@ mod tests {
         // create queue
         let f = 1;
         let config = Config::new(n, f);
-        let mut queue = Queue::new(&config);
+        let mut queue = DependencyGraph::new(&config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 

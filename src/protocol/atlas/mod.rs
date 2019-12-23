@@ -1,9 +1,6 @@
 // This module contains the definition of `KeysConf` and `QuorumConf`.
 mod clocks;
 
-// This module contains the definition of `Queue`.
-mod queue;
-
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{Dot, ProcessId, Rifl};
@@ -11,7 +8,7 @@ use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::atlas::clocks::{KeysClocks, QuorumClocks};
-use crate::protocol::atlas::queue::Queue;
+use crate::protocol::common::DependencyGraph;
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
@@ -22,7 +19,7 @@ pub struct Atlas {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
     cmds_info: CommandsInfo,
-    queue: Queue,
+    graph: DependencyGraph,
     store: KVStore,
     pending: HashSet<Rifl>,
     commands_ready: Vec<CommandResult>,
@@ -36,8 +33,8 @@ impl Process for Atlas {
         // compute fast quorum size
         let q = Atlas::fast_quorum_size(&config);
 
-        // create `Queue`
-        let queue = Queue::new(&config);
+        // create `DependencyGraph`
+        let graph = DependencyGraph::new(&config);
 
         // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProcess::new(process_id, region, planet, config, q);
@@ -52,7 +49,7 @@ impl Process for Atlas {
             bp,
             keys_clocks,
             cmds_info,
-            queue,
+            graph,
             store,
             pending,
             commands_ready,
@@ -96,7 +93,7 @@ impl Process for Atlas {
     }
 
     fn show_stats(&self) {
-        self.queue.show_stats();
+        self.graph.show_stats();
     }
 }
 
@@ -258,10 +255,10 @@ impl Atlas {
         info.cmd = cmd;
         info.clock = clock;
 
-        // add to queue if not a noop and execute commands that can be executed
+        // add to graph if not a noop and execute commands that can be executed
         if let Some(cmd) = info.cmd.clone() {
-            self.queue.add(dot, cmd, info.clock.clone());
-            let to_execute = self.queue.commands_to_execute();
+            self.graph.add(dot, cmd, info.clock.clone());
+            let to_execute = self.graph.commands_to_execute();
             self.execute(to_execute);
         }
 

@@ -1,6 +1,6 @@
 use crate::id::Dot;
 use crate::kvs::Key;
-use crate::protocol::atlas::queue::Vertex;
+use crate::protocol::common::graph::Vertex;
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 

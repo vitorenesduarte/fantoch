@@ -1,6 +1,9 @@
 // This module contains the definition of `BaseProcess`.
 mod base;
 
+// This module contains common data-structures between protocols.
+mod common;
+
 // This module contains the definition of `Newt`.
 mod newt;
 
