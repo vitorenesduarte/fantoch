@@ -1,10 +1,17 @@
 // This module contains the definition of `BaseProcess`.
 mod base;
 
+// This module contains common data-structures between protocols.
+mod common;
+
 // This module contains the definition of `Newt`.
 mod newt;
 
+// This module contains the definition of `Atlas`.
+mod atlas;
+
 // Re-exports.
+pub use atlas::Atlas;
 pub use base::BaseProcess;
 pub use newt::Newt;
 
@@ -30,6 +37,10 @@ pub trait Process {
 
     #[must_use]
     fn commands_ready(&mut self) -> Vec<CommandResult>;
+
+    fn show_stats(&self) {
+        // by default, nothing to show
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]

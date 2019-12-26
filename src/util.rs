@@ -18,6 +18,23 @@ macro_rules! log {
     };
 }
 
+#[macro_export]
+macro_rules! elapsed {
+    ( $x:expr ) => {{
+        use std::time::Instant;
+        let start = Instant::now();
+        let result = $x;
+        let time = start.elapsed();
+        (time, result)
+    }};
+}
+
+/// Returns an iterator with all process identifiers in a system with `n` processes.
+pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
+    // compute process identifiers, making sure ids are non-zero
+    (1..=n).map(|id| id as u64)
+}
+
 /// Updates the processes known by this process.
 pub fn sort_processes_by_distance(
     region: &Region,
@@ -49,8 +66,31 @@ pub fn sort_processes_by_distance(
 }
 
 #[cfg(test)]
+use threshold::{Clock, EventSet, MaxSet, VClock};
+
+#[cfg(test)]
+/// Returns a new `VClock` setting its frontier with the sequences in the iterator.
+pub fn vclock<I: IntoIterator<Item = u64>>(iter: I) -> VClock<ProcessId> {
+    Clock::from(
+        iter.into_iter()
+            .enumerate()
+            .map(|(actor, seq)| ((actor + 1) as u64, seq)) // make ids 1..=n
+            .map(|(actor, seq)| (actor, MaxSet::from_event(seq))),
+    )
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_ids_test() {
+        let n = 3;
+        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3]);
+
+        let n = 5;
+        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+    }
 
     #[test]
     fn sort_processes_by_distance_test() {

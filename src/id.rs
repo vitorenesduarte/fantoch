@@ -14,7 +14,7 @@ pub type RiflGen = IdGen<ClientId>;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id<S> {
     source: S,
-    seq: u64,
+    sequence: u64,
 }
 
 impl<S> Id<S>
@@ -22,13 +22,18 @@ where
     S: Copy,
 {
     /// Creates a new identifier Id.
-    pub fn new(source: S, seq: u64) -> Self {
-        Self { source, seq }
+    pub fn new(source: S, sequence: u64) -> Self {
+        Self { source, sequence }
     }
 
     /// Retrieves the source that created this `Id`.
     pub fn source(&self) -> S {
         self.source
+    }
+
+    /// Retrieves the sequence consumed by this `Id`.
+    pub fn sequence(&self) -> u64 {
+        self.sequence
     }
 }
 
@@ -37,13 +42,13 @@ where
     S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?}, {})", self.source, self.seq)
+        write!(f, "({:?}, {})", self.source, self.sequence)
     }
 }
 
 pub struct IdGen<S> {
     source: S,
-    last_seq: u64,
+    last_sequence: u64,
 }
 
 impl<S> IdGen<S>
@@ -54,7 +59,7 @@ where
     pub fn new(source: S) -> Self {
         Self {
             source,
-            last_seq: 0,
+            last_sequence: 0,
         }
     }
 
@@ -65,8 +70,8 @@ where
 
     /// Generates the next `Id`.
     pub fn next_id(&mut self) -> Id<S> {
-        self.last_seq += 1;
-        Id::new(self.source, self.last_seq)
+        self.last_sequence += 1;
+        Id::new(self.source, self.last_sequence)
     }
 }
 
@@ -85,16 +90,16 @@ mod tests {
         // check source
         assert_eq!(gen.source(), source);
 
-        // generate `n` ids and check the `id` generated
-        let n = 100;
+        // check the `id` generated for `id_count` ids
+        let id_count = 100;
 
-        for seq in 1..=n {
+        for seq in 1..=id_count {
             // generate id
             let id = gen.next_id();
 
             // check `id`
-            assert_eq!(id.source, source);
-            assert_eq!(id.seq, seq);
+            assert_eq!(id.source(), source);
+            assert_eq!(id.sequence(), seq);
         }
     }
 }

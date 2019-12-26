@@ -1,61 +1,55 @@
-// This module contains the definition of `KeyClocks` and `QuorumClocks`.
+// This module contains the definition of `KeysConf` and `QuorumConf`.
 mod clocks;
 
-// This module contains the definition of `ProcessVotes`, `Votes` and `VoteRange`.
-mod votes;
-
-// This module contains the definition of `MultiVotesTable`.
-mod votes_table;
-
-use crate::command::{Command, CommandResult, Pending};
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{Dot, ProcessId, Rifl};
-use crate::kvs::{KVOp, KVStore, Key};
+use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
-use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
-use crate::protocol::newt::votes::{ProcessVotes, Votes};
-use crate::protocol::newt::votes_table::MultiVotesTable;
+use crate::protocol::atlas::clocks::{KeysClocks, QuorumClocks};
+use crate::protocol::common::DependencyGraph;
 use crate::protocol::{BaseProcess, Process, ToSend};
-use std::cmp;
-use std::collections::HashMap;
+use crate::util;
+use std::collections::{HashMap, HashSet};
 use std::mem;
+use threshold::VClock;
 
-pub struct Newt {
+pub struct Atlas {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
     cmds_info: CommandsInfo,
-    table: MultiVotesTable,
+    graph: DependencyGraph,
     store: KVStore,
-    pending: Pending,
+    pending: HashSet<Rifl>,
     commands_ready: Vec<CommandResult>,
 }
 
-impl Process for Newt {
+impl Process for Atlas {
     type Message = Message;
 
-    /// Creates a new `Newt` process.
+    /// Creates a new `Atlas` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-        // compute fast quorum size and stability threshold
-        let (stability_threshold, q) = Newt::read_write_quorum_sizes(&config);
+        // compute fast quorum size
+        let q = Atlas::fast_quorum_size(&config);
 
-        // create `MultiVotesTable`
-        let table = MultiVotesTable::new(config.n(), stability_threshold);
+        // create `DependencyGraph`
+        let graph = DependencyGraph::new(&config);
 
         // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
         let bp = BaseProcess::new(process_id, region, planet, config, q);
-        let keys_clocks = KeysClocks::new(process_id);
-        let cmds_info = CommandsInfo::new(q);
+        let keys_clocks = KeysClocks::new(config.n());
+        let cmds_info = CommandsInfo::new(config.n(), q);
         let store = KVStore::new();
-        let pending = Pending::new();
+        let pending = HashSet::new();
         let commands_ready = Vec::new();
 
-        // create `Newt`
+        // create `Atlas`
         Self {
             bp,
             keys_clocks,
             cmds_info,
-            table,
+            graph,
             store,
             pending,
             commands_ready,
@@ -86,18 +80,8 @@ impl Process for Newt {
                 quorum,
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
-            Message::MCollectAck {
-                dot,
-                clock,
-                process_votes,
-            } => self.handle_mcollectack(from, dot, clock, process_votes),
-            Message::MCommit {
-                dot,
-                cmd,
-                clock,
-                votes,
-            } => self.handle_mcommit(dot, cmd, clock, votes),
-            Message::MPhantom { dot, process_votes } => self.handle_mphantom(dot, process_votes),
+            Message::MCollectAck { dot, clock } => self.handle_mcollectack(from, dot, clock),
+            Message::MCommit { dot, cmd, clock } => self.handle_mcommit(dot, cmd, clock),
         }
     }
 
@@ -109,36 +93,32 @@ impl Process for Newt {
     }
 
     fn show_stats(&self) {
-        self.table.show_stats();
+        self.graph.show_stats();
     }
 }
 
-impl Newt {
-    /// Computes `Newt` stability threshold (read quorum size) and fast quorum size (write quorum
-    /// size). Typically the threshold should be n - q + 1, where n is the number of processes and q
-    /// the size of the write quorum. In `Newt` e.g. with tiny quorums, although the fast quorum is
-    /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
-    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
-    fn read_write_quorum_sizes(config: &Config) -> (usize, usize) {
+impl Atlas {
+    /// Computes `Atlas` fast quorum size.
+    fn fast_quorum_size(config: &Config) -> usize {
         let n = config.n();
         let f = config.f();
-        if config.newt_tiny_quorums() {
-            (n - f, 2 * f)
-        } else {
-            ((n / 2) + 1, (n / 2) + f)
-        }
+        (n / 2) + f
     }
 
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
         // start command in `Pending`
-        self.pending.start(&cmd);
+        assert!(self.pending.insert(cmd.rifl()));
 
         // compute the command identifier
         let dot = self.bp.next_dot();
 
+        // wrap command
+        let cmd = Some(cmd);
+
         // compute its clock
-        let clock = self.keys_clocks.clock(&cmd) + 1;
+        let clock = self.keys_clocks.clock(&cmd);
+        self.keys_clocks.add(dot, &cmd);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -157,12 +137,12 @@ impl Newt {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        cmd: Command,
+        cmd: Option<Command>,
         quorum: Vec<ProcessId>,
-        remote_clock: u64,
+        remote_clock: VClock<ProcessId>,
     ) -> ToSend<Message> {
         log!(
-            "p{}: MCollect({:?}, {:?}, {}) from {}",
+            "p{}: MCollect({:?}, {:?}, {:?}) from {}",
             self.id(),
             dot,
             cmd,
@@ -178,26 +158,20 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // TODO can we somehow combine the next 2 operations in order to save map lookups?
-
-        // compute command clock
-        let clock = cmp::max(remote_clock, self.keys_clocks.clock(&cmd) + 1);
-        // compute votes consumed by this command
-        let process_votes = self.keys_clocks.process_votes(&cmd, clock);
-        // check that there's one vote per key
-        assert_eq!(process_votes.len(), cmd.key_count());
+        // compute its clock
+        let clock = self.keys_clocks.clock_with_past(&cmd, remote_clock);
+        self.keys_clocks.add(dot, &cmd);
 
         // update command info
         info.status = Status::COLLECT;
-        info.cmd = Some(cmd);
+        info.cmd = cmd;
         info.quorum = quorum;
         info.clock = clock;
 
         // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck {
             dot,
-            clock,
-            process_votes,
+            clock: info.clock.clone(),
         };
         let target = vec![from];
 
@@ -209,15 +183,13 @@ impl Newt {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        clock: u64,
-        remote_votes: ProcessVotes,
+        clock: VClock<ProcessId>,
     ) -> ToSend<Message> {
         log!(
-            "p{}: MCollectAck({:?}, {}, {:?}) from {}",
+            "p{}: MCollectAck({:?}, {:?}) from {}",
             self.id(),
             dot,
             clock,
-            remote_votes,
             from
         );
 
@@ -229,44 +201,24 @@ impl Newt {
             return ToSend::Nothing;
         }
 
-        // update votes with remote votes
-        info.votes.add(remote_votes);
-
-        // update quorum clocks while computing max clock and its number of occurences
-        let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
-
-        // optimization: bump all keys clocks in `cmd` to be `max_clock`
-        // - this prevents us from generating votes (either when clients submit new operations or
-        //   when handling `MCollect` from other processes) that could potentially delay the
-        //   execution of this command
-        match info.cmd.as_ref() {
-            Some(cmd) => {
-                let local_votes = self.keys_clocks.process_votes(cmd, max_clock);
-                // update votes with local votes
-                info.votes.add(local_votes);
-            }
-            None => {
-                panic!("there should be a command payload in the MCollectAck handler");
-            }
-        }
+        // update quorum clocks
+        info.quorum_clocks.add(from, clock);
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
+            // compute the threshold union while checking whether it's equal to their union
+            let (final_clock, equal_to_union) =
+                info.quorum_clocks.threshold_union(self.bp.config.f());
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
-            if max_count >= self.bp.config.f() {
-                // reset local votes as we're going to receive them right away; this also prevents a
-                // `info.votes.clone()`
-                let votes = Self::reset_votes(&mut info.votes);
-
+            if equal_to_union {
                 // create `MCommit` and target
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
                 let mcommit = Message::MCommit {
                     dot,
                     cmd: info.cmd.clone(),
-                    clock: max_clock,
-                    votes,
+                    clock: final_clock,
                 };
                 let target = self.bp.all();
 
@@ -285,10 +237,9 @@ impl Newt {
         &mut self,
         dot: Dot,
         cmd: Option<Command>,
-        clock: u64,
-        mut votes: Votes,
+        clock: VClock<ProcessId>,
     ) -> ToSend<Message> {
-        log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
+        log!("p{}: MCommit({:?}, {:?})", self.id(), dot, clock);
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -304,92 +255,52 @@ impl Newt {
         info.cmd = cmd;
         info.clock = clock;
 
-        // get current votes (probably from phantom messages) merge them with received votes so that
-        // all together can be added to a votes table
-        let current_votes = Self::reset_votes(&mut info.votes);
-        votes.merge(current_votes);
-
-        // generate phantom votes if committed clock is higher than the local key's clock
-        let mut to_send = ToSend::Nothing;
-        if let Some(cmd) = info.cmd.as_ref() {
-            // if not a no op, check if we can generate more votes that can speed-up execution
-            let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
-
-            // create `MPhantom` if there are new votes
-            if !process_votes.is_empty() {
-                let mphantom = Message::MPhantom { dot, process_votes };
-                let target = self.bp.all();
-                to_send = ToSend::ToProcesses(self.bp.process_id, target, mphantom)
-            }
-        }
-
-        // update votes table and execute commands that can be executed
-        let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
-        self.execute(to_execute);
-
-        // return `ToSend`
-        to_send
-    }
-
-    fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
-        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
-
-        // get cmd info
-        let info = self.cmds_info.get(dot);
-
-        // TODO if there's ever a Status::EXECUTE, this check might be incorrect
-        if info.status == Status::COMMIT {
-            // only incorporate votes in the command votes table if the command has been committed
-            let to_execute = self.table.add_phantom_votes(process_votes);
+        // add to graph if not a noop and execute commands that can be executed
+        if let Some(cmd) = info.cmd.clone() {
+            self.graph.add(dot, cmd, info.clock.clone());
+            let to_execute = self.graph.commands_to_execute();
             self.execute(to_execute);
-        } else {
-            // if not committed yet, update votes with remote votes
-            info.votes.add(process_votes);
         }
+
+        // nothing to send
         ToSend::Nothing
     }
 
-    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) {
+    fn execute(&mut self, to_execute: Vec<Command>) {
         // borrow everything we'll need
         let commands_ready = &mut self.commands_ready;
         let store = &mut self.store;
         let pending = &mut self.pending;
 
         // get more commands that are ready to be executed
-        let ready = to_execute
-            .into_iter()
-            // flatten each pair with a key and list of ready partial operations
-            .flat_map(|(key, ops)| {
-                ops.into_iter()
-                    .map(move |(rifl, op)| (key.clone(), rifl, op))
-            })
-            .filter_map(|(key, rifl, op)| {
-                // execute op in the `KVStore`
-                let op_result = store.execute(&key, op);
+        let ready = to_execute.into_iter().filter_map(|cmd| {
+            // get command rifl
+            let rifl = cmd.rifl();
+            // execute the command
+            let result = store.execute_command(cmd);
 
-                // add partial result to `Pending`
-                pending.add_partial(rifl, key, op_result)
-            });
+            // if it was pending locally, then it's from a client of this process
+            if pending.remove(&rifl) {
+                Some(result)
+            } else {
+                None
+            }
+        });
         commands_ready.extend(ready);
-    }
-
-    // Replaces the value `local_votes` with empty votes, returning the previous votes.
-    fn reset_votes(local_votes: &mut Votes) -> Votes {
-        let mut votes = Votes::new();
-        mem::swap(&mut votes, local_votes);
-        votes
     }
 }
 
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 struct CommandsInfo {
+    n: usize,
     q: usize,
     dot_to_info: HashMap<Dot, CommandInfo>,
 }
 
 impl CommandsInfo {
-    fn new(q: usize) -> Self {
+    fn new(n: usize, q: usize) -> Self {
         Self {
+            n,
             q,
             dot_to_info: HashMap::new(),
         }
@@ -398,12 +309,13 @@ impl CommandsInfo {
     // Returns the `CommandInfo` associated with `Dot`.
     // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
     fn get(&mut self, dot: Dot) -> &mut CommandInfo {
-        // TODO the borrow checker complains if `self.q` is passed to
+        // TODO the borrow checker complains if `self.n` and `self.q` is passed to
         // `CommandInfo::new`
+        let n = self.n;
         let q = self.q;
         self.dot_to_info
             .entry(dot)
-            .or_insert_with(|| CommandInfo::new(q))
+            .or_insert_with(|| CommandInfo::new(n, q))
     }
 }
 
@@ -413,51 +325,41 @@ struct CommandInfo {
     status: Status,
     quorum: Vec<ProcessId>,
     cmd: Option<Command>, // `None` if noOp
-    clock: u64,
-    // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
-    // quorum members
-    votes: Votes,
-    // `quorum_clocks` is used by the coordinator to compute the highest clock
-    // reported by fast quorum members and the number of times it was reported
+    clock: VClock<ProcessId>,
+    // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
+    // whether to take the fast path
     quorum_clocks: QuorumClocks,
 }
 
 impl CommandInfo {
-    fn new(q: usize) -> Self {
+    fn new(n: usize, q: usize) -> Self {
         Self {
             status: Status::START,
             quorum: vec![],
             cmd: None,
-            clock: 0,
-            votes: Votes::new(),
+            clock: VClock::with(util::process_ids(n)),
             quorum_clocks: QuorumClocks::new(q),
         }
     }
 }
 
-// `Newt` protocol messages
+// `Atlas` protocol messages
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     MCollect {
         dot: Dot,
-        cmd: Command,
+        cmd: Option<Command>, // it's never a noop though
         quorum: Vec<ProcessId>,
-        clock: u64,
+        clock: VClock<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
-        clock: u64,
-        process_votes: ProcessVotes,
+        clock: VClock<ProcessId>,
     },
     MCommit {
         dot: Dot,
         cmd: Option<Command>,
-        clock: u64,
-        votes: Votes,
-    },
-    MPhantom {
-        dot: Dot,
-        process_votes: ProcessVotes,
+        clock: VClock<ProcessId>,
     },
 }
 
@@ -477,36 +379,19 @@ mod tests {
     use crate::time::SimTime;
 
     #[test]
-    fn newt_parameters() {
-        // tiny quorums = false
-        let mut config = Config::new(7, 1);
-        config.set_newt_tiny_quorums(false);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 4);
-        assert_eq!(w, 4);
+    fn atlas_parameters() {
+        let config = Config::new(7, 1);
+        assert_eq!(Atlas::fast_quorum_size(&config), 4);
 
-        let mut config = Config::new(7, 2);
-        config.set_newt_tiny_quorums(false);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 4);
-        assert_eq!(w, 5);
+        let config = Config::new(7, 2);
+        assert_eq!(Atlas::fast_quorum_size(&config), 5);
 
-        // tiny quorums = true
-        let mut config = Config::new(7, 1);
-        config.set_newt_tiny_quorums(true);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 6);
-        assert_eq!(w, 2);
-
-        let mut config = Config::new(7, 2);
-        config.set_newt_tiny_quorums(true);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 5);
-        assert_eq!(w, 4);
+        let config = Config::new(7, 3);
+        assert_eq!(Atlas::fast_quorum_size(&config), 6);
     }
 
     #[test]
-    fn newt_flow() {
+    fn atlas_flow() {
         // processes ids
         let process_id_1 = 1;
         let process_id_2 = 2;
@@ -536,9 +421,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // newts
-        let mut newt_1 = Newt::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut newt_2 = Newt::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut newt_3 = Newt::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        let mut newt_1 = Atlas::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut newt_2 = Atlas::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut newt_3 = Atlas::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
         // discover processes in all newts
         newt_1.discover(processes.clone());
@@ -614,24 +499,13 @@ mod tests {
 
         // all processes handle it
         let to_sends = simulation.forward_to_processes(mcommit_tosend);
-        // get the single mphantom from process 3
-        let to_sends = to_sends
+
+        // there's nothing to send
+        let not_nothing_count = to_sends
             .into_iter()
-            .filter(|to_send| to_send.to_processes())
-            .collect::<Vec<_>>();
-        assert_eq!(to_sends.len(), 1);
-
-        let to_send = to_sends.into_iter().next().unwrap();
-        match to_send.clone() {
-            ToSend::ToProcesses(from, target, Message::MPhantom { .. }) => {
-                assert_eq!(from, process_id_3);
-                assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
-            }
-            _ => panic!("Message::MPhantom not found!"),
-        }
-
-        let nothings = simulation.forward_to_processes(to_send);
-        assert!(nothings.into_iter().all(|to_send| to_send.is_nothing()));
+            .filter(|to_send| !to_send.is_nothing())
+            .count();
+        assert_eq!(not_nothing_count, 0);
 
         // process 1 should have a result to the client
         let commands_ready = simulation.get_process(process_id_1).commands_ready();

@@ -8,11 +8,12 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-threshold = "0.4.0"
+threshold = "0.6.0"
 rand = "0.7"
 permutator = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.2"
 rayon = "1.2.0"
+num-traits = "0.2.10"
 
 [dev-dependencies]

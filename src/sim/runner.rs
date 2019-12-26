@@ -2,10 +2,10 @@ use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
+use crate::metrics::Stats;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
 use crate::sim::{Schedule, Simulation};
-use crate::stats::Stats;
 use crate::time::SimTime;
 use std::collections::HashMap;
 
@@ -111,7 +111,7 @@ where
     }
 
     /// Run the simulation.
-    pub fn run(&mut self) -> HashMap<&Region, (usize, Stats)> {
+    pub fn run(&mut self) -> HashMap<&Region, (usize, Stats<u64>)> {
         // start clients
         self.simulation
             .start_clients(&self.time)
@@ -123,6 +123,9 @@ where
 
         // run simulation loop
         self.simulation_loop();
+
+        // show processes stats
+        self.processes_stats();
 
         // return clients stats
         self.clients_stats()
@@ -237,7 +240,7 @@ where
 
     /// Get client's stats.
     /// TODO does this need to be mut?
-    fn clients_stats(&mut self) -> HashMap<&Region, (usize, Stats)> {
+    fn clients_stats(&mut self) -> HashMap<&Region, (usize, Stats<u64>)> {
         let simulation = &mut self.simulation;
         let mut region_to_latencies = HashMap::new();
 
@@ -265,14 +268,26 @@ where
             })
             .collect()
     }
+
+    /// Show processes' stats.
+    /// TODO does this need to be mut?
+    fn processes_stats(&mut self) {
+        let simulation = &mut self.simulation;
+        self.process_to_region.keys().for_each(|process_id| {
+            // get process from simulation
+            let process = simulation.get_process(*process_id);
+            println!("process {:?} stats:", process_id);
+            process.show_stats();
+        });
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::id::{ProcessId, Rifl};
+    use crate::metrics::F64;
     use crate::protocol::BaseProcess;
-    use crate::stats::F64;
     use std::mem;
 
     #[derive(Clone)]
@@ -371,7 +386,7 @@ mod tests {
         }
     }
 
-    fn run(f: usize, clients_per_region: usize) -> (Stats, Stats) {
+    fn run(f: usize, clients_per_region: usize) -> (Stats<u64>, Stats<u64>) {
         // planet
         let planet = Planet::new("latency/");
 

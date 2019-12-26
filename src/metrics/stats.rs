@@ -1,9 +1,5 @@
-// This module contains the definition of `F64`.
-pub mod float;
-
-// Re-exports.
-pub use float::F64;
-
+use crate::metrics::F64;
+use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -14,21 +10,24 @@ pub enum StatsKind {
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub struct Stats {
+pub struct Stats<I> {
     mean: F64,
     cov: F64,  // coefficient of variation
     mdtm: F64, // mean distance to mean
-    values: Vec<u64>,
+    values: Vec<I>,
 }
 
-impl fmt::Debug for Stats {
+impl<I> fmt::Debug for Stats<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:.0}, {:.2})", self.mean.value(), self.cov.value(),)
     }
 }
 
-impl Stats {
-    pub fn from(mut values: Vec<u64>) -> Self {
+impl<I> Stats<I>
+where
+    I: PrimInt,
+{
+    pub fn from(mut values: Vec<I>) -> Self {
         // sort all values (so that percentiles can be computed)
         values.sort_unstable();
         // compute some stats
@@ -65,21 +64,15 @@ impl Stats {
         self.mdtm
     }
 
-    pub fn show_mean(&self) -> String {
-        self.mean().round()
-    }
-
-    pub fn show_cov(&self) -> String {
-        self.cov().round()
-    }
-
-    pub fn show_mdtm(&self) -> String {
-        self.mdtm().round()
-    }
-
-    fn compute_stats(values: &[u64]) -> (F64, F64, F64) {
+    fn compute_stats(values: &[I]) -> (F64, F64, F64) {
         // transform `u64`s in `f64`s
-        let values: Vec<f64> = values.iter().map(|x| *x as f64).collect();
+        let values: Vec<f64> = values
+            .iter()
+            .map(|x| {
+                (*x).to_f64()
+                    .expect("it should be possible to represent the value as f64")
+            })
+            .collect();
 
         // compute mean
         let mean = Self::compute_mean(&values);
@@ -152,14 +145,20 @@ impl Stats {
         let value = if is_whole_number {
             let left_value = data
                 .nth(index - 1)
-                .expect("there should be a left percentile value");
-            let right_value = data.next().expect("there should a right percentile value");
-            (*left_value as f64 + *right_value as f64) / 2.0
+                .expect("there should be a left percentile value")
+                .to_f64()
+                .expect("left percentile value should be representable as f64");
+            let right_value = data
+                .next()
+                .expect("there should a right percentile value")
+                .to_f64()
+                .expect("right percentile value should be representable as f64");
+            (left_value + right_value) / 2.0
         } else {
-            let value = data
-                .nth(index - 1)
-                .expect("there should a percentile value");
-            *value as f64
+            data.nth(index - 1)
+                .expect("there should a percentile value")
+                .to_f64()
+                .expect("percentile value should be representable as f64")
         };
 
         F64::new(value)
@@ -189,24 +188,24 @@ mod tests {
     #[test]
     fn stats_show() {
         let stats = Stats::from(vec![1, 1, 1]);
-        assert_eq!(stats.show_mean(), "1.0");
-        assert_eq!(stats.show_cov(), "0.0");
-        assert_eq!(stats.show_mdtm(), "0.0");
+        assert_eq!(stats.mean().round(), "1.0");
+        assert_eq!(stats.cov().round(), "0.0");
+        assert_eq!(stats.mdtm().round(), "0.0");
 
         let stats = Stats::from(vec![10, 20, 30]);
-        assert_eq!(stats.show_mean(), "20.0");
-        assert_eq!(stats.show_cov(), "0.5");
-        assert_eq!(stats.show_mdtm(), "6.7");
+        assert_eq!(stats.mean().round(), "20.0");
+        assert_eq!(stats.cov().round(), "0.5");
+        assert_eq!(stats.mdtm().round(), "6.7");
 
         let stats = Stats::from(vec![10, 20]);
-        assert_eq!(stats.show_mean(), "15.0");
-        assert_eq!(stats.show_cov(), "0.5");
-        assert_eq!(stats.show_mdtm(), "5.0");
+        assert_eq!(stats.mean().round(), "15.0");
+        assert_eq!(stats.cov().round(), "0.5");
+        assert_eq!(stats.mdtm().round(), "5.0");
 
         let stats = Stats::from(vec![10, 20, 40, 10]);
-        assert_eq!(stats.show_mean(), "20.0");
-        assert_eq!(stats.show_cov(), "0.7");
-        assert_eq!(stats.show_mdtm(), "10.0");
+        assert_eq!(stats.mean().round(), "20.0");
+        assert_eq!(stats.cov().round(), "0.7");
+        assert_eq!(stats.mdtm().round(), "10.0");
     }
 
     #[test]

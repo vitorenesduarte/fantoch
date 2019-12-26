@@ -6,6 +6,8 @@ pub struct Config {
     f: usize,
     /// defines whether newt should employ tiny quorums or not
     newt_tiny_quorums: bool,
+    /// defines whether we can assume if the conflict relation is transitive
+    transitive_conflicts: bool,
 }
 
 impl Config {
@@ -17,12 +19,15 @@ impl Config {
         if f > n / 2 {
             println!("WARNING: f={} is larger than a majority with n={}", f, n);
         }
-        // by default, `tiny_quorums = false`
+        // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;
+        // by default, `transitive_conflicts = false`
+        let transitive_conflicts = false;
         Self {
             n,
             f,
             newt_tiny_quorums,
+            transitive_conflicts,
         }
     }
 
@@ -45,6 +50,16 @@ impl Config {
     pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
         self.newt_tiny_quorums = newt_tiny_quorums;
     }
+
+    /// Checks whether whether we can assume that conflicts are transitive.
+    pub fn transitive_conflicts(&self) -> bool {
+        self.transitive_conflicts
+    }
+
+    /// Changes the value of `transitive_conflicts`.
+    pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
+        self.transitive_conflicts = transitive_conflicts;
+    }
 }
 
 #[cfg(test)]
@@ -58,22 +73,12 @@ mod tests {
         let f = 1;
 
         // config
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
 
         assert_eq!(config.n(), n);
         assert_eq!(config.f(), f);
-    }
 
-    #[test]
-    fn newt_tiny_quorums() {
-        // n and f
-        let n = 5;
-        let f = 1;
-
-        // config
-        let mut config = Config::new(n, f);
-
-        // by default, false
+        // by default, newt tiny quorums is false
         assert!(!config.newt_tiny_quorums());
 
         // if we change it to false, remains false
@@ -83,5 +88,16 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_newt_tiny_quorums(true);
         assert!(config.newt_tiny_quorums());
+
+        // by default, transitive conflicts is false
+        assert!(!config.transitive_conflicts());
+
+        // if we change it to false, remains false
+        config.set_transitive_conflicts(false);
+        assert!(!config.transitive_conflicts());
+
+        // if we change it to true, it becomes true
+        config.set_transitive_conflicts(true);
+        assert!(config.transitive_conflicts());
     }
 }

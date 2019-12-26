@@ -7,8 +7,8 @@ pub mod search;
 // Re-exports.
 pub use search::Search;
 
+use crate::metrics::{Stats, StatsKind};
 use crate::planet::{Planet, Region};
-use crate::stats::{Stats, StatsKind};
 
 #[derive(Debug)]
 pub struct Bote {
@@ -31,7 +31,12 @@ impl Bote {
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
     /// - one list being the regions where `clients` are
-    pub fn leaderless(&self, servers: &[Region], clients: &[Region], quorum_size: usize) -> Stats {
+    pub fn leaderless(
+        &self,
+        servers: &[Region],
+        clients: &[Region],
+        quorum_size: usize,
+    ) -> Stats<u64> {
         let latencies: Vec<_> = clients
             .iter()
             .map(|client| {
@@ -62,7 +67,7 @@ impl Bote {
         servers: &[Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Stats {
+    ) -> Stats<u64> {
         // compute the latency from leader to its closest quorum
         let leader_to_quorum = self.quorum_latency(leader, servers, quorum_size);
 
@@ -95,7 +100,7 @@ impl Bote {
         clients: &[Region],
         quorum_size: usize,
         stats_sort_by: StatsKind,
-    ) -> (&'a Region, Stats) {
+    ) -> (&'a Region, Stats<u64>) {
         // compute all stats
         let mut stats = self.all_leaders_stats(servers, clients, quorum_size);
 
@@ -121,7 +126,7 @@ impl Bote {
         servers: &'a [Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Vec<(&'a Region, Stats)> {
+    ) -> Vec<(&'a Region, Stats<u64>)> {
         // compute stats for each possible leader
         servers
             .iter()
@@ -213,17 +218,17 @@ mod tests {
         let quorum_size = 3;
         let stats = bote.leaderless(&regions, &regions, quorum_size);
         // w1 -> 9, w2 -> 11, w3 -> 8, w4 -> 8, w6 -> 15
-        assert_eq!(stats.show_mean(), "9.2");
-        assert_eq!(stats.show_cov(), "0.3");
-        assert_eq!(stats.show_mdtm(), "2.2");
+        assert_eq!(stats.mean().round(), "9.2");
+        assert_eq!(stats.cov().round(), "0.3");
+        assert_eq!(stats.mdtm().round(), "2.2");
 
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&regions, &regions, quorum_size);
         // w1 -> 11, w2 -> 14, w3 -> 9, w4 -> 10, w6 -> 15
-        assert_eq!(stats.show_mean(), "10.8");
-        assert_eq!(stats.show_cov(), "0.2");
-        assert_eq!(stats.show_mdtm(), "2.2");
+        assert_eq!(stats.mean().round(), "10.8");
+        assert_eq!(stats.cov().round(), "0.2");
+        assert_eq!(stats.mdtm().round(), "2.2");
     }
 
     #[test]
@@ -247,17 +252,17 @@ mod tests {
         let quorum_size = 3;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 9, w2 -> 11
-        assert_eq!(stats.show_mean(), "9.0");
-        assert_eq!(stats.show_cov(), "0.2");
-        assert_eq!(stats.show_mdtm(), "1.0");
+        assert_eq!(stats.mean().round(), "9.0");
+        assert_eq!(stats.cov().round(), "0.2");
+        assert_eq!(stats.mdtm().round(), "1.0");
 
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 11, w2 -> 14
-        assert_eq!(stats.show_mean(), "11.5");
-        assert_eq!(stats.show_cov(), "0.2");
-        assert_eq!(stats.show_mdtm(), "1.5");
+        assert_eq!(stats.mean().round(), "11.5");
+        assert_eq!(stats.cov().round(), "0.2");
+        assert_eq!(stats.mdtm().round(), "1.5");
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
@@ -266,17 +271,17 @@ mod tests {
         let quorum_size = 3;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 9, w3 -> 8, w6 -> 15
-        assert_eq!(stats.show_mean(), "9.7");
-        assert_eq!(stats.show_cov(), "0.4");
-        assert_eq!(stats.show_mdtm(), "2.9");
+        assert_eq!(stats.mean().round(), "9.7");
+        assert_eq!(stats.cov().round(), "0.4");
+        assert_eq!(stats.mdtm().round(), "2.9");
 
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
         // w1 -> 11, w3 -> 9, w6 -> 15
-        assert_eq!(stats.show_mean(), "10.7");
-        assert_eq!(stats.show_cov(), "0.3");
-        assert_eq!(stats.show_mdtm(), "2.2");
+        assert_eq!(stats.mean().round(), "10.7");
+        assert_eq!(stats.cov().round(), "0.3");
+        assert_eq!(stats.mdtm().round(), "2.2");
     }
 
     #[test]
@@ -303,23 +308,23 @@ mod tests {
         // quorum latency for w1 is 7
         // w1 -> 8, w2 -> 17, w3 -> 15, w4 -> 14, w6 -> 21
         let stats = leader_to_stats.get(&w1).unwrap();
-        assert_eq!(stats.show_mean(), "14.8");
-        assert_eq!(stats.show_cov(), "0.3");
-        assert_eq!(stats.show_mdtm(), "3.4");
+        assert_eq!(stats.mean().round(), "14.8");
+        assert_eq!(stats.cov().round(), "0.3");
+        assert_eq!(stats.mdtm().round(), "3.4");
 
         // quorum latency for w2 is 9
         // w1 -> 19, w2 -> 10, w3 -> 22, w4 -> 18, w6 -> 28
         let stats = leader_to_stats.get(&w2).unwrap();
-        assert_eq!(stats.show_mean(), "19.2");
-        assert_eq!(stats.show_cov(), "0.4");
-        assert_eq!(stats.show_mdtm(), "4.6");
+        assert_eq!(stats.mean().round(), "19.2");
+        assert_eq!(stats.cov().round(), "0.4");
+        assert_eq!(stats.mdtm().round(), "4.6");
 
         // quorum latency for w3 is 7
         // w1 -> 15, w2 -> 20, w3 -> 8, w4 -> 14, w6 -> 14
         let stats = leader_to_stats.get(&w3).unwrap();
-        assert_eq!(stats.show_mean(), "14.0");
-        assert_eq!(stats.show_cov(), "0.3");
-        assert_eq!(stats.show_mdtm(), "2.8");
+        assert_eq!(stats.mean().round(), "14.0");
+        assert_eq!(stats.cov().round(), "0.3");
+        assert_eq!(stats.mdtm().round(), "2.8");
     }
 
     #[test]
@@ -349,23 +354,23 @@ mod tests {
         // quorum latency for w1 is 7
         // w1 -> 8, w2 -> 17
         let stats = leader_to_stats.get(&w1).unwrap();
-        assert_eq!(stats.show_mean(), "12.0");
-        assert_eq!(stats.show_cov(), "0.6");
-        assert_eq!(stats.show_mdtm(), "5.0");
+        assert_eq!(stats.mean().round(), "12.0");
+        assert_eq!(stats.cov().round(), "0.6");
+        assert_eq!(stats.mdtm().round(), "5.0");
 
         // quorum latency for w2 is 9
         // w1 -> 19, w2 -> 10
         let stats = leader_to_stats.get(&w2).unwrap();
-        assert_eq!(stats.show_mean(), "14.0");
-        assert_eq!(stats.show_cov(), "0.5");
-        assert_eq!(stats.show_mdtm(), "5.0");
+        assert_eq!(stats.mean().round(), "14.0");
+        assert_eq!(stats.cov().round(), "0.5");
+        assert_eq!(stats.mdtm().round(), "5.0");
 
         // quorum latency for w3 is 7
         // w1 -> 15, w2 -> 20
         let stats = leader_to_stats.get(&w3).unwrap();
-        assert_eq!(stats.show_mean(), "17.5");
-        assert_eq!(stats.show_cov(), "0.2");
-        assert_eq!(stats.show_mdtm(), "2.5");
+        assert_eq!(stats.mean().round(), "17.5");
+        assert_eq!(stats.cov().round(), "0.2");
+        assert_eq!(stats.mdtm().round(), "2.5");
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
@@ -377,23 +382,23 @@ mod tests {
         // quorum latency for w1 is 7
         // w1 -> 8, w3 -> 15, w6 -> 21
         let stats = leader_to_stats.get(&w1).unwrap();
-        assert_eq!(stats.show_mean(), "14.3");
-        assert_eq!(stats.show_cov(), "0.5");
-        assert_eq!(stats.show_mdtm(), "4.9");
+        assert_eq!(stats.mean().round(), "14.3");
+        assert_eq!(stats.cov().round(), "0.5");
+        assert_eq!(stats.mdtm().round(), "4.9");
 
         // quorum latency for w2 is 9
         // w1 -> 19, w3 -> 22, w6 -> 28
         let stats = leader_to_stats.get(&w2).unwrap();
-        assert_eq!(stats.show_mean(), "23.0");
-        assert_eq!(stats.show_cov(), "0.2");
-        assert_eq!(stats.show_mdtm(), "3.3");
+        assert_eq!(stats.mean().round(), "23.0");
+        assert_eq!(stats.cov().round(), "0.2");
+        assert_eq!(stats.mdtm().round(), "3.3");
 
         // quorum latency for w3 is 7
         // w1 -> 15, w3 -> 8, w6 -> 14
         let stats = leader_to_stats.get(&w3).unwrap();
-        assert_eq!(stats.show_mean(), "12.0");
-        assert_eq!(stats.show_cov(), "0.4");
-        assert_eq!(stats.show_mdtm(), "3.3");
+        assert_eq!(stats.mean().round(), "12.0");
+        assert_eq!(stats.cov().round(), "0.4");
+        assert_eq!(stats.mdtm().round(), "3.3");
     }
 
     #[test]
@@ -414,8 +419,8 @@ mod tests {
         let quorum_size = 2;
         let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, StatsKind::Mean);
 
-        assert_eq!(stats.show_mean(), "14.0");
-        assert_eq!(stats.show_cov(), "0.3");
-        assert_eq!(stats.show_mdtm(), "2.8");
+        assert_eq!(stats.mean().round(), "14.0");
+        assert_eq!(stats.cov().round(), "0.3");
+        assert_eq!(stats.mdtm().round(), "2.8");
     }
 }

@@ -43,6 +43,12 @@ impl Command {
         Self::from(rifl, iter::once((key, KVOp::Put(value))))
     }
 
+    /// Creates a multi-put command.
+    pub fn multi_put(rifl: Rifl, kvs: Vec<(Key, Value)>) -> Self {
+        let commands = kvs.into_iter().map(|(key, value)| (key, KVOp::Put(value)));
+        Self::from(rifl, commands)
+    }
+
     /// Returns the command identifier.
     pub fn rifl(&self) -> Rifl {
         self.rifl
@@ -51,6 +57,11 @@ impl Command {
     /// Returns references to list of keys modified by this command.
     pub fn keys(&self) -> impl Iterator<Item = &Key> {
         self.ops.iter().map(|(key, _)| key)
+    }
+
+    /// Checks if a command conflicts with another given command.
+    pub fn conflicts(&self, other: &Command) -> bool {
+        self.ops.iter().any(|(key, _)| other.ops.contains_key(key))
     }
 
     /// Returns the number of keys accessed by this command.
@@ -115,5 +126,43 @@ impl CommandResult {
     /// Returns the commands results.
     pub fn results(&self) -> &HashMap<Key, KVOpResult> {
         &self.results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conflicts() {
+        let rifl = Rifl::new(1, 1);
+        let cmd_a = Command::multi_get(rifl, vec![String::from("A")]);
+        let cmd_b = Command::multi_get(rifl, vec![String::from("B")]);
+        let cmd_c = Command::multi_get(rifl, vec![String::from("C")]);
+        let cmd_ab = Command::multi_get(rifl, vec![String::from("A"), String::from("B")]);
+
+        // check command a conflicts
+        assert!(cmd_a.conflicts(&cmd_a));
+        assert!(!cmd_a.conflicts(&cmd_b));
+        assert!(!cmd_a.conflicts(&cmd_c));
+        assert!(cmd_a.conflicts(&cmd_ab));
+
+        // check command b conflicts
+        assert!(!cmd_b.conflicts(&cmd_a));
+        assert!(cmd_b.conflicts(&cmd_b));
+        assert!(!cmd_b.conflicts(&cmd_c));
+        assert!(cmd_b.conflicts(&cmd_ab));
+
+        // check command c conflicts
+        assert!(!cmd_c.conflicts(&cmd_a));
+        assert!(!cmd_c.conflicts(&cmd_b));
+        assert!(cmd_c.conflicts(&cmd_c));
+        assert!(!cmd_c.conflicts(&cmd_ab));
+
+        // check command ab conflicts
+        assert!(cmd_ab.conflicts(&cmd_a));
+        assert!(cmd_ab.conflicts(&cmd_b));
+        assert!(!cmd_ab.conflicts(&cmd_c));
+        assert!(cmd_ab.conflicts(&cmd_ab));
     }
 }
