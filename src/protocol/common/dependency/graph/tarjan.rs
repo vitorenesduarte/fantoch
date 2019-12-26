@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::log;
-use crate::protocol::common::graph::VertexIndex;
+use crate::protocol::common::dependency::graph::VertexIndex;
 use std::cmp;
 use std::collections::{BTreeSet, HashSet};
 use threshold::{AEClock, VClock};

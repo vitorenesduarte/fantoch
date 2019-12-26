@@ -9,8 +9,10 @@ use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::metrics::Metrics;
-use crate::protocol::common::graph::index::{PendingIndex, VertexIndex};
-use crate::protocol::common::graph::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
+use crate::protocol::common::dependency::graph::{
+    index::{PendingIndex, VertexIndex},
+    tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC},
+};
 use crate::util;
 use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};

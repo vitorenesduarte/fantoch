@@ -1,5 +1,2 @@
-// This module contains the implementation of a dependency graph.
-mod graph;
-
-// Re-exports.
-pub use graph::DependencyGraph;
+// This module contains definitions common to dependency-based protocols.
+pub mod dependency;

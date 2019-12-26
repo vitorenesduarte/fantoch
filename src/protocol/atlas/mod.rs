@@ -1,14 +1,10 @@
-// This module contains the definition of `KeysConf` and `QuorumConf`.
-mod clocks;
-
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
-use crate::protocol::atlas::clocks::{KeysClocks, QuorumClocks};
-use crate::protocol::common::DependencyGraph;
+use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
