@@ -4,15 +4,14 @@ use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
-use crate::protocol::base::BaseProcess;
 use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
-use crate::protocol::{Process, ToSend};
+use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use threshold::VClock;
 
-pub struct Atlas {
+pub struct EPaxos {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
     cmds_info: CommandsInfo,
@@ -22,13 +21,13 @@ pub struct Atlas {
     commands_ready: Vec<CommandResult>,
 }
 
-impl Process for Atlas {
+impl Process for EPaxos {
     type Message = Message;
 
     /// Creates a new `Atlas` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size
-        let q = Atlas::fast_quorum_size(&config);
+        let q = EPaxos::fast_quorum_size(&config);
 
         // create `DependencyGraph`
         let graph = DependencyGraph::new(&config);
@@ -42,7 +41,7 @@ impl Process for Atlas {
         let commands_ready = Vec::new();
 
         // create `Atlas`
-        Self {
+        EPaxos {
             bp,
             keys_clocks,
             cmds_info,
@@ -94,12 +93,13 @@ impl Process for Atlas {
     }
 }
 
-impl Atlas {
-    /// Computes `Atlas` fast quorum size.
+impl EPaxos {
+    /// Computes `EPaxos` fast quorum size.
     fn fast_quorum_size(config: &Config) -> usize {
         let n = config.n();
-        let f = config.f();
-        (n / 2) + f
+        // ignore config.f() since EPaxos always tolerates a minority of failures
+        let f = n / 2;
+        f + ((f + 1) / 2 as usize)
     }
 
     /// Handles a submit operation by a client.
@@ -203,12 +203,11 @@ impl Atlas {
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
-            // compute the threshold union while checking whether it's equal to their union
-            let (final_clock, equal_to_union) =
-                info.quorum_clocks.threshold_union(self.bp.config.f());
+            // compute the union while checking whether all clocks reported are equal
+            let (final_clock, all_equal) = info.quorum_clocks.union();
             // fast path condition:
-            // - each dependency was reported by at least f processes
-            if equal_to_union {
+            // - all reported clocks if `max_clock` was reported by at least f processes
+            if all_equal {
                 // create `MCommit` and target
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
@@ -376,19 +375,24 @@ mod tests {
     use crate::time::SimTime;
 
     #[test]
-    fn atlas_parameters() {
-        let config = Config::new(7, 1);
-        assert_eq!(Atlas::fast_quorum_size(&config), 4);
+    fn epaxos_parameters() {
+        let ns = vec![3, 5, 7, 9, 11, 13, 15, 17];
+        let expected = vec![2, 3, 5, 6, 8, 9, 11, 12];
 
-        let config = Config::new(7, 2);
-        assert_eq!(Atlas::fast_quorum_size(&config), 5);
-
-        let config = Config::new(7, 3);
-        assert_eq!(Atlas::fast_quorum_size(&config), 6);
+        let fs: Vec<_> = ns
+            .into_iter()
+            .map(|n| {
+                // this value won't be used
+                let f = 0;
+                let config = Config::new(n, f);
+                EPaxos::fast_quorum_size(&config)
+            })
+            .collect();
+        assert_eq!(fs, expected);
     }
 
     #[test]
-    fn atlas_flow() {
+    fn epaxos_flow() {
         // processes ids
         let process_id_1 = 1;
         let process_id_2 = 2;
@@ -418,9 +422,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // newts
-        let mut newt_1 = Atlas::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut newt_2 = Atlas::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut newt_3 = Atlas::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        let mut newt_1 = EPaxos::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut newt_2 = EPaxos::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut newt_3 = EPaxos::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
         // discover processes in all newts
         newt_1.discover(processes.clone());

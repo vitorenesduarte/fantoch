@@ -10,10 +10,15 @@ mod newt;
 // This module contains the definition of `Atlas`.
 mod atlas;
 
+/// This module contains the definition of `EPaxos`.
+mod epaxos;
+
 // Re-exports.
 pub use atlas::Atlas;
-pub use base::BaseProcess;
+pub use epaxos::EPaxos;
 pub use newt::Newt;
+
+pub use base::BaseProcess;
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
