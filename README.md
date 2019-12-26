@@ -6,9 +6,9 @@
 Details coming soon.
 
 #### Supported protocols
-- Atlas (under submission)
-- Newt (being designed)
-- EPaxos ([PR](https://github.com/vitorenesduarte/planet_sim/pull/12))
+- Atlas __(under submission)__: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/atlas)
+- Newt __(under design)__: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/newt)
+- EPaxos: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/epaxos)
 
 Next:
 - FPaxos (and Paxos as a special case of FPaxos)
