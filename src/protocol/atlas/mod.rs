@@ -4,9 +4,8 @@ use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
-use crate::protocol::base::BaseProcess;
 use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
-use crate::protocol::{Process, ToSend};
+use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
 use std::mem;
@@ -28,15 +27,20 @@ impl Process for Atlas {
     /// Creates a new `Atlas` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast quorum size
-        let q = Atlas::fast_quorum_size(&config);
+        let (fast_quorum_size, write_quorum_size) = Atlas::quorum_sizes(&config);
 
-        // create `DependencyGraph`
-        let graph = DependencyGraph::new(&config);
-
-        // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
-        let bp = BaseProcess::new(process_id, region, planet, config, q);
+        // create protocol data-structures
+        let bp = BaseProcess::new(
+            process_id,
+            region,
+            planet,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(config.n(), q);
+        let cmds_info = CommandsInfo::new(config.n(), fast_quorum_size);
+        let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
         let commands_ready = Vec::new();
@@ -95,11 +99,13 @@ impl Process for Atlas {
 }
 
 impl Atlas {
-    /// Computes `Atlas` fast quorum size.
-    fn fast_quorum_size(config: &Config) -> usize {
+    /// Computes `Atlas` fast and write quorum sizes.
+    fn quorum_sizes(config: &Config) -> (usize, usize) {
         let n = config.n();
         let f = config.f();
-        (n / 2) + f
+        let fast_quorum_size = (n / 2) + f;
+        let write_quorum_size = f + 1;
+        (fast_quorum_size, write_quorum_size)
     }
 
     /// Handles a submit operation by a client.
@@ -290,15 +296,15 @@ impl Atlas {
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 struct CommandsInfo {
     n: usize,
-    q: usize,
+    fast_quorum_size: usize,
     dot_to_info: HashMap<Dot, CommandInfo>,
 }
 
 impl CommandsInfo {
-    fn new(n: usize, q: usize) -> Self {
+    fn new(n: usize, fast_quorum_size: usize) -> Self {
         Self {
             n,
-            q,
+            fast_quorum_size,
             dot_to_info: HashMap::new(),
         }
     }
@@ -309,10 +315,10 @@ impl CommandsInfo {
         // TODO the borrow checker complains if `self.n` and `self.q` is passed to
         // `CommandInfo::new`
         let n = self.n;
-        let q = self.q;
+        let fast_quorum_size = self.fast_quorum_size;
         self.dot_to_info
             .entry(dot)
-            .or_insert_with(|| CommandInfo::new(n, q))
+            .or_insert_with(|| CommandInfo::new(n, fast_quorum_size))
     }
 }
 
@@ -329,13 +335,13 @@ struct CommandInfo {
 }
 
 impl CommandInfo {
-    fn new(n: usize, q: usize) -> Self {
+    fn new(n: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
             quorum: vec![],
             cmd: None,
             clock: VClock::with(util::process_ids(n)),
-            quorum_clocks: QuorumClocks::new(q),
+            quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
 }
@@ -378,13 +384,13 @@ mod tests {
     #[test]
     fn atlas_parameters() {
         let config = Config::new(7, 1);
-        assert_eq!(Atlas::fast_quorum_size(&config), 4);
+        assert_eq!(Atlas::quorum_sizes(&config), (4, 2));
 
         let config = Config::new(7, 2);
-        assert_eq!(Atlas::fast_quorum_size(&config), 5);
+        assert_eq!(Atlas::quorum_sizes(&config), (5, 3));
 
         let config = Config::new(7, 3);
-        assert_eq!(Atlas::fast_quorum_size(&config), 6);
+        assert_eq!(Atlas::quorum_sizes(&config), (6, 4));
     }
 
     #[test]

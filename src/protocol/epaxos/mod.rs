@@ -26,16 +26,21 @@ impl Process for EPaxos {
 
     /// Creates a new `Atlas` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-        // compute fast quorum size
-        let q = EPaxos::fast_quorum_size(&config);
+        // compute fast and write quorum sizes
+        let (fast_quorum_size, write_quorum_size) = EPaxos::quorum_sizes(&config);
 
-        // create `DependencyGraph`
-        let graph = DependencyGraph::new(&config);
-
-        // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
-        let bp = BaseProcess::new(process_id, region, planet, config, q);
+        // create protocol data-structures
+        let bp = BaseProcess::new(
+            process_id,
+            region,
+            planet,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(config.n(), q);
+        let cmds_info = CommandsInfo::new(config.n(), fast_quorum_size);
+        let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
         let commands_ready = Vec::new();
@@ -94,12 +99,14 @@ impl Process for EPaxos {
 }
 
 impl EPaxos {
-    /// Computes `EPaxos` fast quorum size.
-    fn fast_quorum_size(config: &Config) -> usize {
+    /// Computes `EPaxos` fast and write quorum sizes.
+    fn quorum_sizes(config: &Config) -> (usize, usize) {
         let n = config.n();
         // ignore config.f() since EPaxos always tolerates a minority of failures
-        let f = n / 2;
-        f + ((f + 1) / 2 as usize)
+        let minority = n / 2;
+        let fast_quorum_size = minority + ((minority + 1) / 2 as usize);
+        let write_quorum_size = minority + 1;
+        (fast_quorum_size, write_quorum_size)
     }
 
     /// Handles a submit operation by a client.
@@ -289,15 +296,15 @@ impl EPaxos {
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 struct CommandsInfo {
     n: usize,
-    q: usize,
+    fast_quorum_size: usize,
     dot_to_info: HashMap<Dot, CommandInfo>,
 }
 
 impl CommandsInfo {
-    fn new(n: usize, q: usize) -> Self {
+    fn new(n: usize, fast_quorum_size: usize) -> Self {
         Self {
             n,
-            q,
+            fast_quorum_size,
             dot_to_info: HashMap::new(),
         }
     }
@@ -308,10 +315,10 @@ impl CommandsInfo {
         // TODO the borrow checker complains if `self.n` and `self.q` is passed to
         // `CommandInfo::new`
         let n = self.n;
-        let q = self.q;
+        let fast_quorum_size = self.fast_quorum_size;
         self.dot_to_info
             .entry(dot)
-            .or_insert_with(|| CommandInfo::new(n, q))
+            .or_insert_with(|| CommandInfo::new(n, fast_quorum_size))
     }
 }
 
@@ -328,13 +335,13 @@ struct CommandInfo {
 }
 
 impl CommandInfo {
-    fn new(n: usize, q: usize) -> Self {
+    fn new(n: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
             quorum: vec![],
             cmd: None,
             clock: VClock::with(util::process_ids(n)),
-            quorum_clocks: QuorumClocks::new(q),
+            quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
 }
@@ -377,15 +384,25 @@ mod tests {
     #[test]
     fn epaxos_parameters() {
         let ns = vec![3, 5, 7, 9, 11, 13, 15, 17];
-        let expected = vec![2, 3, 5, 6, 8, 9, 11, 12];
+        // expected pairs of fast and write quorum sizes
+        let expected = vec![
+            (2, 2),
+            (3, 3),
+            (5, 4),
+            (6, 5),
+            (8, 6),
+            (9, 7),
+            (11, 8),
+            (12, 9),
+        ];
 
         let fs: Vec<_> = ns
             .into_iter()
             .map(|n| {
-                // this value won't be used
+                // this f value won't be used
                 let f = 0;
                 let config = Config::new(n, f);
-                EPaxos::fast_quorum_size(&config)
+                EPaxos::quorum_sizes(&config)
             })
             .collect();
         assert_eq!(fs, expected);
