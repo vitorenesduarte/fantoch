@@ -37,11 +37,11 @@ impl BaseProcess {
             region,
             planet,
             config,
-            fast_quorum_size,
-            write_quorum_size,
             all_processes: None,
             fast_quorum: None,
             write_quorum: None,
+            fast_quorum_size,
+            write_quorum_size,
             dot_gen: DotGen::new(process_id),
         }
     }
