@@ -19,6 +19,7 @@ pub enum SynodMessage<V> {
     MChosen(V),
 }
 
+#[derive(Clone)]
 pub struct Synod<V> {
     // paxos agents
     proposer: Proposer<V>,
@@ -95,6 +96,7 @@ type Promises<V> = HashMap<ProcessId, Accepted<V>>;
 type Accepts = HashSet<ProcessId>;
 type Proposal<V> = Option<V>;
 
+#[derive(Clone)]
 struct Proposer<V> {
     // process identifier
     process_id: ProcessId,
@@ -283,6 +285,7 @@ where
 // If the ballot is 0, the value has not been accepted yet.
 type Accepted<Value> = (Ballot, Value);
 
+#[derive(Clone)]
 struct Acceptor<Value> {
     ballot: Ballot,
     accepted: Accepted<Value>,
@@ -327,6 +330,8 @@ where
     // - a promise to never accept a proposal numbered less than `b`
     // - the proposal accepted with the highest number less than `b`, if any
     fn handle_prepare(&mut self, b: Ballot) -> Option<SynodMessage<V>> {
+        // since we need to promise that we won't accept any proposal numbered less then `b`,
+        // there's no point in letting such proposal be prepared, and so, we ignore such prepares
         if b > self.ballot {
             // update current ballot
             self.ballot = b;
@@ -398,16 +403,16 @@ mod tests {
         assert_eq!(synod_1.value(), &10);
 
         // handle the prepare at n - f processes, including synod 1
-        let promise1 = synod_1
+        let promise_1 = synod_1
             .handle(1, prepare.clone())
             .expect("there should a promise from 1");
-        let promise2 = synod_2
+        let promise_2 = synod_2
             .handle(1, prepare.clone())
             .expect("there should a promise from 2");
-        let promise3 = synod_3
+        let promise_3 = synod_3
             .handle(1, prepare.clone())
             .expect("there should a promise from 3");
-        let promise4 = synod_4
+        let promise_4 = synod_4
             .handle(1, prepare.clone())
             .expect("there should a promise from 4");
 
@@ -416,34 +421,191 @@ mod tests {
         assert_eq!(synod_1.value(), &10);
 
         // synod 1: handle promises
-        let result = synod_1.handle(1, promise1);
+        let result = synod_1.handle(1, promise_1);
         assert!(result.is_none());
-        let result = synod_1.handle(2, promise2);
+        let result = synod_1.handle(2, promise_2);
         assert!(result.is_none());
-        let result = synod_1.handle(3, promise3);
+        let result = synod_1.handle(3, promise_3);
         assert!(result.is_none());
         // only in the last one there should be an accept message
         let accept = synod_1
-            .handle(4, promise4)
+            .handle(4, promise_4)
             .expect("there should an accept message");
 
         // handle the accept at f + 1 processes, including synod 1
-        let accepted1 = synod_1
+        let accepted_1 = synod_1
             .handle(1, accept.clone())
             .expect("there should an accept from 1");
-        let accepted5 = synod_5
+        let accepted_5 = synod_5
             .handle(1, accept.clone())
             .expect("there should an accept from 5");
 
         // synod 1: handle accepts
-        let result = synod_1.handle(1, accepted1);
+        let result = synod_1.handle(1, accepted_1);
         assert!(result.is_none());
         let chosen = synod_1
-            .handle(5, accepted5)
+            .handle(5, accepted_5)
             .expect("there should be a chosen message");
 
         // check that 100 (the sum of 10 + 20 + 30 + 40, i.e. the ballot-0 values from phase-1
         // processes) was chosen
         assert_eq!(chosen, SynodMessage::MChosen(100));
+    }
+
+    #[test]
+    fn synod_prepare_with_lower_ballot_fails() {
+        // n and f
+        let n = 3;
+        let f = 1;
+
+        // create all synods
+        let mut synod_1 = Synod::new(1, n, f, proposal_gen);
+        let mut synod_2 = Synod::new(2, n, f, proposal_gen);
+        let mut synod_3 = Synod::new(3, n, f, proposal_gen);
+
+        // synod 1 and 3: generate prepare
+        let prepare_a = synod_1.new_prepare();
+        let prepare_c = synod_3.new_prepare();
+
+        // handle the prepare_a at synod 1
+        synod_1
+            .handle(1, prepare_a.clone())
+            .expect("there should a promise from 1");
+
+        // handle the prepare_c at synod 3
+        synod_3
+            .handle(3, prepare_c.clone())
+            .expect("there should a promise from 3");
+
+        // handle the prepare_c at synod 2
+        synod_2
+            .handle(3, prepare_c.clone())
+            .expect("there should a promise from 2");
+
+        // handle the prepare_a at synod 2
+        let result = synod_2.handle(1, prepare_a.clone());
+        // there should be no promise from synod 2
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn synod_recovery() {
+        // n and f
+        let n = 3;
+        let f = 1;
+
+        // create all synods
+        let mut synod_1 = Synod::new(1, n, f, proposal_gen);
+        let mut synod_2 = Synod::new(2, n, f, proposal_gen);
+        let mut synod_3 = Synod::new(3, n, f, proposal_gen);
+
+        // set values at all synods
+        assert!(synod_1.maybe_set_value(|| 10));
+        assert_eq!(synod_1.value(), &10);
+        assert!(synod_2.maybe_set_value(|| 20));
+        assert_eq!(synod_2.value(), &20);
+        assert!(synod_3.maybe_set_value(|| 30));
+        assert_eq!(synod_3.value(), &30);
+
+        // synod 1: generate prepare
+        let prepare = synod_1.new_prepare();
+
+        // handle the prepare at synod 1
+        let promise_1 = synod_1
+            .handle(1, prepare.clone())
+            .expect("there should a promise from 1");
+
+        // handle the prepare at synod 2
+        let promise_2 = synod_2
+            .handle(1, prepare.clone())
+            .expect("there should a promise from 2");
+
+        // synod 1: handle promises
+        let result = synod_1.handle(1, promise_1);
+        assert!(result.is_none());
+        // only in the last one there should be an accept message
+        let accept = synod_1
+            .handle(2, promise_2)
+            .expect("there should an accept message");
+
+        // check the value in the accept
+        if let SynodMessage::MAccept(ballot, value) = accept {
+            assert_eq!(ballot, 4); // 8 is the ballot from round-1 (n=3 * round=1 + id=1) that belongs to process 1
+            assert_eq!(value, 30); // sum of 10 and 20, the values stored by processes 1 and 2
+        } else {
+            panic!("process 1 should have generated an accept")
+        }
+
+        // handle the accept only at synod 1
+        synod_1
+            .handle(1, accept)
+            .expect("there should an accept from 1");
+
+        // at this point, if another process tries to recover, there are two possible situations:
+        // - if process 1 is part of that phase-1 quorum, this new process needs to propose the same
+        //   value that was proposed by 1 (i.e. 30)
+        // - if process 2 is *not* part of that phase-1 quorum, this new process can propose
+        //   anything it wants; this value will be 50, i.e. the sum of the values stored by
+        //   processes 2 and 3
+
+        // start recovery by synod 2
+        let prepare = synod_2.new_prepare();
+
+        // handle prepare at synod 2
+        let promise_2 = synod_2
+            .handle(2, prepare.clone())
+            .expect("there should be a promise from 2");
+
+        // synod 2: handle promise by 2
+        let result = synod_2.handle(2, promise_2);
+        assert!(result.is_none());
+
+        // check case 1
+        case_1(prepare.clone(), synod_1.clone(), synod_2.clone());
+
+        // check case 2
+        case_2(prepare.clone(), synod_2.clone(), synod_3.clone());
+
+        // in this case, the second prepare is handled by synod 1
+        fn case_1(prepare: SynodMessage<u64>, mut synod_1: Synod<u64>, mut synod_2: Synod<u64>) {
+            // handle prepare at synod 1
+            let promise_1 = synod_1
+                .handle(2, prepare.clone())
+                .expect("there should be a promise from 1");
+
+            // synod 2: handle promise from 1
+            let accept = synod_2
+                .handle(1, promise_1)
+                .expect("there should an accept message");
+
+            // check the value in the accept
+            if let SynodMessage::MAccept(ballot, value) = accept {
+                assert_eq!(ballot, 8); // 8 is the ballot from round-2 (n=3 * round=2 + id=2) that belongs to process 2
+                assert_eq!(value, 30); // the value proposed by process 1
+            } else {
+                panic!("process 2 should have generated an accept")
+            }
+        }
+
+        // in this case, the second prepare is handled by synod 3
+        fn case_2(prepare: SynodMessage<u64>, mut synod_2: Synod<u64>, mut synod_3: Synod<u64>) {
+            // handle prepare at synod 3
+            let promise_3 = synod_3
+                .handle(2, prepare.clone())
+                .expect("there should be a promise from 3");
+
+            // synod 2: handle promise from 3
+            let accept = synod_2
+                .handle(3, promise_3)
+                .expect("there should an accept message");
+
+            // check the value in the accept
+            if let SynodMessage::MAccept(ballot, value) = accept {
+                assert_eq!(ballot, 8); // 8 is the ballot from round-2 (n=3 * round=2 + id=2) that belongs to process 2
+                assert_eq!(value, 50); // sum of 20 and 30, the values stored by processes 2 and 3
+            } else {
+                panic!("process 2 should have generated an accept")
+            }
+        }
     }
 }
