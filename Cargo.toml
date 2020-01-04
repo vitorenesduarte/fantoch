@@ -17,3 +17,5 @@ rayon = "1.2.0"
 num-traits = "0.2.10"
 
 [dev-dependencies]
+quickcheck = "0.9"
+quickcheck_macros = "0.8"
