@@ -339,11 +339,10 @@ impl CommandsInfo {
     }
 }
 
-
 type ConsensusValue = (Option<Command>, VClock<ProcessId>);
 
-fn proposal_gen(values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
-    (None, VClock::default())
+fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
+    todo!("recovery not implemented yet")
 }
 
 // `CommandInfo` contains all information required in the life-cyle of a
@@ -368,7 +367,7 @@ impl CommandInfo {
             cmd: None,
             clock: VClock::with(util::process_ids(n)),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
-            synod: Synod::new(process_id, n, f, Box::new(proposal_gen)),
+            synod: Synod::new(process_id, n, f, proposal_gen),
         }
     }
 }
