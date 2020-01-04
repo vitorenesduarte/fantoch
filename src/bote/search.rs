@@ -268,7 +268,7 @@ impl Search {
         stats
     }
 
-    fn rank_all<'a>(&'a self, params: &RankingParams) -> AllRanked<'a> {
+    fn rank_all(&self, params: &RankingParams) -> AllRanked<'_> {
         self.all_configs
             // PARALLEL
             .par_iter()

@@ -5,6 +5,7 @@ use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
+use crate::protocol::common::Synod;
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
@@ -39,7 +40,7 @@ impl Process for EPaxos {
             write_quorum_size,
         );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(config.n(), fast_quorum_size);
+        let cmds_info = CommandsInfo::new(process_id, config.n(), config.f(), fast_quorum_size);
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -83,6 +84,7 @@ impl Process for EPaxos {
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck { dot, clock } => self.handle_mcollectack(from, dot, clock),
             Message::MCommit { dot, cmd, clock } => self.handle_mcommit(dot, cmd, clock),
+            _ => ToSend::Nothing,
         }
     }
 
@@ -228,8 +230,18 @@ impl EPaxos {
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
-                // TODO slow path
-                todo!("slow path not implemented yet")
+                // slow path
+                // create `MConsensus` and target
+                let mconsensus = Message::MConsensus {
+                    dot,
+                    cmd: info.cmd.clone(),
+                    clock: final_clock,
+                    ballot: self.id(),
+                };
+                let target = self.bp.write_quorum();
+
+                // return `ToSend`
+                ToSend::ToProcesses(self.id(), target, mconsensus)
             }
         } else {
             ToSend::Nothing
@@ -295,15 +307,19 @@ impl EPaxos {
 
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 struct CommandsInfo {
+    process_id: ProcessId,
     n: usize,
+    f: usize,
     fast_quorum_size: usize,
     dot_to_info: HashMap<Dot, CommandInfo>,
 }
 
 impl CommandsInfo {
-    fn new(n: usize, fast_quorum_size: usize) -> Self {
+    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
         Self {
+            process_id,
             n,
+            f,
             fast_quorum_size,
             dot_to_info: HashMap::new(),
         }
@@ -312,14 +328,21 @@ impl CommandsInfo {
     // Returns the `CommandInfo` associated with `Dot`.
     // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
     fn get(&mut self, dot: Dot) -> &mut CommandInfo {
-        // TODO the borrow checker complains if `self.n` and `self.q` is passed to
-        // `CommandInfo::new`
+        // TODO borrow everything we need so that the borrow checker does not complain
+        let process_id = self.process_id;
         let n = self.n;
+        let f = self.f;
         let fast_quorum_size = self.fast_quorum_size;
         self.dot_to_info
             .entry(dot)
-            .or_insert_with(|| CommandInfo::new(n, fast_quorum_size))
+            .or_insert_with(|| CommandInfo::new(process_id, n, f, fast_quorum_size))
     }
+}
+
+type ConsensusValue = (Option<Command>, VClock<ProcessId>);
+
+fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
+    todo!("recovery not implemented yet")
 }
 
 // `CommandInfo` contains all information required in the life-cyle of a
@@ -332,16 +355,19 @@ struct CommandInfo {
     // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
     // whether to take the fast path
     quorum_clocks: QuorumClocks,
+    // an instance of Paxos Synod protocol
+    synod: Synod<ConsensusValue>,
 }
 
 impl CommandInfo {
-    fn new(n: usize, fast_quorum_size: usize) -> Self {
+    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
             quorum: vec![],
             cmd: None,
             clock: VClock::with(util::process_ids(n)),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
+            synod: Synod::new(process_id, n, f, proposal_gen),
         }
     }
 }
@@ -358,6 +384,16 @@ pub enum Message {
     MCollectAck {
         dot: Dot,
         clock: VClock<ProcessId>,
+    },
+    MConsensus {
+        dot: Dot,
+        cmd: Option<Command>,
+        clock: VClock<ProcessId>,
+        ballot: u64,
+    },
+    MConsensusAck {
+        dot: Dot,
+        ballot: u64,
     },
     MCommit {
         dot: Dot,

@@ -256,7 +256,19 @@ mod tests {
     }
 
     #[test]
-    fn test_add_1() {
+    fn simple_test_add_1() {
+        // the actual test_add_1 is:
+        // {1, 2}, [2, 2]
+        // {1, 1}, [3, 2]
+        // {1, 5}, [6, 2]
+        // {1, 6}, [6, 3]
+        // {1, 3}, [3, 3]
+        // {2, 2}, [0, 2]
+        // {2, 1}, [4, 3]
+        // {1, 4}, [6, 2]
+        // {2, 3}, [6, 3]
+        // in the simple version, {1, 5} and {1, 6} are removed
+
         // {1, 2}, [2, 2]
         let dot_a = Dot::new(1, 2);
         let clock_a = util::vclock(vec![2, 2]);
@@ -265,33 +277,25 @@ mod tests {
         let dot_b = Dot::new(1, 1);
         let clock_b = util::vclock(vec![3, 2]);
 
-        // {1, 5}, [6, 2]
-        let dot_c = Dot::new(1, 5);
-        let clock_c = util::vclock(vec![6, 2]);
-
-        // {1, 6}, [6, 3]
-        let dot_d = Dot::new(1, 6);
-        let clock_d = util::vclock(vec![6, 3]);
-
         // {1, 3}, [3, 3]
-        let dot_e = Dot::new(1, 3);
-        let clock_e = util::vclock(vec![3, 3]);
+        let dot_c = Dot::new(1, 3);
+        let clock_c = util::vclock(vec![3, 3]);
 
         // {2, 2}, [0, 2]
-        let dot_f = Dot::new(2, 2);
-        let clock_f = util::vclock(vec![0, 2]);
+        let dot_d = Dot::new(2, 2);
+        let clock_d = util::vclock(vec![0, 2]);
 
         // {2, 1}, [4, 3]
-        let dot_g = Dot::new(2, 1);
+        let dot_e = Dot::new(2, 1);
+        let clock_e = util::vclock(vec![4, 3]);
+
+        // {1, 4}, [4, 2]
+        let dot_f = Dot::new(1, 4);
+        let clock_f = util::vclock(vec![4, 2]);
+
+        // {2, 3}, [4, 3]
+        let dot_g = Dot::new(2, 3);
         let clock_g = util::vclock(vec![4, 3]);
-
-        // {1, 4}, [6, 2]
-        let dot_h = Dot::new(1, 4);
-        let clock_h = util::vclock(vec![6, 2]);
-
-        // {2, 3}, [6, 3]
-        let dot_i = Dot::new(2, 3);
-        let clock_i = util::vclock(vec![6, 3]);
 
         // create args
         let args = vec![
@@ -302,8 +306,6 @@ mod tests {
             (dot_e, clock_e),
             (dot_f, clock_f),
             (dot_g, clock_g),
-            (dot_h, clock_h),
-            (dot_i, clock_i),
         ];
 
         let n = 2;
