@@ -269,6 +269,8 @@ where
                 let (_, proposal) = self.reset_state();
 
                 // extract proposal
+                // TODO could the proposal be the value that is currently stored in the local
+                // acceptor, or could that value have been overwritten in the meantime?
                 let proposal =
                     proposal.expect("there should have been proposal before a value can be chosen");
 
