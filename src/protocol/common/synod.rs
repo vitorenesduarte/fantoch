@@ -735,22 +735,28 @@ mod proptests {
             let prepare = synod.new_prepare();
 
             // handle it locally
-            synod.handle(source, prepare.clone());
+            let local_promise = synod
+                .handle(source, prepare.clone())
+                .expect("local promises should always be generated");
+            synod.handle(source, local_promise);
 
             // handle it in all `q1`
             let outcome = handle_in_quorum(source, &mut synod, synods, prepare, &action.q1);
-            // there should be at most 1 outcome (if prepare was successful)
-            assert!(outcome.len() <= 1);
 
             // check if phase-1 ended
             if outcome.len() == 1 {
                 // if yes, start phase-2
-                let msg = &outcome[0];
+                let accept = &outcome[0];
+
+                // handle it locally
+                let local_accept = synod
+                    .handle(source, accept.clone())
+                    .expect("local accepts should always be generated");
+                synod.handle(source, local_accept);
 
                 // handle msg in all `q2`
-                let outcome = handle_in_quorum(source, &mut synod, synods, msg.clone(), &action.q2);
-                // there should be at most 1 outcome (if prepare was successful)
-                assert!(outcome.len() <= 1);
+                let outcome =
+                    handle_in_quorum(source, &mut synod, synods, accept.clone(), &action.q2);
 
                 // check if phase-2 ended
                 if outcome.len() == 1 {
