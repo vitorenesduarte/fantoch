@@ -211,36 +211,36 @@ where
                 // - if not, generate proposal using the generator
 
                 // reset state and get promises
-                let (promises, _) = self.reset_state();
+                let (mut promises, _) = self.reset_state();
 
                 // compute the proposal accepted at the highest ballot
-                let highest = promises
+                let (highest_ballot, from) = promises
                     .iter()
                     // get highest proposal
                     .max_by_key(|(_process, (ballot, _value))| ballot)
-                    // extract proposal
-                    .map(|(_, highest)| highest)
+                    // extract ballot and process
+                    .map(|(process, (ballot, _))| (*ballot, *process))
                     .expect("there should n - f promises, and thus, there's a highest value");
 
                 // compute our proposal depending on whether there was a previously accepted
                 // proposal
-                let proposal = match highest {
-                    (0, _) => {
-                        // if the highest ballot is 0, use the proposal generator to generate
-                        // anything we want
-                        // TODO do we need to collect here? also, maybe we could simply upstream the
-                        // ballots, even though they're all 0
-                        let values = promises
-                            .into_iter()
-                            .map(|(process, (_ballot, value))| (process, value))
-                            .collect();
-                        (self.proposal_gen)(values)
-                    }
-                    (_, value) => {
-                        // otherwise, we must propose the value accepted at the highest ballot
-                        // TODO can we avoid cloning here?
-                        value.clone()
-                    }
+                let proposal = if highest_ballot == 0 {
+                    // if the highest ballot is 0, use the proposal generator to generate
+                    // anything we want
+                    // TODO do we need to collect here? also, maybe we could simply upstream the
+                    // ballots, even though they're all 0
+                    let values = promises
+                        .into_iter()
+                        .map(|(process, (_ballot, value))| (process, value))
+                        .collect();
+                    (self.proposal_gen)(values)
+                } else {
+                    // otherwise, we must propose the value accepted at the highest ballot
+                    // TODO this scheme of removing the value from `promises` prevents cloning
+                    // the value when we only have a reference to it; is there a better way?
+                    promises.remove(&from).map(|(_ballot, value)| value).expect(
+                        "a promise from this process must exists as it was the highest promise",
+                    )
                 };
 
                 // save the proposal
