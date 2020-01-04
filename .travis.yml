@@ -48,9 +48,9 @@ before_script: |
   fi
 
 script: |
-  cargo build
-  cargo test
-  QUICKCHECK_TESTS=10000 cargo test -- proptests
+  cargo build --release
+  cargo test --release
+  QUICKCHECK_TESTS=10000 cargo test --release -- proptests
   if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
     # measure code coverage and upload to coveralls.io
 
