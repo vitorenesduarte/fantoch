@@ -364,9 +364,9 @@ where
 mod tests {
     use super::*;
 
-    // generate proposals by summing of the values reported by phase-1 quorum processes
+    // generate proposals by multiplying all the values reported by phase-1 quorum processes
     fn proposal_gen(values: HashMap<ProcessId, u64>) -> u64 {
-        values.into_iter().map(|(_, v)| v).sum()
+        values.into_iter().map(|(_, v)| v).fold(1, |acc, v| acc * v)
     }
 
     #[test]
@@ -383,27 +383,27 @@ mod tests {
         let mut synod_5 = Synod::new(5, n, f, proposal_gen);
 
         // check it's possible to set values (as ballots are still 0), and check value
-        assert!(synod_1.maybe_set_value(|| 10));
-        assert_eq!(synod_1.value(), &10);
-        assert!(synod_2.maybe_set_value(|| 20));
-        assert_eq!(synod_2.value(), &20);
-        assert!(synod_3.maybe_set_value(|| 30));
-        assert_eq!(synod_3.value(), &30);
-        assert!(synod_4.maybe_set_value(|| 40));
-        assert_eq!(synod_4.value(), &40);
-        assert!(synod_5.maybe_set_value(|| 50));
-        assert_eq!(synod_5.value(), &50);
+        assert!(synod_1.maybe_set_value(|| 2));
+        assert_eq!(synod_1.value(), &2);
+        assert!(synod_2.maybe_set_value(|| 3));
+        assert_eq!(synod_2.value(), &3);
+        assert!(synod_3.maybe_set_value(|| 5));
+        assert_eq!(synod_3.value(), &5);
+        assert!(synod_4.maybe_set_value(|| 7));
+        assert_eq!(synod_4.value(), &7);
+        assert!(synod_5.maybe_set_value(|| 11));
+        assert_eq!(synod_5.value(), &11);
 
         // again
-        assert!(synod_1.maybe_set_value(|| 20));
-        assert_eq!(synod_1.value(), &20);
+        assert!(synod_1.maybe_set_value(|| 13));
+        assert_eq!(synod_1.value(), &13);
 
         // synod 1: generate prepare
         let prepare = synod_1.new_prepare();
 
         // it's still possible to set the value as the prepare has not been handled
-        assert!(synod_1.maybe_set_value(|| 10));
-        assert_eq!(synod_1.value(), &10);
+        assert!(synod_1.maybe_set_value(|| 2));
+        assert_eq!(synod_1.value(), &2);
 
         // handle the prepare at n - f processes, including synod 1
         let promise_1 = synod_1
@@ -420,8 +420,8 @@ mod tests {
             .expect("there should a promise from 4");
 
         // check it's no longer possible to set the value
-        assert!(!synod_1.maybe_set_value(|| 20));
-        assert_eq!(synod_1.value(), &10);
+        assert!(!synod_1.maybe_set_value(|| 13));
+        assert_eq!(synod_1.value(), &2);
 
         // synod 1: handle promises
         let result = synod_1.handle(1, promise_1);
@@ -450,9 +450,9 @@ mod tests {
             .handle(5, accepted_5)
             .expect("there should be a chosen message");
 
-        // check that 100 (the sum of 10 + 20 + 30 + 40, i.e. the ballot-0 values from phase-1
+        // check that 210 (2 * 3 * 5 * 7 * 11, i.e. the ballot-0 values from phase-1
         // processes) was chosen
-        assert_eq!(chosen, SynodMessage::MChosen(100));
+        assert_eq!(chosen, SynodMessage::MChosen(210));
     }
 
     #[test]
@@ -503,12 +503,12 @@ mod tests {
         let mut synod_3 = Synod::new(3, n, f, proposal_gen);
 
         // set values at all synods
-        assert!(synod_1.maybe_set_value(|| 10));
-        assert_eq!(synod_1.value(), &10);
-        assert!(synod_2.maybe_set_value(|| 20));
-        assert_eq!(synod_2.value(), &20);
-        assert!(synod_3.maybe_set_value(|| 30));
-        assert_eq!(synod_3.value(), &30);
+        assert!(synod_1.maybe_set_value(|| 2));
+        assert_eq!(synod_1.value(), &2);
+        assert!(synod_2.maybe_set_value(|| 3));
+        assert_eq!(synod_2.value(), &3);
+        assert!(synod_3.maybe_set_value(|| 5));
+        assert_eq!(synod_3.value(), &5);
 
         // synod 1: generate prepare
         let prepare = synod_1.new_prepare();
@@ -534,7 +534,7 @@ mod tests {
         // check the value in the accept
         if let SynodMessage::MAccept(ballot, value) = accept {
             assert_eq!(ballot, 4); // 8 is the ballot from round-1 (n=3 * round=1 + id=1) that belongs to process 1
-            assert_eq!(value, 30); // sum of 10 and 20, the values stored by processes 1 and 2
+            assert_eq!(value, 6); // 2 * 3, the values stored by processes 1 and 2
         } else {
             panic!("process 1 should have generated an accept")
         }
@@ -546,10 +546,10 @@ mod tests {
 
         // at this point, if another process tries to recover, there are two possible situations:
         // - if process 1 is part of that phase-1 quorum, this new process needs to propose the same
-        //   value that was proposed by 1 (i.e. 30)
+        //   value that was proposed by 1 (i.e. 6)
         // - if process 2 is *not* part of that phase-1 quorum, this new process can propose
-        //   anything it wants; this value will be 50, i.e. the sum of the values stored by
-        //   processes 2 and 3
+        //   anything it wants; this value will be 15, i.e. the multiplication of the values stored
+        //   by processes 2 and 3
 
         // start recovery by synod 2
         let prepare = synod_2.new_prepare();
@@ -584,7 +584,7 @@ mod tests {
             // check the value in the accept
             if let SynodMessage::MAccept(ballot, value) = accept {
                 assert_eq!(ballot, 8); // 8 is the ballot from round-2 (n=3 * round=2 + id=2) that belongs to process 2
-                assert_eq!(value, 30); // the value proposed by process 1
+                assert_eq!(value, 6); // the value proposed by process 1
             } else {
                 panic!("process 2 should have generated an accept")
             }
@@ -605,10 +605,204 @@ mod tests {
             // check the value in the accept
             if let SynodMessage::MAccept(ballot, value) = accept {
                 assert_eq!(ballot, 8); // 8 is the ballot from round-2 (n=3 * round=2 + id=2) that belongs to process 2
-                assert_eq!(value, 50); // sum of 20 and 30, the values stored by processes 2 and 3
+                assert_eq!(value, 15); // 3 * 5, the values stored by processes 2 and 3
             } else {
                 panic!("process 2 should have generated an accept")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use quickcheck::{Arbitrary, Gen};
+    use quickcheck_macros::quickcheck;
+    use std::cell::RefCell;
+    use std::convert::TryInto;
+
+    // number of processes and tolerated faults
+    const N: usize = 5;
+    const F: usize = 2;
+    // quorum size:
+    // - since we consider that f = 2, the quorum size is 3
+    const Q: usize = 3;
+
+    // a list of pairs where the second component indicates whether the reply from the first
+    // component is lost (if true) or not (if false)
+    type Quorum = Vec<(ProcessId, bool)>;
+
+    #[derive(Clone, Debug)]
+    struct Action {
+        source: ProcessId, // either 1 or 2
+        q1: Quorum,
+        q2: Quorum,
+    }
+
+    impl Arbitrary for Action {
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            // generate from
+            let source: ProcessId = Arbitrary::arbitrary(g);
+            // make sure it's either 1 or 2
+            let source = source % 2 + 1;
+
+            // generate q1 and q2
+            let q1 = arbitrary_quorum(source, g);
+            let q2 = arbitrary_quorum(source, g);
+
+            // return action
+            Self { source, q1, q2 }
+        }
+        // actions can't be shriked
+        fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+            Box::new(std::iter::empty::<Self>())
+        }
+    }
+
+    // generate a quorum of size `Q` (`Q - 1` actually as `from` is always part of the quorum)
+    fn arbitrary_quorum<G: Gen>(source: ProcessId, g: &mut G) -> Quorum {
+        // compute expected size
+        let expected_size: usize = (Q - 1)
+            .try_into()
+            .expect("it should be possible to subtract 1 as the quorum size is non-zero");
+
+        // loop while we don't generate a quorum with the expected size
+        loop {
+            // generate random ids
+            let ids: Vec<u64> = Arbitrary::arbitrary(g);
+            let ids: HashSet<_> = ids
+                .into_iter()
+                // make sure all ids are between 1 and N
+                .map(|id| id % (N as u64) + 1)
+                // remove `source` from the quorum
+                .filter(|id| *id != source)
+                .collect();
+
+            // if we have enough ids, create quorum and return it
+            if ids.len() == expected_size {
+                let quorum = ids
+                    .into_iter()
+                    .map(|id| {
+                        let reply_lost = Arbitrary::arbitrary(g);
+                        (id, reply_lost)
+                    })
+                    .collect();
+                return quorum;
+            }
+        }
+    }
+
+    type ConsensusValue = u64;
+    type Synods = HashMap<ProcessId, RefCell<Synod<ConsensusValue>>>;
+
+    // generate proposals by multiplying all the values reported by phase-1 quorum processes
+    fn proposal_gen(values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
+        values.into_iter().map(|(_, v)| v).fold(1, |acc, v| acc * v)
+    }
+
+    fn create_synods() -> Synods {
+        // create ids and their initial values
+        let data = vec![(1, 2), (2, 3), (3, 5), (4, 7), (5, 11)];
+
+        // create synods
+        data.into_iter()
+            .map(|(id, value)| {
+                // get id
+                let id = id as u64;
+                // create synod
+                let mut synod = Synod::new(id, N, F, proposal_gen);
+                // set its value
+                assert!(synod.maybe_set_value(|| value));
+                (id, RefCell::new(synod))
+            })
+            .collect()
+    }
+
+    #[quickcheck]
+    fn a_single_value_is_chosen(actions: Vec<Action>) -> bool {
+        fn do_action(action: Action, synods: &Synods, chosen_values: &mut HashSet<ConsensusValue>) {
+            // get source
+            let source = action.source;
+
+            // get synod
+            let mut synod = synods
+                .get(&source)
+                .expect("synod with such id should exist")
+                .borrow_mut();
+
+            // create prepare
+            let prepare = synod.new_prepare();
+
+            // handle it locally
+            synod.handle(source, prepare.clone());
+
+            // handle it in all `q1`
+            let outcome = handle_in_quorum(source, &mut synod, synods, prepare, &action.q1);
+            // there should be at most 1 outcome (if prepare was successful)
+            assert!(outcome.len() <= 1);
+
+            // check if phase-1 ended
+            if outcome.len() == 1 {
+                // if yes, start phase-2
+                let msg = &outcome[0];
+
+                // handle msg in all `q2`
+                let outcome = handle_in_quorum(source, &mut synod, synods, msg.clone(), &action.q2);
+                // there should be at most 1 outcome (if prepare was successful)
+                assert!(outcome.len() <= 1);
+
+                // check if phase-2 ended
+                if outcome.len() == 1 {
+                    // if yes, save chosen value
+                    if let SynodMessage::MChosen(value) = outcome[0] {
+                        chosen_values.insert(value);
+                    }
+                }
+            }
+        }
+
+        fn handle_in_quorum(
+            source: ProcessId,
+            synod: &mut Synod<ConsensusValue>,
+            synods: &Synods,
+            msg: SynodMessage<ConsensusValue>,
+            quorum: &Quorum,
+        ) -> Vec<SynodMessage<ConsensusValue>> {
+            quorum
+                .iter()
+                .filter_map(|(dest, reply_lost)| {
+                    // get dest synod
+                    let mut dest_synod = synods
+                        .get(&dest)
+                        .expect("synod with such id should exist")
+                        .borrow_mut();
+                    // handle msg in destination
+                    let reply = dest_synod.handle(source, msg.clone());
+
+                    // check if there's a reply
+                    if let Some(reply) = reply {
+                        // if yes and reply shouldn't be lost, handle it
+                        if !reply_lost {
+                            return synod.handle(*dest, reply);
+                        }
+                    }
+                    None
+                })
+                .collect()
+        }
+
+        // create synods
+        let synods = create_synods();
+
+        // set with all chosen values:
+        // - if in the end this set has more than one value, there's a bug
+        let mut chosen_values = HashSet::new();
+
+        actions.into_iter().for_each(|action| {
+            do_action(action, &synods, &mut chosen_values);
+        });
+
+        // we're good if there was at most one chosen value
+        chosen_values.len() <= 1
     }
 }
