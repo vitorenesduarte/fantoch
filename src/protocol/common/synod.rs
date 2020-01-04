@@ -639,12 +639,16 @@ mod proptests {
         q2: Quorum,
     }
 
+    fn bound_id(id: ProcessId, bound: usize) -> ProcessId {
+        // make sure ids are between 1 and `bound`
+        id % (bound as u64) + 1
+    }
+
     impl Arbitrary for Action {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            // generate from
+            // generate source: either 1 or 2
             let source: ProcessId = Arbitrary::arbitrary(g);
-            // make sure it's either 1 or 2
-            let source = source % 2 + 1;
+            let source = bound_id(source, 2);
 
             // generate q1 and q2
             let q1 = arbitrary_quorum(source, g);
@@ -666,30 +670,27 @@ mod proptests {
             .try_into()
             .expect("it should be possible to subtract 1 as the quorum size is non-zero");
 
-        // loop while we don't generate a quorum with the expected size
-        loop {
-            // generate random ids
-            let ids: Vec<u64> = Arbitrary::arbitrary(g);
-            let ids: HashSet<_> = ids
-                .into_iter()
-                // make sure all ids are between 1 and N
-                .map(|id| id % (N as u64) + 1)
-                // remove `source` from the quorum
-                .filter(|id| *id != source)
-                .collect();
+        // ids of processes in the quorum
+        let mut ids = HashSet::new();
 
-            // if we have enough ids, create quorum and return it
-            if ids.len() == expected_size {
-                let quorum = ids
-                    .into_iter()
-                    .map(|id| {
-                        let reply_lost = Arbitrary::arbitrary(g);
-                        (id, reply_lost)
-                    })
-                    .collect();
-                return quorum;
+        // loop while we don't generate a quorum with the expected size
+        while ids.len() < expected_size {
+            // generate random id
+            let process: ProcessId = Arbitrary::arbitrary(g);
+            let process = bound_id(process, N);
+
+            // add process if not source
+            if process != source {
+                ids.insert(process);
             }
         }
+        // for each quorum process, generate whether its reply will be lost or not
+        ids.into_iter()
+            .map(|id| {
+                let reply_lost = Arbitrary::arbitrary(g);
+                (id, reply_lost)
+            })
+            .collect()
     }
 
     type ConsensusValue = u64;
