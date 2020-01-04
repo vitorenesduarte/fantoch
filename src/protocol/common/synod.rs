@@ -149,7 +149,7 @@ where
         // generate the next ballot
         self.next_ballot(acceptor.ballot());
 
-        // the new balot should be higher than the acceptor's ballot
+        // the new ballot should be higher than the acceptor's ballot
         assert!(acceptor.ballot() < self.ballot);
 
         // reset paper-slip state
@@ -174,8 +174,8 @@ where
         self.ballot = self.process_id + n * next_round;
     }
 
-    /// Resets the local (paper-slip) state (promises received, accepts received, and proposal),
-    /// returning previous promises and proposal.
+    /// Resets the local (paper-slip) state (promises received, accepts received, and proposal
+    /// sent), returning the previous value of promises and proposal.
     fn reset_state(&mut self) -> (Promises<V>, Proposal<V>) {
         // reset promises
         let mut promises = HashMap::new();
@@ -273,8 +273,8 @@ where
                     proposal.expect("there should have been proposal before a value can be chosen");
 
                 // create chosen message
-                let accept = SynodMessage::MChosen(proposal);
-                return Some(accept);
+                let chosen = SynodMessage::MChosen(proposal);
+                return Some(chosen);
             }
         }
         None
@@ -362,6 +362,7 @@ where
 mod tests {
     use super::*;
 
+    // generate proposals by summing of the values reported by phase-1 quorum processes
     fn proposal_gen(values: HashMap<ProcessId, u64>) -> u64 {
         values.into_iter().map(|(_, v)| v).sum()
     }
