@@ -628,9 +628,12 @@ mod proptests {
     // - since we consider that f = 2, the quorum size is 3
     const Q: usize = 3;
 
-    // a list of pairs where the second component indicates whether the reply from the first
-    // component is lost (if true) or not (if false)
-    type Quorum = Vec<(ProcessId, bool)>;
+    // a list of pairs where the:
+    // - second component indicates whether the msg is lost
+    // - third component indicated whether the reply is lost
+    // with the above, an entry (_, true, false) makes no practical sense: if the msg is lost, there
+    // can't be any reply
+    type Quorum = Vec<(ProcessId, bool, bool)>;
 
     #[derive(Clone, Debug)]
     struct Action {
@@ -684,11 +687,12 @@ mod proptests {
                 ids.insert(process);
             }
         }
-        // for each quorum process, generate whether its reply will be lost or not
+        // for each quorum process, generate whether any of the messages will get lost
         ids.into_iter()
             .map(|id| {
+                let msg_lost = Arbitrary::arbitrary(g);
                 let reply_lost = Arbitrary::arbitrary(g);
-                (id, reply_lost)
+                (id, msg_lost, reply_lost)
             })
             .collect()
     }
@@ -777,20 +781,23 @@ mod proptests {
         ) -> Vec<SynodMessage<ConsensusValue>> {
             quorum
                 .iter()
-                .filter_map(|(dest, reply_lost)| {
-                    // get dest synod
-                    let mut dest_synod = synods
-                        .get(&dest)
-                        .expect("synod with such id should exist")
-                        .borrow_mut();
-                    // handle msg in destination
-                    let reply = dest_synod.handle(source, msg.clone());
+                .filter_map(|(dest, msg_lost, reply_lost)| {
+                    // handle msg if it should be lost
+                    if !msg_lost {
+                        // get dest synod
+                        let mut dest_synod = synods
+                            .get(&dest)
+                            .expect("synod with such id should exist")
+                            .borrow_mut();
+                        // handle msg in destination
+                        let reply = dest_synod.handle(source, msg.clone());
 
-                    // check if there's a reply
-                    if let Some(reply) = reply {
-                        // if yes and reply shouldn't be lost, handle it
-                        if !reply_lost {
-                            return synod.handle(*dest, reply);
+                        // check if there's a reply
+                        if let Some(reply) = reply {
+                            // if yes and reply shouldn't be lost, handle it
+                            if !reply_lost {
+                                return synod.handle(*dest, reply);
+                            }
                         }
                     }
                     None
