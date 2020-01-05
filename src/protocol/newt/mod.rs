@@ -13,18 +13,18 @@ use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
 use crate::log;
 use crate::planet::{Planet, Region};
+use crate::protocol::common::{Commands, Info};
 use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
 use crate::protocol::newt::votes::{ProcessVotes, Votes};
 use crate::protocol::newt::votes_table::MultiVotesTable;
 use crate::protocol::{BaseProcess, Process, ToSend};
 use std::cmp;
-use std::collections::HashMap;
 use std::mem;
 
 pub struct Newt {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
-    cmds_info: CommandsInfo,
+    cmds: Commands<CommandInfo>,
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
@@ -50,7 +50,7 @@ impl Process for Newt {
             write_quorum_size,
         );
         let keys_clocks = KeysClocks::new(process_id);
-        let cmds_info = CommandsInfo::new(fast_quorum_size);
+        let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let table = MultiVotesTable::new(config.n(), stability_threshold);
         let store = KVStore::new();
         let pending = Pending::new();
@@ -60,7 +60,7 @@ impl Process for Newt {
         Self {
             bp,
             keys_clocks,
-            cmds_info,
+            cmds,
             table,
             store,
             pending,
@@ -187,7 +187,7 @@ impl Newt {
         );
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -238,7 +238,7 @@ impl Newt {
         );
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         if info.status != Status::COLLECT {
             // do nothing if we're no longer COLLECT
@@ -309,7 +309,7 @@ impl Newt {
         log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
@@ -353,7 +353,7 @@ impl Newt {
         log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
@@ -399,32 +399,6 @@ impl Newt {
     }
 }
 
-// `CommandsInfo` contains `CommandInfo` for each `Dot`.
-struct CommandsInfo {
-    q: usize,
-    dot_to_info: HashMap<Dot, CommandInfo>,
-}
-
-impl CommandsInfo {
-    fn new(q: usize) -> Self {
-        Self {
-            q,
-            dot_to_info: HashMap::new(),
-        }
-    }
-
-    // Returns the `CommandInfo` associated with `Dot`.
-    // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
-    fn get(&mut self, dot: Dot) -> &mut CommandInfo {
-        // TODO the borrow checker complains if `self.q` is passed to
-        // `CommandInfo::new`
-        let q = self.q;
-        self.dot_to_info
-            .entry(dot)
-            .or_insert_with(|| CommandInfo::new(q))
-    }
-}
-
 // `CommandInfo` contains all information required in the life-cyle of a
 // `Command`
 struct CommandInfo {
@@ -440,15 +414,15 @@ struct CommandInfo {
     quorum_clocks: QuorumClocks,
 }
 
-impl CommandInfo {
-    fn new(q: usize) -> Self {
+impl Info for CommandInfo {
+    fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
             quorum: vec![],
             cmd: None,
             clock: 0,
             votes: Votes::new(),
-            quorum_clocks: QuorumClocks::new(q),
+            quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
 }

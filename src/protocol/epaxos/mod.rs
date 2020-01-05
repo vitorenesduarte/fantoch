@@ -5,7 +5,7 @@ use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
-use crate::protocol::common::{Synod, SynodMessage};
+use crate::protocol::common::{Commands, Info, Synod, SynodMessage};
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
@@ -15,7 +15,7 @@ use threshold::VClock;
 pub struct EPaxos {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
-    cmds_info: CommandsInfo,
+    cmds: Commands<CommandInfo>,
     graph: DependencyGraph,
     store: KVStore,
     pending: HashSet<Rifl>,
@@ -40,7 +40,8 @@ impl Process for EPaxos {
             write_quorum_size,
         );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(process_id, config.n(), fast_quorum_size);
+        let f = Self::allowed_faults(config.n());
+        let cmds = Commands::new(process_id, config.n(), f, fast_quorum_size);
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -50,7 +51,7 @@ impl Process for EPaxos {
         Self {
             bp,
             keys_clocks,
-            cmds_info,
+            cmds,
             graph,
             store,
             pending,
@@ -165,7 +166,7 @@ impl EPaxos {
         );
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -211,7 +212,7 @@ impl EPaxos {
         }
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // do nothing if we're no longer COLLECT
         if info.status != Status::COLLECT {
@@ -266,7 +267,7 @@ impl EPaxos {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, value.clock);
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
@@ -306,7 +307,7 @@ impl EPaxos {
         );
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // compute message: that can either be nothing, an ack or an mcommit
         let msg = match info
@@ -343,7 +344,7 @@ impl EPaxos {
         log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // compute message: that can either be nothing or an mcommit
         match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
@@ -391,39 +392,7 @@ impl EPaxos {
     }
 }
 
-// `CommandsInfo` contains `CommandInfo` for each `Dot`.
-struct CommandsInfo {
-    process_id: ProcessId,
-    n: usize,
-    f: usize,
-    fast_quorum_size: usize,
-    dot_to_info: HashMap<Dot, CommandInfo>,
-}
-
-impl CommandsInfo {
-    fn new(process_id: ProcessId, n: usize, fast_quorum_size: usize) -> Self {
-        Self {
-            process_id,
-            n,
-            f: EPaxos::allowed_faults(n),
-            fast_quorum_size,
-            dot_to_info: HashMap::new(),
-        }
-    }
-
-    // Returns the `CommandInfo` associated with `Dot`.
-    // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
-    fn get(&mut self, dot: Dot) -> &mut CommandInfo {
-        // TODO borrow everything we need so that the borrow checker does not complain
-        let process_id = self.process_id;
-        let n = self.n;
-        let f = self.f;
-        let fast_quorum_size = self.fast_quorum_size;
-        self.dot_to_info
-            .entry(dot)
-            .or_insert_with(|| CommandInfo::new(process_id, n, f, fast_quorum_size))
-    }
-}
+//            f: EPaxos::allowed_faults(n),
 
 // consensus value is a pair where the first component is the command (noop if `None`) and the
 // second component its dependencies represented as a vector clock.
@@ -460,7 +429,7 @@ struct CommandInfo {
     quorum_clocks: QuorumClocks,
 }
 
-impl CommandInfo {
+impl Info for CommandInfo {
     fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
         // create bottom consensus value
         let initial_value = ConsensusValue::new(n);
