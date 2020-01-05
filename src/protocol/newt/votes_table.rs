@@ -59,7 +59,7 @@ impl MultiVotesTable {
         // which ops are safe to be executed
         let (duration, result) = elapsed!(self.add_cmd_and_find(sort_id, cmd, votes));
         self.metrics
-            .add(MetricsKind::AddCommand, duration.as_micros());
+            .collect(MetricsKind::AddCommand, duration.as_micros());
         result
     }
 
@@ -71,7 +71,7 @@ impl MultiVotesTable {
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         let (duration, result) = elapsed!(self.add_votes_and_find(process_votes));
         self.metrics
-            .add(MetricsKind::AddPhantomVotes, duration.as_micros());
+            .collect(MetricsKind::AddPhantomVotes, duration.as_micros());
         result
     }
 

@@ -1,7 +1,9 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
+use crate::metrics::Metrics;
 use crate::planet::{Planet, Region};
 use crate::util;
+use std::fmt;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProcess {
@@ -9,11 +11,13 @@ pub struct BaseProcess {
     pub region: Region,
     pub planet: Planet,
     pub config: Config,
-    // fast quorum size
-    pub q: usize,
-    pub all_processes: Option<Vec<ProcessId>>,
-    pub fast_quorum: Option<Vec<ProcessId>>,
+    all_processes: Option<Vec<ProcessId>>,
+    fast_quorum: Option<Vec<ProcessId>>,
+    write_quorum: Option<Vec<ProcessId>>,
+    fast_quorum_size: usize,
+    write_quorum_size: usize,
     dot_gen: DotGen,
+    metrics: Metrics<MetricsKind, u64>,
 }
 
 impl BaseProcess {
@@ -23,21 +27,26 @@ impl BaseProcess {
         region: Region,
         planet: Planet,
         config: Config,
-        q: usize,
+        fast_quorum_size: usize,
+        write_quorum_size: usize,
     ) -> Self {
         // since processes lead with ballot `id` when taking the slow path and
         // we may rely on the fact that a zero accepted ballot means the process
         // has never been through Paxos phase-2, all ids must non-zero
         assert!(process_id != 0);
-        BaseProcess {
+
+        Self {
             process_id,
             region,
             planet,
             config,
-            q,
             all_processes: None,
             fast_quorum: None,
+            write_quorum: None,
+            fast_quorum_size,
+            write_quorum_size,
             dot_gen: DotGen::new(process_id),
+            metrics: Metrics::new(),
         }
     }
 
@@ -47,21 +56,39 @@ impl BaseProcess {
         util::sort_processes_by_distance(&self.region, &self.planet, &mut processes);
         let all_processes: Vec<_> = processes.into_iter().map(|(id, _)| id).collect();
 
-        // create fast quorum by taking the first `q` elements
-        let fast_quorum: Vec<_> = all_processes.clone().into_iter().take(self.q).collect();
+        // create fast quorum by taking the first `fast_quorum_size` elements
+        let fast_quorum: Vec<_> = all_processes
+            .clone()
+            .into_iter()
+            .take(self.fast_quorum_size)
+            .collect();
+
+        // create write quorum by taking the first `write_quorum_size` elements
+        let write_quorum: Vec<_> = all_processes
+            .clone()
+            .into_iter()
+            .take(self.write_quorum_size)
+            .collect();
+
+        // set all processes
+        self.all_processes = Some(all_processes);
 
         // set fast quorum if we have enough fast quorum processes
-        self.fast_quorum = if fast_quorum.len() == self.q {
+        self.fast_quorum = if fast_quorum.len() == self.fast_quorum_size {
             Some(fast_quorum)
         } else {
             None
         };
 
-        // set all processes
-        self.all_processes = Some(all_processes);
+        // set write quorum if we have enough write quorum processes
+        self.write_quorum = if write_quorum.len() == self.write_quorum_size {
+            Some(write_quorum)
+        } else {
+            None
+        };
 
-        // we're connected if we have a fast quorum
-        self.fast_quorum.is_some()
+        // connected if fast quorum and write quorum are set
+        self.fast_quorum.is_some() && self.write_quorum.is_some()
     }
 
     // Returns the next dot.
@@ -81,6 +108,46 @@ impl BaseProcess {
         self.fast_quorum
             .clone()
             .expect("the fast quorum should be known")
+    }
+
+    // Returns the write quorum.
+    pub fn write_quorum(&self) -> Vec<ProcessId> {
+        self.write_quorum
+            .clone()
+            .expect("the slow quorum should be known")
+    }
+
+    pub fn show_stats(&self) {
+        self.metrics.show_stats();
+    }
+
+    // Increment fast path count.
+    pub fn fast_path(&mut self) {
+        self.inc_metric(MetricsKind::FastPath);
+    }
+
+    // Increment slow path count.
+    pub fn slow_path(&mut self) {
+        self.inc_metric(MetricsKind::SlowPath);
+    }
+
+    fn inc_metric(&mut self, kind: MetricsKind) {
+        self.metrics.aggregate(kind, |v| *v += 1)
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum MetricsKind {
+    FastPath,
+    SlowPath,
+}
+
+impl fmt::Debug for MetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MetricsKind::FastPath => write!(f, "fast_path"),
+            MetricsKind::SlowPath => write!(f, "slow_path"),
+        }
     }
 }
 
@@ -120,23 +187,35 @@ mod tests {
         let id = 8;
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
-        let q = 6;
-        let mut bp = BaseProcess::new(id, region, planet, config, q);
+        let fast_quorum_size = 6;
+        let write_quorum_size = 4;
+        let mut bp = BaseProcess::new(
+            id,
+            region,
+            planet,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
         assert_eq!(bp.all_processes, None);
 
-        // discover processes
-        bp.discover(processes);
+        // discover processes and check we're connected
+        assert!(bp.discover(processes));
 
+        // check set of all processes
         assert_eq!(
-            bp.all_processes,
-            Some(vec![
-                8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
-            ])
+            bp.all(),
+            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2]
         );
-        assert_eq!(bp.fast_quorum, Some(vec![8, 9, 6, 7, 5, 14]));
+
+        // check fast quorum
+        assert_eq!(bp.fast_quorum(), vec![8, 9, 6, 7, 5, 14]);
+
+        // check write quorum
+        assert_eq!(bp.write_quorum(), vec![8, 9, 6, 7]);
     }
 
     #[test]
@@ -159,13 +238,27 @@ mod tests {
         let id = 2;
         let region = Region::new("europe-north1");
         let planet = Planet::new("latency/");
-        let q = 3;
-        let mut bp = BaseProcess::new(id, region, planet, config, q);
+        let fast_quorum_size = 3;
+        let write_quorum_size = 4;
+        let mut bp = BaseProcess::new(
+            id,
+            region,
+            planet,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
 
-        // discover processes
-        bp.discover(processes);
+        // discover processes and check we're connected
+        assert!(bp.discover(processes));
 
-        assert_eq!(bp.all_processes, Some(vec![2, 3, 4, 0, 1]));
-        assert_eq!(bp.fast_quorum, Some(vec![2, 3, 4]));
+        // check set of all processes
+        assert_eq!(bp.all(), vec![2, 3, 4, 0, 1]);
+
+        // check fast quorum
+        assert_eq!(bp.fast_quorum(), vec![2, 3, 4]);
+
+        // check write quorum
+        assert_eq!(bp.write_quorum(), vec![2, 3, 4, 0]);
     }
 }

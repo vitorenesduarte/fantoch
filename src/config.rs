@@ -17,7 +17,7 @@ impl Config {
     /// system.
     pub fn new(n: usize, f: usize) -> Self {
         if f > n / 2 {
-            println!("WARNING: f={} is larger than a majority with n={}", f, n);
+            println!("WARNING: f={} is larger than a minority with n={}", f, n);
         }
         // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;

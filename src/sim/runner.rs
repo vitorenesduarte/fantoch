@@ -307,9 +307,18 @@ mod tests {
         type Message = Message;
 
         fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-            // quorum size is f + 1
-            let q = config.f() + 1;
-            let bp = BaseProcess::new(process_id, region, planet, config, q);
+            // fast quorum size is f + 1
+            let fast_quorum_size = config.f() + 1;
+            // write quorum size can be 0 since it won't be used
+            let write_quorum_size = 0;
+            let bp = BaseProcess::new(
+                process_id,
+                region,
+                planet,
+                config,
+                fast_quorum_size,
+                write_quorum_size,
+            );
 
             // create `PingPong`
             Self {
@@ -335,12 +344,8 @@ mod tests {
 
             // create message
             let msg = Message::Ping(rifl);
-            // clone the fast quorum
-            let fast_quorum = self
-                .bp
-                .fast_quorum
-                .clone()
-                .expect("should have a valid fast quorum upon submit");
+            // get the fast quorum
+            let fast_quorum = self.bp.fast_quorum();
 
             // send message to fast quorum
             ToSend::ToProcesses(self.id(), fast_quorum, msg)
@@ -363,7 +368,7 @@ mod tests {
                     *ack_count += 1;
 
                     // notify client if enough acks
-                    if *ack_count == self.bp.q {
+                    if *ack_count == self.bp.fast_quorum().len() {
                         // remove from acks
                         self.acks.remove(&rifl);
                         // create fake command result

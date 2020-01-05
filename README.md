@@ -5,6 +5,15 @@
 
 Details coming soon.
 
+#### Supported protocols
+- Atlas __(under submission)__: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/atlas)
+- Newt __(under design)__: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/newt)
+- EPaxos: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/epaxos)
+
+Next:
+- FPaxos (and Paxos as a special case of FPaxos)
+- Mencius
+
 #### Ideas / Goals
 
 - the same protocol/system implementation should be used by the simulation and by an actual implementation

@@ -23,17 +23,12 @@ impl QuorumClocks {
         }
     }
 
-    /// Check if we have a clock from a given `ProcessId`.
-    pub fn contains(&self, process_id: ProcessId) -> bool {
-        self.participants.contains(&process_id)
-    }
-
     /// Adds a new `clock` reported by `process_id`.
     pub fn add(&mut self, process_id: ProcessId, clock: VClock<ProcessId>) {
         assert!(self.participants.len() < self.q);
 
-        // record new participant and check it's a new entry
-        assert!(self.participants.insert(process_id));
+        // record new participant
+        self.participants.insert(process_id);
 
         // add clock to the threshold clock
         self.threshold_clock.add(clock);
@@ -48,35 +43,17 @@ impl QuorumClocks {
     pub fn threshold_union(&self, threshold: usize) -> (VClock<ProcessId>, bool) {
         self.threshold_clock.threshold_union(threshold as u64)
     }
+
+    /// Computes the union.
+    pub fn union(&self) -> (VClock<ProcessId>, bool) {
+        self.threshold_clock.union()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util;
-
-    #[test]
-    fn contains() {
-        // quorum clocks
-        let q = 3;
-        let mut quorum_clocks = QuorumClocks::new(q);
-
-        // add clocks and check they're there
-        quorum_clocks.add(1, util::vclock(vec![1, 2, 3, 4, 5]));
-        assert!(quorum_clocks.contains(1));
-        assert!(!quorum_clocks.contains(2));
-        assert!(!quorum_clocks.contains(3));
-
-        quorum_clocks.add(2, util::vclock(vec![1, 2, 3, 4, 5]));
-        assert!(quorum_clocks.contains(1));
-        assert!(quorum_clocks.contains(2));
-        assert!(!quorum_clocks.contains(3));
-
-        quorum_clocks.add(3, util::vclock(vec![1, 2, 3, 4, 5]));
-        assert!(quorum_clocks.contains(1));
-        assert!(quorum_clocks.contains(2));
-        assert!(quorum_clocks.contains(3));
-    }
 
     #[test]
     fn all() {

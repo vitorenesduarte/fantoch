@@ -24,17 +24,12 @@ impl QuorumClocks {
         }
     }
 
-    /// Check if we have a clock from a given `ProcessId`.
-    pub fn contains(&self, process_id: ProcessId) -> bool {
-        self.participants.contains(&process_id)
-    }
-
     /// Adds a new `clock` reported by `process_id` and returns the maximum clock seen until now.
     pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
         assert!(self.participants.len() < self.q);
 
-        // record new participant and check it's a new entry
-        assert!(self.participants.insert(process_id));
+        // record new participant
+        self.participants.insert(process_id);
 
         // update max clock and max clock count
         match self.max_clock.cmp(&clock) {
@@ -65,29 +60,6 @@ impl QuorumClocks {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn contains() {
-        // quorum clocks
-        let q = 3;
-        let mut quorum_clocks = QuorumClocks::new(q);
-
-        // add clocks and check they're there
-        quorum_clocks.add(1, 10);
-        assert!(quorum_clocks.contains(1));
-        assert!(!quorum_clocks.contains(2));
-        assert!(!quorum_clocks.contains(3));
-
-        quorum_clocks.add(2, 10);
-        assert!(quorum_clocks.contains(1));
-        assert!(quorum_clocks.contains(2));
-        assert!(!quorum_clocks.contains(3));
-
-        quorum_clocks.add(3, 10);
-        assert!(quorum_clocks.contains(1));
-        assert!(quorum_clocks.contains(2));
-        assert!(quorum_clocks.contains(3));
-    }
 
     #[test]
     fn all() {

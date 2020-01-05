@@ -36,16 +36,22 @@ impl Process for Newt {
 
     /// Creates a new `Newt` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-        // compute fast quorum size and stability threshold
-        let (stability_threshold, q) = Newt::read_write_quorum_sizes(&config);
+        // compute fast and write quorum sizes and the stability threshold
+        let (fast_quorum_size, stability_threshold, write_quorum_size) =
+            Newt::quorum_sizes(&config);
 
-        // create `MultiVotesTable`
-        let table = MultiVotesTable::new(config.n(), stability_threshold);
-
-        // create `BaseProcess`, `Clocks`, dot_to_info, `KVStore` and `Pending`.
-        let bp = BaseProcess::new(process_id, region, planet, config, q);
+        // create protocol data-structures
+        let bp = BaseProcess::new(
+            process_id,
+            region,
+            planet,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
         let keys_clocks = KeysClocks::new(process_id);
-        let cmds_info = CommandsInfo::new(q);
+        let cmds_info = CommandsInfo::new(fast_quorum_size);
+        let table = MultiVotesTable::new(config.n(), stability_threshold);
         let store = KVStore::new();
         let pending = Pending::new();
         let commands_ready = Vec::new();
@@ -109,24 +115,34 @@ impl Process for Newt {
     }
 
     fn show_stats(&self) {
+        self.bp.show_stats();
         self.table.show_stats();
     }
 }
 
 impl Newt {
-    /// Computes `Newt` stability threshold (read quorum size) and fast quorum size (write quorum
-    /// size). Typically the threshold should be n - q + 1, where n is the number of processes and q
-    /// the size of the write quorum. In `Newt` e.g. with tiny quorums, although the fast quorum is
+    /// Computes `Newt` fast quorum size, stability threshold and write quorum size.
+    ///
+    /// The threshold should be n - q + 1, where n is the number of processes and q the size of the
+    /// quorum used to compute clocks. In `Newt` e.g. with tiny quorums, although the fast quorum is
     /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
-    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f
-    fn read_write_quorum_sizes(config: &Config) -> (usize, usize) {
+    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f.
+    ///
+    /// In general, the stability threshold is given by:
+    ///   "n - (fast_quorum_size - f + 1) + 1 = n - fast_quorum_size + f"
+    /// - this ensures that the stability threshold plus the minimum number of processes where
+    ///   clocks are computed (i.e. fast_quorum_size - f + 1) is greater than n
+    fn quorum_sizes(config: &Config) -> (usize, usize, usize) {
         let n = config.n();
         let f = config.f();
-        if config.newt_tiny_quorums() {
-            (n - f, 2 * f)
+        let minority = n / 2;
+        let (fast_quorum_size, stability_threshold) = if config.newt_tiny_quorums() {
+            (2 * f, n - f)
         } else {
-            ((n / 2) + 1, (n / 2) + f)
-        }
+            (minority + f, minority + 1)
+        };
+        let write_quorum_size = f + 1;
+        (fast_quorum_size, stability_threshold, write_quorum_size)
     }
 
     /// Handles a submit operation by a client.
@@ -224,8 +240,8 @@ impl Newt {
         // get cmd info
         let info = self.cmds_info.get(dot);
 
-        if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
-            // do nothing if we're no longer COLLECT or if this is a duplicated message
+        if info.status != Status::COLLECT {
+            // do nothing if we're no longer COLLECT
             return ToSend::Nothing;
         }
 
@@ -255,6 +271,7 @@ impl Newt {
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
+                self.bp.fast_path();
                 // reset local votes as we're going to receive them right away; this also prevents a
                 // `info.votes.clone()`
                 let votes = Self::reset_votes(&mut info.votes);
@@ -273,6 +290,7 @@ impl Newt {
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
+                self.bp.slow_path();
                 // TODO slow path
                 todo!("slow path not implemented yet")
             }
@@ -481,28 +499,20 @@ mod tests {
         // tiny quorums = false
         let mut config = Config::new(7, 1);
         config.set_newt_tiny_quorums(false);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 4);
-        assert_eq!(w, 4);
+        assert_eq!(Newt::quorum_sizes(&config), (4, 4, 2));
 
         let mut config = Config::new(7, 2);
         config.set_newt_tiny_quorums(false);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 4);
-        assert_eq!(w, 5);
+        assert_eq!(Newt::quorum_sizes(&config), (5, 4, 3));
 
         // tiny quorums = true
         let mut config = Config::new(7, 1);
         config.set_newt_tiny_quorums(true);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 6);
-        assert_eq!(w, 2);
+        assert_eq!(Newt::quorum_sizes(&config), (2, 6, 2));
 
         let mut config = Config::new(7, 2);
         config.set_newt_tiny_quorums(true);
-        let (r, w) = Newt::read_write_quorum_sizes(&config);
-        assert_eq!(r, 5);
-        assert_eq!(w, 4);
+        assert_eq!(Newt::quorum_sizes(&config), (4, 5, 3));
     }
 
     #[test]

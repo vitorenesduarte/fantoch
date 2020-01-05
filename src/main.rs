@@ -1,17 +1,61 @@
 use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, Newt, Process};
+use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
 use planet_sim::sim::Runner;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running atlas...");
-    run_in_thread(|| increasing_load::<Atlas>());
+    println!(">running epaxos...");
+    run_in_thread(|| epaxos::<EPaxos>());
+    // println!(">running atlas...");
+    // run_in_thread(|| increasing_load::<Atlas>());
     // println!(">running newt...");
     // run_in_thread(|| increasing_load::<Newt>());
+}
+
+fn epaxos<P: Process>() {
+    let regions5 = vec![
+        Region::new("A"),
+        Region::new("B"),
+        Region::new("C"),
+        Region::new("D"),
+        Region::new("E"),
+    ];
+
+    // number of processes and f
+    let ns = vec![3, 5];
+    let f = 0;
+
+    // clients workload
+    let conflict_rate = 2;
+    let total_commands = 500;
+    let workload = Workload::new(conflict_rate, total_commands);
+
+    for &n in &ns {
+        let clients_per_region = 1000 / n;
+        println!("running processes={} | clients={}", n, clients_per_region);
+        println!();
+
+        // config
+        let config = Config::new(n, f);
+
+        // process regions
+        let process_regions = regions5.clone().into_iter().take(n).collect();
+
+        // process regions
+        let client_regions = regions5.clone().into_iter().take(n).collect();
+
+        run_simulation::<P>(
+            config,
+            workload,
+            clients_per_region,
+            process_regions,
+            client_regions,
+        );
+    }
 }
 
 fn increasing_load<P: Process>() {
@@ -26,10 +70,11 @@ fn increasing_load<P: Process>() {
     // config
     let n = 5;
     let f = 1;
-    let config = Config::new(n, f);
+    let mut config = Config::new(n, f);
+    config.set_transitive_conflicts(false);
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+    let cs = vec![256];
 
     // clients workload
     let conflict_rate = 10;
