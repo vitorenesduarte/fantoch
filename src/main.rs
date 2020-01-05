@@ -9,44 +9,41 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
     println!(">running epaxos...");
-    run_in_thread(|| epaxos::<EPaxos>());
+    run_in_thread(|| equidistant::<EPaxos>());
     // println!(">running atlas...");
     // run_in_thread(|| increasing_load::<Atlas>());
     // println!(">running newt...");
     // run_in_thread(|| increasing_load::<Newt>());
 }
 
-fn epaxos<P: Process>() {
-    let regions5 = vec![
-        Region::new("A"),
-        Region::new("B"),
-        Region::new("C"),
-        Region::new("D"),
-        Region::new("E"),
-    ];
+fn equidistant<P: Process>() {
+    // intra-region distance
+    let distance = 200;
 
     // number of processes and f
-    let ns = vec![3, 5];
-    let f = 0;
+    let configs = vec![(3, 1), (5, 2)];
+
+    // total clients
+    let total_clients = 1000;
 
     // clients workload
     let conflict_rate = 2;
     let total_commands = 500;
     let workload = Workload::new(conflict_rate, total_commands);
 
-    for &n in &ns {
-        let clients_per_region = 1000 / n;
+    for &(n, f) in &configs {
+        // create planet and regions
+        let (process_regions, planet) = Planet::equidistant(distance, n);
+
+        // client regions
+        let client_regions = process_regions.clone();
+
+        let clients_per_region = total_clients / n;
         println!("running processes={} | clients={}", n, clients_per_region);
         println!();
 
         // config
         let config = Config::new(n, f);
-
-        // process regions
-        let process_regions = regions5.clone().into_iter().take(n).collect();
-
-        // process regions
-        let client_regions = regions5.clone().into_iter().take(n).collect();
 
         run_simulation::<P>(
             config,
@@ -54,11 +51,13 @@ fn epaxos<P: Process>() {
             clients_per_region,
             process_regions,
             client_regions,
+            planet,
         );
     }
 }
 
 fn increasing_load<P: Process>() {
+    let planet = Planet::new("latency/");
     let regions5 = vec![
         Region::new("asia-south1"),
         Region::new("europe-north1"),
@@ -97,11 +96,13 @@ fn increasing_load<P: Process>() {
             clients_per_region,
             process_regions,
             client_regions,
+            planet.clone(),
         );
     }
 }
 
 fn increasing_regions<P: Process>() {
+    let planet = Planet::new("latency/");
     let regions13 = vec![
         Region::new("asia-southeast1"),
         Region::new("europe-west4"),
@@ -150,6 +151,7 @@ fn increasing_regions<P: Process>() {
             clients_per_region,
             process_regions,
             client_regions,
+            planet.clone(),
         );
     }
 }
@@ -160,9 +162,10 @@ fn run_simulation<P: Process>(
     clients_per_region: usize,
     process_regions: Vec<Region>,
     client_regions: Vec<Region>,
+    planet: Planet,
 ) {
-    // planet
-    let planet = Planet::new("latency/");
+    // compute total number of expected commands per region
+    let expected_commands = workload.total_commands() * clients_per_region * client_regions.len();
 
     // function that creates ping pong processes
     let create_process =
@@ -183,19 +186,11 @@ fn run_simulation<P: Process>(
     let stats = runner.run();
     println!("{:?}", stats);
 
-    // compute number of expected commands per region
-    let expected_commands_per_region = workload.total_commands() * clients_per_region;
-
-    let (mean_sum, p5_sum, p95_sum, p99_sum, p999_sum) = stats
+    let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum) = stats
         .iter()
-        .map(|(region, (region_issued_commands, region_stats))| {
-            if *region_issued_commands != expected_commands_per_region {
-                panic!(
-                    "region {:?} has only issued {} out of {} commands",
-                    region, region_issued_commands, expected_commands_per_region
-                );
-            }
+        .map(|(_region, (region_issued_commands, region_stats))| {
             (
+                region_issued_commands,
                 region_stats.mean().value(),
                 region_stats.percentile(0.5).value(),
                 region_stats.percentile(0.95).value(),
@@ -204,9 +199,11 @@ fn run_simulation<P: Process>(
             )
         })
         .fold(
-            (0.0, 0.0, 0.0, 0.0, 0.0),
-            |(mean_acc, p5_acc, p95_acc, p99_acc, p999_acc), (mean, p5, p95, p99, p999)| {
+            (0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            |(issued_commands_acc, mean_acc, p5_acc, p95_acc, p99_acc, p999_acc),
+             (issued_commands, mean, p5, p95, p99, p999)| {
                 (
+                    issued_commands_acc + issued_commands,
                     mean_acc + mean,
                     p5_acc + p5,
                     p95_acc + p95,
@@ -215,6 +212,13 @@ fn run_simulation<P: Process>(
                 )
             },
         );
+
+    if issued_commands != expected_commands {
+        panic!(
+            "only issued {} out of {} commands",
+            issued_commands, expected_commands,
+        );
+    }
     // TODO averaging of percentiles is just wrong, but we'll do it for now
     let stats_count = stats.len() as f64;
     println!(

@@ -80,7 +80,8 @@ impl DependencyGraph {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.metrics.collect(MetricsKind::FindSCC, duration.as_micros());
+        self.metrics
+            .collect(MetricsKind::FindSCC, duration.as_micros());
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
@@ -124,7 +125,8 @@ impl DependencyGraph {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.metrics.collect(MetricsKind::ChainSize, scc.len() as u128);
+                self.metrics
+                    .collect(MetricsKind::ChainSize, scc.len() as u128);
                 self.save_scc(scc, &mut keys);
             });
 
