@@ -5,4 +5,4 @@ pub mod dependency;
 pub mod synod;
 
 // Re-exports.
-pub use synod::Synod;
+pub use synod::{Synod, SynodMessage};

@@ -5,6 +5,7 @@ use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
+use crate::protocol::common::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
@@ -39,7 +40,7 @@ impl Process for Atlas {
             write_quorum_size,
         );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(config.n(), fast_quorum_size);
+        let cmds_info = CommandsInfo::new(process_id, config.n(), config.f(), fast_quorum_size);
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -82,7 +83,7 @@ impl Process for Atlas {
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck { dot, clock } => self.handle_mcollectack(from, dot, clock),
-            Message::MCommit { dot, cmd, clock } => self.handle_mcommit(dot, cmd, clock),
+            Message::MCommit { dot, value } => self.handle_mcommit(from, dot, value),
         }
     }
 
@@ -167,15 +168,13 @@ impl Atlas {
 
         // update command info
         info.status = Status::COLLECT;
-        info.cmd = cmd;
         info.quorum = quorum;
-        info.clock = clock;
+        // create and set consensus value
+        let value = ConsensusValue::with(cmd, clock.clone());
+        assert!(info.synod.maybe_set_value(|| value));
 
         // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck {
-            dot,
-            clock: info.clock.clone(),
-        };
+        let mcollectack = Message::MCollectAck { dot, clock };
         let target = vec![from];
 
         // return `ToSend`
@@ -218,11 +217,12 @@ impl Atlas {
                 // create `MCommit` and target
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
-                let mcommit = Message::MCommit {
-                    dot,
-                    cmd: info.cmd.clone(),
-                    clock: final_clock,
-                };
+
+                // create consensus value
+                // TODO can the following be more performant or at least more ergonomic?
+                let cmd = info.synod.value().clone().cmd;
+                let value = ConsensusValue::with(cmd, final_clock);
+                let mcommit = Message::MCommit { dot, value };
                 let target = self.bp.all();
 
                 // return `ToSend`
@@ -238,11 +238,11 @@ impl Atlas {
 
     fn handle_mcommit(
         &mut self,
+        from: ProcessId,
         dot: Dot,
-        cmd: Option<Command>,
-        clock: VClock<ProcessId>,
+        value: ConsensusValue,
     ) -> ToSend<Message> {
-        log!("p{}: MCommit({:?}, {:?})", self.id(), dot, clock);
+        log!("p{}: MCommit({:?}, {:?})", self.id(), dot, value.clock);
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -255,12 +255,12 @@ impl Atlas {
 
         // update command info:
         info.status = Status::COMMIT;
-        info.cmd = cmd;
-        info.clock = clock;
+        info.synod
+            .handle(from, SynodMessage::MChosen(value.clone()));
 
         // add to graph if not a noop and execute commands that can be executed
-        if let Some(cmd) = info.cmd.clone() {
-            self.graph.add(dot, cmd, info.clock.clone());
+        if let Some(cmd) = value.cmd {
+            self.graph.add(dot, cmd, value.clock);
             let to_execute = self.graph.commands_to_execute();
             self.execute(to_execute);
         }
@@ -295,15 +295,19 @@ impl Atlas {
 
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 struct CommandsInfo {
+    process_id: ProcessId,
     n: usize,
+    f: usize,
     fast_quorum_size: usize,
     dot_to_info: HashMap<Dot, CommandInfo>,
 }
 
 impl CommandsInfo {
-    fn new(n: usize, fast_quorum_size: usize) -> Self {
+    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
         Self {
+            process_id,
             n,
+            f,
             fast_quorum_size,
             dot_to_info: HashMap::new(),
         }
@@ -312,14 +316,39 @@ impl CommandsInfo {
     // Returns the `CommandInfo` associated with `Dot`.
     // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
     fn get(&mut self, dot: Dot) -> &mut CommandInfo {
-        // TODO the borrow checker complains if `self.n` and `self.q` is passed to
-        // `CommandInfo::new`
+        // TODO borrow everything we need so that the borrow checker does not complain
+        let process_id = self.process_id;
         let n = self.n;
+        let f = self.f;
         let fast_quorum_size = self.fast_quorum_size;
         self.dot_to_info
             .entry(dot)
-            .or_insert_with(|| CommandInfo::new(n, fast_quorum_size))
+            .or_insert_with(|| CommandInfo::new(process_id, n, f, fast_quorum_size))
     }
+}
+
+// consensus value is a pair where the first component is the command (noop if `None`) and the
+// second component its dependencies represented as a vector clock.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConsensusValue {
+    cmd: Option<Command>,
+    clock: VClock<ProcessId>,
+}
+
+impl ConsensusValue {
+    fn new(n: usize) -> Self {
+        let cmd = None;
+        let clock = VClock::with(util::process_ids(n));
+        Self { cmd, clock }
+    }
+
+    fn with(cmd: Option<Command>, clock: VClock<ProcessId>) -> Self {
+        Self { cmd, clock }
+    }
+}
+
+fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
+    todo!("recovery not implemented yet")
 }
 
 // `CommandInfo` contains all information required in the life-cyle of a
@@ -327,20 +356,20 @@ impl CommandsInfo {
 struct CommandInfo {
     status: Status,
     quorum: Vec<ProcessId>,
-    cmd: Option<Command>, // `None` if noOp
-    clock: VClock<ProcessId>,
+    synod: Synod<ConsensusValue>,
     // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
     // whether to take the fast path
     quorum_clocks: QuorumClocks,
 }
 
 impl CommandInfo {
-    fn new(n: usize, fast_quorum_size: usize) -> Self {
+    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
+        // create bottom consensus value
+        let initial_value = ConsensusValue::new(n);
         Self {
             status: Status::START,
             quorum: vec![],
-            cmd: None,
-            clock: VClock::with(util::process_ids(n)),
+            synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
@@ -361,8 +390,7 @@ pub enum Message {
     },
     MCommit {
         dot: Dot,
-        cmd: Option<Command>,
-        clock: VClock<ProcessId>,
+        value: ConsensusValue,
     },
 }
 
