@@ -30,7 +30,7 @@ where
         }
     }
 
-    pub fn add(&mut self, kind: K, value: V) {
+    pub fn collect(&mut self, kind: K, value: V) {
         let current = match self.collected.get_mut(&kind) {
             Some(current) => current,
             None => self.collected.entry(kind).or_insert_with(Vec::new),
@@ -40,7 +40,7 @@ where
 
     // TODO unfortunately, given trait bounds, we can only aggregate `PrimInt` types; find a way to
     // remove that limitation
-    pub fn update<F>(&mut self, kind: K, update: F)
+    pub fn aggregate<F>(&mut self, kind: K, update: F)
     where
         F: FnOnce(&mut V),
     {

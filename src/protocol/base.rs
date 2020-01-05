@@ -132,7 +132,7 @@ impl BaseProcess {
     }
 
     fn inc_metric(&mut self, kind: MetricsKind) {
-        self.metrics.update(kind, |v| *v += 1)
+        self.metrics.aggregate(kind, |v| *v += 1)
     }
 }
 

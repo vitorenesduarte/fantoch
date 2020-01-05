@@ -80,13 +80,13 @@ impl DependencyGraph {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.metrics.add(MetricsKind::FindSCC, duration.as_micros());
+        self.metrics.collect(MetricsKind::FindSCC, duration.as_micros());
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
             let (duration, _) = elapsed!(self.try_pending(keys));
             self.metrics
-                .add(MetricsKind::TryPending, duration.as_micros());
+                .collect(MetricsKind::TryPending, duration.as_micros());
         }
     }
 
@@ -112,7 +112,7 @@ impl DependencyGraph {
         let (duration, finder_result) =
             elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
         self.metrics
-            .add(MetricsKind::StrongConnect, duration.as_micros());
+            .collect(MetricsKind::StrongConnect, duration.as_micros());
 
         // get sccs
         let (sccs, visited) = finder.finalize(&self.vertex_index);
@@ -124,7 +124,7 @@ impl DependencyGraph {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.metrics.add(MetricsKind::ChainSize, scc.len() as u128);
+                self.metrics.collect(MetricsKind::ChainSize, scc.len() as u128);
                 self.save_scc(scc, &mut keys);
             });
 
