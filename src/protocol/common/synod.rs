@@ -27,7 +27,6 @@ pub struct Synod<V> {
     chosen: bool,
 }
 
-#[allow(dead_code)]
 impl<V> Synod<V>
 where
     V: Clone,

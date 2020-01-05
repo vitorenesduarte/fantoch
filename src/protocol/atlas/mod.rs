@@ -27,7 +27,7 @@ impl Process for Atlas {
 
     /// Creates a new `Atlas` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-        // compute fast quorum size
+        // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = Atlas::quorum_sizes(&config);
 
         // create protocol data-structures
@@ -202,8 +202,8 @@ impl Atlas {
         // get cmd info
         let info = self.cmds_info.get(dot);
 
-        if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
-            // do nothing if we're no longer COLLECT or if this is a duplicated message
+        if info.status != Status::COLLECT {
+            // do nothing if we're no longer COLLECT
             return ToSend::Nothing;
         }
 
@@ -546,30 +546,30 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
 
-        // newts
-        let mut newt_1 = Atlas::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut newt_2 = Atlas::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut newt_3 = Atlas::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        // atlas
+        let mut atlas_1 = Atlas::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut atlas_2 = Atlas::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut atlas_3 = Atlas::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
-        // discover processes in all newts
-        newt_1.discover(processes.clone());
-        newt_2.discover(processes.clone());
-        newt_3.discover(processes.clone());
+        // discover processes in all atlas
+        atlas_1.discover(processes.clone());
+        atlas_2.discover(processes.clone());
+        atlas_3.discover(processes.clone());
 
         // create simulation
         let mut simulation = Simulation::new();
 
         // register processes
-        simulation.register_process(newt_1);
-        simulation.register_process(newt_2);
-        simulation.register_process(newt_3);
+        simulation.register_process(atlas_1);
+        simulation.register_process(atlas_2);
+        simulation.register_process(atlas_3);
 
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
         let workload = Workload::new(conflict_rate, total_commands);
 
-        // create client 1 that is connected to newt 1
+        // create client 1 that is connected to atlas 1
         let client_id = 1;
         let client_region = europe_west2.clone();
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
@@ -580,13 +580,13 @@ mod tests {
         // start client
         let (target, cmd) = client_1.start(&time);
 
-        // check that `target` is newt 1
+        // check that `target` is atlas 1
         assert_eq!(target, process_id_1);
 
         // register clients
         simulation.register_client(client_1);
 
-        // submit it in newt_0
+        // submit it in atlas_0
         let mcollects = simulation.get_process(target).submit(cmd);
 
         // check that the mcollect is being sent to 2 processes

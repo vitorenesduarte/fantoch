@@ -239,8 +239,8 @@ impl Newt {
         // get cmd info
         let info = self.cmds_info.get(dot);
 
-        if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
-            // do nothing if we're no longer COLLECT or if this is a duplicated message
+        if info.status != Status::COLLECT {
+            // do nothing if we're no longer COLLECT
             return ToSend::Nothing;
         }
 

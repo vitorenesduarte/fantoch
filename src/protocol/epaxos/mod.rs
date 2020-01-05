@@ -5,7 +5,7 @@ use crate::kvs::KVStore;
 use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
-use crate::protocol::common::Synod;
+use crate::protocol::common::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
 use std::collections::{HashMap, HashSet};
@@ -46,8 +46,8 @@ impl Process for EPaxos {
         let pending = HashSet::new();
         let commands_ready = Vec::new();
 
-        // create `Atlas`
-        EPaxos {
+        // create `EPaxos`
+        Self {
             bp,
             keys_clocks,
             cmds_info,
@@ -83,8 +83,11 @@ impl Process for EPaxos {
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck { dot, clock } => self.handle_mcollectack(from, dot, clock),
-            Message::MCommit { dot, cmd, clock } => self.handle_mcommit(dot, cmd, clock),
-            _ => ToSend::Nothing,
+            Message::MCommit { dot, value } => self.handle_mcommit(from, dot, value),
+            Message::MConsensus { dot, ballot, value } => {
+                self.handle_mconsensus(from, dot, ballot, value)
+            }
+            Message::MConsensusAck { dot, ballot } => self.handle_mconsensusack(from, dot, ballot),
         }
     }
 
@@ -170,15 +173,13 @@ impl EPaxos {
 
         // update command info
         info.status = Status::COLLECT;
-        info.cmd = cmd;
         info.quorum = quorum;
-        info.clock = clock;
+        // create and set consensus value
+        let value = ConsensusValue::with(cmd, clock.clone());
+        assert!(info.synod.maybe_set_value(|| value));
 
         // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck {
-            dot,
-            clock: info.clock.clone(),
-        };
+        let mcollectack = Message::MCollectAck { dot, clock };
         let target = vec![from];
 
         // return `ToSend`
@@ -199,11 +200,16 @@ impl EPaxos {
             from
         );
 
+        // ignore ack from self (see `CommandInfo::new` for the reason why)
+        if from == self.bp.process_id {
+            return ToSend::Nothing;
+        }
+
         // get cmd info
         let info = self.cmds_info.get(dot);
 
-        if info.status != Status::COLLECT || info.quorum_clocks.contains(from) {
-            // do nothing if we're no longer COLLECT or if this is a duplicated message
+        // do nothing if we're no longer COLLECT
+        if info.status != Status::COLLECT {
             return ToSend::Nothing;
         }
 
@@ -214,32 +220,28 @@ impl EPaxos {
         if info.quorum_clocks.all() {
             // compute the union while checking whether all clocks reported are equal
             let (final_clock, all_equal) = info.quorum_clocks.union();
+
+            // create consensus value
+            // TODO can the following be more performant or at least more ergonomic?
+            let cmd = info.synod.value().clone().cmd;
+            let value = ConsensusValue::with(cmd, final_clock);
+
             // fast path condition:
             // - all reported clocks if `max_clock` was reported by at least f processes
             if all_equal {
-                // create `MCommit` and target
+                // fast path: create `MCommit`
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
-                let mcommit = Message::MCommit {
-                    dot,
-                    cmd: info.cmd.clone(),
-                    clock: final_clock,
-                };
+                let mcommit = Message::MCommit { dot, value };
                 let target = self.bp.all();
 
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
-                // slow path
-                // create `MConsensus` and target
-                let mconsensus = Message::MConsensus {
-                    dot,
-                    cmd: info.cmd.clone(),
-                    clock: final_clock,
-                    ballot: self.id(),
-                };
+                // slow path: create `MConsensus`
+                let ballot = info.synod.first_ballot();
+                let mconsensus = Message::MConsensus { dot, ballot, value };
                 let target = self.bp.write_quorum();
-
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mconsensus)
             }
@@ -250,11 +252,11 @@ impl EPaxos {
 
     fn handle_mcommit(
         &mut self,
+        from: ProcessId,
         dot: Dot,
-        cmd: Option<Command>,
-        clock: VClock<ProcessId>,
+        value: ConsensusValue,
     ) -> ToSend<Message> {
-        log!("p{}: MCommit({:?}, {:?})", self.id(), dot, clock);
+        log!("p{}: MCommit({:?}, {:?})", self.id(), dot, value.clock);
 
         // get cmd info
         let info = self.cmds_info.get(dot);
@@ -267,18 +269,95 @@ impl EPaxos {
 
         // update command info:
         info.status = Status::COMMIT;
-        info.cmd = cmd;
-        info.clock = clock;
+        info.synod
+            .handle(from, SynodMessage::MChosen(value.clone()));
 
         // add to graph if not a noop and execute commands that can be executed
-        if let Some(cmd) = info.cmd.clone() {
-            self.graph.add(dot, cmd, info.clock.clone());
+        if let Some(cmd) = value.cmd {
+            self.graph.add(dot, cmd, value.clock);
             let to_execute = self.graph.commands_to_execute();
             self.execute(to_execute);
         }
 
         // nothing to send
         ToSend::Nothing
+    }
+
+    fn handle_mconsensus(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        ballot: u64,
+        value: ConsensusValue,
+    ) -> ToSend<Message> {
+        log!(
+            "p{}: MConsensus({:?}, {}, {:?})",
+            self.id(),
+            dot,
+            ballot,
+            value.clock
+        );
+
+        // get cmd info
+        let info = self.cmds_info.get(dot);
+
+        // compute message: that can either be nothing, an ack or an mcommit
+        let msg = match info
+            .synod
+            .handle(from, SynodMessage::MAccept(ballot, value))
+        {
+            Some(SynodMessage::MAccepted(ballot)) => {
+                // the accept message was accepted:
+                // create `MConsensusAck`
+                Message::MConsensusAck { dot, ballot }
+            }
+            Some(SynodMessage::MChosen(value)) => {
+                // the value has already been chosen:
+                // create `MCommit`
+                Message::MCommit { dot, value }
+            }
+            None => {
+                // ballot too low to be accepted
+                return ToSend::Nothing;
+            }
+            _ => panic!(
+                "no other type of message should be output by Synod in the MConsensus handler"
+            ),
+        };
+
+        // create target
+        let target = vec![from];
+
+        // return `ToSend`
+        ToSend::ToProcesses(self.id(), target, msg)
+    }
+
+    fn handle_mconsensusack(&mut self, from: ProcessId, dot: Dot, ballot: u64) -> ToSend<Message> {
+        log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
+
+        // get cmd info
+        let info = self.cmds_info.get(dot);
+
+        // compute message: that can either be nothing or an mcommit
+        match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
+            Some(SynodMessage::MChosen(value)) => {
+                // enough accepts were gathered and the value has been chosen
+                // create `MCommit` and target
+                // create target
+                let target = self.bp.all();
+                let mcommit = Message::MCommit { dot, value };
+
+                // return `ToSend`
+                ToSend::ToProcesses(self.id(), target, mcommit)
+            }
+            None => {
+                // not enough accepts yet
+                ToSend::Nothing
+            }
+            _ => panic!(
+                "no other type of message should be output by Synod in the MConsensusAck handler"
+            ),
+        }
     }
 
     fn execute(&mut self, to_execute: Vec<Command>) {
@@ -339,7 +418,25 @@ impl CommandsInfo {
     }
 }
 
-type ConsensusValue = (Option<Command>, VClock<ProcessId>);
+// consensus value is a pair where the first component is the command (noop if `None`) and the
+// second component its dependencies represented as a vector clock.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConsensusValue {
+    cmd: Option<Command>,
+    clock: VClock<ProcessId>,
+}
+
+impl ConsensusValue {
+    fn new(n: usize) -> Self {
+        let cmd = None;
+        let clock = VClock::with(util::process_ids(n));
+        Self { cmd, clock }
+    }
+
+    fn with(cmd: Option<Command>, clock: VClock<ProcessId>) -> Self {
+        Self { cmd, clock }
+    }
+}
 
 fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
     todo!("recovery not implemented yet")
@@ -350,25 +447,27 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 struct CommandInfo {
     status: Status,
     quorum: Vec<ProcessId>,
-    cmd: Option<Command>, // `None` if noOp
-    clock: VClock<ProcessId>,
+    synod: Synod<ConsensusValue>,
     // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
     // whether to take the fast path
     quorum_clocks: QuorumClocks,
-    // an instance of Paxos Synod protocol
-    synod: Synod<ConsensusValue>,
 }
 
 impl CommandInfo {
     fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
+        // create bottom consensus value
+        let initial_value = ConsensusValue::new(n);
+
+        // although the fast quorum size is `fast_quorum_size`, we're going to initialize
+        // `QuorumClocks` with `fast_quorum_size - 1` since the clock reported by the coordinator
+        // shouldn't be considered in the fast path condition, and this clock is not necessary for
+        // correctness; for this to work, `MCollectAck`'s from self should be ignored, or not even
+        // created.
         Self {
             status: Status::START,
             quorum: vec![],
-            cmd: None,
-            clock: VClock::with(util::process_ids(n)),
-            quorum_clocks: QuorumClocks::new(fast_quorum_size),
-            // TODO fix me like Atlas
-            synod: Synod::new(process_id, n, f, proposal_gen, ConsensusValue::default()),
+            synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
+            quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
         }
     }
 }
@@ -379,27 +478,25 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Option<Command>, // it's never a noop though
-        quorum: Vec<ProcessId>,
         clock: VClock<ProcessId>,
+        quorum: Vec<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
         clock: VClock<ProcessId>,
     },
+    MCommit {
+        dot: Dot,
+        value: ConsensusValue,
+    },
     MConsensus {
         dot: Dot,
-        cmd: Option<Command>,
-        clock: VClock<ProcessId>,
         ballot: u64,
+        value: ConsensusValue,
     },
     MConsensusAck {
         dot: Dot,
         ballot: u64,
-    },
-    MCommit {
-        dot: Dot,
-        cmd: Option<Command>,
-        clock: VClock<ProcessId>,
     },
 }
 
@@ -445,7 +542,7 @@ mod tests {
         assert_eq!(fs, expected);
     }
 
-    // #[test]
+    #[test]
     fn epaxos_flow() {
         // processes ids
         let process_id_1 = 1;
@@ -475,30 +572,30 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
 
-        // newts
-        let mut newt_1 = EPaxos::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut newt_2 = EPaxos::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut newt_3 = EPaxos::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        // epaxos
+        let mut epaxos_1 = EPaxos::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut epaxos_2 = EPaxos::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut epaxos_3 = EPaxos::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
-        // discover processes in all newts
-        newt_1.discover(processes.clone());
-        newt_2.discover(processes.clone());
-        newt_3.discover(processes.clone());
+        // discover processes in all epaxos
+        epaxos_1.discover(processes.clone());
+        epaxos_2.discover(processes.clone());
+        epaxos_3.discover(processes.clone());
 
         // create simulation
         let mut simulation = Simulation::new();
 
         // register processes
-        simulation.register_process(newt_1);
-        simulation.register_process(newt_2);
-        simulation.register_process(newt_3);
+        simulation.register_process(epaxos_1);
+        simulation.register_process(epaxos_2);
+        simulation.register_process(epaxos_3);
 
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
         let workload = Workload::new(conflict_rate, total_commands);
 
-        // create client 1 that is connected to newt 1
+        // create client 1 that is connected to epaxos 1
         let client_id = 1;
         let client_region = europe_west2.clone();
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
@@ -509,39 +606,43 @@ mod tests {
         // start client
         let (target, cmd) = client_1.start(&time);
 
-        // check that `target` is newt 1
+        // check that `target` is epaxos 1
         assert_eq!(target, process_id_1);
 
         // register clients
         simulation.register_client(client_1);
 
-        // submit it in newt_0
+        // submit it in epaxos_0
         let mcollects = simulation.get_process(target).submit(cmd);
 
         // check that the mcollect is being sent to 2 processes
         assert!(mcollects.to_processes());
         if let ToSend::ToProcesses(_, to, _) = mcollects.clone() {
-            assert_eq!(to.len(), 2 * f);
+            assert_eq!(to.len(), 2);
             assert_eq!(to, vec![1, 2]);
         } else {
             panic!("ToSend::ToProcesses not found!");
         }
 
         // handle in mcollects
-        let mut mcollectacks = simulation.forward_to_processes(mcollects);
+        let mcollectacks = simulation.forward_to_processes(mcollects);
 
         // check that there are 2 mcollectacks
-        assert_eq!(mcollectacks.len(), 2 * f);
+        assert_eq!(mcollectacks.len(), 2);
         assert!(mcollectacks.iter().all(|to_send| to_send.to_processes()));
 
-        // handle the first mcollectack
-        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
-        let mcommit_tosend = mcommits.pop().unwrap();
-        // no mcommit yet
-        assert!(mcommit_tosend.is_nothing());
+        // handle all mcollectacks
+        let mut mcommits: Vec<_> = mcollectacks
+            .into_iter()
+            .flat_map(|mcollectack| simulation.forward_to_processes(mcollectack))
+            .filter(|tosend| {
+                // ignore nothings
+                !tosend.is_nothing()
+            })
+            .collect();
 
-        // handle the second mcollectack
-        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
+        // check there's a single mcommit
+        assert_eq!(mcommits.len(), 1);
         let mcommit_tosend = mcommits.pop().unwrap();
 
         // check that there is an mcommit sent to everyone
