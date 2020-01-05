@@ -23,6 +23,7 @@ where
     K: Hash + Eq + Debug,
     V: Default + PrimInt + Debug,
 {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             collected: HashMap::new(),
@@ -46,7 +47,7 @@ where
     {
         let current = match self.aggregated.get_mut(&kind) {
             Some(current) => current,
-            None => self.aggregated.entry(kind).or_insert(V::default()),
+            None => self.aggregated.entry(kind).or_insert_with(V::default),
         };
         update(current);
     }

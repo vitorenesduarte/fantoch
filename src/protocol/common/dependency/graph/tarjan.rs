@@ -126,11 +126,9 @@ impl TarjanSCCFinder {
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume that conflicts are
                         //   trnasitive
-                        if !self.transitive_conflicts {
-                            if !vertex.conflicts(&dep_vertex) {
-                                log!("Finder::strong_connect non-conflicting {:?}", dep_dot);
-                                continue;
-                            }
+                        if !self.transitive_conflicts && !vertex.conflicts(&dep_vertex) {
+                            log!("Finder::strong_connect non-conflicting {:?}", dep_dot);
+                            continue;
                         }
 
                         // if not visited, visit

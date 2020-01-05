@@ -9,11 +9,11 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
     println!(">running epaxos...");
-    run_in_thread(|| equidistant::<EPaxos>());
+    run_in_thread(equidistant::<EPaxos>);
     // println!(">running atlas...");
-    // run_in_thread(|| increasing_load::<Atlas>());
+    // run_in_thread(increasing_load::<Atlas>);
     // println!(">running newt...");
-    // run_in_thread(|| increasing_load::<Newt>());
+    // run_in_thread(increasing_load::<Newt>);
 }
 
 fn equidistant<P: Process>() {
