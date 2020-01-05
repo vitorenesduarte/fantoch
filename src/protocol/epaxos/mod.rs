@@ -40,7 +40,7 @@ impl Process for EPaxos {
             write_quorum_size,
         );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let cmds_info = CommandsInfo::new(process_id, config.n(), fast_quorum_size);
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -109,10 +109,14 @@ impl EPaxos {
     fn quorum_sizes(config: &Config) -> (usize, usize) {
         let n = config.n();
         // ignore config.f() since EPaxos always tolerates a minority of failures
-        let minority = n / 2;
-        let fast_quorum_size = minority + ((minority + 1) / 2 as usize);
-        let write_quorum_size = minority + 1;
+        let f = Self::allowed_faults(n);
+        let fast_quorum_size = f + ((f + 1) / 2 as usize);
+        let write_quorum_size = f + 1;
         (fast_quorum_size, write_quorum_size)
+    }
+
+    fn allowed_faults(n: usize) -> usize {
+        n / 2
     }
 
     /// Handles a submit operation by a client.
@@ -242,7 +246,7 @@ impl EPaxos {
             } else {
                 self.bp.slow_path();
                 // slow path: create `MConsensus`
-                let ballot = info.synod.first_ballot();
+                let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };
                 let target = self.bp.write_quorum();
                 // return `ToSend`
@@ -397,11 +401,11 @@ struct CommandsInfo {
 }
 
 impl CommandsInfo {
-    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
+    fn new(process_id: ProcessId, n: usize, fast_quorum_size: usize) -> Self {
         Self {
             process_id,
             n,
-            f,
+            f: EPaxos::allowed_faults(n),
             fast_quorum_size,
             dot_to_info: HashMap::new(),
         }

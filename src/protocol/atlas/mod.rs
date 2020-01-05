@@ -237,7 +237,7 @@ impl Atlas {
             } else {
                 self.bp.slow_path();
                 // slow path: create `MConsensus`
-                let ballot = info.synod.first_ballot();
+                let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };
                 let target = self.bp.write_quorum();
                 // return `ToSend`

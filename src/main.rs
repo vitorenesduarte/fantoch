@@ -1,7 +1,7 @@
 use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, Newt, Process};
+use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
 use planet_sim::sim::Runner;
 use std::thread;
 
@@ -9,7 +9,7 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
     println!(">running epaxos...");
-    run_in_thread(|| epaxos::<Atlas>());
+    run_in_thread(|| epaxos::<EPaxos>());
     // println!(">running atlas...");
     // run_in_thread(|| increasing_load::<Atlas>());
     // println!(">running newt...");
@@ -27,7 +27,7 @@ fn epaxos<P: Process>() {
 
     // number of processes and f
     let ns = vec![3, 5];
-    let f = 1;
+    let f = 0;
 
     // clients workload
     let conflict_rate = 2;
