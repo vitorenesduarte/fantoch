@@ -84,6 +84,10 @@ impl Process for Atlas {
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
             Message::MCollectAck { dot, clock } => self.handle_mcollectack(from, dot, clock),
             Message::MCommit { dot, value } => self.handle_mcommit(from, dot, value),
+            Message::MConsensus { dot, ballot, value } => {
+                self.handle_mconsensus(from, dot, ballot, value)
+            }
+            Message::MConsensusAck { dot, ballot } => self.handle_mconsensusack(from, dot, ballot),
         }
     }
 
@@ -211,25 +215,30 @@ impl Atlas {
             // compute the threshold union while checking whether it's equal to their union
             let (final_clock, equal_to_union) =
                 info.quorum_clocks.threshold_union(self.bp.config.f());
+
+            // create consensus value
+            // TODO can the following be more performant or at least more ergonomic?
+            let cmd = info.synod.value().clone().cmd;
+            let value = ConsensusValue::with(cmd, final_clock);
+
             // fast path condition:
             // - each dependency was reported by at least f processes
             if equal_to_union {
-                // create `MCommit` and target
+                // fast path: create `MCommit`
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
-
-                // create consensus value
-                // TODO can the following be more performant or at least more ergonomic?
-                let cmd = info.synod.value().clone().cmd;
-                let value = ConsensusValue::with(cmd, final_clock);
                 let mcommit = Message::MCommit { dot, value };
                 let target = self.bp.all();
 
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
-                // TODO slow path
-                todo!("slow path not implemented yet")
+                // slow path: create `MConsensus`
+                let ballot = info.synod.first_ballot();
+                let mconsensus = Message::MConsensus { dot, ballot, value };
+                let target = self.bp.write_quorum();
+                // return `ToSend`
+                ToSend::ToProcesses(self.id(), target, mconsensus)
             }
         } else {
             ToSend::Nothing
@@ -267,6 +276,83 @@ impl Atlas {
 
         // nothing to send
         ToSend::Nothing
+    }
+
+    fn handle_mconsensus(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        ballot: u64,
+        value: ConsensusValue,
+    ) -> ToSend<Message> {
+        log!(
+            "p{}: MConsensus({:?}, {}, {:?})",
+            self.id(),
+            dot,
+            ballot,
+            value.clock
+        );
+
+        // get cmd info
+        let info = self.cmds_info.get(dot);
+
+        // compute message: that can either be nothing, an ack or an mcommit
+        let msg = match info
+            .synod
+            .handle(from, SynodMessage::MAccept(ballot, value))
+        {
+            Some(SynodMessage::MAccepted(ballot)) => {
+                // the accept message was accepted:
+                // create `MConsensusAck`
+                Message::MConsensusAck { dot, ballot }
+            }
+            Some(SynodMessage::MChosen(value)) => {
+                // the value has already been chosen:
+                // create `MCommit`
+                Message::MCommit { dot, value }
+            }
+            None => {
+                // ballot too low to be accepted
+                return ToSend::Nothing;
+            }
+            _ => panic!(
+                "no other type of message should be output by Synod in the MConsensus handler"
+            ),
+        };
+
+        // create target
+        let target = vec![from];
+
+        // return `ToSend`
+        ToSend::ToProcesses(self.id(), target, msg)
+    }
+
+    fn handle_mconsensusack(&mut self, from: ProcessId, dot: Dot, ballot: u64) -> ToSend<Message> {
+        log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
+
+        // get cmd info
+        let info = self.cmds_info.get(dot);
+
+        // compute message: that can either be nothing or an mcommit
+        match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
+            Some(SynodMessage::MChosen(value)) => {
+                // enough accepts were gathered and the value has been chosen
+                // create `MCommit` and target
+                // create target
+                let target = self.bp.all();
+                let mcommit = Message::MCommit { dot, value };
+
+                // return `ToSend`
+                ToSend::ToProcesses(self.id(), target, mcommit)
+            }
+            None => {
+                // not enough accepts yet
+                ToSend::Nothing
+            }
+            _ => panic!(
+                "no other type of message should be output by Synod in the MConsensusAck handler"
+            ),
+        }
     }
 
     fn execute(&mut self, to_execute: Vec<Command>) {
@@ -381,8 +467,8 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Option<Command>, // it's never a noop though
-        quorum: Vec<ProcessId>,
         clock: VClock<ProcessId>,
+        quorum: Vec<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
@@ -391,6 +477,15 @@ pub enum Message {
     MCommit {
         dot: Dot,
         value: ConsensusValue,
+    },
+    MConsensus {
+        dot: Dot,
+        ballot: u64,
+        value: ConsensusValue,
+    },
+    MConsensusAck {
+        dot: Dot,
+        ballot: u64,
     },
 }
 
