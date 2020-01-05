@@ -367,7 +367,8 @@ impl CommandInfo {
             cmd: None,
             clock: VClock::with(util::process_ids(n)),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
-            synod: Synod::new(process_id, n, f, proposal_gen),
+            // TODO fix me like Atlas
+            synod: Synod::new(process_id, n, f, proposal_gen, ConsensusValue::default()),
         }
     }
 }
