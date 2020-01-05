@@ -99,6 +99,7 @@ impl Process for EPaxos {
     }
 
     fn show_stats(&self) {
+        self.bp.show_stats();
         self.graph.show_stats();
     }
 }
@@ -229,6 +230,7 @@ impl EPaxos {
             // fast path condition:
             // - all reported clocks if `max_clock` was reported by at least f processes
             if all_equal {
+                self.bp.fast_path();
                 // fast path: create `MCommit`
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
@@ -238,6 +240,7 @@ impl EPaxos {
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
+                self.bp.slow_path();
                 // slow path: create `MConsensus`
                 let ballot = info.synod.first_ballot();
                 let mconsensus = Message::MConsensus { dot, ballot, value };

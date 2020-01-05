@@ -115,6 +115,7 @@ impl Process for Newt {
     }
 
     fn show_stats(&self) {
+        self.bp.show_stats();
         self.table.show_stats();
     }
 }
@@ -270,6 +271,7 @@ impl Newt {
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
+                self.bp.fast_path();
                 // reset local votes as we're going to receive them right away; this also prevents a
                 // `info.votes.clone()`
                 let votes = Self::reset_votes(&mut info.votes);
@@ -288,6 +290,7 @@ impl Newt {
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
+                self.bp.slow_path();
                 // TODO slow path
                 todo!("slow path not implemented yet")
             }

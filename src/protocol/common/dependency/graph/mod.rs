@@ -58,7 +58,7 @@ impl DependencyGraph {
     }
 
     pub fn show_stats(&self) {
-        self.metrics.show_stats()
+        self.metrics.show_stats();
     }
 
     /// Returns new commands ready to be executed.

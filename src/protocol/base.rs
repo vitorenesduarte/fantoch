@@ -1,7 +1,9 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
+use crate::metrics::Metrics;
 use crate::planet::{Planet, Region};
 use crate::util;
+use std::fmt;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProcess {
@@ -15,6 +17,7 @@ pub struct BaseProcess {
     fast_quorum_size: usize,
     write_quorum_size: usize,
     dot_gen: DotGen,
+    metrics: Metrics<MetricsKind, u64>,
 }
 
 impl BaseProcess {
@@ -43,6 +46,7 @@ impl BaseProcess {
             fast_quorum_size,
             write_quorum_size,
             dot_gen: DotGen::new(process_id),
+            metrics: Metrics::new(),
         }
     }
 
@@ -111,6 +115,39 @@ impl BaseProcess {
         self.write_quorum
             .clone()
             .expect("the slow quorum should be known")
+    }
+
+    pub fn show_stats(&self) {
+        self.metrics.show_stats();
+    }
+
+    // Increment fast path count.
+    pub fn fast_path(&mut self) {
+        self.inc_metric(MetricsKind::FastPath);
+    }
+
+    // Increment slow path count.
+    pub fn slow_path(&mut self) {
+        self.inc_metric(MetricsKind::SlowPath);
+    }
+
+    fn inc_metric(&mut self, kind: MetricsKind) {
+        self.metrics.update(kind, |v| *v += 1)
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum MetricsKind {
+    FastPath,
+    SlowPath,
+}
+
+impl fmt::Debug for MetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MetricsKind::FastPath => write!(f, "fast_path"),
+            MetricsKind::SlowPath => write!(f, "slow_path"),
+        }
     }
 }
 

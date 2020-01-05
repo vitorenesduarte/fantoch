@@ -99,6 +99,7 @@ impl Process for Atlas {
     }
 
     fn show_stats(&self) {
+        self.bp.show_stats();
         self.graph.show_stats();
     }
 }
@@ -224,6 +225,7 @@ impl Atlas {
             // fast path condition:
             // - each dependency was reported by at least f processes
             if equal_to_union {
+                self.bp.fast_path();
                 // fast path: create `MCommit`
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
                 // members, or send the payload to all in a slim-MConsensus
@@ -233,6 +235,7 @@ impl Atlas {
                 // return `ToSend`
                 ToSend::ToProcesses(self.id(), target, mcommit)
             } else {
+                self.bp.slow_path();
                 // slow path: create `MConsensus`
                 let ballot = info.synod.first_ballot();
                 let mconsensus = Message::MConsensus { dot, ballot, value };
