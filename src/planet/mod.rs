@@ -4,6 +4,7 @@ mod dat;
 // This module contains the definition of `Region`.
 pub mod region;
 
+// Re-exports.
 pub use region::Region;
 
 use crate::planet::dat::Dat;
@@ -33,6 +34,44 @@ impl Planet {
 
         // return a new planet
         Planet { latencies, sorted }
+    }
+
+    /// Creates a equidistant `Planet`.
+    pub fn equidistant(planet_distance: u64, region_number: usize) -> (Vec<Region>, Self) {
+        // create regions
+        let regions: Vec<_> = (0..region_number)
+            .map(|i| {
+                // region name
+                let name = format!("r_{}", i);
+                Region::new(name)
+            })
+            .collect();
+
+        // create latencies
+        let latencies: HashMap<_, _> = regions
+            .clone()
+            .into_iter()
+            .map(|from| {
+                // create distances
+                let distances = regions
+                    .clone()
+                    .into_iter()
+                    .map(|to| {
+                        let distance = if from == to { 0 } else { planet_distance };
+                        (to, distance)
+                    })
+                    .collect();
+
+                (from, distances)
+            })
+            .collect();
+
+        // create sorted
+        let sorted = Self::sort_by_distance(latencies.clone());
+
+        // create single-region planet
+        let planet = Planet { latencies, sorted };
+        (regions, planet)
     }
 
     /// Retrieves a list with all regions.

@@ -16,12 +16,12 @@ impl Pending {
     }
 
     /// Starts tracking a command submitted by some client.
-    pub fn start(&mut self, cmd: &Command) {
+    pub fn start(&mut self, cmd: &Command) -> bool {
         // create `CommandResult`
         let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
 
         // add it to pending
-        self.pending.insert(cmd.rifl(), cmd_result);
+        self.pending.insert(cmd.rifl(), cmd_result).is_none()
     }
 
     /// Adds a new partial command result.
@@ -78,8 +78,11 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
-        pending.start(&get_ab);
-        pending.start(&put_b);
+        assert!(pending.start(&get_ab));
+        assert!(pending.start(&put_b));
+
+        // starting a command already started `false`
+        assert!(!pending.start(&put_b));
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);

@@ -117,8 +117,8 @@ impl BaseProcess {
             .expect("the slow quorum should be known")
     }
 
-    pub fn show_stats(&self) {
-        self.metrics.show_stats();
+    pub fn show_metrics(&self) {
+        self.metrics.show();
     }
 
     // Increment fast path count.

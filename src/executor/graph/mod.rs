@@ -4,15 +4,19 @@ mod tarjan;
 /// This module contains the definition of `VertexIndex` and `PendingIndex`.
 mod index;
 
+/// This modules contains the definition of `GraphExecutor` and `GraphExecutionInfo`.
+mod executor;
+
+// Re-exports.
+pub use executor::{GraphExecutionInfo, GraphExecutor};
+
+use self::index::{PendingIndex, VertexIndex};
+use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::metrics::Metrics;
-use crate::protocol::common::dependency::graph::{
-    index::{PendingIndex, VertexIndex},
-    tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC},
-};
 use crate::util;
 use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};
@@ -57,8 +61,8 @@ impl DependencyGraph {
         }
     }
 
-    pub fn show_stats(&self) {
-        self.metrics.show_stats();
+    pub fn show_metrics(&self) {
+        self.metrics.show();
     }
 
     /// Returns new commands ready to be executed.
@@ -80,7 +84,8 @@ impl DependencyGraph {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.metrics.collect(MetricsKind::FindSCC, duration.as_micros());
+        self.metrics
+            .collect(MetricsKind::FindSCC, duration.as_micros());
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
@@ -124,7 +129,8 @@ impl DependencyGraph {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.metrics.collect(MetricsKind::ChainSize, scc.len() as u128);
+                self.metrics
+                    .collect(MetricsKind::ChainSize, scc.len() as u128);
                 self.save_scc(scc, &mut keys);
             });
 

@@ -23,6 +23,7 @@ where
     K: Hash + Eq + Debug,
     V: Default + PrimInt + Debug,
 {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             collected: HashMap::new(),
@@ -46,12 +47,12 @@ where
     {
         let current = match self.aggregated.get_mut(&kind) {
             Some(current) => current,
-            None => self.aggregated.entry(kind).or_insert(V::default()),
+            None => self.aggregated.entry(kind).or_insert_with(V::default),
         };
         update(current);
     }
 
-    pub fn show_stats(&self) {
+    pub fn show(&self) {
         self.collected.iter().for_each(|(kind, values)| {
             // TODO can we avoid cloning here?
             let stats = Stats::from(values.clone());

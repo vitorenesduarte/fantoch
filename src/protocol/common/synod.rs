@@ -183,8 +183,7 @@ where
         self.reset_state();
 
         // create prepare message
-        let prepare = SynodMessage::MPrepare(self.ballot);
-        prepare
+        SynodMessage::MPrepare(self.ballot)
     }
 
     /// Skips prepare phase. See top-level docs (in `Synod`) for more info.

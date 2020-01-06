@@ -1,3 +1,5 @@
+use crate::protocol::EPaxos;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
     /// number of processes
@@ -62,6 +64,51 @@ impl Config {
     }
 }
 
+impl Config {
+    /// Computes `Atlas` fast and write quorum sizes.
+    pub fn atlas_quorum_sizes(&self) -> (usize, usize) {
+        let n = self.n;
+        let f = self.f;
+        let fast_quorum_size = (n / 2) + f;
+        let write_quorum_size = f + 1;
+        (fast_quorum_size, write_quorum_size)
+    }
+
+    /// Computes `EPaxos` fast and write quorum sizes.
+    pub fn epaxos_quorum_sizes(&self) -> (usize, usize) {
+        let n = self.n;
+        // ignore config.f() since EPaxos always tolerates a minority of failures
+        let f = EPaxos::allowed_faults(n);
+        let fast_quorum_size = f + ((f + 1) / 2 as usize);
+        let write_quorum_size = f + 1;
+        (fast_quorum_size, write_quorum_size)
+    }
+
+    /// Computes `Newt` fast quorum size, stability threshold and write quorum size.
+    ///
+    /// The threshold should be n - q + 1, where n is the number of processes and q the size of the
+    /// quorum used to compute clocks. In `Newt` e.g. with tiny quorums, although the fast quorum is
+    /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
+    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f.
+    ///
+    /// In general, the stability threshold is given by:
+    ///   "n - (fast_quorum_size - f + 1) + 1 = n - fast_quorum_size + f"
+    /// - this ensures that the stability threshold plus the minimum number of processes where
+    ///   clocks are computed (i.e. fast_quorum_size - f + 1) is greater than n
+    pub fn newt_quorum_sizes(&self) -> (usize, usize, usize) {
+        let n = self.n;
+        let f = self.f;
+        let minority = n / 2;
+        let (fast_quorum_size, stability_threshold) = if self.newt_tiny_quorums {
+            (2 * f, n - f)
+        } else {
+            (minority + f, minority + 1)
+        };
+        let write_quorum_size = f + 1;
+        (fast_quorum_size, write_quorum_size, stability_threshold)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +146,65 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+    }
+
+    #[test]
+    fn atlas_parameters() {
+        let config = Config::new(7, 1);
+        assert_eq!(config.atlas_quorum_sizes(), (4, 2));
+
+        let config = Config::new(7, 2);
+        assert_eq!(config.atlas_quorum_sizes(), (5, 3));
+
+        let config = Config::new(7, 3);
+        assert_eq!(config.atlas_quorum_sizes(), (6, 4));
+    }
+
+    #[test]
+    fn epaxos_parameters() {
+        let ns = vec![3, 5, 7, 9, 11, 13, 15, 17];
+        // expected pairs of fast and write quorum sizes
+        let expected = vec![
+            (2, 2),
+            (3, 3),
+            (5, 4),
+            (6, 5),
+            (8, 6),
+            (9, 7),
+            (11, 8),
+            (12, 9),
+        ];
+
+        let fs: Vec<_> = ns
+            .into_iter()
+            .map(|n| {
+                // this f value won't be used
+                let f = 0;
+                let config = Config::new(n, f);
+                config.epaxos_quorum_sizes()
+            })
+            .collect();
+        assert_eq!(fs, expected);
+    }
+
+    #[test]
+    fn newt_parameters() {
+        // tiny quorums = false
+        let mut config = Config::new(7, 1);
+        config.set_newt_tiny_quorums(false);
+        assert_eq!(config.newt_quorum_sizes(), (4, 2, 4));
+
+        let mut config = Config::new(7, 2);
+        config.set_newt_tiny_quorums(false);
+        assert_eq!(config.newt_quorum_sizes(), (5, 3, 4));
+
+        // tiny quorums = true
+        let mut config = Config::new(7, 1);
+        config.set_newt_tiny_quorums(true);
+        assert_eq!(config.newt_quorum_sizes(), (2, 2, 6));
+
+        let mut config = Config::new(7, 2);
+        config.set_newt_tiny_quorums(true);
+        assert_eq!(config.newt_quorum_sizes(), (4, 3, 5));
     }
 }

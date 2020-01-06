@@ -70,9 +70,8 @@ impl Client {
     }
 
     /// Start client's workload.
-    pub fn start(&mut self, time: &dyn SysTime) -> (ProcessId, Command) {
+    pub fn start(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
         self.next_cmd(time)
-            .expect("client should able to generate an operation when it is first started")
     }
 
     /// Handle executed command and its overall latency.
@@ -153,21 +152,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn start_before_discover() {
-        // client
-        let region = Region::new("europe-west2");
-        let total_commands = 10;
-        let mut client = gen_client(total_commands, region);
-
-        // create system time
-        let time = SimTime::new();
-
-        // should panic!
-        client.start(&time);
-    }
-
-    #[test]
     fn client_flow() {
         // processes
         let processes = vec![
@@ -191,7 +175,7 @@ mod tests {
         let fake_result = |cmd: Command| CommandResult::new(cmd.rifl(), 0);
 
         // start client at time 0
-        let (process_id, cmd) = client.start(&time);
+        let (process_id, cmd) = client.start(&time).expect("there should a first operation");
         // process_id should be 2
         assert_eq!(process_id, 2);
 

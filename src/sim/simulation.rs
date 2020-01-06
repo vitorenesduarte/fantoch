@@ -1,13 +1,13 @@
 use crate::client::Client;
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Process, ToSend};
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-pub struct Simulation<P> {
-    processes: HashMap<ProcessId, Cell<P>>,
+pub struct Simulation<P: Process> {
+    processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
@@ -24,98 +24,72 @@ where
         }
     }
 
-    /// Registers a new process in the `Simulation` by storing it in a `Cell`.
-    /// - from this call onwards, the process can be mutated through this `Simulation` by borrowing
-    ///   it mutabily, as done in the route methods.
-    pub fn register_process(&mut self, process: P) {
+    /// Registers a `Process` in the `Simulation` by storing it in a `Cell`.
+    pub fn register_process(&mut self, process: P, executor: P::Executor) {
         // get identifier
         let id = process.id();
-        // insert it
-        let res = self.processes.insert(id, Cell::new(process));
-        // check it has never been inserted before
-        assert!(res.is_none())
+
+        // register process and check it has never been registered before
+        let res = self.processes.insert(id, Cell::new((process, executor)));
+        assert!(res.is_none());
     }
 
-    /// Registers a `Client` process in the `Simulation` by storing it in a `Cell`.
-    /// - from this call onwards, the process can be mutated through this `Simulation` by borrowing
-    ///   it mutabily, as done in the route methods.
+    /// Registers a `Client` in the `Simulation` by storing it in a `Cell`.
     pub fn register_client(&mut self, client: Client) {
         // get identifier
         let id = client.id();
-        // insert it
+
+        // register client and check it has never been registerd before
         let res = self.clients.insert(id, Cell::new(client));
-        // check it has never been inserted before
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     /// Starts all clients registered in the router.
-    pub fn start_clients(&mut self, time: &dyn SysTime) -> Vec<(ClientId, ToSend<P::Message>)> {
+    pub fn start_clients(
+        &mut self,
+        time: &dyn SysTime,
+    ) -> Vec<(ClientId, Option<(ProcessId, Command)>)> {
         self.clients
             .iter_mut()
             .map(|(_, client)| {
                 let client = client.get_mut();
                 // start client
-                let (process_id, cmd) = client.start(time);
-                // create `ToSend`
-                let to_send = ToSend::ToCoordinator(process_id, cmd);
-                (client.id(), to_send)
+                let submit = client.start(time);
+                (client.id(), submit)
             })
             .collect()
     }
 
     /// Forward a `ToSend`.
     pub fn forward_to_processes(&mut self, to_send: ToSend<P::Message>) -> Vec<ToSend<P::Message>> {
-        match to_send {
-            ToSend::ToCoordinator(process_id, cmd) => {
-                let to_send = self.get_process(process_id).submit(cmd);
-                vec![to_send]
-            }
-            ToSend::ToProcesses(from, processes, msg) => processes
-                .into_iter()
-                .map(|process_id| self.get_process(process_id).handle(from, msg.clone()))
-                .collect(),
-            ToSend::Nothing => vec![],
-        }
-    }
-
-    /// Forward a list of `CommandResult`.
-    pub fn forward_to_clients(
-        &mut self,
-        results: Vec<CommandResult>,
-        time: &dyn SysTime,
-    ) -> Vec<ToSend<P::Message>> {
-        results
+        // extract `ToSend` arguments
+        let ToSend { from, target, msg } = to_send;
+        target
             .into_iter()
-            .map(|cmd_result| {
-                // get client id
-                let client_id = cmd_result.rifl().source();
-                self.forward_to_client(client_id, cmd_result, time)
+            .filter_map(|process_id| {
+                let (process, _) = self.get_process(process_id);
+                process.handle(from, msg.clone())
             })
             .collect()
     }
 
-    /// Forward a `CommandResult` to some client.
+    /// Forward a `CommandResult`.
     pub fn forward_to_client(
         &mut self,
-        client_id: ClientId,
         cmd_result: CommandResult,
         time: &dyn SysTime,
-    ) -> ToSend<P::Message> {
-        // route command result
-        self.get_client(client_id)
-            .handle(cmd_result, time)
-            .map_or(ToSend::Nothing, |(process_id, cmd)| {
-                ToSend::ToCoordinator(process_id, cmd)
-            })
+    ) -> Option<(ProcessId, Command)> {
+        let client_id = cmd_result.rifl().source();
+        self.get_client(client_id).handle(cmd_result, time)
     }
 
     /// Returns the process registered with this identifier.
     /// It panics if the process is not registered.
-    pub fn get_process(&mut self, process_id: ProcessId) -> &mut P {
+    pub fn get_process(&mut self, process_id: ProcessId) -> &mut (P, P::Executor) {
         self.processes
             .get_mut(&process_id)
             .unwrap_or_else(|| {
-                panic!("proc {} should have been set before", process_id);
+                panic!("process {} should have been registered before", process_id);
             })
             .get_mut()
     }
@@ -126,7 +100,7 @@ where
         self.clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
-                panic!("client {} should have been set before", client_id);
+                panic!("client {} should have been registered before", client_id);
             })
             .get_mut()
     }

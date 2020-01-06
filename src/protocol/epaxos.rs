@@ -1,34 +1,37 @@
-use crate::command::{Command, CommandResult};
+use crate::command::Command;
 use crate::config::Config;
-use crate::id::{Dot, ProcessId, Rifl};
-use crate::kvs::KVStore;
+use crate::executor::{Executor, GraphExecutor};
+use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::planet::{Planet, Region};
-use crate::protocol::common::dependency::{DependencyGraph, KeysClocks, QuorumClocks};
-use crate::protocol::common::{Synod, SynodMessage};
+use crate::protocol::common::{
+    dependency::{KeysClocks, QuorumClocks},
+    info::{Commands, Info},
+    synod::{Synod, SynodMessage},
+};
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem;
 use threshold::VClock;
 
-pub struct Atlas {
+type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
+
+pub struct EPaxos {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
-    cmds_info: CommandsInfo,
-    graph: DependencyGraph,
-    store: KVStore,
-    pending: HashSet<Rifl>,
-    commands_ready: Vec<CommandResult>,
+    cmds: Commands<CommandInfo>,
+    to_executor: Vec<ExecutionInfo>,
 }
 
-impl Process for Atlas {
+impl Process for EPaxos {
     type Message = Message;
+    type Executor = GraphExecutor;
 
     /// Creates a new `Atlas` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
         // compute fast and write quorum sizes
-        let (fast_quorum_size, write_quorum_size) = Atlas::quorum_sizes(&config);
+        let (fast_quorum_size, write_quorum_size) = config.epaxos_quorum_sizes();
 
         // create protocol data-structures
         let bp = BaseProcess::new(
@@ -40,21 +43,16 @@ impl Process for Atlas {
             write_quorum_size,
         );
         let keys_clocks = KeysClocks::new(config.n());
-        let cmds_info = CommandsInfo::new(process_id, config.n(), config.f(), fast_quorum_size);
-        let graph = DependencyGraph::new(&config);
-        let store = KVStore::new();
-        let pending = HashSet::new();
-        let commands_ready = Vec::new();
+        let f = Self::allowed_faults(config.n());
+        let cmds = Commands::new(process_id, config.n(), f, fast_quorum_size);
+        let to_executor = Vec::new();
 
-        // create `Atlas`
+        // create `EPaxos`
         Self {
             bp,
             keys_clocks,
-            cmds_info,
-            graph,
-            store,
-            pending,
-            commands_ready,
+            cmds,
+            to_executor,
         }
     }
 
@@ -69,12 +67,12 @@ impl Process for Atlas {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, cmd: Command) -> ToSend<Self::Message> {
+    fn submit(&mut self, cmd: Command) -> ToSend<Message> {
         self.handle_submit(cmd)
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
+    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Message>> {
         match msg {
             Message::MCollect {
                 dot,
@@ -92,33 +90,25 @@ impl Process for Atlas {
     }
 
     /// Returns new commands results to be sent to clients.
-    fn commands_ready(&mut self) -> Vec<CommandResult> {
-        let mut ready = Vec::new();
-        mem::swap(&mut ready, &mut self.commands_ready);
-        ready
+    fn to_executor(&mut self) -> Vec<ExecutionInfo> {
+        let mut to_executor = Vec::new();
+        mem::swap(&mut to_executor, &mut self.to_executor);
+        to_executor
     }
 
-    fn show_stats(&self) {
-        self.bp.show_stats();
-        self.graph.show_stats();
+    fn show_metrics(&self) {
+        self.bp.show_metrics();
     }
 }
 
-impl Atlas {
-    /// Computes `Atlas` fast and write quorum sizes.
-    fn quorum_sizes(config: &Config) -> (usize, usize) {
-        let n = config.n();
-        let f = config.f();
-        let fast_quorum_size = (n / 2) + f;
-        let write_quorum_size = f + 1;
-        (fast_quorum_size, write_quorum_size)
+impl EPaxos {
+    /// EPaxos always tolerates a minority of faults.
+    pub fn allowed_faults(n: usize) -> usize {
+        n / 2
     }
 
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
-        // start command in `Pending`
-        assert!(self.pending.insert(cmd.rifl()));
-
         // compute the command identifier
         let dot = self.bp.next_dot();
 
@@ -139,7 +129,11 @@ impl Atlas {
         let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), target, mcollect)
+        ToSend {
+            from: self.id(),
+            target,
+            msg: mcollect,
+        }
     }
 
     fn handle_mcollect(
@@ -149,7 +143,7 @@ impl Atlas {
         cmd: Option<Command>,
         quorum: Vec<ProcessId>,
         remote_clock: VClock<ProcessId>,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -160,11 +154,11 @@ impl Atlas {
         );
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // discard message if no longer in START
         if info.status != Status::START {
-            return ToSend::Nothing;
+            return None;
         }
 
         // compute its clock
@@ -183,7 +177,11 @@ impl Atlas {
         let target = vec![from];
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), target, mcollectack)
+        Some(ToSend {
+            from: self.id(),
+            target,
+            msg: mcollectack,
+        })
     }
 
     fn handle_mcollectack(
@@ -191,7 +189,7 @@ impl Atlas {
         from: ProcessId,
         dot: Dot,
         clock: VClock<ProcessId>,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {}",
             self.id(),
@@ -200,12 +198,17 @@ impl Atlas {
             from
         );
 
-        // get cmd info
-        let info = self.cmds_info.get(dot);
+        // ignore ack from self (see `CommandInfo::new` for the reason why)
+        if from == self.bp.process_id {
+            return None;
+        }
 
+        // get cmd info
+        let info = self.cmds.get(dot);
+
+        // do nothing if we're no longer COLLECT
         if info.status != Status::COLLECT {
-            // do nothing if we're no longer COLLECT
-            return ToSend::Nothing;
+            return None;
         }
 
         // update quorum clocks
@@ -213,9 +216,8 @@ impl Atlas {
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
-            // compute the threshold union while checking whether it's equal to their union
-            let (final_clock, equal_to_union) =
-                info.quorum_clocks.threshold_union(self.bp.config.f());
+            // compute the union while checking whether all clocks reported are equal
+            let (final_clock, all_equal) = info.quorum_clocks.union();
 
             // create consensus value
             // TODO can the following be more performant or at least more ergonomic?
@@ -223,8 +225,8 @@ impl Atlas {
             let value = ConsensusValue::with(cmd, final_clock);
 
             // fast path condition:
-            // - each dependency was reported by at least f processes
-            if equal_to_union {
+            // - all reported clocks if `max_clock` was reported by at least f processes
+            if all_equal {
                 self.bp.fast_path();
                 // fast path: create `MCommit`
                 // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
@@ -233,7 +235,11 @@ impl Atlas {
                 let target = self.bp.all();
 
                 // return `ToSend`
-                ToSend::ToProcesses(self.id(), target, mcommit)
+                Some(ToSend {
+                    from: self.id(),
+                    target,
+                    msg: mcommit,
+                })
             } else {
                 self.bp.slow_path();
                 // slow path: create `MConsensus`
@@ -241,10 +247,14 @@ impl Atlas {
                 let mconsensus = Message::MConsensus { dot, ballot, value };
                 let target = self.bp.write_quorum();
                 // return `ToSend`
-                ToSend::ToProcesses(self.id(), target, mconsensus)
+                Some(ToSend {
+                    from: self.id(),
+                    target,
+                    msg: mconsensus,
+                })
             }
         } else {
-            ToSend::Nothing
+            None
         }
     }
 
@@ -253,32 +263,34 @@ impl Atlas {
         from: ProcessId,
         dot: Dot,
         value: ConsensusValue,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, value.clock);
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             // TODO what about the executed status?
-            return ToSend::Nothing;
+            return None;
         }
 
         // update command info:
         info.status = Status::COMMIT;
-        info.synod
-            .handle(from, SynodMessage::MChosen(value.clone()));
 
-        // add to graph if not a noop and execute commands that can be executed
+        // handle commit in synod
+        let msg = SynodMessage::MChosen(value.clone());
+        info.synod.handle(from, msg);
+
+        // create execution info if not a noop
         if let Some(cmd) = value.cmd {
-            self.graph.add(dot, cmd, value.clock);
-            let to_execute = self.graph.commands_to_execute();
-            self.execute(to_execute);
+            // create execution info
+            let execution_info = ExecutionInfo::new(dot, cmd, value.clock);
+            self.to_executor.push(execution_info);
         }
 
         // nothing to send
-        ToSend::Nothing
+        None
     }
 
     fn handle_mconsensus(
@@ -287,7 +299,7 @@ impl Atlas {
         dot: Dot,
         ballot: u64,
         value: ConsensusValue,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MConsensus({:?}, {}, {:?})",
             self.id(),
@@ -297,7 +309,7 @@ impl Atlas {
         );
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // compute message: that can either be nothing, an ack or an mcommit
         let msg = match info
@@ -316,7 +328,7 @@ impl Atlas {
             }
             None => {
                 // ballot too low to be accepted
-                return ToSend::Nothing;
+                return None;
             }
             _ => panic!(
                 "no other type of message should be output by Synod in the MConsensus handler"
@@ -327,14 +339,23 @@ impl Atlas {
         let target = vec![from];
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), target, msg)
+        Some(ToSend {
+            from: self.id(),
+            target,
+            msg,
+        })
     }
 
-    fn handle_mconsensusack(&mut self, from: ProcessId, dot: Dot, ballot: u64) -> ToSend<Message> {
+    fn handle_mconsensusack(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        ballot: u64,
+    ) -> Option<ToSend<Message>> {
         log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
 
         // get cmd info
-        let info = self.cmds_info.get(dot);
+        let info = self.cmds.get(dot);
 
         // compute message: that can either be nothing or an mcommit
         match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
@@ -346,73 +367,20 @@ impl Atlas {
                 let mcommit = Message::MCommit { dot, value };
 
                 // return `ToSend`
-                ToSend::ToProcesses(self.id(), target, mcommit)
+                Some(ToSend {
+                    from: self.id(),
+                    target,
+                    msg: mcommit,
+                })
             }
             None => {
                 // not enough accepts yet
-                ToSend::Nothing
+                None
             }
             _ => panic!(
                 "no other type of message should be output by Synod in the MConsensusAck handler"
             ),
         }
-    }
-
-    fn execute(&mut self, to_execute: Vec<Command>) {
-        // borrow everything we'll need
-        let commands_ready = &mut self.commands_ready;
-        let store = &mut self.store;
-        let pending = &mut self.pending;
-
-        // get more commands that are ready to be executed
-        let ready = to_execute.into_iter().filter_map(|cmd| {
-            // get command rifl
-            let rifl = cmd.rifl();
-            // execute the command
-            let result = store.execute_command(cmd);
-
-            // if it was pending locally, then it's from a client of this process
-            if pending.remove(&rifl) {
-                Some(result)
-            } else {
-                None
-            }
-        });
-        commands_ready.extend(ready);
-    }
-}
-
-// `CommandsInfo` contains `CommandInfo` for each `Dot`.
-struct CommandsInfo {
-    process_id: ProcessId,
-    n: usize,
-    f: usize,
-    fast_quorum_size: usize,
-    dot_to_info: HashMap<Dot, CommandInfo>,
-}
-
-impl CommandsInfo {
-    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
-        Self {
-            process_id,
-            n,
-            f,
-            fast_quorum_size,
-            dot_to_info: HashMap::new(),
-        }
-    }
-
-    // Returns the `CommandInfo` associated with `Dot`.
-    // If no `CommandInfo` is associated, an empty `CommandInfo` is returned.
-    fn get(&mut self, dot: Dot) -> &mut CommandInfo {
-        // TODO borrow everything we need so that the borrow checker does not complain
-        let process_id = self.process_id;
-        let n = self.n;
-        let f = self.f;
-        let fast_quorum_size = self.fast_quorum_size;
-        self.dot_to_info
-            .entry(dot)
-            .or_insert_with(|| CommandInfo::new(process_id, n, f, fast_quorum_size))
     }
 }
 
@@ -451,15 +419,21 @@ struct CommandInfo {
     quorum_clocks: QuorumClocks,
 }
 
-impl CommandInfo {
+impl Info for CommandInfo {
     fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
         // create bottom consensus value
         let initial_value = ConsensusValue::new(n);
+
+        // although the fast quorum size is `fast_quorum_size`, we're going to initialize
+        // `QuorumClocks` with `fast_quorum_size - 1` since the clock reported by the coordinator
+        // shouldn't be considered in the fast path condition, and this clock is not necessary for
+        // correctness; for this to work, `MCollectAck`'s from self should be ignored, or not even
+        // created.
         Self {
             status: Status::START,
             quorum: vec![],
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
-            quorum_clocks: QuorumClocks::new(fast_quorum_size),
+            quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
         }
     }
 }
@@ -508,19 +482,10 @@ mod tests {
     use crate::time::SimTime;
 
     #[test]
-    fn atlas_parameters() {
-        let config = Config::new(7, 1);
-        assert_eq!(Atlas::quorum_sizes(&config), (4, 2));
+    fn epaxos_flow() {
+        // create simulation
+        let mut simulation = Simulation::new();
 
-        let config = Config::new(7, 2);
-        assert_eq!(Atlas::quorum_sizes(&config), (5, 3));
-
-        let config = Config::new(7, 3);
-        assert_eq!(Atlas::quorum_sizes(&config), (6, 4));
-    }
-
-    #[test]
-    fn atlas_flow() {
         // processes ids
         let process_id_1 = 1;
         let process_id_2 = 2;
@@ -549,30 +514,32 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
 
-        // atlas
-        let mut atlas_1 = Atlas::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut atlas_2 = Atlas::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut atlas_3 = Atlas::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        // executors
+        let executor_1 = GraphExecutor::new(&config);
+        let executor_2 = GraphExecutor::new(&config);
+        let executor_3 = GraphExecutor::new(&config);
 
-        // discover processes in all atlas
-        atlas_1.discover(processes.clone());
-        atlas_2.discover(processes.clone());
-        atlas_3.discover(processes.clone());
+        // epaxos
+        let mut epaxos_1 = EPaxos::new(process_id_1, europe_west2.clone(), planet.clone(), config);
+        let mut epaxos_2 = EPaxos::new(process_id_2, europe_west3.clone(), planet.clone(), config);
+        let mut epaxos_3 = EPaxos::new(process_id_3, us_west1.clone(), planet.clone(), config);
 
-        // create simulation
-        let mut simulation = Simulation::new();
+        // discover processes in all epaxos
+        epaxos_1.discover(processes.clone());
+        epaxos_2.discover(processes.clone());
+        epaxos_3.discover(processes.clone());
 
         // register processes
-        simulation.register_process(atlas_1);
-        simulation.register_process(atlas_2);
-        simulation.register_process(atlas_3);
+        simulation.register_process(epaxos_1, executor_1);
+        simulation.register_process(epaxos_2, executor_2);
+        simulation.register_process(epaxos_3, executor_3);
 
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
         let workload = Workload::new(conflict_rate, total_commands);
 
-        // create client 1 that is connected to atlas 1
+        // create client 1 that is connected to epaxos 1
         let client_id = 1;
         let client_region = europe_west2.clone();
         let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
@@ -581,81 +548,71 @@ mod tests {
         assert!(client_1.discover(processes));
 
         // start client
-        let (target, cmd) = client_1.start(&time);
+        let (target, cmd) = client_1
+            .start(&time)
+            .expect("there should be a first operation");
 
-        // check that `target` is atlas 1
+        // check that `target` is epaxos 1
         assert_eq!(target, process_id_1);
 
-        // register clients
+        // register client
         simulation.register_client(client_1);
 
-        // submit it in atlas_0
-        let mcollects = simulation.get_process(target).submit(cmd);
+        // register command in executor and submit it in epaxos 1
+        let (process, executor) = simulation.get_process(target);
+        executor.register(&cmd);
+        let mcollect = process.submit(cmd);
 
         // check that the mcollect is being sent to 2 processes
-        assert!(mcollects.to_processes());
-        if let ToSend::ToProcesses(_, to, _) = mcollects.clone() {
-            assert_eq!(to.len(), 2 * f);
-            assert_eq!(to, vec![1, 2]);
-        } else {
-            panic!("ToSend::ToProcesses not found!");
-        }
+        let ToSend { target, .. } = mcollect.clone();
+        assert_eq!(target.len(), 2 * f);
+        assert_eq!(target, vec![1, 2]);
 
-        // handle in mcollects
-        let mut mcollectacks = simulation.forward_to_processes(mcollects);
+        // handle mcollects
+        let mut mcollectacks = simulation.forward_to_processes(mcollect);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
-        assert!(mcollectacks.iter().all(|to_send| to_send.to_processes()));
 
-        // handle the first mcollectack
-        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
-        let mcommit_tosend = mcommits.pop().unwrap();
-        // no mcommit yet
-        assert!(mcommit_tosend.is_nothing());
+        // handle the *only* mcollectack
+        // - there's a single mcollectack single the initial coordinator does not reply to itself
+        let mut mcommits = simulation
+            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        // there's a commit now
+        assert_eq!(mcommits.len(), 1);
 
-        // handle the second mcollectack
-        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
-        let mcommit_tosend = mcommits.pop().unwrap();
-
-        // check that there is an mcommit sent to everyone
-        assert!(mcommit_tosend.to_processes());
-        if let ToSend::ToProcesses(_, to, _) = mcommit_tosend.clone() {
-            assert_eq!(to.len(), n);
-        } else {
-            panic!("ToSend::ToProcesses not found!");
-        }
+        // check that the mcommit is sent to everyone
+        let mcommit = mcommits.pop().expect("there should be an mcommit");
+        let ToSend { target, .. } = mcommit.clone();
+        assert_eq!(target.len(), n);
 
         // all processes handle it
-        let to_sends = simulation.forward_to_processes(mcommit_tosend);
+        let to_sends = simulation.forward_to_processes(mcommit);
 
-        // there's nothing to send
-        let not_nothing_count = to_sends
-            .into_iter()
-            .filter(|to_send| !to_send.is_nothing())
-            .count();
-        assert_eq!(not_nothing_count, 0);
+        // check there's nothing to send
+        assert!(to_sends.is_empty());
 
-        // process 1 should have a result to the client
-        let commands_ready = simulation.get_process(process_id_1).commands_ready();
-        assert_eq!(commands_ready.len(), 1);
+        // process 1 should have something to the executor
+        let (process, executor) = simulation.get_process(process_id_1);
+        let to_executor = process.to_executor();
+        assert_eq!(to_executor.len(), 1);
 
-        // handle what was sent to client
-        let new_submit = simulation
-            .forward_to_clients(commands_ready, &time)
-            .into_iter()
-            .next()
-            .unwrap();
-        assert!(new_submit.to_coordinator());
+        // handle in executor and check there's a single command ready
+        let mut ready = executor.handle(to_executor);
+        assert_eq!(ready.len(), 1);
 
-        let mcollect = simulation
-            .forward_to_processes(new_submit)
-            .into_iter()
-            .next()
-            .unwrap();
-        if let ToSend::ToProcesses(from, _, Message::MCollect { dot, .. }) = mcollect {
-            assert_eq!(from, target);
-            assert_eq!(dot, Dot::new(target, 2));
+        // get that command
+        let cmd_result = ready.pop().expect("there should a command ready");
+
+        // handle the previous command result
+        let (target, cmd) = simulation
+            .forward_to_client(cmd_result, &time)
+            .expect("there should a new submit");
+
+        let (process, _) = simulation.get_process(target);
+        let ToSend { msg, .. } = process.submit(cmd);
+        if let Message::MCollect { dot, .. } = msg {
+            assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {
             panic!("Message::MCollect not found!");
         }
