@@ -4,15 +4,13 @@ mod tarjan;
 /// This module contains the definition of `VertexIndex` and `PendingIndex`.
 mod index;
 
+use self::index::{PendingIndex, VertexIndex};
+use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::metrics::Metrics;
-use crate::protocol::common::dependency::graph::{
-    index::{PendingIndex, VertexIndex},
-    tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC},
-};
 use crate::util;
 use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};

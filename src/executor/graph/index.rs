@@ -1,6 +1,6 @@
+use super::tarjan::Vertex;
 use crate::id::Dot;
 use crate::kvs::Key;
-use crate::protocol::common::dependency::graph::Vertex;
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 

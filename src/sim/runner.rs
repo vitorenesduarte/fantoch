@@ -1,6 +1,7 @@
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
+use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
@@ -78,8 +79,12 @@ where
         processes.into_iter().for_each(|mut process| {
             // discover
             assert!(process.discover(to_discover.clone()));
-            // and register it
-            simulation.register_process(process);
+
+            // create executor for this process
+            let executor = <P::Executor as Executor>::new(&config);
+
+            // and register both
+            simulation.register_process(process, executor);
         });
 
         // register clients and create client to region mapping
@@ -115,9 +120,9 @@ where
         self.simulation
             .start_clients(&self.time)
             .into_iter()
-            .for_each(|(client_id, to_send)| {
+            .for_each(|(client_id, submit)| {
                 // schedule client commands
-                self.try_to_schedule(MessageRegion::Client(client_id), to_send);
+                self.schedule_submit(MessageRegion::Client(client_id), submit)
             });
 
         // run simulation loop
@@ -137,9 +142,12 @@ where
             actions.into_iter().for_each(|action| {
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
+                        // register command in the executor
+                        self.simulation.get_executor(process_id).register(&cmd);
+
                         // submit to process and schedule output messages
                         let to_send = self.simulation.get_process(process_id).submit(cmd);
-                        self.try_to_schedule(MessageRegion::Process(process_id), to_send);
+                        self.schedule_send(MessageRegion::Process(process_id), Some(to_send));
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
                         // get process
@@ -147,55 +155,63 @@ where
 
                         // handle message and get ready commands
                         let to_send = process.handle(from, msg);
-                        let ready = process.commands_ready();
+
+                        // handle new execution info in the executor
+                        let to_executor = process.to_executor();
+                        let ready = self.simulation.get_executor(process_id).handle(to_executor);
 
                         // schedule new messages
-                        self.try_to_schedule(MessageRegion::Process(process_id), to_send);
+                        self.schedule_send(MessageRegion::Process(process_id), to_send);
 
                         // schedule new command results
                         ready.into_iter().for_each(|cmd_result| {
-                            // create action and schedule it
-                            let client_id = cmd_result.rifl().source();
-                            let action = ScheduleAction::SendToClient(client_id, cmd_result);
-                            self.schedule_it(
-                                MessageRegion::Process(process_id),
-                                MessageRegion::Client(client_id),
-                                action,
-                            );
+                            self.schedule_to_client(MessageRegion::Process(process_id), cmd_result)
                         });
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
-                        // route to client and schedule output command
-                        let to_send = self
+                        // route to client and schedule new submit
+                        let submit = self
                             .simulation
-                            .forward_to_client(client_id, cmd_result, &self.time);
-                        self.try_to_schedule(MessageRegion::Client(client_id), to_send);
+                            .get_client(client_id)
+                            .handle(cmd_result, &self.time);
+                        self.schedule_submit(MessageRegion::Client(client_id), submit);
                     }
                 }
             })
         }
     }
 
-    /// Try to schedule a `ToSend`.
-    fn try_to_schedule(&mut self, from_region: MessageRegion, to_send: ToSend<P::Message>) {
-        match to_send {
-            ToSend::ToCoordinator(process_id, cmd) => {
-                // create action and schedule it
-                let action = ScheduleAction::SubmitToProc(process_id, cmd);
-                self.schedule_it(from_region, MessageRegion::Process(process_id), action);
-            }
-            ToSend::ToProcesses(from, target, msg) => {
-                // for each process in target, schedule message delivery
-                target.into_iter().for_each(|to| {
-                    // otherwise, create action and schedule it
-                    let action = ScheduleAction::SendToProc(from, to, msg.clone());
-                    self.schedule_it(from_region.clone(), MessageRegion::Process(to), action);
-                });
-            }
-            ToSend::Nothing => {
-                // nothing to do
-            }
+    // (maybe) Schedules a new submit from a client.
+    fn schedule_submit(
+        &mut self,
+        from_region: MessageRegion,
+        submit: Option<(ProcessId, Command)>,
+    ) {
+        if let Some((process_id, cmd)) = submit {
+            // create action and schedule it
+            let action = ScheduleAction::SubmitToProc(process_id, cmd);
+            self.schedule_it(from_region, MessageRegion::Process(process_id), action);
         }
+    }
+
+    /// (maybe) Schedules a new send from some process.
+    fn schedule_send(&mut self, from_region: MessageRegion, to_send: Option<ToSend<P::Message>>) {
+        if let Some(ToSend { from, target, msg }) = to_send {
+            // for each process in target, schedule message delivery
+            target.into_iter().for_each(|to| {
+                // otherwise, create action and schedule it
+                let action = ScheduleAction::SendToProc(from, to, msg.clone());
+                self.schedule_it(from_region.clone(), MessageRegion::Process(to), action);
+            });
+        }
+    }
+
+    /// Schedules a new command result.
+    fn schedule_to_client(&mut self, from_region: MessageRegion, cmd_result: CommandResult) {
+        // create action and schedule it
+        let client_id = cmd_result.rifl().source();
+        let action = ScheduleAction::SendToClient(client_id, cmd_result);
+        self.schedule_it(from_region, MessageRegion::Client(client_id), action);
     }
 
     fn schedule_it(
@@ -282,10 +298,50 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::Executor;
     use crate::id::{ProcessId, Rifl};
     use crate::metrics::{Stats, F64};
     use crate::protocol::BaseProcess;
+    use std::collections::HashSet;
     use std::mem;
+
+    type ExecutionInfo = <PingPongExecutor as Executor>::ExecutionInfo;
+
+    struct PingPongExecutor {
+        pending: HashSet<Rifl>,
+    }
+
+    impl PingPongExecutor {
+        fn new() -> Self {
+            PingPongExecutor {
+                pending: HashSet::new(),
+            }
+        }
+    }
+
+    impl Executor for PingPongExecutor {
+        type ExecutionInfo = CommandResult;
+
+        fn new(_config: &Config) -> Self {
+            // ignore config
+            PingPongExecutor::new()
+        }
+
+        fn register(&mut self, cmd: &Command) {
+            // add to pending and make sure it was not there
+            assert!(self.pending.insert(cmd.rifl()));
+        }
+
+        fn handle(&mut self, infos: Vec<CommandResult>) -> Vec<CommandResult> {
+            infos
+                .into_iter()
+                .filter(|info| {
+                    // only return those results that belong to registered commands
+                    self.pending.remove(&info.rifl())
+                })
+                .collect()
+        }
+    }
 
     #[derive(Clone)]
     enum Message {
@@ -297,11 +353,12 @@ mod tests {
     struct PingPong {
         bp: BaseProcess,
         acks: HashMap<Rifl, usize>,
-        commands_ready: Vec<CommandResult>,
+        to_executor: Vec<ExecutionInfo>,
     }
 
     impl Process for PingPong {
         type Message = Message;
+        type Executor = PingPongExecutor;
 
         fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
             // fast quorum size is f + 1
@@ -321,7 +378,7 @@ mod tests {
             Self {
                 bp,
                 acks: HashMap::new(),
-                commands_ready: Vec::new(),
+                to_executor: Vec::new(),
             }
         }
 
@@ -345,16 +402,24 @@ mod tests {
             let fast_quorum = self.bp.fast_quorum();
 
             // send message to fast quorum
-            ToSend::ToProcesses(self.id(), fast_quorum, msg)
+            ToSend {
+                from: self.id(),
+                target: fast_quorum,
+                msg,
+            }
         }
 
-        fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
+        fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Self::Message>> {
             match msg {
                 Message::Ping(rifl) => {
                     // create msg
                     let msg = Message::Pong(rifl);
                     // reply back
-                    ToSend::ToProcesses(self.id(), vec![from], msg)
+                    Some(ToSend {
+                        from: self.id(),
+                        target: vec![from],
+                        msg,
+                    })
                 }
                 Message::Pong(rifl) => {
                     // increase ack count
@@ -369,22 +434,20 @@ mod tests {
                         // remove from acks
                         self.acks.remove(&rifl);
                         // create fake command result
-                        let cmd_result = CommandResult::new(rifl, 0);
-                        // save new ready command
-                        self.commands_ready.push(cmd_result);
+                        let ready = CommandResult::new(rifl, 0);
+                        self.to_executor.push(ready);
                     }
-
                     // nothing to send
-                    ToSend::Nothing
+                    None
                 }
             }
         }
 
         /// Returns new commands results to be sent to clients.
-        fn commands_ready(&mut self) -> Vec<CommandResult> {
-            let mut ready = Vec::new();
-            mem::swap(&mut ready, &mut self.commands_ready);
-            ready
+        fn to_executor(&mut self) -> Vec<ExecutionInfo> {
+            let mut to_executor = Vec::new();
+            mem::swap(&mut to_executor, &mut self.to_executor);
+            to_executor
         }
     }
 

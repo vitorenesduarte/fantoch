@@ -2,18 +2,26 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Stats;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
+use planet_sim::protocol::{Atlas, EPaxos, Process};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running epaxos...");
-    run_in_thread(equidistant::<EPaxos>);
-    // println!(">running atlas...");
-    // run_in_thread(increasing_load::<Atlas>);
-    // println!(">running newt...");
-    // run_in_thread(increasing_load::<Newt>);
+    println!(">running atlas n = 5 | f = 1...");
+    let mut config = Config::new(5, 1);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<Atlas>(config));
+
+    println!(">running atlas n = 5 | f = 2...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<Atlas>(config));
+
+    println!(">running epaxos n = 5...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<EPaxos>(config));
 }
 
 fn equidistant<P: Process>() {
@@ -56,7 +64,7 @@ fn equidistant<P: Process>() {
     }
 }
 
-fn increasing_load<P: Process>() {
+fn increasing_load<P: Process>(config: Config) {
     let planet = Planet::new("latency/");
     let regions5 = vec![
         Region::new("asia-south1"),
@@ -66,14 +74,8 @@ fn increasing_load<P: Process>() {
         Region::new("europe-west1"),
     ];
 
-    // config
-    let n = 5;
-    let f = 1;
-    let mut config = Config::new(n, f);
-    config.set_transitive_conflicts(false);
-
     // number of clients
-    let cs = vec![256];
+    let cs = vec![8, 16, 32, 64, 128];
 
     // clients workload
     let conflict_rate = 10;

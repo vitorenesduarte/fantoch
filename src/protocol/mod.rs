@@ -4,29 +4,31 @@ mod base;
 // This module contains common data-structures between protocols.
 mod common;
 
-// This module contains the definition of `Newt`.
-mod newt;
-
 // This module contains the definition of `Atlas`.
 mod atlas;
 
 /// This module contains the definition of `EPaxos`.
 mod epaxos;
 
+// // This module contains the definition of `Newt`.
+// mod newt;
+
 // Re-exports.
 pub use atlas::Atlas;
 pub use epaxos::EPaxos;
-pub use newt::Newt;
+// pub use newt::Newt;
 
 pub use base::BaseProcess;
 
-use crate::command::{Command, CommandResult};
+use crate::command::Command;
 use crate::config::Config;
+use crate::executor::Executor;
 use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 
 pub trait Process {
     type Message: Clone;
+    type Executor: Executor;
 
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;
 
@@ -38,10 +40,10 @@ pub trait Process {
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
 
     #[must_use]
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message>;
+    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Self::Message>>;
 
     #[must_use]
-    fn commands_ready(&mut self) -> Vec<CommandResult>;
+    fn to_executor(&mut self) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
     fn show_metrics(&self) {
         // by default, nothing to show
@@ -49,37 +51,14 @@ pub trait Process {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub enum ToSend<M> {
-    // nothing to send
-    Nothing,
-    // new command to be sent to a coordinator
-    ToCoordinator(ProcessId, Command),
-    // a protocol message to be sent to a list of processes
-    ToProcesses(ProcessId, Vec<ProcessId>, M),
+pub struct ToSend<M> {
+    pub from: ProcessId,
+    pub target: Vec<ProcessId>,
+    pub msg: M,
 }
 
-impl<M> ToSend<M> {
-    /// Check if there's nothing to be sent.
-    pub fn is_nothing(&self) -> bool {
-        match *self {
-            ToSend::Nothing => true,
-            _ => false,
-        }
-    }
+// #[cfg(test)]
+// fn run()
+//     fn run
 
-    /// Check if it's something to be sent to a coordinator.
-    pub fn to_coordinator(&self) -> bool {
-        match *self {
-            ToSend::ToCoordinator(_, _) => true,
-            _ => false,
-        }
-    }
-
-    /// Check if it' ssomething to be sent to processes.
-    pub fn to_processes(&self) -> bool {
-        match *self {
-            ToSend::ToProcesses(_, _, _) => true,
-            _ => false,
-        }
-    }
-}
+// }

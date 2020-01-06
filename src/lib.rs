@@ -10,6 +10,9 @@ pub mod client;
 // This module contains the implementation of a key-value store.
 pub mod kvs;
 
+// This module contains the definition of an executor.
+pub mod executor;
+
 // This module contains the definition of `Command`, `CommandResult` and
 // `Pending`.
 pub mod command;

@@ -121,29 +121,6 @@ impl Process for Newt {
 }
 
 impl Newt {
-    /// Computes `Newt` fast quorum size, stability threshold and write quorum size.
-    ///
-    /// The threshold should be n - q + 1, where n is the number of processes and q the size of the
-    /// quorum used to compute clocks. In `Newt` e.g. with tiny quorums, although the fast quorum is
-    /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
-    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f.
-    ///
-    /// In general, the stability threshold is given by:
-    ///   "n - (fast_quorum_size - f + 1) + 1 = n - fast_quorum_size + f"
-    /// - this ensures that the stability threshold plus the minimum number of processes where
-    ///   clocks are computed (i.e. fast_quorum_size - f + 1) is greater than n
-    fn quorum_sizes(config: &Config) -> (usize, usize, usize) {
-        let n = config.n();
-        let f = config.f();
-        let minority = n / 2;
-        let (fast_quorum_size, stability_threshold) = if config.newt_tiny_quorums() {
-            (2 * f, n - f)
-        } else {
-            (minority + f, minority + 1)
-        };
-        let write_quorum_size = f + 1;
-        (fast_quorum_size, stability_threshold, write_quorum_size)
-    }
 
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
@@ -467,27 +444,6 @@ mod tests {
     use crate::client::{Client, Workload};
     use crate::sim::Simulation;
     use crate::time::SimTime;
-
-    #[test]
-    fn newt_parameters() {
-        // tiny quorums = false
-        let mut config = Config::new(7, 1);
-        config.set_newt_tiny_quorums(false);
-        assert_eq!(Newt::quorum_sizes(&config), (4, 4, 2));
-
-        let mut config = Config::new(7, 2);
-        config.set_newt_tiny_quorums(false);
-        assert_eq!(Newt::quorum_sizes(&config), (5, 4, 3));
-
-        // tiny quorums = true
-        let mut config = Config::new(7, 1);
-        config.set_newt_tiny_quorums(true);
-        assert_eq!(Newt::quorum_sizes(&config), (2, 6, 2));
-
-        let mut config = Config::new(7, 2);
-        config.set_newt_tiny_quorums(true);
-        assert_eq!(Newt::quorum_sizes(&config), (4, 5, 3));
-    }
 
     #[test]
     fn newt_flow() {
