@@ -7,8 +7,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 
 pub struct Simulation<P: Process> {
-    processes: HashMap<ProcessId, Cell<P>>,
-    executors: HashMap<ProcessId, Cell<P::Executor>>,
+    processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
@@ -21,7 +20,6 @@ where
     pub fn new() -> Self {
         Simulation {
             processes: HashMap::new(),
-            executors: HashMap::new(),
             clients: HashMap::new(),
         }
     }
@@ -32,11 +30,7 @@ where
         let id = process.id();
 
         // register process and check it has never been registered before
-        let res = self.processes.insert(id, Cell::new(process));
-        assert!(res.is_none());
-
-        // register executor and check it has never been registered before
-        let res = self.executors.insert(id, Cell::new(executor));
+        let res = self.processes.insert(id, Cell::new((process, executor)));
         assert!(res.is_none());
     }
 
@@ -72,7 +66,10 @@ where
         let ToSend { from, target, msg } = to_send;
         target
             .into_iter()
-            .filter_map(|process_id| self.get_process(process_id).handle(from, msg.clone()))
+            .filter_map(|process_id| {
+                let (process, _) = self.get_process(process_id);
+                process.handle(from, msg.clone())
+            })
             .collect()
     }
 
@@ -88,22 +85,11 @@ where
 
     /// Returns the process registered with this identifier.
     /// It panics if the process is not registered.
-    pub fn get_process(&mut self, process_id: ProcessId) -> &mut P {
+    pub fn get_process(&mut self, process_id: ProcessId) -> &mut (P, P::Executor) {
         self.processes
             .get_mut(&process_id)
             .unwrap_or_else(|| {
                 panic!("process {} should have been registered before", process_id);
-            })
-            .get_mut()
-    }
-
-    /// Returns the executor registered with this identifier.
-    /// It panics if the executor is not registered.
-    pub fn get_executor(&mut self, process_id: ProcessId) -> &mut P::Executor {
-        self.executors
-            .get_mut(&process_id)
-            .unwrap_or_else(|| {
-                panic!("executor {} should have been registered before", process_id);
             })
             .get_mut()
     }

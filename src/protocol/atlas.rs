@@ -542,11 +542,10 @@ mod tests {
         // register client
         simulation.register_client(client_1);
 
-        // register command in executor
-        simulation.get_executor(process_id_1).register(&cmd);
-
-        // submit it in atlas_0
-        let mcollect = simulation.get_process(target).submit(cmd);
+        // register command in executor and submit it in atlas 1
+        let (process, executor) = simulation.get_process(target);
+        executor.register(&cmd);
+        let mcollect = process.submit(cmd);
 
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
@@ -583,11 +582,12 @@ mod tests {
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
-        let to_executor = simulation.get_process(process_id_1).to_executor();
+        let (process, executor) = simulation.get_process(process_id_1);
+        let to_executor = process.to_executor();
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
-        let mut ready = simulation.get_executor(process_id_1).handle(to_executor);
+        let mut ready = executor.handle(to_executor);
         assert_eq!(ready.len(), 1);
 
         // get that command
@@ -598,7 +598,8 @@ mod tests {
             .forward_to_client(cmd_result, &time)
             .expect("there should a new submit");
 
-        let ToSend { msg, .. } = simulation.get_process(target).submit(cmd);
+        let (process, _) = simulation.get_process(target);
+        let ToSend { msg, .. } = process.submit(cmd);
         if let Message::MCollect { dot, .. } = msg {
             assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {

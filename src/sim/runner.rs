@@ -142,23 +142,26 @@ where
             actions.into_iter().for_each(|action| {
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
+                        // get process and executor
+                        let (process, executor) = self.simulation.get_process(process_id);
+
                         // register command in the executor
-                        self.simulation.get_executor(process_id).register(&cmd);
+                        executor.register(&cmd);
 
                         // submit to process and schedule output messages
-                        let to_send = self.simulation.get_process(process_id).submit(cmd);
+                        let to_send = process.submit(cmd);
                         self.schedule_send(MessageRegion::Process(process_id), Some(to_send));
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
-                        // get process
-                        let process = self.simulation.get_process(process_id);
+                        // get process and executor
+                        let (process, executor) = self.simulation.get_process(process_id);
 
                         // handle message and get ready commands
                         let to_send = process.handle(from, msg);
 
                         // handle new execution info in the executor
                         let to_executor = process.to_executor();
-                        let ready = self.simulation.get_executor(process_id).handle(to_executor);
+                        let ready = executor.handle(to_executor);
 
                         // schedule new messages
                         self.schedule_send(MessageRegion::Process(process_id), to_send);
@@ -259,9 +262,10 @@ where
         let simulation = &mut self.simulation;
         self.process_to_region.keys().for_each(|process_id| {
             // get process from simulation
-            let process = simulation.get_process(*process_id);
+            let (process, executor) = simulation.get_process(*process_id);
             println!("process {:?} stats:", process_id);
             process.show_metrics();
+            executor.show_metrics();
         });
     }
 
