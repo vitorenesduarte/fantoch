@@ -31,7 +31,7 @@ impl MultiVotesTable {
     }
 
     pub fn show_stats(&self) {
-        self.metrics.show_stats()
+        self.metrics.show()
     }
 
     /// Add a new command, its clock and votes to the votes table.

@@ -43,7 +43,7 @@ pub trait Process {
     #[must_use]
     fn commands_ready(&mut self) -> Vec<CommandResult>;
 
-    fn show_stats(&self) {
+    fn show_metrics(&self) {
         // by default, nothing to show
     }
 }

@@ -52,7 +52,7 @@ where
         update(current);
     }
 
-    pub fn show_stats(&self) {
+    pub fn show(&self) {
         self.collected.iter().for_each(|(kind, values)| {
             // TODO can we avoid cloning here?
             let stats = Stats::from(values.clone());

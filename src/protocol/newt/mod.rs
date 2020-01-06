@@ -114,8 +114,8 @@ impl Process for Newt {
         ready
     }
 
-    fn show_stats(&self) {
-        self.bp.show_stats();
+    fn show_metrics(&self) {
+        self.bp.show_metrics();
         self.table.show_stats();
     }
 }

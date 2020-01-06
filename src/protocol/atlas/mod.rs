@@ -98,9 +98,9 @@ impl Process for Atlas {
         ready
     }
 
-    fn show_stats(&self) {
-        self.bp.show_stats();
-        self.graph.show_stats();
+    fn show_metrics(&self) {
+        self.bp.show_metrics();
+        self.graph.show_metrics();
     }
 }
 

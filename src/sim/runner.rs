@@ -2,7 +2,6 @@ use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
-use crate::metrics::Stats;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
 use crate::sim::{Schedule, Simulation};
@@ -111,7 +110,7 @@ where
     }
 
     /// Run the simulation.
-    pub fn run(&mut self) -> HashMap<&Region, (usize, Stats<u64>)> {
+    pub fn run(&mut self) -> HashMap<Region, (usize, Vec<u64>)> {
         // start clients
         self.simulation
             .start_clients(&self.time)
@@ -124,11 +123,11 @@ where
         // run simulation loop
         self.simulation_loop();
 
-        // show processes stats
-        self.processes_stats();
+        // show processes metrics
+        self.processes_metrics();
 
-        // return clients stats
-        self.clients_stats()
+        // return clients latencies
+        self.clients_latencies()
     }
 
     fn simulation_loop(&mut self) {
@@ -238,9 +237,21 @@ where
         ping_latency / 2
     }
 
+    /// Show processes' stats.
+    /// TODO does this need to be mut?
+    fn processes_metrics(&mut self) {
+        let simulation = &mut self.simulation;
+        self.process_to_region.keys().for_each(|process_id| {
+            // get process from simulation
+            let process = simulation.get_process(*process_id);
+            println!("process {:?} stats:", process_id);
+            process.show_metrics();
+        });
+    }
+
     /// Get client's stats.
     /// TODO does this need to be mut?
-    fn clients_stats(&mut self) -> HashMap<&Region, (usize, Stats<u64>)> {
+    fn clients_latencies(&mut self) -> HashMap<Region, (usize, Vec<u64>)> {
         let simulation = &mut self.simulation;
         let mut region_to_latencies = HashMap::new();
 
@@ -253,32 +264,18 @@ where
 
             // get current metrics from this region
             let (total_issued_commands, current_latencies) =
-                region_to_latencies.entry(region).or_insert((0, Vec::new()));
+                match region_to_latencies.get_mut(region) {
+                    Some(v) => v,
+                    None => region_to_latencies
+                        .entry(region.clone())
+                        .or_insert((0, Vec::new())),
+                };
             // update metrics
             *total_issued_commands += issued_commands;
             current_latencies.extend(latencies);
         }
 
-        // compute stats for each region
         region_to_latencies
-            .into_iter()
-            .map(|(region, (total_issued_commands, latencies))| {
-                let stats = Stats::from(latencies);
-                (region, (total_issued_commands, stats))
-            })
-            .collect()
-    }
-
-    /// Show processes' stats.
-    /// TODO does this need to be mut?
-    fn processes_stats(&mut self) {
-        let simulation = &mut self.simulation;
-        self.process_to_region.keys().for_each(|process_id| {
-            // get process from simulation
-            let process = simulation.get_process(*process_id);
-            println!("process {:?} stats:", process_id);
-            process.show_stats();
-        });
     }
 }
 
@@ -286,7 +283,7 @@ where
 mod tests {
     use super::*;
     use crate::id::{ProcessId, Rifl};
-    use crate::metrics::F64;
+    use crate::metrics::{Stats, F64};
     use crate::protocol::BaseProcess;
     use std::mem;
 
@@ -431,11 +428,11 @@ mod tests {
 
         // run simulation and return stats
         runner.run();
-        let mut stats = runner.clients_stats();
-        let (us_west1_issued, us_west1) = stats
+        let mut latencies = runner.clients_latencies();
+        let (us_west1_issued, us_west1) = latencies
             .remove(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
-        let (us_west2_issued, us_west2) = stats
+        let (us_west2_issued, us_west2) = latencies
             .remove(&Region::new("us-west2"))
             .expect("there should stats from us-west2 region");
 
@@ -445,7 +442,7 @@ mod tests {
         assert_eq!(us_west2_issued, expected);
 
         // return stats for both regions
-        (us_west1, us_west2)
+        (Stats::from(us_west1), Stats::from(us_west2))
     }
 
     #[test]

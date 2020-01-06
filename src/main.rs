@@ -1,8 +1,8 @@
 use planet_sim::client::Workload;
 use planet_sim::config::Config;
+use planet_sim::metrics::Stats;
 use planet_sim::planet::{Planet, Region};
 use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
-use planet_sim::sim::Runner;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
@@ -45,7 +45,7 @@ fn equidistant<P: Process>() {
         // config
         let config = Config::new(n, f);
 
-        run_simulation::<P>(
+        run::<P>(
             config,
             workload,
             clients_per_region,
@@ -90,7 +90,7 @@ fn increasing_load<P: Process>() {
         // client regions
         let client_regions = regions5.clone();
 
-        run_simulation::<P>(
+        run::<P>(
             config,
             workload,
             clients_per_region,
@@ -145,7 +145,7 @@ fn increasing_regions<P: Process>() {
         // client regions
         let client_regions = regions13.clone();
 
-        run_simulation::<P>(
+        run::<P>(
             config,
             workload,
             clients_per_region,
@@ -156,7 +156,7 @@ fn increasing_regions<P: Process>() {
     }
 }
 
-fn run_simulation<P: Process>(
+fn run<P: Process>(
     config: Config,
     workload: Workload,
     clients_per_region: usize,
@@ -164,31 +164,26 @@ fn run_simulation<P: Process>(
     client_regions: Vec<Region>,
     planet: Planet,
 ) {
-    // compute total number of expected commands per region
-    let expected_commands = workload.total_commands() * clients_per_region * client_regions.len();
+    // compute number of regions and total number of expected commands per region
+    let region_count = client_regions.len();
+    let expected_commands = workload.total_commands() * clients_per_region * region_count;
 
-    // function that creates ping pong processes
-    let create_process =
-        |process_id, region, planet, config| P::new(process_id, region, planet, config);
-
-    // create runner
-    let mut runner = Runner::new(
-        planet,
+    // run simulation and get latencies
+    let latencies = planet_sim::sim::run_simulation::<P>(
         config,
-        create_process,
         workload,
         clients_per_region,
         process_regions,
         client_regions,
+        planet,
     );
+    println!("outcome: {:?}", latencies);
 
-    // run simulation and get stats
-    let stats = runner.run();
-    println!("{:?}", stats);
-
-    let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum) = stats
-        .iter()
-        .map(|(_region, (region_issued_commands, region_stats))| {
+    // compute stats
+    let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum) = latencies
+        .into_iter()
+        .map(|(_region, (region_issued_commands, region_latencies))| {
+            let region_stats = Stats::from(region_latencies);
             (
                 region_issued_commands,
                 region_stats.mean().value(),
@@ -220,16 +215,16 @@ fn run_simulation<P: Process>(
         );
     }
     // TODO averaging of percentiles is just wrong, but we'll do it for now
-    let stats_count = stats.len() as f64;
+    let region_count = region_count as f64;
     println!(
         "n={} AND c={} | avg={} p5={} p95={} p99={} p99.9={}",
         config.n(),
         clients_per_region,
-        mean_sum / stats_count,
-        p5_sum / stats_count,
-        p95_sum / stats_count,
-        p99_sum / stats_count,
-        p999_sum / stats_count
+        mean_sum / region_count,
+        p5_sum / region_count,
+        p95_sum / region_count,
+        p99_sum / region_count,
+        p999_sum / region_count
     );
 }
 
