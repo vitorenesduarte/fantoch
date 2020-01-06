@@ -192,19 +192,19 @@ mod tests {
         // tiny quorums = false
         let mut config = Config::new(7, 1);
         config.set_newt_tiny_quorums(false);
-        assert_eq!(config.newt_quorum_sizes(), (4, 4, 2));
+        assert_eq!(config.newt_quorum_sizes(), (4, 2, 4));
 
         let mut config = Config::new(7, 2);
         config.set_newt_tiny_quorums(false);
-        assert_eq!(config.newt_quorum_sizes(), (5, 4, 3));
+        assert_eq!(config.newt_quorum_sizes(), (5, 3, 4));
 
         // tiny quorums = true
         let mut config = Config::new(7, 1);
         config.set_newt_tiny_quorums(true);
-        assert_eq!(config.newt_quorum_sizes(), (2, 6, 2));
+        assert_eq!(config.newt_quorum_sizes(), (2, 2, 6));
 
         let mut config = Config::new(7, 2);
         config.set_newt_tiny_quorums(true);
-        assert_eq!(config.newt_quorum_sizes(), (4, 5, 3));
+        assert_eq!(config.newt_quorum_sizes(), (4, 3, 5));
     }
 }
