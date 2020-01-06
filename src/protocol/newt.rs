@@ -576,7 +576,7 @@ mod tests {
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check that it didn't generate another command
-        let mut ready = simulation.get_executor(process_id_1).handle(to_executor);
+        let ready = simulation.get_executor(process_id_1).handle(to_executor);
         assert!(ready.is_empty());
         // -------------------------
 
