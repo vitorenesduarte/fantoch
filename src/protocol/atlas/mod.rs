@@ -593,7 +593,7 @@ mod tests {
         // get that command
         let cmd_result = ready.pop().expect("there should a command ready");
 
-        // handle what was sent to client
+        // handle the previous command result
         let (target, cmd) = simulation
             .forward_to_client(cmd_result, &time)
             .expect("there should a new submit");

@@ -554,10 +554,6 @@ mod tests {
             _ => panic!("Message::MPhantom not found!"),
         }
 
-        let to_sends = simulation.forward_to_processes(mphantom);
-        // check there's nothing to send
-        assert!(to_sends.is_empty());
-
         // process 1 should have something to the executor
         let to_executor = simulation.get_process(process_id_1).to_executor();
         assert_eq!(to_executor.len(), 1);
@@ -569,7 +565,22 @@ mod tests {
         // get that command
         let cmd_result = ready.pop().expect("there should a command ready");
 
-        // handle what was sent to client
+        // -------------------------
+        // forward now the mphantoms
+        let to_sends = simulation.forward_to_processes(mphantom);
+        // check there's nothing to send
+        assert!(to_sends.is_empty());
+
+        // process 1 should have something to the executor
+        let to_executor = simulation.get_process(process_id_1).to_executor();
+        assert_eq!(to_executor.len(), 1);
+
+        // handle in executor and check that it didn't generate another command
+        let mut ready = simulation.get_executor(process_id_1).handle(to_executor);
+        assert!(ready.is_empty());
+        // -------------------------
+
+        // handle the previous command result
         let (target, cmd) = simulation
             .forward_to_client(cmd_result, &time)
             .expect("there should a new submit");
