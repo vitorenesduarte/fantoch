@@ -2,21 +2,21 @@
 mod base;
 
 // This module contains common data-structures between protocols.
-mod common;
+pub mod common;
 
 // This module contains the definition of `Atlas`.
 mod atlas;
 
-/// This module contains the definition of `EPaxos`.
+// This module contains the definition of `EPaxos`.
 mod epaxos;
 
-// // This module contains the definition of `Newt`.
-// mod newt;
+// This module contains the definition of `Newt`.
+mod newt;
 
 // Re-exports.
 pub use atlas::Atlas;
 pub use epaxos::EPaxos;
-// pub use newt::Newt;
+pub use newt::Newt;
 
 pub use base::BaseProcess;
 

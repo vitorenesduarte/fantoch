@@ -1,44 +1,34 @@
-// This module contains the definition of `KeyClocks` and `QuorumClocks`.
-mod clocks;
-
-// This module contains the definition of `ProcessVotes`, `Votes` and `VoteRange`.
-mod votes;
-
-// This module contains the definition of `MultiVotesTable`.
-mod votes_table;
-
-use crate::command::{Command, CommandResult, Pending};
+use crate::command::Command;
 use crate::config::Config;
-use crate::id::{Dot, ProcessId, Rifl};
-use crate::kvs::{KVOp, KVStore, Key};
+use crate::executor::{Executor, TableExecutor};
+use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::planet::{Planet, Region};
-use crate::protocol::common::{Commands, Info};
-use crate::protocol::newt::clocks::{KeysClocks, QuorumClocks};
-use crate::protocol::newt::votes::{ProcessVotes, Votes};
-use crate::protocol::newt::votes_table::MultiVotesTable;
+use crate::protocol::common::{
+    info::{Commands, Info},
+    votes::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
+};
 use crate::protocol::{BaseProcess, Process, ToSend};
 use std::cmp;
 use std::mem;
+
+type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
 pub struct Newt {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
     cmds: Commands<CommandInfo>,
-    table: MultiVotesTable,
-    store: KVStore,
-    pending: Pending,
-    commands_ready: Vec<CommandResult>,
+    to_executor: Vec<ExecutionInfo>,
 }
 
 impl Process for Newt {
     type Message = Message;
+    type Executor = TableExecutor;
 
     /// Creates a new `Newt` process.
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
-        // compute fast and write quorum sizes and the stability threshold
-        let (fast_quorum_size, stability_threshold, write_quorum_size) =
-            Newt::quorum_sizes(&config);
+        // compute fast and write quorum sizes
+        let (fast_quorum_size, write_quorum_size, _) = config.newt_quorum_sizes();
 
         // create protocol data-structures
         let bp = BaseProcess::new(
@@ -51,20 +41,14 @@ impl Process for Newt {
         );
         let keys_clocks = KeysClocks::new(process_id);
         let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
-        let table = MultiVotesTable::new(config.n(), stability_threshold);
-        let store = KVStore::new();
-        let pending = Pending::new();
-        let commands_ready = Vec::new();
+        let to_executor = Vec::new();
 
         // create `Newt`
         Self {
             bp,
             keys_clocks,
             cmds,
-            table,
-            store,
-            pending,
-            commands_ready,
+            to_executor,
         }
     }
 
@@ -84,7 +68,7 @@ impl Process for Newt {
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> ToSend<Self::Message> {
+    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Message>> {
         match msg {
             Message::MCollect {
                 dot,
@@ -108,25 +92,20 @@ impl Process for Newt {
     }
 
     /// Returns new commands results to be sent to clients.
-    fn commands_ready(&mut self) -> Vec<CommandResult> {
-        let mut ready = Vec::new();
-        mem::swap(&mut ready, &mut self.commands_ready);
-        ready
+    fn to_executor(&mut self) -> Vec<ExecutionInfo> {
+        let mut to_executor = Vec::new();
+        mem::swap(&mut to_executor, &mut self.to_executor);
+        to_executor
     }
 
     fn show_metrics(&self) {
         self.bp.show_metrics();
-        self.table.show_stats();
     }
 }
 
 impl Newt {
-
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
-        // start command in `Pending`
-        self.pending.start(&cmd);
-
         // compute the command identifier
         let dot = self.bp.next_dot();
 
@@ -143,7 +122,11 @@ impl Newt {
         let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), target, mcollect)
+        ToSend {
+            from: self.id(),
+            target,
+            msg: mcollect,
+        }
     }
 
     fn handle_mcollect(
@@ -153,7 +136,7 @@ impl Newt {
         cmd: Command,
         quorum: Vec<ProcessId>,
         remote_clock: u64,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {}) from {}",
             self.id(),
@@ -168,7 +151,7 @@ impl Newt {
 
         // discard message if no longer in START
         if info.status != Status::START {
-            return ToSend::Nothing;
+            return None;
         }
 
         // TODO can we somehow combine the next 2 operations in order to save map lookups?
@@ -195,7 +178,11 @@ impl Newt {
         let target = vec![from];
 
         // return `ToSend`
-        ToSend::ToProcesses(self.id(), target, mcollectack)
+        Some(ToSend {
+            from: self.id(),
+            target,
+            msg: mcollectack,
+        })
     }
 
     fn handle_mcollectack(
@@ -204,7 +191,7 @@ impl Newt {
         dot: Dot,
         clock: u64,
         remote_votes: ProcessVotes,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {}",
             self.id(),
@@ -219,7 +206,7 @@ impl Newt {
 
         if info.status != Status::COLLECT {
             // do nothing if we're no longer COLLECT
-            return ToSend::Nothing;
+            return None;
         }
 
         // update votes with remote votes
@@ -265,14 +252,18 @@ impl Newt {
                 let target = self.bp.all();
 
                 // return `ToSend`
-                ToSend::ToProcesses(self.id(), target, mcommit)
+                Some(ToSend {
+                    from: self.id(),
+                    target,
+                    msg: mcommit,
+                })
             } else {
                 self.bp.slow_path();
                 // TODO slow path
                 todo!("slow path not implemented yet")
             }
         } else {
-            ToSend::Nothing
+            None
         }
     }
 
@@ -282,7 +273,7 @@ impl Newt {
         cmd: Option<Command>,
         clock: u64,
         mut votes: Votes,
-    ) -> ToSend<Message> {
+    ) -> Option<ToSend<Message>> {
         log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
 
         // get cmd info
@@ -291,7 +282,7 @@ impl Newt {
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             // TODO what about the executed status?
-            return ToSend::Nothing;
+            return None;
         }
 
         // update command info:
@@ -305,7 +296,7 @@ impl Newt {
         votes.merge(current_votes);
 
         // generate phantom votes if committed clock is higher than the local key's clock
-        let mut to_send = ToSend::Nothing;
+        let mut to_send = None;
         if let Some(cmd) = info.cmd.as_ref() {
             // if not a no op, check if we can generate more votes that can speed-up execution
             let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
@@ -314,19 +305,31 @@ impl Newt {
             if !process_votes.is_empty() {
                 let mphantom = Message::MPhantom { dot, process_votes };
                 let target = self.bp.all();
-                to_send = ToSend::ToProcesses(self.bp.process_id, target, mphantom)
+                to_send = Some(ToSend {
+                    from: self.bp.process_id,
+                    target,
+                    msg: mphantom,
+                });
             }
         }
 
-        // update votes table and execute commands that can be executed
-        let to_execute = self.table.add(dot, info.cmd.clone(), info.clock, votes);
-        self.execute(to_execute);
+        // create execution info if not a noop
+        // TODO if noOp, should we add `Votes` to the table, or there will be no votes?
+        if let Some(cmd) = info.cmd.clone() {
+            // create execution info
+            let execution_info = ExecutionInfo::votes(dot, cmd, info.clock, votes);
+            self.to_executor.push(execution_info);
+        }
 
         // return `ToSend`
         to_send
     }
 
-    fn handle_mphantom(&mut self, dot: Dot, process_votes: ProcessVotes) -> ToSend<Message> {
+    fn handle_mphantom(
+        &mut self,
+        dot: Dot,
+        process_votes: ProcessVotes,
+    ) -> Option<ToSend<Message>> {
         log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
 
         // get cmd info
@@ -334,38 +337,16 @@ impl Newt {
 
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
-            // only incorporate votes in the command votes table if the command has been committed
-            let to_execute = self.table.add_phantom_votes(process_votes);
-            self.execute(to_execute);
+            // create execution info
+            let execution_info = ExecutionInfo::phantom_votes(process_votes);
+            self.to_executor.push(execution_info);
         } else {
             // if not committed yet, update votes with remote votes
             info.votes.add(process_votes);
         }
-        ToSend::Nothing
-    }
 
-    fn execute(&mut self, to_execute: Vec<(Key, Vec<(Rifl, KVOp)>)>) {
-        // borrow everything we'll need
-        let commands_ready = &mut self.commands_ready;
-        let store = &mut self.store;
-        let pending = &mut self.pending;
-
-        // get more commands that are ready to be executed
-        let ready = to_execute
-            .into_iter()
-            // flatten each pair with a key and list of ready partial operations
-            .flat_map(|(key, ops)| {
-                ops.into_iter()
-                    .map(move |(rifl, op)| (key.clone(), rifl, op))
-            })
-            .filter_map(|(key, rifl, op)| {
-                // execute op in the `KVStore`
-                let op_result = store.execute(&key, op);
-
-                // add partial result to `Pending`
-                pending.add_partial(rifl, key, op_result)
-            });
-        commands_ready.extend(ready);
+        // nothing to send
+        None
     }
 
     // Replaces the value `local_votes` with empty votes, returning the previous votes.
@@ -447,6 +428,9 @@ mod tests {
 
     #[test]
     fn newt_flow() {
+        // create simulation
+        let mut simulation = Simulation::new();
+
         // processes ids
         let process_id_1 = 1;
         let process_id_2 = 2;
@@ -475,6 +459,11 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
 
+        // executors
+        let executor_1 = TableExecutor::new(&config);
+        let executor_2 = TableExecutor::new(&config);
+        let executor_3 = TableExecutor::new(&config);
+
         // newts
         let mut newt_1 = Newt::new(process_id_1, europe_west2.clone(), planet.clone(), config);
         let mut newt_2 = Newt::new(process_id_2, europe_west3.clone(), planet.clone(), config);
@@ -485,13 +474,10 @@ mod tests {
         newt_2.discover(processes.clone());
         newt_3.discover(processes.clone());
 
-        // create simulation
-        let mut simulation = Simulation::new();
-
         // register processes
-        simulation.register_process(newt_1);
-        simulation.register_process(newt_2);
-        simulation.register_process(newt_3);
+        simulation.register_process(newt_1, executor_1);
+        simulation.register_process(newt_2, executor_2);
+        simulation.register_process(newt_3, executor_3);
 
         // client workload
         let conflict_rate = 100;
@@ -507,7 +493,9 @@ mod tests {
         assert!(client_1.discover(processes));
 
         // start client
-        let (target, cmd) = client_1.start(&time);
+        let (target, cmd) = client_1
+            .start(&time)
+            .expect("there should be a first operation");
 
         // check that `target` is newt 1
         assert_eq!(target, process_id_1);
@@ -515,84 +503,80 @@ mod tests {
         // register clients
         simulation.register_client(client_1);
 
+        // register command in executor
+        simulation.get_executor(process_id_1).register(&cmd);
+
         // submit it in newt_0
-        let mcollects = simulation.get_process(target).submit(cmd);
+        let mcollect = simulation.get_process(target).submit(cmd);
 
         // check that the mcollect is being sent to 2 processes
-        assert!(mcollects.to_processes());
-        if let ToSend::ToProcesses(_, to, _) = mcollects.clone() {
-            assert_eq!(to.len(), 2 * f);
-            assert_eq!(to, vec![1, 2]);
-        } else {
-            panic!("ToSend::ToProcesses not found!");
-        }
+        let ToSend { target, .. } = mcollect.clone();
+        assert_eq!(target.len(), 2 * f);
+        assert_eq!(target, vec![1, 2]);
 
-        // handle in mcollects
-        let mut mcollectacks = simulation.forward_to_processes(mcollects);
+        // handle mcollects
+        let mut mcollectacks = simulation.forward_to_processes(mcollect);
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
-        assert!(mcollectacks.iter().all(|to_send| to_send.to_processes()));
 
         // handle the first mcollectack
-        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
-        let mcommit_tosend = mcommits.pop().unwrap();
+        let mcommits = simulation
+            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
         // no mcommit yet
-        assert!(mcommit_tosend.is_nothing());
+        assert!(mcommits.is_empty());
 
         // handle the second mcollectack
-        let mut mcommits = simulation.forward_to_processes(mcollectacks.pop().unwrap());
-        let mcommit_tosend = mcommits.pop().unwrap();
+        let mut mcommits = simulation
+            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        // there's a commit now
+        assert_eq!(mcommits.len(), 1);
 
-        // check that there is an mcommit sent to everyone
-        assert!(mcommit_tosend.to_processes());
-        if let ToSend::ToProcesses(_, to, _) = mcommit_tosend.clone() {
-            assert_eq!(to.len(), n);
-        } else {
-            panic!("ToSend::ToProcesses not found!");
-        }
+        // check that the mcommit is sent to everyone
+        let mcommit = mcommits.pop().expect("there should be an mcommit");
+        let ToSend { target, .. } = mcommit.clone();
+        assert_eq!(target.len(), n);
 
         // all processes handle it
-        let to_sends = simulation.forward_to_processes(mcommit_tosend);
-        // get the single mphantom from process 3
-        let to_sends = to_sends
-            .into_iter()
-            .filter(|to_send| to_send.to_processes())
-            .collect::<Vec<_>>();
-        assert_eq!(to_sends.len(), 1);
+        let mut mphantoms = simulation.forward_to_processes(mcommit);
+        // there should be one mphantom (from process 3)
+        assert_eq!(mphantoms.len(), 1);
 
-        let to_send = to_sends.into_iter().next().unwrap();
-        match to_send.clone() {
-            ToSend::ToProcesses(from, target, Message::MPhantom { .. }) => {
+        // get mphantom
+        let mphantom = mphantoms.pop().expect("there should an mphantom");
+        let ToSend { from, target, msg } = mphantom.clone();
+
+        match msg {
+            Message::MPhantom { .. } => {
                 assert_eq!(from, process_id_3);
                 assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
             }
             _ => panic!("Message::MPhantom not found!"),
         }
 
-        let nothings = simulation.forward_to_processes(to_send);
-        assert!(nothings.into_iter().all(|to_send| to_send.is_nothing()));
+        let to_sends = simulation.forward_to_processes(mphantom);
+        // check there's nothing to send
+        assert!(to_sends.is_empty());
 
-        // process 1 should have a result to the client
-        let commands_ready = simulation.get_process(process_id_1).commands_ready();
-        assert_eq!(commands_ready.len(), 1);
+        // process 1 should have something to the executor
+        let to_executor = simulation.get_process(process_id_1).to_executor();
+        assert_eq!(to_executor.len(), 1);
+
+        // handle in executor and check there's a single command ready
+        let mut ready = simulation.get_executor(process_id_1).handle(to_executor);
+        assert_eq!(ready.len(), 1);
+
+        // get that command
+        let cmd_result = ready.pop().expect("there should a command ready");
 
         // handle what was sent to client
-        let new_submit = simulation
-            .forward_to_clients(commands_ready, &time)
-            .into_iter()
-            .next()
-            .unwrap();
-        assert!(new_submit.to_coordinator());
+        let (target, cmd) = simulation
+            .forward_to_client(cmd_result, &time)
+            .expect("there should a new submit");
 
-        let mcollect = simulation
-            .forward_to_processes(new_submit)
-            .into_iter()
-            .next()
-            .unwrap();
-        if let ToSend::ToProcesses(from, _, Message::MCollect { dot, .. }) = mcollect {
-            assert_eq!(from, target);
-            assert_eq!(dot, Dot::new(target, 2));
+        let ToSend { msg, .. } = simulation.get_process(target).submit(cmd);
+        if let Message::MCollect { dot, .. } = msg {
+            assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {
             panic!("Message::MCollect not found!");
         }

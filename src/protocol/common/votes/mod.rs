@@ -1,3 +1,9 @@
+// This module contains the definition of `KeysClocks` and `QuorumClocks`.
+mod clocks;
+
+// Re-exports.
+pub use clocks::{KeysClocks, QuorumClocks};
+
 use crate::id::ProcessId;
 use crate::kvs::Key;
 use std::collections::hash_map::{self, HashMap};
@@ -105,7 +111,7 @@ mod tests {
     use super::*;
     use crate::command::Command;
     use crate::id::Rifl;
-    use crate::protocol::newt::clocks::KeysClocks;
+    use crate::protocol::common::votes::KeysClocks;
     use std::cmp::max;
 
     impl VoteRange {

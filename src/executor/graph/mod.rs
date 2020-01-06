@@ -4,6 +4,12 @@ mod tarjan;
 /// This module contains the definition of `VertexIndex` and `PendingIndex`.
 mod index;
 
+/// This modules contains the definition of `GraphExecutor` and `GraphExecutionInfo`.
+mod executor;
+
+// Re-exports.
+pub use executor::{GraphExecutionInfo, GraphExecutor};
+
 use self::index::{PendingIndex, VertexIndex};
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::command::Command;

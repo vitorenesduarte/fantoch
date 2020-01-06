@@ -569,7 +569,7 @@ mod tests {
         assert_eq!(target.len(), 2 * f);
         assert_eq!(target, vec![1, 2]);
 
-        // handle in mcollects
+        // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);
 
         // check that there are 2 mcollectacks

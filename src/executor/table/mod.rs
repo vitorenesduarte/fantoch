@@ -1,9 +1,15 @@
+/// This modules contains the definition of `TableExecutor` and `TableExecutionInfo`.
+mod executor;
+
+// Re-exports.
+pub use executor::{TableExecutionInfo, TableExecutor};
+
 use crate::command::Command;
 use crate::elapsed;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
 use crate::metrics::Metrics;
-use crate::protocol::newt::votes::{ProcessVotes, VoteRange, Votes};
+use crate::protocol::common::votes::{ProcessVotes, VoteRange, Votes};
 use crate::util;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -30,7 +36,7 @@ impl MultiVotesTable {
         }
     }
 
-    pub fn show_stats(&self) {
+    pub fn show_metrics(&self) {
         self.metrics.show()
     }
 
@@ -39,18 +45,10 @@ impl MultiVotesTable {
     pub fn add(
         &mut self,
         dot: Dot,
-        cmd: Option<Command>,
+        cmd: Command,
         clock: u64,
         votes: Votes,
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
-        // if noOp, do nothing;
-        // TODO if noOp, should we add `Votes` to the table, or there will be no
-        // votes?
-        let cmd = match cmd {
-            Some(cmd) => cmd,
-            None => return Vec::new(),
-        };
-
         // create sort identifier:
         // - if two ops got assigned the same clock, they will be ordered by dot
         let sort_id = (clock, dot);

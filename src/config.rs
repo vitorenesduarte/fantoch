@@ -105,7 +105,7 @@ impl Config {
             (minority + f, minority + 1)
         };
         let write_quorum_size = f + 1;
-        (fast_quorum_size, stability_threshold, write_quorum_size)
+        (fast_quorum_size, write_quorum_size, stability_threshold)
     }
 }
 
