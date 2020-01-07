@@ -182,7 +182,7 @@ fn run<P: Process>(
     println!("outcome: {:?}", latencies);
 
     // compute stats
-    let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum) = latencies
+    let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum, p9999_sum) = latencies
         .into_iter()
         .map(|(_region, (region_issued_commands, region_latencies))| {
             let region_stats = Stats::from(region_latencies);
@@ -193,12 +193,13 @@ fn run<P: Process>(
                 region_stats.percentile(0.95).value(),
                 region_stats.percentile(0.99).value(),
                 region_stats.percentile(0.999).value(),
+                region_stats.percentile(0.9999).value(),
             )
         })
         .fold(
-            (0, 0.0, 0.0, 0.0, 0.0, 0.0),
-            |(issued_commands_acc, mean_acc, p5_acc, p95_acc, p99_acc, p999_acc),
-             (issued_commands, mean, p5, p95, p99, p999)| {
+            (0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            |(issued_commands_acc, mean_acc, p5_acc, p95_acc, p99_acc, p999_acc, p9999_acc),
+             (issued_commands, mean, p5, p95, p99, p999, p9999)| {
                 (
                     issued_commands_acc + issued_commands,
                     mean_acc + mean,
@@ -206,6 +207,7 @@ fn run<P: Process>(
                     p95_acc + p95,
                     p99_acc + p99,
                     p999_acc + p999,
+                    p9999_acc + p9999,
                 )
             },
         );
@@ -219,14 +221,15 @@ fn run<P: Process>(
     // TODO averaging of percentiles is just wrong, but we'll do it for now
     let region_count = region_count as f64;
     println!(
-        "n={} AND c={} | avg={} p5={} p95={} p99={} p99.9={}",
+        "n = {} AND c = {} | avg={} p5={} p95={} p99={} p99.9={} p99.99={}",
         config.n(),
         clients_per_region,
-        mean_sum / region_count,
-        p5_sum / region_count,
-        p95_sum / region_count,
-        p99_sum / region_count,
-        p999_sum / region_count
+        (mean_sum / region_count).round() as u64,
+        (p5_sum / region_count).round() as u64,
+        (p95_sum / region_count).round() as u64,
+        (p99_sum / region_count).round() as u64,
+        (p999_sum / region_count).round() as u64,
+        (p9999_sum / region_count).round() as u64,
     );
 }
 
