@@ -118,7 +118,7 @@ impl EPaxos {
         // compute its clock
         // - similarly to Atlas, here we shouldn't save the command in `keys_clocks`; if we do, it
         //   will be declared as a dependency of itself when this message is handled by its own
-        //   coordinator
+        //   coordinator, which prevents fast paths with f > 1
         let clock = self.keys_clocks.clock(&cmd);
 
         // create `MCollect` and target

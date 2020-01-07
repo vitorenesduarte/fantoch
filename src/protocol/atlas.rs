@@ -111,7 +111,8 @@ impl Atlas {
 
         // compute its clock
         // - here we shouldn't save the command in `keys_clocks`; if we do, it will be declared as a
-        //   dependency of itself when this message is handled by its own coordinator
+        //   dependency of itself when this message is handled by its own coordinator, which
+        //   prevents fast paths with f > 1
         // TODO is there a parallel with newt? or it doesn't suffer from this problem?
         let clock = self.keys_clocks.clock(&cmd);
 
