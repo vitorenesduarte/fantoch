@@ -192,14 +192,14 @@ impl VotesTable {
     }
 
     fn stable_ops(&mut self) -> Vec<(Rifl, KVOp)> {
-        // compute stable sort id:
+        // compute *next* stable sort id:
         // - if clock 10 is stable, then we can execute all ops with an id smaller than `(11,0)`
         // - if id with `(11,0)` is also part of this local structure, we can also execute it
         //   without 11 being stable, because, once 11 is stable, it will be the first to be
         //   executed either way
         let stable_clock = self.stable_clock();
         let first_dot = Dot::new(1, 0);
-        let stable_sort_id = (stable_clock + 1, first_dot);
+        let next_stable = (stable_clock + 1, first_dot);
 
         // in fact, in the above example, if `(11,0)` is executed, we can also
         // execute `(11,1)`, and with that, execute `(11,2)` and so on
@@ -208,11 +208,12 @@ impl VotesTable {
 
         // compute the list of ops that can be executed now
         let stable = {
-            let mut unstable = self.ops.split_off(&stable_sort_id);
-            // swap unstable with self.cmds
-            mem::swap(&mut unstable, &mut self.ops);
-            // now unstable contains in fact the stable
-            unstable
+            // remove from `self.ops` ops higher than `next_stable`, including `next_stable`
+            let mut remaining = self.ops.split_off(&next_stable);
+            // swap remaining with `self.ops`
+            mem::swap(&mut remaining, &mut self.ops);
+            // now remaingin contains what's the stable
+            remaining
         };
 
         // return stable ops
