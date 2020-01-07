@@ -4,6 +4,7 @@ use threshold::{MaxSet, TClock, VClock};
 
 type ThresholdClock = TClock<ProcessId, MaxSet>;
 
+#[derive(Debug)]
 pub struct QuorumClocks {
     // fast quorum size
     q: usize,
