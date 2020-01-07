@@ -1,9 +1,13 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-pub fn merge<K, V, F>(map: &mut BTreeMap<K, V>, other: BTreeMap<K, V>, merge_fun: F)
+pub fn merge<K, V, F>(
+    mut map: BTreeMap<K, V>,
+    other: BTreeMap<K, V>,
+    merge_fun: F,
+) -> BTreeMap<K, V>
 where
-    K: Ord + PartialEq + Eq,
+    K: Ord + Eq,
     F: Fn(&mut V, V),
 {
     // create iterators for `map` and `other`
@@ -62,6 +66,9 @@ where
     // - `other_iter`: keys from `other` that are larger than the larger key in `map`
     map.extend(absent);
     map.extend(other_iter);
+
+    // return merged map
+    map
 }
 
 #[cfg(test)]
@@ -69,26 +76,49 @@ mod proptests {
     use super::*;
     use crate::elapsed;
     use quickcheck_macros::quickcheck;
+    use std::collections::HashMap;
+    use std::hash::Hash;
+    use std::iter::FromIterator;
 
-    type Map = BTreeMap<u64, Vec<u64>>;
-
-    fn merge_fun(m: &mut Vec<u64>, v: Vec<u64>) {
-        m.extend(v)
-    }
-
-    fn naive_merge(mut map: Map, other: Map) -> Map {
-        other.into_iter().for_each(|(k, v)| {
-            let m = map.entry(k).or_insert_with(Vec::new);
-            merge_fun(m, v)
+    fn hash_merge<K, V, F>(
+        mut map: HashMap<K, V>,
+        other: HashMap<K, V>,
+        merge_fun: F,
+    ) -> HashMap<K, V>
+    where
+        K: Hash + Eq,
+        F: Fn(&mut V, V),
+    {
+        other.into_iter().for_each(|(k, v)| match map.get_mut(&k) {
+            Some(m) => merge_fun(m, v),
+            None => {
+                map.entry(k).or_insert(v);
+            }
         });
         map
     }
 
+    type K = u64;
+    type V = Vec<u64>;
+    fn merge_fun(m: &mut V, v: V) {
+        m.extend(v)
+    }
+
     #[quickcheck]
-    fn merge_check(mut map: Map, other: Map) -> bool {
-        let (naive_time, expected) = elapsed!(naive_merge(map.clone(), other.clone()));
-        let (time, ()) = elapsed!(merge(&mut map, other, merge_fun));
+    fn merge_check(map: Vec<(K, V)>, other: Vec<(K, V)>) -> bool {
+        // create hashmaps and merge them
+        let map_hash = HashMap::from_iter(map.clone());
+        let other_hash = HashMap::from_iter(other.clone());
+        let (naive_time, merge_hash) = elapsed!(hash_merge(map_hash, other_hash, merge_fun));
+
+        // create btreemaps and merge them
+        let map_btree = BTreeMap::from_iter(map.clone());
+        let other_btree = BTreeMap::from_iter(other.clone());
+        let (time, merge_btree) = elapsed!(merge(map_btree, other_btree, merge_fun));
+
+        // show merge times
         println!("{} {}", naive_time.as_nanos(), time.as_nanos());
-        map == expected
+
+        merge_btree == BTreeMap::from_iter(merge_hash)
     }
 }
