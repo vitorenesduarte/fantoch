@@ -5,7 +5,7 @@ use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::common::{
-    dependency::{KeysClocks, QuorumClocks},
+    graph::{KeysClocks, QuorumClocks},
     info::{Commands, Info},
     synod::{Synod, SynodMessage},
 };

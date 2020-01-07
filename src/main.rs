@@ -8,24 +8,24 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    // println!(">running newt n = 5 | f = 1...");
-    // let config = Config::new(5, 1);
-    // run_in_thread(move || increasing_load::<Newt>(config));
+    println!(">running newt n = 5 | f = 1...");
+    let config = Config::new(5, 1);
+    run_in_thread(move || increasing_load::<Newt>(config));
 
-    println!(">running atlas n = 5 | f = 1...");
-    let mut config = Config::new(5, 1);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<Atlas>(config));
-
-    println!(">running atlas n = 5 | f = 2...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<Atlas>(config));
-
-    println!(">running epaxos n = 5...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<EPaxos>(config));
+    // println!(">running atlas n = 5 | f = 1...");
+    // let mut config = Config::new(5, 1);
+    // config.set_transitive_conflicts(true);
+    // run_in_thread(move || increasing_load::<Atlas>(config));
+    //
+    // println!(">running atlas n = 5 | f = 2...");
+    // let mut config = Config::new(5, 2);
+    // config.set_transitive_conflicts(true);
+    // run_in_thread(move || increasing_load::<Atlas>(config));
+    //
+    // println!(">running epaxos n = 5...");
+    // let mut config = Config::new(5, 2);
+    // config.set_transitive_conflicts(true);
+    // run_in_thread(move || increasing_load::<EPaxos>(config));
 }
 
 fn equidistant<P: Process>() {
@@ -79,7 +79,7 @@ fn increasing_load<P: Process>(config: Config) {
     ];
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256];
+    let cs = vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 
     // clients workload
     let conflict_rate = 10;

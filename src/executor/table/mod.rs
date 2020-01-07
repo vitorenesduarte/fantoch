@@ -9,7 +9,7 @@ use crate::elapsed;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
 use crate::metrics::Metrics;
-use crate::protocol::common::votes::{ProcessVotes, VoteRange, Votes};
+use crate::protocol::common::table::{ProcessVotes, VoteRange, Votes};
 use crate::util;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;

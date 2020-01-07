@@ -6,7 +6,7 @@ use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::common::{
     info::{Commands, Info},
-    votes::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
+    table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
 };
 use crate::protocol::{BaseProcess, Process, ToSend};
 use std::cmp;

@@ -111,7 +111,7 @@ mod tests {
     use super::*;
     use crate::command::Command;
     use crate::id::Rifl;
-    use crate::protocol::common::votes::KeysClocks;
+    use crate::protocol::common::table::KeysClocks;
     use std::cmp::max;
 
     impl VoteRange {
