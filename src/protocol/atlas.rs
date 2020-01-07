@@ -110,8 +110,10 @@ impl Atlas {
         let cmd = Some(cmd);
 
         // compute its clock
+        // - here we shouldn't save the command in `keys_clocks`; if we do, it will be declared as a
+        //   dependency of itself when this message is handled by its own coordinator
+        // TODO is there a parallel with newt? or it doesn't suffer from this problem?
         let clock = self.keys_clocks.clock(&cmd);
-        self.keys_clocks.add(dot, &cmd);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -155,8 +157,15 @@ impl Atlas {
             return None;
         }
 
-        // compute its clock
-        let clock = self.keys_clocks.clock_with_past(&cmd, remote_clock);
+        // optimization: compute clock if not from self
+        // TODO is there a parallel with newt?
+        let clock = if from == self.bp.process_id {
+            remote_clock
+        } else {
+            self.keys_clocks.clock_with_past(&cmd, remote_clock)
+        };
+
+        // save command in order to be declared as a conflict for following commands
         self.keys_clocks.add(dot, &cmd);
 
         // update command info
