@@ -2,12 +2,16 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Stats;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, EPaxos, Process};
+use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
+    // println!(">running newt n = 5 | f = 1...");
+    // let config = Config::new(5, 1);
+    // run_in_thread(move || increasing_load::<Newt>(config));
+
     println!(">running atlas n = 5 | f = 1...");
     let mut config = Config::new(5, 1);
     config.set_transitive_conflicts(true);
@@ -75,7 +79,7 @@ fn increasing_load<P: Process>(config: Config) {
     ];
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+    let cs = vec![8, 16, 32, 64, 128, 256];
 
     // clients workload
     let conflict_rate = 10;
@@ -179,7 +183,7 @@ fn run<P: Process>(
         client_regions,
         planet,
     );
-    println!("outcome: {:?}", latencies);
+    println!("simulation ended...");
 
     // compute stats
     let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum, p9999_sum) = latencies
