@@ -14,7 +14,6 @@ use crate::util;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::mem;
-use std::time::Duration;
 use threshold::AEClock;
 
 type SortId = (u64, Dot);
@@ -57,7 +56,8 @@ impl MultiVotesTable {
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
         let (duration, result) = elapsed!(self.add_cmd_and_find(sort_id, cmd, votes));
-        self.add_votes_metric(duration);
+        self.metrics
+            .collect(MetricsKind::AddVotes, duration.as_micros() as u64);
         result
     }
 
@@ -68,7 +68,8 @@ impl MultiVotesTable {
         process_votes: ProcessVotes,
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         let (duration, result) = elapsed!(self.add_votes_and_find(process_votes));
-        self.add_phantom_votes_metric(duration);
+        self.metrics
+            .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
         result
     }
 
@@ -130,16 +131,6 @@ impl MultiVotesTable {
         } else {
             Some((key, stable_ops))
         }
-    }
-
-    fn add_votes_metric(&mut self, duration: Duration) {
-        self.metrics
-            .collect(MetricsKind::AddVotes, duration.as_micros() as u64);
-    }
-
-    fn add_phantom_votes_metric(&mut self, duration: Duration) {
-        self.metrics
-            .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
     }
 }
 
