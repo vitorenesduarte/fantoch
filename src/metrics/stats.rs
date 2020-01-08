@@ -17,7 +17,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    /// Creates an empty histogram
+    /// Creates an empty histogram.
     pub fn new() -> Self {
         Self::default()
     }
@@ -221,10 +221,10 @@ mod tests {
 
     #[test]
     fn stats_show() {
-        let statsgram = Stats::from(vec![1, 1, 1]);
-        assert_eq!(statsgram.mean().round(), "1.0");
-        assert_eq!(statsgram.cov().round(), "0.0");
-        assert_eq!(statsgram.mdtm().round(), "0.0");
+        let stats = Stats::from(vec![1, 1, 1]);
+        assert_eq!(stats.mean().round(), "1.0");
+        assert_eq!(stats.cov().round(), "0.0");
+        assert_eq!(stats.mdtm().round(), "0.0");
 
         let stats = Stats::from(vec![10, 20, 30]);
         assert_eq!(stats.mean().round(), "20.0");
