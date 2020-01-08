@@ -55,7 +55,7 @@ impl ClientPlacement {
 }
 
 /// Mapping from protocol name to its stats.
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct ProtocolStats(BTreeMap<String, Histogram>);
 
 impl ProtocolStats {

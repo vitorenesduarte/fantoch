@@ -7,7 +7,7 @@ use crate::planet::{Planet, Region};
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -101,7 +101,7 @@ impl Search {
         println!("config count: {}", count);
 
         // create result variable
-        let mut configs = BTreeSet::new();
+        let mut configs = BTreeMap::new();
 
         // TODO Transform what's below in an iterator.
         // With access to `p.min_n` and `p.max_n` it should be possible.
@@ -124,8 +124,10 @@ impl Search {
                                         let score =
                                             score3 + score5 + score7 + score9 + score11 + score13;
                                         let css = vec![cs3, cs5, cs7, cs9, cs11, cs13];
-                                        let config = (score, css, clients);
-                                        configs.insert(config);
+                                        configs
+                                            .entry(score)
+                                            .or_insert_with(Vec::new)
+                                            .push((score, css, clients));
                                     },
                                 );
                             });
@@ -140,6 +142,7 @@ impl Search {
             .into_iter()
             // sort DESC (highest score first)
             .rev()
+            .flat_map(|(_, configs)| configs)
             .collect()
     }
 

@@ -10,7 +10,7 @@ pub enum Stats {
     MDTM, // mean distance to mean
 }
 
-#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Histogram {
     // raw values: we have "100%" precision as all values are stored
     values: BTreeMap<u64, usize>,
@@ -66,6 +66,22 @@ impl Histogram {
 
     pub fn mdtm_improv(&self, other: &Self) -> F64 {
         self.mdtm() - other.mdtm()
+    }
+
+    pub fn min(&self) -> F64 {
+        self.values
+            .iter()
+            .next()
+            .map(|(min, _)| F64::new(*min as f64))
+            .unwrap_or(F64::nan())
+    }
+
+    pub fn max(&self) -> F64 {
+        self.values
+            .iter()
+            .next_back()
+            .map(|(min, _)| F64::new(*min as f64))
+            .unwrap_or(F64::nan())
     }
 
     // Computes a given percentile.
@@ -315,14 +331,20 @@ mod tests {
         assert_eq!(stats.mean(), F64::new(1.0));
         assert_eq!(stats.cov(), F64::new(0.0));
         assert_eq!(stats.mdtm(), F64::new(0.0));
+        assert_eq!(stats.min(), F64::new(1.0));
+        assert_eq!(stats.max(), F64::new(1.0));
 
         let stats = Histogram::from(vec![10, 20, 30]);
         assert_eq!(stats.mean(), F64::new(20.0));
         assert_eq!(stats.cov(), F64::new(0.5));
+        assert_eq!(stats.min(), F64::new(10.0));
+        assert_eq!(stats.max(), F64::new(30.0));
 
         let stats = Histogram::from(vec![10, 20]);
         assert_eq!(stats.mean(), F64::new(15.0));
         assert_eq!(stats.mdtm(), F64::new(5.0));
+        assert_eq!(stats.min(), F64::new(10.0));
+        assert_eq!(stats.max(), F64::new(20.0));
     }
 
     #[test]
@@ -371,6 +393,8 @@ mod tests {
         ];
         let stats = Histogram::from(data);
 
+        assert_eq!(stats.min(), F64::new(43.0));
+        assert_eq!(stats.max(), F64::new(99.0));
         assert_eq!(stats.percentile(0.9), F64::new(98.0));
         assert_eq!(stats.percentile(0.5), F64::new(77.0));
         assert_eq!(stats.percentile(0.2), F64::new(64.0));
