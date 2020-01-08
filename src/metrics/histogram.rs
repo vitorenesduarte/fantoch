@@ -30,15 +30,15 @@ impl Histogram {
     }
 
     /// Merges two histograms.
-    pub fn merge(&mut self, other: Self) {
-        btree::merge(&mut self.values, other.values, Self::merge_count);
+    pub fn merge(&mut self, other: &Self) {
+        histogram_merge(&mut self.values, &other.values)
     }
 
     /// Increments the occurrence of some value in the histogram.
     pub fn increment(&mut self, value: u64) {
         // register another occurrence of `value`
         let mut count = self.values.entry(value).or_insert(0);
-        Self::merge_count(&mut count, 1);
+        *count += 1;
     }
 
     pub fn mean(&self) -> F64 {
@@ -187,15 +187,121 @@ impl Histogram {
             .sum::<f64>();
         distances_sum / count
     }
-
-    fn merge_count(value: &mut usize, other: usize) {
-        *value += other;
-    }
 }
 
 impl fmt::Debug for Histogram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:.0}, {:.2})", self.mean().value(), self.cov().value())
+    }
+}
+
+pub fn histogram_merge<K>(map: &mut BTreeMap<K, usize>, other: &BTreeMap<K, usize>)
+where
+    K: Ord + Eq + Clone,
+{
+    // create iterators for `map` and `other`
+    let mut map_iter = map.iter_mut();
+    let mut other_iter = other.into_iter();
+
+    // variables to hold the "current value" of each iterator
+    let mut map_current = map_iter.next();
+    let mut other_current = other_iter.next();
+
+    // create vec where we'll store all entries with keys that are in `map`, are smaller than the
+    // larger key in `map`, but can't be inserted when interating `map`
+    let mut absent = Vec::new();
+
+    loop {
+        match (map_current, other_current) {
+            (Some((map_key, map_value)), Some((other_key, other_value))) => {
+                match map_key.cmp(&other_key) {
+                    Ordering::Less => {
+                        // simply advance `map` iterator
+                        map_current = map_iter.next();
+                        other_current = Some((other_key, other_value));
+                    }
+                    Ordering::Greater => {
+                        // save entry to added later
+                        absent.push((other_key, other_value));
+                        // advance `other` iterator
+                        map_current = Some((map_key, map_value));
+                        other_current = other_iter.next();
+                    }
+                    Ordering::Equal => {
+                        // merge values
+                        *map_value += other_value;
+                        // advance both iterators
+                        map_current = map_iter.next();
+                        other_current = other_iter.next();
+                    }
+                }
+            }
+            (None, Some(entry)) => {
+                // the key in `entry` is the first key from `other` that is larger than the larger
+                // key in `map`; save entry and break out of the loop
+                absent.push(entry);
+                break;
+            }
+            (_, None) => {
+                // there's nothing else to do here as in these (two) cases we have already
+                // incorporated all entries from `other`
+                break;
+            }
+        };
+    }
+
+    // extend `map` with keys from `other` that are not in `map`:
+    // - `absent`: keys from `other` that are smaller than the larger key in `map`
+    // - `other_iter`: keys from `other` that are larger than the larger key in `map`
+    map.extend(absent.into_iter().map(|(key, value)| (key.clone(), *value)));
+    map.extend(
+        other_iter
+            .into_iter()
+            .map(|(key, value)| (key.clone(), *value)),
+    );
+}
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use crate::elapsed;
+    use quickcheck_macros::quickcheck;
+    use std::collections::HashMap;
+    use std::hash::Hash;
+    use std::iter::FromIterator;
+
+    fn hash_merge<K>(map: &mut HashMap<K, usize>, other: &HashMap<K, usize>)
+    where
+        K: Hash + Eq + Clone,
+    {
+        other.into_iter().for_each(|(k, v)| match map.get_mut(&k) {
+            Some(m) => {
+                *m += *v;
+            }
+            None => {
+                map.entry(k.clone()).or_insert(*v);
+            }
+        });
+    }
+
+    type K = u64;
+
+    #[quickcheck]
+    fn merge_check(map: Vec<(K, usize)>, other: Vec<(K, usize)>) -> bool {
+        // create hashmaps and merge them
+        let mut hashmap = HashMap::from_iter(map.clone());
+        let other_hashmap = HashMap::from_iter(other.clone());
+        let (naive_time, _) = elapsed!(hash_merge(&mut hashmap, &other_hashmap));
+
+        // create btreemaps and merge them
+        let mut btreemap = BTreeMap::from_iter(map.clone());
+        let other_btreemap = BTreeMap::from_iter(other.clone());
+        let (time, _) = elapsed!(histogram_merge(&mut btreemap, &other_btreemap));
+
+        // show merge times
+        println!("{} {}", naive_time.as_nanos(), time.as_nanos());
+
+        btreemap == BTreeMap::from_iter(hashmap)
     }
 }
 

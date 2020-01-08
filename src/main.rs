@@ -189,8 +189,7 @@ fn run<P: Process>(
     // compute stats
     let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum, p9999_sum) = latencies
         .into_iter()
-        .map(|(_region, (region_issued_commands, region_latencies))| {
-            let region_stats = Stats::from(region_latencies);
+        .map(|(_region, (region_issued_commands, region_stats))| {
             (
                 region_issued_commands,
                 region_stats.mean().value(),

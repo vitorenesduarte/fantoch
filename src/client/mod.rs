@@ -31,7 +31,7 @@ pub struct Client {
     /// map from pending command RIFL to its start time
     pending: Pending,
     /// an histogram with all latencies observed by this client
-    latencies: Histogram,
+    latency_histogram: Histogram,
 }
 
 impl Client {
@@ -46,7 +46,7 @@ impl Client {
             rifl_gen: RiflGen::new(client_id),
             workload,
             pending: Pending::new(),
-            latencies: Histogram::new(),
+            latency_histogram: Histogram::new(),
         }
     }
 
@@ -83,15 +83,15 @@ impl Client {
     ) -> Option<(ProcessId, Command)> {
         // end command in pending and save command latency
         let latency = self.pending.end(cmd_result.rifl(), time);
-        self.latencies.increment(latency);
+        self.latency_histogram.increment(latency);
 
         // generate command
         self.next_cmd(time)
     }
 
-    /// Returns the histogram of latencies registered until now.
-    pub fn latencies(&self) -> &Histogram {
-        &self.latencies
+    /// Returns the histogram of latencies registered.
+    pub fn latency_histogram(&self) -> &Histogram {
+        &self.latency_histogram
     }
 
     /// Returns the number of commands already issued.
@@ -114,7 +114,6 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metrics::{Stats, F64};
     use crate::time::SimTime;
 
     // Generates some client.
@@ -198,6 +197,6 @@ mod tests {
         assert!(next.is_none());
 
         // check latencies
-        assert_eq!(client.latencies(), &Histogram::from(vec![10, 5]));
+        assert_eq!(client.latency_histogram(), &Histogram::from(vec![10, 5]));
     }
 }

@@ -3,6 +3,7 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
+use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
 use crate::sim::{Schedule, Simulation};
@@ -115,7 +116,7 @@ where
     }
 
     /// Run the simulation.
-    pub fn run(&mut self) -> HashMap<Region, (usize, Vec<u64>)> {
+    pub fn run(&mut self) -> HashMap<Region, (usize, Histogram)> {
         // start clients
         self.simulation
             .start_clients(&self.time)
@@ -271,28 +272,27 @@ where
 
     /// Get client's stats.
     /// TODO does this need to be mut?
-    fn clients_latencies(&mut self) -> HashMap<Region, (usize, Vec<u64>)> {
+    fn clients_latencies(&mut self) -> HashMap<Region, (usize, Histogram)> {
         let simulation = &mut self.simulation;
         let mut region_to_latencies = HashMap::new();
 
         for (&client_id, region) in self.client_to_region.iter() {
+            // get current metrics from this region
+            let (total_issued_commands, histogram) = match region_to_latencies.get_mut(region) {
+                Some(v) => v,
+                None => region_to_latencies
+                    .entry(region.clone())
+                    .or_insert((0, Histogram::new())),
+            };
+
             // get client from simulation
             let client = simulation.get_client(client_id);
-            // get client's issued commands and latencies
-            let issued_commands = client.issued_commands();
-            let latencies = client.latencies();
 
-            // get current metrics from this region
-            let (total_issued_commands, current_latencies) =
-                match region_to_latencies.get_mut(region) {
-                    Some(v) => v,
-                    None => region_to_latencies
-                        .entry(region.clone())
-                        .or_insert((0, Vec::new())),
-                };
-            // update metrics
-            *total_issued_commands += issued_commands;
-            current_latencies.extend(latencies);
+            // update issued comamnds with this client's issued commands
+            *total_issued_commands += client.issued_commands();
+
+            // update region's histogram with this client's histogram
+            histogram.merge(client.latency_histogram());
         }
 
         region_to_latencies
@@ -304,7 +304,7 @@ mod tests {
     use super::*;
     use crate::executor::Executor;
     use crate::id::{ProcessId, Rifl};
-    use crate::metrics::{Stats, F64};
+    use crate::metrics::F64;
     use crate::protocol::BaseProcess;
     use std::collections::HashSet;
     use std::mem;
@@ -455,7 +455,7 @@ mod tests {
         }
     }
 
-    fn run(f: usize, clients_per_region: usize) -> (Stats, Stats) {
+    fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
         // planet
         let planet = Planet::new("latency/");
 
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(us_west2_issued, expected);
 
         // return stats for both regions
-        (Stats::from(us_west1), Stats::from(us_west2))
+        (us_west1, us_west2)
     }
 
     #[test]
