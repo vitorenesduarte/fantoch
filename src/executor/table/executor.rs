@@ -78,7 +78,7 @@ impl Executor for TableExecutor {
             .collect()
     }
 
-    fn show_metrics(&mut self) {
+    fn show_metrics(&self) {
         self.table.show_metrics();
     }
 }

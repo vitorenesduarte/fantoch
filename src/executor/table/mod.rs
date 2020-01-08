@@ -37,7 +37,7 @@ impl MultiVotesTable {
         }
     }
 
-    pub fn show_metrics(&mut self) {
+    pub fn show_metrics(&self) {
         self.metrics.show()
     }
 

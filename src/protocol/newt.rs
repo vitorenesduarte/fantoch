@@ -98,7 +98,7 @@ impl Process for Newt {
         to_executor
     }
 
-    fn show_metrics(&mut self) {
+    fn show_metrics(&self) {
         self.bp.show_metrics();
     }
 }

@@ -58,8 +58,8 @@ where
     K: Debug,
     V: Debug,
 {
-    pub fn show(&mut self) {
-        self.collected.iter_mut().for_each(|(kind, stats)| {
+    pub fn show(&self) {
+        self.collected.iter().for_each(|(kind, stats)| {
             println!(
                 "{:?}: avg={} p95={} p99={}",
                 kind,

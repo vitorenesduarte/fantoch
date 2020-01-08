@@ -45,7 +45,7 @@ pub trait Process {
     #[must_use]
     fn to_executor(&mut self) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
-    fn show_metrics(&mut self) {
+    fn show_metrics(&self) {
         // by default, nothing to show
     }
 }

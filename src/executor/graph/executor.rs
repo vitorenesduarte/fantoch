@@ -70,7 +70,7 @@ impl Executor for GraphExecutor {
             .collect()
     }
 
-    fn show_metrics(&mut self) {
+    fn show_metrics(&self) {
         self.graph.show_metrics();
     }
 }
