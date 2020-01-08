@@ -83,11 +83,11 @@ impl DependencyGraph {
         self.index(vertex);
 
         // try to find a new SCC
-        let find_result = self.find_scc_measure(dot);
+        let find_result = self.measure_find_scc(dot);
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
-            self.try_pending_measure(keys);
+            self.measure_try_pending(keys);
         }
     }
 
@@ -99,18 +99,19 @@ impl DependencyGraph {
         assert!(self.vertex_index.index(vertex));
     }
 
-    fn find_scc_measure(&mut self, dot: Dot) -> FinderInfo {
+    fn measure_find_scc(&mut self, dot: Dot) -> FinderInfo {
         let (duration, find_result) = elapsed!(self.find_scc(dot));
         self.metrics
             .collect(MetricsKind::FindSCC, duration.as_micros() as u64);
         find_result
     }
+
     #[must_use]
     fn find_scc(&mut self, dot: Dot) -> FinderInfo {
         log!("Queue:find_scc {:?}", dot);
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
-        let finder_result = self.strong_connect_measure(&mut finder, dot);
+        let finder_result = self.measure_strong_connect(&mut finder, dot);
 
         // get sccs
         let (sccs, visited) = finder.finalize(&self.vertex_index);
@@ -122,7 +123,7 @@ impl DependencyGraph {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.chain_size_measure(scc.len());
+                self.measure_chain_size(scc.len());
                 self.save_scc(scc, &mut keys);
             });
 
@@ -157,7 +158,7 @@ impl DependencyGraph {
         })
     }
 
-    fn try_pending_measure(&mut self, keys: BinaryHeap<Key>) {
+    fn measure_try_pending(&mut self, keys: BinaryHeap<Key>) {
         let (duration, _) = elapsed!(self.try_pending(keys));
         self.metrics
             .collect(MetricsKind::TryPending, duration.as_micros() as u64);
@@ -202,7 +203,7 @@ impl DependencyGraph {
         }
     }
 
-    fn strong_connect_measure(&mut self, finder: &mut TarjanSCCFinder, dot: Dot) -> FinderResult {
+    fn measure_strong_connect(&mut self, finder: &mut TarjanSCCFinder, dot: Dot) -> FinderResult {
         // get the vertex
         let vertex = self
             .vertex_index
@@ -216,7 +217,7 @@ impl DependencyGraph {
         finder_result
     }
 
-    fn chain_size_measure(&mut self, size: usize) {
+    fn measure_chain_size(&mut self, size: usize) {
         self.metrics.collect(MetricsKind::ChainSize, size as u64);
     }
 }
