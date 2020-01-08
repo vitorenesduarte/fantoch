@@ -96,7 +96,7 @@ impl Process for EPaxos {
         to_executor
     }
 
-    fn show_metrics(&self) {
+    fn show_metrics(&mut self) {
         self.bp.show_metrics();
     }
 }

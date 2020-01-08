@@ -455,7 +455,7 @@ mod tests {
         }
     }
 
-    fn run(f: usize, clients_per_region: usize) -> (Stats<u64>, Stats<u64>) {
+    fn run(f: usize, clients_per_region: usize) -> (Stats, Stats) {
         // planet
         let planet = Planet::new("latency/");
 

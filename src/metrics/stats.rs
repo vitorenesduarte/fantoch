@@ -1,128 +1,171 @@
-use crate::metrics::F64;
-use num_traits::PrimInt;
+use crate::metrics::{btree, F64};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt;
 
 pub enum StatsKind {
     Mean,
-    COV,
-    MDTM,
+    COV,  // coefficient of variation
+    MDTM, // mean distance to mean
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub struct Stats<I> {
-    mean: F64,
-    cov: F64,  // coefficient of variation
-    mdtm: F64, // mean distance to mean
-    values: Vec<I>,
+#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct Stats {
+    // raw values: we have "100%" precision as all values are stored
+    values: BTreeMap<u64, usize>,
 }
 
-impl<I> fmt::Debug for Stats<I> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:.0}, {:.2})", self.mean.value(), self.cov.value(),)
-    }
-}
-
-impl<I> Stats<I>
-where
-    I: PrimInt,
-{
-    pub fn from(mut values: Vec<I>) -> Self {
-        // sort all values (so that percentiles can be computed)
-        values.sort_unstable();
-        // compute some stats
-        let (mean, cov, mdtm) = Stats::compute_stats(&values);
-        Self {
-            mean,
-            cov,
-            mdtm,
-            values,
-        }
+impl Stats {
+    /// Creates an empty histogram
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn mean_improv(&self, other: &Self) -> F64 {
-        self.mean - other.mean
+    /// Creates an histogram from a list of values.
+    pub fn from(values: Vec<u64>) -> Self {
+        let mut stats = Self::new();
+        values.into_iter().for_each(|value| stats.increment(value));
+        stats
     }
 
-    pub fn cov_improv(&self, other: &Self) -> F64 {
-        self.cov - other.cov
+    /// Merges two histograms.
+    pub fn merge(&mut self, other: Self) {
+        btree::merge(&mut self.values, other.values, Self::merge_count);
     }
 
-    pub fn mdtm_improv(&self, other: &Self) -> F64 {
-        self.mdtm - other.mdtm
+    /// Increments the occurrence of some value in the histogram.
+    pub fn increment(&mut self, value: u64) {
+        // register another occurrence of `value`
+        let mut count = self.values.entry(value).or_insert(0);
+        Self::merge_count(&mut count, 1);
     }
 
     pub fn mean(&self) -> F64 {
-        self.mean
+        let (mean, _) = self.compute_mean_and_count();
+        F64::new(mean)
     }
 
     pub fn cov(&self) -> F64 {
-        self.cov
+        let cov = self.compute_cov();
+        F64::new(cov)
     }
 
     pub fn mdtm(&self) -> F64 {
-        self.mdtm
+        let mdtm = self.compute_mdtm();
+        F64::new(mdtm)
     }
 
-    fn compute_stats(values: &[I]) -> (F64, F64, F64) {
-        // transform `u64`s in `f64`s
-        let values: Vec<f64> = values
-            .iter()
-            .map(|x| {
-                (*x).to_f64()
-                    .expect("it should be possible to represent the value as f64")
-            })
-            .collect();
+    pub fn mean_improv(&self, other: &Self) -> F64 {
+        self.mean() - other.mean()
+    }
 
+    pub fn cov_improv(&self, other: &Self) -> F64 {
+        self.cov() - other.cov()
+    }
+
+    pub fn mdtm_improv(&self, other: &Self) -> F64 {
+        self.mdtm() - other.mdtm()
+    }
+
+    // Computes a given percentile.
+    pub fn percentile(&self, percentile: f64) -> F64 {
+        assert!(percentile >= 0.0 && percentile <= 1.0);
+
+        // compute the number of elements in the histogram
+        let count = self.count() as f64;
+        let index = percentile * count;
+        let index_rounded = index.round();
+        // check if index is a whole number
+        let is_whole_number = (index - index_rounded).abs() == 0.0;
+
+        // compute final index
+        let mut index = index_rounded as usize;
+
+        // create data iterator of values in the histogram
+        let mut data = self.values.iter();
+
+        // compute left and right value that will be used to compute the percentile
+        let left_value;
+        let right_value;
+
+        loop {
+            let (value, count) = data.next().expect("there should a next histogram value");
+
+            match index.cmp(&count) {
+                Ordering::Equal => {
+                    // if it's the same, this is the left value and the next histogram value is the
+                    // right value
+                    left_value = *value as f64;
+                    right_value = data.next().map(|(value, _)| *value as f64);
+                    break;
+                }
+                Ordering::Less => {
+                    // if index is smaller, this value is both the left and the right value
+                    left_value = *value as f64;
+                    right_value = Some(left_value);
+                    break;
+                }
+                Ordering::Greater => {
+                    // if greater, keep going
+                    index -= count;
+                }
+            }
+        }
+
+        let value = if is_whole_number {
+            (left_value + right_value.expect("there should be a right value")) / 2.0
+        } else {
+            left_value
+        };
+
+        F64::new(value)
+    }
+
+    fn compute_mean_and_count(&self) -> (f64, f64) {
+        let (sum, count) = self.sum_and_count();
+        // cast them to floats
+        let sum = sum as f64;
+        let count = count as f64;
         // compute mean
-        let mean = Self::compute_mean(&values);
-
-        // compute coefficient of variation
-        let cov = Self::compute_cov(&values, mean);
-
-        // compute mean distance to mean
-        let mdtm = Self::compute_mdtm(&values, mean);
-
-        // return the 3 stats
-        (F64::new(mean), F64::new(cov), F64::new(mdtm))
+        let mean = sum / count;
+        (mean, count)
     }
 
-    // from https://rust-lang-nursery.github.io/rust-cookbook/science/mathematics/statistics.html
-    fn compute_mean(values: &[f64]) -> f64 {
-        let sum = values.iter().sum::<f64>();
-        let count = values.len() as f64;
-        sum / count
+    fn sum_and_count(&self) -> (u64, usize) {
+        self.values
+            .iter()
+            .fold((0, 0), |(sum_acc, count_acc), (value, count)| {
+                // compute the actual sum for this value
+                let sum = value * (*count as u64);
+                (sum_acc + sum, count_acc + count)
+            })
     }
 
-    fn compute_cov(values: &[f64], mean: f64) -> f64 {
-        let stddev = Self::compute_stddev(values, mean);
+    fn count(&self) -> usize {
+        self.values.iter().map(|(_, count)| count).sum::<usize>()
+    }
+
+    fn compute_cov(&self) -> f64 {
+        let (mean, count) = self.compute_mean_and_count();
+        let stddev = self.compute_stddev(mean, count);
         stddev / mean
     }
 
-    fn compute_mdtm(values: &[f64], mean: f64) -> f64 {
-        let count = values.len() as f64;
-        let distances_sum = values
-            .iter()
-            .map(|x| {
-                let diff = mean - x;
-                diff.abs()
-            })
-            .sum::<f64>();
-        distances_sum / count
-    }
-
-    fn compute_stddev(values: &[f64], mean: f64) -> f64 {
-        let variance = Self::compute_variance(values, mean);
+    fn compute_stddev(&self, mean: f64, count: f64) -> f64 {
+        let variance = self.compute_variance(mean, count);
         variance.sqrt()
     }
 
-    fn compute_variance(values: &[f64], mean: f64) -> f64 {
-        let count = values.len() as f64;
-        let sum = values
+    fn compute_variance(&self, mean: f64, count: f64) -> f64 {
+        let sum = self
+            .values
             .iter()
-            .map(|x| {
+            .map(|(x, x_count)| (*x as f64, *x_count as f64))
+            .map(|(x, x_count)| {
                 let diff = mean - x;
-                diff * diff
+                // as `x` was reported `x_count` times, we multiply the squared diff by it
+                (diff * diff) * x_count
             })
             .sum::<f64>();
         // we divide by (count - 1) to have the corrected version of variance
@@ -130,38 +173,29 @@ where
         sum / (count - 1.0)
     }
 
-    // Assumes `self.values` is sorted.
-    pub fn percentile(&self, percentile: f64) -> F64 {
-        assert!(percentile >= 0.0 && percentile <= 1.0);
-        let index = percentile * (self.values.len() as f64);
-        let index_rounded = index.round();
-        // check if index is a whole number
-        let is_whole_number = (index - index_rounded).abs() == 0.0;
+    fn compute_mdtm(&self) -> f64 {
+        let (mean, count) = self.compute_mean_and_count();
+        let distances_sum = self
+            .values
+            .iter()
+            .map(|(x, x_count)| (*x as f64, *x_count as f64))
+            .map(|(x, x_count)| {
+                let diff = mean - x;
+                // as `x` was reported `x_count` times, we multiply the absolute value by it
+                diff.abs() * x_count
+            })
+            .sum::<f64>();
+        distances_sum / count
+    }
 
-        // compute final index and create data iterator
-        let index = index_rounded as usize;
-        let mut data = self.values.iter();
+    fn merge_count(value: &mut usize, other: usize) {
+        *value += other;
+    }
+}
 
-        let value = if is_whole_number {
-            let left_value = data
-                .nth(index - 1)
-                .expect("there should be a left percentile value")
-                .to_f64()
-                .expect("left percentile value should be representable as f64");
-            let right_value = data
-                .next()
-                .expect("there should a right percentile value")
-                .to_f64()
-                .expect("right percentile value should be representable as f64");
-            (left_value + right_value) / 2.0
-        } else {
-            data.nth(index - 1)
-                .expect("there should a percentile value")
-                .to_f64()
-                .expect("percentile value should be representable as f64")
-        };
-
-        F64::new(value)
+impl fmt::Debug for Stats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:.0}, {:.2})", self.mean().value(), self.cov().value())
     }
 }
 
@@ -187,10 +221,10 @@ mod tests {
 
     #[test]
     fn stats_show() {
-        let stats = Stats::from(vec![1, 1, 1]);
-        assert_eq!(stats.mean().round(), "1.0");
-        assert_eq!(stats.cov().round(), "0.0");
-        assert_eq!(stats.mdtm().round(), "0.0");
+        let statsgram = Stats::from(vec![1, 1, 1]);
+        assert_eq!(statsgram.mean().round(), "1.0");
+        assert_eq!(statsgram.cov().round(), "0.0");
+        assert_eq!(statsgram.mdtm().round(), "0.0");
 
         let stats = Stats::from(vec![10, 20, 30]);
         assert_eq!(stats.mean().round(), "20.0");

@@ -117,7 +117,7 @@ impl BaseProcess {
             .expect("the slow quorum should be known")
     }
 
-    pub fn show_metrics(&self) {
+    pub fn show_metrics(&mut self) {
         self.metrics.show();
     }
 

@@ -22,6 +22,7 @@ use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};
 use std::fmt;
 use std::mem;
+use std::time::Duration;
 use threshold::{AEClock, VClock};
 
 pub struct DependencyGraph {
@@ -61,7 +62,7 @@ impl DependencyGraph {
         }
     }
 
-    pub fn show_metrics(&self) {
+    pub fn show_metrics(&mut self) {
         self.metrics.show();
     }
 
@@ -84,14 +85,12 @@ impl DependencyGraph {
 
         // try to find a new SCC
         let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.metrics
-            .collect(MetricsKind::FindSCC, duration.as_micros());
+        self.find_scc_metric(duration);
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
             let (duration, _) = elapsed!(self.try_pending(keys));
-            self.metrics
-                .collect(MetricsKind::TryPending, duration.as_micros());
+            self.try_pending_metric(duration);
         }
     }
 
@@ -116,8 +115,7 @@ impl DependencyGraph {
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
         let (duration, finder_result) =
             elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
-        self.metrics
-            .collect(MetricsKind::StrongConnect, duration.as_micros());
+        self.strong_connect_metric(duration);
 
         // get sccs
         let (sccs, visited) = finder.finalize(&self.vertex_index);
@@ -129,8 +127,7 @@ impl DependencyGraph {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.metrics
-                    .collect(MetricsKind::ChainSize, scc.len() as u128);
+                self.chain_size_metric(scc.len());
                 self.save_scc(scc, &mut keys);
             });
 
@@ -202,6 +199,25 @@ impl DependencyGraph {
                 }
             }
         }
+    }
+
+    fn find_scc_metric(&mut self, duration: Duration) {
+        self.metrics
+            .collect(MetricsKind::FindSCC, duration.as_micros() as u64);
+    }
+
+    fn try_pending_metric(&mut self, duration: Duration) {
+        self.metrics
+            .collect(MetricsKind::TryPending, duration.as_micros() as u64);
+    }
+
+    fn strong_connect_metric(&mut self, duration: Duration) {
+        self.metrics
+            .collect(MetricsKind::StrongConnect, duration.as_micros() as u64);
+    }
+
+    fn chain_size_metric(&mut self, size: usize) {
+        self.metrics.collect(MetricsKind::ChainSize, size as u64);
     }
 }
 

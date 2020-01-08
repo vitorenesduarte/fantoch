@@ -20,7 +20,7 @@ pub trait Executor {
 
     fn handle(&mut self, infos: Vec<Self::ExecutionInfo>) -> Vec<CommandResult>;
 
-    fn show_metrics(&self) {
+    fn show_metrics(&mut self) {
         // by default, nothing to show
     }
 }

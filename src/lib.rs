@@ -38,6 +38,3 @@ pub mod bote;
 
 // This module contains some utilitary functions.
 mod util;
-
-// This module contains a function to merge to `BTreeMap`'s.
-mod map_merge;

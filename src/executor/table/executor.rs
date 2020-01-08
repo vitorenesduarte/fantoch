@@ -50,7 +50,7 @@ impl Executor for TableExecutor {
                         cmd,
                         clock,
                         votes,
-                    } => table.add(dot, cmd, clock, votes),
+                    } => table.add_votes(dot, cmd, clock, votes),
                     TableExecutionInfo::PhantomVotes { process_votes } => {
                         table.add_phantom_votes(process_votes)
                     }
@@ -78,7 +78,7 @@ impl Executor for TableExecutor {
             .collect()
     }
 
-    fn show_metrics(&self) {
+    fn show_metrics(&mut self) {
         self.table.show_metrics();
     }
 }
