@@ -4,19 +4,19 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
 
-pub enum StatsKind {
+pub enum Stats {
     Mean,
     COV,  // coefficient of variation
     MDTM, // mean distance to mean
 }
 
 #[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-pub struct Stats {
+pub struct Histogram {
     // raw values: we have "100%" precision as all values are stored
     values: BTreeMap<u64, usize>,
 }
 
-impl Stats {
+impl Histogram {
     /// Creates an empty histogram.
     pub fn new() -> Self {
         Self::default()
@@ -193,7 +193,7 @@ impl Stats {
     }
 }
 
-impl fmt::Debug for Stats {
+impl fmt::Debug for Histogram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:.0}, {:.2})", self.mean().value(), self.cov().value())
     }
@@ -205,38 +205,38 @@ mod tests {
 
     #[test]
     fn stats() {
-        let stats = Stats::from(vec![1, 1, 1]);
+        let stats = Histogram::from(vec![1, 1, 1]);
         assert_eq!(stats.mean(), F64::new(1.0));
         assert_eq!(stats.cov(), F64::new(0.0));
         assert_eq!(stats.mdtm(), F64::new(0.0));
 
-        let stats = Stats::from(vec![10, 20, 30]);
+        let stats = Histogram::from(vec![10, 20, 30]);
         assert_eq!(stats.mean(), F64::new(20.0));
         assert_eq!(stats.cov(), F64::new(0.5));
 
-        let stats = Stats::from(vec![10, 20]);
+        let stats = Histogram::from(vec![10, 20]);
         assert_eq!(stats.mean(), F64::new(15.0));
         assert_eq!(stats.mdtm(), F64::new(5.0));
     }
 
     #[test]
     fn stats_show() {
-        let stats = Stats::from(vec![1, 1, 1]);
+        let stats = Histogram::from(vec![1, 1, 1]);
         assert_eq!(stats.mean().round(), "1.0");
         assert_eq!(stats.cov().round(), "0.0");
         assert_eq!(stats.mdtm().round(), "0.0");
 
-        let stats = Stats::from(vec![10, 20, 30]);
+        let stats = Histogram::from(vec![10, 20, 30]);
         assert_eq!(stats.mean().round(), "20.0");
         assert_eq!(stats.cov().round(), "0.5");
         assert_eq!(stats.mdtm().round(), "6.7");
 
-        let stats = Stats::from(vec![10, 20]);
+        let stats = Histogram::from(vec![10, 20]);
         assert_eq!(stats.mean().round(), "15.0");
         assert_eq!(stats.cov().round(), "0.5");
         assert_eq!(stats.mdtm().round(), "5.0");
 
-        let stats = Stats::from(vec![10, 20, 40, 10]);
+        let stats = Histogram::from(vec![10, 20, 40, 10]);
         assert_eq!(stats.mean().round(), "20.0");
         assert_eq!(stats.cov().round(), "0.7");
         assert_eq!(stats.mdtm().round(), "10.0");
@@ -244,16 +244,16 @@ mod tests {
 
     #[test]
     fn stats_improv() {
-        let stats_a = Stats::from(vec![1, 1, 1]);
-        let stats_b = Stats::from(vec![10, 20]);
+        let stats_a = Histogram::from(vec![1, 1, 1]);
+        let stats_b = Histogram::from(vec![10, 20]);
         assert_eq!(stats_a.mean_improv(&stats_b), F64::new(-14.0));
 
-        let stats_a = Stats::from(vec![1, 1, 1]);
-        let stats_b = Stats::from(vec![10, 20, 30]);
+        let stats_a = Histogram::from(vec![1, 1, 1]);
+        let stats_b = Histogram::from(vec![10, 20, 30]);
         assert_eq!(stats_a.cov_improv(&stats_b), F64::new(-0.5));
 
-        let stats_a = Stats::from(vec![1, 1, 1]);
-        let stats_b = Stats::from(vec![10, 20]);
+        let stats_a = Histogram::from(vec![1, 1, 1]);
+        let stats_b = Histogram::from(vec![10, 20]);
         assert_eq!(stats_a.mdtm_improv(&stats_b), F64::new(-5.0));
     }
 
@@ -263,7 +263,7 @@ mod tests {
             43, 54, 56, 61, 62, 66, 68, 69, 69, 70, 71, 72, 77, 78, 79, 85, 87, 88, 89, 93, 95, 96,
             98, 99, 99,
         ];
-        let stats = Stats::from(data);
+        let stats = Histogram::from(data);
 
         assert_eq!(stats.percentile(0.9), F64::new(98.0));
         assert_eq!(stats.percentile(0.5), F64::new(77.0));
