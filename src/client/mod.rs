@@ -11,6 +11,7 @@ pub use workload::Workload;
 use crate::command::{Command, CommandResult};
 use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
+use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::time::SysTime;
 use crate::util;
@@ -29,8 +30,8 @@ pub struct Client {
     workload: Workload,
     /// map from pending command RIFL to its start time
     pending: Pending,
-    /// list of all command latencies
-    latencies: Vec<u64>,
+    /// an histogram with all latencies observed by this client
+    latencies: Histogram,
 }
 
 impl Client {
@@ -45,7 +46,7 @@ impl Client {
             rifl_gen: RiflGen::new(client_id),
             workload,
             pending: Pending::new(),
-            latencies: Vec::with_capacity(workload.total_commands()),
+            latencies: Histogram::new(),
         }
     }
 
@@ -82,14 +83,14 @@ impl Client {
     ) -> Option<(ProcessId, Command)> {
         // end command in pending and save command latency
         let latency = self.pending.end(cmd_result.rifl(), time);
-        self.latencies.push(latency);
+        self.latencies.increment(latency);
 
         // generate command
         self.next_cmd(time)
     }
 
-    /// Computes `Stats` from latencies registered until now.
-    pub fn latencies(&self) -> &Vec<u64> {
+    /// Returns the histogram of latencies registered until now.
+    pub fn latencies(&self) -> &Histogram {
         &self.latencies
     }
 
@@ -197,10 +198,6 @@ mod tests {
         assert!(next.is_none());
 
         // check latencies
-        assert_eq!(client.latencies(), &vec![10, 5]);
-
-        // check stats
-        let stats = Stats::from(client.latencies().to_vec());
-        assert_eq!(stats.mean(), F64::new(7.5));
+        assert_eq!(client.latencies(), &Histogram::from(vec![10, 5]));
     }
 }
