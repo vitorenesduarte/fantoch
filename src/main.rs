@@ -1,6 +1,5 @@
 use planet_sim::client::Workload;
 use planet_sim::config::Config;
-use planet_sim::metrics::Stats;
 use planet_sim::planet::{Planet, Region};
 use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
 use std::thread;

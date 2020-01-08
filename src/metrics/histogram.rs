@@ -1,4 +1,4 @@
-use crate::metrics::{btree, F64};
+use crate::metrics::F64;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -37,7 +37,7 @@ impl Histogram {
     /// Increments the occurrence of some value in the histogram.
     pub fn increment(&mut self, value: u64) {
         // register another occurrence of `value`
-        let mut count = self.values.entry(value).or_insert(0);
+        let count = self.values.entry(value).or_insert(0);
         *count += 1;
     }
 

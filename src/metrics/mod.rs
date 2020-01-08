@@ -1,9 +1,6 @@
 // This module contains the definition of `F64`.
 pub mod float;
 
-// This module contains a function to merge to `BTreeMap`'s to be used to merge `Histogram`'s.
-mod btree;
-
 // This module contains the definition of `Histogram`.
 mod histogram;
 
