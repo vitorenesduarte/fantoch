@@ -1,22 +1,29 @@
 use futures::join;
 use std::error::Error;
+use std::fmt::Debug;
 use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::time::Duration;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+
+const LOCALHOST: &str = "127.0.0.1";
 
 /// Connect to all processes. It receives:
 /// - local port to bind to
 /// - list of addresses to connect to
-pub async fn connect_to_all<A: ToSocketAddrs>(
+pub async fn connect_to_all<A>(
     port: u16,
     addresses: Vec<A>,
-) -> Result<(Vec<TcpStream>, Vec<TcpStream>), Box<dyn Error>> {
+) -> Result<(Vec<TcpStream>, Vec<TcpStream>), Box<dyn Error>>
+where
+    A: ToSocketAddrs + Debug + Copy,
+{
     // number of processes
     let n = addresses.len();
 
     // try to bind localy
-    let listener = TcpListener::bind(("127.0.0.1", port)).await?;
+    let listener = TcpListener::bind((LOCALHOST, port)).await?;
 
     // create channel to communicate with listener
     let (tx, mut rx) = mpsc::unbounded_channel();
@@ -24,26 +31,40 @@ pub async fn connect_to_all<A: ToSocketAddrs>(
     // spawn listener
     tokio::spawn(listen(listener, tx));
 
-    // create list of readers and writers
-    let mut writers = Vec::with_capacity(n);
-    let mut readers = Vec::with_capacity(n);
+    // create list of in and out connections:
+    // - even though TCP is full-duplex, due to the current tokio parallel-tcp-socket-read-write
+    //   limitation, we going to use in streams for reading and out streams for writing, which can
+    //   be done in parallel
+    let mut outgoing = Vec::with_capacity(n);
+    let mut incoming = Vec::with_capacity(n);
 
     // connect to all addresses (and get the writers)
     for address in addresses {
-        let writer = TcpStream::connect(address).await?;
-        writers.push(writer);
+        loop {
+            match TcpStream::connect(address).await {
+                Ok(stream) => {
+                    outgoing.push(stream);
+                    break;
+                }
+                Err(e) => {
+                    println!("failed to connect to {:?}: {}", address, e);
+                    println!("will try again in 1 second");
+                    tokio::time::delay_for(Duration::from_secs(1)).await;
+                }
+            }
+        }
     }
 
     // receive from listener all connected (the readers)
     for _ in 0..n {
-        let reader = rx
+        let stream = rx
             .recv()
             .await
             .expect("should receive stream from listener");
-        readers.push(reader);
+        incoming.push(stream);
     }
 
-    Ok((readers, writers))
+    Ok((incoming, outgoing))
 }
 
 /// Listen on new connections and send them to parent process.

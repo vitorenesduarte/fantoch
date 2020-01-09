@@ -3,6 +3,7 @@ use planet_sim::run;
 use std::error::Error;
 
 const DEFAULT_PORT: u16 = 3717;
+const ADDRESSES_SEP: &str = ",";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -39,10 +40,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("addresses: {:?}", addresses);
 
     // connect to all
-    let (readers, writers) = run::net::connect_to_all(port, addresses).await?;
+    let (incoming, outgoing) = run::net::connect_to_all(port, addresses).await?;
 
-    println!("writers: {:?}", writers);
-    println!("readers: {:?}", writers);
+    println!("in: {:?}", incoming);
+    println!("out: {:?}", outgoing);
 
     Ok(())
 }
@@ -55,6 +56,6 @@ fn parse_port(port: Option<&str>) -> u16 {
 fn parse_addresses(addresses: Option<&str>) -> Vec<&str> {
     addresses
         .expect("addresses should be set")
-        .split(":")
+        .split(ADDRESSES_SEP)
         .collect()
 }
