@@ -23,14 +23,14 @@ fn main() {
     // config.set_transitive_conflicts(true);
     // run_in_thread(move || increasing_load::<Atlas>(config));
 
-    println!(">running epaxos n = 5...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<EPaxos>(config));
+    // println!(">running epaxos n = 5...");
+    // let mut config = Config::new(5, 2);
+    // config.set_transitive_conflicts(true);
+    // run_in_thread(move || increasing_load::<EPaxos>(config));
 
-    // println!(">running fpaxos n = 5 | f = 1");
-    // let mut config = Config::new(5, 1);
-    // increasing_load_fpaxos(config);
+    println!(">running fpaxos n = 5 | f = 1");
+    let mut config = Config::new(5, 1);
+    increasing_load_fpaxos(config);
 }
 
 fn equidistant<P: Process>() {
@@ -115,26 +115,36 @@ fn increasing_load<P: Process>(config: Config) {
 
 fn increasing_load_fpaxos(config: Config) {
     let planet = Planet::new("latency/");
-    let regions = vec![
+    let bote = Bote::from(planet);
+
+    // servers and clients
+    let servers = vec![
         Region::new("asia-south1"),
         Region::new("europe-north1"),
         Region::new("southamerica-east1"),
         Region::new("australia-southeast1"),
         Region::new("europe-west1"),
     ];
+    let clients = servers.clone();
 
-    let bote = Bote::from(planet);
+    // compute quorum size
+    let quorum_size = config.f() + 1;
 
-    regions.iter().for_each(|leader| {
-        //leader;
+    // for each possible leader
+    servers.iter().for_each(|leader| {
+        println!("leader: {:?}", leader);
+        let latencies = bote.leader(leader, &servers, &clients, quorum_size);
+        // show latency for each client
+        latencies.clone().into_iter().for_each(|(region, latency)| {
+            // create histogram
+            let histogram = Histogram::from(vec![latency]);
+            println!("region = {:?} |   {:?}", region, histogram);
+        });
+
+        // global histogram
+        let histogram = Histogram::from(latencies.into_iter().map(|(_, latency)| latency));
+        println!("n = {} AND c = {} |  {:?}", config.n(), 1, histogram);
     });
-
-    let region = 1;
-    let histogram = 1;
-    println!("region = {:?} |   {:?}", region, histogram);
-
-    let histogram = 1;
-    println!("n = {} AND c = {} |  {:?}", config.n(), 1, histogram);
 }
 
 fn increasing_regions<P: Process>() {
