@@ -1,3 +1,7 @@
+use bytes::Bytes;
+use futures::prelude::*;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -7,8 +11,6 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
-
-type Connection = Framed<TcpStream, LengthDelimitedCodec>;
 
 /// Connect to all processes. It receives:
 /// - local port to bind to
@@ -46,8 +48,8 @@ where
             match TcpStream::connect(address.clone()).await {
                 Ok(stream) => {
                     // save stream if connected successfully
-                    let stream = Framed::new(stream, LengthDelimitedCodec::new());
-                    outgoing.push(stream);
+                    let connection = Connection::new(stream);
+                    outgoing.push(connection);
                     break;
                 }
                 Err(e) => {
@@ -71,8 +73,8 @@ where
             .recv()
             .await
             .expect("should receive stream from listener");
-        let stream = Framed::new(stream, LengthDelimitedCodec::new());
-        incoming.push(stream);
+        let connection = Connection::new(stream);
+        incoming.push(connection);
     }
 
     Ok((incoming, outgoing))
@@ -91,5 +93,53 @@ async fn listen(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
             }
             Err(e) => println!("couldn't accept new connection: {:?}", e),
         }
+    }
+}
+
+/// Delimits frames using a length header.
+#[derive(Debug)]
+pub struct Connection {
+    stream: Framed<TcpStream, LengthDelimitedCodec>,
+}
+
+impl Connection {
+    pub fn new(stream: TcpStream) -> Self {
+        let stream = Framed::new(stream, LengthDelimitedCodec::new());
+        Self { stream }
+    }
+
+    pub async fn send<V>(&mut self, value: &V)
+    where
+        V: Serialize,
+    {
+        // serialize
+        let bytes = bincode::serialize(value).expect("serialize should work");
+        // TODO do we need `Bytes`?
+        let bytes = Bytes::from(bytes);
+        if let Err(e) = self.stream.send(bytes).await {
+            println!("error while writing to socket: {:?}", e);
+        }
+    }
+
+    pub async fn recv<V>(&mut self) -> Option<V>
+    where
+        V: DeserializeOwned,
+    {
+        self.stream
+            .next()
+            .await
+            // at this point we have `Option<Result<_, _>>`
+            .map(|result| match result {
+                Ok(bytes) => {
+                    let value = bincode::deserialize(&bytes).expect("deserialize should work");
+                    Some(value)
+                }
+                Err(e) => {
+                    println!("error while reading from socket: {:?}", e);
+                    None
+                }
+            })
+            // at this point we have `Option<Option<V>>`
+            .flatten()
     }
 }
