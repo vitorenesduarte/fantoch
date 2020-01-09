@@ -2,7 +2,7 @@ use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
 use crate::bote::protocol::{ClientPlacement, ProtocolStats};
 use crate::bote::Bote;
 use crate::elapsed;
-use crate::metrics::{Stats, F64};
+use crate::metrics::{Histogram, Stats, F64};
 use crate::planet::{Planet, Region};
 use permutator::Combination;
 use rayon::prelude::*;
@@ -249,6 +249,7 @@ impl Search {
 
                 // compute atlas stats
                 let atlas = bote.leaderless(config, clients, quorum_size);
+                let atlas = Histogram::from(atlas.into_iter().map(|(_client, latency)| latency));
                 stats.insert(Atlas, f, placement, atlas);
 
                 // compute fpaxos quorum size
@@ -256,6 +257,7 @@ impl Search {
 
                 // // compute best mean fpaxos stats
                 let fpaxos = bote.leader(leader, config, clients, quorum_size);
+                let fpaxos = Histogram::from(fpaxos.into_iter().map(|(_client, latency)| latency));
                 stats.insert(FPaxos, f, placement, fpaxos);
             }
 
@@ -264,6 +266,7 @@ impl Search {
 
             // compute epaxos stats
             let epaxos = bote.leaderless(config, clients, quorum_size);
+            let epaxos = Histogram::from(epaxos.into_iter().map(|(_client, latency)| latency));
             stats.insert(EPaxos, 0, placement, epaxos);
         }
 

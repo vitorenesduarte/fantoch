@@ -23,7 +23,7 @@ impl Histogram {
     }
 
     /// Creates an histogram from a list of values.
-    pub fn from(values: Vec<u64>) -> Self {
+    pub fn from<T: IntoIterator<Item = u64>>(values: T) -> Self {
         let mut stats = Self::new();
         values.into_iter().for_each(|value| stats.increment(value));
         stats

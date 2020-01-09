@@ -1,3 +1,4 @@
+use planet_sim::bote::Bote;
 use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
@@ -8,9 +9,9 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running newt n = 5 | f = 1...");
-    let config = Config::new(5, 1);
-    run_in_thread(move || increasing_load::<Newt>(config));
+    // println!(">running newt n = 5 | f = 1...");
+    // let config = Config::new(5, 1);
+    // run_in_thread(move || increasing_load::<Newt>(config));
 
     // println!(">running atlas n = 5 | f = 1...");
     // let mut config = Config::new(5, 1);
@@ -22,10 +23,14 @@ fn main() {
     // config.set_transitive_conflicts(true);
     // run_in_thread(move || increasing_load::<Atlas>(config));
 
-    // println!(">running epaxos n = 5...");
-    // let mut config = Config::new(5, 2);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<EPaxos>(config));
+    println!(">running epaxos n = 5...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<EPaxos>(config));
+
+    // println!(">running fpaxos n = 5 | f = 1");
+    // let mut config = Config::new(5, 1);
+    // increasing_load_fpaxos(config);
 }
 
 fn equidistant<P: Process>() {
@@ -80,6 +85,7 @@ fn increasing_load<P: Process>(config: Config) {
 
     // number of clients
     let cs = vec![8, 16, 32, 64, 128, 256, 512];
+    let cs = vec![512];
 
     // clients workload
     let conflict_rate = 10;
@@ -105,6 +111,30 @@ fn increasing_load<P: Process>(config: Config) {
             planet.clone(),
         );
     }
+}
+
+fn increasing_load_fpaxos(config: Config) {
+    let planet = Planet::new("latency/");
+    let regions = vec![
+        Region::new("asia-south1"),
+        Region::new("europe-north1"),
+        Region::new("southamerica-east1"),
+        Region::new("australia-southeast1"),
+        Region::new("europe-west1"),
+    ];
+
+    let bote = Bote::from(planet);
+
+    regions.iter().for_each(|leader| {
+        //leader;
+    });
+
+    let region = 1;
+    let histogram = 1;
+    println!("region = {:?} |   {:?}", region, histogram);
+
+    let histogram = 1;
+    println!("n = {} AND c = {} |  {:?}", config.n(), 1, histogram);
 }
 
 fn increasing_regions<P: Process>() {

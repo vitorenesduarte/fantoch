@@ -30,13 +30,13 @@ impl Bote {
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
     /// - one list being the regions where `clients` are
-    pub fn leaderless(
+    pub fn leaderless<'a>(
         &self,
         servers: &[Region],
-        clients: &[Region],
+        clients: &'a [Region],
         quorum_size: usize,
-    ) -> Histogram {
-        let latencies: Vec<_> = clients
+    ) -> Vec<(&'a Region, u64)> {
+        clients
             .iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
@@ -46,12 +46,9 @@ impl Bote {
                 let closest_to_quorum = self.quorum_latency(closest, servers, quorum_size);
 
                 // client perceived latency is the sum of both
-                client_to_closest + closest_to_quorum
+                (client, client_to_closest + closest_to_quorum)
             })
-            .collect();
-
-        // compute stats from these client perceived latencies
-        Histogram::from(latencies)
+            .collect()
     }
 
     /// Computes stats for a leader-based protocol with a given `quorum_size` for some `leader`.
@@ -59,29 +56,26 @@ impl Bote {
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
     /// - one list being the regions where `clients` are
-    pub fn leader(
+    pub fn leader<'a>(
         &self,
         leader: &Region,
         servers: &[Region],
-        clients: &[Region],
+        clients: &'a [Region],
         quorum_size: usize,
-    ) -> Histogram {
+    ) -> Vec<(&'a Region, u64)> {
         // compute the latency from leader to its closest quorum
         let leader_to_quorum = self.quorum_latency(leader, servers, quorum_size);
 
         // compute perceived latency for each client
-        let latencies: Vec<_> = clients
+        clients
             .iter()
             .map(|client| {
                 // compute the latency from client to leader
                 let client_to_leader = self.planet.ping_latency(client, &leader).unwrap();
                 // client perceived latency is the sum of both
-                client_to_leader + leader_to_quorum
+                (client, client_to_leader + leader_to_quorum)
             })
-            .collect();
-
-        // compute stats from these client perceived latencies
-        Histogram::from(latencies)
+            .collect()
     }
 
     /// Computes the best leader (for some criteria) and its stats for a leader-based protocol with
@@ -133,7 +127,12 @@ impl Bote {
             .iter()
             .map(|leader| {
                 // compute stats
-                let stats = self.leader(leader, servers, clients, quorum_size);
+                let latency_per_client = self.leader(leader, servers, clients, quorum_size);
+                let stats = Histogram::from(
+                    latency_per_client
+                        .into_iter()
+                        .map(|(_client, latency)| latency),
+                );
                 (leader, stats)
             })
             .collect()
@@ -217,18 +216,20 @@ mod tests {
         // quorum size 3
         let quorum_size = 3;
         let stats = bote.leaderless(&regions, &regions, quorum_size);
+        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
         // w1 -> 9, w2 -> 11, w3 -> 8, w4 -> 8, w6 -> 15
-        assert_eq!(stats.mean().round(), "9.2");
-        assert_eq!(stats.cov().round(), "0.3");
-        assert_eq!(stats.mdtm().round(), "2.2");
+        assert_eq!(histogram.mean().round(), "9.2");
+        assert_eq!(histogram.cov().round(), "0.3");
+        assert_eq!(histogram.mdtm().round(), "2.2");
 
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&regions, &regions, quorum_size);
+        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
         // w1 -> 11, w2 -> 14, w3 -> 9, w4 -> 10, w6 -> 15
-        assert_eq!(stats.mean().round(), "10.8");
-        assert_eq!(stats.cov().round(), "0.2");
-        assert_eq!(stats.mdtm().round(), "2.2");
+        assert_eq!(histogram.mean().round(), "10.8");
+        assert_eq!(histogram.cov().round(), "0.2");
+        assert_eq!(histogram.mdtm().round(), "2.2");
     }
 
     #[test]
@@ -251,18 +252,20 @@ mod tests {
         // quorum size 3
         let quorum_size = 3;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
+        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
         // w1 -> 9, w2 -> 11
-        assert_eq!(stats.mean().round(), "9.0");
-        assert_eq!(stats.cov().round(), "0.2");
-        assert_eq!(stats.mdtm().round(), "1.0");
+        assert_eq!(histogram.mean().round(), "9.0");
+        assert_eq!(histogram.cov().round(), "0.2");
+        assert_eq!(histogram.mdtm().round(), "1.0");
 
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
+        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
         // w1 -> 11, w2 -> 14
-        assert_eq!(stats.mean().round(), "11.5");
-        assert_eq!(stats.cov().round(), "0.2");
-        assert_eq!(stats.mdtm().round(), "1.5");
+        assert_eq!(histogram.mean().round(), "11.5");
+        assert_eq!(histogram.cov().round(), "0.2");
+        assert_eq!(histogram.mdtm().round(), "1.5");
 
         // subset of clients: w1 w3 w6
         let clients = vec![w1.clone(), w3.clone(), w6.clone()];
@@ -270,18 +273,20 @@ mod tests {
         // quorum size 3
         let quorum_size = 3;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
+        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
         // w1 -> 9, w3 -> 8, w6 -> 15
-        assert_eq!(stats.mean().round(), "9.7");
-        assert_eq!(stats.cov().round(), "0.4");
-        assert_eq!(stats.mdtm().round(), "2.9");
+        assert_eq!(histogram.mean().round(), "9.7");
+        assert_eq!(histogram.cov().round(), "0.4");
+        assert_eq!(histogram.mdtm().round(), "2.9");
 
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
+        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
         // w1 -> 11, w3 -> 9, w6 -> 15
-        assert_eq!(stats.mean().round(), "10.7");
-        assert_eq!(stats.cov().round(), "0.3");
-        assert_eq!(stats.mdtm().round(), "2.2");
+        assert_eq!(histogram.mean().round(), "10.7");
+        assert_eq!(histogram.cov().round(), "0.3");
+        assert_eq!(histogram.mdtm().round(), "2.2");
     }
 
     #[test]
