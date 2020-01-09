@@ -1,4 +1,5 @@
 use clap::{App, Arg};
+use planet_sim::id::ProcessId;
 use planet_sim::run;
 use std::error::Error;
 
@@ -7,10 +8,35 @@ const ADDRESSES_SEP: &str = ",";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let (process_id, port, addresses) = parse_args();
+
+    println!("port: {}", port);
+    println!("addresses: {:?}", addresses);
+
+    // connect to all
+    let (incoming, outgoing) = run::net::connect_to_all(port, addresses).await?;
+
+    println!("in: {:?}", incoming);
+    println!("out: {:?}", outgoing);
+
+    // say hi to all processes
+
+    Ok(())
+}
+
+fn parse_args() -> (ProcessId, u16, Vec<String>) {
     let matches = App::new("prun")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Runs an instance of some protocol.")
+        .arg(
+            Arg::with_name("id")
+                .long("id")
+                .value_name("ID")
+                .help("process identifier")
+                .required(true)
+                .takes_value(true),
+        )
         .arg(
             Arg::with_name("port")
                 .short("p")
@@ -30,22 +56,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
 
-    // get port
+    // parse arguments
+    let id = parse_id(matches.value_of("id"));
     let port = parse_port(matches.value_of("port"));
-
-    // get addresses
     let addresses = parse_addresses(matches.value_of("addresses"));
+    (id, port, addresses)
+}
 
-    println!("port: {}", port);
-    println!("addresses: {:?}", addresses);
-
-    // connect to all
-    let (incoming, outgoing) = run::net::connect_to_all(port, addresses).await?;
-
-    println!("in: {:?}", incoming);
-    println!("out: {:?}", outgoing);
-
-    Ok(())
+fn parse_id(id: Option<&str>) -> ProcessId {
+    id.expect("id should be set")
+        .parse::<ProcessId>()
+        .expect("process id should be a number")
 }
 
 fn parse_port(port: Option<&str>) -> u16 {
@@ -53,9 +74,10 @@ fn parse_port(port: Option<&str>) -> u16 {
         .unwrap_or(DEFAULT_PORT)
 }
 
-fn parse_addresses(addresses: Option<&str>) -> Vec<&str> {
+fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
     addresses
         .expect("addresses should be set")
         .split(ADDRESSES_SEP)
+        .map(|address| address.to_string())
         .collect()
 }

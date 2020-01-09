@@ -1,14 +1,14 @@
-use futures::join;
 use std::error::Error;
 use std::fmt::Debug;
-use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::Duration;
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
+
+type Connection = Framed<TcpStream, LengthDelimitedCodec>;
 
 /// Connect to all processes. It receives:
 /// - local port to bind to
@@ -16,9 +16,9 @@ const CONNECT_RETRIES: usize = 100;
 pub async fn connect_to_all<A>(
     port: u16,
     addresses: Vec<A>,
-) -> Result<(Vec<TcpStream>, Vec<TcpStream>), Box<dyn Error>>
+) -> Result<(Vec<Connection>, Vec<Connection>), Box<dyn Error>>
 where
-    A: ToSocketAddrs + Debug + Copy,
+    A: ToSocketAddrs + Debug + Clone,
 {
     // number of processes
     let n = addresses.len();
@@ -43,9 +43,10 @@ where
     for address in addresses {
         let mut tries = 0;
         loop {
-            match TcpStream::connect(address).await {
+            match TcpStream::connect(address.clone()).await {
                 Ok(stream) => {
                     // save stream if connected successfully
+                    let stream = Framed::new(stream, LengthDelimitedCodec::new());
                     outgoing.push(stream);
                     break;
                 }
@@ -70,6 +71,7 @@ where
             .recv()
             .await
             .expect("should receive stream from listener");
+        let stream = Framed::new(stream, LengthDelimitedCodec::new());
         incoming.push(stream);
     }
 
@@ -91,15 +93,3 @@ async fn listen(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
         }
     }
 }
-
-async fn reader(mut reader: FramedRead<TcpStream, LengthDelimitedCodec>) {
-    println!("reader spawned!");
-}
-
-async fn writer(mut writer: FramedWrite<TcpStream, LengthDelimitedCodec>) {
-    println!("writer spawned!");
-}
-
-// let (reader, writer) = stream.split();
-// let reader = FramedRead::new(reader, LengthDelimitedCodec::new());
-// let writer = FramedWrite::new(writer, LengthDelimitedCodec::new());
