@@ -22,10 +22,10 @@ fn main() {
     config.set_transitive_conflicts(true);
     run_in_thread(move || increasing_load::<Atlas>(config));
 
-    println!(">running epaxos n = 5...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<EPaxos>(config));
+    // println!(">running epaxos n = 5...");
+    // let mut config = Config::new(5, 2);
+    // config.set_transitive_conflicts(true);
+    // run_in_thread(move || increasing_load::<EPaxos>(config));
 }
 
 fn equidistant<P: Process>() {
@@ -80,6 +80,7 @@ fn increasing_load<P: Process>(config: Config) {
 
     // number of clients
     let cs = vec![8, 16, 32, 64, 128, 256];
+    let cs = vec![512];
 
     // clients workload
     let conflict_rate = 10;
@@ -202,16 +203,10 @@ fn run<P: Process>(
         );
     }
     println!(
-        "n = {} AND c = {} |  min={}   max={}   avg={}   p95={}   p99={}   p99.9={}   p99.99={}",
+        "n = {} AND c = {} |  {:?}",
         config.n(),
         clients_per_region,
-        histogram.min().value().round(),
-        histogram.max().value().round(),
-        histogram.mean().value().round(),
-        histogram.percentile(0.95).value().round(),
-        histogram.percentile(0.99).value().round(),
-        histogram.percentile(0.999).value().round(),
-        histogram.percentile(0.9999).value().round(),
+        histogram
     );
 }
 

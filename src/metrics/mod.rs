@@ -56,14 +56,8 @@ where
     V: Debug,
 {
     pub fn show(&self) {
-        self.collected.iter().for_each(|(kind, stats)| {
-            println!(
-                "{:?}: avg={} p95={} p99={}",
-                kind,
-                stats.mean().round(),
-                stats.percentile(0.95).round(),
-                stats.percentile(0.99).round(),
-            );
+        self.collected.iter().for_each(|(kind, histogram)| {
+            println!("{:?}: {:?}", kind, histogram);
         });
         self.aggregated.iter().for_each(|(kind, value)| {
             println!("{:?}: {:?}", kind, value);
