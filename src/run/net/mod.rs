@@ -8,6 +8,7 @@ use tokio::time::Duration;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 const LOCALHOST: &str = "127.0.0.1";
+const CONNECT_RETRIES: usize = 100;
 
 /// Connect to all processes. It receives:
 /// - local port to bind to
@@ -40,16 +41,24 @@ where
 
     // connect to all addresses (and get the writers)
     for address in addresses {
+        let mut tries = 0;
         loop {
             match TcpStream::connect(address).await {
                 Ok(stream) => {
+                    // save stream if connected successfully
                     outgoing.push(stream);
                     break;
                 }
                 Err(e) => {
-                    println!("failed to connect to {:?}: {}", address, e);
-                    println!("will try again in 1 second");
-                    tokio::time::delay_for(Duration::from_secs(1)).await;
+                    // if not, try again if we shouldn't give up (due to too many attempts)
+                    tries += 1;
+                    if tries < CONNECT_RETRIES {
+                        println!("failed to connect to {:?}: {}", address, e);
+                        println!("will try again in 1 second");
+                        tokio::time::delay_for(Duration::from_secs(1)).await;
+                    } else {
+                        return Err(Box::new(e));
+                    }
                 }
             }
         }
