@@ -19,22 +19,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("addresses: {:?}", addresses);
 
     // connect to all
-    let (incoming, mut outgoing) = run::net::connect_to_all(port, addresses).await?;
-
-    println!("in: {:?}", incoming);
-    println!("out: {:?}", outgoing);
+    let (connections, mut connections_say_hi) = run::net::connect_to_all(port, addresses).await?;
 
     // say hi to all processes
     let hi = Hi(process_id);
-    for connection in outgoing.iter_mut() {
-        println!("will send hi");
+    for connection in connections_say_hi.iter_mut() {
         connection.send(&hi).await;
     }
+    println!("said hi to all processes");
 
     // create mapping from process id to connection
     let mut id_to_connection = HashMap::new();
-    for mut connection in incoming {
-        println!("will receive hi");
+    for mut connection in connections {
         if let Some(Hi(from)) = connection.recv().await {
             // save entry and check it has not been inserted before
             let res = id_to_connection.insert(from, connection);
@@ -46,8 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    println!("id to connection: {:?}", id_to_connection);
-
+    println!("received hi to processes: {:?}", id_to_connection.keys());
     Ok(())
 }
 
