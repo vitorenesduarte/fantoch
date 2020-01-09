@@ -1,4 +1,4 @@
-use crate::metrics::Stats;
+use crate::metrics::Histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -55,15 +55,15 @@ impl ClientPlacement {
 }
 
 /// Mapping from protocol name to its stats.
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize, Default)]
-pub struct ProtocolStats(BTreeMap<String, Stats<u64>>);
+#[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct ProtocolStats(BTreeMap<String, Histogram>);
 
 impl ProtocolStats {
     pub fn new() -> ProtocolStats {
         Default::default()
     }
 
-    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Stats<u64> {
+    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Histogram {
         let key = Self::key(protocol, f, placement);
         self.get_and_unwrap(&key)
     }
@@ -73,7 +73,7 @@ impl ProtocolStats {
         protocol: Protocol,
         f: usize,
         placement: ClientPlacement,
-        stats: Stats<u64>,
+        stats: Histogram,
     ) {
         let key = Self::key(protocol, f, placement);
         self.0.insert(key, stats);
@@ -94,7 +94,7 @@ impl ProtocolStats {
         format!("{}{}", prefix, suffix)
     }
 
-    fn get_and_unwrap(&self, key: &str) -> &Stats<u64> {
+    fn get_and_unwrap(&self, key: &str) -> &Histogram {
         self.0.get(key).unwrap_or_else(|| {
             panic!("stats with key {} not found", key);
         })
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn protocol_stats() {
-        let stats = Stats::from(vec![10, 20, 40, 10]);
+        let stats = Histogram::from(vec![10, 20, 40, 10]);
         let f = 1;
         let placement = ClientPlacement::Colocated;
         let mut all_stats = ProtocolStats::new();

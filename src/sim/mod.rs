@@ -14,6 +14,7 @@ pub use simulation::Simulation;
 
 use crate::client::Workload;
 use crate::config::Config;
+use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::Process;
 use std::collections::HashMap;
@@ -25,7 +26,7 @@ pub fn run_simulation<P: Process>(
     process_regions: Vec<Region>,
     client_regions: Vec<Region>,
     planet: Planet,
-) -> HashMap<Region, (usize, Vec<u64>)> {
+) -> HashMap<Region, (usize, Histogram)> {
     // function that creates ping pong processes
     let create_process =
         |process_id, region, planet, config| P::new(process_id, region, planet, config);

@@ -1,6 +1,6 @@
 use planet_sim::client::Workload;
 use planet_sim::config::Config;
-use planet_sim::metrics::Stats;
+use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
 use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
 use std::thread;
@@ -8,24 +8,24 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running newt n = 5 | f = 1...");
-    let config = Config::new(5, 1);
-    run_in_thread(move || increasing_load::<Newt>(config));
+    // println!(">running newt n = 5 | f = 1...");
+    // let config = Config::new(5, 1);
+    // run_in_thread(move || increasing_load::<Newt>(config));
 
     // println!(">running atlas n = 5 | f = 1...");
     // let mut config = Config::new(5, 1);
     // config.set_transitive_conflicts(true);
     // run_in_thread(move || increasing_load::<Atlas>(config));
-    //
-    // println!(">running atlas n = 5 | f = 2...");
-    // let mut config = Config::new(5, 2);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<Atlas>(config));
-    //
-    // println!(">running epaxos n = 5...");
-    // let mut config = Config::new(5, 2);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<EPaxos>(config));
+
+    println!(">running atlas n = 5 | f = 2...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<Atlas>(config));
+
+    println!(">running epaxos n = 5...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<EPaxos>(config));
 }
 
 fn equidistant<P: Process>() {
@@ -79,7 +79,7 @@ fn increasing_load<P: Process>(config: Config) {
     ];
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+    let cs = vec![8, 16, 32, 64, 128, 256];
 
     // clients workload
     let conflict_rate = 10;
@@ -186,35 +186,14 @@ fn run<P: Process>(
     println!("simulation ended...");
 
     // compute stats
-    let (issued_commands, mean_sum, p5_sum, p95_sum, p99_sum, p999_sum, p9999_sum) = latencies
-        .into_iter()
-        .map(|(_region, (region_issued_commands, region_latencies))| {
-            let region_stats = Stats::from(region_latencies);
-            (
-                region_issued_commands,
-                region_stats.mean().value(),
-                region_stats.percentile(0.5).value(),
-                region_stats.percentile(0.95).value(),
-                region_stats.percentile(0.99).value(),
-                region_stats.percentile(0.999).value(),
-                region_stats.percentile(0.9999).value(),
-            )
-        })
-        .fold(
-            (0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
-            |(issued_commands_acc, mean_acc, p5_acc, p95_acc, p99_acc, p999_acc, p9999_acc),
-             (issued_commands, mean, p5, p95, p99, p999, p9999)| {
-                (
-                    issued_commands_acc + issued_commands,
-                    mean_acc + mean,
-                    p5_acc + p5,
-                    p95_acc + p95,
-                    p99_acc + p99,
-                    p999_acc + p999,
-                    p9999_acc + p9999,
-                )
-            },
-        );
+    let (issued_commands, histogram) = latencies.into_iter().fold(
+        (0, Histogram::new()),
+        |(issued_commands_acc, mut histogram_acc), (_region, (issued_commands, histogram))| {
+            // merge histograms
+            histogram_acc.merge(&histogram);
+            (issued_commands_acc + issued_commands, histogram_acc)
+        },
+    );
 
     if issued_commands != expected_commands {
         panic!(
@@ -222,18 +201,17 @@ fn run<P: Process>(
             issued_commands, expected_commands,
         );
     }
-    // TODO averaging of percentiles is just wrong, but we'll do it for now
-    let region_count = region_count as f64;
     println!(
-        "n = {} AND c = {} | avg={} p5={} p95={} p99={} p99.9={} p99.99={}",
+        "n = {} AND c = {} |  min={}   max={}   avg={}   p95={}   p99={}   p99.9={}   p99.99={}",
         config.n(),
         clients_per_region,
-        (mean_sum / region_count).round() as u64,
-        (p5_sum / region_count).round() as u64,
-        (p95_sum / region_count).round() as u64,
-        (p99_sum / region_count).round() as u64,
-        (p999_sum / region_count).round() as u64,
-        (p9999_sum / region_count).round() as u64,
+        histogram.min().value().round(),
+        histogram.max().value().round(),
+        histogram.mean().value().round(),
+        histogram.percentile(0.95).value().round(),
+        histogram.percentile(0.99).value().round(),
+        histogram.percentile(0.999).value().round(),
+        histogram.percentile(0.9999).value().round(),
     );
 }
 

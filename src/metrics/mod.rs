@@ -1,27 +1,26 @@
 // This module contains the definition of `F64`.
 pub mod float;
 
-// This module contains the definition of `Stats`.
-pub mod stats;
+// This module contains the definition of `Histogram`.
+mod histogram;
 
 // Re-exports.
 pub use float::F64;
-pub use stats::{Stats, StatsKind};
+pub use histogram::{Histogram, Stats};
 
-use num_traits::PrimInt;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 
 pub struct Metrics<K, V> {
-    collected: HashMap<K, Vec<V>>,
+    collected: HashMap<K, Histogram>,
     aggregated: HashMap<K, V>,
 }
 
 impl<K, V> Metrics<K, V>
 where
-    K: Hash + Eq + Debug,
-    V: Default + PrimInt + Debug,
+    K: Hash + Eq,
+    V: Default,
 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -31,16 +30,14 @@ where
         }
     }
 
-    pub fn collect(&mut self, kind: K, value: V) {
-        let current = match self.collected.get_mut(&kind) {
+    pub fn collect(&mut self, kind: K, value: u64) {
+        let stats = match self.collected.get_mut(&kind) {
             Some(current) => current,
-            None => self.collected.entry(kind).or_insert_with(Vec::new),
+            None => self.collected.entry(kind).or_insert_with(Histogram::new),
         };
-        current.push(value);
+        stats.increment(value);
     }
 
-    // TODO unfortunately, given trait bounds, we can only aggregate `PrimInt` types; find a way to
-    // remove that limitation
     pub fn aggregate<F>(&mut self, kind: K, update: F)
     where
         F: FnOnce(&mut V),
@@ -51,12 +48,15 @@ where
         };
         update(current);
     }
+}
 
+impl<K, V> Metrics<K, V>
+where
+    K: Debug,
+    V: Debug,
+{
     pub fn show(&self) {
-        self.collected.iter().for_each(|(kind, values)| {
-            // TODO can we avoid cloning here?
-            let stats = Stats::from(values.clone());
-
+        self.collected.iter().for_each(|(kind, stats)| {
             println!(
                 "{:?}: avg={} p95={} p99={}",
                 kind,

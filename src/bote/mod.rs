@@ -7,7 +7,7 @@ pub mod search;
 // Re-exports.
 pub use search::Search;
 
-use crate::metrics::{Stats, StatsKind};
+use crate::metrics::{Histogram, Stats};
 use crate::planet::{Planet, Region};
 
 #[derive(Debug)]
@@ -25,8 +25,7 @@ impl Bote {
         Self { planet }
     }
 
-    /// Computes `Stats` for a leaderless-based protocol with a given
-    /// `quorum_size`.
+    /// Computes stats for a leaderless-based protocol with a given `quorum_size`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -36,7 +35,7 @@ impl Bote {
         servers: &[Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Stats<u64> {
+    ) -> Histogram {
         let latencies: Vec<_> = clients
             .iter()
             .map(|client| {
@@ -52,11 +51,10 @@ impl Bote {
             .collect();
 
         // compute stats from these client perceived latencies
-        Stats::from(latencies)
+        Histogram::from(latencies)
     }
 
-    /// Computes `Stats` for a leader-based protocol with a given
-    /// `quorum_size` for some `leader`.
+    /// Computes stats for a leader-based protocol with a given `quorum_size` for some `leader`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -67,7 +65,7 @@ impl Bote {
         servers: &[Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Stats<u64> {
+    ) -> Histogram {
         // compute the latency from leader to its closest quorum
         let leader_to_quorum = self.quorum_latency(leader, servers, quorum_size);
 
@@ -83,11 +81,11 @@ impl Bote {
             .collect();
 
         // compute stats from these client perceived latencies
-        Stats::from(latencies)
+        Histogram::from(latencies)
     }
 
-    /// Computes the best leader (for some criteria) and its `Stats` for a
-    /// leader-based protocol with a given `quorum_size`.
+    /// Computes the best leader (for some criteria) and its stats for a leader-based protocol with
+    /// a given `quorum_size`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -99,24 +97,27 @@ impl Bote {
         servers: &'a [Region],
         clients: &[Region],
         quorum_size: usize,
-        stats_sort_by: StatsKind,
-    ) -> (&'a Region, Stats<u64>) {
+        stats_sort_by: Stats,
+    ) -> (&'a Region, Histogram) {
         // compute all stats
         let mut stats = self.all_leaders_stats(servers, clients, quorum_size);
 
         // select the best leader based on `stats_sort_by`
         stats.sort_unstable_by(|(_la, sa), (_lb, sb)| match stats_sort_by {
-            StatsKind::Mean => sa.mean().cmp(&sb.mean()),
-            StatsKind::COV => sa.cov().cmp(&sb.cov()),
-            StatsKind::MDTM => sa.mdtm().cmp(&sb.mdtm()),
+            Stats::Mean => sa.mean().cmp(&sb.mean()),
+            Stats::COV => sa.cov().cmp(&sb.cov()),
+            Stats::MDTM => sa.mdtm().cmp(&sb.mdtm()),
         });
 
         // get the lowest (in terms of `compare`) stat
-        stats.into_iter().next().unwrap()
+        stats
+            .into_iter()
+            .next()
+            .expect("the best leader should exist")
     }
 
-    /// Computes `Stats` for a leader-based protocol with a given `quorum_size`
-    /// for each possible leader.
+    /// Computes stats for a leader-based protocol with a given `quorum_size` for each possible
+    /// leader.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -126,7 +127,7 @@ impl Bote {
         servers: &'a [Region],
         clients: &[Region],
         quorum_size: usize,
-    ) -> Vec<(&'a Region, Stats<u64>)> {
+    ) -> Vec<(&'a Region, Histogram)> {
         // compute stats for each possible leader
         servers
             .iter()
@@ -139,8 +140,7 @@ impl Bote {
     }
 
     /// Computes the latency to closest quorum of size `quorum_size`.
-    /// It takes as input the considered source region `from` and all available
-    /// `regions`.
+    /// It takes as input the considered source region `from` and all available `regions`.
     fn quorum_latency(&self, from: &Region, regions: &[Region], quorum_size: usize) -> u64 {
         let (latency, _) = self.nth_closest(quorum_size, &from, &regions);
         *latency
@@ -417,7 +417,7 @@ mod tests {
 
         // quorum size 2:
         let quorum_size = 2;
-        let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, StatsKind::Mean);
+        let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, Stats::Mean);
 
         assert_eq!(stats.mean().round(), "14.0");
         assert_eq!(stats.cov().round(), "0.3");

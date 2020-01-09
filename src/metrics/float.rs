@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
-#[derive(PartialOrd, PartialEq, Deserialize, Serialize, Clone, Copy)]
+#[derive(PartialOrd, Deserialize, Serialize, Clone, Copy)]
 pub struct F64(f64);
 
 impl F64 {
@@ -74,6 +74,16 @@ impl Ord for F64 {
                     Ordering::Less
                 }
             }
+        }
+    }
+}
+
+impl PartialEq for F64 {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.is_nan() {
+            other.0.is_nan()
+        } else {
+            self.0 == other.0
         }
     }
 }

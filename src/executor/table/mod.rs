@@ -42,7 +42,7 @@ impl MultiVotesTable {
 
     /// Add a new command, its clock and votes to the votes table.
     #[must_use]
-    pub fn add(
+    pub fn add_votes(
         &mut self,
         dot: Dot,
         cmd: Command,
@@ -57,7 +57,7 @@ impl MultiVotesTable {
         // which ops are safe to be executed
         let (duration, result) = elapsed!(self.add_cmd_and_find(sort_id, cmd, votes));
         self.metrics
-            .collect(MetricsKind::AddCommand, duration.as_micros());
+            .collect(MetricsKind::AddVotes, duration.as_micros() as u64);
         result
     }
 
@@ -69,7 +69,7 @@ impl MultiVotesTable {
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         let (duration, result) = elapsed!(self.add_votes_and_find(process_votes));
         self.metrics
-            .collect(MetricsKind::AddPhantomVotes, duration.as_micros());
+            .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
         result
     }
 
@@ -136,14 +136,14 @@ impl MultiVotesTable {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 enum MetricsKind {
-    AddCommand,
+    AddVotes,
     AddPhantomVotes,
 }
 
 impl fmt::Debug for MetricsKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            MetricsKind::AddCommand => write!(f, "add_command"),
+            MetricsKind::AddVotes => write!(f, "add_votes"),
             MetricsKind::AddPhantomVotes => write!(f, "add_phantom_votes"),
         }
     }
