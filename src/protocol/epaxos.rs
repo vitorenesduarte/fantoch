@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::log;
-use serde::{Deserialize, Serialize};
 use crate::planet::{Planet, Region};
 use crate::protocol::common::{
     graph::{KeysClocks, QuorumClocks},
@@ -12,6 +11,7 @@ use crate::protocol::common::{
 };
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::mem;
 use threshold::VClock;

@@ -21,11 +21,8 @@ where
     P: Process + 'static, // TODO what does this 'static do?
     A: ToSocketAddrs + Debug + Clone,
 {
-    let (connections, id_to_connection) = net::connect_to_all(process_id, port, addresses).await?;
-    println!("received hi to processes: {:?}", id_to_connection.keys());
-
-    // start readers
-    let msgs_channel = net::start_readers::<P>(connections);
-
+    let (from_readers, to_writers) =
+        net::connect_to_all::<P, A>(process_id, port, addresses).await?;
+    println!("connected to processes: {:?}", to_writers.keys());
     Ok(())
 }

@@ -15,40 +15,31 @@ use tokio::time::Duration;
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
 
+type MessageSender<P> = UnboundedSender<<P as Process>::Message>;
+type MessageReceiver<P> = UnboundedReceiver<<P as Process>::Message>;
+
 /// Connect to all processes. It receives:
 /// - local port to bind to
 /// - list of addresses to connect to
-pub async fn connect_to_all<A>(
+pub async fn connect_to_all<P, A>(
     process_id: ProcessId,
     port: u16,
     addresses: Vec<A>,
-) -> Result<(Vec<Connection>, HashMap<ProcessId, Connection>), Box<dyn Error>>
+) -> Result<(MessageReceiver<P>, HashMap<ProcessId, MessageSender<P>>), Box<dyn Error>>
 where
+    P: Process + 'static, // TODO what does this 'static do?
     A: ToSocketAddrs + Debug + Clone,
 {
     // connect to all
     let (connections_0, connections_1) = connect(port, addresses).await?;
 
     // say hi
-    say_hi(process_id, connections_0, connections_1).await
-}
+    let (connections_0, connections_1) = say_hi(process_id, connections_0, connections_1).await?;
 
-/// Starts a reader task per connection received and returns an unbounded channel to which readers
-/// will write to.
-pub async fn start_readers<P>(
-    connections: Vec<Connection>,
-) -> Result<UnboundedReceiver<P::Message>, Box<dyn Error>>
-where
-    P: Process + 'static, // TODO what does this 'static do?
-{
-    // create channel where readers should write to
-    let (tx, rx) = mpsc::unbounded_channel();
-
-    for connection in connections {
-        tokio::spawn(reader_task::<P>(connection, tx.clone()));
-    }
-
-    Ok(rx)
+    // start readers and writers
+    let from_readers = start_readers::<P>(connections_0).await?;
+    let to_writers = start_writers::<P>(connections_1).await?;
+    Ok((from_readers, to_writers))
 }
 
 async fn connect<A>(
@@ -145,6 +136,45 @@ async fn say_hi(
     Ok((connections_say_hi, id_to_connection))
 }
 
+/// Starts a reader task per connection received and returns an unbounded channel to which readers
+/// will write to.
+async fn start_readers<P>(
+    connections: Vec<Connection>,
+) -> Result<UnboundedReceiver<P::Message>, Box<dyn Error>>
+where
+    P: Process + 'static, // TODO what does this 'static do?
+{
+    // create channel where readers should write to
+    let (tx, rx) = mpsc::unbounded_channel();
+
+    // start one reader task per connection
+    for connection in connections {
+        tokio::spawn(reader_task::<P>(connection, tx.clone()));
+    }
+
+    Ok(rx)
+}
+
+async fn start_writers<P>(
+    connections: HashMap<ProcessId, Connection>,
+) -> Result<HashMap<ProcessId, MessageSender<P>>, Box<dyn Error>>
+where
+    P: Process + 'static, // TODO what does this 'static do?
+{
+    // mapping from process id to channel parent should write to
+    let mut writers = HashMap::new();
+
+    // start on writer task per connection
+    for (process_id, connection) in connections {
+        // create channel where parent should write to
+        let (tx, rx) = mpsc::unbounded_channel();
+        tokio::spawn(writer_task::<P>(connection, rx));
+        writers.insert(process_id, tx);
+    }
+
+    Ok(writers)
+}
+
 /// Listen on new connections and send them to parent process.
 async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
     loop {
@@ -162,7 +192,7 @@ async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<TcpStr
 }
 
 /// Reader task.
-async fn reader_task<P>(mut connection: Connection, parent: UnboundedSender<P::Message>)
+async fn reader_task<P>(mut connection: Connection, parent: MessageSender<P>)
 where
     P: Process + 'static, // TODO what does this 'static do?
 {
@@ -174,8 +204,22 @@ where
                 }
             }
             None => {
-                println!("[reader] error receiving message");
+                println!("[reader] error receiving message from connection");
             }
+        }
+    }
+}
+
+/// Writer task. Messages comme in an Arc to avoid cloning them.
+async fn writer_task<P>(mut connection: Connection, mut parent: MessageReceiver<P>)
+where
+    P: Process + 'static, // TODO what does this 'static do?
+{
+    loop {
+        if let Some(msg) = parent.recv().await {
+            connection.send(msg).await;
+        } else {
+            println!("[writer] error receiving message from parent");
         }
     }
 }

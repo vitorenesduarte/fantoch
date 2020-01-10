@@ -16,12 +16,14 @@ impl Connection {
         Self { stream }
     }
 
-    pub async fn send<V>(&mut self, value: &V)
+    // TODO here we only need a reference to the message; can we optimize this and not have each
+    // connection own a copy of the message when sending it?
+    pub async fn send<V>(&mut self, value: V)
     where
         V: Serialize,
     {
         // serialize
-        let bytes = bincode::serialize(value).expect("serialize should work");
+        let bytes = bincode::serialize(&value).expect("serialize should work");
         // TODO do we need `Bytes`?
         let bytes = Bytes::from(bytes);
         if let Err(e) = self.stream.send(bytes).await {
