@@ -1,15 +1,10 @@
 use clap::{App, Arg};
 use planet_sim::id::ProcessId;
 use planet_sim::run;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::error::Error;
 
 const DEFAULT_PORT: u16 = 3717;
 const ADDRESSES_SEP: &str = ",";
-
-#[derive(Serialize, Deserialize)]
-struct Hi(ProcessId);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -18,30 +13,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("port: {}", port);
     println!("addresses: {:?}", addresses);
 
-    // connect to all
-    let (connections, mut connections_say_hi) = run::net::connect_to_all(port, addresses).await?;
-
-    // say hi to all processes
-    let hi = Hi(process_id);
-    for connection in connections_say_hi.iter_mut() {
-        connection.send(&hi).await;
-    }
-    println!("said hi to all processes");
-
-    // create mapping from process id to connection
-    let mut id_to_connection = HashMap::new();
-    for mut connection in connections {
-        if let Some(Hi(from)) = connection.recv().await {
-            // save entry and check it has not been inserted before
-            let res = id_to_connection.insert(from, connection);
-            assert!(res.is_none());
-        } else {
-            println!("error receiving hi");
-            // TODO how can we make errors?
-            return Ok(());
-        }
-    }
-
+    let (connections, id_to_connection) =
+        run::net::connect_to_all(process_id, port, addresses).await?;
     println!("received hi to processes: {:?}", id_to_connection.keys());
     Ok(())
 }

@@ -1,13 +1,15 @@
-use bytes::Bytes;
-use futures::prelude::*;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+// This module contains the definition of `Connection`.
+mod connection;
+
+use crate::id::ProcessId;
+use connection::Connection;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::Duration;
-use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
@@ -16,6 +18,21 @@ const CONNECT_RETRIES: usize = 100;
 /// - local port to bind to
 /// - list of addresses to connect to
 pub async fn connect_to_all<A>(
+    process_id: ProcessId,
+    port: u16,
+    addresses: Vec<A>,
+) -> Result<(Vec<Connection>, HashMap<ProcessId, Connection>), Box<dyn Error>>
+where
+    A: ToSocketAddrs + Debug + Clone,
+{
+    // connect to all
+    let (connections_0, connections_1) = connect(port, addresses).await?;
+
+    // say hi
+    say_hi(process_id, connections_0, connections_1).await
+}
+
+async fn connect<A>(
     port: u16,
     addresses: Vec<A>,
 ) -> Result<(Vec<Connection>, Vec<Connection>), Box<dyn Error>>
@@ -80,6 +97,35 @@ where
     Ok((incoming, outgoing))
 }
 
+async fn say_hi(
+    process_id: ProcessId,
+    connections: Vec<Connection>,
+    mut connections_say_hi: Vec<Connection>,
+) -> Result<(Vec<Connection>, HashMap<ProcessId, Connection>), Box<dyn Error>> {
+    // say hi to all processes
+    #[derive(Serialize, Deserialize)]
+    struct Hi(ProcessId);
+
+    let hi = Hi(process_id);
+    for connection in connections_say_hi.iter_mut() {
+        connection.send(&hi).await;
+    }
+    println!("said hi to all processes");
+
+    // create mapping from process id to connection
+    let mut id_to_connection = HashMap::new();
+    for mut connection in connections {
+        if let Some(Hi(from)) = connection.recv().await {
+            // save entry and check it has not been inserted before
+            let res = id_to_connection.insert(from, connection);
+            assert!(res.is_none());
+        } else {
+            panic!("error receiving hi");
+        }
+    }
+    Ok((connections_say_hi, id_to_connection))
+}
+
 /// Listen on new connections and send them to parent process.
 async fn listen(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
     loop {
@@ -93,53 +139,5 @@ async fn listen(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
             }
             Err(e) => println!("couldn't accept new connection: {:?}", e),
         }
-    }
-}
-
-/// Delimits frames using a length header.
-#[derive(Debug)]
-pub struct Connection {
-    stream: Framed<TcpStream, LengthDelimitedCodec>,
-}
-
-impl Connection {
-    pub fn new(stream: TcpStream) -> Self {
-        let stream = Framed::new(stream, LengthDelimitedCodec::new());
-        Self { stream }
-    }
-
-    pub async fn send<V>(&mut self, value: &V)
-    where
-        V: Serialize,
-    {
-        // serialize
-        let bytes = bincode::serialize(value).expect("serialize should work");
-        // TODO do we need `Bytes`?
-        let bytes = Bytes::from(bytes);
-        if let Err(e) = self.stream.send(bytes).await {
-            println!("error while writing to socket: {:?}", e);
-        }
-    }
-
-    pub async fn recv<V>(&mut self) -> Option<V>
-    where
-        V: DeserializeOwned,
-    {
-        self.stream
-            .next()
-            .await
-            // at this point we have `Option<Result<_, _>>`
-            .map(|result| match result {
-                Ok(bytes) => {
-                    let value = bincode::deserialize(&bytes).expect("deserialize should work");
-                    Some(value)
-                }
-                Err(e) => {
-                    println!("error while reading from socket: {:?}", e);
-                    None
-                }
-            })
-            // at this point we have `Option<Option<V>>`
-            .flatten()
     }
 }
