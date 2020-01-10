@@ -25,9 +25,12 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::fmt::Debug;
 
 pub trait Process {
-    type Message: Clone;
+    type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
     type Executor: Executor;
 
     fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;

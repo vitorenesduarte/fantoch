@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::log;
+use serde::{Deserialize, Serialize};
 use crate::planet::{Planet, Region};
 use crate::protocol::common::{
     graph::{KeysClocks, QuorumClocks},
@@ -394,7 +395,7 @@ impl EPaxos {
 
 // consensus value is a pair where the first component is the command (noop if `None`) and the
 // second component its dependencies represented as a vector clock.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     cmd: Option<Command>,
     clock: VClock<ProcessId>,
@@ -447,7 +448,7 @@ impl Info for CommandInfo {
 }
 
 // `Atlas` protocol messages
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MCollect {
         dot: Dot,

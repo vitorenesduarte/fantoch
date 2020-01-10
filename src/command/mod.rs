@@ -6,11 +6,12 @@ pub use pending::Pending;
 
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, Key, Value};
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::{self, HashMap};
-use std::fmt;
+use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Command {
     rifl: Rifl,
     ops: HashMap<Key, KVOp>,

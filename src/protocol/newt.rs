@@ -9,6 +9,7 @@ use crate::protocol::common::{
     table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
 };
 use crate::protocol::{BaseProcess, Process, ToSend};
+use serde::{Deserialize, Serialize};
 use std::cmp;
 use std::mem;
 
@@ -386,7 +387,7 @@ impl Info for CommandInfo {
 }
 
 // `Newt` protocol messages
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MCollect {
         dot: Dot,

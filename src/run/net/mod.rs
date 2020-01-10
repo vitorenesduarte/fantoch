@@ -2,13 +2,14 @@
 mod connection;
 
 use crate::id::ProcessId;
+use crate::protocol::Process;
 use connection::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::time::Duration;
 
 const LOCALHOST: &str = "127.0.0.1";
@@ -32,6 +33,24 @@ where
     say_hi(process_id, connections_0, connections_1).await
 }
 
+/// Starts a reader task per connection received and returns an unbounded channel to which readers
+/// will write to.
+pub async fn start_readers<P>(
+    connections: Vec<Connection>,
+) -> Result<UnboundedReceiver<P::Message>, Box<dyn Error>>
+where
+    P: Process + 'static, // TODO what does this 'static do?
+{
+    // create channel where readers should write to
+    let (tx, rx) = mpsc::unbounded_channel();
+
+    for connection in connections {
+        tokio::spawn(reader_task::<P>(connection, tx.clone()));
+    }
+
+    Ok(rx)
+}
+
 async fn connect<A>(
     port: u16,
     addresses: Vec<A>,
@@ -49,7 +68,7 @@ where
     let (tx, mut rx) = mpsc::unbounded_channel();
 
     // spawn listener
-    tokio::spawn(listen(listener, tx));
+    tokio::spawn(listener_task(listener, tx));
 
     // create list of in and out connections:
     // - even though TCP is full-duplex, due to the current tokio parallel-tcp-socket-read-write
@@ -127,17 +146,36 @@ async fn say_hi(
 }
 
 /// Listen on new connections and send them to parent process.
-async fn listen(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
+async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<TcpStream>) {
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
-                println!("new connection: {:?}", addr);
+                println!("[listener] new connection: {:?}", addr);
 
                 if let Err(e) = parent.send(stream) {
-                    println!("error sending stream to parent process: {:?}", e);
+                    println!("[listener] error sending stream to parent process: {:?}", e);
                 }
             }
-            Err(e) => println!("couldn't accept new connection: {:?}", e),
+            Err(e) => println!("[listener] couldn't accept new connection: {:?}", e),
+        }
+    }
+}
+
+/// Reader task.
+async fn reader_task<P>(mut connection: Connection, parent: UnboundedSender<P::Message>)
+where
+    P: Process + 'static, // TODO what does this 'static do?
+{
+    loop {
+        match connection.recv().await {
+            Some(msg) => {
+                if let Err(e) = parent.send(msg) {
+                    println!("[reader] error notifying parent task with new msg: {:?}", e);
+                }
+            }
+            None => {
+                println!("[reader] error receiving message");
+            }
         }
     }
 }

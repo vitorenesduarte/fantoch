@@ -11,6 +11,7 @@ use crate::protocol::common::{
 };
 use crate::protocol::{BaseProcess, Process, ToSend};
 use crate::util;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::mem;
 use threshold::VClock;
@@ -386,7 +387,7 @@ impl Atlas {
 
 // consensus value is a pair where the first component is the command (noop if `None`) and the
 // second component its dependencies represented as a vector clock.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     cmd: Option<Command>,
     clock: VClock<ProcessId>,
@@ -433,7 +434,7 @@ impl Info for CommandInfo {
 }
 
 // `Atlas` protocol messages
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MCollect {
         dot: Dot,

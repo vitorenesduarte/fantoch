@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 use planet_sim::id::ProcessId;
-use planet_sim::run;
+use planet_sim::protocol::Atlas;
 use std::error::Error;
 
 const DEFAULT_PORT: u16 = 3717;
@@ -10,13 +10,10 @@ const ADDRESSES_SEP: &str = ",";
 async fn main() -> Result<(), Box<dyn Error>> {
     let (process_id, port, addresses) = parse_args();
 
+    println!("process id: {}", process_id);
     println!("port: {}", port);
     println!("addresses: {:?}", addresses);
-
-    let (connections, id_to_connection) =
-        run::net::connect_to_all(process_id, port, addresses).await?;
-    println!("received hi to processes: {:?}", id_to_connection.keys());
-    Ok(())
+    planet_sim::run::run::<Atlas, String>(port, addresses, process_id).await
 }
 
 fn parse_args() -> (ProcessId, u16, Vec<String>) {

@@ -1,11 +1,12 @@
 use crate::command::{Command, CommandResult};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Definition of `Key` and `Value` types.
 pub type Key = String;
 pub type Value = String;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum KVOp {
     Get,
     Put(Value),
