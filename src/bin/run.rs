@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("port: {}", port);
     println!("addresses: {:?}", addresses);
     println!("client port: {}", client_port);
-    // planet_sim::run::run::<Atlas, String>(port, addresses, client_port, process_id).await
+    planet_sim::run::run::<Atlas, String>(process_id, port, addresses, client_port).await;
     Ok(())
 }
 
