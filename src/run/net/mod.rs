@@ -3,11 +3,12 @@ mod connection;
 
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::Process;
+use crate::protocol::{Process, ToSend};
+use bytes::Bytes;
 use connection::Connection;
 use futures::future::FutureExt;
 use futures::select;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
@@ -17,9 +18,6 @@ use tokio::time::Duration;
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
-
-type MessageSender<P> = UnboundedSender<<P as Process>::Message>;
-type MessageReceiver<P> = UnboundedReceiver<<P as Process>::Message>;
 
 pub type ClientReceiver = UnboundedReceiver<FromClient>;
 pub type ClientSender = UnboundedSender<FromClient>;
@@ -50,9 +48,9 @@ pub async fn init<P, A>(
     process_id: ProcessId,
 ) -> Result<
     (
-        MessageReceiver<P>,
-        HashMap<ProcessId, MessageSender<P>>,
-        ClientReceiver,
+        UnboundedReceiver<P::Message>,
+        UnboundedSender<ToSend<P::Message>>,
+        UnboundedReceiver<FromClient>,
     ),
     Box<dyn Error>,
 >
@@ -69,11 +67,11 @@ where
 
     // start readers and writers
     let from_readers = start_readers::<P>(connections_0).await?;
-    let to_writers = start_writers::<P>(connections_1).await?;
+    let to_writer = start_broadcast_writer::<P>(connections_1).await?;
 
     // start client listener
     let from_clients = client_listener(client_port).await?;
-    Ok((from_readers, to_writers, from_clients))
+    Ok((from_readers, to_writer, from_clients))
 }
 
 async fn connect_to_all<A>(
@@ -202,24 +200,30 @@ where
     Ok(rx)
 }
 
-async fn start_writers<P>(
+async fn start_broadcast_writer<P>(
     connections: HashMap<ProcessId, Connection>,
-) -> Result<HashMap<ProcessId, UnboundedSender<P::Message>>, Box<dyn Error>>
+) -> Result<UnboundedSender<ToSend<P::Message>>, Box<dyn Error>>
 where
     P: Process + 'static, // TODO what does this 'static do?
 {
-    // mapping from process id to channel parent should write to
+    // mapping from process id to channel broadcast writer should write to
     let mut writers = HashMap::new();
 
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
         let (tx, rx) = mpsc::unbounded_channel();
-        tokio::spawn(writer_task::<P>(connection, rx));
+        // spawn writer task
+        tokio::spawn(writer_task(connection, rx));
         writers.insert(process_id, tx);
     }
 
-    Ok(writers)
+    // create channel where parent should write to
+    let (tx, rx) = mpsc::unbounded_channel();
+
+    // spawn broadcast writer
+    tokio::spawn(broadcast_writer_task::<P>(writers, rx));
+    Ok(tx)
 }
 
 async fn client_listener(client_port: u16) -> Result<ClientReceiver, Box<dyn Error>> {
@@ -295,14 +299,40 @@ where
     }
 }
 
-/// Writer task.
-async fn writer_task<P>(mut connection: Connection, mut parent: UnboundedReceiver<P::Message>)
-where
+/// Broadcast Writer task.
+async fn broadcast_writer_task<P>(
+    mut writers: HashMap<ProcessId, UnboundedSender<Bytes>>,
+    mut parent: UnboundedReceiver<ToSend<P::Message>>,
+) where
     P: Process + 'static, // TODO what does this 'static do?
 {
     loop {
-        if let Some(msg) = parent.recv().await {
-            connection.send(msg).await;
+        if let Some(ToSend { target, msg, .. }) = parent.recv().await {
+            // serialize message
+            let bytes = Connection::serialize(&msg);
+            for process_id in target {
+                // find writer
+                let writer = writers
+                    .get_mut(&process_id)
+                    .expect("[broadcast_writer] process in target should have a writer");
+                if let Err(e) = writer.send(bytes.clone()) {
+                    println!(
+                        "[broadcast_writer] error sending bytes to writer {}: {:?}",
+                        process_id, e
+                    );
+                }
+            }
+        } else {
+            println!("[writer] error receiving message from parent");
+        }
+    }
+}
+
+/// Writer task.
+async fn writer_task(mut connection: Connection, mut parent: UnboundedReceiver<Bytes>) {
+    loop {
+        if let Some(bytes) = parent.recv().await {
+            connection.send_serialized(bytes).await;
         } else {
             println!("[writer] error receiving message from parent");
         }

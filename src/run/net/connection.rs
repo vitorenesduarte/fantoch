@@ -29,6 +29,10 @@ impl Connection {
     {
         // serialize and send
         let bytes = Self::serialize(&value);
+        self.send_serialized(bytes);
+    }
+
+    pub async fn send_serialized(&mut self, bytes: Bytes) {
         if let Err(e) = self.stream.send(bytes).await {
             println!("[connection] error while writing to socket: {:?}", e);
         }
@@ -52,7 +56,7 @@ impl Connection {
         }
     }
 
-    fn serialize<V>(value: &V) -> Bytes
+    pub fn serialize<V>(value: &V) -> Bytes
     where
         V: Serialize,
     {
