@@ -5,24 +5,33 @@ use crate::id::ProcessId;
 use crate::protocol::Process;
 use std::error::Error;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use tokio::net::ToSocketAddrs;
 
-struct Runner<P> {
-    phantom: PhantomData<P>,
-}
+// pub async fn run<P, A>(
+//     port: u16,
+//     addresses: Vec<A>,
+//     client_port: u16,
+//     process_id: ProcessId,
+// ) -> Result<(), Box<dyn Error>>
+// where
+//     P: Process + 'static, // TODO what does this 'static do?
+//     A: ToSocketAddrs + Debug + Clone,
+// {
+//     // check ports are different
+//     assert!(port != client_port);
 
-pub async fn run<P, A>(
-    port: u16,
-    addresses: Vec<A>,
-    process_id: ProcessId,
-) -> Result<(), Box<dyn Error>>
-where
-    P: Process + 'static, // TODO what does this 'static do?
-    A: ToSocketAddrs + Debug + Clone,
-{
-    let (from_readers, to_writers) =
-        net::connect_to_all::<P, A>(process_id, port, addresses).await?;
-    println!("connected to processes: {:?}", to_writers.keys());
-    Ok(())
-}
+//     let (from_readers, to_writers, from_clients) =
+//         net::init::<P, A>(port, addresses, client_port, process_id).await?;
+//     println!("connected to processes: {:?}", to_writers.keys());
+
+//     loop {
+//         // match future::select(from_readers.recv(), from_clients.recv()) {
+//         //     Either::Left(new_msg) => {
+//         //         println!("new msg: {:?}", new_msg);
+//         //     }
+//         //     Either::Right(new_submit) => {
+//         //         println!("new submit: {:?}", new_submit);
+//         //     }
+//         // }
+//     }
+// }

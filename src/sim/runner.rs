@@ -8,7 +8,6 @@ use crate::planet::{Planet, Region};
 use crate::protocol::{Process, ToSend};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SimTime;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 enum ScheduleAction<P: Process> {
@@ -307,6 +306,7 @@ mod tests {
     use crate::id::{ProcessId, Rifl};
     use crate::metrics::F64;
     use crate::protocol::BaseProcess;
+    use serde::{Deserialize, Serialize};
     use std::collections::HashSet;
     use std::mem;
 

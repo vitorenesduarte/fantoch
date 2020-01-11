@@ -8,15 +8,17 @@ const ADDRESSES_SEP: &str = ",";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (process_id, port, addresses) = parse_args();
+    let (process_id, port, addresses, client_port) = parse_args();
 
     println!("process id: {}", process_id);
     println!("port: {}", port);
     println!("addresses: {:?}", addresses);
-    planet_sim::run::run::<Atlas, String>(port, addresses, process_id).await
+    println!("client port: {}", client_port);
+    // planet_sim::run::run::<Atlas, String>(port, addresses, client_port, process_id).await
+    Ok(())
 }
 
-fn parse_args() -> (ProcessId, u16, Vec<String>) {
+fn parse_args() -> (ProcessId, u16, Vec<String>, u16) {
     let matches = App::new("prun")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -46,13 +48,22 @@ fn parse_args() -> (ProcessId, u16, Vec<String>) {
                 .required(true)
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("client_port")
+                .short("cp")
+                .long("client_port")
+                .value_name("CLIENT_PORT")
+                .help("client port to bind to")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
     let id = parse_id(matches.value_of("id"));
     let port = parse_port(matches.value_of("port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
-    (id, port, addresses)
+    let client_port = parse_port(matches.value_of("client_port"));
+    (id, port, addresses, client_port)
 }
 
 fn parse_id(id: Option<&str>) -> ProcessId {
