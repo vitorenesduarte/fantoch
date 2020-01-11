@@ -1,11 +1,21 @@
 // This module contains the definition of...
+pub mod task;
+
+// This module contains the definition of...
 pub mod net;
 
-use crate::id::ProcessId;
-use crate::protocol::Process;
-use std::error::Error;
+use crate::command::{Command, CommandResult};
+use crate::id::ClientId;
 use std::fmt::Debug;
-use tokio::net::ToSocketAddrs;
+use tokio::sync::mpsc::UnboundedSender;
+
+#[derive(Debug)]
+pub enum FromClient {
+    // clients can register
+    Register(ClientId, UnboundedSender<CommandResult>),
+    // or submit new commands
+    Submit(Command),
+}
 
 // pub async fn run<P, A>(
 //     port: u16,

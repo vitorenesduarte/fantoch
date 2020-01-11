@@ -29,7 +29,7 @@ impl Connection {
     {
         // serialize and send
         let bytes = Self::serialize(&value);
-        self.send_serialized(bytes);
+        self.send_serialized(bytes).await;
     }
 
     pub async fn send_serialized(&mut self, bytes: Bytes) {
