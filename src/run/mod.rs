@@ -7,13 +7,15 @@ pub mod net;
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::{Process, ToSend};
+use crate::protocol::Process;
 use crate::time::RunTime;
-use serde::{Deserialize, Serialize};
+use futures::future::FutureExt;
+use futures::select;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
-use tokio::net::{TcpListener, ToSocketAddrs};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::net::ToSocketAddrs;
+use tokio::sync::mpsc::UnboundedSender;
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
@@ -43,7 +45,7 @@ where
     let listener = net::listen((LOCALHOST, port)).await?;
 
     // connect to all processes
-    let (from_readers, to_writer) = net::process::connect_to_all::<A, P::Message>(
+    let (mut from_readers, to_writer) = net::process::connect_to_all::<A, P::Message>(
         process_id,
         listener,
         addresses,
@@ -53,17 +55,59 @@ where
 
     // start client listener
     let listener = net::listen((LOCALHOST, client_port)).await?;
-    let from_clients = net::client::start_listener(process_id, listener);
+    let mut from_clients = net::client::start_listener(process_id, listener);
+
+    // mapping from client id to its channel
+    let mut clients = HashMap::new();
 
     loop {
-        // match future::select(from_readers.recv(), from_clients.recv()) {
-        //     Either::Left(new_msg) => {
-        //         println!("new msg: {:?}", new_msg);
-        //     }
-        //     Either::Right(new_submit) => {
-        //         println!("new submit: {:?}", new_submit);
-        //     }
-        // }
+        select! {
+            msg = from_readers.recv().fuse() => {
+                println!("reader message: {:?}", msg);
+                if let Some(msg) = msg {
+                    // TODO handle in process
+                } else {
+                    println!("[server] error while receiving new process message from readers");
+                }
+            }
+            from_client = from_clients.recv().fuse() => {
+                println!("from client: {:?}", from_client);
+                if let Some(from_client) = from_client {
+                    handle_from_client(from_client, &mut clients)
+                } else {
+                    println!("[server] error while receiving new command from clients");
+                }
+            }
+        }
+    }
+}
+
+fn handle_from_client(
+    from_client: FromClient,
+    clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
+) {
+    match from_client {
+        FromClient::Register(client_id, tx) => {
+            let res = clients.insert(client_id, tx);
+            assert!(res.is_none());
+        }
+        FromClient::Submit(cmd) => {
+            // TODO handle in process; for now create fake command result
+            // get client id
+            let client_id = cmd.rifl().source();
+            // find its channel
+            let tx = clients
+                .get_mut(&client_id)
+                .expect("client should register before submitting any commands");
+            // fake command result
+            let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
+            if let Err(e) = tx.send(cmd_result) {
+                println!(
+                    "[server] error while sending command result to client: {:?}",
+                    e
+                );
+            }
+        }
     }
 }
 
