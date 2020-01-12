@@ -29,11 +29,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
 
-pub trait Message: Debug + Clone + Serialize + DeserializeOwned + Send {}
-impl<T> Message for T where T: Debug + Clone + Serialize + DeserializeOwned + Send {}
-
 pub trait Protocol {
-    type Message: Message;
+    type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
     type Executor: Executor;
 
     fn new(process_id: ProcessId, config: Config) -> Self;

@@ -72,12 +72,3 @@ impl Connection {
         bincode::deserialize(&bytes).expect("[connection] deserialize should work")
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    #[tokio::test]
-    async fn send_and_recv() {
-        // create
-    }
-}

@@ -4,6 +4,7 @@ use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
 use planet_sim::protocol::{Atlas, EPaxos, Newt, Protocol};
+use planet_sim::sim::Runner;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
@@ -218,14 +219,15 @@ fn run<P: Protocol>(
     let expected_commands = workload.total_commands() * clients_per_region * region_count;
 
     // run simulation and get latencies
-    let latencies = planet_sim::sim::run_simulation::<P>(
+    let mut runner: Runner<P> = Runner::new(
+        planet,
         config,
         workload,
         clients_per_region,
         process_regions,
         client_regions,
-        planet,
     );
+    let latencies = runner.run();
     println!("simulation ended...");
 
     // compute stats
