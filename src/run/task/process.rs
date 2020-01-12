@@ -295,6 +295,25 @@ fn handle_execution_info<P>(
 ) where
     P: Protocol,
 {
+    // get new commands ready
+    let ready = executor.handle(execution_info);
+
+    for cmd_result in ready {
+        // get client id
+        let client_id = cmd_result.rifl().source();
+        // get client channel
+        let tx = clients
+            .get(&client_id)
+            .expect("command result should belong to a registered client");
+
+        // send command result to client
+        if let Err(e) = tx.send(cmd_result) {
+            println!(
+                "[executor] error while sending to command result to client {}: {:?}",
+                client_id, e
+            );
+        }
+    }
 }
 
 fn handle_from_client<P>(
