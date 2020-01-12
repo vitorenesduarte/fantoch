@@ -656,7 +656,7 @@ mod tests {
             // check stats_fmt for n = 5
             let n = 5;
             if config.len() == n {
-                let expected = "af1=(271, 0.20) ff1=(419, 0.24) af2=(314, 0.13) ff2=(428, 0.23) e=(271, 0.20) af1C=(234, 0.15) ff1C=(410, 0.31) af2C=(280, 0.05) ff2C=(419, 0.31) eC=(234, 0.15) ";
+                let expected = "af1=min=202   max=347   avg=271   p95=339   p99=347   p99.9=347   p99.99=347 ff1=min=202   max=583   avg=419   p95=525   p99=583   p99.9=583   p99.99=583 af2=min=265   max=391   avg=314   p95=358   p99=391   p99.9=391   p99.99=391 ff2=min=211   max=592   avg=428   p95=534   p99=592   p99.9=592   p99.99=592 e=min=202   max=347   avg=271   p95=339   p99=347   p99.9=347   p99.99=347 af1C=min=202   max=280   avg=234   p95=280   p99=280   p99.9=280   p99.99=280 ff1C=min=202   max=525   avg=410   p95=525   p99=525   p99.9=525   p99.99=525 af2C=min=265   max=302   avg=280   p95=302   p99=302   p99.9=302   p99.99=302 ff2C=min=211   max=534   avg=419   p95=534   p99=534   p99.9=534   p99.99=534 eC=min=202   max=280   avg=234   p95=280   p99=280   p99.9=280   p99.99=280 ";
                 assert_eq!(Search::stats_fmt(stats, n), expected);
             }
         }
