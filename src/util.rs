@@ -2,6 +2,29 @@ use crate::id::ProcessId;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 
+// from: https://riptutorial.com/rust/example/4149/create-a-hashset-macro
+#[macro_export]
+macro_rules! set {
+    ($( $x:expr ),*) => {
+        {
+            let mut set = HashSet::new();
+            $(
+                set.insert($x);
+            )*
+            set
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! singleton {
+    ( $x:expr ) => {{
+        let mut set = HashSet::with_capacity(1);
+        set.insert($x);
+        set
+    }};
+}
+
 // Debug version
 #[cfg(debug_assertions)]
 #[macro_export]

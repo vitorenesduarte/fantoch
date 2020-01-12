@@ -69,7 +69,7 @@ where
             msg = from_readers.recv().fuse() => {
                 println!("reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
-                    handle_from_processes(from, msg, &mut process, &to_writer)
+                    handle_from_processes(process_id, from, msg, &mut process, &to_writer)
                 } else {
                     println!("[server] error while receiving new process message from readers");
                 }
@@ -87,6 +87,7 @@ where
 }
 
 fn handle_from_processes<P>(
+    process_id: ProcessId,
     from: ProcessId,
     msg: P::Message,
     process: &mut P,
@@ -96,6 +97,16 @@ fn handle_from_processes<P>(
 {
     // handle message in process
     if let Some(to_send) = process.handle(from, msg) {
+        // handle msg locally if self in `to_send.target`
+        if to_send.target.contains(&process_id) {
+            handle_from_processes(
+                process_id,
+                process_id,
+                to_send.msg.clone(),
+                process,
+                to_writer,
+            );
+        }
         if let Err(e) = to_writer.send(to_send) {
             println!("[server] error while sending to broadcast writer: {:?}", e);
         }

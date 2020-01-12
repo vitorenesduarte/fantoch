@@ -100,11 +100,15 @@ where
     // receive hi from all
     let id_to_connection_0 = receive_hi(connections_0).await;
     let id_to_connection_1 = receive_hi(connections_1).await;
-    println!("received hi from all processes");
+    println!(
+        "received hi from all processes: {:?} | {:?}",
+        id_to_connection_0.keys(),
+        id_to_connection_1.keys()
+    );
 
     (
         start_readers::<V>(id_to_connection_0),
-        start_broadcast_writer::<V>(id_to_connection_1),
+        start_broadcast_writer::<V>(process_id, id_to_connection_1),
     )
 }
 
@@ -116,14 +120,15 @@ async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
     }
 }
 
-async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)> {
-    let mut id_to_connection = Vec::with_capacity(connections.len());
+async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connection> {
+    let mut id_to_connection = HashMap::with_capacity(connections.len());
 
     // receive hi from each connection
     for mut connection in connections {
         if let Some(ProcessHi(from)) = connection.recv().await {
             // save entry and check it has not been inserted before
-            id_to_connection.push((from, connection));
+            let res = id_to_connection.insert(from, connection);
+            assert!(res.is_none());
         } else {
             panic!("error receiving hi");
         }
@@ -133,7 +138,9 @@ async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)
 
 /// Starts a reader task per connection received and returns an unbounded channel to which
 /// readers will write to.
-fn start_readers<V>(connections: Vec<(ProcessId, Connection)>) -> UnboundedReceiver<(ProcessId, V)>
+fn start_readers<V>(
+    connections: HashMap<ProcessId, Connection>,
+) -> UnboundedReceiver<(ProcessId, V)>
 where
     V: Debug + DeserializeOwned + Send + 'static,
 {
@@ -143,7 +150,8 @@ where
 }
 
 fn start_broadcast_writer<V>(
-    connections: Vec<(ProcessId, Connection)>,
+    process_id: ProcessId,
+    connections: HashMap<ProcessId, Connection>,
 ) -> UnboundedSender<ToSend<V>>
 where
     V: Serialize + Send + 'static,
@@ -159,7 +167,7 @@ where
     }
 
     // spawn broadcast writer
-    task::spawn_consumer(|rx| broadcast_writer_task::<V>(writers, rx))
+    task::spawn_consumer(|rx| broadcast_writer_task::<V>(process_id, writers, rx))
 }
 
 /// Reader task.
@@ -186,6 +194,7 @@ async fn reader_task<V>(
 
 /// Broadcast Writer task.
 async fn broadcast_writer_task<V>(
+    process_id: ProcessId,
     mut writers: HashMap<ProcessId, UnboundedSender<Bytes>>,
     mut parent: UnboundedReceiver<ToSend<V>>,
 ) where
@@ -196,15 +205,18 @@ async fn broadcast_writer_task<V>(
             // serialize message
             let bytes = Connection::serialize(&msg);
             for id in target {
-                // find writer
-                let writer = writers
-                    .get_mut(&id)
-                    .expect("[broadcast_writer] identifier in target should have a writer");
-                if let Err(e) = writer.send(bytes.clone()) {
-                    println!(
-                        "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
-                        id, e
-                    );
+                // only send if id different from self
+                if id != process_id {
+                    // find writer
+                    let writer = writers
+                        .get_mut(&id)
+                        .expect("[broadcast_writer] identifier in target should have a writer");
+                    if let Err(e) = writer.send(bytes.clone()) {
+                        println!(
+                            "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
+                            id, e
+                        );
+                    }
                 }
             }
         } else {

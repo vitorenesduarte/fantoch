@@ -2,14 +2,15 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::log;
 use crate::protocol::common::{
     info::{Commands, Info},
     table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
 };
 use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::cmp;
+use std::collections::HashSet;
 use std::mem;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
@@ -128,7 +129,7 @@ impl Newt {
         from: ProcessId,
         dot: Dot,
         cmd: Command,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
         remote_clock: u64,
     ) -> Option<ToSend<Message>> {
         log!(
@@ -169,7 +170,7 @@ impl Newt {
             clock,
             process_votes,
         };
-        let target = vec![from];
+        let target = singleton![from];
 
         // return `ToSend`
         Some(ToSend {
@@ -355,7 +356,7 @@ impl Newt {
 // `Command`
 struct CommandInfo {
     status: Status,
-    quorum: Vec<ProcessId>,
+    quorum: HashSet<ProcessId>,
     cmd: Option<Command>, // `None` if noOp
     clock: u64,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
@@ -370,7 +371,7 @@ impl Info for CommandInfo {
     fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
-            quorum: vec![],
+            quorum: HashSet::new(),
             cmd: None,
             clock: 0,
             votes: Votes::new(),
@@ -385,7 +386,7 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Command,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
         clock: u64,
     },
     MCollectAck {
@@ -418,6 +419,7 @@ mod tests {
     use super::*;
     use crate::client::{Client, Workload};
     use crate::planet::{Planet, Region};
+    use crate::set;
     use crate::sim::Simulation;
     use crate::time::SimTime;
     use crate::util;
@@ -511,7 +513,7 @@ mod tests {
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
         assert_eq!(target.len(), 2 * f);
-        assert_eq!(target, vec![1, 2]);
+        assert_eq!(target, set![1, 2]);
 
         // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);
@@ -548,7 +550,7 @@ mod tests {
         match msg {
             Message::MPhantom { .. } => {
                 assert_eq!(from, process_id_3);
-                assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
+                assert_eq!(target, set![process_id_1, process_id_2, process_id_3]);
             }
             _ => panic!("Message::MPhantom not found!"),
         }

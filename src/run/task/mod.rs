@@ -49,11 +49,12 @@ where
 }
 
 /// Spawns many producers, returning the consumer-end of the channel.
-pub fn spawn_producers<A, M, F>(
-    args: Vec<A>,
+pub fn spawn_producers<A, T, M, F>(
+    args: T,
     producer: impl Fn(A, UnboundedSender<M>) -> F,
 ) -> UnboundedReceiver<M>
 where
+    T: IntoIterator<Item = A>,
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {

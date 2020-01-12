@@ -26,6 +26,7 @@ use crate::executor::Executor;
 use crate::id::ProcessId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fmt::Debug;
 
 pub trait Protocol {
@@ -55,6 +56,6 @@ pub trait Protocol {
 #[derive(Clone, PartialEq, Debug)]
 pub struct ToSend<M> {
     pub from: ProcessId,
-    pub target: Vec<ProcessId>,
+    pub target: HashSet<ProcessId>,
     pub msg: M,
 }

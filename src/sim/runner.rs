@@ -7,6 +7,7 @@ use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Protocol, ToSend};
 use crate::sim::{Schedule, Simulation};
+use crate::singleton;
 use crate::time::SimTime;
 use crate::util;
 use std::collections::HashMap;
@@ -415,7 +416,7 @@ mod tests {
                     // reply back
                     Some(ToSend {
                         from: self.id(),
-                        target: vec![from],
+                        target: singleton![from],
                         msg,
                     })
                 }

@@ -2,7 +2,6 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::log;
 use crate::protocol::common::{
     graph::{KeysClocks, QuorumClocks},
     info::{Commands, Info},
@@ -10,8 +9,9 @@ use crate::protocol::common::{
 };
 use crate::protocol::{BaseProcess, Protocol, ToSend};
 use crate::util;
+use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use threshold::VClock;
 
@@ -137,7 +137,7 @@ impl EPaxos {
         from: ProcessId,
         dot: Dot,
         cmd: Option<Command>,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
     ) -> Option<ToSend<Message>> {
         log!(
@@ -176,7 +176,7 @@ impl EPaxos {
 
         // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck { dot, clock };
-        let target = vec![from];
+        let target = singleton![from];
 
         // return `ToSend`
         Some(ToSend {
@@ -338,7 +338,7 @@ impl EPaxos {
         };
 
         // create target
-        let target = vec![from];
+        let target = singleton![from];
 
         // return `ToSend`
         Some(ToSend {
@@ -414,7 +414,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 // `Command`
 struct CommandInfo {
     status: Status,
-    quorum: Vec<ProcessId>,
+    quorum: HashSet<ProcessId>,
     synod: Synod<ConsensusValue>,
     // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
     // whether to take the fast path
@@ -433,7 +433,7 @@ impl Info for CommandInfo {
         // created.
         Self {
             status: Status::START,
-            quorum: vec![],
+            quorum: HashSet::new(),
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
         }
@@ -447,7 +447,7 @@ pub enum Message {
         dot: Dot,
         cmd: Option<Command>, // it's never a noop though
         clock: VClock<ProcessId>,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
@@ -481,6 +481,7 @@ mod tests {
     use super::*;
     use crate::client::{Client, Workload};
     use crate::planet::{Planet, Region};
+    use crate::set;
     use crate::sim::Simulation;
     use crate::time::SimTime;
 
@@ -573,7 +574,7 @@ mod tests {
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
         assert_eq!(target.len(), 2 * f);
-        assert_eq!(target, vec![1, 2]);
+        assert_eq!(target, set![1, 2]);
 
         // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);
