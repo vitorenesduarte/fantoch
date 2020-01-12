@@ -10,6 +10,11 @@ where
     tokio::spawn(task);
 }
 
+/// Just a wrapper around mpsc::unbounded_channel.
+pub fn channel<M>() -> (UnboundedSender<M>, UnboundedReceiver<M>) {
+    mpsc::unbounded_channel()
+}
+
 /// Spawns a single producer, returning the consumer-end of the channel.
 pub fn spawn_producer<M, F>(producer: impl FnOnce(UnboundedSender<M>) -> F) -> UnboundedReceiver<M>
 where
@@ -19,7 +24,7 @@ where
     // create channel and:
     // - pass the producer-end of the channel to producer
     // - return the consumer-end of the channel to the caller
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = channel();
     tokio::spawn(producer(tx));
     rx
 }
@@ -36,7 +41,7 @@ where
     // create channel and:
     // - pass a clone of the producer-end of the channel to each producer
     // - return the consumer-end of the channel to the caller
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = channel();
     for arg in args {
         tokio::spawn(producer(arg, tx.clone()));
     }
@@ -52,7 +57,7 @@ where
     // create channel and:
     // - pass the consumer-end of the channel to the consumer
     // - return the producer-end of the channel to the caller
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = channel();
     tokio::spawn(receiver(rx));
     tx
 }

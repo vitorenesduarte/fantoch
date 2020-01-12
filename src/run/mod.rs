@@ -53,7 +53,7 @@ where
 
     // start client listener
     let listener = net::listen((LOCALHOST, client_port)).await?;
-    let from_clients = net::client::start_listener(listener);
+    let from_clients = net::client::start_listener(process_id, listener);
 
     loop {
         // match future::select(from_readers.recv(), from_clients.recv()) {
@@ -90,7 +90,7 @@ where
     let mut client = Client::new(client_id, workload);
 
     // say hi
-    let process_id = net::client::say_hi(&mut connection, client_id).await;
+    let process_id = net::client::say_hi(client_id, &mut connection).await;
 
     // set process id (although this won't be used)
     client.skip_discover(process_id);
