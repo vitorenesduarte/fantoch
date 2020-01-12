@@ -88,7 +88,7 @@ impl fmt::Debug for Command {
 }
 
 /// Structure that aggregates partial results of multi-key commands.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CommandResult {
     rifl: Rifl,
     key_count: usize,

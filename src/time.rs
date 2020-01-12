@@ -1,11 +1,25 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 pub trait SysTime {
     /// Returns the current time.
-    fn now(&self) -> u64;
+    fn now(&self) -> u128;
+}
+
+// TODO find a better name
+pub struct RunTime;
+
+impl SysTime for RunTime {
+    fn now(&self) -> u128 {
+        let now = SystemTime::now();
+        now.duration_since(UNIX_EPOCH)
+            .expect("we're way past UNIX EPOCH")
+            .as_micros()
+    }
 }
 
 #[derive(Default)]
 pub struct SimTime {
-    time: u64,
+    time: u128,
 }
 
 impl SimTime {
@@ -15,12 +29,12 @@ impl SimTime {
     }
 
     /// Increases simulation time by `tick`.
-    pub fn tick(&mut self, tick: u64) {
+    pub fn tick(&mut self, tick: u128) {
         self.time += tick;
     }
 
     /// Sets simulation time to `new_time`.
-    pub fn set_time(&mut self, new_time: u64) {
+    pub fn set_time(&mut self, new_time: u128) {
         // make sure time is monotonic
         assert!(self.time <= new_time);
         self.time = new_time;
@@ -28,7 +42,7 @@ impl SimTime {
 }
 
 impl SysTime for SimTime {
-    fn now(&self) -> u64 {
+    fn now(&self) -> u128 {
         self.time
     }
 }

@@ -4,9 +4,11 @@ pub mod task;
 // This module contains the definition of...
 pub mod net;
 
+use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Process, ToSend};
+use crate::time::RunTime;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Debug;
@@ -73,6 +75,45 @@ pub async fn client<A>(
 where
     A: ToSocketAddrs,
 {
-    let connection = net::connect(address).await?;
-    loop {}
+    // TODO there's a single client for now
+    let mut connection = net::connect(address).await?;
+
+    // create system time
+    let time = RunTime;
+
+    // TODO make workload configurable
+    let conflict_rate = 10;
+    let total_commands = 100;
+    let workload = Workload::new(conflict_rate, total_commands);
+
+    // create client
+    let mut client = Client::new(client_id, workload);
+
+    // say hi
+    let process_id = net::client::say_hi(&mut connection, client_id).await;
+
+    // set process id (although this won't be used)
+    client.skip_discover(process_id);
+
+    if let Some((_, cmd)) = client.start(&time) {
+        // submit first command
+        connection.send(cmd).await;
+        loop {
+            if let Some(cmd_result) = connection.recv().await {
+                if let Some((_, cmd)) = client.handle(cmd_result, &time) {
+                    connection.send(cmd).await;
+                } else {
+                    // all commands have been generated
+                    println!("client {} ended", client_id);
+                    println!("total commands: {}", client.issued_commands());
+                    println!("{:?}", client.latency_histogram());
+                    return Ok(());
+                }
+            } else {
+                panic!("couldn't receive command result from process");
+            }
+        }
+    } else {
+        panic!("client couldn't be started");
+    }
 }

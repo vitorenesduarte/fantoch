@@ -551,10 +551,10 @@ mod tests {
         // create client 1 that is connected to epaxos 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
+        let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        assert!(client_1.discover(processes));
+        assert!(client_1.discover(&client_region, &planet, processes));
 
         // start client
         let (target, cmd) = client_1

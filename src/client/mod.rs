@@ -1,7 +1,7 @@
-// This module contains the definition of `Workload`.
+// This module contains the definition of `Workload`
 pub mod workload;
 
-// This module contains the defintion of `Pending`
+// This module contains the definition of `Pending`
 pub mod pending;
 
 // Re-exports.
@@ -19,9 +19,6 @@ use crate::util;
 pub struct Client {
     /// id of this client
     client_id: ClientId,
-    /// region where this client is
-    region: Region,
-    planet: Planet,
     /// id of the process this client is connected to
     process_id: Option<ProcessId>,
     /// rifl id generator
@@ -36,12 +33,10 @@ pub struct Client {
 
 impl Client {
     /// Creates a new client.
-    pub fn new(client_id: ClientId, region: Region, planet: Planet, workload: Workload) -> Self {
+    pub fn new(client_id: ClientId, workload: Workload) -> Self {
         // create client
         Self {
             client_id,
-            region,
-            planet,
             process_id: None,
             rifl_gen: RiflGen::new(client_id),
             workload,
@@ -55,10 +50,15 @@ impl Client {
         self.client_id
     }
 
-    /// Generate client's first command.
-    pub fn discover(&mut self, mut processes: Vec<(ProcessId, Region)>) -> bool {
+    /// Find the closest process.
+    pub fn discover(
+        &mut self,
+        region: &Region,
+        planet: &Planet,
+        mut processes: Vec<(ProcessId, Region)>,
+    ) -> bool {
         // sort `processes` by distance from `self.region`
-        util::sort_processes_by_distance(&self.region, &self.planet, &mut processes);
+        util::sort_processes_by_distance(region, planet, &mut processes);
 
         // set the closest process
         self.process_id = processes
@@ -68,6 +68,11 @@ impl Client {
 
         // check if we have a closest process
         self.process_id.is_some()
+    }
+
+    /// Set the closest process.
+    pub fn skip_discover(&mut self, process_id: ProcessId) {
+        self.process_id = Some(process_id);
     }
 
     /// Start client's workload.
@@ -117,19 +122,21 @@ mod tests {
     use crate::time::SimTime;
 
     // Generates some client.
-    fn gen_client(total_commands: usize, region: Region) -> Client {
+    fn gen_client(total_commands: usize) -> Client {
         // workload
         let conflict_rate = 100;
         let workload = Workload::new(conflict_rate, total_commands);
 
         // client
         let id = 1;
-        let planet = Planet::new("latency/");
-        Client::new(id, region, planet, workload)
+        Client::new(id, workload)
     }
 
     #[test]
     fn discover() {
+        // create planet
+        let planet = Planet::new("latency/");
+
         // processes
         let processes = vec![
             (0, Region::new("asia-east1")),
@@ -140,19 +147,22 @@ mod tests {
         // client
         let region = Region::new("europe-west2");
         let total_commands = 0;
-        let mut client = gen_client(total_commands, region);
+        let mut client = gen_client(total_commands);
 
         // check discover with empty vec
-        assert!(!client.discover(vec![]));
+        assert!(!client.discover(&region, &planet, vec![]));
         assert_eq!(client.process_id, None);
 
         // check discover with processes
-        assert!(client.discover(processes));
+        assert!(client.discover(&region, &planet, processes));
         assert_eq!(client.process_id, Some(2));
     }
 
     #[test]
     fn client_flow() {
+        // create planet
+        let planet = Planet::new("latency/");
+
         // processes
         let processes = vec![
             (0, Region::new("asia-east1")),
@@ -163,10 +173,10 @@ mod tests {
         // client
         let region = Region::new("europe-west2");
         let total_commands = 2;
-        let mut client = gen_client(total_commands, region);
+        let mut client = gen_client(total_commands);
 
         // discover
-        client.discover(processes);
+        client.discover(&region, &planet, processes);
 
         // create system time
         let mut time = SimTime::new();

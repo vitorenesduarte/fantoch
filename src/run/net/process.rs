@@ -1,19 +1,17 @@
+use super::ProcessHi;
 use crate::id::ProcessId;
 use crate::protocol::ToSend;
 use crate::run::net::connection::Connection;
 use crate::run::task;
 use bytes::Bytes;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::Duration;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Hi(ProcessId);
 
 pub async fn connect_to_all<A, V>(
     process_id: ProcessId,
@@ -87,7 +85,7 @@ where
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
     // say hi to all processes
-    let hi = Hi(process_id);
+    let hi = ProcessHi(process_id);
     for connection in connections_0.iter_mut() {
         connection.send(&hi).await;
     }
@@ -96,7 +94,7 @@ where
     // create mapping from process id to connection
     let mut id_to_connection = HashMap::new();
     for mut connection in connections_1 {
-        if let Some(Hi(from)) = connection.recv().await {
+        if let Some(ProcessHi(from)) = connection.recv().await {
             // save entry and check it has not been inserted before
             let res = id_to_connection.insert(from, connection);
             assert!(res.is_none());

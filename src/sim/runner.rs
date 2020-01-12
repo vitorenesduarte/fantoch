@@ -95,9 +95,9 @@ where
             for _ in 1..=clients_per_region {
                 // create client
                 client_id += 1;
-                let mut client = Client::new(client_id, region.clone(), planet.clone(), workload);
+                let mut client = Client::new(client_id, workload);
                 // discover
-                assert!(client.discover(to_discover.clone()));
+                assert!(client.discover(&region, &planet, to_discover.clone()));
                 // and register it
                 simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
@@ -230,7 +230,7 @@ where
         // compute distance between regions
         let distance = self.distance(from, to);
         // schedule action
-        self.schedule.schedule(&self.time, distance, action);
+        self.schedule.schedule(&self.time, distance as u128, action);
     }
 
     /// Retrieves the region of some process/client.

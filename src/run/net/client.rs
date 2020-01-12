@@ -1,17 +1,13 @@
+use super::{ClientHi, ProcessHi};
 use crate::command::CommandResult;
-use crate::id::ClientId;
+use crate::id::{ClientId, ProcessId};
 use crate::run::net::connection::Connection;
 use crate::run::task;
 use crate::run::FromClient;
 use futures::future::FutureExt;
 use futures::select;
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Hi(ClientId);
 
 pub fn start_listener(listener: TcpListener) -> UnboundedReceiver<FromClient> {
     task::spawn_producer(|tx| client_listener_task(listener, tx))
@@ -66,4 +62,17 @@ fn receive_hi(
             println!("error while registering client in parent: {:?}", e);
         }
     })
+}
+
+pub async fn say_hi(connection: &mut Connection, client_id: ClientId) -> ProcessId {
+    // say hi
+    let hi = ClientHi(client_id);
+    connection.send(hi).await;
+
+    // receive hi back
+    if let Some(ProcessHi(process_id)) = connection.recv().await {
+        process_id
+    } else {
+        panic!("couldn't receive process id from connected process");
+    }
 }
