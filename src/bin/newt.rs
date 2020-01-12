@@ -15,6 +15,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         port,
         addresses,
         client_port,
+        config,
     )
     .await?;
     Ok(())

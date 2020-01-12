@@ -15,7 +15,7 @@ use std::fmt::Debug;
 pub trait Executor {
     type ExecutionInfo: Debug;
 
-    fn new(config: &Config) -> Self;
+    fn new(config: Config) -> Self;
 
     fn register(&mut self, cmd: &Command);
 

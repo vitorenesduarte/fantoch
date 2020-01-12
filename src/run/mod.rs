@@ -3,12 +3,13 @@ pub mod task;
 
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
+use crate::config::Config;
+use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Protocol, ToSend};
 use crate::time::RunTime;
 use futures::future::FutureExt;
 use futures::select;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::ToSocketAddrs;
@@ -27,6 +28,10 @@ pub enum FromClient {
     Submit(Command),
 }
 
+pub enum FromExecutor {
+    Submit(Command),
+}
+
 pub async fn process<A, P>(
     mut process: P,
     process_id: ProcessId,
@@ -34,6 +39,7 @@ pub async fn process<A, P>(
     port: u16,
     addresses: Vec<A>,
     client_port: u16,
+    config: Config,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -59,25 +65,25 @@ where
 
     // start client listener
     let listener = task::listen((LOCALHOST, client_port)).await?;
-    let mut from_clients = task::client::start_listener(process_id, listener);
+    let from_clients = task::client::start_listener(process_id, listener);
 
-    // mapping from client id to its channel
-    let mut clients = HashMap::new();
+    // start executor
+    let (mut from_executor, to_executor) = task::process::start_executor::<P>(config, from_clients);
 
     loop {
         select! {
             msg = from_readers.recv().fuse() => {
                 println!("reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &to_writer)
+                    handle_from_processes(process_id, from, msg, &mut process, &to_writer, &to_executor)
                 } else {
                     println!("[server] error while receiving new process message from readers");
                 }
             }
-            from_client = from_clients.recv().fuse() => {
-                println!("from client: {:?}", from_client);
-                if let Some(from_client) = from_client {
-                    handle_from_client(process_id, from_client, &mut clients, &mut process, &to_writer)
+            cmd = from_executor.recv().fuse() => {
+                println!("from executor: {:?}", from_executor);
+                if let Some(cmd) = cmd {
+                    handle_from_client(process_id, cmd, &mut process, &to_writer, &to_executor)
                 } else {
                     println!("[server] error while receiving new command from clients");
                 }
@@ -92,59 +98,35 @@ fn handle_from_processes<P>(
     msg: P::Message,
     process: &mut P,
     to_writer: &UnboundedSender<ToSend<P::Message>>,
+    to_executor: &UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
 ) where
     P: Protocol,
 {
     // handle message in process
     let to_send = process.handle(from, msg);
-    send_to_writer(process_id, to_send, process, to_writer);
-    // TODO check if there's new execution info for the executor
-}
+    send_to_writer(process_id, to_send, process, to_writer, to_executor);
 
-// // find its channel
-// let tx = clients
-//     .get_mut(&client_id)
-//     .expect("client should register before submitting any commands");
-// // fake command result
-// let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
-// if let Err(e) = tx.send(cmd_result) {
-//     println!(
-//         "[server] error while sending command result to client: {:?}",
-//         e
-//     );
-// }
+    // check if there's new execution info for the executor
+    let execution_info = process.to_executor();
+    if !execution_info.is_empty() {
+        if let Err(e) = to_executor.send(execution_info) {
+            println!("[server] error while sending to executor: {:?}", e);
+        }
+    }
+}
 
 fn handle_from_client<P>(
     process_id: ProcessId,
-    from_client: FromClient,
-    clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
+    cmd: Command,
     process: &mut P,
     to_writer: &UnboundedSender<ToSend<P::Message>>,
+    to_executor: &UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
 ) where
     P: Protocol,
 {
-    match from_client {
-        FromClient::Submit(cmd) => {
-            // get client id
-            let client_id = cmd.rifl().source();
-
-            // TODO register in executor
-
-            // submit command in process
-            let to_send = process.submit(cmd);
-            send_to_writer(process_id, Some(to_send), process, to_writer);
-        }
-        FromClient::Register(client_id, tx) => {
-            println!("[server] client {} registered", client_id);
-            let res = clients.insert(client_id, tx);
-            assert!(res.is_none());
-        }
-        FromClient::Unregister(client_id) => {
-            println!("[server] client {} unregistered", client_id);
-            let res = clients.remove(&client_id);
-            assert!(res.is_some());
-        }
-    }
+    // submit command in process
+    let to_send = process.submit(cmd);
+    send_to_writer(process_id, Some(to_send), process, to_writer, to_executor);
 }
 
 fn send_to_writer<P>(
@@ -152,6 +134,7 @@ fn send_to_writer<P>(
     to_send: Option<ToSend<P::Message>>,
     process: &mut P,
     to_writer: &UnboundedSender<ToSend<P::Message>>,
+    to_executor: &UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
 ) where
     P: Protocol,
 {
@@ -164,6 +147,7 @@ fn send_to_writer<P>(
                 to_send.msg.clone(),
                 process,
                 to_writer,
+                to_executor,
             );
         }
         if let Err(e) = to_writer.send(to_send) {

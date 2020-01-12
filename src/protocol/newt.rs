@@ -458,9 +458,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = TableExecutor::new(&config);
-        let executor_2 = TableExecutor::new(&config);
-        let executor_3 = TableExecutor::new(&config);
+        let executor_1 = TableExecutor::new(config);
+        let executor_2 = TableExecutor::new(config);
+        let executor_3 = TableExecutor::new(config);
 
         // newts
         let mut newt_1 = Newt::new(process_id_1, config);

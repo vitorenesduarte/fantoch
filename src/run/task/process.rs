@@ -1,7 +1,11 @@
 use super::{connection::Connection, ProcessHi};
+use crate::command::Command;
+use crate::config::Config;
+use crate::executor::Executor;
 use crate::id::ProcessId;
-use crate::protocol::ToSend;
+use crate::protocol::{Protocol, ToSend};
 use crate::run::task;
+use crate::run::FromClient;
 use bytes::Bytes;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -235,3 +239,43 @@ async fn writer_task(mut connection: Connection, mut parent: UnboundedReceiver<B
         }
     }
 }
+
+/// Starts the executor.
+pub fn start_executor<P>(
+    config: Config,
+    from_clients: UnboundedReceiver<FromClient>,
+) -> (
+    UnboundedReceiver<Command>,
+    UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
+)
+where
+    P: Protocol,
+{
+    todo!()
+}
+
+//
+// // mapping from client id to its channel
+// let mut clients = HashMap::new();
+// clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
+//
+// match from_client {
+//     FromClient::Submit(cmd) => {
+//         // register in executor
+//         to_executor.send(ToExecutor::Register(cmd.rifl(), cmd.key_count()));
+
+//         // submit command in process
+//         let to_send = process.submit(cmd);
+//         send_to_writer(process_id, Some(to_send), process, to_writer);
+//     }
+//     FromClient::Register(client_id, tx) => {
+//         println!("[server] client {} registered", client_id);
+//         let res = clients.insert(client_id, tx);
+//         assert!(res.is_none());
+//     }
+//     FromClient::Unregister(client_id) => {
+//         println!("[server] client {} unregistered", client_id);
+//         let res = clients.remove(&client_id);
+//         assert!(res.is_some());
+//     }
+// }

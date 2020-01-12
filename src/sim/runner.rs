@@ -80,7 +80,7 @@ where
             assert!(process.discover(sorted));
 
             // create executor for this process
-            let executor = <P::Executor as Executor>::new(&config);
+            let executor = <P::Executor as Executor>::new(config);
 
             // and register both
             simulation.register_process(process, executor);
@@ -328,7 +328,7 @@ mod tests {
     impl Executor for PingPongExecutor {
         type ExecutionInfo = CommandResult;
 
-        fn new(_config: &Config) -> Self {
+        fn new(_config: Config) -> Self {
             // ignore config
             PingPongExecutor::new()
         }
