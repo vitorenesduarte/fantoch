@@ -22,7 +22,7 @@ pub async fn connect_to_all<A, V>(
     connect_retries: usize,
 ) -> Result<(UnboundedReceiver<V>, UnboundedSender<ToSend<V>>), Box<dyn Error>>
 where
-    A: ToSocketAddrs + Debug + Clone,
+    A: ToSocketAddrs + Debug,
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
     // spawn listener

@@ -37,8 +37,10 @@ where
     // check ports are different
     assert!(port != client_port);
 
+    // start process listener
+    let listener = net::listen((LOCALHOST, port)).await?;
+
     // connect to all processes
-    let listener = TcpListener::bind((LOCALHOST, port)).await?;
     let (from_readers, to_writer) = net::process::connect_to_all::<A, P::Message>(
         process_id,
         listener,
@@ -48,7 +50,7 @@ where
     .await?;
 
     // start client listener
-    let listener = TcpListener::bind((LOCALHOST, client_port)).await?;
+    let listener = net::listen((LOCALHOST, client_port)).await?;
     let from_clients = net::client::start_listener(listener);
 
     loop {
@@ -69,7 +71,8 @@ pub async fn client<A>(
     client_number: usize,
 ) -> Result<(), Box<dyn Error>>
 where
-    A: ToSocketAddrs + Debug + Clone,
+    A: ToSocketAddrs,
 {
+    let connection = net::connect(address).await?;
     loop {}
 }
