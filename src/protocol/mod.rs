@@ -31,7 +31,7 @@ use std::fmt::Debug;
 
 pub trait Protocol {
     type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
-    type Executor: Executor;
+    type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;
 

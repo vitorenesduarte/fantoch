@@ -85,7 +85,7 @@ where
                 if let Some(cmd) = cmd {
                     handle_from_client(process_id, cmd, &mut process, &to_writer, &to_executor)
                 } else {
-                    println!("[server] error while receiving new command from clients");
+                    println!("[server] error while receiving new command from executor");
                 }
             }
         }

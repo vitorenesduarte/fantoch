@@ -1,12 +1,14 @@
 use super::{connection::Connection, ProcessHi};
-use crate::command::Command;
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::ProcessId;
+use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Protocol, ToSend};
 use crate::run::task;
 use crate::run::FromClient;
 use bytes::Bytes;
+use futures::future::FutureExt;
+use futures::select;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -251,41 +253,77 @@ pub fn start_executor<P>(
 where
     P: Protocol + 'static,
 {
-    task::spawn_producer_and_consumer(|tx, rx| executor_task::<P>(tx, rx, from_clients))
+    task::spawn_producer_and_consumer(|tx, rx| executor_task::<P>(config, tx, rx, from_clients))
 }
 
 async fn executor_task<P>(
+    config: Config,
     to_parent: UnboundedSender<Command>,
-    from_parent: UnboundedReceiver<Vec<<P::Executor as Executor>::ExecutionInfo>>,
-    from_clients: UnboundedReceiver<FromClient>,
+    mut from_parent: UnboundedReceiver<Vec<<P::Executor as Executor>::ExecutionInfo>>,
+    mut from_clients: UnboundedReceiver<FromClient>,
 ) where
     P: Protocol,
 {
-    todo!()
+    // create executor
+    let mut executor = P::Executor::new(config);
+
+    // mapping from client id to its channel
+    let mut clients = HashMap::new();
+
+    select! {
+        execution_info = from_parent.recv().fuse() => {
+            if let Some(execution_info) = execution_info {
+                handle_execution_info::<P>(execution_info, &mut executor, &mut clients);
+            } else {
+                println!("[execution] error while receiving execution info from parent");
+            }
+        }
+        from_client = from_clients.recv().fuse() => {
+            if let Some(from_client) = from_client {
+                handle_from_client::<P>(from_client, &mut executor, &mut clients, &to_parent);
+            } else {
+                println!("[execution] error while receiving new command from clients");
+            }
+        }
+    }
 }
 
-//
-// // mapping from client id to its channel
-// let mut clients = HashMap::new();
-// clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
-//
-// match from_client {
-//     FromClient::Submit(cmd) => {
-//         // register in executor
-//         to_executor.send(ToExecutor::Register(cmd.rifl(), cmd.key_count()));
+fn handle_execution_info<P>(
+    execution_info: Vec<<P::Executor as Executor>::ExecutionInfo>,
+    executor: &mut P::Executor,
+    clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
+) where
+    P: Protocol,
+{
+}
 
-//         // submit command in process
-//         let to_send = process.submit(cmd);
-//         send_to_writer(process_id, Some(to_send), process, to_writer);
-//     }
-//     FromClient::Register(client_id, tx) => {
-//         println!("[server] client {} registered", client_id);
-//         let res = clients.insert(client_id, tx);
-//         assert!(res.is_none());
-//     }
-//     FromClient::Unregister(client_id) => {
-//         println!("[server] client {} unregistered", client_id);
-//         let res = clients.remove(&client_id);
-//         assert!(res.is_some());
-//     }
-// }
+fn handle_from_client<P>(
+    from_client: FromClient,
+    executor: &mut P::Executor,
+    clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
+    to_parent: &UnboundedSender<Command>,
+) where
+    P: Protocol,
+{
+    match from_client {
+        FromClient::Submit(cmd) => {
+            // register in executor
+            executor.register(&cmd);
+
+            // send to command to parent
+            if let Err(e) = to_parent.send(cmd) {
+                println!("[executor] error while sending to parent: {:?}", e);
+            }
+        }
+        FromClient::Register(client_id, tx) => {
+            println!("[executor] client {} registered", client_id);
+            let res = clients.insert(client_id, tx);
+            assert!(res.is_none());
+        }
+        FromClient::Unregister(client_id) => {
+            println!("[executor] client {} unregistered", client_id);
+            let res = clients.remove(&client_id);
+            assert!(res.is_some());
+        }
+    }
+}
