@@ -75,7 +75,7 @@ impl Executor for GraphExecutor {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GraphExecutionInfo {
     dot: Dot,
     cmd: Command,

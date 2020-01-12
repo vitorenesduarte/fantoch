@@ -83,6 +83,7 @@ impl Executor for TableExecutor {
     }
 }
 
+#[derive(Debug)]
 pub enum TableExecutionInfo {
     Votes {
         dot: Dot,
