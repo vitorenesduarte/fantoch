@@ -6,7 +6,7 @@ edition = "2018"
 authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
-default-run = "run"
+default-run = "process"
 
 [dependencies]
 threshold = "0.6.5"

@@ -27,9 +27,9 @@ async fn client_listener_task(listener: TcpListener, parent: UnboundedSender<Fro
         match rx.recv().await {
             Some(connection) => {
                 println!("[client_listener] new connection");
-                // start client task and give it the producer-end of the channel in order for this
-                // client to notify parent
-                task::spawn(client_task(connection, parent.clone()));
+                // start client server task and give it the producer-end of the channel in order for
+                // this client to notify parent
+                task::spawn(client_server_task(connection, parent.clone()));
             }
             None => {
                 println!("[client_listener] error receiving message from listener");
@@ -38,10 +38,10 @@ async fn client_listener_task(listener: TcpListener, parent: UnboundedSender<Fro
     }
 }
 
-/// Client task. Checks messages both from the client connection (new commands) and parent (new
-/// command results).
-async fn client_task(mut connection: Connection, parent: UnboundedSender<FromClient>) {
-    let mut parent = client_say_hi(&mut connection, parent);
+/// Client server-side task. Checks messages both from the client connection (new commands) and
+/// parent (new command results).
+async fn client_server_task(mut connection: Connection, parent: UnboundedSender<FromClient>) {
+    let mut parent = receive_hi(&mut connection, parent);
 
     loop {
         select! {
@@ -55,7 +55,7 @@ async fn client_task(mut connection: Connection, parent: UnboundedSender<FromCli
     }
 }
 
-fn client_say_hi(
+fn receive_hi(
     connection: &mut Connection,
     parent: UnboundedSender<FromClient>,
 ) -> UnboundedReceiver<CommandResult> {

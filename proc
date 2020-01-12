@@ -2,13 +2,13 @@
 
 case $1 in
 1) 
-  cargo run -- --id 1 -p 3001 -a localhost:3002,localhost:3003
+  cargo run --bin process -- --id 1 -p 3001 -a localhost:3002,localhost:3003
   ;;
 2)
-  cargo run -- --id 2 -p 3002 -a localhost:3001,localhost:3003
+  cargo run --bin process -- --id 2 -p 3002 -a localhost:3001,localhost:3003
   ;;
 3)
-  cargo run -- --id 3 -p 3003 -a localhost:3001,localhost:3002
+  cargo run --bin process -- --id 3 -p 3003 -a localhost:3001,localhost:3002
   ;;
 *)
   echo "process id $0 invalid"

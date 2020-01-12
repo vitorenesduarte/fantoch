@@ -20,7 +20,7 @@ pub enum FromClient {
     Submit(Command),
 }
 
-pub async fn run<P, A>(
+pub async fn process<P, A>(
     process_id: ProcessId,
     port: u16,
     addresses: Vec<A>,
