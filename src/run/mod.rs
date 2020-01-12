@@ -31,8 +31,9 @@ pub enum FromClient {
 }
 
 pub async fn process<A, P>(
-    process: P,
+    mut process: P,
     process_id: ProcessId,
+    sorted_processes: Vec<ProcessId>,
     port: u16,
     addresses: Vec<A>,
     client_port: u16,
@@ -41,6 +42,9 @@ where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + 'static, // TODO what does this 'static do?
 {
+    // discover processes
+    process.discover(sorted_processes);
+
     // check ports are different
     assert!(port != client_port);
 
