@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::Duration;
 
@@ -42,7 +42,7 @@ where
     for address in addresses {
         let mut tries = 0;
         loop {
-            match connect(&address).await {
+            match super::connect(&address).await {
                 Ok(connection) => {
                     // save connection if connected successfully
                     outgoing.push(connection);
@@ -140,15 +140,6 @@ where
 
     // spawn broadcast writer
     task::spawn_consumer(|rx| broadcast_writer_task::<V>(writers, rx))
-}
-
-async fn connect<A>(address: &A) -> Result<Connection, Box<dyn Error>>
-where
-    A: ToSocketAddrs + Debug + Clone,
-{
-    let stream = TcpStream::connect(address.clone()).await?;
-    let connection = Connection::new(stream);
-    Ok(connection)
 }
 
 /// Reader task.

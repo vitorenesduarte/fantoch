@@ -8,7 +8,9 @@ pub mod process;
 pub mod client;
 
 use crate::run::net::connection::Connection;
-use tokio::net::TcpListener;
+use std::error::Error;
+use std::fmt::Debug;
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::UnboundedSender;
 
 /// Listen on new connections and send them to parent process.
@@ -28,4 +30,13 @@ pub async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<Co
             Err(e) => println!("[listener] couldn't accept new connection: {:?}", e),
         }
     }
+}
+
+pub async fn connect<A>(address: &A) -> Result<Connection, Box<dyn Error>>
+where
+    A: ToSocketAddrs + Debug + Clone,
+{
+    let stream = TcpStream::connect(address.clone()).await?;
+    let connection = Connection::new(stream);
+    Ok(connection)
 }
