@@ -1,52 +1,31 @@
 // This module contains the definition of `Connection`.
-mod connection;
+pub mod connection;
 
-// This module contains the definition of...
-mod util;
+// This module contains the definition of ...
+pub mod process;
 
-use crate::id::{ClientId, ProcessId};
-use crate::protocol::{Process, ToSend};
-use crate::run::FromClient;
-use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::fmt::Debug;
-use tokio::net::{TcpListener, ToSocketAddrs};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+// This module contains the definition of ...
+pub mod client;
 
-const LOCALHOST: &str = "127.0.0.1";
-const CONNECT_RETRIES: usize = 100;
+use crate::run::net::connection::Connection;
+use tokio::net::TcpListener;
+use tokio::sync::mpsc::UnboundedSender;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ClientHi(ClientId);
+/// Listen on new connections and send them to parent process.
+pub async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<Connection>) {
+    loop {
+        match listener.accept().await {
+            Ok((stream, addr)) => {
+                println!("[listener] new connection: {:?}", addr);
 
-/// Connect to all processes. It receives:
-/// - local port to bind to
-/// - list of addresses to connect to
-pub async fn init<P, A>(
-    process_id: ProcessId,
-    port: u16,
-    addresses: Vec<A>,
-    client_port: u16,
-) -> Result<
-    (
-        UnboundedReceiver<P::Message>,
-        UnboundedSender<ToSend<P::Message>>,
-        UnboundedReceiver<FromClient>,
-    ),
-    Box<dyn Error>,
->
-where
-    P: Process + 'static, // TODO what does this 'static do?
-    A: ToSocketAddrs + Debug + Clone,
-{
-    // connect to all processes
-    let listener = TcpListener::bind((LOCALHOST, port)).await?;
-    let (from_readers, to_writer) =
-        util::process::connect_to_all(process_id, listener, addresses, CONNECT_RETRIES).await?;
+                // create connection
+                let connection = Connection::new(stream);
 
-    // start client listener
-    let listener = TcpListener::bind((LOCALHOST, client_port)).await?;
-    let from_clients = util::client::start_listener(listener);
-
-    Ok((from_readers, to_writer, from_clients))
+                if let Err(e) = parent.send(connection) {
+                    println!("[listener] error sending stream to parent process: {:?}", e);
+                }
+            }
+            Err(e) => println!("[listener] couldn't accept new connection: {:?}", e),
+        }
+    }
 }

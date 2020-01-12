@@ -14,12 +14,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("port: {}", port);
     println!("addresses: {:?}", addresses);
     println!("client port: {}", client_port);
-    planet_sim::run::process::<Atlas, String>(process_id, port, addresses, client_port).await?;
+    planet_sim::run::process::<String, Atlas>(process_id, port, addresses, client_port).await?;
     Ok(())
 }
 
 fn parse_args() -> (ProcessId, u16, Vec<String>, u16) {
-    let matches = App::new("prun")
+    let matches = App::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Runs an instance of some protocol.")

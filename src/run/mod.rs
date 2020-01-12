@@ -6,11 +6,15 @@ pub mod net;
 
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::Process;
+use crate::protocol::{Process, ToSend};
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Debug;
-use tokio::net::ToSocketAddrs;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::net::{TcpListener, ToSocketAddrs};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+
+const LOCALHOST: &str = "127.0.0.1";
+const CONNECT_RETRIES: usize = 100;
 
 #[derive(Debug)]
 pub enum FromClient {
@@ -20,21 +24,32 @@ pub enum FromClient {
     Submit(Command),
 }
 
-pub async fn process<P, A>(
+pub async fn process<A, P>(
     process_id: ProcessId,
     port: u16,
     addresses: Vec<A>,
     client_port: u16,
 ) -> Result<(), Box<dyn Error>>
 where
-    P: Process + 'static, // TODO what does this 'static do?
     A: ToSocketAddrs + Debug + Clone,
+    P: Process + 'static, // TODO what does this 'static do?
 {
     // check ports are different
     assert!(port != client_port);
 
-    let (from_readers, to_writers, from_clients) =
-        net::init::<P, A>(process_id, port, addresses, client_port).await?;
+    // connect to all processes
+    let listener = TcpListener::bind((LOCALHOST, port)).await?;
+    let (from_readers, to_writer) = net::process::connect_to_all::<A, P::Message>(
+        process_id,
+        listener,
+        addresses,
+        CONNECT_RETRIES,
+    )
+    .await?;
+
+    // start client listener
+    let listener = TcpListener::bind((LOCALHOST, client_port)).await?;
+    let from_clients = net::client::start_listener(listener);
 
     loop {
         // match future::select(from_readers.recv(), from_clients.recv()) {
@@ -46,4 +61,15 @@ where
         //     }
         // }
     }
+}
+
+pub async fn client<A>(
+    client_id: ClientId,
+    address: A,
+    client_number: usize,
+) -> Result<(), Box<dyn Error>>
+where
+    A: ToSocketAddrs + Debug + Clone,
+{
+    loop {}
 }
