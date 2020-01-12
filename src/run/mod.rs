@@ -24,6 +24,8 @@ const CONNECT_RETRIES: usize = 100;
 pub enum FromClient {
     // clients can register
     Register(ClientId, UnboundedSender<CommandResult>),
+    // unregister
+    Unregister(ClientId),
     // or submit new commands
     Submit(Command),
 }
@@ -87,10 +89,6 @@ fn handle_from_client(
     clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
 ) {
     match from_client {
-        FromClient::Register(client_id, tx) => {
-            let res = clients.insert(client_id, tx);
-            assert!(res.is_none());
-        }
         FromClient::Submit(cmd) => {
             // TODO handle in process; for now create fake command result
             // get client id
@@ -107,6 +105,16 @@ fn handle_from_client(
                     e
                 );
             }
+        }
+        FromClient::Register(client_id, tx) => {
+            println!("[server] client {} registered", client_id);
+            let res = clients.insert(client_id, tx);
+            assert!(res.is_none());
+        }
+        FromClient::Unregister(client_id) => {
+            println!("[server] client {} unregistered", client_id);
+            let res = clients.remove(&client_id);
+            assert!(res.is_some());
         }
     }
 }

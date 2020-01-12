@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+case $1 in
+1) 
+  cargo run --bin client -- --id 1 --address localhost:4001
+  ;;
+*)
+  echo "client id $0 invalid"
+  ;;
+esac

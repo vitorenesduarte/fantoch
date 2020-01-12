@@ -30,7 +30,6 @@ fn parse_args() -> (ClientId, String, usize) {
         )
         .arg(
             Arg::with_name("address")
-                .short("a")
                 .long("address")
                 .value_name("ADDR")
                 .help("address of the protocol instance to connect to")
@@ -39,7 +38,6 @@ fn parse_args() -> (ClientId, String, usize) {
         )
         .arg(
             Arg::with_name("number")
-                .short("n")
                 .long("number")
                 .value_name("CLIENT_NUMBER")
                 .help("number of clients")

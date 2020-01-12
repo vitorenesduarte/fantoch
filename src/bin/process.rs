@@ -3,7 +3,6 @@ use planet_sim::id::ProcessId;
 use planet_sim::protocol::Atlas;
 use std::error::Error;
 
-const DEFAULT_PORT: u16 = 3717;
 const ADDRESSES_SEP: &str = ",";
 
 #[tokio::main]
@@ -33,15 +32,14 @@ fn parse_args() -> (ProcessId, u16, Vec<String>, u16) {
         )
         .arg(
             Arg::with_name("port")
-                .short("p")
                 .long("port")
                 .value_name("PORT")
                 .help("port to bind to")
+                .required(true)
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("addresses")
-                .short("a")
                 .long("addresses")
                 .value_name("ADDR")
                 .help("comma-separated list of addresses to connect to")
@@ -50,10 +48,10 @@ fn parse_args() -> (ProcessId, u16, Vec<String>, u16) {
         )
         .arg(
             Arg::with_name("client_port")
-                .short("cp")
                 .long("client_port")
                 .value_name("CLIENT_PORT")
                 .help("client port to bind to")
+                .required(true)
                 .takes_value(true),
         )
         .get_matches();
@@ -73,8 +71,9 @@ fn parse_id(id: Option<&str>) -> ProcessId {
 }
 
 fn parse_port(port: Option<&str>) -> u16 {
-    port.map(|port| port.parse::<u16>().expect("port should be a number"))
-        .unwrap_or(DEFAULT_PORT)
+    port.expect("port should be set")
+        .parse::<u16>()
+        .expect("port should be a number")
 }
 
 fn parse_addresses(addresses: Option<&str>) -> Vec<String> {

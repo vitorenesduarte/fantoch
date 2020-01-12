@@ -1,5 +1,5 @@
 use super::{ClientHi, ProcessHi};
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::run::net::connection::Connection;
 use crate::run::task;
@@ -48,29 +48,58 @@ async fn client_server_task(
     mut connection: Connection,
     parent: UnboundedSender<FromClient>,
 ) {
-    let mut parent_results = server_receive_hi(process_id, &mut connection, &parent).await;
+    let (client_id, mut parent_results) =
+        server_receive_hi(process_id, &mut connection, &parent).await;
 
     loop {
         select! {
             cmd = connection.recv().fuse() => {
-                println!("new command: {:?}", cmd);
-                if let Some(cmd) = cmd {
-                    if let Err(e) = parent.send(FromClient::Submit(cmd)) {
-                        println!("[client_server] error while sending new command to parent: {:?}", e);
-                    }
-                } else {
-                    println!("[client_server] error while receiving new command from client");
+                if !client_server_task_handle_cmd(cmd, client_id, &parent) {
+                    return;
                 }
             }
             cmd_result = parent_results.recv().fuse() => {
-                println!("new command result: {:?}", cmd_result);
-                if let Some(cmd_result) = cmd_result {
-                    connection.send(cmd_result).await;
-                } else {
-                    println!("[client_server] error while receiving new command result from parent");
-                }
+                client_server_task_handle_cmd_result(cmd_result, &mut connection).await;
             }
         }
+    }
+}
+
+fn client_server_task_handle_cmd(
+    cmd: Option<Command>,
+    client_id: ClientId,
+    parent: &UnboundedSender<FromClient>,
+) -> bool {
+    println!("new command: {:?}", cmd);
+    if let Some(cmd) = cmd {
+        if let Err(e) = parent.send(FromClient::Submit(cmd)) {
+            println!(
+                "[client_server] error while sending new command to parent: {:?}",
+                e
+            );
+        }
+        return true;
+    } else {
+        println!("[client_server] client disconnected.");
+        if let Err(e) = parent.send(FromClient::Unregister(client_id)) {
+            println!(
+                "[client_server] error while sending unregister to parent: {:?}",
+                e
+            );
+        }
+        return false;
+    }
+}
+
+async fn client_server_task_handle_cmd_result(
+    cmd_result: Option<CommandResult>,
+    connection: &mut Connection,
+) {
+    println!("new command result: {:?}", cmd_result);
+    if let Some(cmd_result) = cmd_result {
+        connection.send(cmd_result).await;
+    } else {
+        println!("[client_server] error while receiving new command result from parent");
     }
 }
 
@@ -78,7 +107,7 @@ async fn server_receive_hi(
     process_id: ProcessId,
     connection: &mut Connection,
     parent: &UnboundedSender<FromClient>,
-) -> UnboundedReceiver<CommandResult> {
+) -> (ClientId, UnboundedReceiver<CommandResult>) {
     // create channel where the process will write command results and where client will read them
     let (tx, rx) = task::channel();
 
@@ -101,8 +130,8 @@ async fn server_receive_hi(
     let hi = ProcessHi(process_id);
     connection.send(hi).await;
 
-    // return channel where client should read command results
-    rx
+    // return client id and channel where client should read command results
+    (client_id, rx)
 }
 
 pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> ProcessId {
