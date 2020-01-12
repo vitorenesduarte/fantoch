@@ -13,7 +13,7 @@ use crate::config::Config;
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Debug;
+    type ExecutionInfo: Debug + Send;
 
     fn new(config: Config) -> Self;
 

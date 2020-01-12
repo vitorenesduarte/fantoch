@@ -249,6 +249,16 @@ pub fn start_executor<P>(
     UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
 )
 where
+    P: Protocol + 'static,
+{
+    task::spawn_producer_and_consumer(|tx, rx| executor_task::<P>(tx, rx, from_clients))
+}
+
+async fn executor_task<P>(
+    to_parent: UnboundedSender<Command>,
+    from_parent: UnboundedReceiver<Vec<<P::Executor as Executor>::ExecutionInfo>>,
+    from_clients: UnboundedReceiver<FromClient>,
+) where
     P: Protocol,
 {
     todo!()

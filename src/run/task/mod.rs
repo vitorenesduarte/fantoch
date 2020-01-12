@@ -44,7 +44,7 @@ where
     // - pass the producer-end of the channel to producer
     // - return the consumer-end of the channel to the caller
     let (tx, rx) = channel();
-    tokio::spawn(producer(tx));
+    spawn(producer(tx));
     rx
 }
 
@@ -63,13 +63,13 @@ where
     // - return the consumer-end of the channel to the caller
     let (tx, rx) = channel();
     for arg in args {
-        tokio::spawn(producer(arg, tx.clone()));
+        spawn(producer(arg, tx.clone()));
     }
     rx
 }
 
 /// Spawns a consumer, returning the producer-end of the channel.
-pub fn spawn_consumer<M, F>(receiver: impl FnOnce(UnboundedReceiver<M>) -> F) -> UnboundedSender<M>
+pub fn spawn_consumer<M, F>(consumer: impl FnOnce(UnboundedReceiver<M>) -> F) -> UnboundedSender<M>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -78,8 +78,28 @@ where
     // - pass the consumer-end of the channel to the consumer
     // - return the producer-end of the channel to the caller
     let (tx, rx) = channel();
-    tokio::spawn(receiver(rx));
+    spawn(consumer(rx));
     tx
+}
+
+/// Spawns a producer and a consumer, returning one two channel: one consumer-end and one
+/// producer-end of the. channel.
+pub fn spawn_producer_and_consumer<M, N, F>(
+    task: impl FnOnce(UnboundedSender<M>, UnboundedReceiver<N>) -> F,
+) -> (UnboundedReceiver<M>, UnboundedSender<N>)
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    // create two channels and:
+    // - pass the producer-end of the 1st channel and the consumer-end of the 2nd channel to the
+    //   task
+    // - return the consumer-end of the 1st channel and the producer-end of the 2nd channel to the
+    //   caller
+    let (tx1, rx1) = channel();
+    let (tx2, rx2) = channel();
+    spawn(task(tx1, rx2));
+    (rx1, tx2)
 }
 
 /// Connect to some address.
