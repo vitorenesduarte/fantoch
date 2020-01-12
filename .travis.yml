@@ -1,7 +1,7 @@
 sudo: required
 language: rust
 rust:
-  - stable
+  - nightly
 
 matrix:
   allow_failures:
