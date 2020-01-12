@@ -77,7 +77,7 @@ where
             from_client = from_clients.recv().fuse() => {
                 println!("from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client(from_client, &mut clients, &mut process, &to_writer)
+                    handle_from_client(process_id, from_client, &mut clients, &mut process, &to_writer)
                 } else {
                     println!("[server] error while receiving new command from clients");
                 }
@@ -96,24 +96,11 @@ fn handle_from_processes<P>(
     P: Protocol,
 {
     // handle message in process
-    if let Some(to_send) = process.handle(from, msg) {
-        // handle msg locally if self in `to_send.target`
-        if to_send.target.contains(&process_id) {
-            handle_from_processes(
-                process_id,
-                process_id,
-                to_send.msg.clone(),
-                process,
-                to_writer,
-            );
-        }
-        if let Err(e) = to_writer.send(to_send) {
-            println!("[server] error while sending to broadcast writer: {:?}", e);
-        }
-    }
-
-    // check if there's new execution info for the executor
+    let to_send = process.handle(from, msg);
+    send_to_writer(process_id, to_send, process, to_writer);
+    // TODO check if there's new execution info for the executor
 }
+
 // // find its channel
 // let tx = clients
 //     .get_mut(&client_id)
@@ -128,6 +115,7 @@ fn handle_from_processes<P>(
 // }
 
 fn handle_from_client<P>(
+    process_id: ProcessId,
     from_client: FromClient,
     clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
     process: &mut P,
@@ -144,9 +132,7 @@ fn handle_from_client<P>(
 
             // submit command in process
             let to_send = process.submit(cmd);
-            if let Err(e) = to_writer.send(to_send) {
-                println!("[server] error while sending to broadcast writer: {:?}", e);
-            }
+            send_to_writer(process_id, Some(to_send), process, to_writer);
         }
         FromClient::Register(client_id, tx) => {
             println!("[server] client {} registered", client_id);
@@ -157,6 +143,31 @@ fn handle_from_client<P>(
             println!("[server] client {} unregistered", client_id);
             let res = clients.remove(&client_id);
             assert!(res.is_some());
+        }
+    }
+}
+
+fn send_to_writer<P>(
+    process_id: ProcessId,
+    to_send: Option<ToSend<P::Message>>,
+    process: &mut P,
+    to_writer: &UnboundedSender<ToSend<P::Message>>,
+) where
+    P: Protocol,
+{
+    if let Some(to_send) = to_send {
+        // handle msg locally if self in `to_send.target`
+        if to_send.target.contains(&process_id) {
+            handle_from_processes(
+                process_id,
+                process_id,
+                to_send.msg.clone(),
+                process,
+                to_writer,
+            );
+        }
+        if let Err(e) = to_writer.send(to_send) {
+            println!("[server] error while sending to broadcast writer: {:?}", e);
         }
     }
 }
