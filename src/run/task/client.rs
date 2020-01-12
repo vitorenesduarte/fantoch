@@ -76,7 +76,7 @@ fn client_server_task_handle_cmd(
                 e
             );
         }
-        return true;
+        true
     } else {
         println!("[client_server] client disconnected.");
         if let Err(e) = parent.send(FromClient::Unregister(client_id)) {
@@ -85,7 +85,7 @@ fn client_server_task_handle_cmd(
                 e
             );
         }
-        return false;
+        false
     }
 }
 

@@ -146,7 +146,7 @@ fn increasing_load_fpaxos(config: Config) {
 
         // global histogram
         let histogram = Histogram::from(latencies.into_iter().map(|(_, latency)| latency));
-        println!("n = {} AND c = {} |  {:?}", config.n(), 1, histogram);
+        println!("n = {} AND c = 1 |  {:?}", config.n(), histogram);
     });
 }
 
