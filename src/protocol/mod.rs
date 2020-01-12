@@ -24,7 +24,6 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::ProcessId;
-use crate::planet::{Planet, Region};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
@@ -37,12 +36,7 @@ pub trait Protocol {
 
     fn id(&self) -> ProcessId;
 
-    fn discover(
-        &mut self,
-        region: &Region,
-        planet: &Planet,
-        processes: Vec<(ProcessId, Region)>,
-    ) -> bool;
+    fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
 
     #[must_use]
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;

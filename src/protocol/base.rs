@@ -1,8 +1,6 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::metrics::Metrics;
-use crate::planet::{Planet, Region};
-use crate::util;
 use std::fmt;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
@@ -45,32 +43,24 @@ impl BaseProcess {
     }
 
     /// Updates the processes known by this process.
-    pub fn discover(
-        &mut self,
-        region: &Region,
-        planet: &Planet,
-        mut processes: Vec<(ProcessId, Region)>,
-    ) -> bool {
-        // create all processes
-        util::sort_processes_by_distance(region, planet, &mut processes);
-        let all_processes: Vec<_> = processes.into_iter().map(|(id, _)| id).collect();
-
+    /// The set of processes provided is already sorted by distance.
+    pub fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
         // create fast quorum by taking the first `fast_quorum_size` elements
-        let fast_quorum: Vec<_> = all_processes
+        let fast_quorum: Vec<_> = processes
             .clone()
             .into_iter()
             .take(self.fast_quorum_size)
             .collect();
 
         // create write quorum by taking the first `write_quorum_size` elements
-        let write_quorum: Vec<_> = all_processes
+        let write_quorum: Vec<_> = processes
             .clone()
             .into_iter()
             .take(self.write_quorum_size)
             .collect();
 
         // set all processes
-        self.all_processes = Some(all_processes);
+        self.all_processes = Some(processes);
 
         // set fast quorum if we have enough fast quorum processes
         self.fast_quorum = if fast_quorum.len() == self.fast_quorum_size {
@@ -153,6 +143,8 @@ impl fmt::Debug for MetricsKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::planet::{Planet, Region};
+    use crate::util;
 
     #[test]
     fn discover() {
@@ -195,7 +187,8 @@ mod tests {
         assert_eq!(bp.all_processes, None);
 
         // discover processes and check we're connected
-        assert!(bp.discover(&region, &planet, processes));
+        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        assert!(bp.discover(sorted));
 
         // check set of all processes
         assert_eq!(
@@ -235,7 +228,8 @@ mod tests {
         let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // discover processes and check we're connected
-        assert!(bp.discover(&region, &planet, processes));
+        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        assert!(bp.discover(sorted));
 
         // check set of all processes
         assert_eq!(bp.all(), vec![2, 3, 4, 0, 1]);

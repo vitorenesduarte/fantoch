@@ -8,6 +8,7 @@ use crate::planet::{Planet, Region};
 use crate::protocol::{Protocol, ToSend};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SimTime;
+use crate::util;
 use std::collections::HashMap;
 
 enum ScheduleAction<P: Protocol> {
@@ -75,7 +76,8 @@ where
         // register processes
         processes.into_iter().for_each(|(region, mut process)| {
             // discover
-            assert!(process.discover(&region, &planet, to_discover.clone()));
+            let sorted = util::sort_processes_by_distance(&region, &planet, to_discover.clone());
+            assert!(process.discover(sorted));
 
             // create executor for this process
             let executor = <P::Executor as Executor>::new(&config);
@@ -93,7 +95,9 @@ where
                 client_id += 1;
                 let mut client = Client::new(client_id, workload);
                 // discover
-                assert!(client.discover(&region, &planet, to_discover.clone()));
+                let sorted =
+                    util::sort_processes_by_distance(&region, &planet, to_discover.clone());
+                assert!(client.discover(sorted));
                 // and register it
                 simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
@@ -380,13 +384,8 @@ mod tests {
             self.bp.process_id
         }
 
-        fn discover(
-            &mut self,
-            region: &Region,
-            planet: &Planet,
-            processes: Vec<(ProcessId, Region)>,
-        ) -> bool {
-            self.bp.discover(region, planet, processes)
+        fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
+            self.bp.discover(processes)
         }
 
         fn submit(&mut self, cmd: Command) -> ToSend<Self::Message> {

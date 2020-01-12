@@ -7,6 +7,6 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let (process_id, port, addresses, client_port, config) = protocol::parse_args();
     let process = Atlas::new(process_id, config);
-    planet_sim::run::process(process, process_id, port, addresses, client_port, config).await?;
+    planet_sim::run::process(process, process_id, port, addresses, client_port).await?;
     Ok(())
 }

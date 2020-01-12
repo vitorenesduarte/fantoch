@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::log;
-use crate::planet::{Planet, Region};
 use crate::protocol::common::{
     graph::{KeysClocks, QuorumClocks},
     info::{Commands, Info},
@@ -55,13 +54,9 @@ impl Protocol for Atlas {
     }
 
     /// Updates the processes known by this process.
-    fn discover(
-        &mut self,
-        region: &Region,
-        planet: &Planet,
-        processes: Vec<(ProcessId, Region)>,
-    ) -> bool {
-        self.bp.discover(region, planet, processes)
+    /// The set of processes provided is already sorted by distance.
+    fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
+        self.bp.discover(processes)
     }
 
     /// Submits a command issued by some client.
@@ -471,6 +466,7 @@ enum Status {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
+    use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
 
@@ -518,9 +514,12 @@ mod tests {
         let mut atlas_3 = Atlas::new(process_id_3, config);
 
         // discover processes in all atlas
-        atlas_1.discover(&europe_west2, &planet, processes.clone());
-        atlas_2.discover(&europe_west3, &planet, processes.clone());
-        atlas_3.discover(&us_west1, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());
+        atlas_1.discover(sorted);
+        let sorted = util::sort_processes_by_distance(&europe_west3, &planet, processes.clone());
+        atlas_2.discover(sorted);
+        let sorted = util::sort_processes_by_distance(&us_west1, &planet, processes.clone());
+        atlas_3.discover(sorted);
 
         // register processes
         simulation.register_process(atlas_1, executor_1);
@@ -538,7 +537,8 @@ mod tests {
         let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        assert!(client_1.discover(&client_region, &planet, processes));
+        let sorted = util::sort_processes_by_distance(&client_region, &planet, processes);
+        assert!(client_1.discover(sorted));
 
         // start client
         let (target, cmd) = client_1

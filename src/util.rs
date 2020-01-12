@@ -39,8 +39,8 @@ pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
 pub fn sort_processes_by_distance(
     region: &Region,
     planet: &Planet,
-    processes: &mut Vec<(ProcessId, Region)>,
-) {
+    mut processes: Vec<(ProcessId, Region)>,
+) -> Vec<ProcessId> {
     // TODO the following computation could be cached on `planet`
     let indexes: HashMap<_, _> = planet
         // get all regions sorted by distance from `region`
@@ -63,6 +63,8 @@ pub fn sort_processes_by_distance(
             index_a.cmp(index_b)
         }
     });
+
+    processes.into_iter().map(|(id, _)| id).collect()
 }
 
 #[cfg(test)]
@@ -95,7 +97,7 @@ mod tests {
     #[test]
     fn sort_processes_by_distance_test() {
         // processes
-        let mut processes = vec![
+        let processes = vec![
             (0, Region::new("asia-east1")),
             (1, Region::new("asia-northeast1")),
             (2, Region::new("asia-south1")),
@@ -118,17 +120,11 @@ mod tests {
         // sort processes
         let region = Region::new("europe-west3");
         let planet = Planet::new("latency/");
-        sort_processes_by_distance(&region, &planet, &mut processes);
-
-        // get only processes ids
-        let process_ids: Vec<_> = processes
-            .into_iter()
-            .map(|(process_id, _)| process_id)
-            .collect();
+        let sorted = sort_processes_by_distance(&region, &planet, processes);
 
         assert_eq!(
             vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2],
-            process_ids
+            sorted
         );
     }
 }

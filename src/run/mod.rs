@@ -6,7 +6,6 @@ pub mod net;
 
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
-use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::Protocol;
 use crate::time::RunTime;
@@ -37,7 +36,6 @@ pub async fn process<A, P>(
     port: u16,
     addresses: Vec<A>,
     client_port: u16,
-    config: Config,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -147,8 +145,8 @@ where
     // say hi
     let process_id = net::client::client_say_hi(client_id, &mut connection).await;
 
-    // set process id (although this won't be used)
-    client.skip_discover(process_id);
+    // discover process (although this won't be used)
+    client.discover(vec![process_id]);
 
     if let Some((_, cmd)) = client.start(&time) {
         // submit first command
