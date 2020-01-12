@@ -16,10 +16,10 @@ use crate::client::Workload;
 use crate::config::Config;
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
-use crate::protocol::Process;
+use crate::protocol::Protocol;
 use std::collections::HashMap;
 
-pub fn run_simulation<P: Process>(
+pub fn run_simulation<P: Protocol>(
     config: Config,
     workload: Workload,
     clients_per_region: usize,
@@ -27,15 +27,10 @@ pub fn run_simulation<P: Process>(
     client_regions: Vec<Region>,
     planet: Planet,
 ) -> HashMap<Region, (usize, Histogram)> {
-    // function that creates ping pong processes
-    let create_process =
-        |process_id, region, planet, config| P::new(process_id, region, planet, config);
-
     // create runner
-    let mut runner = Runner::new(
+    let mut runner: Runner<P> = Runner::new(
         planet,
         config,
-        create_process,
         workload,
         clients_per_region,
         process_regions,

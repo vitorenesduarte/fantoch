@@ -7,10 +7,6 @@ const DEFAULT_CLIENT_NUMBER: usize = 1;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let (client_id, address, client_number) = parse_args();
-
-    println!("client id: {}", client_id);
-    println!("process address: {}", address);
-    println!("client number: {}", client_number);
     planet_sim::run::client(client_id, address, client_number).await?;
     Ok(())
 }
@@ -46,10 +42,15 @@ fn parse_args() -> (ClientId, String, usize) {
         .get_matches();
 
     // parse arguments
-    let id = parse_id(matches.value_of("id"));
+    let client_id = parse_id(matches.value_of("id"));
     let address = parse_address(matches.value_of("address"));
     let client_number = parse_client_number(matches.value_of("number"));
-    (id, address, client_number)
+
+    println!("client id: {}", client_id);
+    println!("process address: {}", address);
+    println!("client number: {}", client_number);
+
+    (client_id, address, client_number)
 }
 
 fn parse_id(id: Option<&str>) -> ClientId {

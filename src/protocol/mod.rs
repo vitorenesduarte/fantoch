@@ -29,15 +29,23 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
 
-pub trait Process {
-    type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
+pub trait Message: Debug + Clone + Serialize + DeserializeOwned + Send {}
+impl<T> Message for T where T: Debug + Clone + Serialize + DeserializeOwned + Send {}
+
+pub trait Protocol {
+    type Message: Message;
     type Executor: Executor;
 
-    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;
+    fn new(process_id: ProcessId, config: Config) -> Self;
 
     fn id(&self) -> ProcessId;
 
-    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool;
+    fn discover(
+        &mut self,
+        region: &Region,
+        planet: &Planet,
+        processes: Vec<(ProcessId, Region)>,
+    ) -> bool;
 
     #[must_use]
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
@@ -59,9 +67,3 @@ pub struct ToSend<M> {
     pub target: Vec<ProcessId>,
     pub msg: M,
 }
-
-// #[cfg(test)]
-// fn run()
-//     fn run
-
-// }

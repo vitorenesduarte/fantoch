@@ -1,23 +1,10 @@
 use clap::{App, Arg};
+use planet_sim::config::Config;
 use planet_sim::id::ProcessId;
-use planet_sim::protocol::Atlas;
-use std::error::Error;
 
 const ADDRESSES_SEP: &str = ",";
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let (process_id, port, addresses, client_port) = parse_args();
-
-    println!("process id: {}", process_id);
-    println!("port: {}", port);
-    println!("addresses: {:?}", addresses);
-    println!("client port: {}", client_port);
-    planet_sim::run::process::<String, Atlas>(process_id, port, addresses, client_port).await?;
-    Ok(())
-}
-
-fn parse_args() -> (ProcessId, u16, Vec<String>, u16) {
+pub fn parse_args() -> (ProcessId, u16, Vec<String>, u16, Config) {
     let matches = App::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -54,14 +41,38 @@ fn parse_args() -> (ProcessId, u16, Vec<String>, u16) {
                 .required(true)
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("n")
+                .long("processes")
+                .value_name("PROCESS_NUMBER")
+                .help("total number of processes")
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("f")
+                .long("faults")
+                .value_name("FAULT_NUMBER")
+                .help("total number of allowed faults")
+                .required(true)
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
-    let id = parse_id(matches.value_of("id"));
+    let process_id = parse_id(matches.value_of("id"));
     let port = parse_port(matches.value_of("port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
     let client_port = parse_port(matches.value_of("client_port"));
-    (id, port, addresses, client_port)
+    let config = parse_config(matches.value_of("n"), matches.value_of("f"));
+
+    println!("process id: {}", process_id);
+    println!("port: {}", port);
+    println!("addresses: {:?}", addresses);
+    println!("client port: {}", client_port);
+    println!("config: {:?}", config);
+
+    (process_id, port, addresses, client_port, config)
 }
 
 fn parse_id(id: Option<&str>) -> ProcessId {
@@ -82,4 +93,16 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
         .split(ADDRESSES_SEP)
         .map(|address| address.to_string())
         .collect()
+}
+
+fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
+    let n = n
+        .expect("n should be set")
+        .parse::<usize>()
+        .expect("n should be a number");
+    let f = f
+        .expect("f should be set")
+        .parse::<usize>()
+        .expect("f should be a number");
+    Config::new(n, f)
 }

@@ -8,8 +8,6 @@ use std::fmt;
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProcess {
     pub process_id: ProcessId,
-    pub region: Region,
-    pub planet: Planet,
     pub config: Config,
     all_processes: Option<Vec<ProcessId>>,
     fast_quorum: Option<Vec<ProcessId>>,
@@ -24,8 +22,6 @@ impl BaseProcess {
     /// Creates a new `BaseProcess`.
     pub fn new(
         process_id: ProcessId,
-        region: Region,
-        planet: Planet,
         config: Config,
         fast_quorum_size: usize,
         write_quorum_size: usize,
@@ -37,8 +33,6 @@ impl BaseProcess {
 
         Self {
             process_id,
-            region,
-            planet,
             config,
             all_processes: None,
             fast_quorum: None,
@@ -51,9 +45,14 @@ impl BaseProcess {
     }
 
     /// Updates the processes known by this process.
-    pub fn discover(&mut self, mut processes: Vec<(ProcessId, Region)>) -> bool {
+    pub fn discover(
+        &mut self,
+        region: &Region,
+        planet: &Planet,
+        mut processes: Vec<(ProcessId, Region)>,
+    ) -> bool {
         // create all processes
-        util::sort_processes_by_distance(&self.region, &self.planet, &mut processes);
+        util::sort_processes_by_distance(region, planet, &mut processes);
         let all_processes: Vec<_> = processes.into_iter().map(|(id, _)| id).collect();
 
         // create fast quorum by taking the first `fast_quorum_size` elements
@@ -189,21 +188,14 @@ mod tests {
         let planet = Planet::new("latency/");
         let fast_quorum_size = 6;
         let write_quorum_size = 4;
-        let mut bp = BaseProcess::new(
-            id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
         assert_eq!(bp.all_processes, None);
 
         // discover processes and check we're connected
-        assert!(bp.discover(processes));
+        assert!(bp.discover(&region, &planet, processes));
 
         // check set of all processes
         assert_eq!(
@@ -240,17 +232,10 @@ mod tests {
         let planet = Planet::new("latency/");
         let fast_quorum_size = 3;
         let write_quorum_size = 4;
-        let mut bp = BaseProcess::new(
-            id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // discover processes and check we're connected
-        assert!(bp.discover(processes));
+        assert!(bp.discover(&region, &planet, processes));
 
         // check set of all processes
         assert_eq!(bp.all(), vec![2, 3, 4, 0, 1]);

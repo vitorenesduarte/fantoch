@@ -6,8 +6,9 @@ pub mod net;
 
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
+use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::Process;
+use crate::protocol::Protocol;
 use crate::time::RunTime;
 use futures::future::FutureExt;
 use futures::select;
@@ -31,14 +32,16 @@ pub enum FromClient {
 }
 
 pub async fn process<A, P>(
+    process: P,
     process_id: ProcessId,
     port: u16,
     addresses: Vec<A>,
     client_port: u16,
+    config: Config,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug + Clone,
-    P: Process + 'static, // TODO what does this 'static do?
+    P: Protocol + 'static, // TODO what does this 'static do?
 {
     // check ports are different
     assert!(port != client_port);

@@ -9,7 +9,7 @@ use crate::protocol::common::{
     info::{Commands, Info},
     synod::{Synod, SynodMessage},
 };
-use crate::protocol::{BaseProcess, Process, ToSend};
+use crate::protocol::{BaseProcess, Protocol, ToSend};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -25,24 +25,17 @@ pub struct EPaxos {
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Process for EPaxos {
+impl Protocol for EPaxos {
     type Message = Message;
     type Executor = GraphExecutor;
 
     /// Creates a new `Atlas` process.
-    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
+    fn new(process_id: ProcessId, config: Config) -> Self {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = config.epaxos_quorum_sizes();
 
         // create protocol data-structures
-        let bp = BaseProcess::new(
-            process_id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
         let keys_clocks = KeysClocks::new(config.n());
         let f = Self::allowed_faults(config.n());
         let cmds = Commands::new(process_id, config.n(), f, fast_quorum_size);
@@ -63,8 +56,13 @@ impl Process for EPaxos {
     }
 
     /// Updates the processes known by this process.
-    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        region: &Region,
+        planet: &Planet,
+        processes: Vec<(ProcessId, Region)>,
+    ) -> bool {
+        self.bp.discover(region, planet, processes)
     }
 
     /// Submits a command issued by some client.
@@ -529,14 +527,14 @@ mod tests {
         let executor_3 = GraphExecutor::new(&config);
 
         // epaxos
-        let mut epaxos_1 = EPaxos::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut epaxos_2 = EPaxos::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut epaxos_3 = EPaxos::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        let mut epaxos_1 = EPaxos::new(process_id_1, config);
+        let mut epaxos_2 = EPaxos::new(process_id_2, config);
+        let mut epaxos_3 = EPaxos::new(process_id_3, config);
 
         // discover processes in all epaxos
-        epaxos_1.discover(processes.clone());
-        epaxos_2.discover(processes.clone());
-        epaxos_3.discover(processes.clone());
+        epaxos_1.discover(&europe_west2, &planet, processes.clone());
+        epaxos_2.discover(&europe_west3, &planet, processes.clone());
+        epaxos_3.discover(&us_west1, &planet, processes.clone());
 
         // register processes
         simulation.register_process(epaxos_1, executor_1);

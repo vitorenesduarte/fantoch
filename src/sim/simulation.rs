@@ -1,19 +1,19 @@
 use crate::client::Client;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::{Process, ToSend};
+use crate::protocol::{Protocol, ToSend};
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-pub struct Simulation<P: Process> {
+pub struct Simulation<P: Protocol> {
     processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
 impl<P> Simulation<P>
 where
-    P: Process,
+    P: Protocol,
 {
     /// Create a new `Simulation`.
     #[allow(clippy::new_without_default)]

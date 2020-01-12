@@ -3,7 +3,7 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
+use planet_sim::protocol::{Atlas, EPaxos, Newt, Protocol};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
@@ -34,7 +34,7 @@ fn main() {
 }
 
 #[allow(dead_code)]
-fn equidistant<P: Process>() {
+fn equidistant<P: Protocol>() {
     // intra-region distance
     let distance = 200;
 
@@ -75,7 +75,7 @@ fn equidistant<P: Process>() {
 }
 
 #[allow(dead_code)]
-fn increasing_load<P: Process>(config: Config) {
+fn increasing_load<P: Protocol>(config: Config) {
     let planet = Planet::new("latency/");
     let regions5 = vec![
         Region::new("asia-south1"),
@@ -150,7 +150,7 @@ fn increasing_load_fpaxos(config: Config) {
 }
 
 #[allow(dead_code)]
-fn increasing_regions<P: Process>() {
+fn increasing_regions<P: Protocol>() {
     let planet = Planet::new("latency/");
     let regions13 = vec![
         Region::new("asia-southeast1"),
@@ -205,7 +205,7 @@ fn increasing_regions<P: Process>() {
     }
 }
 
-fn run<P: Process>(
+fn run<P: Protocol>(
     config: Config,
     workload: Workload,
     clients_per_region: usize,
