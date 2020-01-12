@@ -90,7 +90,7 @@ where
     let mut client = Client::new(client_id, workload);
 
     // say hi
-    let process_id = net::client::say_hi(client_id, &mut connection).await;
+    let process_id = net::client::client_say_hi(client_id, &mut connection).await;
 
     // set process id (although this won't be used)
     client.skip_discover(process_id);

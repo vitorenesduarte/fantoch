@@ -48,24 +48,36 @@ async fn client_server_task(
     mut connection: Connection,
     parent: UnboundedSender<FromClient>,
 ) {
-    let mut parent = receive_hi(process_id, &mut connection, parent).await;
+    let mut parent_results = server_receive_hi(process_id, &mut connection, &parent).await;
 
     loop {
         select! {
-            new_submit = connection.recv::<String>().fuse() => {
-                println!("new submit: {:?}", new_submit);
+            cmd = connection.recv().fuse() => {
+                println!("new command: {:?}", cmd);
+                if let Some(cmd) = cmd {
+                    if let Err(e) = parent.send(FromClient::Submit(cmd)) {
+                        println!("[client_server] error while sending new command to parent: {:?}", e);
+                    }
+                } else {
+                    println!("[client_server] error while receiving new command from client");
+                }
             }
-            new_msg = parent.recv().fuse() => {
-                println!("new msg: {:?}", new_msg);
+            cmd_result = parent_results.recv().fuse() => {
+                println!("new command result: {:?}", cmd_result);
+                if let Some(cmd_result) = cmd_result {
+                    connection.send(cmd_result).await;
+                } else {
+                    println!("[client_server] error while receiving new command result from parent");
+                }
             }
         }
     }
 }
 
-async fn receive_hi(
+async fn server_receive_hi(
     process_id: ProcessId,
     connection: &mut Connection,
-    parent: UnboundedSender<FromClient>,
+    parent: &UnboundedSender<FromClient>,
 ) -> UnboundedReceiver<CommandResult> {
     // create channel where the process will write command results and where client will read them
     let (tx, rx) = task::channel();
@@ -74,12 +86,15 @@ async fn receive_hi(
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
         client_id
     } else {
-        panic!("couldn't receive client id from connected client");
+        panic!("[client_server] couldn't receive client id from connected client");
     };
 
     // notify parent with the channel where it should write command results
     if let Err(e) = parent.send(FromClient::Register(client_id, tx)) {
-        println!("error while registering client in parent: {:?}", e);
+        println!(
+            "[client_server] error while registering client in parent: {:?}",
+            e
+        );
     }
 
     // say hi back
@@ -90,7 +105,7 @@ async fn receive_hi(
     rx
 }
 
-pub async fn say_hi(client_id: ClientId, connection: &mut Connection) -> ProcessId {
+pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> ProcessId {
     // say hi
     let hi = ClientHi(client_id);
     connection.send(hi).await;
@@ -99,6 +114,6 @@ pub async fn say_hi(client_id: ClientId, connection: &mut Connection) -> Process
     if let Some(ProcessHi(process_id)) = connection.recv().await {
         process_id
     } else {
-        panic!("couldn't receive process id from connected process");
+        panic!("[client] couldn't receive process id from connected process");
     }
 }
