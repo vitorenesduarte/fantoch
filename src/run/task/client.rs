@@ -1,8 +1,6 @@
-use super::{ClientHi, ProcessHi};
+use super::{connection::Connection, ClientHi, ProcessHi};
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::run::net::connection::Connection;
-use crate::run::task;
 use crate::run::FromClient;
 use futures::future::FutureExt;
 use futures::select;
@@ -13,7 +11,7 @@ pub fn start_listener(
     process_id: ProcessId,
     listener: TcpListener,
 ) -> UnboundedReceiver<FromClient> {
-    task::spawn_producer(|tx| client_listener_task(process_id, listener, tx))
+    super::spawn_producer(|tx| client_listener_task(process_id, listener, tx))
 }
 
 /// Listen on new client connections and spawn a client task for each new connection.
@@ -23,7 +21,7 @@ async fn client_listener_task(
     parent: UnboundedSender<FromClient>,
 ) {
     // start listener task
-    let mut rx = task::spawn_producer(|tx| super::listener_task(listener, tx));
+    let mut rx = super::spawn_producer(|tx| super::listener_task(listener, tx));
 
     loop {
         // handle new client connections
@@ -32,7 +30,7 @@ async fn client_listener_task(
                 println!("[client_listener] new connection");
                 // start client server task and give it the producer-end of the channel in order for
                 // this client to notify parent
-                task::spawn(client_server_task(process_id, connection, parent.clone()));
+                super::spawn(client_server_task(process_id, connection, parent.clone()));
             }
             None => {
                 println!("[client_listener] error receiving message from listener");
@@ -109,7 +107,7 @@ async fn server_receive_hi(
     parent: &UnboundedSender<FromClient>,
 ) -> (ClientId, UnboundedReceiver<CommandResult>) {
     // create channel where the process will write command results and where client will read them
-    let (tx, rx) = task::channel();
+    let (tx, rx) = super::channel();
 
     // receive hi from client and register in parent, sending it tx
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {

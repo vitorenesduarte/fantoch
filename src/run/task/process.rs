@@ -1,7 +1,6 @@
-use super::ProcessHi;
+use super::{connection::Connection, ProcessHi};
 use crate::id::ProcessId;
 use crate::protocol::ToSend;
-use crate::run::net::connection::Connection;
 use crate::run::task;
 use bytes::Bytes;
 use serde::de::DeserializeOwned;
@@ -18,7 +17,13 @@ pub async fn connect_to_all<A, V>(
     listener: TcpListener,
     addresses: Vec<A>,
     connect_retries: usize,
-) -> Result<(UnboundedReceiver<V>, UnboundedSender<ToSend<V>>), Box<dyn Error>>
+) -> Result<
+    (
+        UnboundedReceiver<(ProcessId, V)>,
+        UnboundedSender<ToSend<V>>,
+    ),
+    Box<dyn Error>,
+>
 where
     A: ToSocketAddrs + Debug,
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
@@ -73,55 +78,72 @@ where
         incoming.push(connection);
     }
 
-    Ok(say_hi::<V>(process_id, incoming, outgoing).await)
+    Ok(handshake::<V>(process_id, incoming, outgoing).await)
 }
 
-async fn say_hi<V>(
+async fn handshake<V>(
     process_id: ProcessId,
     mut connections_0: Vec<Connection>,
-    connections_1: Vec<Connection>,
-) -> (UnboundedReceiver<V>, UnboundedSender<ToSend<V>>)
+    mut connections_1: Vec<Connection>,
+) -> (
+    UnboundedReceiver<(ProcessId, V)>,
+    UnboundedSender<ToSend<V>>,
+)
 where
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
-    // say hi to all processes
-    let hi = ProcessHi(process_id);
-    for connection in connections_0.iter_mut() {
-        connection.send(&hi).await;
-    }
+    // say hi to all
+    say_hi(process_id, &mut connections_0).await;
+    say_hi(process_id, &mut connections_1).await;
     println!("said hi to all processes");
 
-    // create mapping from process id to connection
-    let mut id_to_connection = HashMap::new();
-    for mut connection in connections_1 {
+    // receive hi from all
+    let id_to_connection_0 = receive_hi(connections_0).await;
+    let id_to_connection_1 = receive_hi(connections_1).await;
+    println!("received hi from all processes");
+
+    (
+        start_readers::<V>(id_to_connection_0),
+        start_broadcast_writer::<V>(id_to_connection_1),
+    )
+}
+
+async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
+    let hi = ProcessHi(process_id);
+    // send hi on each connection
+    for connection in connections.iter_mut() {
+        connection.send(&hi).await;
+    }
+}
+
+async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)> {
+    let mut id_to_connection = Vec::with_capacity(connections.len());
+
+    // receive hi from each connection
+    for mut connection in connections {
         if let Some(ProcessHi(from)) = connection.recv().await {
             // save entry and check it has not been inserted before
-            let res = id_to_connection.insert(from, connection);
-            assert!(res.is_none());
+            id_to_connection.push((from, connection));
         } else {
             panic!("error receiving hi");
         }
     }
-
-    (
-        start_readers::<V>(connections_0),
-        start_broadcast_writer::<V>(id_to_connection),
-    )
+    id_to_connection
 }
 
 /// Starts a reader task per connection received and returns an unbounded channel to which
 /// readers will write to.
-fn start_readers<V>(connections: Vec<Connection>) -> UnboundedReceiver<V>
+fn start_readers<V>(connections: Vec<(ProcessId, Connection)>) -> UnboundedReceiver<(ProcessId, V)>
 where
     V: Debug + DeserializeOwned + Send + 'static,
 {
-    task::spawn_producers(connections, |connection, tx| {
-        reader_task::<V>(connection, tx)
+    task::spawn_producers(connections, |(process_id, connection), tx| {
+        reader_task::<V>(process_id, connection, tx)
     })
 }
 
 fn start_broadcast_writer<V>(
-    connections: HashMap<ProcessId, Connection>,
+    connections: Vec<(ProcessId, Connection)>,
 ) -> UnboundedSender<ToSend<V>>
 where
     V: Serialize + Send + 'static,
@@ -141,14 +163,17 @@ where
 }
 
 /// Reader task.
-async fn reader_task<V>(mut connection: Connection, parent: UnboundedSender<V>)
-where
+async fn reader_task<V>(
+    process_id: ProcessId,
+    mut connection: Connection,
+    parent: UnboundedSender<(ProcessId, V)>,
+) where
     V: Debug + DeserializeOwned + Send + 'static,
 {
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = parent.send(msg) {
+                if let Err(e) = parent.send((process_id, msg)) {
                     println!("[reader] error notifying parent task with new msg: {:?}", e);
                 }
             }

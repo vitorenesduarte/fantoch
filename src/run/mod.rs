@@ -1,13 +1,10 @@
 // This module contains the definition of...
 pub mod task;
 
-// This module contains the definition of...
-pub mod net;
-
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::Protocol;
+use crate::protocol::{Protocol, ToSend};
 use crate::time::RunTime;
 use futures::future::FutureExt;
 use futures::select;
@@ -49,10 +46,10 @@ where
     assert!(port != client_port);
 
     // start process listener
-    let listener = net::listen((LOCALHOST, port)).await?;
+    let listener = task::listen((LOCALHOST, port)).await?;
 
     // connect to all processes
-    let (mut from_readers, to_writer) = net::process::connect_to_all::<A, P::Message>(
+    let (mut from_readers, to_writer) = task::process::connect_to_all::<A, P::Message>(
         process_id,
         listener,
         addresses,
@@ -61,8 +58,8 @@ where
     .await?;
 
     // start client listener
-    let listener = net::listen((LOCALHOST, client_port)).await?;
-    let mut from_clients = net::client::start_listener(process_id, listener);
+    let listener = task::listen((LOCALHOST, client_port)).await?;
+    let mut from_clients = task::client::start_listener(process_id, listener);
 
     // mapping from client id to its channel
     let mut clients = HashMap::new();
@@ -71,8 +68,8 @@ where
         select! {
             msg = from_readers.recv().fuse() => {
                 println!("reader message: {:?}", msg);
-                if let Some(msg) = msg {
-                    // TODO handle in process
+                if let Some((from, msg)) = msg {
+                    handle_from_processes(from, msg, &mut process, &to_writer)
                 } else {
                     println!("[server] error while receiving new process message from readers");
                 }
@@ -80,7 +77,7 @@ where
             from_client = from_clients.recv().fuse() => {
                 println!("from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client(from_client, &mut clients)
+                    handle_from_client(from_client, &mut clients, &mut process, &to_writer)
                 } else {
                     println!("[server] error while receiving new command from clients");
                 }
@@ -89,26 +86,55 @@ where
     }
 }
 
-fn handle_from_client(
+fn handle_from_processes<P>(
+    from: ProcessId,
+    msg: P::Message,
+    process: &mut P,
+    to_writer: &UnboundedSender<ToSend<P::Message>>,
+) where
+    P: Protocol,
+{
+    // handle message in process
+    if let Some(to_send) = process.handle(from, msg) {
+        if let Err(e) = to_writer.send(to_send) {
+            println!("[server] error while sending to broadcast writer: {:?}", e);
+        }
+    }
+
+    // check if there's new execution info for the executor
+}
+// // find its channel
+// let tx = clients
+//     .get_mut(&client_id)
+//     .expect("client should register before submitting any commands");
+// // fake command result
+// let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
+// if let Err(e) = tx.send(cmd_result) {
+//     println!(
+//         "[server] error while sending command result to client: {:?}",
+//         e
+//     );
+// }
+
+fn handle_from_client<P>(
     from_client: FromClient,
     clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
-) {
+    process: &mut P,
+    to_writer: &UnboundedSender<ToSend<P::Message>>,
+) where
+    P: Protocol,
+{
     match from_client {
         FromClient::Submit(cmd) => {
-            // TODO handle in process; for now create fake command result
             // get client id
             let client_id = cmd.rifl().source();
-            // find its channel
-            let tx = clients
-                .get_mut(&client_id)
-                .expect("client should register before submitting any commands");
-            // fake command result
-            let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
-            if let Err(e) = tx.send(cmd_result) {
-                println!(
-                    "[server] error while sending command result to client: {:?}",
-                    e
-                );
+
+            // TODO register in executor
+
+            // submit command in process
+            let to_send = process.submit(cmd);
+            if let Err(e) = to_writer.send(to_send) {
+                println!("[server] error while sending to broadcast writer: {:?}", e);
             }
         }
         FromClient::Register(client_id, tx) => {
@@ -133,7 +159,7 @@ where
     A: ToSocketAddrs,
 {
     // TODO there's a single client for now
-    let mut connection = net::connect(address).await?;
+    let mut connection = task::connect(address).await?;
 
     // create system time
     let time = RunTime;
@@ -147,7 +173,7 @@ where
     let mut client = Client::new(client_id, workload);
 
     // say hi
-    let process_id = net::client::client_say_hi(client_id, &mut connection).await;
+    let process_id = task::client::client_say_hi(client_id, &mut connection).await;
 
     // discover process (although this won't be used)
     client.discover(vec![process_id]);
