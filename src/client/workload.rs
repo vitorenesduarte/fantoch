@@ -3,7 +3,7 @@ use crate::id::RiflGen;
 use crate::kvs::Key;
 use rand::Rng;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Workload {
     /// conflict rate  of this workload
     conflict_rate: usize,
@@ -15,6 +15,9 @@ pub struct Workload {
 
 impl Workload {
     pub fn new(conflict_rate: usize, total_commands: usize) -> Self {
+        // check conflict rate value
+        assert!(conflict_rate <= 100);
+
         Self {
             conflict_rate,
             total_commands,

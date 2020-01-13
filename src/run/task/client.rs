@@ -59,38 +59,9 @@ async fn client_server_task(
             }
             cmd_result = parent_results.recv().fuse() => {
                 println!("[client_server] new command result: {:?}", cmd_result);
-                if let Some(cmd_result) = cmd_result {
-                    connection.send(cmd_result).await;
-                } else {
-                    println!("[client_server] error while receiving new command result from parent");
-                }
+                client_server_task_handle_cmd_result(cmd_result, &mut connection).await;
             }
         }
-    }
-}
-
-fn client_server_task_handle_cmd(
-    cmd: Option<Command>,
-    client_id: ClientId,
-    parent: &UnboundedSender<FromClient>,
-) -> bool {
-    if let Some(cmd) = cmd {
-        if let Err(e) = parent.send(FromClient::Submit(cmd)) {
-            println!(
-                "[client_server] error while sending new command to parent: {:?}",
-                e
-            );
-        }
-        true
-    } else {
-        println!("[client_server] client disconnected.");
-        if let Err(e) = parent.send(FromClient::Unregister(client_id)) {
-            println!(
-                "[client_server] error while sending unregister to parent: {:?}",
-                e
-            );
-        }
-        false
     }
 }
 
@@ -135,5 +106,41 @@ pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> 
         process_id
     } else {
         panic!("[client] couldn't receive process id from connected process");
+    }
+}
+
+fn client_server_task_handle_cmd(
+    cmd: Option<Command>,
+    client_id: ClientId,
+    parent: &UnboundedSender<FromClient>,
+) -> bool {
+    if let Some(cmd) = cmd {
+        if let Err(e) = parent.send(FromClient::Submit(cmd)) {
+            println!(
+                "[client_server] error while sending new command to parent: {:?}",
+                e
+            );
+        }
+        true
+    } else {
+        println!("[client_server] client disconnected.");
+        if let Err(e) = parent.send(FromClient::Unregister(client_id)) {
+            println!(
+                "[client_server] error while sending unregister to parent: {:?}",
+                e
+            );
+        }
+        false
+    }
+}
+
+async fn client_server_task_handle_cmd_result(
+    cmd_result: Option<CommandResult>,
+    connection: &mut Connection,
+) {
+    if let Some(cmd_result) = cmd_result {
+        connection.send(cmd_result).await;
+    } else {
+        println!("[client_server] error while receiving new command result from parent");
     }
 }

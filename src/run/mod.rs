@@ -160,6 +160,7 @@ pub async fn client<A>(
     client_id: ClientId,
     address: A,
     client_number: usize,
+    workload: Workload,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs,
@@ -169,11 +170,6 @@ where
 
     // create system time
     let time = RunTime;
-
-    // TODO make workload configurable
-    let conflict_rate = 10;
-    let total_commands = 100;
-    let workload = Workload::new(conflict_rate, total_commands);
 
     // create client
     let mut client = Client::new(client_id, workload);
