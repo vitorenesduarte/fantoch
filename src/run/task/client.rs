@@ -75,6 +75,7 @@ async fn server_receive_hi(
 
     // receive hi from client and register in parent, sending it tx
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
+        println!("[client_server] received hi from client {}", client_id);
         client_id
     } else {
         panic!("[client_server] couldn't receive client id from connected client");
@@ -94,19 +95,6 @@ async fn server_receive_hi(
 
     // return client id and channel where client should read command results
     (client_id, rx)
-}
-
-pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> ProcessId {
-    // say hi
-    let hi = ClientHi(client_id);
-    connection.send(hi).await;
-
-    // receive hi back
-    if let Some(ProcessHi(process_id)) = connection.recv().await {
-        process_id
-    } else {
-        panic!("[client] couldn't receive process id from connected process");
-    }
 }
 
 fn client_server_task_handle_cmd(
@@ -142,5 +130,19 @@ async fn client_server_task_handle_cmd_result(
         connection.send(cmd_result).await;
     } else {
         println!("[client_server] error while receiving new command result from parent");
+    }
+}
+
+pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> ProcessId {
+    // say hi
+    let hi = ClientHi(client_id);
+    connection.send(hi).await;
+
+    // receive hi back
+    if let Some(ProcessHi(process_id)) = connection.recv().await {
+        println!("[client] received hi from process {}", process_id);
+        process_id
+    } else {
+        panic!("[client] couldn't receive process id from connected process");
     }
 }

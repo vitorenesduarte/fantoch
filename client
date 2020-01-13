@@ -2,7 +2,13 @@
 
 case $1 in
 1) 
-  cargo run --bin client -- --id 1 --address localhost:4001 --commands_per_client 0
+  cargo run --bin client -- --id 1 --address localhost:4001 --commands_per_client 10000
+  ;;
+2)
+  cargo run --bin client -- --id 2 --address localhost:4002 --commands_per_client 10000
+  ;;
+3)
+  cargo run --bin client -- --id 3 --address localhost:4003 --commands_per_client 10000
   ;;
 *)
   echo "client id $0 invalid"

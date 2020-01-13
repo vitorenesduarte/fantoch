@@ -270,21 +270,23 @@ async fn executor_task<P>(
     // mapping from client id to its channel
     let mut clients = HashMap::new();
 
-    select! {
-        execution_info = from_parent.recv().fuse() => {
-            println!("[executor] from parent: {:?}", execution_info);
-            if let Some(execution_info) = execution_info {
-                handle_execution_info::<P>(execution_info, &mut executor, &mut clients);
-            } else {
-                println!("[executor] error while receiving execution info from parent");
+    loop {
+        select! {
+            execution_info = from_parent.recv().fuse() => {
+                println!("[executor] from parent: {:?}", execution_info);
+                if let Some(execution_info) = execution_info {
+                    handle_execution_info::<P>(execution_info, &mut executor, &mut clients);
+                } else {
+                    println!("[executor] error while receiving execution info from parent");
+                }
             }
-        }
-        from_client = from_clients.recv().fuse() => {
-            println!("[executor] from client: {:?}", from_client);
-            if let Some(from_client) = from_client {
-                handle_from_client::<P>(from_client, &mut executor, &mut clients, &to_parent);
-            } else {
-                println!("[executor] error while receiving new command from clients");
+            from_client = from_clients.recv().fuse() => {
+                println!("[executor] from client: {:?}", from_client);
+                if let Some(from_client) = from_client {
+                    handle_from_client::<P>(from_client, &mut executor, &mut clients, &to_parent);
+                } else {
+                    println!("[executor] error while receiving new command from clients");
+                }
             }
         }
     }
