@@ -10,11 +10,12 @@ pub use table::{TableExecutionInfo, TableExecutor};
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
+use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo;
+    type ExecutionInfo: Debug + Send;
 
-    fn new(config: &Config) -> Self;
+    fn new(config: Config) -> Self;
 
     fn register(&mut self, cmd: &Command);
 

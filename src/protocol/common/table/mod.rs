@@ -6,6 +6,7 @@ pub use clocks::{KeysClocks, QuorumClocks};
 
 use crate::id::ProcessId;
 use crate::kvs::Key;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::{self, HashMap};
 use std::fmt;
 
@@ -13,7 +14,7 @@ use std::fmt;
 pub type ProcessVotes = HashMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Votes {
     votes: HashMap<Key, Vec<VoteRange>>,
 }
@@ -45,6 +46,7 @@ impl Votes {
     }
 
     /// Removes the votes on some key.
+    #[allow(clippy::ptr_arg)]
     pub fn remove_votes(&mut self, key: &Key) -> Option<Vec<VoteRange>> {
         self.votes.remove(key)
     }
@@ -66,7 +68,7 @@ impl IntoIterator for Votes {
 
 // `VoteRange` encodes a set of votes performed by some processed:
 // - this will be used to fill the `VotesTable`
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct VoteRange {
     by: ProcessId,
     start: u64,

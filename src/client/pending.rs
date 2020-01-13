@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct Pending {
     /// mapping from Rifl to command start time
-    pending: HashMap<Rifl, u64>,
+    pending: HashMap<Rifl, u128>,
 }
 
 impl Pending {
@@ -36,8 +36,8 @@ impl Pending {
         let end_time = time.now();
         // make sure time is monotonic
         assert!(start_time <= end_time);
-        // return latency
-        end_time - start_time
+        // return latency (that should fit in a u64)
+        (end_time - start_time) as u64
     }
 }
 

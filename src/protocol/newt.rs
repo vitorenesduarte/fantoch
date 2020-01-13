@@ -2,14 +2,16 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::log;
-use crate::planet::{Planet, Region};
 use crate::protocol::common::{
     info::{Commands, Info},
     table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
 };
-use crate::protocol::{BaseProcess, Process, ToSend};
+use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::{log, singleton};
+use serde::{Deserialize, Serialize};
 use std::cmp;
+use std::collections::{BTreeSet, HashSet};
+use std::iter::FromIterator;
 use std::mem;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
@@ -21,24 +23,17 @@ pub struct Newt {
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Process for Newt {
+impl Protocol for Newt {
     type Message = Message;
     type Executor = TableExecutor;
 
     /// Creates a new `Newt` process.
-    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
+    fn new(process_id: ProcessId, config: Config) -> Self {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size, _) = config.newt_quorum_sizes();
 
         // create protocol data-structures
-        let bp = BaseProcess::new(
-            process_id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
         let keys_clocks = KeysClocks::new(process_id);
         let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
@@ -58,7 +53,8 @@ impl Process for Newt {
     }
 
     /// Updates the processes known by this process.
-    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool {
+    /// The set of processes provided is already sorted by distance.
+    fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
         self.bp.discover(processes)
     }
 
@@ -134,7 +130,7 @@ impl Newt {
         from: ProcessId,
         dot: Dot,
         cmd: Command,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
         remote_clock: u64,
     ) -> Option<ToSend<Message>> {
         log!(
@@ -166,7 +162,7 @@ impl Newt {
         // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
-        info.quorum = quorum;
+        info.quorum = BTreeSet::from_iter(quorum);
         info.clock = clock;
 
         // create `MCollectAck` and target
@@ -175,7 +171,7 @@ impl Newt {
             clock,
             process_votes,
         };
-        let target = vec![from];
+        let target = singleton![from];
 
         // return `ToSend`
         Some(ToSend {
@@ -361,8 +357,8 @@ impl Newt {
 // `Command`
 struct CommandInfo {
     status: Status,
-    quorum: Vec<ProcessId>,
-    cmd: Option<Command>, // `None` if noOp
+    quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
+    cmd: Option<Command>,        // `None` if noOp
     clock: u64,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
@@ -376,7 +372,7 @@ impl Info for CommandInfo {
     fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
-            quorum: vec![],
+            quorum: BTreeSet::new(),
             cmd: None,
             clock: 0,
             votes: Votes::new(),
@@ -386,12 +382,12 @@ impl Info for CommandInfo {
 }
 
 // `Newt` protocol messages
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Command,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
         clock: u64,
     },
     MCollectAck {
@@ -423,8 +419,10 @@ enum Status {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
+    use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
+    use crate::util;
 
     #[test]
     fn newt_flow() {
@@ -460,19 +458,22 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = TableExecutor::new(&config);
-        let executor_2 = TableExecutor::new(&config);
-        let executor_3 = TableExecutor::new(&config);
+        let executor_1 = TableExecutor::new(config);
+        let executor_2 = TableExecutor::new(config);
+        let executor_3 = TableExecutor::new(config);
 
         // newts
-        let mut newt_1 = Newt::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut newt_2 = Newt::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut newt_3 = Newt::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        let mut newt_1 = Newt::new(process_id_1, config);
+        let mut newt_2 = Newt::new(process_id_2, config);
+        let mut newt_3 = Newt::new(process_id_3, config);
 
         // discover processes in all newts
-        newt_1.discover(processes.clone());
-        newt_2.discover(processes.clone());
-        newt_3.discover(processes.clone());
+        let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());
+        newt_1.discover(sorted);
+        let sorted = util::sort_processes_by_distance(&europe_west3, &planet, processes.clone());
+        newt_2.discover(sorted);
+        let sorted = util::sort_processes_by_distance(&us_west1, &planet, processes.clone());
+        newt_3.discover(sorted);
 
         // register processes
         simulation.register_process(newt_1, executor_1);
@@ -487,10 +488,11 @@ mod tests {
         // create client 1 that is connected to newt 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
+        let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        assert!(client_1.discover(processes));
+        let sorted = util::sort_processes_by_distance(&client_region, &planet, processes);
+        assert!(client_1.discover(sorted));
 
         // start client
         let (target, cmd) = client_1
@@ -511,7 +513,8 @@ mod tests {
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
         assert_eq!(target.len(), 2 * f);
-        assert_eq!(target, vec![1, 2]);
+        assert!(target.contains(&1));
+        assert!(target.contains(&2));
 
         // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);
@@ -548,7 +551,9 @@ mod tests {
         match msg {
             Message::MPhantom { .. } => {
                 assert_eq!(from, process_id_3);
-                assert_eq!(target, vec![process_id_1, process_id_2, process_id_3]);
+                assert!(target.contains(&process_id_1));
+                assert!(target.contains(&process_id_2));
+                assert!(target.contains(&process_id_3));
             }
             _ => panic!("Message::MPhantom not found!"),
         }

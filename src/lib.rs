@@ -33,6 +33,9 @@ pub mod metrics;
 // This module contains the definition of `Simulation` and `Runner`.
 pub mod sim;
 
+// This module contains the definition of Runner` (that actually runs a given `Process`)
+pub mod run;
+
 // This module contains back-of-the-envelop calculations.
 pub mod bote;
 

@@ -24,17 +24,20 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::ProcessId;
-use crate::planet::{Planet, Region};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::collections::HashSet;
+use std::fmt::Debug;
 
-pub trait Process {
-    type Message: Clone;
-    type Executor: Executor;
+pub trait Protocol {
+    type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
+    type Executor: Executor + Send;
 
-    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self;
+    fn new(process_id: ProcessId, config: Config) -> Self;
 
     fn id(&self) -> ProcessId;
 
-    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool;
+    fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
 
     #[must_use]
     fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
@@ -53,12 +56,6 @@ pub trait Process {
 #[derive(Clone, PartialEq, Debug)]
 pub struct ToSend<M> {
     pub from: ProcessId,
-    pub target: Vec<ProcessId>,
+    pub target: HashSet<ProcessId>,
     pub msg: M,
 }
-
-// #[cfg(test)]
-// fn run()
-//     fn run
-
-// }

@@ -3,37 +3,39 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, EPaxos, Newt, Process};
+use planet_sim::protocol::{Atlas, EPaxos, Newt, Protocol};
+use planet_sim::sim::Runner;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    // println!(">running newt n = 5 | f = 1...");
-    // let config = Config::new(5, 1);
-    // run_in_thread(move || increasing_load::<Newt>(config));
+    println!(">running newt n = 5 | f = 1...");
+    let config = Config::new(5, 1);
+    run_in_thread(move || increasing_load::<Newt>(config));
 
-    // println!(">running atlas n = 5 | f = 1...");
-    // let mut config = Config::new(5, 1);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<Atlas>(config));
+    println!(">running atlas n = 5 | f = 1...");
+    let mut config = Config::new(5, 1);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<Atlas>(config));
 
-    // println!(">running atlas n = 5 | f = 2...");
-    // let mut config = Config::new(5, 2);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<Atlas>(config));
+    println!(">running atlas n = 5 | f = 2...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<Atlas>(config));
 
-    // println!(">running epaxos n = 5...");
-    // let mut config = Config::new(5, 2);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<EPaxos>(config));
+    println!(">running epaxos n = 5...");
+    let mut config = Config::new(5, 2);
+    config.set_transitive_conflicts(true);
+    run_in_thread(move || increasing_load::<EPaxos>(config));
 
     println!(">running fpaxos n = 5 | f = 1");
-    let mut config = Config::new(5, 1);
+    let config = Config::new(5, 1);
     increasing_load_fpaxos(config);
 }
 
-fn equidistant<P: Process>() {
+#[allow(dead_code)]
+fn equidistant<P: Protocol>() {
     // intra-region distance
     let distance = 200;
 
@@ -73,7 +75,8 @@ fn equidistant<P: Process>() {
     }
 }
 
-fn increasing_load<P: Process>(config: Config) {
+#[allow(dead_code)]
+fn increasing_load<P: Protocol>(config: Config) {
     let planet = Planet::new("latency/");
     let regions5 = vec![
         Region::new("asia-south1"),
@@ -85,7 +88,6 @@ fn increasing_load<P: Process>(config: Config) {
 
     // number of clients
     let cs = vec![8, 16, 32, 64, 128, 256, 512];
-    let cs = vec![512];
 
     // clients workload
     let conflict_rate = 10;
@@ -113,6 +115,7 @@ fn increasing_load<P: Process>(config: Config) {
     }
 }
 
+#[allow(dead_code)]
 fn increasing_load_fpaxos(config: Config) {
     let planet = Planet::new("latency/");
     let bote = Bote::from(planet);
@@ -143,11 +146,12 @@ fn increasing_load_fpaxos(config: Config) {
 
         // global histogram
         let histogram = Histogram::from(latencies.into_iter().map(|(_, latency)| latency));
-        println!("n = {} AND c = {} |  {:?}", config.n(), 1, histogram);
+        println!("n = {} AND c = 1 |  {:?}", config.n(), histogram);
     });
 }
 
-fn increasing_regions<P: Process>() {
+#[allow(dead_code)]
+fn increasing_regions<P: Protocol>() {
     let planet = Planet::new("latency/");
     let regions13 = vec![
         Region::new("asia-southeast1"),
@@ -202,7 +206,7 @@ fn increasing_regions<P: Process>() {
     }
 }
 
-fn run<P: Process>(
+fn run<P: Protocol>(
     config: Config,
     workload: Workload,
     clients_per_region: usize,
@@ -215,14 +219,15 @@ fn run<P: Process>(
     let expected_commands = workload.total_commands() * clients_per_region * region_count;
 
     // run simulation and get latencies
-    let latencies = planet_sim::sim::run_simulation::<P>(
+    let mut runner: Runner<P> = Runner::new(
+        planet,
         config,
         workload,
         clients_per_region,
         process_regions,
         client_regions,
-        planet,
     );
+    let latencies = runner.run();
     println!("simulation ended...");
 
     // compute stats

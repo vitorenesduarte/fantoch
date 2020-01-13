@@ -1,7 +1,7 @@
-// This module contains the definition of `Workload`.
+// This module contains the definition of `Workload`
 pub mod workload;
 
-// This module contains the defintion of `Pending`
+// This module contains the definition of `Pending`
 pub mod pending;
 
 // Re-exports.
@@ -12,16 +12,11 @@ use crate::command::{Command, CommandResult};
 use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
 use crate::metrics::Histogram;
-use crate::planet::{Planet, Region};
 use crate::time::SysTime;
-use crate::util;
 
 pub struct Client {
     /// id of this client
     client_id: ClientId,
-    /// region where this client is
-    region: Region,
-    planet: Planet,
     /// id of the process this client is connected to
     process_id: Option<ProcessId>,
     /// rifl id generator
@@ -36,12 +31,10 @@ pub struct Client {
 
 impl Client {
     /// Creates a new client.
-    pub fn new(client_id: ClientId, region: Region, planet: Planet, workload: Workload) -> Self {
+    pub fn new(client_id: ClientId, workload: Workload) -> Self {
         // create client
         Self {
             client_id,
-            region,
-            planet,
             process_id: None,
             rifl_gen: RiflGen::new(client_id),
             workload,
@@ -55,16 +48,10 @@ impl Client {
         self.client_id
     }
 
-    /// Generate client's first command.
-    pub fn discover(&mut self, mut processes: Vec<(ProcessId, Region)>) -> bool {
-        // sort `processes` by distance from `self.region`
-        util::sort_processes_by_distance(&self.region, &self.planet, &mut processes);
-
+    /// "Connect" to the closest process.
+    pub fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
         // set the closest process
-        self.process_id = processes
-            .into_iter()
-            .map(|(process_id, _)| process_id)
-            .next();
+        self.process_id = processes.into_iter().next();
 
         // check if we have a closest process
         self.process_id.is_some()
@@ -114,22 +101,26 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::planet::{Planet, Region};
     use crate::time::SimTime;
+    use crate::util;
 
     // Generates some client.
-    fn gen_client(total_commands: usize, region: Region) -> Client {
+    fn gen_client(total_commands: usize) -> Client {
         // workload
         let conflict_rate = 100;
         let workload = Workload::new(conflict_rate, total_commands);
 
         // client
         let id = 1;
-        let planet = Planet::new("latency/");
-        Client::new(id, region, planet, workload)
+        Client::new(id, workload)
     }
 
     #[test]
     fn discover() {
+        // create planet
+        let planet = Planet::new("latency/");
+
         // processes
         let processes = vec![
             (0, Region::new("asia-east1")),
@@ -140,19 +131,24 @@ mod tests {
         // client
         let region = Region::new("europe-west2");
         let total_commands = 0;
-        let mut client = gen_client(total_commands, region);
+        let mut client = gen_client(total_commands);
 
         // check discover with empty vec
-        assert!(!client.discover(vec![]));
+        let sorted = util::sort_processes_by_distance(&region, &planet, vec![]);
+        assert!(!client.discover(sorted));
         assert_eq!(client.process_id, None);
 
         // check discover with processes
-        assert!(client.discover(processes));
+        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        assert!(client.discover(sorted));
         assert_eq!(client.process_id, Some(2));
     }
 
     #[test]
     fn client_flow() {
+        // create planet
+        let planet = Planet::new("latency/");
+
         // processes
         let processes = vec![
             (0, Region::new("asia-east1")),
@@ -163,10 +159,11 @@ mod tests {
         // client
         let region = Region::new("europe-west2");
         let total_commands = 2;
-        let mut client = gen_client(total_commands, region);
+        let mut client = gen_client(total_commands);
 
         // discover
-        client.discover(processes);
+        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        client.discover(sorted);
 
         // create system time
         let mut time = SimTime::new();

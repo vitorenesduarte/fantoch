@@ -5,12 +5,13 @@ use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
-use crate::protocol::{Process, ToSend};
+use crate::protocol::{Protocol, ToSend};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SimTime;
+use crate::util;
 use std::collections::HashMap;
 
-enum ScheduleAction<P: Process> {
+enum ScheduleAction<P: Protocol> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
@@ -22,7 +23,7 @@ enum MessageRegion {
     Client(ClientId),
 }
 
-pub struct Runner<P: Process> {
+pub struct Runner<P: Protocol> {
     planet: Planet,
     simulation: Simulation<P>,
     time: SimTime,
@@ -35,23 +36,19 @@ pub struct Runner<P: Process> {
 
 impl<P> Runner<P>
 where
-    P: Process,
+    P: Protocol,
 {
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of regions:
     /// - `process_regions`: list of regions where processes are located
     /// - `client_regions`: list of regions where clients are located
-    pub fn new<F>(
+    pub fn new(
         planet: Planet,
         config: Config,
-        create_process: F,
         workload: Workload,
         clients_per_region: usize,
         process_regions: Vec<Region>,
         client_regions: Vec<Region>,
-    ) -> Self
-    where
-        F: Fn(ProcessId, Region, Planet, Config) -> P,
-    {
+    ) -> Self {
         // check that we have the correct number of `process_regions`
         assert_eq!(process_regions.len(), config.n());
 
@@ -66,8 +63,8 @@ where
             .map(|(region, process_id)| {
                 let process_id = process_id as u64;
                 // create process and save it
-                let process = create_process(process_id, region.clone(), planet.clone(), config);
-                processes.push(process);
+                let process = P::new(process_id, config);
+                processes.push((region.clone(), process));
 
                 (process_id, region)
             })
@@ -77,12 +74,13 @@ where
         let process_to_region = to_discover.clone().into_iter().collect();
 
         // register processes
-        processes.into_iter().for_each(|mut process| {
+        processes.into_iter().for_each(|(region, mut process)| {
             // discover
-            assert!(process.discover(to_discover.clone()));
+            let sorted = util::sort_processes_by_distance(&region, &planet, to_discover.clone());
+            assert!(process.discover(sorted));
 
             // create executor for this process
-            let executor = <P::Executor as Executor>::new(&config);
+            let executor = <P::Executor as Executor>::new(config);
 
             // and register both
             simulation.register_process(process, executor);
@@ -95,9 +93,11 @@ where
             for _ in 1..=clients_per_region {
                 // create client
                 client_id += 1;
-                let mut client = Client::new(client_id, region.clone(), planet.clone(), workload);
+                let mut client = Client::new(client_id, workload);
                 // discover
-                assert!(client.discover(to_discover.clone()));
+                let sorted =
+                    util::sort_processes_by_distance(&region, &planet, to_discover.clone());
+                assert!(client.discover(sorted));
                 // and register it
                 simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
@@ -230,7 +230,7 @@ where
         // compute distance between regions
         let distance = self.distance(from, to);
         // schedule action
-        self.schedule.schedule(&self.time, distance, action);
+        self.schedule.schedule(&self.time, distance as u128, action);
     }
 
     /// Retrieves the region of some process/client.
@@ -306,6 +306,8 @@ mod tests {
     use crate::id::{ProcessId, Rifl};
     use crate::metrics::F64;
     use crate::protocol::BaseProcess;
+    use crate::singleton;
+    use serde::{Deserialize, Serialize};
     use std::collections::HashSet;
     use std::mem;
 
@@ -326,7 +328,7 @@ mod tests {
     impl Executor for PingPongExecutor {
         type ExecutionInfo = CommandResult;
 
-        fn new(_config: &Config) -> Self {
+        fn new(_config: Config) -> Self {
             // ignore config
             PingPongExecutor::new()
         }
@@ -347,7 +349,7 @@ mod tests {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     enum Message {
         Ping(Rifl),
         Pong(Rifl),
@@ -360,23 +362,16 @@ mod tests {
         to_executor: Vec<ExecutionInfo>,
     }
 
-    impl Process for PingPong {
+    impl Protocol for PingPong {
         type Message = Message;
         type Executor = PingPongExecutor;
 
-        fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
+        fn new(process_id: ProcessId, config: Config) -> Self {
             // fast quorum size is f + 1
             let fast_quorum_size = config.f() + 1;
             // write quorum size can be 0 since it won't be used
             let write_quorum_size = 0;
-            let bp = BaseProcess::new(
-                process_id,
-                region,
-                planet,
-                config,
-                fast_quorum_size,
-                write_quorum_size,
-            );
+            let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
 
             // create `PingPong`
             Self {
@@ -390,7 +385,7 @@ mod tests {
             self.bp.process_id
         }
 
-        fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool {
+        fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
             self.bp.discover(processes)
         }
 
@@ -421,7 +416,7 @@ mod tests {
                     // reply back
                     Some(ToSend {
                         from: self.id(),
-                        target: vec![from],
+                        target: singleton![from],
                         msg,
                     })
                 }
@@ -463,10 +458,6 @@ mod tests {
         let n = 3;
         let config = Config::new(n, f);
 
-        // function that creates ping pong processes
-        let create_process =
-            |process_id, region, planet, config| PingPong::new(process_id, region, planet, config);
-
         // clients workload
         let conflict_rate = 100;
         let total_commands = 10;
@@ -483,10 +474,9 @@ mod tests {
         let client_regions = vec![Region::new("us-west1"), Region::new("us-west2")];
 
         // create runner
-        let mut runner = Runner::new(
+        let mut runner: Runner<PingPong> = Runner::new(
             planet,
             config,
-            create_process,
             workload,
             clients_per_region,
             process_regions,

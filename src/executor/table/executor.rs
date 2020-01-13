@@ -15,7 +15,7 @@ pub struct TableExecutor {
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
-    fn new(config: &Config) -> Self {
+    fn new(config: Config) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
         let table = MultiVotesTable::new(config.n(), stability_threshold);
@@ -83,6 +83,7 @@ impl Executor for TableExecutor {
     }
 }
 
+#[derive(Debug)]
 pub enum TableExecutionInfo {
     Votes {
         dot: Dot,

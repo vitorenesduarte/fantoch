@@ -16,7 +16,7 @@ pub struct GraphExecutor {
 impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
-    fn new(config: &Config) -> Self {
+    fn new(config: Config) -> Self {
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -75,7 +75,7 @@ impl Executor for GraphExecutor {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GraphExecutionInfo {
     dot: Dot,
     cmd: Command,

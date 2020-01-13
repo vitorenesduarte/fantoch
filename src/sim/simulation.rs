@@ -1,19 +1,19 @@
 use crate::client::Client;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::{Process, ToSend};
+use crate::protocol::{Protocol, ToSend};
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-pub struct Simulation<P: Process> {
+pub struct Simulation<P: Protocol> {
     processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
 impl<P> Simulation<P>
 where
-    P: Process,
+    P: Protocol,
 {
     /// Create a new `Simulation`.
     #[allow(clippy::new_without_default)]
@@ -64,12 +64,28 @@ where
     pub fn forward_to_processes(&mut self, to_send: ToSend<P::Message>) -> Vec<ToSend<P::Message>> {
         // extract `ToSend` arguments
         let ToSend { from, target, msg } = to_send;
-        target
+
+        // handle first in self if self in target
+        let to_send = if target.contains(&from) {
+            let (process, _) = self.get_process(from);
+            process.handle(from, msg.clone())
+        } else {
+            None
+        };
+
+        let to_sends = target
             .into_iter()
-            .filter_map(|process_id| {
+            // make sure we don't handle again in self
+            .filter(|process_id| *process_id != from)
+            .map(|process_id| {
                 let (process, _) = self.get_process(process_id);
                 process.handle(from, msg.clone())
-            })
+            });
+
+        // make sure that the first to_send is the one from self
+        std::iter::once(to_send)
+            .chain(to_sends)
+            .filter_map(|to_send| to_send)
             .collect()
     }
 

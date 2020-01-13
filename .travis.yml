@@ -5,7 +5,7 @@ rust:
 
 matrix:
   allow_failures:
-    - rust: nightly
+    - rust: stable
   fast_finish: true
 
 notifications:

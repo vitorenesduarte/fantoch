@@ -2,16 +2,17 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::log;
-use crate::planet::{Planet, Region};
 use crate::protocol::common::{
     graph::{KeysClocks, QuorumClocks},
     info::{Commands, Info},
     synod::{Synod, SynodMessage},
 };
-use crate::protocol::{BaseProcess, Process, ToSend};
+use crate::protocol::{BaseProcess, Protocol, ToSend};
 use crate::util;
-use std::collections::HashMap;
+use crate::{log, singleton};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::iter::FromIterator;
 use std::mem;
 use threshold::VClock;
 
@@ -24,24 +25,17 @@ pub struct EPaxos {
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Process for EPaxos {
+impl Protocol for EPaxos {
     type Message = Message;
     type Executor = GraphExecutor;
 
     /// Creates a new `Atlas` process.
-    fn new(process_id: ProcessId, region: Region, planet: Planet, config: Config) -> Self {
+    fn new(process_id: ProcessId, config: Config) -> Self {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = config.epaxos_quorum_sizes();
 
         // create protocol data-structures
-        let bp = BaseProcess::new(
-            process_id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
         let keys_clocks = KeysClocks::new(config.n());
         let f = Self::allowed_faults(config.n());
         let cmds = Commands::new(process_id, config.n(), f, fast_quorum_size);
@@ -62,7 +56,8 @@ impl Process for EPaxos {
     }
 
     /// Updates the processes known by this process.
-    fn discover(&mut self, processes: Vec<(ProcessId, Region)>) -> bool {
+    /// The set of processes provided is already sorted by distance.
+    fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
         self.bp.discover(processes)
     }
 
@@ -143,7 +138,7 @@ impl EPaxos {
         from: ProcessId,
         dot: Dot,
         cmd: Option<Command>,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
     ) -> Option<ToSend<Message>> {
         log!(
@@ -175,14 +170,14 @@ impl EPaxos {
 
         // update command info
         info.status = Status::COLLECT;
-        info.quorum = quorum;
+        info.quorum = BTreeSet::from_iter(quorum);
         // create and set consensus value
         let value = ConsensusValue::with(cmd, clock.clone());
         assert!(info.synod.maybe_set_value(|| value));
 
         // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck { dot, clock };
-        let target = vec![from];
+        let target = singleton![from];
 
         // return `ToSend`
         Some(ToSend {
@@ -344,7 +339,7 @@ impl EPaxos {
         };
 
         // create target
-        let target = vec![from];
+        let target = singleton![from];
 
         // return `ToSend`
         Some(ToSend {
@@ -394,7 +389,7 @@ impl EPaxos {
 
 // consensus value is a pair where the first component is the command (noop if `None`) and the
 // second component its dependencies represented as a vector clock.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     cmd: Option<Command>,
     clock: VClock<ProcessId>,
@@ -420,7 +415,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 // `Command`
 struct CommandInfo {
     status: Status,
-    quorum: Vec<ProcessId>,
+    quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
     synod: Synod<ConsensusValue>,
     // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
     // whether to take the fast path
@@ -439,7 +434,7 @@ impl Info for CommandInfo {
         // created.
         Self {
             status: Status::START,
-            quorum: vec![],
+            quorum: BTreeSet::new(),
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
         }
@@ -447,13 +442,13 @@ impl Info for CommandInfo {
 }
 
 // `Atlas` protocol messages
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Option<Command>, // it's never a noop though
         clock: VClock<ProcessId>,
-        quorum: Vec<ProcessId>,
+        quorum: HashSet<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
@@ -486,6 +481,7 @@ enum Status {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
+    use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
 
@@ -523,19 +519,22 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(&config);
-        let executor_2 = GraphExecutor::new(&config);
-        let executor_3 = GraphExecutor::new(&config);
+        let executor_1 = GraphExecutor::new(config);
+        let executor_2 = GraphExecutor::new(config);
+        let executor_3 = GraphExecutor::new(config);
 
         // epaxos
-        let mut epaxos_1 = EPaxos::new(process_id_1, europe_west2.clone(), planet.clone(), config);
-        let mut epaxos_2 = EPaxos::new(process_id_2, europe_west3.clone(), planet.clone(), config);
-        let mut epaxos_3 = EPaxos::new(process_id_3, us_west1.clone(), planet.clone(), config);
+        let mut epaxos_1 = EPaxos::new(process_id_1, config);
+        let mut epaxos_2 = EPaxos::new(process_id_2, config);
+        let mut epaxos_3 = EPaxos::new(process_id_3, config);
 
         // discover processes in all epaxos
-        epaxos_1.discover(processes.clone());
-        epaxos_2.discover(processes.clone());
-        epaxos_3.discover(processes.clone());
+        let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());
+        epaxos_1.discover(sorted);
+        let sorted = util::sort_processes_by_distance(&europe_west3, &planet, processes.clone());
+        epaxos_2.discover(sorted);
+        let sorted = util::sort_processes_by_distance(&us_west1, &planet, processes.clone());
+        epaxos_3.discover(sorted);
 
         // register processes
         simulation.register_process(epaxos_1, executor_1);
@@ -550,10 +549,11 @@ mod tests {
         // create client 1 that is connected to epaxos 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, client_region, planet.clone(), workload);
+        let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        assert!(client_1.discover(processes));
+        let sorted = util::sort_processes_by_distance(&client_region, &planet, processes);
+        assert!(client_1.discover(sorted));
 
         // start client
         let (target, cmd) = client_1
@@ -574,7 +574,8 @@ mod tests {
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
         assert_eq!(target.len(), 2 * f);
-        assert_eq!(target, vec![1, 2]);
+        assert!(target.contains(&1));
+        assert!(target.contains(&2));
 
         // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);

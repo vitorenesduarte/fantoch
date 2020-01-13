@@ -1,19 +1,17 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::metrics::Metrics;
-use crate::planet::{Planet, Region};
-use crate::util;
+use std::collections::HashSet;
 use std::fmt;
+use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
 pub struct BaseProcess {
     pub process_id: ProcessId,
-    pub region: Region,
-    pub planet: Planet,
     pub config: Config,
-    all_processes: Option<Vec<ProcessId>>,
-    fast_quorum: Option<Vec<ProcessId>>,
-    write_quorum: Option<Vec<ProcessId>>,
+    all_processes: Option<HashSet<ProcessId>>,
+    fast_quorum: Option<HashSet<ProcessId>>,
+    write_quorum: Option<HashSet<ProcessId>>,
     fast_quorum_size: usize,
     write_quorum_size: usize,
     dot_gen: DotGen,
@@ -24,8 +22,6 @@ impl BaseProcess {
     /// Creates a new `BaseProcess`.
     pub fn new(
         process_id: ProcessId,
-        region: Region,
-        planet: Planet,
         config: Config,
         fast_quorum_size: usize,
         write_quorum_size: usize,
@@ -37,8 +33,6 @@ impl BaseProcess {
 
         Self {
             process_id,
-            region,
-            planet,
             config,
             all_processes: None,
             fast_quorum: None,
@@ -51,27 +45,24 @@ impl BaseProcess {
     }
 
     /// Updates the processes known by this process.
-    pub fn discover(&mut self, mut processes: Vec<(ProcessId, Region)>) -> bool {
-        // create all processes
-        util::sort_processes_by_distance(&self.region, &self.planet, &mut processes);
-        let all_processes: Vec<_> = processes.into_iter().map(|(id, _)| id).collect();
-
+    /// The set of processes provided is already sorted by distance.
+    pub fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
         // create fast quorum by taking the first `fast_quorum_size` elements
-        let fast_quorum: Vec<_> = all_processes
+        let fast_quorum: HashSet<_> = processes
             .clone()
             .into_iter()
             .take(self.fast_quorum_size)
             .collect();
 
         // create write quorum by taking the first `write_quorum_size` elements
-        let write_quorum: Vec<_> = all_processes
+        let write_quorum: HashSet<_> = processes
             .clone()
             .into_iter()
             .take(self.write_quorum_size)
             .collect();
 
         // set all processes
-        self.all_processes = Some(all_processes);
+        self.all_processes = Some(HashSet::from_iter(processes));
 
         // set fast quorum if we have enough fast quorum processes
         self.fast_quorum = if fast_quorum.len() == self.fast_quorum_size {
@@ -97,21 +88,21 @@ impl BaseProcess {
     }
 
     // Returns all processes.
-    pub fn all(&self) -> Vec<ProcessId> {
+    pub fn all(&self) -> HashSet<ProcessId> {
         self.all_processes
             .clone()
             .expect("the set of all processes should be known")
     }
 
     // Returns the fast quorum.
-    pub fn fast_quorum(&self) -> Vec<ProcessId> {
+    pub fn fast_quorum(&self) -> HashSet<ProcessId> {
         self.fast_quorum
             .clone()
             .expect("the fast quorum should be known")
     }
 
     // Returns the write quorum.
-    pub fn write_quorum(&self) -> Vec<ProcessId> {
+    pub fn write_quorum(&self) -> HashSet<ProcessId> {
         self.write_quorum
             .clone()
             .expect("the slow quorum should be known")
@@ -154,6 +145,10 @@ impl fmt::Debug for MetricsKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::planet::{Planet, Region};
+    use crate::util;
+    use std::collections::BTreeSet;
+    use std::iter::FromIterator;
 
     #[test]
     fn discover() {
@@ -189,33 +184,35 @@ mod tests {
         let planet = Planet::new("latency/");
         let fast_quorum_size = 6;
         let write_quorum_size = 4;
-        let mut bp = BaseProcess::new(
-            id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
         assert_eq!(bp.all_processes, None);
 
         // discover processes and check we're connected
-        assert!(bp.discover(processes));
+        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        assert!(bp.discover(sorted));
 
         // check set of all processes
         assert_eq!(
-            bp.all(),
-            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2]
+            BTreeSet::from_iter(bp.all()),
+            BTreeSet::from_iter(vec![
+                8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
+            ]),
         );
 
         // check fast quorum
-        assert_eq!(bp.fast_quorum(), vec![8, 9, 6, 7, 5, 14]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.fast_quorum()),
+            BTreeSet::from_iter(vec![8, 9, 6, 7, 5, 14])
+        );
 
         // check write quorum
-        assert_eq!(bp.write_quorum(), vec![8, 9, 6, 7]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.write_quorum()),
+            BTreeSet::from_iter(vec![8, 9, 6, 7])
+        );
     }
 
     #[test]
@@ -240,25 +237,28 @@ mod tests {
         let planet = Planet::new("latency/");
         let fast_quorum_size = 3;
         let write_quorum_size = 4;
-        let mut bp = BaseProcess::new(
-            id,
-            region,
-            planet,
-            config,
-            fast_quorum_size,
-            write_quorum_size,
-        );
+        let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // discover processes and check we're connected
-        assert!(bp.discover(processes));
+        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        assert!(bp.discover(sorted));
 
         // check set of all processes
-        assert_eq!(bp.all(), vec![2, 3, 4, 0, 1]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.all()),
+            BTreeSet::from_iter(vec![2, 3, 4, 0, 1])
+        );
 
         // check fast quorum
-        assert_eq!(bp.fast_quorum(), vec![2, 3, 4]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.fast_quorum()),
+            BTreeSet::from_iter(vec![2, 3, 4])
+        );
 
         // check write quorum
-        assert_eq!(bp.write_quorum(), vec![2, 3, 4, 0]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.write_quorum()),
+            BTreeSet::from_iter(vec![2, 3, 4, 0])
+        );
     }
 }

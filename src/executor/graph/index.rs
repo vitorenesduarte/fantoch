@@ -50,6 +50,7 @@ impl PendingIndex {
     }
 
     /// Finds all pending dots for a given key.
+    #[allow(clippy::ptr_arg)]
     pub fn pending(&self, key: &Key) -> Option<HashSet<Dot>> {
         self.index.get(key).cloned()
     }

@@ -73,7 +73,7 @@ impl Histogram {
             .iter()
             .next()
             .map(|(min, _)| F64::new(*min as f64))
-            .unwrap_or(F64::nan())
+            .unwrap_or_else(F64::nan)
     }
 
     pub fn max(&self) -> F64 {
@@ -81,7 +81,7 @@ impl Histogram {
             .iter()
             .next_back()
             .map(|(min, _)| F64::new(*min as f64))
-            .unwrap_or(F64::nan())
+            .unwrap_or_else(F64::nan)
     }
 
     // Computes a given percentile.
@@ -227,7 +227,7 @@ where
 {
     // create iterators for `map` and `other`
     let mut map_iter = map.iter_mut();
-    let mut other_iter = other.into_iter();
+    let mut other_iter = other.iter();
 
     // variables to hold the "current value" of each iterator
     let mut map_current = map_iter.next();
@@ -280,11 +280,7 @@ where
     // - `absent`: keys from `other` that are smaller than the larger key in `map`
     // - `other_iter`: keys from `other` that are larger than the larger key in `map`
     map.extend(absent.into_iter().map(|(key, value)| (key.clone(), *value)));
-    map.extend(
-        other_iter
-            .into_iter()
-            .map(|(key, value)| (key.clone(), *value)),
-    );
+    map.extend(other_iter.map(|(key, value)| (key.clone(), *value)));
 }
 
 #[cfg(test)]
