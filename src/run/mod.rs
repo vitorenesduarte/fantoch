@@ -13,8 +13,10 @@ use futures::future::FutureExt;
 use futures::select;
 use std::error::Error;
 use std::fmt::Debug;
+use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Semaphore;
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
@@ -29,11 +31,35 @@ pub enum FromClient {
     Submit(Command),
 }
 
-pub enum FromExecutor {
-    Submit(Command),
+pub async fn process<A, P>(
+    process: P,
+    process_id: ProcessId,
+    sorted_processes: Vec<ProcessId>,
+    port: u16,
+    addresses: Vec<A>,
+    client_port: u16,
+    config: Config,
+) -> Result<(), Box<dyn Error>>
+where
+    A: ToSocketAddrs + Debug + Clone,
+    P: Protocol + 'static, // TODO what does this 'static do?
+{
+    // this is for callers that don't care about the connected notification
+    let semaphore = Arc::new(Semaphore::new(0));
+    process_with_notify::<A, P>(
+        process,
+        process_id,
+        sorted_processes,
+        port,
+        addresses,
+        client_port,
+        config,
+        semaphore,
+    )
+    .await
 }
 
-pub async fn process<A, P>(
+async fn process_with_notify<A, P>(
     mut process: P,
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
@@ -41,6 +67,7 @@ pub async fn process<A, P>(
     addresses: Vec<A>,
     client_port: u16,
     config: Config,
+    connected: Arc<Semaphore>,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -70,6 +97,9 @@ where
 
     // start executor
     let (mut from_executor, to_executor) = task::process::start_executor::<P>(config, from_clients);
+
+    // notify parent that we're connected
+    connected.add_permits(1);
 
     loop {
         select! {
@@ -202,4 +232,134 @@ where
     }
     println!("client {} done", client_id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::Newt;
+    use tokio::task;
+    use tokio::time::Duration;
+
+    #[tokio::test]
+    async fn test_semaphore() {
+        // create semaphore
+        let semaphore = Arc::new(Semaphore::new(0));
+
+        let task_semaphore = semaphore.clone();
+        tokio::spawn(async move {
+            println!("[task] will sleep for 5 seconds");
+            tokio::time::delay_for(Duration::from_secs(5)).await;
+            println!("[task] semaphore released!");
+            task_semaphore.add_permits(1);
+        });
+
+        println!("[main] will block on the semaphore");
+        let _ = semaphore.acquire().await;
+        println!("[main] semaphore acquired!");
+    }
+
+    #[tokio::test]
+    async fn test_run() {
+        // test with newt
+        // create local task set
+        let local = task::LocalSet::new();
+
+        // run test in local task set
+        local
+            .run_until(async {
+                match run::<Newt>().await {
+                    Ok(()) => {}
+                    Err(e) => panic!("run failed: {:?}", e),
+                }
+            })
+            .await;
+    }
+
+    async fn run<P>() -> Result<(), Box<dyn Error>>
+    where
+        P: Protocol + 'static,
+    {
+        // create config
+        let n = 3;
+        let f = 1;
+        let config = Config::new(n, f);
+
+        // create processes
+        let process_1 = P::new(1, config);
+        let process_2 = P::new(2, config);
+        let process_3 = P::new(3, config);
+
+        // create semaphores
+        let semaphore_1 = Arc::new(Semaphore::new(0));
+        let semaphore_2 = Arc::new(Semaphore::new(0));
+        let semaphore_3 = Arc::new(Semaphore::new(0));
+
+        // spawn processes
+        task::spawn_local(process_with_notify::<String, P>(
+            process_1,
+            1,
+            vec![1, 2, 3],
+            3001,
+            vec![
+                String::from("localhost:3002"),
+                String::from("localhost:3003"),
+            ],
+            4001,
+            config,
+            semaphore_1.clone(),
+        ));
+        task::spawn_local(process_with_notify::<String, P>(
+            process_2,
+            2,
+            vec![2, 3, 1],
+            3002,
+            vec![
+                String::from("localhost:3001"),
+                String::from("localhost:3003"),
+            ],
+            4002,
+            config,
+            semaphore_2.clone(),
+        ));
+        task::spawn_local(process_with_notify::<String, P>(
+            process_3,
+            3,
+            vec![3, 1, 2],
+            3003,
+            vec![
+                String::from("localhost:3001"),
+                String::from("localhost:3002"),
+            ],
+            4003,
+            config,
+            semaphore_3.clone(),
+        ));
+
+        // wait that all processes are connected
+        println!("[main] waiting that processes are connected");
+        let _ = semaphore_1.acquire().await;
+        let _ = semaphore_2.acquire().await;
+        let _ = semaphore_3.acquire().await;
+        println!("[main] processes are connected");
+
+        // create workload
+        let conflict_rate = 100;
+        let total_commands = 1000;
+        let workload = Workload::new(conflict_rate, total_commands);
+
+        // spawn clients
+        let client_1_handle =
+            task::spawn_local(client(1, String::from("localhost:4001"), 1, workload));
+        let client_2_handle =
+            task::spawn_local(client(2, String::from("localhost:4002"), 1, workload));
+        let client_3_handle =
+            task::spawn_local(client(3, String::from("localhost:4003"), 1, workload));
+
+        // wait for the 3 clients
+        let _ = client_1_handle.await.expect("client 1 should finish");
+        let _ = client_2_handle.await.expect("client 2 should finish");
+        let _ = client_3_handle.await.expect("client 3 should finish");
+        Ok(())
+    }
 }

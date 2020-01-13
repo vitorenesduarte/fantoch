@@ -11,7 +11,6 @@ pub struct Connection {
     stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
 }
 
-#[allow(dead_code)]
 impl Connection {
     pub fn new(stream: TcpStream) -> Self {
         // TODO here `BufStream` will allocate two buffers, one for reading and another one for
