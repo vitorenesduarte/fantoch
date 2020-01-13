@@ -130,7 +130,7 @@ fn parse_sorted_processes(ids: Option<&str>) -> Vec<ProcessId> {
 }
 
 fn parse_ip(ip: Option<&str>) -> IpAddr {
-    ip.unwrap_or("127.0.0.1")
+    ip.unwrap_or(DEFAULT_IP)
         .parse::<IpAddr>()
         .expect("ip should be a valid ip address")
 }

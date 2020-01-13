@@ -291,21 +291,25 @@ impl Newt {
         let current_votes = Self::reset_votes(&mut info.votes);
         votes.merge(current_votes);
 
-        // generate phantom votes if committed clock is higher than the local key's clock
+        // generate phantom votes if committed clock is higher than the local key's clock:
+        // - this only happens if newt is configured with tiny quorums or, in case it's not, this
+        //   process was part of the fast quorum (if it was, `info.quorum` is not empty)
         let mut to_send = None;
-        if let Some(cmd) = info.cmd.as_ref() {
-            // if not a no op, check if we can generate more votes that can speed-up execution
-            let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
+        if self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty() {
+            if let Some(cmd) = info.cmd.as_ref() {
+                // if not a no op, check if we can generate more votes that can speed-up execution
+                let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
 
-            // create `MPhantom` if there are new votes
-            if !process_votes.is_empty() {
-                let mphantom = Message::MPhantom { dot, process_votes };
-                let target = self.bp.all();
-                to_send = Some(ToSend {
-                    from: self.bp.process_id,
-                    target,
-                    msg: mphantom,
-                });
+                // create `MPhantom` if there are new votes
+                if !process_votes.is_empty() {
+                    let mphantom = Message::MPhantom { dot, process_votes };
+                    let target = self.bp.all();
+                    to_send = Some(ToSend {
+                        from: self.bp.process_id,
+                        target,
+                        msg: mphantom,
+                    });
+                }
             }
         }
 
@@ -455,7 +459,11 @@ mod tests {
         // n and f
         let n = 3;
         let f = 1;
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
+        // set tiny quorums to true:
+        // - doesn't change the fast quorum size for n = 3 and f = 1 but
+        // - if affects phantom vote generation
+        config.set_newt_tiny_quorums(true);
 
         // executors
         let executor_1 = TableExecutor::new(config);
