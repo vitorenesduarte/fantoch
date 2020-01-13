@@ -198,7 +198,7 @@ where
                 panic!("couldn't receive command result from process");
             }
         }
-    } else {
-        panic!("client couldn't be started");
     }
+    println!("client {} done", client_id);
+    Ok(())
 }
