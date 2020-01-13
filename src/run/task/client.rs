@@ -1,6 +1,7 @@
 use super::{connection::Connection, ClientHi, ProcessHi};
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
+use crate::log;
 use crate::run::FromClient;
 use futures::future::FutureExt;
 use futures::select;
@@ -52,13 +53,13 @@ async fn client_server_task(
     loop {
         select! {
             cmd = connection.recv().fuse() => {
-                println!("[client_server] new command: {:?}", cmd);
+                log!("[client_server] new command: {:?}", cmd);
                 if !client_server_task_handle_cmd(cmd, client_id, &parent) {
                     return;
                 }
             }
             cmd_result = parent_results.recv().fuse() => {
-                println!("[client_server] new command result: {:?}", cmd_result);
+                log!("[client_server] new command result: {:?}", cmd_result);
                 client_server_task_handle_cmd_result(cmd_result, &mut connection).await;
             }
         }

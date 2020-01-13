@@ -6,6 +6,7 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
+use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::time::RunTime;
 use futures::future::FutureExt;
@@ -73,7 +74,7 @@ where
     loop {
         select! {
             msg = from_readers.recv().fuse() => {
-                println!("[server] reader message: {:?}", msg);
+                log!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
                     handle_from_processes(process_id, from, msg, &mut process, &to_writer, &to_executor)
                 } else {
@@ -81,7 +82,7 @@ where
                 }
             }
             cmd = from_executor.recv().fuse() => {
-                println!("[server] from executor: {:?}", cmd);
+                log!("[server] from executor: {:?}", cmd);
                 if let Some(cmd) = cmd {
                     handle_from_client(process_id, cmd, &mut process, &to_writer, &to_executor)
                 } else {

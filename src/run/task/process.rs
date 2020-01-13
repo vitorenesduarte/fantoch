@@ -3,6 +3,7 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
+use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::task;
 use crate::run::FromClient;
@@ -273,7 +274,7 @@ async fn executor_task<P>(
     loop {
         select! {
             execution_info = from_parent.recv().fuse() => {
-                println!("[executor] from parent: {:?}", execution_info);
+                log!("[executor] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     handle_execution_info::<P>(execution_info, &mut executor, &mut clients);
                 } else {
@@ -281,7 +282,7 @@ async fn executor_task<P>(
                 }
             }
             from_client = from_clients.recv().fuse() => {
-                println!("[executor] from client: {:?}", from_client);
+                log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
                     handle_from_client::<P>(from_client, &mut executor, &mut clients, &to_parent);
                 } else {
