@@ -34,7 +34,7 @@ addons:
       # </travis>
 
 before_script: |
-  if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
+  if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
     export PATH=$HOME/.cargo/bin:$PATH
 
     # <tarpaulin>
