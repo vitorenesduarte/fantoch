@@ -467,7 +467,6 @@ mod tests {
     use super::*;
     use crate::client::{Client, Workload};
     use crate::planet::{Planet, Region};
-    use crate::set;
     use crate::sim::Simulation;
     use crate::time::SimTime;
 
@@ -560,7 +559,8 @@ mod tests {
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
         assert_eq!(target.len(), 2 * f);
-        assert_eq!(target, set![1, 2]);
+        assert!(target.contains(&1));
+        assert!(target.contains(&2));
 
         // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);

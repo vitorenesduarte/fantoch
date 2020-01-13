@@ -146,8 +146,9 @@ impl fmt::Debug for MetricsKind {
 mod tests {
     use super::*;
     use crate::planet::{Planet, Region};
-    use crate::set;
     use crate::util;
+    use std::collections::BTreeSet;
+    use std::iter::FromIterator;
 
     #[test]
     fn discover() {
@@ -195,15 +196,23 @@ mod tests {
 
         // check set of all processes
         assert_eq!(
-            bp.all(),
-            set![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2]
+            BTreeSet::from_iter(bp.all()),
+            BTreeSet::from_iter(vec![
+                8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
+            ]),
         );
 
         // check fast quorum
-        assert_eq!(bp.fast_quorum(), set![8, 9, 6, 7, 5, 14]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.fast_quorum()),
+            BTreeSet::from_iter(vec![8, 9, 6, 7, 5, 14])
+        );
 
         // check write quorum
-        assert_eq!(bp.write_quorum(), set![8, 9, 6, 7]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.write_quorum()),
+            BTreeSet::from_iter(vec![8, 9, 6, 7])
+        );
     }
 
     #[test]
@@ -235,12 +244,21 @@ mod tests {
         assert!(bp.discover(sorted));
 
         // check set of all processes
-        assert_eq!(bp.all(), set![2, 3, 4, 0, 1]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.all()),
+            BTreeSet::from_iter(vec![2, 3, 4, 0, 1])
+        );
 
         // check fast quorum
-        assert_eq!(bp.fast_quorum(), set![2, 3, 4]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.fast_quorum()),
+            BTreeSet::from_iter(vec![2, 3, 4])
+        );
 
         // check write quorum
-        assert_eq!(bp.write_quorum(), set![2, 3, 4, 0]);
+        assert_eq!(
+            BTreeSet::from_iter(bp.write_quorum()),
+            BTreeSet::from_iter(vec![2, 3, 4, 0])
+        );
     }
 }

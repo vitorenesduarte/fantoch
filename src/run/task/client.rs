@@ -52,12 +52,18 @@ async fn client_server_task(
     loop {
         select! {
             cmd = connection.recv().fuse() => {
+                println!("[client_server] new command: {:?}", cmd);
                 if !client_server_task_handle_cmd(cmd, client_id, &parent) {
                     return;
                 }
             }
             cmd_result = parent_results.recv().fuse() => {
-                client_server_task_handle_cmd_result(cmd_result, &mut connection).await;
+                println!("[client_server] new command result: {:?}", cmd_result);
+                if let Some(cmd_result) = cmd_result {
+                    connection.send(cmd_result).await;
+                } else {
+                    println!("[client_server] error while receiving new command result from parent");
+                }
             }
         }
     }
@@ -68,7 +74,6 @@ fn client_server_task_handle_cmd(
     client_id: ClientId,
     parent: &UnboundedSender<FromClient>,
 ) -> bool {
-    println!("new command: {:?}", cmd);
     if let Some(cmd) = cmd {
         if let Err(e) = parent.send(FromClient::Submit(cmd)) {
             println!(
@@ -86,18 +91,6 @@ fn client_server_task_handle_cmd(
             );
         }
         false
-    }
-}
-
-async fn client_server_task_handle_cmd_result(
-    cmd_result: Option<CommandResult>,
-    connection: &mut Connection,
-) {
-    println!("new command result: {:?}", cmd_result);
-    if let Some(cmd_result) = cmd_result {
-        connection.send(cmd_result).await;
-    } else {
-        println!("[client_server] error while receiving new command result from parent");
     }
 }
 

@@ -73,7 +73,7 @@ where
     loop {
         select! {
             msg = from_readers.recv().fuse() => {
-                println!("reader message: {:?}", msg);
+                println!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
                     handle_from_processes(process_id, from, msg, &mut process, &to_writer, &to_executor)
                 } else {
@@ -81,7 +81,7 @@ where
                 }
             }
             cmd = from_executor.recv().fuse() => {
-                println!("from executor: {:?}", from_executor);
+                println!("[server] from executor: {:?}", cmd);
                 if let Some(cmd) = cmd {
                     handle_from_client(process_id, cmd, &mut process, &to_writer, &to_executor)
                 } else {
