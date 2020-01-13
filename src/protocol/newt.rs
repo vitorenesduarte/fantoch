@@ -10,7 +10,8 @@ use crate::protocol::{BaseProcess, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::cmp;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
+use std::iter::FromIterator;
 use std::mem;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
@@ -161,7 +162,7 @@ impl Newt {
         // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
-        info.quorum = quorum;
+        info.quorum = BTreeSet::from_iter(quorum);
         info.clock = clock;
 
         // create `MCollectAck` and target
@@ -356,8 +357,8 @@ impl Newt {
 // `Command`
 struct CommandInfo {
     status: Status,
-    quorum: HashSet<ProcessId>,
-    cmd: Option<Command>, // `None` if noOp
+    quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
+    cmd: Option<Command>,        // `None` if noOp
     clock: u64,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
@@ -371,7 +372,7 @@ impl Info for CommandInfo {
     fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
-            quorum: HashSet::new(),
+            quorum: BTreeSet::new(),
             cmd: None,
             clock: 0,
             votes: Votes::new(),
