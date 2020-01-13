@@ -6,8 +6,6 @@ edition = "2018"
 authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
-default-run = "simulation"
-
 [dependencies]
 threshold = "0.6.5"
 rand = "0.7.3"

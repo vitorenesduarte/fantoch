@@ -36,7 +36,7 @@ where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + 'static, // TODO what does this 'static do?
 {
-    // this is for callers that don't care about the connected notification
+    // create semaphore for callers that don't care about the connected notification
     let semaphore = Arc::new(Semaphore::new(0));
     process_with_notify::<A, P>(
         process,
@@ -283,10 +283,8 @@ mod tests {
         let process_2 = P::new(2, config);
         let process_3 = P::new(3, config);
 
-        // create semaphores
-        let semaphore_1 = Arc::new(Semaphore::new(0));
-        let semaphore_2 = Arc::new(Semaphore::new(0));
-        let semaphore_3 = Arc::new(Semaphore::new(0));
+        // create semaphore so that processes can notify once they're connected
+        let semaphore = Arc::new(Semaphore::new(0));
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
@@ -300,7 +298,7 @@ mod tests {
             ],
             4001,
             config,
-            semaphore_1.clone(),
+            semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
             process_2,
@@ -313,7 +311,7 @@ mod tests {
             ],
             4002,
             config,
-            semaphore_2.clone(),
+            semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
             process_3,
@@ -326,14 +324,14 @@ mod tests {
             ],
             4003,
             config,
-            semaphore_3.clone(),
+            semaphore.clone(),
         ));
 
         // wait that all processes are connected
         println!("[main] waiting that processes are connected");
-        let _ = semaphore_1.acquire().await;
-        let _ = semaphore_2.acquire().await;
-        let _ = semaphore_3.acquire().await;
+        let _ = semaphore.acquire().await;
+        let _ = semaphore.acquire().await;
+        let _ = semaphore.acquire().await;
         println!("[main] processes are connected");
 
         // create workload

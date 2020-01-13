@@ -1,4 +1,4 @@
-use super::{connection::Connection};
+use super::connection::Connection;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
@@ -33,13 +33,13 @@ where
     let n = addresses.len();
 
     // create list of in and out connections:
-    // - even though TCP is full-duplex, due to the current tokio parallel-tcp-socket-read-write
+    // - even though TCP is full-duplex, due to the current tokio non-parallel-tcp-socket-read-write
     //   limitation, we going to use in streams for reading and out streams for writing, which can
     //   be done in parallel
     let mut outgoing = Vec::with_capacity(n);
     let mut incoming = Vec::with_capacity(n);
 
-    // connect to all addresses (and get the writers)
+    // connect to all addresses (outgoing)
     for address in addresses {
         let mut tries = 0;
         loop {
@@ -67,7 +67,7 @@ where
         }
     }
 
-    // receive from listener all connected (the readers)
+    // receive from listener all connected (incoming)
     for _ in 0..n {
         let connection = rx
             .recv()
@@ -87,12 +87,12 @@ async fn handshake<V>(
 where
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
-    // say hi to all
+    // say hi to all on both connections
     say_hi(process_id, &mut connections_0).await;
     say_hi(process_id, &mut connections_1).await;
     println!("said hi to all processes");
 
-    // receive hi from all
+    // receive hi from all on both connections
     let id_to_connection_0 = receive_hi(connections_0).await;
     let id_to_connection_1 = receive_hi(connections_1).await;
     println!(
@@ -194,21 +194,23 @@ async fn broadcast_writer_task<V>(
         if let Some(ToSend { target, msg, .. }) = parent.recv().await {
             // serialize message
             let bytes = Connection::serialize(&msg);
-            for id in target {
-                // only send if id different from self
-                if id != process_id {
+            target
+                .into_iter()
+                // don't send message to self
+                .filter(|id| *id != process_id)
+                .for_each(|id| {
                     // find writer
                     let writer = writers
                         .get_mut(&id)
                         .expect("[broadcast_writer] identifier in target should have a writer");
+                    // and send
                     if let Err(e) = writer.send(bytes.clone()) {
                         println!(
                             "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
                             id, e
                         );
                     }
-                }
-            }
+                });
         } else {
             println!("[broadcast_writer] error receiving message from parent");
         }

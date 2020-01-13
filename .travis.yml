@@ -1,11 +1,11 @@
 sudo: required
 language: rust
 rust:
-  - nightly
+  - stable
 
 matrix:
   allow_failures:
-    - rust: nightly
+    - rust: stable
   fast_finish: true
 
 notifications:
@@ -34,7 +34,7 @@ addons:
       # </travis>
 
 before_script: |
-  if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
+  if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
     export PATH=$HOME/.cargo/bin:$PATH
 
     # <tarpaulin>
@@ -50,7 +50,7 @@ before_script: |
 script: |
   cargo build
   QUICKCHECK_TESTS=10000 cargo test 
-  if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
+  if [[ "$TRAVIS_RUST_VERSION" == "stable" ]]; then
     # measure code coverage and upload to coveralls.io
 
     # <tarpaulin>
