@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-protocol="newt"
+protocol=$1
 release="--release"
 
-case $1 in
+case $2 in
 1) 
   cargo run ${release} --bin ${protocol} -- --id 1 --sorted 1,2,3 --port 3001 --addresses localhost:3002,localhost:3003 --client_port 4001 --processes 3 --faults 1
   ;;

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+protocol="newt"
+cargo build --release --bin ${protocol}
+cargo build --release --bin client
+
+for id in 1 2 3; do
+    proc ${protocol} ${id} 2>&1 > .log_proc_${id} &
+done
+sleep 1
+
+for id in 1 2 3; do
+    started=""
+
+    while [[ ${started} != "1" ]]; do
+        started=$(cat .log_proc_${id} | grep "process ${id} started" | wc -l | xargs)
+    done
+done
+echo "> processes started"
+
+for id in 1 2 3; do
+    client ${id} 2>&1 > .log_client_${id} &
+done
+sleep 1
+echo "> clients started"
+
+for id in 1 2 3; do
+    ended=""
+
+    while [[ ${ended} != "1" ]]; do
+        ended=$(cat .log_client_${id} | grep "client ${id} ended" | wc -l | xargs)
+        sleep 1
+    done
+done
+echo "> clients ended"
+
+bench_stop

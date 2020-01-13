@@ -94,6 +94,8 @@ where
     // notify parent that we're connected
     connected.add_permits(1);
 
+    println!("process {} started", process_id);
+
     loop {
         select! {
             msg = from_readers.recv().fuse() => {
@@ -223,7 +225,7 @@ where
             }
         }
     }
-    println!("client {} done", client_id);
+    println!("client {} ended", client_id);
     Ok(())
 }
 
