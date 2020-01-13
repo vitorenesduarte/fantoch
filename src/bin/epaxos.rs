@@ -5,16 +5,17 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (process_id, sorted_processes, port, addresses, client_port, config) =
+    let (process_id, sorted_processes, ip, port, client_port, addresses, config) =
         protocol::parse_args();
     let process = EPaxos::new(process_id, config);
     planet_sim::run::process(
         process,
         process_id,
         sorted_processes,
+        ip,
         port,
-        addresses,
         client_port,
+        addresses,
         config,
     )
     .await?;

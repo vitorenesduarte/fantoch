@@ -16,20 +16,21 @@ use futures::select;
 use prelude::*;
 use std::error::Error;
 use std::fmt::Debug;
+use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
 
-const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
 
 pub async fn process<A, P>(
     process: P,
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
+    ip: IpAddr,
     port: u16,
-    addresses: Vec<A>,
     client_port: u16,
+    addresses: Vec<A>,
     config: Config,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -42,9 +43,10 @@ where
         process,
         process_id,
         sorted_processes,
+        ip,
         port,
-        addresses,
         client_port,
+        addresses,
         config,
         semaphore,
     )
@@ -56,9 +58,10 @@ async fn process_with_notify<A, P>(
     mut process: P,
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
+    ip: IpAddr,
     port: u16,
-    addresses: Vec<A>,
     client_port: u16,
+    addresses: Vec<A>,
     config: Config,
     connected: Arc<Semaphore>,
 ) -> Result<(), Box<dyn Error>>
@@ -73,7 +76,7 @@ where
     assert!(port != client_port);
 
     // start process listener
-    let listener = task::listen((LOCALHOST, port)).await?;
+    let listener = task::listen((ip, port)).await?;
 
     // connect to all processes
     let (mut from_readers, to_writer) = task::process::connect_to_all::<A, P::Message>(
@@ -85,7 +88,7 @@ where
     .await?;
 
     // start client listener
-    let listener = task::listen((LOCALHOST, client_port)).await?;
+    let listener = task::listen((ip, client_port)).await?;
     let from_clients = task::client::start_listener(process_id, listener);
 
     // start executor
@@ -288,17 +291,22 @@ mod tests {
         // create semaphore so that processes can notify once they're connected
         let semaphore = Arc::new(Semaphore::new(0));
 
+        let localhost = "127.0.0.1"
+            .parse::<IpAddr>()
+            .expect("127.0.0.1 should be a valid ip");
+
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
             process_1,
             1,
             vec![1, 2, 3],
+            localhost,
             3001,
+            4001,
             vec![
                 String::from("localhost:3002"),
                 String::from("localhost:3003"),
             ],
-            4001,
             config,
             semaphore.clone(),
         ));
@@ -306,12 +314,13 @@ mod tests {
             process_2,
             2,
             vec![2, 3, 1],
+            localhost,
             3002,
+            4002,
             vec![
                 String::from("localhost:3001"),
                 String::from("localhost:3003"),
             ],
-            4002,
             config,
             semaphore.clone(),
         ));
@@ -319,12 +328,13 @@ mod tests {
             process_3,
             3,
             vec![3, 1, 2],
+            localhost,
             3003,
+            4003,
             vec![
                 String::from("localhost:3001"),
                 String::from("localhost:3002"),
             ],
-            4003,
             config,
             semaphore.clone(),
         ));
