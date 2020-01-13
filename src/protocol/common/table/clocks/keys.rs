@@ -57,6 +57,7 @@ impl KeysClocks {
     }
 
     /// Retrieves the current clock for `key`.
+    #[allow(clippy::ptr_arg)]
     fn key_clock(&self, key: &Key) -> u64 {
         self.clocks.get(key).cloned().unwrap_or(0)
     }

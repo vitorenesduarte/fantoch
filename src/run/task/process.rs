@@ -1,13 +1,11 @@
-use super::{connection::Connection, ProcessHi};
-use crate::command::{Command, CommandResult};
+use super::{connection::Connection};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
+use crate::run::prelude::*;
 use crate::run::task;
-use crate::run::FromClient;
-use bytes::Bytes;
 use futures::future::FutureExt;
 use futures::select;
 use serde::de::DeserializeOwned;
@@ -16,7 +14,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::Duration;
 
 pub async fn connect_to_all<A, V>(
@@ -24,13 +21,7 @@ pub async fn connect_to_all<A, V>(
     listener: TcpListener,
     addresses: Vec<A>,
     connect_retries: usize,
-) -> Result<
-    (
-        UnboundedReceiver<(ProcessId, V)>,
-        UnboundedSender<ToSend<V>>,
-    ),
-    Box<dyn Error>,
->
+) -> Result<(ReaderReceiver<V>, BroadcastWriterSender<V>), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug,
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
@@ -92,10 +83,7 @@ async fn handshake<V>(
     process_id: ProcessId,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
-) -> (
-    UnboundedReceiver<(ProcessId, V)>,
-    UnboundedSender<ToSend<V>>,
-)
+) -> (ReaderReceiver<V>, BroadcastWriterSender<V>)
 where
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
@@ -145,9 +133,7 @@ async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connecti
 
 /// Starts a reader task per connection received and returns an unbounded channel to which
 /// readers will write to.
-fn start_readers<V>(
-    connections: HashMap<ProcessId, Connection>,
-) -> UnboundedReceiver<(ProcessId, V)>
+fn start_readers<V>(connections: HashMap<ProcessId, Connection>) -> ReaderReceiver<V>
 where
     V: Debug + DeserializeOwned + Send + 'static,
 {
@@ -159,7 +145,7 @@ where
 fn start_broadcast_writer<V>(
     process_id: ProcessId,
     connections: HashMap<ProcessId, Connection>,
-) -> UnboundedSender<ToSend<V>>
+) -> BroadcastWriterSender<V>
 where
     V: Serialize + Send + 'static,
 {
@@ -178,11 +164,8 @@ where
 }
 
 /// Reader task.
-async fn reader_task<V>(
-    process_id: ProcessId,
-    mut connection: Connection,
-    parent: UnboundedSender<(ProcessId, V)>,
-) where
+async fn reader_task<V>(process_id: ProcessId, mut connection: Connection, parent: ReaderSender<V>)
+where
     V: Debug + DeserializeOwned + Send + 'static,
 {
     loop {
@@ -202,8 +185,8 @@ async fn reader_task<V>(
 /// Broadcast Writer task.
 async fn broadcast_writer_task<V>(
     process_id: ProcessId,
-    mut writers: HashMap<ProcessId, UnboundedSender<Bytes>>,
-    mut parent: UnboundedReceiver<ToSend<V>>,
+    mut writers: HashMap<ProcessId, WriterSender>,
+    mut parent: BroadcastWriterReceiver<V>,
 ) where
     V: Serialize + Send + 'static,
 {
@@ -233,7 +216,7 @@ async fn broadcast_writer_task<V>(
 }
 
 /// Writer task.
-async fn writer_task(mut connection: Connection, mut parent: UnboundedReceiver<Bytes>) {
+async fn writer_task(mut connection: Connection, mut parent: WriterReceiver) {
     loop {
         if let Some(bytes) = parent.recv().await {
             connection.send_serialized(bytes).await;
@@ -246,11 +229,8 @@ async fn writer_task(mut connection: Connection, mut parent: UnboundedReceiver<B
 /// Starts the executor.
 pub fn start_executor<P>(
     config: Config,
-    from_clients: UnboundedReceiver<FromClient>,
-) -> (
-    UnboundedReceiver<Command>,
-    UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
-)
+    from_clients: ClientReceiver,
+) -> (CommandReceiver, ExecutionInfoSender<P>)
 where
     P: Protocol + 'static,
 {
@@ -259,9 +239,9 @@ where
 
 async fn executor_task<P>(
     config: Config,
-    to_parent: UnboundedSender<Command>,
-    mut from_parent: UnboundedReceiver<Vec<<P::Executor as Executor>::ExecutionInfo>>,
-    mut from_clients: UnboundedReceiver<FromClient>,
+    to_parent: CommandSender,
+    mut from_parent: ExecutionInfoReceiver<P>,
+    mut from_clients: ClientReceiver,
 ) where
     P: Protocol,
 {
@@ -296,7 +276,7 @@ async fn executor_task<P>(
 fn handle_execution_info<P>(
     execution_info: Vec<<P::Executor as Executor>::ExecutionInfo>,
     executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
+    clients: &mut HashMap<ClientId, CommandResultSender>,
 ) where
     P: Protocol,
 {
@@ -324,8 +304,8 @@ fn handle_execution_info<P>(
 fn handle_from_client<P>(
     from_client: FromClient,
     executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, UnboundedSender<CommandResult>>,
-    to_parent: &UnboundedSender<Command>,
+    clients: &mut HashMap<ClientId, CommandResultSender>,
+    to_parent: &CommandSender,
 ) where
     P: Protocol,
 {

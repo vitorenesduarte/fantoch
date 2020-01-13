@@ -1,35 +1,27 @@
+// This module contains the prelude.
+mod prelude;
+
 // This module contains the definition of...
-pub mod task;
+mod task;
 
 use crate::client::{Client, Workload};
-use crate::command::{Command, CommandResult};
+use crate::command::Command;
 use crate::config::Config;
-use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::time::RunTime;
 use futures::future::FutureExt;
 use futures::select;
+use prelude::*;
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Semaphore;
 
 const LOCALHOST: &str = "127.0.0.1";
 const CONNECT_RETRIES: usize = 100;
-
-#[derive(Debug)]
-pub enum FromClient {
-    // clients can register
-    Register(ClientId, UnboundedSender<CommandResult>),
-    // unregister
-    Unregister(ClientId),
-    // or submit new commands
-    Submit(Command),
-}
 
 pub async fn process<A, P>(
     process: P,
@@ -59,6 +51,7 @@ where
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_with_notify<A, P>(
     mut process: P,
     process_id: ProcessId,
@@ -128,8 +121,8 @@ fn handle_from_processes<P>(
     from: ProcessId,
     msg: P::Message,
     process: &mut P,
-    to_writer: &UnboundedSender<ToSend<P::Message>>,
-    to_executor: &UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
+    to_writer: &BroadcastWriterSender<P::Message>,
+    to_executor: &ExecutionInfoSender<P>,
 ) where
     P: Protocol,
 {
@@ -150,8 +143,8 @@ fn handle_from_client<P>(
     process_id: ProcessId,
     cmd: Command,
     process: &mut P,
-    to_writer: &UnboundedSender<ToSend<P::Message>>,
-    to_executor: &UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
+    to_writer: &BroadcastWriterSender<P::Message>,
+    to_executor: &ExecutionInfoSender<P>,
 ) where
     P: Protocol,
 {
@@ -164,8 +157,8 @@ fn send_to_writer<P>(
     process_id: ProcessId,
     to_send: Option<ToSend<P::Message>>,
     process: &mut P,
-    to_writer: &UnboundedSender<ToSend<P::Message>>,
-    to_executor: &UnboundedSender<Vec<<P::Executor as Executor>::ExecutionInfo>>,
+    to_writer: &BroadcastWriterSender<P::Message>,
+    to_executor: &ExecutionInfoSender<P>,
 ) where
     P: Protocol,
 {

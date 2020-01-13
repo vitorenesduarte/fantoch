@@ -27,6 +27,7 @@ impl KVStore {
     }
 
     /// Executes a `KVOp` in the `KVStore`.
+    #[allow(clippy::ptr_arg)]
     pub fn execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
         match op {
             KVOp::Get => self.store.get(key).cloned(),

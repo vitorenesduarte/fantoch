@@ -7,18 +7,11 @@ pub mod process;
 // This module contains the definition of ...
 pub mod client;
 
-use crate::id::{ClientId, ProcessId};
 use connection::Connection;
-use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ProcessHi(ProcessId);
-#[derive(Debug, Serialize, Deserialize)]
-struct ClientHi(ClientId);
 
 /// Just a wrapper around tokio::spawn.
 pub fn spawn<F>(task: F)

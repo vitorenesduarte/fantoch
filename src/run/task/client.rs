@@ -1,26 +1,18 @@
-use super::{connection::Connection, ClientHi, ProcessHi};
+use super::{connection::Connection};
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::log;
-use crate::run::FromClient;
+use crate::run::prelude::*;
 use futures::future::FutureExt;
 use futures::select;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-pub fn start_listener(
-    process_id: ProcessId,
-    listener: TcpListener,
-) -> UnboundedReceiver<FromClient> {
+pub fn start_listener(process_id: ProcessId, listener: TcpListener) -> ClientReceiver {
     super::spawn_producer(|tx| client_listener_task(process_id, listener, tx))
 }
 
 /// Listen on new client connections and spawn a client task for each new connection.
-async fn client_listener_task(
-    process_id: ProcessId,
-    listener: TcpListener,
-    parent: UnboundedSender<FromClient>,
-) {
+async fn client_listener_task(process_id: ProcessId, listener: TcpListener, parent: ClientSender) {
     // start listener task
     let mut rx = super::spawn_producer(|tx| super::listener_task(listener, tx));
 
@@ -45,7 +37,7 @@ async fn client_listener_task(
 async fn client_server_task(
     process_id: ProcessId,
     mut connection: Connection,
-    parent: UnboundedSender<FromClient>,
+    parent: ClientSender,
 ) {
     let (client_id, mut parent_results) =
         server_receive_hi(process_id, &mut connection, &parent).await;
@@ -69,8 +61,8 @@ async fn client_server_task(
 async fn server_receive_hi(
     process_id: ProcessId,
     connection: &mut Connection,
-    parent: &UnboundedSender<FromClient>,
-) -> (ClientId, UnboundedReceiver<CommandResult>) {
+    parent: &ClientSender,
+) -> (ClientId, CommandResultReceiver) {
     // create channel where the process will write command results and where client will read them
     let (tx, rx) = super::channel();
 
@@ -101,7 +93,7 @@ async fn server_receive_hi(
 fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
-    parent: &UnboundedSender<FromClient>,
+    parent: &ClientSender,
 ) -> bool {
     if let Some(cmd) = cmd {
         if let Err(e) = parent.send(FromClient::Submit(cmd)) {
