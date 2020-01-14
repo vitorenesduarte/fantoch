@@ -46,7 +46,7 @@ fn parse_args() -> (ClientId, String, usize, Option<u64>, Workload) {
             Arg::with_name("interval")
                 .long("interval")
                 .value_name("INTERVAL")
-                .help("if this value is set, an open-loop client will be created (by default is closed-loop) and the value set is issued as the interval between submitted commands")
+                .help("if this value is set, an open-loop client will be created (by default is closed-loop) and the value set is used as the interval (in milliseconds) between submitted commands")
                 .takes_value(true),
         )
         .arg(
