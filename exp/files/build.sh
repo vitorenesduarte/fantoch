@@ -2,7 +2,7 @@
 
 if [ $# -ne 1 ]; then
     echo "usage: build branch"
-    exit -1
+    exit 1
 fi
 
 # get branch
@@ -10,6 +10,7 @@ branch=$1
 
 # install rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# shellcheck disable=SC1090
 source "${HOME}/.cargo/env"
 
 # clone the repository if dir does not exist
@@ -18,7 +19,10 @@ if [[ ! -d planet_sim ]]; then
 fi
 
 # pull recent changes in ${branch}
-cd planet_sim/ || exit "planet_sim/ directory must exist after clone"
+cd planet_sim/ || {
+    echo "planet_sim/ directory must exist after clone"
+    exit 1
+}
 git checkout "${branch}"
 git pull
 

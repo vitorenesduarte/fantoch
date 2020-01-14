@@ -12,7 +12,7 @@ export SSH_ARGS="-oStrictHostKeyChecking=no"
 config() {
     if [ $# -ne 1 ]; then
         echo "usage: config key"
-        exit -1
+        exit 1
     fi
     local key=$1
     grep -E "^${key}=" "${CONFIG_FILE}" | cut -d= -f2
@@ -21,7 +21,7 @@ config() {
 log() {
     if [ $# -ne 1 ]; then
         echo "usage: log message"
-        exit -1
+        exit 1
     fi
     local message=$1
     echo "[$(date +%H:%M:%S)] ${message}"
@@ -31,7 +31,7 @@ log() {
 info() {
     if [ $# -ne 1 ]; then
         echo "usage: info message"
-        exit -1
+        exit 1
     fi
     local message=$1
     local verbose
