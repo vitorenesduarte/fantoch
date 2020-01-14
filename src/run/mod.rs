@@ -469,7 +469,7 @@ mod tests {
             3,
             String::from("localhost:4003"),
             1,
-            1, // 1ms interval between ops
+            100, // 100ms interval between ops
             workload,
         ));
 
