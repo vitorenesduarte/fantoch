@@ -29,6 +29,14 @@ impl Histogram {
         stats
     }
 
+    /// Create string with values in the histogram.
+    pub fn all_values(&self) -> String {
+        self.values
+            .iter()
+            .map(|(value, count)| format!("{} {}\n", value, count))
+            .collect()
+    }
+
     /// Merges two histograms.
     pub fn merge(&mut self, other: &Self) {
         histogram_merge(&mut self.values, &other.values)

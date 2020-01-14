@@ -3,7 +3,7 @@ use planet_sim::client::Workload;
 use planet_sim::id::ClientId;
 use std::error::Error;
 
-const RANGE_SEP: &str = ",";
+const RANGE_SEP: &str = "-";
 const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 

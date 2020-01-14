@@ -198,18 +198,20 @@ where
 {
     // start one client per id
     let handles = ids.into_iter().map(|client_id| {
-        // clone address
-        let address_ = address.clone();
         // start the open loop client if some interval was provided
         if let Some(interval_ms) = interval_ms {
             task::spawn(open_loop_client::<A>(
                 client_id,
-                address_,
+                address.clone(),
                 interval_ms,
                 workload,
             ))
         } else {
-            task::spawn(closed_loop_client::<A>(client_id, address_, workload))
+            task::spawn(closed_loop_client::<A>(
+                client_id,
+                address.clone(),
+                workload,
+            ))
         }
     });
 
@@ -227,7 +229,7 @@ where
 
     // show global metrics
     println!("latency: {:?}", latency);
-    println!("throughput: {:?}", throughput);
+    println!("throughput: {}", throughput.all_values());
     Ok(())
 }
 
@@ -471,21 +473,23 @@ mod tests {
         let total_commands = 100;
         let workload = Workload::new(conflict_rate, total_commands);
 
-        // spawn clients:
-        // - the first two as closed-loop
-        // - the thirs one as open-loop
+        // clients:
+        // - the first spawns 1 closed-loop client (1)
+        // - the second spawns 3 closed-loop clients (2, 22, 222)
+        // - the third spawns 1 open-loop client (3)
         let client_1_handle = task::spawn_local(closed_loop_client(
-            vec![1],
+            1,
             String::from("localhost:4001"),
             workload,
         ));
-        let client_2_handle = task::spawn_local(closed_loop_client(
-            vec![2],
+        let client_2_handle = task::spawn_local(client(
+            vec![2, 22, 222],
             String::from("localhost:4002"),
+            None,
             workload,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
-            vec![3],
+            3,
             String::from("localhost:4003"),
             100, // 100ms interval between ops
             workload,
