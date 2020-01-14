@@ -1,4 +1,4 @@
-use super::{connection::Connection};
+use super::connection::Connection;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::log;
