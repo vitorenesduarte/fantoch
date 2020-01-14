@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
-CONFIG_FILE="${DIR}/config"
+
+# prelude
+export CONFIG_FILE="${DIR}/config"
+export MACHINES_FILE="${DIR}/files/machines"
+export MACHINE_IPS_FILE="${DIR}/files/machine_ips"
+export BUILD_FILE="${DIR}/files/build.sh"
+export SSH_ARGS="-oStrictHostKeyChecking=no"
 
 config() {
     if [ $# -ne 1 ]; then

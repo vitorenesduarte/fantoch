@@ -3,18 +3,18 @@
 DIR=$(dirname "${BASH_SOURCE[0]}")
 source "${DIR}/util.sh"
 
+# get branch
 branch=$(config branch)
-machines_file=machines
-build_file=build.sh
-ssh_args="-oStrictHostKeyChecking=no"
 
+# build deps in each machines
 while IFS= read -r machine; do
     # copy build file to machine
-    scp "${ssh_args}" "${DIR}/${build_file}" "${machine}:${build_file}"
+    scp "${SSH_ARGS}" "${BUILD_FILE}" "${machine}:build.sh"
 
     # execute build in machine
-    ssh "${ssh_args}" "${machine}" "./${build_file} ${branch}" </dev/null &
-done <"${DIR}/${machines_file}"
+    # shellcheck disable=SC2029
+    ssh "${SSH_ARGS}" "${machine}" "./build.sh ${branch}" </dev/null &
+done <"${MACHINES_FILE}"
 
 # wait for all builds to complete
 wait_jobs
