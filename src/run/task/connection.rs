@@ -1,24 +1,14 @@
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::io::{self, BufReader, BufStream, BufWriter, ReadHalf, WriteHalf};
+use tokio::io::{self, BufStream};
 use tokio::net::TcpStream;
-use tokio_util::codec::{Framed, FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// Delimits frames using a length header.
 #[derive(Debug)]
 pub struct Connection {
     stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
-}
-
-#[derive(Debug)]
-pub struct ConnectionReadHalf {
-    read: FramedRead<BufReader<ReadHalf<TcpStream>>, LengthDelimitedCodec>,
-}
-
-#[derive(Debug)]
-pub struct ConnectionWriteHalf {
-    write: FramedWrite<BufWriter<WriteHalf<TcpStream>>, LengthDelimitedCodec>,
 }
 
 impl Connection {
@@ -35,7 +25,7 @@ impl Connection {
     where
         V: DeserializeOwned,
     {
-        recv(&mut self.stream).await
+        next(&mut self.stream).await
     }
 
     // TODO here we only need a reference to the value
@@ -48,38 +38,6 @@ impl Connection {
 
     pub async fn send_serialized(&mut self, bytes: Bytes) {
         send_serialized(&mut self.stream, bytes).await;
-    }
-
-    // TODO if the typical usage is `let (read, write) = Connection::new(stream).split()`, this will
-    // have many unnecessary allocations.
-    pub fn split(self) -> (ConnectionReadHalf, ConnectionWriteHalf) {
-        let stream = self.stream.into_inner().into_inner();
-        let (read, write) = io::split(stream);
-        // buffer halves
-        let read = BufReader::new(read);
-        let write = BufWriter::new(write);
-        // frame halves
-        let read = FramedRead::new(read, LengthDelimitedCodec::new());
-        let write = FramedWrite::new(write, LengthDelimitedCodec::new());
-        (ConnectionReadHalf { read }, ConnectionWriteHalf { write })
-    }
-}
-
-impl ConnectionReadHalf {
-    pub async fn recv<V>(&mut self) -> Option<V>
-    where
-        V: DeserializeOwned,
-    {
-        recv(&mut self.read).await
-    }
-}
-
-impl ConnectionWriteHalf {
-    pub async fn send<V>(&mut self, value: V)
-    where
-        V: Serialize,
-    {
-        send(&mut self.write, value).await;
     }
 }
 
@@ -99,7 +57,10 @@ where
     Bytes::from(bytes)
 }
 
-pub async fn recv<S, V>(stream: &mut S) -> Option<V>
+/// By implementing this method based on `Stream`s, it will make it trivial in the future to
+/// support it for e.g. `FramedRead<BufReader<ReadHalf<TcpStream>>, LengthDelimitedCodec>`. At this
+/// point this makes no sense as `ReadHalf` needs to lock `TcpStream` in order to perform a `recv`.
+async fn next<S, V>(stream: &mut S) -> Option<V>
 where
     S: Stream<Item = Result<BytesMut, io::Error>> + Unpin,
     V: DeserializeOwned,
@@ -118,12 +79,16 @@ where
     }
 }
 
-// TODO here we only need a reference to the value
+/// By implementing this method based on `Sink`s, it will make it trivial in the future to
+/// support it for e.g. `FramedWrite<BufWriter<WriteHalf<TcpStream>>, LengthDelimitedCodec>`. At
+/// this point this makes no sense as `WriteHalf` needs to lock `TcpStream` in order to perform a
+/// `send`.
 async fn send<S, V>(sink: &mut S, value: V)
 where
     S: Sink<Bytes, Error = io::Error> + Unpin,
     V: Serialize,
 {
+    // TODO here we only need a reference to the value
     let bytes = serialize(&value);
     send_serialized(sink, bytes).await;
 }
