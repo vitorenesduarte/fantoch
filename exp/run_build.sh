@@ -12,7 +12,7 @@ while IFS= read -r machine; do
     # copy build file to machine
     scp "${ssh_args}" "${DIR}/${build_file}" "${machine}:${build_file}"
 
-    # execute build
+    # execute build in machine
     ssh "${ssh_args}" "${machine}" "./${build_file} ${branch}" </dev/null &
 done <"${DIR}/${machines_file}"
 
