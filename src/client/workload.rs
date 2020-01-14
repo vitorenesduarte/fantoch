@@ -59,6 +59,12 @@ impl Workload {
         self.total_commands
     }
 
+    /// Returns a boolean indicating whether the workload has finished, i.e. all commands have been
+    /// issued.
+    pub fn finished(&self) -> bool {
+        self.command_count == self.total_commands
+    }
+
     /// Generate a command.
     fn gen_cmd(&mut self, rifl_gen: &mut RiflGen) -> Command {
         // generate rifl, key and value
@@ -132,7 +138,7 @@ mod tests {
         }
 
         // check the workload is finished
-        assert_eq!(workload.issued_commands(), total_commands);
+        assert!(workload.finished());
 
         // after this, no more commands are generated
         for _ in 1..=10 {
@@ -140,6 +146,6 @@ mod tests {
         }
 
         // check the workload is still finished
-        assert_eq!(workload.issued_commands(), total_commands);
+        assert!(workload.finished());
     }
 }

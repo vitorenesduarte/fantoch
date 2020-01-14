@@ -41,6 +41,11 @@ impl Pending {
         // (both should fit in u64)
         (latency as u64, end_time as u64)
     }
+
+    /// Checks whether pending is empty.
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -64,12 +69,21 @@ mod tests {
         // create sys time
         let mut time = SimTime::new();
 
+        // pending starts empty
+        assert!(pending.is_empty());
+
         // start first rifl at time 0
         pending.start(rifl1, &time);
+
+        // pending is not empty now
+        assert!(!pending.is_empty());
 
         // start second rifl at time 10
         time.tick(10);
         pending.start(rifl2, &time);
+
+        // pending is not empty
+        assert!(!pending.is_empty());
 
         // end first rifl at time 11
         time.tick(1);
@@ -77,9 +91,15 @@ mod tests {
         assert_eq!(latency, 11);
         assert_eq!(return_time, 11);
 
+        // pending is not empty
+        assert!(!pending.is_empty());
+
         // start third rifl at time 15
         time.tick(4);
         pending.start(rifl3, &time);
+
+        // pending is not empty
+        assert!(!pending.is_empty());
 
         // end third rifl at time 16
         time.tick(1);
@@ -87,11 +107,17 @@ mod tests {
         assert_eq!(latency, 1);
         assert_eq!(return_time, 16);
 
+        // pending is not empty
+        assert!(!pending.is_empty());
+
         // end second rifl at time 20
         time.tick(4);
         let (latency, return_time) = pending.end(rifl2, &time);
         assert_eq!(latency, 10);
         assert_eq!(return_time, 20);
+
+        // pending is empty now
+        assert!(pending.is_empty());
     }
 
     #[test]

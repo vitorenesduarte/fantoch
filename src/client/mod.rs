@@ -73,12 +73,18 @@ impl Client {
         })
     }
 
-    /// Handle executed command.
-    pub fn handle(&mut self, cmd_result: CommandResult, time: &dyn SysTime) {
+    /// Handle executed command and return a boolean indicating whether we have generated all
+    /// commands and receive all the corresponding command results.
+    pub fn handle(&mut self, cmd_result: CommandResult, time: &dyn SysTime) -> bool {
         // end command in pending and save command latency
         let (latency, return_time) = self.pending.end(cmd_result.rifl(), time);
         self.latency_histogram.increment(latency);
         self.throughput_histogram.increment(return_time);
+
+        // we're done once:
+        // - the workload is finished and
+        // - pending is empty
+        self.workload.finished() && self.pending.is_empty()
     }
 
     /// Returns the latency histogram.
