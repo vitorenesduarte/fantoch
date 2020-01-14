@@ -9,6 +9,7 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
+use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
 use crate::time::{RunTime, SysTime};
 use futures::future::FutureExt;
@@ -187,38 +188,59 @@ fn send_to_writer<P>(
 }
 
 pub async fn client<A>(
-    client_id: ClientId,
+    ids: Vec<ClientId>,
     address: A,
-    client_number: usize,
     interval_ms: Option<u64>,
     workload: Workload,
 ) -> Result<(), Box<dyn Error>>
 where
-    A: ToSocketAddrs,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
-    // start the open loop client if some interval was provided
-    if let Some(interval_ms) = interval_ms {
-        open_loop_client(client_id, address, client_number, interval_ms, workload).await
-    } else {
-        closed_loop_client(client_id, address, client_number, workload).await
+    // start one client per id
+    let handles = ids.into_iter().map(|client_id| {
+        // clone address
+        let address_ = address.clone();
+        // start the open loop client if some interval was provided
+        if let Some(interval_ms) = interval_ms {
+            task::spawn(open_loop_client::<A>(
+                client_id,
+                address_,
+                interval_ms,
+                workload,
+            ))
+        } else {
+            task::spawn(closed_loop_client::<A>(client_id, address_, workload))
+        }
+    });
+
+    // wait for all clients to complete and aggregate their metrics
+    let mut latency = Histogram::new();
+    let mut throughput = Histogram::new();
+
+    for handle in handles {
+        let client = handle.await?;
+        println!("client {} ended", client.id());
+        latency.merge(client.latency_histogram());
+        throughput.merge(client.throughput_histogram());
+        println!("metrics from {} collected", client.id());
     }
+
+    // show global metrics
+    println!("latency: {:?}", latency);
+    println!("throughput: {:?}", throughput);
+    Ok(())
 }
 
-async fn closed_loop_client<A>(
-    client_id: ClientId,
-    address: A,
-    client_number: usize,
-    workload: Workload,
-) -> Result<(), Box<dyn Error>>
+async fn closed_loop_client<A>(client_id: ClientId, address: A, workload: Workload) -> Client
 where
-    A: ToSocketAddrs,
+    A: ToSocketAddrs + Debug + Send + 'static + Sync,
 {
     // create system time
     let time = RunTime;
 
     // TODO there's a single client for now
     // setup client
-    let (mut client, mut read, write) = client_setup(client_id, address, workload).await?;
+    let (mut client, mut read, write) = client_setup(client_id, address, workload).await;
 
     // generate and submit commands while there are commands to be generated
     while next_cmd(&mut client, &time, &write) {
@@ -227,25 +249,24 @@ where
         handle_cmd_result(&mut client, &time, cmd_result);
     }
 
-    metrics(client);
-    Ok(())
+    // return client
+    client
 }
 
 async fn open_loop_client<A>(
     client_id: ClientId,
     address: A,
-    client_number: usize,
     interval_ms: u64,
     workload: Workload,
-) -> Result<(), Box<dyn Error>>
+) -> Client
 where
-    A: ToSocketAddrs,
+    A: ToSocketAddrs + Debug + Send + 'static + Sync,
 {
     // create system time
     let time = RunTime;
 
     // setup client
-    let (mut client, mut read, write) = client_setup(client_id, address, workload).await?;
+    let (mut client, mut read, write) = client_setup(client_id, address, workload).await;
 
     // create interval
     let mut interval = time::interval(Duration::from_millis(interval_ms));
@@ -264,20 +285,27 @@ where
             }
         }
     }
-    metrics(client);
-    Ok(())
+    // return client
+    client
 }
 
 async fn client_setup<A>(
     client_id: ClientId,
     address: A,
     workload: Workload,
-) -> Result<(Client, CommandResultReceiver, CommandSender), Box<dyn Error>>
+) -> (Client, CommandResultReceiver, CommandSender)
 where
-    A: ToSocketAddrs,
+    A: ToSocketAddrs + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection = task::connect(address).await?;
+    let mut connection = match task::connect(address).await {
+        Ok(connection) => connection,
+        Err(e) => {
+            // TODO panicking here as not sure how to make error handling send + 'static (required
+            // by tokio::spawn) and still be able to use the ? operator
+            panic!("[client] error connecting at client {}: {:?}", client_id, e);
+        }
+    };
 
     // create client
     let mut client = Client::new(client_id, workload);
@@ -292,7 +320,7 @@ where
     let (read, write) = task::client::start_client_rw_task(connection);
 
     // return client its connection
-    Ok((client, read, write))
+    (client, read, write)
 }
 
 /// Generate the next command, returning a boolean representing whether a new command was generated
@@ -322,13 +350,6 @@ fn handle_cmd_result(
     } else {
         panic!("[client] error while receiving command result from client read-write task");
     }
-}
-
-fn metrics(client: Client) {
-    // once the loop exits, all commands have been generated
-    println!("total commands: {}", client.issued_commands());
-    println!("{:?}", client.latency_histogram());
-    println!("client {} ended", client.id());
 }
 
 #[cfg(test)]
@@ -454,21 +475,18 @@ mod tests {
         // - the first two as closed-loop
         // - the thirs one as open-loop
         let client_1_handle = task::spawn_local(closed_loop_client(
-            1,
+            vec![1],
             String::from("localhost:4001"),
-            1,
             workload,
         ));
         let client_2_handle = task::spawn_local(closed_loop_client(
-            2,
+            vec![2],
             String::from("localhost:4002"),
-            1,
             workload,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
-            3,
+            vec![3],
             String::from("localhost:4003"),
-            1,
             100, // 100ms interval between ops
             workload,
         ));

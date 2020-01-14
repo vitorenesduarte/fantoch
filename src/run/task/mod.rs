@@ -12,14 +12,15 @@ use std::error::Error;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 
 /// Just a wrapper around tokio::spawn.
-pub fn spawn<F>(task: F)
+pub fn spawn<F>(task: F) -> JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    tokio::spawn(task);
+    tokio::spawn(task)
 }
 
 /// Just a wrapper around mpsc::unbounded_channel.

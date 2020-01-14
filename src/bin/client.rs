@@ -3,27 +3,27 @@ use planet_sim::client::Workload;
 use planet_sim::id::ClientId;
 use std::error::Error;
 
-const DEFAULT_CLIENT_NUMBER: usize = 1;
+const RANGE_SEP: &str = ",";
 const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (client_id, address, client_number, interval, workload) = parse_args();
-    planet_sim::run::client(client_id, address, client_number, interval, workload).await?;
+    let (ids, address, interval, workload) = parse_args();
+    planet_sim::run::client(ids, address, interval, workload).await?;
     Ok(())
 }
 
-fn parse_args() -> (ClientId, String, usize, Option<u64>, Workload) {
+fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Runs a client that will connect to some instance of a protocol.")
         .arg(
-            Arg::with_name("id")
-                .long("id")
-                .value_name("ID")
-                .help("client identifier")
+            Arg::with_name("ids")
+                .long("ids")
+                .value_name("ID_RANGE")
+                .help("a range of client identifiers represented as START-END; as many client as the number of identifers will be created")
                 .required(true)
                 .takes_value(true),
         )
@@ -33,13 +33,6 @@ fn parse_args() -> (ClientId, String, usize, Option<u64>, Workload) {
                 .value_name("ADDR")
                 .help("address of the protocol instance to connect to")
                 .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("client_number")
-                .long("client_number")
-                .value_name("CLIENT_NUMBER")
-                .help("number of clients")
                 .takes_value(true),
         )
         .arg(
@@ -66,41 +59,44 @@ fn parse_args() -> (ClientId, String, usize, Option<u64>, Workload) {
         .get_matches();
 
     // parse arguments
-    let client_id = parse_id(matches.value_of("id"));
+    let ids = parse_id_range(matches.value_of("ids"));
     let address = parse_address(matches.value_of("address"));
-    let client_number = parse_client_number(matches.value_of("client_number"));
     let interval = parse_interval(matches.value_of("interval"));
     let workload = parse_workload(
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
     );
 
-    println!("client id: {}", client_id);
+    println!("ids: {:?}", ids);
+    println!("client number: {}", ids.len());
     println!("process address: {}", address);
-    println!("client number: {}", client_number);
     println!("workload: {:?}", workload);
 
-    (client_id, address, client_number, interval, workload)
+    (ids, address, interval, workload)
 }
 
-fn parse_id(id: Option<&str>) -> ClientId {
-    id.expect("id should be set")
-        .parse::<ClientId>()
-        .expect("client id should be a number")
+fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {
+    let bounds: Vec<_> = id_range
+        .expect("id range should be set")
+        .split(RANGE_SEP)
+        .map(|bound| {
+            bound
+                .parse::<ClientId>()
+                .expect("range bound should be a number")
+        })
+        .collect();
+    // check that we only have two bounds: start and end
+    if bounds.len() == 2 {
+        let start = bounds[0];
+        let end = bounds[1];
+        (start..=end).collect()
+    } else {
+        panic!("invalid id range (there should only be a lower bound and an uppper bound)")
+    }
 }
 
 fn parse_address(addresses: Option<&str>) -> String {
     addresses.expect("address should be set").to_string()
-}
-
-fn parse_client_number(number: Option<&str>) -> usize {
-    number
-        .map(|number| {
-            number
-                .parse::<usize>()
-                .expect("client number should be a number")
-        })
-        .unwrap_or(DEFAULT_CLIENT_NUMBER)
 }
 
 fn parse_interval(interval: Option<&str>) -> Option<u64> {
