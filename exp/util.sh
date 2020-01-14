@@ -7,6 +7,7 @@ export CONFIG_FILE="${DIR}/config"
 export MACHINES_FILE="${DIR}/files/machines"
 export MACHINE_IPS_FILE="${DIR}/files/machine_ips"
 export BUILD_FILE="${DIR}/files/build.sh"
+export TOPOLOGY_FILE="${DIR}/files/topology.py"
 export SSH_ARGS="-oStrictHostKeyChecking=no"
 
 config() {
@@ -46,4 +47,15 @@ wait_jobs() {
     for job in $(jobs -p); do
         wait "${job}"
     done
+}
+
+topology() {
+    if [ $# -ne 2 ]; then
+        echo "usage: topology id n"
+        exit 1
+    fi
+    local id=$1
+    local n=$2
+    # shellcheck disable=SC2086
+    "${TOPOLOGY_FILE}" ${id} ${n} "${MACHINE_IPS_FILE}"
 }

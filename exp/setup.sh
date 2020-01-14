@@ -23,8 +23,6 @@ run_build() {
 
     # wait for all builds to complete
     wait_jobs
-
-    info "all builds have been completed"
 }
 
 fetch_ips() {
@@ -43,10 +41,11 @@ fetch_ips() {
 
         echo "${machine} ${ip}" >>"${MACHINE_IPS_FILE}"
     done <"${MACHINES_FILE}"
-
-    info "all ips have been fetched"
-    cat "${MACHINE_IPS_FILE}"
 }
 
 run_build
+info "all builds have been completed"
+
 fetch_ips
+info "all ips have been fetched"
+cat "${MACHINE_IPS_FILE}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 if [ $# -ne 1 ]; then
-    echo "usage: build branch"
+    echo "usage: build.sh branch"
     exit 1
 fi
 
@@ -28,6 +28,3 @@ git pull
 
 # build all the binaries in release mode for this architecture
 cargo build --release --bins
-
-# return machine IP
-hostname -I | awk '{ print $1 }'
