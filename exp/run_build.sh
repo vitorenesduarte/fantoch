@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
+# shellcheck source=util.sh
 source "${DIR}/util.sh"
 
 # get branch
