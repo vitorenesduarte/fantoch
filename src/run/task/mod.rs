@@ -101,7 +101,7 @@ where
     A: ToSocketAddrs,
 {
     let stream = TcpStream::connect(address).await?;
-    let connection = connection::new_connection(stream);
+    let connection = Connection::new(stream);
     Ok(connection)
 }
 
@@ -121,7 +121,7 @@ async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<Connec
                 println!("[listener] new connection: {:?}", addr);
 
                 // create connection
-                let connection = connection::new_connection(stream);
+                let connection = Connection::new(stream);
 
                 if let Err(e) = parent.send(connection) {
                     println!("[listener] error sending stream to parent process: {:?}", e);

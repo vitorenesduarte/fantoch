@@ -21,27 +21,16 @@ pub struct ConnectionWriteHalf {
     write: FramedWrite<BufWriter<WriteHalf<TcpStream>>, LengthDelimitedCodec>,
 }
 
-pub fn new_connection(stream: TcpStream) -> Connection {
+impl Connection {
     // TODO here `BufStream` will allocate two buffers, one for reading and another one for
     // writing; this may be unnecessarily inneficient for users that will only read or write; on
     // the other end, the allocation only occurs once, so it's probably fine to do this
-    let stream = BufStream::new(stream);
-    let stream = Framed::new(stream, LengthDelimitedCodec::new());
-    Connection { stream }
-}
+    pub fn new(stream: TcpStream) -> Self {
+        let stream = BufStream::new(stream);
+        let stream = Framed::new(stream, LengthDelimitedCodec::new());
+        Connection { stream }
+    }
 
-pub fn new_splitted_connection(stream: TcpStream) -> (ConnectionReadHalf, ConnectionWriteHalf) {
-    let (read, write) = tokio::io::split(stream);
-    // buffer halves
-    let read = BufReader::new(read);
-    let write = BufWriter::new(write);
-    // frame halves
-    let read = FramedRead::new(read, LengthDelimitedCodec::new());
-    let write = FramedWrite::new(write, LengthDelimitedCodec::new());
-    (ConnectionReadHalf { read }, ConnectionWriteHalf { write })
-}
-
-impl Connection {
     pub async fn recv<V>(&mut self) -> Option<V>
     where
         V: DeserializeOwned,
@@ -59,6 +48,20 @@ impl Connection {
 
     pub async fn send_serialized(&mut self, bytes: Bytes) {
         send_serialized(&mut self.stream, bytes).await;
+    }
+
+    // TODO if the typical usage is `let (read, write) = Connection::new(stream).split()`, this will
+    // have many unnecessary allocations.
+    pub fn split(self) -> (ConnectionReadHalf, ConnectionWriteHalf) {
+        let stream = self.stream.into_inner().into_inner();
+        let (read, write) = io::split(stream);
+        // buffer halves
+        let read = BufReader::new(read);
+        let write = BufWriter::new(write);
+        // frame halves
+        let read = FramedRead::new(read, LengthDelimitedCodec::new());
+        let write = FramedWrite::new(write, LengthDelimitedCodec::new());
+        (ConnectionReadHalf { read }, ConnectionWriteHalf { write })
     }
 }
 
