@@ -46,14 +46,14 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
             Arg::with_name("conflict_rate")
                 .long("conflict_rate")
                 .value_name("CONFLICT_RATE")
-                .help("number between 0 and 100 representing how contended the workload should be")
+                .help("number between 0 and 100 representing how contended the workload should be; default: 0")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("commands_per_client")
                 .long("commands_per_client")
                 .value_name("COMMANDS_PER_CLIENT")
-                .help("number of commands to be issued by each client")
+                .help("number of commands to be issued by each client; default: 1000")
                 .takes_value(true),
         )
         .get_matches();
