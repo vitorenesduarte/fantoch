@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
@@ -45,17 +46,18 @@ info() {
 
 wait_jobs() {
     for job in $(jobs -p); do
-        wait "${job}"
+        wait ${job}
     done
 }
 
 topology() {
-    if [ $# -ne 2 ]; then
-        echo "usage: topology id n"
+    if [ $# -ne 4 ]; then
+        echo "usage: topology ttype id process_number client_machines_number"
         exit 1
     fi
-    local id=$1
-    local n=$2
-    # shellcheck disable=SC2086
-    "${TOPOLOGY_FILE}" ${id} ${n} "${MACHINE_IPS_FILE}"
+    local ttype=$1
+    local id=$2
+    local n=$3
+    local client_machines_number=$4
+    "${TOPOLOGY_FILE}" ${ttype} ${id} ${n} ${client_machines_number} "${MACHINE_IPS_FILE}"
 }

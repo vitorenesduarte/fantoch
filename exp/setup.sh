@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=util.sh
@@ -18,7 +19,7 @@ run_build() {
 
         # execute build in machine
         # shellcheck disable=SC2029
-        ssh "${SSH_ARGS}" "${machine}" "./build.sh ${branch}" </dev/null &
+        ssh "${SSH_ARGS}" ${machine} "./build.sh ${branch}" </dev/null &
     done <"${MACHINES_FILE}"
 
     # wait for all builds to complete
@@ -37,7 +38,7 @@ fetch_ips() {
 
         # get machine ip
         # shellcheck disable=SC2029
-        ip=$(ssh "${SSH_ARGS}" "${machine}" hostname -I </dev/null | awk '{ print $1 }')
+        ip=$(ssh "${SSH_ARGS}" ${machine} hostname -I </dev/null | awk '{ print $1 }')
 
         echo "${machine} ${ip}" >>"${MACHINE_IPS_FILE}"
     done <"${MACHINES_FILE}"

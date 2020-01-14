@@ -24,32 +24,70 @@ def sorted_by_distance(id, n):
     return up_to_n + before_id
 
 
-if len(sys.argv) != 4:
-    print("usage: topology.py id number_of_processes machine_ips_file")
+if len(sys.argv) != 6:
+    print("usage: topology.py ttype index process_number client_machines_number machine_ips_file")
     sys.exit(1)
 
-# get number of processes and output file (the first argument is this script)
-id = int(sys.argv[1])
-n = int(sys.argv[2])
-machine_ips_file = sys.argv[3]
+# get arguments:
+# - two topology types are supported: process and client
+ttype = sys.argv[1]
+assert ttype == "process" or ttype == "client"
+# - index represents the machine that will be assigned for this process of client;
+# in case of `ttype == "process"` this represents the process id
+index = int(sys.argv[2])
+# - number of processes (and machines for those processes)
+n = int(sys.argv[3])
+# - number of machines where clients will run
+client_machines_number = int(sys.argv[4])
+# - file with all machines and their ips
+machine_ips_file = sys.argv[5]
 
 # get machines and ips list
 data = machines_and_ips(machine_ips_file)
 
-# compute sorted
-sorted = sorted_by_distance(id, n)
+# the total number of machines should be:
+# - at least as much as the sum of `n` and `client_machines_number`
+assert len(data) >= n + client_machines_number
 
-# compute ip and ips to connect to (all but me)
-ips = []
-for p in range(1, n + 1):
-    # find process ip
-    (machine, ip) = data[p - 1]
-    if p == id:
-        my_machine = machine
-        my_ip = ip
-    else:
-        ips.append(ip)
+if ttype == "process":
+    # index should be between 1 and n
+    assert index >= 1 and index <= n
 
-sorted = ",".join(map(str, sorted))
-ips = ",".join(ips)
-print(my_machine, sorted, my_ip, ips)
+    # compute sorted
+    sorted = sorted_by_distance(index, n)
+
+    # compute ip and ips to connect to (all but me)
+    ips = []
+    for p in range(1, n + 1):
+        # find process ip
+        (machine, ip) = data[p - 1]
+        if p == index:
+            my_machine = machine
+            my_ip = ip
+        else:
+            ips.append(ip)
+
+    sorted = ",".join(map(str, sorted))
+    ips = ",".join(ips)
+    print(my_machine, sorted, my_ip, ips)
+
+elif ttype == "client":
+    # index should be between 1 and `client_machines_number`
+    assert index >= 1 and index <= client_machines_number
+
+    # select client machine:
+    # - we should skip the first `n` machines are those are assigned to processes
+    (my_machine, _) = data[n + index - 1]
+
+    # select the ip of the process machine to connect to:
+    # - assuming there are as many processes as client machines,
+    # we can select the process at this client's index
+    # check that our assumption is true
+    assert client_machines_number <= n
+    (_, ip) = data[index - 1]
+    # TODO make this more flexible
+    print(my_machine, ip)
+
+else:
+    print("this case is impossible")
+    sys.exit(1)
