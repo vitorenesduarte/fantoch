@@ -1,4 +1,4 @@
-use super::{connection::Connection};
+use super::connection::Connection;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::log;
@@ -137,5 +137,40 @@ pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> 
         process_id
     } else {
         panic!("[client] couldn't receive process id from connected process");
+    }
+}
+
+pub fn start_client_rw_task(connection: Connection) -> (CommandResultReceiver, CommandSender) {
+    super::spawn_producer_and_consumer(|tx, rx| client_rw_task(connection, tx, rx))
+}
+
+async fn client_rw_task(
+    mut connection: Connection,
+    to_parent: CommandResultSender,
+    mut from_parent: CommandReceiver,
+) {
+    loop {
+        select! {
+            cmd_result = connection.recv().fuse() => {
+                log!("[client_rw] from connection: {:?}", cmd_result);
+                if let Some(cmd_result) = cmd_result {
+                    if let Err(e) = to_parent.send(cmd_result) {
+                        println!("[client_rw] error while sending command result to parent");
+                    }
+                } else {
+                    println!("[client_rw] error while receiving new command result from connection");
+                }
+            }
+            cmd = from_parent.recv().fuse() => {
+                log!("[client_rw] from parent: {:?}", cmd);
+                if let Some(cmd) = cmd {
+                    connection.send(cmd).await;
+                } else {
+                    println!("[client_rw] error while receiving new command from parent");
+                    // in this case it means that the parent (the client) is done, and so we can exit the loop
+                    break;
+                }
+            }
+        }
     }
 }

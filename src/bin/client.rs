@@ -9,12 +9,12 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (client_id, address, client_number, workload) = parse_args();
-    planet_sim::run::client(client_id, address, client_number, workload).await?;
+    let (client_id, address, client_number, interval, workload) = parse_args();
+    planet_sim::run::client(client_id, address, client_number, interval, workload).await?;
     Ok(())
 }
 
-fn parse_args() -> (ClientId, String, usize, Workload) {
+fn parse_args() -> (ClientId, String, usize, Option<u64>, Workload) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -43,6 +43,13 @@ fn parse_args() -> (ClientId, String, usize, Workload) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("interval")
+                .long("interval")
+                .value_name("INTERVAL")
+                .help("if this value is set, an open-loop client will be created (by default is closed-loop) and the value set is used as the interval (in milliseconds) between submitted commands")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("conflict_rate")
                 .long("conflict_rate")
                 .value_name("CONFLICT_RATE")
@@ -62,6 +69,7 @@ fn parse_args() -> (ClientId, String, usize, Workload) {
     let client_id = parse_id(matches.value_of("id"));
     let address = parse_address(matches.value_of("address"));
     let client_number = parse_client_number(matches.value_of("client_number"));
+    let interval = parse_interval(matches.value_of("interval"));
     let workload = parse_workload(
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
@@ -72,7 +80,7 @@ fn parse_args() -> (ClientId, String, usize, Workload) {
     println!("client number: {}", client_number);
     println!("workload: {:?}", workload);
 
-    (client_id, address, client_number, workload)
+    (client_id, address, client_number, interval, workload)
 }
 
 fn parse_id(id: Option<&str>) -> ClientId {
@@ -93,6 +101,14 @@ fn parse_client_number(number: Option<&str>) -> usize {
                 .expect("client number should be a number")
         })
         .unwrap_or(DEFAULT_CLIENT_NUMBER)
+}
+
+fn parse_interval(interval: Option<&str>) -> Option<u64> {
+    interval.map(|interval| {
+        interval
+            .parse::<u64>()
+            .expect("interval should be a number")
+    })
 }
 
 fn parse_workload(conflict_rate: Option<&str>, commands_per_client: Option<&str>) -> Workload {

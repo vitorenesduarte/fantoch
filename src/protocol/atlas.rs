@@ -543,7 +543,7 @@ mod tests {
 
         // start client
         let (target, cmd) = client_1
-            .start(&time)
+            .next_cmd(&time)
             .expect("there should be a first operation");
 
         // check that `target` is atlas 1

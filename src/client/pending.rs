@@ -25,8 +25,8 @@ impl Pending {
         }
     }
 
-    /// End a command returns command latency.
-    pub fn end(&mut self, rifl: Rifl, time: &dyn SysTime) -> u64 {
+    /// End a command returns command latency and the time it was returned.
+    pub fn end(&mut self, rifl: Rifl, time: &dyn SysTime) -> (u64, u64) {
         // get start time
         let start_time = self
             .pending
@@ -36,8 +36,15 @@ impl Pending {
         let end_time = time.now();
         // make sure time is monotonic
         assert!(start_time <= end_time);
-        // return latency (that should fit in a u64)
-        (end_time - start_time) as u64
+        // compute latency
+        let latency = end_time - start_time;
+        // (both should fit in u64)
+        (latency as u64, end_time as u64)
+    }
+
+    /// Checks whether pending is empty.
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
     }
 }
 
@@ -62,31 +69,55 @@ mod tests {
         // create sys time
         let mut time = SimTime::new();
 
+        // pending starts empty
+        assert!(pending.is_empty());
+
         // start first rifl at time 0
         pending.start(rifl1, &time);
+
+        // pending is not empty now
+        assert!(!pending.is_empty());
 
         // start second rifl at time 10
         time.tick(10);
         pending.start(rifl2, &time);
 
+        // pending is not empty
+        assert!(!pending.is_empty());
+
         // end first rifl at time 11
         time.tick(1);
-        let latency = pending.end(rifl1, &time);
+        let (latency, return_time) = pending.end(rifl1, &time);
         assert_eq!(latency, 11);
+        assert_eq!(return_time, 11);
+
+        // pending is not empty
+        assert!(!pending.is_empty());
 
         // start third rifl at time 15
         time.tick(4);
         pending.start(rifl3, &time);
 
+        // pending is not empty
+        assert!(!pending.is_empty());
+
         // end third rifl at time 16
         time.tick(1);
-        let latency = pending.end(rifl3, &time);
+        let (latency, return_time) = pending.end(rifl3, &time);
         assert_eq!(latency, 1);
+        assert_eq!(return_time, 16);
+
+        // pending is not empty
+        assert!(!pending.is_empty());
 
         // end second rifl at time 20
         time.tick(4);
-        let latency = pending.end(rifl2, &time);
+        let (latency, return_time) = pending.end(rifl2, &time);
         assert_eq!(latency, 10);
+        assert_eq!(return_time, 20);
+
+        // pending is empty now
+        assert!(pending.is_empty());
     }
 
     #[test]

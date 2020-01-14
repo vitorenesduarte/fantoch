@@ -1,4 +1,4 @@
-use super::connection::Connection;
+use super::connection::{self, Connection};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
@@ -193,7 +193,7 @@ async fn broadcast_writer_task<V>(
     loop {
         if let Some(ToSend { target, msg, .. }) = parent.recv().await {
             // serialize message
-            let bytes = Connection::serialize(&msg);
+            let bytes = connection::serialize(&msg);
             target
                 .into_iter()
                 // don't send message to self

@@ -27,6 +27,9 @@ pub struct Client {
     pending: Pending,
     /// an histogram with all latencies observed by this client
     latency_histogram: Histogram,
+    /// an histogram with all the times in which commands were returned to this client; this is
+    /// useful for throughput/time plots or in general to compute throughput
+    throughput_histogram: Histogram,
 }
 
 impl Client {
@@ -40,6 +43,7 @@ impl Client {
             workload,
             pending: Pending::new(),
             latency_histogram: Histogram::new(),
+            throughput_histogram: Histogram::new(),
         }
     }
 
@@ -57,36 +61,8 @@ impl Client {
         self.process_id.is_some()
     }
 
-    /// Start client's workload.
-    pub fn start(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
-        self.next_cmd(time)
-    }
-
-    /// Handle executed command and its overall latency.
-    pub fn handle(
-        &mut self,
-        cmd_result: CommandResult,
-        time: &dyn SysTime,
-    ) -> Option<(ProcessId, Command)> {
-        // end command in pending and save command latency
-        let latency = self.pending.end(cmd_result.rifl(), time);
-        self.latency_histogram.increment(latency);
-
-        // generate command
-        self.next_cmd(time)
-    }
-
-    /// Returns the histogram of latencies registered.
-    pub fn latency_histogram(&self) -> &Histogram {
-        &self.latency_histogram
-    }
-
-    /// Returns the number of commands already issued.
-    pub fn issued_commands(&self) -> usize {
-        self.workload.issued_commands()
-    }
-
-    fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
+    /// Generates the next command in this client's workload.
+    pub fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
         self.process_id.and_then(|process_id| {
             // generate next command in the workload if some process_id
             self.workload.next_cmd(&mut self.rifl_gen).map(|cmd| {
@@ -95,6 +71,35 @@ impl Client {
                 (process_id, cmd)
             })
         })
+    }
+
+    /// Handle executed command and return a boolean indicating whether we have generated all
+    /// commands and receive all the corresponding command results.
+    pub fn handle(&mut self, cmd_result: CommandResult, time: &dyn SysTime) -> bool {
+        // end command in pending and save command latency
+        let (latency, return_time) = self.pending.end(cmd_result.rifl(), time);
+        self.latency_histogram.increment(latency);
+        self.throughput_histogram.increment(return_time);
+
+        // we're done once:
+        // - the workload is finished and
+        // - pending is empty
+        self.workload.finished() && self.pending.is_empty()
+    }
+
+    /// Returns the latency histogram.
+    pub fn latency_histogram(&self) -> &Histogram {
+        &self.latency_histogram
+    }
+
+    /// Returns the throughput histogram.
+    pub fn throughput_histogram(&self) -> &Histogram {
+        &self.throughput_histogram
+    }
+
+    /// Returns the number of commands already issued.
+    pub fn issued_commands(&self) -> usize {
+        self.workload.issued_commands()
     }
 }
 
@@ -172,13 +177,16 @@ mod tests {
         let fake_result = |cmd: Command| CommandResult::new(cmd.rifl(), 0);
 
         // start client at time 0
-        let (process_id, cmd) = client.start(&time).expect("there should a first operation");
+        let (process_id, cmd) = client
+            .next_cmd(&time)
+            .expect("there should a first operation");
         // process_id should be 2
         assert_eq!(process_id, 2);
 
         // handle result at time 10
         time.tick(10);
-        let next = client.handle(fake_result(cmd), &time);
+        client.handle(fake_result(cmd), &time);
+        let next = client.next_cmd(&time);
 
         // check there's next command
         assert!(next.is_some());
@@ -188,7 +196,8 @@ mod tests {
 
         // handle result at time 15
         time.tick(5);
-        let next = client.handle(fake_result(cmd), &time);
+        client.handle(fake_result(cmd), &time);
+        let next = client.next_cmd(&time);
 
         // check there's no next command
         assert!(next.is_none());

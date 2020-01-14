@@ -5,12 +5,12 @@ mod prelude;
 mod task;
 
 use crate::client::{Client, Workload};
-use crate::command::Command;
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
-use crate::time::RunTime;
+use crate::time::{RunTime, SysTime};
 use futures::future::FutureExt;
 use futures::select;
 use prelude::*;
@@ -20,6 +20,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
+use tokio::time::{self, Duration};
 
 const CONNECT_RETRIES: usize = 100;
 
@@ -189,16 +190,94 @@ pub async fn client<A>(
     client_id: ClientId,
     address: A,
     client_number: usize,
+    interval_ms: Option<u64>,
     workload: Workload,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs,
 {
-    // TODO there's a single client for now
-    let mut connection = task::connect(address).await?;
+    // start the open loop client if some interval was provided
+    if let Some(interval_ms) = interval_ms {
+        open_loop_client(client_id, address, client_number, interval_ms, workload).await
+    } else {
+        closed_loop_client(client_id, address, client_number, workload).await
+    }
+}
 
+async fn closed_loop_client<A>(
+    client_id: ClientId,
+    address: A,
+    client_number: usize,
+    workload: Workload,
+) -> Result<(), Box<dyn Error>>
+where
+    A: ToSocketAddrs,
+{
     // create system time
     let time = RunTime;
+
+    // TODO there's a single client for now
+    // setup client
+    let (mut client, mut read, write) = client_setup(client_id, address, workload).await?;
+
+    // generate and submit commands while there are commands to be generated
+    while next_cmd(&mut client, &time, &write) {
+        // and wait for their return
+        let cmd_result = read.recv().await;
+        handle_cmd_result(&mut client, &time, cmd_result);
+    }
+
+    metrics(client);
+    Ok(())
+}
+
+async fn open_loop_client<A>(
+    client_id: ClientId,
+    address: A,
+    client_number: usize,
+    interval_ms: u64,
+    workload: Workload,
+) -> Result<(), Box<dyn Error>>
+where
+    A: ToSocketAddrs,
+{
+    // create system time
+    let time = RunTime;
+
+    // setup client
+    let (mut client, mut read, write) = client_setup(client_id, address, workload).await?;
+
+    // create interval
+    let mut interval = time::interval(Duration::from_millis(interval_ms));
+
+    loop {
+        select! {
+            _ = interval.tick().fuse() => {
+                // submit new command on every tick (if there are still commands to be generated)
+                next_cmd(&mut client, &time, &write);
+            }
+            cmd_result = read.recv().fuse() => {
+                if handle_cmd_result(&mut client, &time, cmd_result) {
+                    // check if we have generated all commands and received all the corresponding command results, exit
+                    break;
+                }
+            }
+        }
+    }
+    metrics(client);
+    Ok(())
+}
+
+async fn client_setup<A>(
+    client_id: ClientId,
+    address: A,
+    workload: Workload,
+) -> Result<(Client, CommandResultReceiver, CommandSender), Box<dyn Error>>
+where
+    A: ToSocketAddrs,
+{
+    // connect to process
+    let mut connection = task::connect(address).await?;
 
     // create client
     let mut client = Client::new(client_id, workload);
@@ -209,27 +288,47 @@ where
     // discover process (although this won't be used)
     client.discover(vec![process_id]);
 
-    if let Some((_, cmd)) = client.start(&time) {
-        // submit first command
-        connection.send(cmd).await;
-        loop {
-            if let Some(cmd_result) = connection.recv().await {
-                if let Some((_, cmd)) = client.handle(cmd_result, &time) {
-                    connection.send(cmd).await;
-                } else {
-                    // all commands have been generated
-                    println!("client {} ended", client_id);
-                    println!("total commands: {}", client.issued_commands());
-                    println!("{:?}", client.latency_histogram());
-                    return Ok(());
-                }
-            } else {
-                panic!("couldn't receive command result from process");
-            }
+    // start client read-write task
+    let (read, write) = task::client::start_client_rw_task(connection);
+
+    // return client its connection
+    Ok((client, read, write))
+}
+
+/// Generate the next command, returning a boolean representing whether a new command was generated
+/// or not.
+fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &CommandSender) -> bool {
+    if let Some((_, cmd)) = client.next_cmd(time) {
+        if let Err(e) = write.send(cmd) {
+            println!(
+                "[client] error while sending command to client read-write task: {:?}",
+                e
+            );
         }
+        true
+    } else {
+        false
     }
-    println!("client {} ended", client_id);
-    Ok(())
+}
+
+/// Handles a command result. The returned boolean indicates whether this client is finished or not.
+fn handle_cmd_result(
+    client: &mut Client,
+    time: &dyn SysTime,
+    cmd_result: Option<CommandResult>,
+) -> bool {
+    if let Some(cmd_result) = cmd_result {
+        client.handle(cmd_result, time)
+    } else {
+        panic!("[client] error while receiving command result from client read-write task");
+    }
+}
+
+fn metrics(client: Client) {
+    // once the loop exits, all commands have been generated
+    println!("total commands: {}", client.issued_commands());
+    println!("{:?}", client.latency_histogram());
+    println!("client {} ended", client.id());
 }
 
 #[cfg(test)]
@@ -348,16 +447,31 @@ mod tests {
 
         // create workload
         let conflict_rate = 100;
-        let total_commands = 1000;
+        let total_commands = 100;
         let workload = Workload::new(conflict_rate, total_commands);
 
-        // spawn clients
-        let client_1_handle =
-            task::spawn_local(client(1, String::from("localhost:4001"), 1, workload));
-        let client_2_handle =
-            task::spawn_local(client(2, String::from("localhost:4002"), 1, workload));
-        let client_3_handle =
-            task::spawn_local(client(3, String::from("localhost:4003"), 1, workload));
+        // spawn clients:
+        // - the first two as closed-loop
+        // - the thirs one as open-loop
+        let client_1_handle = task::spawn_local(closed_loop_client(
+            1,
+            String::from("localhost:4001"),
+            1,
+            workload,
+        ));
+        let client_2_handle = task::spawn_local(closed_loop_client(
+            2,
+            String::from("localhost:4002"),
+            1,
+            workload,
+        ));
+        let client_3_handle = task::spawn_local(open_loop_client(
+            3,
+            String::from("localhost:4003"),
+            1,
+            100, // 100ms interval between ops
+            workload,
+        ));
 
         // wait for the 3 clients
         let _ = client_1_handle.await.expect("client 1 should finish");
