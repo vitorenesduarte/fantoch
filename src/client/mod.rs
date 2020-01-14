@@ -27,6 +27,9 @@ pub struct Client {
     pending: Pending,
     /// an histogram with all latencies observed by this client
     latency_histogram: Histogram,
+    /// an histogram with all the times in which commands were returned to this client; this is
+    /// useful for throughput/time plots or in general to compute throughput
+    throughput_histogram: Histogram,
 }
 
 impl Client {
@@ -40,6 +43,7 @@ impl Client {
             workload,
             pending: Pending::new(),
             latency_histogram: Histogram::new(),
+            throughput_histogram: Histogram::new(),
         }
     }
 
@@ -69,16 +73,22 @@ impl Client {
         time: &dyn SysTime,
     ) -> Option<(ProcessId, Command)> {
         // end command in pending and save command latency
-        let latency = self.pending.end(cmd_result.rifl(), time);
+        let (latency, return_time) = self.pending.end(cmd_result.rifl(), time);
         self.latency_histogram.increment(latency);
+        self.throughput_histogram.increment(return_time);
 
         // generate command
         self.next_cmd(time)
     }
 
-    /// Returns the histogram of latencies registered.
+    /// Returns the latency histogram.
     pub fn latency_histogram(&self) -> &Histogram {
         &self.latency_histogram
+    }
+
+    /// Returns the throughput histogram.
+    pub fn throughput_histogram(&self) -> &Histogram {
+        &self.throughput_histogram
     }
 
     /// Returns the number of commands already issued.

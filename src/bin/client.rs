@@ -39,7 +39,7 @@ fn parse_args() -> (ClientId, String, usize, Workload) {
             Arg::with_name("client_number")
                 .long("client_number")
                 .value_name("CLIENT_NUMBER")
-                .help("number of clients")
+                .help("number of clients; if this is set to 0, this client will behave as an open-loop client")
                 .takes_value(true),
         )
         .arg(
