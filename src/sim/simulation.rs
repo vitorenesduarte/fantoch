@@ -54,7 +54,7 @@ where
             .map(|(_, client)| {
                 let client = client.get_mut();
                 // start client
-                let submit = client.start(time);
+                let submit = client.next_cmd(time);
                 (client.id(), submit)
             })
             .collect()
@@ -95,8 +95,14 @@ where
         cmd_result: CommandResult,
         time: &dyn SysTime,
     ) -> Option<(ProcessId, Command)> {
+        // get client id
         let client_id = cmd_result.rifl().source();
-        self.get_client(client_id).handle(cmd_result, time)
+        // find client
+        let client = self.get_client(client_id);
+        // handle command result
+        client.handle(cmd_result, time);
+        // and generate the next command
+        client.next_cmd(time)
     }
 
     /// Returns the process registered with this identifier.

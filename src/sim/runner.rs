@@ -173,11 +173,8 @@ where
                         });
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
-                        // route to client and schedule new submit
-                        let submit = self
-                            .simulation
-                            .get_client(client_id)
-                            .handle(cmd_result, &self.time);
+                        // handle new command result in client
+                        let submit = self.simulation.forward_to_client(cmd_result, &self.time);
                         self.schedule_submit(MessageRegion::Client(client_id), submit);
                     }
                 }
