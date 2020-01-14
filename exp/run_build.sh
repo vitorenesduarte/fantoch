@@ -18,3 +18,5 @@ done <"${MACHINES_FILE}"
 
 # wait for all builds to complete
 wait_jobs
+
+info "all builds have been completed"

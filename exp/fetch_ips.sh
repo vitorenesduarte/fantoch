@@ -15,3 +15,6 @@ while IFS= read -r machine; do
 
     echo "${machine} ${ip}" >>"${MACHINE_IPS_FILE}"
 done <"${MACHINES_FILE}"
+
+info "all ips have been fetched"
+cat "${MACHINE_IPS_FILE}"
