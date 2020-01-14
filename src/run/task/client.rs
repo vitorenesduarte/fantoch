@@ -167,6 +167,8 @@ async fn client_rw_task(
                     connection.send(cmd).await;
                 } else {
                     println!("[client_rw] error while receiving new command from parent");
+                    // in this case it means that the parent (the client) is done, and so we can exit the loop
+                    break;
                 }
             }
         }

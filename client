@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 release="--release"
+release=""
 
 case $1 in
 1) 

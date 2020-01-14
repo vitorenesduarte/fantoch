@@ -2,6 +2,7 @@
 
 protocol=$1
 release="--release"
+release=""
 
 case $2 in
 1) 
