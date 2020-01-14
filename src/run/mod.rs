@@ -12,7 +12,7 @@ use crate::log;
 use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
 use crate::time::{RunTime, SysTime};
-use futures::future::FutureExt;
+use futures::future::{join_all, FutureExt};
 use futures::select;
 use prelude::*;
 use std::error::Error;
@@ -219,8 +219,8 @@ where
     let mut latency = Histogram::new();
     let mut throughput = Histogram::new();
 
-    for handle in handles {
-        let client = handle.await?;
+    for join_result in join_all(handles).await {
+        let client = join_result?;
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
         throughput.merge(client.throughput_histogram());

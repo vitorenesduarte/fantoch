@@ -193,8 +193,7 @@ run_clients() {
         start_client ${machine} ${index} ${address} >"$(client_file ${index})" 2>&1 &
     done
 
-    tail -f .log_client* &
-
+    # TODO fix this wait (it's hanging)
     # wait for clients to end
     wait_jobs
 }
