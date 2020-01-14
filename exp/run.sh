@@ -69,42 +69,58 @@ start_process() {
     ssh "${SSH_ARGS}" ${machine} "./${BUILD_FOLDER}/${protocol} ${command_args}" </dev/null
 }
 
-# stop previous processes
-for id in $(seq 1 ${PROCESSES}); do
-    machine=$(topology ${id} ${PROCESSES} | awk '{ print $1 }')
+wait_process_started() {
+    if [ $# -ne 1 ]; then
+        echo "usage: wait_process_started id"
+        exit 1
+    fi
+    local id=$1
 
-    # stop previous process
-    stop_process ${machine} &
-done
-wait_jobs
-
-sleep ${KILL_WAIT}
-info "hopefully all processes are stopped now"
-
-# start new processes
-for id in $(seq 1 ${PROCESSES}); do
-    # compute topology
-    result=$(topology ${id} ${PROCESSES})
-    machine=$(echo "${result}" | awk '{ print $1 }')
-    sorted=$(echo "${result}" | awk '{ print $2 }')
-    ip=$(echo "${result}" | awk '{ print $3 }')
-    ips=$(echo "${result}" | awk '{ print $4 }')
-
-    # append port to each ip
-    addresses=$(echo ${ips} | tr ',' '\n' | awk -v port=${PORT} '{ print $1":"port }' | tr '\n' ',' | sed 's/,$//')
-
-    # start a new process
-    info "process ${id} spawned"
-    start_process ${machine} ${PROTOCOL} ${id} ${sorted} ${ip} ${addresses} >"$(process_file ${id})" 2>&1 &
-done
-
-# wait for processes started
-for id in $(seq 1 ${PROCESSES}); do
-    # check if id started
     started=0
     while [[ ${started} != 1 ]]; do
         started=$(grep -c "process ${id} started" "$(process_file ${id})" | xargs)
         sleep 1
     done
-done
+}
+
+stop_processes() {
+    # stop previous processes
+    for id in $(seq 1 ${PROCESSES}); do
+        machine=$(topology ${id} ${PROCESSES} | awk '{ print $1 }')
+
+        # stop previous process
+        stop_process ${machine} &
+    done
+    wait_jobs
+}
+
+start_processes() {
+    # start new processes
+    for id in $(seq 1 ${PROCESSES}); do
+        # compute topology
+        result=$(topology ${id} ${PROCESSES})
+        machine=$(echo "${result}" | awk '{ print $1 }')
+        sorted=$(echo "${result}" | awk '{ print $2 }')
+        ip=$(echo "${result}" | awk '{ print $3 }')
+        ips=$(echo "${result}" | awk '{ print $4 }')
+
+        # append port to each ip
+        addresses=$(echo ${ips} | tr ',' '\n' | awk -v port=${PORT} '{ print $1":"port }' | tr '\n' ',' | sed 's/,$//')
+
+        # start a new process
+        info "process ${id} spawned"
+        start_process ${machine} ${PROTOCOL} ${id} ${sorted} ${ip} ${addresses} >"$(process_file ${id})" 2>&1 &
+    done
+
+    # wait for processes started
+    for id in $(seq 1 ${PROCESSES}); do
+        wait_process_started ${id}
+    done
+}
+
+stop_processes
+sleep ${KILL_WAIT}
+info "hopefully all processes are stopped now"
+
+start_processes
 info "all processes have been started"
