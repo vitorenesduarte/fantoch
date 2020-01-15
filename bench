@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-protocol="newt"
-cargo build --release --bin ${protocol}
-cargo build --release --bin client
+protocol="atlas"
 
 for id in 1 2 3; do
     proc ${protocol} ${id} >.log_process_${id} 2>&1 &

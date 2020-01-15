@@ -239,12 +239,19 @@ run_clients() {
     wait_jobs
 }
 
-stop_processes
-sleep ${KILL_WAIT}
-info "hopefully all processes are stopped now"
+if [[ $1 == "stop" ]]; then
+    stop_processes
+else
+    stop_processes
+    sleep ${KILL_WAIT}
+    info "hopefully all processes are stopped now"
 
-start_processes
-info "all processes have been started"
+    start_processes
+    info "all processes have been started"
 
-run_clients
-info "all clients have run"
+    run_clients
+    info "all clients have run"
+fi
+
+# TODO launch dstat with something like:
+# dstat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv

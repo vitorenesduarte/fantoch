@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
-const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 100;
+const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 #[derive(Debug)]
 pub struct ChannelSender<M> {

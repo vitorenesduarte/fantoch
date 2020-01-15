@@ -151,7 +151,7 @@ where
     V: Serialize + Send + 'static,
 {
     // mapping from process id to channel broadcast writer should write to
-    let mut writers = HashMap::new();
+    let mut writers = HashMap::with_capacity(connections.len());
 
     // start on writer task per connection
     for (process_id, connection) in connections {
