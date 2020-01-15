@@ -15,8 +15,11 @@ PROCESSES=3
 FAULTS=1
 
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=10
-COMMANDS_PER_CLIENT=10000
+CLIENTS_PER_MACHINE=500
+CONFLICT_RATE=0
+COMMANDS_PER_CLIENT=20000
+
+TCP_NODELAY=true
 
 process_file() {
     if [ $# -ne 1 ]; then
@@ -89,7 +92,10 @@ start_process() {
         --addresses ${addresses} \
         --client_port ${CLIENT_PORT} \
         --processes ${PROCESSES} \
-        --faults ${FAULTS}"
+        --faults ${FAULTS} \
+        --tcp_nodelay ${TCP_NODELAY}"
+
+    info "starting ${protocol} with: $(echo ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
     ssh "${SSH_ARGS}" ${machine} "./${BUILD_FOLDER}/${protocol} ${command_args}" </dev/null
@@ -169,9 +175,13 @@ start_client() {
     command_args="\
         --ids ${id_start}-${id_end} \
         --address ${address} \
-        --commands_per_client ${COMMANDS_PER_CLIENT}"
+        --conflict_rate ${CONFLICT_RATE} \
+        --commands_per_client ${COMMANDS_PER_CLIENT} \
+        --tcp_nodelay ${TCP_NODELAY}"
     # TODO for open-loop clients:
     # --interval 1
+
+    info "starting client with: $(echo ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
     ssh "${SSH_ARGS}" ${machine} "./${BUILD_FOLDER}/client ${command_args}" </dev/null
