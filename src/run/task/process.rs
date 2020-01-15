@@ -165,14 +165,17 @@ where
 }
 
 /// Reader task.
-async fn reader_task<V>(process_id: ProcessId, mut connection: Connection, parent: ReaderSender<V>)
-where
+async fn reader_task<V>(
+    process_id: ProcessId,
+    mut connection: Connection,
+    mut parent: ReaderSender<V>,
+) where
     V: Debug + DeserializeOwned + Send + 'static,
 {
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = parent.send((process_id, msg)) {
+                if let Err(e) = parent.send((process_id, msg)).await {
                     println!("[reader] error notifying parent task with new msg: {:?}", e);
                 }
             }
@@ -191,27 +194,31 @@ async fn broadcast_writer_task<V>(
 ) where
     V: Serialize + Send + 'static,
 {
+    // TODO maybe use tokio broadcast channel (only if it supports some sort of filtering or
+    // subscribing)
     loop {
         if let Some(ToSend { target, msg, .. }) = parent.recv().await {
             // serialize message
             let bytes = connection::serialize(&msg);
-            target
+
+            let filtered = target
                 .into_iter()
                 // don't send message to self
-                .filter(|id| *id != process_id)
-                .for_each(|id| {
-                    // find writer
-                    let writer = writers
-                        .get_mut(&id)
-                        .expect("[broadcast_writer] identifier in target should have a writer");
-                    // and send
-                    if let Err(e) = writer.send(bytes.clone()) {
-                        println!(
-                            "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
-                            id, e
-                        );
-                    }
-                });
+                .filter(|id| *id != process_id);
+
+            for id in filtered {
+                // find writer
+                let writer = writers
+                    .get_mut(&id)
+                    .expect("[broadcast_writer] identifier in target should have a writer");
+                // and send
+                if let Err(e) = writer.send(bytes.clone()).await {
+                    println!(
+                        "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
+                        id, e
+                    );
+                }
+            }
         } else {
             println!("[broadcast_writer] error receiving message from parent");
         }
@@ -242,7 +249,7 @@ where
 
 async fn executor_task<P>(
     config: Config,
-    to_parent: CommandSender,
+    mut to_parent: CommandSender,
     mut from_parent: ExecutionInfoReceiver<P>,
     mut from_clients: ClientReceiver,
 ) where
@@ -259,7 +266,7 @@ async fn executor_task<P>(
             execution_info = from_parent.recv().fuse() => {
                 log!("[executor] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(execution_info, &mut executor, &mut clients);
+                    handle_execution_info::<P>(execution_info, &mut executor, &mut clients).await;
                 } else {
                     println!("[executor] error while receiving execution info from parent");
                 }
@@ -267,7 +274,7 @@ async fn executor_task<P>(
             from_client = from_clients.recv().fuse() => {
                 log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client::<P>(from_client, &mut executor, &mut clients, &to_parent);
+                    handle_from_client::<P>(from_client, &mut executor, &mut clients, &mut to_parent).await;
                 } else {
                     println!("[executor] error while receiving new command from clients");
                 }
@@ -276,7 +283,7 @@ async fn executor_task<P>(
     }
 }
 
-fn handle_execution_info<P>(
+async fn handle_execution_info<P>(
     execution_info: Vec<<P::Executor as Executor>::ExecutionInfo>,
     executor: &mut P::Executor,
     clients: &mut HashMap<ClientId, CommandResultSender>,
@@ -291,11 +298,11 @@ fn handle_execution_info<P>(
         let client_id = cmd_result.rifl().source();
         // get client channel
         let tx = clients
-            .get(&client_id)
+            .get_mut(&client_id)
             .expect("command result should belong to a registered client");
 
         // send command result to client
-        if let Err(e) = tx.send(cmd_result) {
+        if let Err(e) = tx.send(cmd_result).await {
             println!(
                 "[executor] error while sending to command result to client {}: {:?}",
                 client_id, e
@@ -304,11 +311,11 @@ fn handle_execution_info<P>(
     }
 }
 
-fn handle_from_client<P>(
+async fn handle_from_client<P>(
     from_client: FromClient,
     executor: &mut P::Executor,
     clients: &mut HashMap<ClientId, CommandResultSender>,
-    to_parent: &CommandSender,
+    to_parent: &mut CommandSender,
 ) where
     P: Protocol,
 {
@@ -318,7 +325,7 @@ fn handle_from_client<P>(
             executor.register(&cmd);
 
             // send to command to parent
-            if let Err(e) = to_parent.send(cmd) {
+            if let Err(e) = to_parent.send(cmd).await {
                 println!("[executor] error while sending to parent: {:?}", e);
             }
         }

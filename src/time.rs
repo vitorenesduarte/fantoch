@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub trait SysTime {
+pub trait SysTime: Send + 'static + Sync /* TODO why is Sync needed here */ {
     /// Returns the current time.
     fn now(&self) -> u128;
 }
