@@ -210,18 +210,16 @@ where
     /// Resets the local (paper-slip) state (promises received, accepts received, and proposal
     /// sent), returning the previous value of promises and proposal.
     /// TODO quick check tells me it's in fact not necessary to reset the proposal (which makes
-    /// sense). However, for performance reasons (saving a `.clone()`), I'll keep the `mem::swap`.
+    /// sense). However, for performance reasons (saving a `.clone()`), I'll keep the `mem::take`.
     fn reset_state(&mut self) -> (Promises<V>, Proposal<V>) {
         // reset promises
-        let mut promises = HashMap::new();
-        mem::swap(&mut promises, &mut self.promises);
+        let promises = mem::take(&mut self.promises);
 
         // reset accepts
         self.accepts = HashSet::new();
 
         // reset proposal
-        let mut proposal = None;
-        mem::swap(&mut proposal, &mut self.proposal);
+        let proposal = mem::take(&mut self.proposal);
 
         // return previous promises and proposal
         (promises, proposal)

@@ -85,9 +85,7 @@ impl Protocol for Atlas {
 
     /// Returns new commands results to be sent to clients.
     fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        let mut to_executor = Vec::new();
-        mem::swap(&mut to_executor, &mut self.to_executor);
-        to_executor
+        mem::take(&mut self.to_executor)
     }
 
     fn show_metrics(&self) {

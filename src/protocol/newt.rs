@@ -89,9 +89,7 @@ impl Protocol for Newt {
 
     /// Returns new commands results to be sent to clients.
     fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        let mut to_executor = Vec::new();
-        mem::swap(&mut to_executor, &mut self.to_executor);
-        to_executor
+        mem::take(&mut self.to_executor)
     }
 
     fn show_metrics(&self) {
@@ -351,9 +349,7 @@ impl Newt {
 
     // Replaces the value `local_votes` with empty votes, returning the previous votes.
     fn reset_votes(local_votes: &mut Votes) -> Votes {
-        let mut votes = Votes::new();
-        mem::swap(&mut votes, local_votes);
-        votes
+        mem::take(local_votes)
     }
 }
 

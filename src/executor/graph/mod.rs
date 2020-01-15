@@ -68,9 +68,7 @@ impl DependencyGraph {
     /// Returns new commands ready to be executed.
     #[must_use]
     pub fn commands_to_execute(&mut self) -> Vec<Command> {
-        let mut ready = Vec::new();
-        mem::swap(&mut ready, &mut self.to_execute);
-        ready
+        mem::take(&mut self.to_execute)
     }
 
     /// Add a new command with its clock to the queue.
