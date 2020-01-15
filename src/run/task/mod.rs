@@ -97,12 +97,12 @@ where
 }
 
 /// Connect to some address.
-pub async fn connect<A>(address: A) -> Result<Connection, Box<dyn Error>>
+pub async fn connect<A>(address: A, tcp_nodelay: bool) -> Result<Connection, Box<dyn Error>>
 where
     A: ToSocketAddrs,
 {
     let stream = TcpStream::connect(address).await?;
-    let connection = Connection::new(stream);
+    let connection = Connection::new(stream, tcp_nodelay);
     Ok(connection)
 }
 
@@ -115,14 +115,18 @@ where
 }
 
 /// Listen on new connections and send them to parent process.
-async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<Connection>) {
+async fn listener_task(
+    mut listener: TcpListener,
+    tcp_nodelay: bool,
+    parent: UnboundedSender<Connection>,
+) {
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
                 println!("[listener] new connection: {:?}", addr);
 
                 // create connection
-                let connection = Connection::new(stream);
+                let connection = Connection::new(stream, tcp_nodelay);
 
                 if let Err(e) = parent.send(connection) {
                     println!("[listener] error sending stream to parent process: {:?}", e);

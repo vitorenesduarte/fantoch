@@ -5,7 +5,7 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (process_id, sorted_processes, ip, port, client_port, addresses, config) =
+    let (process_id, sorted_processes, ip, port, client_port, addresses, config, tcp_nodelay) =
         protocol::parse_args();
     let process = Atlas::new(process_id, config);
     planet_sim::run::process(
@@ -17,6 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         client_port,
         addresses,
         config,
+        tcp_nodelay,
     )
     .await?;
     Ok(())

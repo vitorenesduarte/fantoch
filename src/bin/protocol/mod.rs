@@ -7,6 +7,7 @@ const LIST_SEP: &str = ",";
 const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_CLIENT_PORT: u16 = 4000;
+const DEFAULT_TCP_NODELAY: bool = true;
 
 pub fn parse_args() -> (
     ProcessId,
@@ -16,6 +17,7 @@ pub fn parse_args() -> (
     u16,
     Vec<String>,
     Config,
+    bool,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -82,6 +84,13 @@ pub fn parse_args() -> (
                 .required(true)
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("tcp_nodelay")
+                .long("tcp_nodelay")
+                .value_name("TCP_NODELAY")
+                .help("set TCP_NODELAY; defaul: true")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -92,6 +101,7 @@ pub fn parse_args() -> (
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
     let config = parse_config(matches.value_of("n"), matches.value_of("f"));
+    let tcp_nodelay = parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -100,6 +110,7 @@ pub fn parse_args() -> (
     println!("client port: {}", client_port);
     println!("addresses: {:?}", addresses);
     println!("config: {:?}", config);
+    println!("tcp_nodelay: {:?}", tcp_nodelay);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -115,6 +126,7 @@ pub fn parse_args() -> (
         client_port,
         addresses,
         config,
+        tcp_nodelay,
     )
 }
 
@@ -163,6 +175,16 @@ fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
         .parse::<usize>()
         .expect("f should be a number");
     Config::new(n, f)
+}
+
+fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
+    tcp_nodelay
+        .map(|tcp_nodelay| {
+            tcp_nodelay
+                .parse::<bool>()
+                .expect("tcp_nodelay should be a boolean")
+        })
+        .unwrap_or(DEFAULT_TCP_NODELAY)
 }
 
 fn parse_id(id: &str) -> ProcessId {

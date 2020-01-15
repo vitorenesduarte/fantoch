@@ -7,14 +7,23 @@ use futures::future::FutureExt;
 use futures::select;
 use tokio::net::TcpListener;
 
-pub fn start_listener(process_id: ProcessId, listener: TcpListener) -> ClientReceiver {
-    super::spawn_producer(|tx| client_listener_task(process_id, listener, tx))
+pub fn start_listener(
+    process_id: ProcessId,
+    listener: TcpListener,
+    tcp_nodelay: bool,
+) -> ClientReceiver {
+    super::spawn_producer(|tx| client_listener_task(process_id, listener, tcp_nodelay, tx))
 }
 
 /// Listen on new client connections and spawn a client task for each new connection.
-async fn client_listener_task(process_id: ProcessId, listener: TcpListener, parent: ClientSender) {
+async fn client_listener_task(
+    process_id: ProcessId,
+    listener: TcpListener,
+    tcp_nodelay: bool,
+    parent: ClientSender,
+) {
     // start listener task
-    let mut rx = super::spawn_producer(|tx| super::listener_task(listener, tx));
+    let mut rx = super::spawn_producer(|tx| super::listener_task(listener, tcp_nodelay, tx));
 
     loop {
         // handle new client connections

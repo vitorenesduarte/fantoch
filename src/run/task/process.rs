@@ -21,13 +21,14 @@ pub async fn connect_to_all<A, V>(
     listener: TcpListener,
     addresses: Vec<A>,
     connect_retries: usize,
+    tcp_nodelay: bool,
 ) -> Result<(ReaderReceiver<V>, BroadcastWriterSender<V>), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug,
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
     // spawn listener
-    let mut rx = task::spawn_producer(|tx| super::listener_task(listener, tx));
+    let mut rx = task::spawn_producer(|tx| super::listener_task(listener, tcp_nodelay, tx));
 
     // number of addresses
     let n = addresses.len();
@@ -43,7 +44,7 @@ where
     for address in addresses {
         let mut tries = 0;
         loop {
-            match super::connect(&address).await {
+            match super::connect(&address, tcp_nodelay).await {
                 Ok(connection) => {
                     // save connection if connected successfully
                     outgoing.push(connection);

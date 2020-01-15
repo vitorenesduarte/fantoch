@@ -6,15 +6,16 @@ use std::error::Error;
 const RANGE_SEP: &str = "-";
 const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
+const DEFAULT_TCP_NODELAY: bool = true;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload) = parse_args();
-    planet_sim::run::client(ids, address, interval, workload).await?;
+    let (ids, address, interval, workload, tcp_nodelay) = parse_args();
+    planet_sim::run::client(ids, address, interval, workload, tcp_nodelay).await?;
     Ok(())
 }
 
-fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
+fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -56,6 +57,13 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
                 .help("number of commands to be issued by each client; default: 1000")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("tcp_nodelay")
+                .long("tcp_nodelay")
+                .value_name("TCP_NODELAY")
+                .help("set TCP_NODELAY; defaul: true")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -66,13 +74,15 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
     );
+    let tcp_nodelay = parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
 
     println!("ids: {:?}", ids);
     println!("client number: {}", ids.len());
     println!("process address: {}", address);
     println!("workload: {:?}", workload);
+    println!("tcp_nodelay: {:?}", tcp_nodelay);
 
-    (ids, address, interval, workload)
+    (ids, address, interval, workload, tcp_nodelay)
 }
 
 fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {
@@ -131,4 +141,14 @@ fn parse_commands_per_client(number: Option<&str>) -> usize {
                 .expect("commands per client should be a number")
         })
         .unwrap_or(DEFAULT_COMMANDS_PER_CLIENT)
+}
+
+fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
+    tcp_nodelay
+        .map(|tcp_nodelay| {
+            tcp_nodelay
+                .parse::<bool>()
+                .expect("tcp_nodelay should be a boolean")
+        })
+        .unwrap_or(DEFAULT_TCP_NODELAY)
 }
