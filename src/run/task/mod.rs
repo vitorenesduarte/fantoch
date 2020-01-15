@@ -1,17 +1,20 @@
 // This module contains the definition of `Connection`.
 pub mod connection;
 
+// This module contains the definition of `Sender` and `Receiver`.
+pub mod chan;
+
 // This module contains the definition of ...
 pub mod process;
 
 // This module contains the definition of ...
 pub mod client;
 
+use chan::{channel, ChannelReceiver, ChannelSender};
 use connection::Connection;
 use std::error::Error;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 /// Just a wrapper around tokio::spawn.
@@ -23,13 +26,8 @@ where
     tokio::spawn(task)
 }
 
-/// Just a wrapper around mpsc::unbounded_channel.
-pub fn channel<M>() -> (UnboundedSender<M>, UnboundedReceiver<M>) {
-    mpsc::unbounded_channel()
-}
-
 /// Spawns a single producer, returning the consumer-end of the channel.
-pub fn spawn_producer<M, F>(producer: impl FnOnce(UnboundedSender<M>) -> F) -> UnboundedReceiver<M>
+pub fn spawn_producer<M, F>(producer: impl FnOnce(ChannelSender<M>) -> F) -> ChannelReceiver<M>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -45,8 +43,8 @@ where
 /// Spawns many producers, returning the consumer-end of the channel.
 pub fn spawn_producers<A, T, M, F>(
     args: T,
-    producer: impl Fn(A, UnboundedSender<M>) -> F,
-) -> UnboundedReceiver<M>
+    producer: impl Fn(A, ChannelSender<M>) -> F,
+) -> ChannelReceiver<M>
 where
     T: IntoIterator<Item = A>,
     F: Future + Send + 'static,
@@ -63,7 +61,7 @@ where
 }
 
 /// Spawns a consumer, returning the producer-end of the channel.
-pub fn spawn_consumer<M, F>(consumer: impl FnOnce(UnboundedReceiver<M>) -> F) -> UnboundedSender<M>
+pub fn spawn_consumer<M, F>(consumer: impl FnOnce(ChannelReceiver<M>) -> F) -> ChannelSender<M>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -79,8 +77,8 @@ where
 /// Spawns a producer and a consumer, returning one two channel: one consumer-end and one
 /// producer-end of the. channel.
 pub fn spawn_producer_and_consumer<M, N, F>(
-    task: impl FnOnce(UnboundedSender<M>, UnboundedReceiver<N>) -> F,
-) -> (UnboundedReceiver<M>, UnboundedSender<N>)
+    task: impl FnOnce(ChannelSender<M>, ChannelReceiver<N>) -> F,
+) -> (ChannelReceiver<M>, ChannelSender<N>)
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -118,7 +116,7 @@ where
 async fn listener_task(
     mut listener: TcpListener,
     tcp_nodelay: bool,
-    parent: UnboundedSender<Connection>,
+    mut parent: ChannelSender<Connection>,
 ) {
     loop {
         match listener.accept().await {
@@ -128,7 +126,7 @@ async fn listener_task(
                 // create connection
                 let connection = Connection::new(stream, tcp_nodelay);
 
-                if let Err(e) = parent.send(connection) {
+                if let Err(e) = parent.send(connection).await {
                     println!("[listener] error sending stream to parent process: {:?}", e);
                 }
             }

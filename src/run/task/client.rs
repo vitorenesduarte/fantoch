@@ -46,16 +46,16 @@ async fn client_listener_task(
 async fn client_server_task(
     process_id: ProcessId,
     mut connection: Connection,
-    parent: ClientSender,
+    mut parent: ClientSender,
 ) {
     let (client_id, mut parent_results) =
-        server_receive_hi(process_id, &mut connection, &parent).await;
+        server_receive_hi(process_id, &mut connection, &mut parent).await;
 
     loop {
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &parent) {
+                if !client_server_task_handle_cmd(cmd, client_id, &mut parent).await {
                     return;
                 }
             }
@@ -70,10 +70,10 @@ async fn client_server_task(
 async fn server_receive_hi(
     process_id: ProcessId,
     connection: &mut Connection,
-    parent: &ClientSender,
+    parent: &mut ClientSender,
 ) -> (ClientId, CommandResultReceiver) {
     // create channel where the process will write command results and where client will read them
-    let (tx, rx) = super::channel();
+    let (tx, rx) = super::chan::channel();
 
     // receive hi from client and register in parent, sending it tx
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
@@ -84,7 +84,7 @@ async fn server_receive_hi(
     };
 
     // notify parent with the channel where it should write command results
-    if let Err(e) = parent.send(FromClient::Register(client_id, tx)) {
+    if let Err(e) = parent.send(FromClient::Register(client_id, tx)).await {
         println!(
             "[client_server] error while registering client in parent: {:?}",
             e
@@ -99,13 +99,13 @@ async fn server_receive_hi(
     (client_id, rx)
 }
 
-fn client_server_task_handle_cmd(
+async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
-    parent: &ClientSender,
+    parent: &mut ClientSender,
 ) -> bool {
     if let Some(cmd) = cmd {
-        if let Err(e) = parent.send(FromClient::Submit(cmd)) {
+        if let Err(e) = parent.send(FromClient::Submit(cmd)).await {
             println!(
                 "[client_server] error while sending new command to parent: {:?}",
                 e
@@ -114,7 +114,7 @@ fn client_server_task_handle_cmd(
         true
     } else {
         println!("[client_server] client disconnected.");
-        if let Err(e) = parent.send(FromClient::Unregister(client_id)) {
+        if let Err(e) = parent.send(FromClient::Unregister(client_id)).await {
             println!(
                 "[client_server] error while sending unregister to parent: {:?}",
                 e
@@ -155,7 +155,7 @@ pub fn start_client_rw_task(connection: Connection) -> (CommandResultReceiver, C
 
 async fn client_rw_task(
     mut connection: Connection,
-    to_parent: CommandResultSender,
+    mut to_parent: CommandResultSender,
     mut from_parent: CommandReceiver,
 ) {
     loop {
@@ -163,7 +163,7 @@ async fn client_rw_task(
             cmd_result = connection.recv().fuse() => {
                 log!("[client_rw] from connection: {:?}", cmd_result);
                 if let Some(cmd_result) = cmd_result {
-                    if let Err(e) = to_parent.send(cmd_result) {
+                    if let Err(e) = to_parent.send(cmd_result).await {
                         println!("[client_rw] error while sending command result to parent");
                     }
                 } else {

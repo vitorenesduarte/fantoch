@@ -84,7 +84,7 @@ where
     let listener = task::listen((ip, port)).await?;
 
     // connect to all processes
-    let (mut from_readers, to_writer) = task::process::connect_to_all::<A, P::Message>(
+    let (mut from_readers, mut to_writer) = task::process::connect_to_all::<A, P::Message>(
         process_id,
         listener,
         addresses,
@@ -98,7 +98,8 @@ where
     let from_clients = task::client::start_listener(process_id, listener, tcp_nodelay);
 
     // start executor
-    let (mut from_executor, to_executor) = task::process::start_executor::<P>(config, from_clients);
+    let (mut from_executor, mut to_executor) =
+        task::process::start_executor::<P>(config, from_clients);
 
     // notify parent that we're connected
     connected.add_permits(1);
@@ -110,7 +111,7 @@ where
             msg = from_readers.recv().fuse() => {
                 log!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &to_writer, &to_executor)
+                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writer, &mut to_executor).await
                 } else {
                     println!("[server] error while receiving new process message from readers");
                 }
@@ -118,7 +119,7 @@ where
             cmd = from_executor.recv().fuse() => {
                 log!("[server] from executor: {:?}", cmd);
                 if let Some(cmd) = cmd {
-                    handle_from_client(process_id, cmd, &mut process, &to_writer, &to_executor)
+                    handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
                 } else {
                     println!("[server] error while receiving new command from executor");
                 }
@@ -127,65 +128,58 @@ where
     }
 }
 
-fn handle_from_processes<P>(
+async fn handle_from_processes<P>(
     process_id: ProcessId,
     from: ProcessId,
     msg: P::Message,
     process: &mut P,
-    to_writer: &BroadcastWriterSender<P::Message>,
-    to_executor: &ExecutionInfoSender<P>,
+    to_writer: &mut BroadcastWriterSender<P::Message>,
+    to_executor: &mut ExecutionInfoSender<P>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     // handle message in process
     let to_send = process.handle(from, msg);
-    send_to_writer(process_id, to_send, process, to_writer, to_executor);
+    send_to_writer(process_id, to_send, process, to_writer).await;
 
     // check if there's new execution info for the executor
     let execution_info = process.to_executor();
     if !execution_info.is_empty() {
-        if let Err(e) = to_executor.send(execution_info) {
+        if let Err(e) = to_executor.send(execution_info).await {
             println!("[server] error while sending to executor: {:?}", e);
         }
     }
 }
 
-fn handle_from_client<P>(
+async fn handle_from_client<P>(
     process_id: ProcessId,
     cmd: Command,
     process: &mut P,
-    to_writer: &BroadcastWriterSender<P::Message>,
-    to_executor: &ExecutionInfoSender<P>,
+    to_writer: &mut BroadcastWriterSender<P::Message>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     // submit command in process
     let to_send = process.submit(cmd);
-    send_to_writer(process_id, Some(to_send), process, to_writer, to_executor);
+    send_to_writer(process_id, Some(to_send), process, to_writer).await;
 }
 
-fn send_to_writer<P>(
+async fn send_to_writer<P>(
     process_id: ProcessId,
     to_send: Option<ToSend<P::Message>>,
     process: &mut P,
-    to_writer: &BroadcastWriterSender<P::Message>,
-    to_executor: &ExecutionInfoSender<P>,
+    to_writer: &mut BroadcastWriterSender<P::Message>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     if let Some(to_send) = to_send {
-        // handle msg locally if self in `to_send.target`
+        // handle msg locally if self in `to_send.target` and make sure there's nothing to be sent
         if to_send.target.contains(&process_id) {
-            handle_from_processes(
-                process_id,
-                process_id,
-                to_send.msg.clone(),
-                process,
-                to_writer,
-                to_executor,
-            );
+            // TODO can we avoid cloning here?
+            let nothing = process.handle(process_id, to_send.msg.clone());
+            assert!(nothing.is_none());
         }
-        if let Err(e) = to_writer.send(to_send) {
+        if let Err(e) = to_writer.send(to_send).await {
             println!("[server] error while sending to broadcast writer: {:?}", e);
         }
     }
@@ -254,11 +248,11 @@ where
 
     // TODO there's a single client for now
     // setup client
-    let (mut client, mut read, write) =
+    let (mut client, mut read, mut write) =
         client_setup(client_id, address, workload, tcp_nodelay).await;
 
     // generate and submit commands while there are commands to be generated
-    while next_cmd(&mut client, &time, &write) {
+    while next_cmd(&mut client, &time, &mut write).await {
         // and wait for their return
         let cmd_result = read.recv().await;
         handle_cmd_result(&mut client, &time, cmd_result);
@@ -282,7 +276,7 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut client, mut read, write) =
+    let (mut client, mut read, mut write) =
         client_setup(client_id, address, workload, tcp_nodelay).await;
 
     // create interval
@@ -292,7 +286,7 @@ where
         select! {
             _ = interval.tick().fuse() => {
                 // submit new command on every tick (if there are still commands to be generated)
-                next_cmd(&mut client, &time, &write);
+                next_cmd(&mut client, &time, &mut write).await;
             }
             cmd_result = read.recv().fuse() => {
                 if handle_cmd_result(&mut client, &time, cmd_result) {
@@ -343,9 +337,9 @@ where
 
 /// Generate the next command, returning a boolean representing whether a new command was generated
 /// or not.
-fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &CommandSender) -> bool {
+async fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &mut CommandSender) -> bool {
     if let Some((_, cmd)) = client.next_cmd(time) {
-        if let Err(e) = write.send(cmd) {
+        if let Err(e) = write.send(cmd).await {
             println!(
                 "[client] error while sending command to client read-write task: {:?}",
                 e
