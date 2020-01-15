@@ -13,6 +13,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 # shellcheck disable=SC1090
 source "${HOME}/.cargo/env"
 
+# install nightly (also check for updates)
+rustup toolchain install nightly
+rustup update
+
 # clone the repository if dir does not exist
 if [[ ! -d planet_sim ]]; then
     git clone https://github.com/vitorenesduarte/planet_sim -b "${branch}"
