@@ -4,7 +4,7 @@ use planet_sim::id::ClientId;
 use std::error::Error;
 
 const RANGE_SEP: &str = "-";
-const DEFAULT_CONFLICT_RATE: usize = 0;
+const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 #[tokio::main]
@@ -46,7 +46,7 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
             Arg::with_name("conflict_rate")
                 .long("conflict_rate")
                 .value_name("CONFLICT_RATE")
-                .help("number between 0 and 100 representing how contended the workload should be; default: 0")
+                .help("number between 0 and 100 representing how contended the workload should be; default: 100")
                 .takes_value(true),
         )
         .arg(
