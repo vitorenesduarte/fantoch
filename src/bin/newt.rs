@@ -1,4 +1,4 @@
-mod protocol;
+mod common;
 
 use planet_sim::protocol::{Newt, Protocol};
 use std::error::Error;
@@ -6,7 +6,7 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let (process_id, sorted_processes, ip, port, client_port, addresses, config, tcp_nodelay) =
-        protocol::parse_args();
+        common::protocol::parse_args();
     let process = Newt::new(process_id, config);
     planet_sim::run::process(
         process,

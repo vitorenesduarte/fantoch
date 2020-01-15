@@ -1,3 +1,5 @@
+mod common;
+
 use clap::{App, Arg};
 use planet_sim::client::Workload;
 use planet_sim::id::ClientId;
@@ -6,7 +8,6 @@ use std::error::Error;
 const RANGE_SEP: &str = "-";
 const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
-const DEFAULT_TCP_NODELAY: bool = true;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -74,7 +75,7 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool) {
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
     );
-    let tcp_nodelay = parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let tcp_nodelay = common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
 
     println!("ids: {:?}", ids);
     println!("client number: {}", ids.len());
@@ -141,14 +142,4 @@ fn parse_commands_per_client(number: Option<&str>) -> usize {
                 .expect("commands per client should be a number")
         })
         .unwrap_or(DEFAULT_COMMANDS_PER_CLIENT)
-}
-
-fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
-    tcp_nodelay
-        .map(|tcp_nodelay| {
-            tcp_nodelay
-                .parse::<bool>()
-                .expect("tcp_nodelay should be a boolean")
-        })
-        .unwrap_or(DEFAULT_TCP_NODELAY)
 }

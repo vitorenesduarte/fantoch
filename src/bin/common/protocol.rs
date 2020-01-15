@@ -101,7 +101,7 @@ pub fn parse_args() -> (
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
     let config = parse_config(matches.value_of("n"), matches.value_of("f"));
-    let tcp_nodelay = parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -175,16 +175,6 @@ fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
         .parse::<usize>()
         .expect("f should be a number");
     Config::new(n, f)
-}
-
-fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
-    tcp_nodelay
-        .map(|tcp_nodelay| {
-            tcp_nodelay
-                .parse::<bool>()
-                .expect("tcp_nodelay should be a boolean")
-        })
-        .unwrap_or(DEFAULT_TCP_NODELAY)
 }
 
 fn parse_id(id: &str) -> ProcessId {
