@@ -173,11 +173,19 @@ async fn send_to_writer<P>(
     P: Protocol + 'static,
 {
     if let Some(to_send) = to_send {
-        // handle msg locally if self in `to_send.target` and make sure there's nothing to be sent
+        // handle msg locally if self in `to_send.target` and make sure that, if there's something
+        // to be sent, it is to self, i.e. messages from self to self shouldn't generate messages
         if to_send.target.contains(&process_id) {
             // TODO can we avoid cloning here?
-            let nothing = process.handle(process_id, to_send.msg.clone());
-            assert!(nothing.is_none());
+            if let Some(ToSend { target, msg, .. }) =
+                process.handle(process_id, to_send.msg.clone())
+            {
+                assert!(target.len() == 1);
+                assert!(target.contains(&process_id));
+                // handling this message shouldn't generate a new message
+                let nothing = process.handle(process_id, msg);
+                assert!(nothing.is_none());
+            }
         }
         if let Err(e) = to_writer.send(to_send).await {
             println!("[server] error while sending to broadcast writer: {:?}", e);
