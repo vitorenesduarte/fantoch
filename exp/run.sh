@@ -6,7 +6,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source "${DIR}/util.sh"
 
 KILL_WAIT=3 # seconds
-RELEASE=false
+RELEASE=true
 
 PORT=3000
 CLIENT_PORT=4000
@@ -15,9 +15,9 @@ PROCESSES=3
 FAULTS=1
 
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=100
+CLIENTS_PER_MACHINE=500
 CONFLICT_RATE=0
-COMMANDS_PER_CLIENT=3000
+COMMANDS_PER_CLIENT=20000
 
 TCP_NODELAY=true
 
@@ -27,15 +27,16 @@ bin_script() {
         exit 1
     fi
     local binary=$1
+    local prefix="source \${HOME}/.cargo/env && cd planet_sim"
 
     case "${RELEASE}" in
     "true")
         # for release builds
-        echo "./planet_sim/target/release/${binary}"
+        echo "${prefix} && cargo build --release --bins && ./target/release/${binary}"
         ;;
     "false")
         # for debug builds
-        echo "source \${HOME}/.cargo/env && cd planet_sim && env RUSTFLAGS=\"-Z sanitizer=leak\" cargo +nightly run --release --bin ${binary} --"
+        echo "${prefix} && env RUSTFLAGS=\"-Z sanitizer=leak\" cargo +nightly run --release --bin ${binary} --"
         ;;
     *)
         echo "invalid value for relase: ${RELEASE}"

@@ -29,6 +29,3 @@ cd planet_sim/ || {
 }
 git checkout "${branch}"
 git pull
-
-# build all the binaries in release mode for this architecture
-cargo build --release --bins
