@@ -6,20 +6,43 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source "${DIR}/util.sh"
 
 KILL_WAIT=3 # seconds
-BUILD_FOLDER="./planet_sim/target/release"
+RELEASE=false
+
 PORT=3000
 CLIENT_PORT=4000
-
 PROTOCOL="atlas"
 PROCESSES=3
 FAULTS=1
 
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=500
+CLIENTS_PER_MACHINE=100
 CONFLICT_RATE=0
-COMMANDS_PER_CLIENT=20000
+COMMANDS_PER_CLIENT=3000
 
 TCP_NODELAY=true
+
+bin_script() {
+    if [ $# -ne 1 ]; then
+        echo "usage: bin_script binary"
+        exit 1
+    fi
+    local binary=$1
+
+    case "${RELEASE}" in
+    "true")
+        # for release builds
+        echo "./planet_sim/target/release/${binary}"
+        ;;
+    "false")
+        # for debug builds
+        echo "source \${HOME}/.cargo/env && cd planet_sim && env RUSTFLAGS=\"-Z sanitizer=leak\" cargo +nightly run --release --bin ${binary} --"
+        ;;
+    *)
+        echo "invalid value for relase: ${RELEASE}"
+        exit 1
+        ;;
+    esac
+}
 
 process_file() {
     if [ $# -ne 1 ]; then
@@ -95,10 +118,13 @@ start_process() {
         --faults ${FAULTS} \
         --tcp_nodelay ${TCP_NODELAY}"
 
-    info "starting ${protocol} with: $(echo ${command_args} | tr -s ' ')"
+    # compute script (based on ${RELEASE})
+    script=$(bin_script "${protocol}")
+
+    info "starting ${protocol} with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "./${BUILD_FOLDER}/${protocol} ${command_args}" </dev/null
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" </dev/null
 }
 
 wait_process_started() {
@@ -153,6 +179,7 @@ start_client() {
     local id_start
     local id_end
     local command_args
+    local script
 
     # check that index is at least 1
     if [[ ${index} -lt 1 ]]; then
@@ -181,10 +208,13 @@ start_client() {
     # TODO for open-loop clients:
     # --interval 1
 
-    info "starting client with: $(echo ${command_args} | tr -s ' ')"
+    # compute script (based on ${RELEASE})
+    script=$(bin_script "client")
+
+    info "starting client with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "./${BUILD_FOLDER}/client ${command_args}" </dev/null
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" </dev/null
 }
 
 run_clients() {
