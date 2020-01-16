@@ -263,7 +263,6 @@ where
     // create system time
     let time = RunTime;
 
-    // TODO there's a single client for now
     // setup client
     let (mut client, mut read, mut write) = client_setup(
         client_id,
