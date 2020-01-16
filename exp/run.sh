@@ -118,7 +118,7 @@ wait_client_ended() {
     local ended=0
     while [[ ${ended} != 1 ]]; do
         # shellcheck disable=SC2029
-        started=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        ended=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
         sleep 1
     done
 }
