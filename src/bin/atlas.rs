@@ -14,6 +14,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         addresses,
         config,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
     ) = common::protocol::parse_args();
     let process = Atlas::new(process_id, config);
@@ -27,6 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         addresses,
         config,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
     )
     .await?;

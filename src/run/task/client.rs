@@ -11,10 +11,18 @@ pub fn start_listener(
     process_id: ProcessId,
     listener: TcpListener,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> ClientReceiver {
     super::spawn_producer(channel_buffer_size, |tx| {
-        client_listener_task(process_id, listener, tcp_nodelay, channel_buffer_size, tx)
+        client_listener_task(
+            process_id,
+            listener,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
+            tx,
+        )
     })
 }
 
@@ -23,12 +31,13 @@ async fn client_listener_task(
     process_id: ProcessId,
     listener: TcpListener,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
     parent: ClientSender,
 ) {
     // start listener task
     let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, tx)
+        super::listener_task(listener, tcp_nodelay, socket_buffer_size, tx)
     });
 
     loop {
