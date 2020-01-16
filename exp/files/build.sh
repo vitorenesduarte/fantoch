@@ -58,5 +58,6 @@ cd planet_sim/ || {
     echo "planet_sim/ directory must exist after clone"
     exit 1
 }
+git stash
 git checkout "${branch}"
 git pull
