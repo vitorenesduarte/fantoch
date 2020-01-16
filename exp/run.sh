@@ -5,41 +5,61 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=util.sh
 source "${DIR}/util.sh"
 
-KILL_WAIT=3 # seconds
-RELEASE=true
+# seconds
+KILL_WAIT=3
 
+# mode can be: release, flamegraph, leaks
+# PROCESS_RUN_MODE="flamegraph"
+PROCESS_RUN_MODE="flamegraph"
+CLIENT_RUN_MODE="release"
+
+# processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="atlas"
+PROTOCOL="newt"
 PROCESSES=3
 FAULTS=1
 
+# clients config
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=500
+CLIENTS_PER_MACHINE=1000
 CONFLICT_RATE=0
-COMMANDS_PER_CLIENT=20000
+COMMANDS_PER_CLIENT=200
 
+# overall config
 TCP_NODELAY=true
+# by default, each socket stream is buffered (with a buffer of size 8KBs),
+# which should greatly reduce the number of syscalls for small-sized messages
+SOCKET_BUFFER_SIZE=$((8 * 1024))
+# if this value is 100, the run doesn't finish, which probably means there's a deadlock somewhere
+# with 1000 we can see that channels fill up sometimes
+# with 10000 that doesn't seem to happen
+CHANNEL_BUFFER_SIZE=10000
 
 bin_script() {
-    if [ $# -ne 1 ]; then
-        echo "usage: bin_script binary"
+    if [ $# -ne 2 ]; then
+        echo "usage: bin_script mode binary"
         exit 1
     fi
-    local binary=$1
+    local mode=$1
+    local binary=$2
     local prefix="source \${HOME}/.cargo/env && cd planet_sim"
 
-    case "${RELEASE}" in
-    "true")
-        # for release builds
-        echo "${prefix} && cargo build --release --bins && ./target/release/${binary}"
+    case "${mode}" in
+    "release")
+        # for release runs
+        echo "${prefix} && sed -i 's/debug = true/debug = false/g' Cargo.toml && cargo build --release --bins && ./target/release/${binary}"
         ;;
-    "false")
-        # for debug builds
+    "flamegraph")
+        # for flamegraph runs
+        echo "${prefix} && sed -i 's/debug = false/debug = true/g' Cargo.toml && cargo flamegraph --bin=${binary} --"
+        ;;
+    "leaks")
+        # for memory-leak runs
         echo "${prefix} && env RUSTFLAGS=\"-Z sanitizer=leak\" cargo +nightly run --release --bin ${binary} --"
         ;;
     *)
-        echo "invalid value for relase: ${RELEASE}"
+        echo "invalid run mode: ${mode}"
         exit 1
         ;;
     esac
@@ -117,10 +137,12 @@ start_process() {
         --client_port ${CLIENT_PORT} \
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
-        --tcp_nodelay ${TCP_NODELAY}"
+        --tcp_nodelay ${TCP_NODELAY} \
+        --socket_buffer_size ${SOCKET_BUFFER_SIZE} \
+        --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
 
-    # compute script (based on ${RELEASE})
-    script=$(bin_script "${protocol}")
+    # compute script (based on run mode)
+    script=$(bin_script "${PROCESS_RUN_MODE}" "${protocol}")
 
     info "starting ${protocol} with: $(echo ${script} ${command_args} | tr -s ' ')"
 
@@ -205,12 +227,14 @@ start_client() {
         --address ${address} \
         --conflict_rate ${CONFLICT_RATE} \
         --commands_per_client ${COMMANDS_PER_CLIENT} \
-        --tcp_nodelay ${TCP_NODELAY}"
+        --tcp_nodelay ${TCP_NODELAY} \
+        --socket_buffer_size ${SOCKET_BUFFER_SIZE} \
+        --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
     # TODO for open-loop clients:
     # --interval 1
 
-    # compute script (based on ${RELEASE})
-    script=$(bin_script "client")
+    # compute script (based on run mode)
+    script=$(bin_script "${CLIENT_RUN_MODE}" "client")
 
     info "starting client with: $(echo ${script} ${command_args} | tr -s ' ')"
 
@@ -246,12 +270,12 @@ else
     sleep ${KILL_WAIT}
     info "hopefully all processes are stopped now"
 
+    # TODO launch dstat in all all machines with something like:
+    # dstat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
+
     start_processes
     info "all processes have been started"
 
     run_clients
     info "all clients have run"
 fi
-
-# TODO launch dstat with something like:
-# dstat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
