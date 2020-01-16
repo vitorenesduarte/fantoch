@@ -1,10 +1,10 @@
+use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Protocol, ToSend};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProcessHi(pub ProcessId);
@@ -22,19 +22,19 @@ pub enum FromClient {
 }
 
 // list of channels used to communicate between tasks
-pub type ReaderReceiver<V> = UnboundedReceiver<(ProcessId, V)>;
-pub type ReaderSender<V> = UnboundedSender<(ProcessId, V)>;
-pub type BroadcastWriterReceiver<V> = UnboundedReceiver<ToSend<V>>;
-pub type BroadcastWriterSender<V> = UnboundedSender<ToSend<V>>;
-pub type WriterReceiver = UnboundedReceiver<Bytes>;
-pub type WriterSender = UnboundedSender<Bytes>;
-pub type ClientReceiver = UnboundedReceiver<FromClient>;
-pub type ClientSender = UnboundedSender<FromClient>;
-pub type CommandReceiver = UnboundedReceiver<Command>;
-pub type CommandSender = UnboundedSender<Command>;
-pub type CommandResultReceiver = UnboundedReceiver<CommandResult>;
-pub type CommandResultSender = UnboundedSender<CommandResult>;
+pub type ReaderReceiver<V> = ChannelReceiver<(ProcessId, V)>;
+pub type ReaderSender<V> = ChannelSender<(ProcessId, V)>;
+pub type BroadcastWriterReceiver<V> = ChannelReceiver<ToSend<V>>;
+pub type BroadcastWriterSender<V> = ChannelSender<ToSend<V>>;
+pub type WriterReceiver = ChannelReceiver<Bytes>;
+pub type WriterSender = ChannelSender<Bytes>;
+pub type ClientReceiver = ChannelReceiver<FromClient>;
+pub type ClientSender = ChannelSender<FromClient>;
+pub type CommandReceiver = ChannelReceiver<Command>;
+pub type CommandSender = ChannelSender<Command>;
+pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
+pub type CommandResultSender = ChannelSender<CommandResult>;
 pub type ExecutionInfoReceiver<P> =
-    UnboundedReceiver<Vec<<<P as Protocol>::Executor as Executor>::ExecutionInfo>>;
+    ChannelReceiver<Vec<<<P as Protocol>::Executor as Executor>::ExecutionInfo>>;
 pub type ExecutionInfoSender<P> =
-    UnboundedSender<Vec<<<P as Protocol>::Executor as Executor>::ExecutionInfo>>;
+    ChannelSender<Vec<<<P as Protocol>::Executor as Executor>::ExecutionInfo>>;

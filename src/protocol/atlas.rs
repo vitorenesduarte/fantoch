@@ -85,9 +85,7 @@ impl Protocol for Atlas {
 
     /// Returns new commands results to be sent to clients.
     fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        let mut to_executor = Vec::new();
-        mem::swap(&mut to_executor, &mut self.to_executor);
-        to_executor
+        mem::take(&mut self.to_executor)
     }
 
     fn show_metrics(&self) {
@@ -283,6 +281,10 @@ impl Atlas {
             let execution_info = ExecutionInfo::new(dot, cmd, value.clock);
             self.to_executor.push(execution_info);
         }
+
+        // TODO the following is incorrect: it should only be deleted once it has been committed at
+        // all processes
+        self.cmds.remove(dot);
 
         // nothing to send
         None

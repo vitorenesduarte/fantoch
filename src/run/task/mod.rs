@@ -1,17 +1,20 @@
 // This module contains the definition of `Connection`.
 pub mod connection;
 
+// This module contains the definition of `Sender` and `Receiver`.
+pub mod chan;
+
 // This module contains the definition of ...
 pub mod process;
 
 // This module contains the definition of ...
 pub mod client;
 
+use chan::{channel, ChannelReceiver, ChannelSender};
 use connection::Connection;
 use std::error::Error;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 /// Just a wrapper around tokio::spawn.
@@ -23,13 +26,11 @@ where
     tokio::spawn(task)
 }
 
-/// Just a wrapper around mpsc::unbounded_channel.
-pub fn channel<M>() -> (UnboundedSender<M>, UnboundedReceiver<M>) {
-    mpsc::unbounded_channel()
-}
-
 /// Spawns a single producer, returning the consumer-end of the channel.
-pub fn spawn_producer<M, F>(producer: impl FnOnce(UnboundedSender<M>) -> F) -> UnboundedReceiver<M>
+pub fn spawn_producer<M, F>(
+    channel_buffer_size: usize,
+    producer: impl FnOnce(ChannelSender<M>) -> F,
+) -> ChannelReceiver<M>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -37,16 +38,17 @@ where
     // create channel and:
     // - pass the producer-end of the channel to producer
     // - return the consumer-end of the channel to the caller
-    let (tx, rx) = channel();
+    let (tx, rx) = channel(channel_buffer_size);
     spawn(producer(tx));
     rx
 }
 
 /// Spawns many producers, returning the consumer-end of the channel.
 pub fn spawn_producers<A, T, M, F>(
+    channel_buffer_size: usize,
     args: T,
-    producer: impl Fn(A, UnboundedSender<M>) -> F,
-) -> UnboundedReceiver<M>
+    producer: impl Fn(A, ChannelSender<M>) -> F,
+) -> ChannelReceiver<M>
 where
     T: IntoIterator<Item = A>,
     F: Future + Send + 'static,
@@ -55,7 +57,7 @@ where
     // create channel and:
     // - pass a clone of the producer-end of the channel to each producer
     // - return the consumer-end of the channel to the caller
-    let (tx, rx) = channel();
+    let (tx, rx) = channel(channel_buffer_size);
     for arg in args {
         spawn(producer(arg, tx.clone()));
     }
@@ -63,7 +65,10 @@ where
 }
 
 /// Spawns a consumer, returning the producer-end of the channel.
-pub fn spawn_consumer<M, F>(consumer: impl FnOnce(UnboundedReceiver<M>) -> F) -> UnboundedSender<M>
+pub fn spawn_consumer<M, F>(
+    channel_buffer_size: usize,
+    consumer: impl FnOnce(ChannelReceiver<M>) -> F,
+) -> ChannelSender<M>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -71,7 +76,7 @@ where
     // create channel and:
     // - pass the consumer-end of the channel to the consumer
     // - return the producer-end of the channel to the caller
-    let (tx, rx) = channel();
+    let (tx, rx) = channel(channel_buffer_size);
     spawn(consumer(rx));
     tx
 }
@@ -79,8 +84,9 @@ where
 /// Spawns a producer and a consumer, returning one two channel: one consumer-end and one
 /// producer-end of the. channel.
 pub fn spawn_producer_and_consumer<M, N, F>(
-    task: impl FnOnce(UnboundedSender<M>, UnboundedReceiver<N>) -> F,
-) -> (UnboundedReceiver<M>, UnboundedSender<N>)
+    channel_buffer_size: usize,
+    task: impl FnOnce(ChannelSender<M>, ChannelReceiver<N>) -> F,
+) -> (ChannelReceiver<M>, ChannelSender<N>)
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -90,19 +96,19 @@ where
     //   task
     // - return the consumer-end of the 1st channel and the producer-end of the 2nd channel to the
     //   caller
-    let (tx1, rx1) = channel();
-    let (tx2, rx2) = channel();
+    let (tx1, rx1) = channel(channel_buffer_size);
+    let (tx2, rx2) = channel(channel_buffer_size);
     spawn(task(tx1, rx2));
     (rx1, tx2)
 }
 
 /// Connect to some address.
-pub async fn connect<A>(address: A) -> Result<Connection, Box<dyn Error>>
+pub async fn connect<A>(address: A, tcp_nodelay: bool) -> Result<Connection, Box<dyn Error>>
 where
     A: ToSocketAddrs,
 {
     let stream = TcpStream::connect(address).await?;
-    let connection = Connection::new(stream);
+    let connection = Connection::new(stream, tcp_nodelay);
     Ok(connection)
 }
 
@@ -115,16 +121,20 @@ where
 }
 
 /// Listen on new connections and send them to parent process.
-async fn listener_task(mut listener: TcpListener, parent: UnboundedSender<Connection>) {
+async fn listener_task(
+    mut listener: TcpListener,
+    tcp_nodelay: bool,
+    mut parent: ChannelSender<Connection>,
+) {
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
                 println!("[listener] new connection: {:?}", addr);
 
                 // create connection
-                let connection = Connection::new(stream);
+                let connection = Connection::new(stream, tcp_nodelay);
 
-                if let Err(e) = parent.send(connection) {
+                if let Err(e) = parent.send(connection).await {
                     println!("[listener] error sending stream to parent process: {:?}", e);
                 }
             }

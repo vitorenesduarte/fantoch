@@ -40,4 +40,9 @@ where
             .entry(dot)
             .or_insert_with(|| I::new(process_id, n, f, fast_quorum_size))
     }
+
+    // Remove `Info` associated with `Dot`.
+    pub fn remove(&mut self, dot: Dot) {
+        self.dot_to_info.remove(&dot);
+    }
 }

@@ -1,3 +1,5 @@
+mod common;
+
 use clap::{App, Arg};
 use planet_sim::client::Workload;
 use planet_sim::id::ClientId;
@@ -9,12 +11,20 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload) = parse_args();
-    planet_sim::run::client(ids, address, interval, workload).await?;
+    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) = parse_args();
+    planet_sim::run::client(
+        ids,
+        address,
+        interval,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
+    .await?;
     Ok(())
 }
 
-fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
+fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -46,14 +56,28 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
             Arg::with_name("conflict_rate")
                 .long("conflict_rate")
                 .value_name("CONFLICT_RATE")
-                .help("number between 0 and 100 representing how contended the workload should be")
+                .help("number between 0 and 100 representing how contended the workload should be; default: 100")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("commands_per_client")
                 .long("commands_per_client")
                 .value_name("COMMANDS_PER_CLIENT")
-                .help("number of commands to be issued by each client")
+                .help("number of commands to be issued by each client; default: 1000")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("tcp_nodelay")
+                .long("tcp_nodelay")
+                .value_name("TCP_NODELAY")
+                .help("set TCP_NODELAY; defaul: true")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("channel_buffer_size")
+                .long("channel_buffer_size")
+                .value_name("CHANNEL_BUFFER_SIZE")
+                .help("set the size of the buffer in each channel used for task communication; default: 100")
                 .takes_value(true),
         )
         .get_matches();
@@ -66,13 +90,25 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload) {
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
     );
+    let tcp_nodelay = common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let channel_buffer_size =
+        common::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
 
     println!("ids: {:?}", ids);
     println!("client number: {}", ids.len());
     println!("process address: {}", address);
     println!("workload: {:?}", workload);
+    println!("tcp_nodelay: {:?}", tcp_nodelay);
+    println!("channel buffer size: {:?}", channel_buffer_size);
 
-    (ids, address, interval, workload)
+    (
+        ids,
+        address,
+        interval,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
 }
 
 fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {

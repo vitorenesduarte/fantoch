@@ -89,9 +89,7 @@ impl Protocol for Newt {
 
     /// Returns new commands results to be sent to clients.
     fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        let mut to_executor = Vec::new();
-        mem::swap(&mut to_executor, &mut self.to_executor);
-        to_executor
+        mem::take(&mut self.to_executor)
     }
 
     fn show_metrics(&self) {
@@ -294,8 +292,11 @@ impl Newt {
         // generate phantom votes if committed clock is higher than the local key's clock:
         // - this only happens if newt is configured with tiny quorums or, in case it's not, this
         //   process was part of the fast quorum (if it was, `info.quorum` is not empty)
+        // - n = 3 is a special case where tiny quorums don't reduce the quorum size; in this case,
+        //   we also don't generate phantom votes
         let mut to_send = None;
-        if self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty() {
+        if self.bp.config.n() > 3 && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
+        {
             if let Some(cmd) = info.cmd.as_ref() {
                 // if not a no op, check if we can generate more votes that can speed-up execution
                 let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
@@ -320,6 +321,10 @@ impl Newt {
             let execution_info = ExecutionInfo::votes(dot, cmd, info.clock, votes);
             self.to_executor.push(execution_info);
         }
+
+        // TODO the following is incorrect: it should only be deleted once it has been committed at
+        // all processes
+        self.cmds.remove(dot);
 
         // return `ToSend`
         to_send
@@ -351,9 +356,7 @@ impl Newt {
 
     // Replaces the value `local_votes` with empty votes, returning the previous votes.
     fn reset_votes(local_votes: &mut Votes) -> Votes {
-        let mut votes = Votes::new();
-        mem::swap(&mut votes, local_votes);
-        votes
+        mem::take(local_votes)
     }
 }
 

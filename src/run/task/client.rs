@@ -7,14 +7,29 @@ use futures::future::FutureExt;
 use futures::select;
 use tokio::net::TcpListener;
 
-pub fn start_listener(process_id: ProcessId, listener: TcpListener) -> ClientReceiver {
-    super::spawn_producer(|tx| client_listener_task(process_id, listener, tx))
+pub fn start_listener(
+    process_id: ProcessId,
+    listener: TcpListener,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
+) -> ClientReceiver {
+    super::spawn_producer(channel_buffer_size, |tx| {
+        client_listener_task(process_id, listener, tcp_nodelay, channel_buffer_size, tx)
+    })
 }
 
 /// Listen on new client connections and spawn a client task for each new connection.
-async fn client_listener_task(process_id: ProcessId, listener: TcpListener, parent: ClientSender) {
+async fn client_listener_task(
+    process_id: ProcessId,
+    listener: TcpListener,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
+    parent: ClientSender,
+) {
     // start listener task
-    let mut rx = super::spawn_producer(|tx| super::listener_task(listener, tx));
+    let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
+        super::listener_task(listener, tcp_nodelay, tx)
+    });
 
     loop {
         // handle new client connections
@@ -23,7 +38,12 @@ async fn client_listener_task(process_id: ProcessId, listener: TcpListener, pare
                 println!("[client_listener] new connection");
                 // start client server task and give it the producer-end of the channel in order for
                 // this client to notify parent
-                super::spawn(client_server_task(process_id, connection, parent.clone()));
+                super::spawn(client_server_task(
+                    process_id,
+                    channel_buffer_size,
+                    connection,
+                    parent.clone(),
+                ));
             }
             None => {
                 println!("[client_listener] error receiving message from listener");
@@ -36,17 +56,23 @@ async fn client_listener_task(process_id: ProcessId, listener: TcpListener, pare
 /// parent (new command results).
 async fn client_server_task(
     process_id: ProcessId,
+    channel_buffer_size: usize,
     mut connection: Connection,
-    parent: ClientSender,
+    mut parent: ClientSender,
 ) {
-    let (client_id, mut parent_results) =
-        server_receive_hi(process_id, &mut connection, &parent).await;
+    let (client_id, mut parent_results) = server_receive_hi(
+        process_id,
+        channel_buffer_size,
+        &mut connection,
+        &mut parent,
+    )
+    .await;
 
     loop {
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &parent) {
+                if !client_server_task_handle_cmd(cmd, client_id, &mut parent).await {
                     return;
                 }
             }
@@ -60,11 +86,12 @@ async fn client_server_task(
 
 async fn server_receive_hi(
     process_id: ProcessId,
+    channel_buffer_size: usize,
     connection: &mut Connection,
-    parent: &ClientSender,
+    parent: &mut ClientSender,
 ) -> (ClientId, CommandResultReceiver) {
     // create channel where the process will write command results and where client will read them
-    let (tx, rx) = super::channel();
+    let (mut tx, rx) = super::chan::channel(channel_buffer_size);
 
     // receive hi from client and register in parent, sending it tx
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
@@ -74,8 +101,11 @@ async fn server_receive_hi(
         panic!("[client_server] couldn't receive client id from connected client");
     };
 
+    // set channel name
+    tx.set_name(format!("client_server_{}", client_id));
+
     // notify parent with the channel where it should write command results
-    if let Err(e) = parent.send(FromClient::Register(client_id, tx)) {
+    if let Err(e) = parent.send(FromClient::Register(client_id, tx)).await {
         println!(
             "[client_server] error while registering client in parent: {:?}",
             e
@@ -90,13 +120,13 @@ async fn server_receive_hi(
     (client_id, rx)
 }
 
-fn client_server_task_handle_cmd(
+async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
-    parent: &ClientSender,
+    parent: &mut ClientSender,
 ) -> bool {
     if let Some(cmd) = cmd {
-        if let Err(e) = parent.send(FromClient::Submit(cmd)) {
+        if let Err(e) = parent.send(FromClient::Submit(cmd)).await {
             println!(
                 "[client_server] error while sending new command to parent: {:?}",
                 e
@@ -105,7 +135,7 @@ fn client_server_task_handle_cmd(
         true
     } else {
         println!("[client_server] client disconnected.");
-        if let Err(e) = parent.send(FromClient::Unregister(client_id)) {
+        if let Err(e) = parent.send(FromClient::Unregister(client_id)).await {
             println!(
                 "[client_server] error while sending unregister to parent: {:?}",
                 e
@@ -140,13 +170,18 @@ pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> 
     }
 }
 
-pub fn start_client_rw_task(connection: Connection) -> (CommandResultReceiver, CommandSender) {
-    super::spawn_producer_and_consumer(|tx, rx| client_rw_task(connection, tx, rx))
+pub fn start_client_rw_task(
+    channel_buffer_size: usize,
+    connection: Connection,
+) -> (CommandResultReceiver, CommandSender) {
+    super::spawn_producer_and_consumer(channel_buffer_size, |tx, rx| {
+        client_rw_task(connection, tx, rx)
+    })
 }
 
 async fn client_rw_task(
     mut connection: Connection,
-    to_parent: CommandResultSender,
+    mut to_parent: CommandResultSender,
     mut from_parent: CommandReceiver,
 ) {
     loop {
@@ -154,7 +189,7 @@ async fn client_rw_task(
             cmd_result = connection.recv().fuse() => {
                 log!("[client_rw] from connection: {:?}", cmd_result);
                 if let Some(cmd_result) = cmd_result {
-                    if let Err(e) = to_parent.send(cmd_result) {
+                    if let Err(e) = to_parent.send(cmd_result).await {
                         println!("[client_rw] error while sending command result to parent");
                     }
                 } else {

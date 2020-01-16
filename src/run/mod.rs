@@ -12,7 +12,7 @@ use crate::log;
 use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
 use crate::time::{RunTime, SysTime};
-use futures::future::FutureExt;
+use futures::future::{join_all, FutureExt};
 use futures::select;
 use prelude::*;
 use std::error::Error;
@@ -34,6 +34,8 @@ pub async fn process<A, P>(
     client_port: u16,
     addresses: Vec<A>,
     config: Config,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -50,6 +52,8 @@ where
         client_port,
         addresses,
         config,
+        tcp_nodelay,
+        channel_buffer_size,
         semaphore,
     )
     .await
@@ -65,6 +69,8 @@ async fn process_with_notify<A, P>(
     client_port: u16,
     addresses: Vec<A>,
     config: Config,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
     connected: Arc<Semaphore>,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -81,20 +87,24 @@ where
     let listener = task::listen((ip, port)).await?;
 
     // connect to all processes
-    let (mut from_readers, to_writer) = task::process::connect_to_all::<A, P::Message>(
+    let (mut from_readers, mut to_writer) = task::process::connect_to_all::<A, P::Message>(
         process_id,
         listener,
         addresses,
         CONNECT_RETRIES,
+        tcp_nodelay,
+        channel_buffer_size,
     )
     .await?;
 
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
-    let from_clients = task::client::start_listener(process_id, listener);
+    let from_clients =
+        task::client::start_listener(process_id, listener, tcp_nodelay, channel_buffer_size);
 
     // start executor
-    let (mut from_executor, to_executor) = task::process::start_executor::<P>(config, from_clients);
+    let (mut from_executor, mut to_executor) =
+        task::process::start_executor::<P>(config, channel_buffer_size, from_clients);
 
     // notify parent that we're connected
     connected.add_permits(1);
@@ -106,7 +116,7 @@ where
             msg = from_readers.recv().fuse() => {
                 log!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &to_writer, &to_executor)
+                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writer, &mut to_executor).await
                 } else {
                     println!("[server] error while receiving new process message from readers");
                 }
@@ -114,7 +124,7 @@ where
             cmd = from_executor.recv().fuse() => {
                 log!("[server] from executor: {:?}", cmd);
                 if let Some(cmd) = cmd {
-                    handle_from_client(process_id, cmd, &mut process, &to_writer, &to_executor)
+                    handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
                 } else {
                     println!("[server] error while receiving new command from executor");
                 }
@@ -123,65 +133,66 @@ where
     }
 }
 
-fn handle_from_processes<P>(
+async fn handle_from_processes<P>(
     process_id: ProcessId,
     from: ProcessId,
     msg: P::Message,
     process: &mut P,
-    to_writer: &BroadcastWriterSender<P::Message>,
-    to_executor: &ExecutionInfoSender<P>,
+    to_writer: &mut BroadcastWriterSender<P::Message>,
+    to_executor: &mut ExecutionInfoSender<P>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     // handle message in process
     let to_send = process.handle(from, msg);
-    send_to_writer(process_id, to_send, process, to_writer, to_executor);
+    send_to_writer(process_id, to_send, process, to_writer).await;
 
     // check if there's new execution info for the executor
     let execution_info = process.to_executor();
     if !execution_info.is_empty() {
-        if let Err(e) = to_executor.send(execution_info) {
+        if let Err(e) = to_executor.send(execution_info).await {
             println!("[server] error while sending to executor: {:?}", e);
         }
     }
 }
 
-fn handle_from_client<P>(
+async fn handle_from_client<P>(
     process_id: ProcessId,
     cmd: Command,
     process: &mut P,
-    to_writer: &BroadcastWriterSender<P::Message>,
-    to_executor: &ExecutionInfoSender<P>,
+    to_writer: &mut BroadcastWriterSender<P::Message>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     // submit command in process
     let to_send = process.submit(cmd);
-    send_to_writer(process_id, Some(to_send), process, to_writer, to_executor);
+    send_to_writer(process_id, Some(to_send), process, to_writer).await;
 }
 
-fn send_to_writer<P>(
+async fn send_to_writer<P>(
     process_id: ProcessId,
     to_send: Option<ToSend<P::Message>>,
     process: &mut P,
-    to_writer: &BroadcastWriterSender<P::Message>,
-    to_executor: &ExecutionInfoSender<P>,
+    to_writer: &mut BroadcastWriterSender<P::Message>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     if let Some(to_send) = to_send {
-        // handle msg locally if self in `to_send.target`
+        // handle msg locally if self in `to_send.target` and make sure that, if there's something
+        // to be sent, it is to self, i.e. messages from self to self shouldn't generate messages
         if to_send.target.contains(&process_id) {
-            handle_from_processes(
-                process_id,
-                process_id,
-                to_send.msg.clone(),
-                process,
-                to_writer,
-                to_executor,
-            );
+            // TODO can we avoid cloning here?
+            if let Some(ToSend { target, msg, .. }) =
+                process.handle(process_id, to_send.msg.clone())
+            {
+                assert!(target.len() == 1);
+                assert!(target.contains(&process_id));
+                // handling this message shouldn't generate a new message
+                let nothing = process.handle(process_id, msg);
+                assert!(nothing.is_none());
+            }
         }
-        if let Err(e) = to_writer.send(to_send) {
+        if let Err(e) = to_writer.send(to_send).await {
             println!("[server] error while sending to broadcast writer: {:?}", e);
         }
     }
@@ -192,6 +203,8 @@ pub async fn client<A>(
     address: A,
     interval_ms: Option<u64>,
     workload: Workload,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -205,12 +218,16 @@ where
                 address.clone(),
                 interval_ms,
                 workload,
+                tcp_nodelay,
+                channel_buffer_size,
             ))
         } else {
             task::spawn(closed_loop_client::<A>(
                 client_id,
                 address.clone(),
                 workload,
+                tcp_nodelay,
+                channel_buffer_size,
             ))
         }
     });
@@ -219,8 +236,8 @@ where
     let mut latency = Histogram::new();
     let mut throughput = Histogram::new();
 
-    for handle in handles {
-        let client = handle.await?;
+    for join_result in join_all(handles).await {
+        let client = join_result?;
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
         throughput.merge(client.throughput_histogram());
@@ -233,7 +250,13 @@ where
     Ok(())
 }
 
-async fn closed_loop_client<A>(client_id: ClientId, address: A, workload: Workload) -> Client
+async fn closed_loop_client<A>(
+    client_id: ClientId,
+    address: A,
+    workload: Workload,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
+) -> Client
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
 {
@@ -242,10 +265,17 @@ where
 
     // TODO there's a single client for now
     // setup client
-    let (mut client, mut read, write) = client_setup(client_id, address, workload).await;
+    let (mut client, mut read, mut write) = client_setup(
+        client_id,
+        address,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
+    .await;
 
     // generate and submit commands while there are commands to be generated
-    while next_cmd(&mut client, &time, &write) {
+    while next_cmd(&mut client, &time, &mut write).await {
         // and wait for their return
         let cmd_result = read.recv().await;
         handle_cmd_result(&mut client, &time, cmd_result);
@@ -260,6 +290,8 @@ async fn open_loop_client<A>(
     address: A,
     interval_ms: u64,
     workload: Workload,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Client
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
@@ -268,7 +300,14 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut client, mut read, write) = client_setup(client_id, address, workload).await;
+    let (mut client, mut read, mut write) = client_setup(
+        client_id,
+        address,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
+    .await;
 
     // create interval
     let mut interval = time::interval(Duration::from_millis(interval_ms));
@@ -277,7 +316,7 @@ where
         select! {
             _ = interval.tick().fuse() => {
                 // submit new command on every tick (if there are still commands to be generated)
-                next_cmd(&mut client, &time, &write);
+                next_cmd(&mut client, &time, &mut write).await;
             }
             cmd_result = read.recv().fuse() => {
                 if handle_cmd_result(&mut client, &time, cmd_result) {
@@ -295,12 +334,14 @@ async fn client_setup<A>(
     client_id: ClientId,
     address: A,
     workload: Workload,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> (Client, CommandResultReceiver, CommandSender)
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection = match task::connect(address).await {
+    let mut connection = match task::connect(address, tcp_nodelay).await {
         Ok(connection) => connection,
         Err(e) => {
             // TODO panicking here as not sure how to make error handling send + 'static (required
@@ -319,7 +360,7 @@ where
     client.discover(vec![process_id]);
 
     // start client read-write task
-    let (read, write) = task::client::start_client_rw_task(connection);
+    let (read, write) = task::client::start_client_rw_task(channel_buffer_size, connection);
 
     // return client its connection
     (client, read, write)
@@ -327,9 +368,9 @@ where
 
 /// Generate the next command, returning a boolean representing whether a new command was generated
 /// or not.
-fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &CommandSender) -> bool {
+async fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &mut CommandSender) -> bool {
     if let Some((_, cmd)) = client.next_cmd(time) {
-        if let Err(e) = write.send(cmd) {
+        if let Err(e) = write.send(cmd).await {
             println!(
                 "[client] error while sending command to client read-write task: {:?}",
                 e
@@ -430,6 +471,8 @@ mod tests {
                 String::from("localhost:3003"),
             ],
             config,
+            true,
+            100,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -444,6 +487,8 @@ mod tests {
                 String::from("localhost:3003"),
             ],
             config,
+            true,
+            100,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -458,6 +503,8 @@ mod tests {
                 String::from("localhost:3002"),
             ],
             config,
+            true,
+            100,
             semaphore.clone(),
         ));
 
@@ -481,18 +528,24 @@ mod tests {
             1,
             String::from("localhost:4001"),
             workload,
+            true,
+            100,
         ));
         let client_2_handle = task::spawn_local(client(
             vec![2, 22, 222],
             String::from("localhost:4002"),
             None,
             workload,
+            true,
+            100,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
             3,
             String::from("localhost:4003"),
             100, // 100ms interval between ops
             workload,
+            true,
+            100,
         ));
 
         // wait for the 3 clients
