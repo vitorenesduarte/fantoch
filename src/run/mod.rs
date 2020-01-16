@@ -246,19 +246,22 @@ where
 
     // wait for all clients to complete and aggregate their metrics
     let mut latency = Histogram::new();
-    let mut throughput = Histogram::new();
+    // let mut throughput = Histogram::new();
 
     for join_result in join_all(handles).await {
         let client = join_result?;
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
-        throughput.merge(client.throughput_histogram());
+        // throughput.merge(client.throughput_histogram());
         println!("metrics from {} collected", client.id());
     }
 
     // show global metrics
+    // TODO write both metrics (latency and throughput) to a file; the filename should be provided
+    // as input (as an Option)
     println!("latency: {:?}", latency);
-    println!("throughput: {}", throughput.all_values());
+    // println!("throughput: {}", throughput.all_values());
+    println!("all clients ended");
     Ok(())
 }
 
