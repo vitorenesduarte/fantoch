@@ -18,6 +18,7 @@ pub fn parse_args() -> (
     Vec<String>,
     Config,
     bool,
+    usize,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -91,6 +92,13 @@ pub fn parse_args() -> (
                 .help("set TCP_NODELAY; defaul: true")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("channel_buffer_size")
+                .long("channel_buffer_size")
+                .value_name("CHANNEL_BUFFER_SIZE")
+                .help("set the size of the buffer in each channel used for task communication; default: 100")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -102,6 +110,8 @@ pub fn parse_args() -> (
     let addresses = parse_addresses(matches.value_of("addresses"));
     let config = parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let channel_buffer_size =
+        super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -111,6 +121,7 @@ pub fn parse_args() -> (
     println!("addresses: {:?}", addresses);
     println!("config: {:?}", config);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
+    println!("channel buffer size: {:?}", channel_buffer_size);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -127,6 +138,7 @@ pub fn parse_args() -> (
         addresses,
         config,
         tcp_nodelay,
+        channel_buffer_size,
     )
 }
 

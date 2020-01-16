@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::fmt::Debug;
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Receiver, Sender};
-
-const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 #[derive(Debug)]
 pub struct ChannelSender<M> {
+    name: Option<String>,
     sender: Sender<M>,
 }
 
@@ -14,18 +14,41 @@ pub struct ChannelReceiver<M> {
     receiver: Receiver<M>,
 }
 
-pub fn channel<M>() -> (ChannelSender<M>, ChannelReceiver<M>) {
-    let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
-    (ChannelSender { sender }, ChannelReceiver { receiver })
+pub fn channel<M>(buffer_size: usize) -> (ChannelSender<M>, ChannelReceiver<M>) {
+    let (sender, receiver) = mpsc::channel(buffer_size);
+    (
+        ChannelSender { name: None, sender },
+        ChannelReceiver { receiver },
+    )
 }
 
 impl<M> ChannelSender<M>
 where
     M: Debug + 'static,
 {
+    pub fn set_name(&mut self, name: String) {
+        self.name = Some(name);
+    }
+
     pub async fn send(&mut self, value: M) -> Result<(), Box<dyn Error>> {
-        // TODO try send first and show a log message if channel is full; only after, block on send
-        self.sender.send(value).await.map_err(|err| err.into())
+        match self.sender.try_send(value) {
+            Ok(()) => {
+                // if it was sent, we're done
+                Ok(())
+            }
+            Err(TrySendError::Full(value)) => {
+                // if it's full, use `send` and `await` on it
+                match &self.name {
+                    Some(name) => println!("named channel {} is full", name),
+                    None => println!("unnamed channel is full"),
+                }
+                self.sender.send(value).await.map_err(|err| err.into())
+            }
+            Err(e) => {
+                // otherwise, upstream the error
+                Err(e.into())
+            }
+        }
     }
 }
 
@@ -38,6 +61,7 @@ impl<M> ChannelReceiver<M> {
 impl<T> Clone for ChannelSender<T> {
     fn clone(&self) -> Self {
         Self {
+            name: self.name.clone(),
             sender: self.sender.clone(),
         }
     }

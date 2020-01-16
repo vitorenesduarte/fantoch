@@ -11,8 +11,11 @@ pub fn start_listener(
     process_id: ProcessId,
     listener: TcpListener,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> ClientReceiver {
-    super::spawn_producer(|tx| client_listener_task(process_id, listener, tcp_nodelay, tx))
+    super::spawn_producer(channel_buffer_size, |tx| {
+        client_listener_task(process_id, listener, tcp_nodelay, channel_buffer_size, tx)
+    })
 }
 
 /// Listen on new client connections and spawn a client task for each new connection.
@@ -20,10 +23,13 @@ async fn client_listener_task(
     process_id: ProcessId,
     listener: TcpListener,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
     parent: ClientSender,
 ) {
     // start listener task
-    let mut rx = super::spawn_producer(|tx| super::listener_task(listener, tcp_nodelay, tx));
+    let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
+        super::listener_task(listener, tcp_nodelay, tx)
+    });
 
     loop {
         // handle new client connections
@@ -32,7 +38,12 @@ async fn client_listener_task(
                 println!("[client_listener] new connection");
                 // start client server task and give it the producer-end of the channel in order for
                 // this client to notify parent
-                super::spawn(client_server_task(process_id, connection, parent.clone()));
+                super::spawn(client_server_task(
+                    process_id,
+                    channel_buffer_size,
+                    connection,
+                    parent.clone(),
+                ));
             }
             None => {
                 println!("[client_listener] error receiving message from listener");
@@ -45,11 +56,17 @@ async fn client_listener_task(
 /// parent (new command results).
 async fn client_server_task(
     process_id: ProcessId,
+    channel_buffer_size: usize,
     mut connection: Connection,
     mut parent: ClientSender,
 ) {
-    let (client_id, mut parent_results) =
-        server_receive_hi(process_id, &mut connection, &mut parent).await;
+    let (client_id, mut parent_results) = server_receive_hi(
+        process_id,
+        channel_buffer_size,
+        &mut connection,
+        &mut parent,
+    )
+    .await;
 
     loop {
         select! {
@@ -69,11 +86,12 @@ async fn client_server_task(
 
 async fn server_receive_hi(
     process_id: ProcessId,
+    channel_buffer_size: usize,
     connection: &mut Connection,
     parent: &mut ClientSender,
 ) -> (ClientId, CommandResultReceiver) {
     // create channel where the process will write command results and where client will read them
-    let (tx, rx) = super::chan::channel();
+    let (mut tx, rx) = super::chan::channel(channel_buffer_size);
 
     // receive hi from client and register in parent, sending it tx
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
@@ -82,6 +100,9 @@ async fn server_receive_hi(
     } else {
         panic!("[client_server] couldn't receive client id from connected client");
     };
+
+    // set channel name
+    tx.set_name(format!("client_server_{}", client_id));
 
     // notify parent with the channel where it should write command results
     if let Err(e) = parent.send(FromClient::Register(client_id, tx)).await {
@@ -149,8 +170,13 @@ pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> 
     }
 }
 
-pub fn start_client_rw_task(connection: Connection) -> (CommandResultReceiver, CommandSender) {
-    super::spawn_producer_and_consumer(|tx, rx| client_rw_task(connection, tx, rx))
+pub fn start_client_rw_task(
+    channel_buffer_size: usize,
+    connection: Connection,
+) -> (CommandResultReceiver, CommandSender) {
+    super::spawn_producer_and_consumer(channel_buffer_size, |tx, rx| {
+        client_rw_task(connection, tx, rx)
+    })
 }
 
 async fn client_rw_task(

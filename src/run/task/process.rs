@@ -22,13 +22,16 @@ pub async fn connect_to_all<A, V>(
     addresses: Vec<A>,
     connect_retries: usize,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Result<(ReaderReceiver<V>, BroadcastWriterSender<V>), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug,
     V: Debug + Serialize + DeserializeOwned + Send + 'static,
 {
     // spawn listener
-    let mut rx = task::spawn_producer(|tx| super::listener_task(listener, tcp_nodelay, tx));
+    let mut rx = task::spawn_producer(channel_buffer_size, |tx| {
+        super::listener_task(listener, tcp_nodelay, tx)
+    });
 
     // number of addresses
     let n = addresses.len();
@@ -77,11 +80,12 @@ where
         incoming.push(connection);
     }
 
-    Ok(handshake::<V>(process_id, incoming, outgoing).await)
+    Ok(handshake::<V>(process_id, channel_buffer_size, incoming, outgoing).await)
 }
 
 async fn handshake<V>(
     process_id: ProcessId,
+    channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
 ) -> (ReaderReceiver<V>, BroadcastWriterSender<V>)
@@ -103,8 +107,8 @@ where
     );
 
     (
-        start_readers::<V>(id_to_connection_0),
-        start_broadcast_writer::<V>(process_id, id_to_connection_1),
+        start_readers::<V>(channel_buffer_size, id_to_connection_0),
+        start_broadcast_writer::<V>(process_id, channel_buffer_size, id_to_connection_1),
     )
 }
 
@@ -134,17 +138,23 @@ async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connecti
 
 /// Starts a reader task per connection received and returns an unbounded channel to which
 /// readers will write to.
-fn start_readers<V>(connections: HashMap<ProcessId, Connection>) -> ReaderReceiver<V>
+fn start_readers<V>(
+    channel_buffer_size: usize,
+    connections: HashMap<ProcessId, Connection>,
+) -> ReaderReceiver<V>
 where
     V: Debug + DeserializeOwned + Send + 'static,
 {
-    task::spawn_producers(connections, |(process_id, connection), tx| {
-        reader_task::<V>(process_id, connection, tx)
-    })
+    task::spawn_producers(
+        channel_buffer_size,
+        connections,
+        |(process_id, connection), tx| reader_task::<V>(process_id, connection, tx),
+    )
 }
 
 fn start_broadcast_writer<V>(
     process_id: ProcessId,
+    channel_buffer_size: usize,
     connections: HashMap<ProcessId, Connection>,
 ) -> BroadcastWriterSender<V>
 where
@@ -156,12 +166,14 @@ where
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
-        let tx = task::spawn_consumer(|rx| writer_task(connection, rx));
+        let tx = task::spawn_consumer(channel_buffer_size, |rx| writer_task(connection, rx));
         writers.insert(process_id, tx);
     }
 
     // spawn broadcast writer
-    task::spawn_consumer(|rx| broadcast_writer_task::<V>(process_id, writers, rx))
+    task::spawn_consumer(channel_buffer_size, |rx| {
+        broadcast_writer_task::<V>(process_id, writers, rx)
+    })
 }
 
 /// Reader task.
@@ -239,12 +251,15 @@ async fn writer_task(mut connection: Connection, mut parent: WriterReceiver) {
 /// Starts the executor.
 pub fn start_executor<P>(
     config: Config,
+    channel_buffer_size: usize,
     from_clients: ClientReceiver,
 ) -> (CommandReceiver, ExecutionInfoSender<P>)
 where
     P: Protocol + 'static,
 {
-    task::spawn_producer_and_consumer(|tx, rx| executor_task::<P>(config, tx, rx, from_clients))
+    task::spawn_producer_and_consumer(channel_buffer_size, |tx, rx| {
+        executor_task::<P>(config, tx, rx, from_clients)
+    })
 }
 
 async fn executor_task<P>(

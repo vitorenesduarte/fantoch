@@ -11,12 +11,20 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload, tcp_nodelay) = parse_args();
-    planet_sim::run::client(ids, address, interval, workload, tcp_nodelay).await?;
+    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) = parse_args();
+    planet_sim::run::client(
+        ids,
+        address,
+        interval,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
+    .await?;
     Ok(())
 }
 
-fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool) {
+fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -65,6 +73,13 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool) {
                 .help("set TCP_NODELAY; defaul: true")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("channel_buffer_size")
+                .long("channel_buffer_size")
+                .value_name("CHANNEL_BUFFER_SIZE")
+                .help("set the size of the buffer in each channel used for task communication; default: 100")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -76,14 +91,24 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool) {
         matches.value_of("commands_per_client"),
     );
     let tcp_nodelay = common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let channel_buffer_size =
+        common::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
 
     println!("ids: {:?}", ids);
     println!("client number: {}", ids.len());
     println!("process address: {}", address);
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
+    println!("channel buffer size: {:?}", channel_buffer_size);
 
-    (ids, address, interval, workload, tcp_nodelay)
+    (
+        ids,
+        address,
+        interval,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
 }
 
 fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {

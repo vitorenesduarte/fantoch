@@ -35,6 +35,7 @@ pub async fn process<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -52,6 +53,7 @@ where
         addresses,
         config,
         tcp_nodelay,
+        channel_buffer_size,
         semaphore,
     )
     .await
@@ -68,6 +70,7 @@ async fn process_with_notify<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
     connected: Arc<Semaphore>,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -90,16 +93,18 @@ where
         addresses,
         CONNECT_RETRIES,
         tcp_nodelay,
+        channel_buffer_size,
     )
     .await?;
 
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
-    let from_clients = task::client::start_listener(process_id, listener, tcp_nodelay);
+    let from_clients =
+        task::client::start_listener(process_id, listener, tcp_nodelay, channel_buffer_size);
 
     // start executor
     let (mut from_executor, mut to_executor) =
-        task::process::start_executor::<P>(config, from_clients);
+        task::process::start_executor::<P>(config, channel_buffer_size, from_clients);
 
     // notify parent that we're connected
     connected.add_permits(1);
@@ -199,6 +204,7 @@ pub async fn client<A>(
     interval_ms: Option<u64>,
     workload: Workload,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Result<(), Box<dyn Error>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -213,6 +219,7 @@ where
                 interval_ms,
                 workload,
                 tcp_nodelay,
+                channel_buffer_size,
             ))
         } else {
             task::spawn(closed_loop_client::<A>(
@@ -220,6 +227,7 @@ where
                 address.clone(),
                 workload,
                 tcp_nodelay,
+                channel_buffer_size,
             ))
         }
     });
@@ -247,6 +255,7 @@ async fn closed_loop_client<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Client
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
@@ -256,8 +265,14 @@ where
 
     // TODO there's a single client for now
     // setup client
-    let (mut client, mut read, mut write) =
-        client_setup(client_id, address, workload, tcp_nodelay).await;
+    let (mut client, mut read, mut write) = client_setup(
+        client_id,
+        address,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
+    .await;
 
     // generate and submit commands while there are commands to be generated
     while next_cmd(&mut client, &time, &mut write).await {
@@ -276,6 +291,7 @@ async fn open_loop_client<A>(
     interval_ms: u64,
     workload: Workload,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> Client
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
@@ -284,8 +300,14 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut client, mut read, mut write) =
-        client_setup(client_id, address, workload, tcp_nodelay).await;
+    let (mut client, mut read, mut write) = client_setup(
+        client_id,
+        address,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+    )
+    .await;
 
     // create interval
     let mut interval = time::interval(Duration::from_millis(interval_ms));
@@ -313,6 +335,7 @@ async fn client_setup<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
+    channel_buffer_size: usize,
 ) -> (Client, CommandResultReceiver, CommandSender)
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
@@ -337,7 +360,7 @@ where
     client.discover(vec![process_id]);
 
     // start client read-write task
-    let (read, write) = task::client::start_client_rw_task(connection);
+    let (read, write) = task::client::start_client_rw_task(channel_buffer_size, connection);
 
     // return client its connection
     (client, read, write)
@@ -449,6 +472,7 @@ mod tests {
             ],
             config,
             true,
+            100,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -464,6 +488,7 @@ mod tests {
             ],
             config,
             true,
+            100,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -479,6 +504,7 @@ mod tests {
             ],
             config,
             true,
+            100,
             semaphore.clone(),
         ));
 
@@ -503,6 +529,7 @@ mod tests {
             String::from("localhost:4001"),
             workload,
             true,
+            100,
         ));
         let client_2_handle = task::spawn_local(client(
             vec![2, 22, 222],
@@ -510,6 +537,7 @@ mod tests {
             None,
             workload,
             true,
+            100,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
             3,
@@ -517,6 +545,7 @@ mod tests {
             100, // 100ms interval between ops
             workload,
             true,
+            100,
         ));
 
         // wait for the 3 clients
