@@ -73,7 +73,7 @@ process_file() {
 
     # variables
     local id=$1
-    echo ".log_process_${id}"
+    echo "\${HOME}/.log_process_${id}"
 }
 
 client_file() {
@@ -84,7 +84,43 @@ client_file() {
 
     # variables
     local index=$1
-    echo ".log_client_${index}"
+    echo "\${HOME}/.log_client_${index}"
+}
+
+wait_process_started() {
+    if [ $# -ne 2 ]; then
+        echo "usage: wait_process_started id machine"
+        exit 1
+    fi
+    local id=$1
+    local machine=$2
+    local cmd
+    cmd="grep -c \"process ${id} started\" $(process_file ${id})"
+
+    local started=0
+    while [[ ${started} != 1 ]]; do
+        # shellcheck disable=SC2029
+        started=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
+}
+
+wait_client_ended() {
+    if [ $# -ne 2 ]; then
+        echo "usage: wait_client_ended index machine"
+        exit 1
+    fi
+    local index=$1
+    local machine=$2
+    local cmd
+    cmd="grep -c \"all clients ended\" $(client_file ${id})"
+
+    local ended=0
+    while [[ ${ended} != 1 ]]; do
+        # shellcheck disable=SC2029
+        started=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
 }
 
 stop_process() {
@@ -147,24 +183,20 @@ start_process() {
     info "starting ${protocol} with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" </dev/null
-}
-
-wait_process_started() {
-    if [ $# -ne 1 ]; then
-        echo "usage: wait_process_started id"
-        exit 1
-    fi
-    local id=$1
-
-    started=0
-    while [[ ${started} != 1 ]]; do
-        started=$(grep -c "process ${id} started" "$(process_file ${id})" | xargs)
-        sleep 1
-    done
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" \>"$(process_file ${id})" 2\>\&1 </dev/null
 }
 
 start_processes() {
+    # variables
+    local result
+    local machine
+    local sorted
+    local ip
+    local ips
+    local addresses
+    # mapping from id to machine
+    declare -A machines
+
     # start new processes
     for id in $(seq 1 ${PROCESSES}); do
         # compute topology
@@ -174,17 +206,20 @@ start_processes() {
         ip=$(echo "${result}" | awk '{ print $3 }')
         ips=$(echo "${result}" | awk '{ print $4 }')
 
+        # save machine
+        machines[${id}]=${machine}
+
         # append port to each ip
         addresses=$(echo ${ips} | tr ',' '\n' | awk -v port=${PORT} '{ print $1":"port }' | tr '\n' ',' | sed 's/,$//')
 
         # start a new process
         info "process ${id} spawned"
-        start_process ${machine} ${PROTOCOL} ${id} ${sorted} ${ip} ${addresses} >"$(process_file ${id})" 2>&1 &
+        start_process ${machine} ${PROTOCOL} ${id} ${sorted} ${ip} ${addresses} &
     done
 
     # wait for processes started
     for id in $(seq 1 ${PROCESSES}); do
-        wait_process_started ${id}
+        wait_process_started ${id} ${machines[${id}]}
     done
 }
 
@@ -239,10 +274,18 @@ start_client() {
     info "starting client with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" </dev/null
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" \>"$(client_file ${id})" 2\>\&1 </dev/null
 }
 
 run_clients() {
+    # variables
+    local result
+    local machine
+    local ip
+    local address
+    # mapping from index to machine
+    declare -A machines
+
     # start clients
     for index in $(seq 1 ${CLIENT_MACHINES_NUMBER}); do
         # compute topology
@@ -250,17 +293,21 @@ run_clients() {
         machine=$(echo "${result}" | awk '{ print $1 }')
         ip=$(echo "${result}" | awk '{ print $2 }')
 
+        # save machine
+        machines[${index}]=${machine}
+
         # append port to ip
         address="${ip}:${CLIENT_PORT}"
 
         # start a new client
         info "client ${index} spawned"
-        start_client ${machine} ${index} ${address} >"$(client_file ${index})" 2>&1 &
+        start_client ${machine} ${index} ${address} &
     done
 
-    # TODO fix this wait (it's hanging)
-    # wait for clients to end
-    wait_jobs
+    # wait for clients ended
+    for index in $(seq 1 ${CLIENT_MACHINES_NUMBER}); do
+        wait_client_ended ${index} ${machines[${index}]}
+    done
 }
 
 if [[ $1 == "stop" ]]; then
@@ -277,5 +324,5 @@ else
     info "all processes have been started"
 
     run_clients
-    info "all clients have run"
+    info "all clients have ended"
 fi
