@@ -4,8 +4,9 @@
 RUST_NIGHTLY="true"
 # - needed for RUN_MODE="flamegraph"
 FLAMEGRAPH="true"
-# flag indicating whether we should just remove planet_sim folder
-NUKE_PLANET_SIM="true"
+# flag indicating whether we should just remove previous installations
+NUKE_RUST="false"
+NUKE_PLANET_SIM="false"
 
 # maximum number of open files
 MAX_OPEN_FILES=100000
@@ -17,6 +18,14 @@ fi
 
 # get branch
 branch=$1
+
+# maybe nuke previous stuff
+if [ "${NUKE_RUST}" == "true" ]; then
+    rm -rf .cargo/ .rustup/
+fi
+if [ "${NUKE_PLANET_SIM}" == "true" ]; then
+    rm -rf .planet_sim/
+fi
 
 # install rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -62,10 +71,8 @@ echo "*                hard    nofile          ${MAX_OPEN_FILES}" | sudo tee -a 
 # install dstat
 sudo apt-get install -y dstat
 
-# maybe remove planet_sim folder
-if [ "${NUKE_PLANET_SIM}" == "true" ]; then
-    rm -rf planet_sim/
-fi
+# clean up
+sudo apt-get autoremove
 
 # clone the repository if dir does not exist
 if [[ ! -d planet_sim ]]; then
