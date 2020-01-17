@@ -91,6 +91,7 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("channel_buffer_size")
                 .long("channel_buffer_size")
                 .value_name("CHANNEL_BUFFER_SIZE")
                 .help("set the size of the buffer in each channel used for task communication; default: 10000")
