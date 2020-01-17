@@ -65,6 +65,11 @@ impl Config {
 }
 
 impl Config {
+    /// Computes `Basic` quorum size.
+    pub fn basic_quorum_size(&self) -> usize {
+        self.f + 1
+    }
+
     /// Computes `Atlas` fast and write quorum sizes.
     pub fn atlas_quorum_sizes(&self) -> (usize, usize) {
         let n = self.n;
@@ -146,6 +151,19 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+    }
+
+    #[test]
+    fn basic_parameters() {
+        let config = Config::new(7, 1);
+        assert_eq!(config.basic_quorum_size(), 2);
+
+        let config = Config::new(7, 2);
+        assert_eq!(config.atlas_quorum_sizes(), (5, 3));
+        assert_eq!(config.basic_quorum_size(), 3);
+
+        let config = Config::new(7, 3);
+        assert_eq!(config.basic_quorum_size(), 4);
     }
 
     #[test]
