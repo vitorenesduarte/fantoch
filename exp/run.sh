@@ -9,7 +9,6 @@ source "${DIR}/util.sh"
 KILL_WAIT=3
 
 # mode can be: release, flamegraph, leaks
-# PROCESS_RUN_MODE="flamegraph"
 PROCESS_RUN_MODE="flamegraph"
 CLIENT_RUN_MODE="release"
 
@@ -30,7 +29,9 @@ COMMANDS_PER_CLIENT=200
 TCP_NODELAY=true
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
-SOCKET_BUFFER_SIZE=$((8 * 1024))
+PROCESS_SOCKET_BUFFER_SIZE=$((8 * 1024))
+# do not buffer on the client-side
+CLIENT_SOCKET_BUFFER_SIZE=0
 # if this value is 100, the run doesn't finish, which probably means there's a deadlock somewhere
 # with 1000 we can see that channels fill up sometimes
 # with 10000 that doesn't seem to happen
@@ -174,7 +175,7 @@ start_process() {
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
         --tcp_nodelay ${TCP_NODELAY} \
-        --socket_buffer_size ${SOCKET_BUFFER_SIZE} \
+        --socket_buffer_size ${PROCESS_SOCKET_BUFFER_SIZE} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
 
     # compute script (based on run mode)
@@ -263,7 +264,7 @@ start_client() {
         --conflict_rate ${CONFLICT_RATE} \
         --commands_per_client ${COMMANDS_PER_CLIENT} \
         --tcp_nodelay ${TCP_NODELAY} \
-        --socket_buffer_size ${SOCKET_BUFFER_SIZE} \
+        --socket_buffer_size ${CLIENT_SOCKET_BUFFER_SIZE} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
     # TODO for open-loop clients:
     # --interval 1
