@@ -21,7 +21,7 @@ impl Protocol for Basic {
     type Message = Message;
     type Executor = BasicExecutor;
 
-    /// Creates a new `Atlas` process.
+    /// Creates a new `Basic` process.
     fn new(process_id: ProcessId, config: Config) -> Self {
         // compute fast and write quorum sizes
         let fast_quorum_size = config.basic_quorum_size();
@@ -32,7 +32,7 @@ impl Protocol for Basic {
         let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
 
-        // create `Atlas`
+        // create `Basic`
         Self {
             bp,
             cmds,
@@ -183,7 +183,7 @@ impl Info for CommandInfo {
     }
 }
 
-// `Atlas` protocol messages
+// `Basic` protocol messages
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MStore { dot: Dot, cmd: Command },
