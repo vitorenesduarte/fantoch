@@ -15,13 +15,13 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="newt"
+PROTOCOL="basic"
 PROCESSES=3
 FAULTS=1
 
 # clients config
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=1000
+CLIENTS_PER_MACHINE=2000
 CONFLICT_RATE=0
 COMMANDS_PER_CLIENT=10000
 
@@ -30,7 +30,7 @@ TCP_NODELAY=true
 
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
-PROCESS_SOCKET_BUFFER_SIZE=$((42 * 1024))
+PROCESS_SOCKET_BUFFER_SIZE=$((100 * 1024))
 # do not buffer on the client-side
 CLIENT_SOCKET_BUFFER_SIZE=0
 
