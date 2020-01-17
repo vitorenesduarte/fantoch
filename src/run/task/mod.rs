@@ -103,12 +103,16 @@ where
 }
 
 /// Connect to some address.
-pub async fn connect<A>(address: A, tcp_nodelay: bool) -> Result<Connection, Box<dyn Error>>
+pub async fn connect<A>(
+    address: A,
+    tcp_nodelay: bool,
+    socket_buffer_size: usize,
+) -> Result<Connection, Box<dyn Error>>
 where
     A: ToSocketAddrs,
 {
     let stream = TcpStream::connect(address).await?;
-    let connection = Connection::new(stream, tcp_nodelay);
+    let connection = Connection::new(stream, tcp_nodelay, socket_buffer_size);
     Ok(connection)
 }
 
@@ -124,6 +128,7 @@ where
 async fn listener_task(
     mut listener: TcpListener,
     tcp_nodelay: bool,
+    socket_buffer_capacity: usize,
     mut parent: ChannelSender<Connection>,
 ) {
     loop {
@@ -132,7 +137,7 @@ async fn listener_task(
                 println!("[listener] new connection: {:?}", addr);
 
                 // create connection
-                let connection = Connection::new(stream, tcp_nodelay);
+                let connection = Connection::new(stream, tcp_nodelay, socket_buffer_capacity);
 
                 if let Err(e) = parent.send(connection).await {
                     println!("[listener] error sending stream to parent process: {:?}", e);

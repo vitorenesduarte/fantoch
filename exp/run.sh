@@ -5,41 +5,64 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=util.sh
 source "${DIR}/util.sh"
 
-KILL_WAIT=3 # seconds
-RELEASE=true
+# seconds
+KILL_WAIT=3
 
+# mode can be: release, flamegraph, leaks
+PROCESS_RUN_MODE="flamegraph"
+CLIENT_RUN_MODE="release"
+
+# processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="atlas"
+PROTOCOL="newt"
 PROCESSES=3
 FAULTS=1
 
+# clients config
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=500
+CLIENTS_PER_MACHINE=1000
 CONFLICT_RATE=0
-COMMANDS_PER_CLIENT=20000
+COMMANDS_PER_CLIENT=10000
 
+# overall configurations
 TCP_NODELAY=true
 
+# by default, each socket stream is buffered (with a buffer of size 8KBs),
+# which should greatly reduce the number of syscalls for small-sized messages
+PROCESS_SOCKET_BUFFER_SIZE=$((42 * 1024))
+# do not buffer on the client-side
+CLIENT_SOCKET_BUFFER_SIZE=0
+
+# if this value is 100, the run doesn't finish, which probably means there's a deadlock somewhere
+# with 1000 we can see that channels fill up sometimes
+# with 10000 that doesn't seem to happen
+CHANNEL_BUFFER_SIZE=10000
+
 bin_script() {
-    if [ $# -ne 1 ]; then
-        echo "usage: bin_script binary"
+    if [ $# -ne 2 ]; then
+        echo "usage: bin_script mode binary"
         exit 1
     fi
-    local binary=$1
+    local mode=$1
+    local binary=$2
     local prefix="source \${HOME}/.cargo/env && cd planet_sim"
 
-    case "${RELEASE}" in
-    "true")
-        # for release builds
-        echo "${prefix} && cargo build --release --bins && ./target/release/${binary}"
+    case "${mode}" in
+    "release")
+        # for release runs
+        echo "${prefix} && sed -i 's/debug = true/debug = false/g' Cargo.toml && cargo build --release --bins && ./target/release/${binary}"
         ;;
-    "false")
-        # for debug builds
+    "flamegraph")
+        # for flamegraph runs
+        echo "${prefix} && sed -i 's/debug = false/debug = true/g' Cargo.toml && cargo flamegraph --bin=${binary} --"
+        ;;
+    "leaks")
+        # for memory-leak runs
         echo "${prefix} && env RUSTFLAGS=\"-Z sanitizer=leak\" cargo +nightly run --release --bin ${binary} --"
         ;;
     *)
-        echo "invalid value for relase: ${RELEASE}"
+        echo "invalid run mode: ${mode}"
         exit 1
         ;;
     esac
@@ -53,7 +76,7 @@ process_file() {
 
     # variables
     local id=$1
-    echo ".log_process_${id}"
+    echo "\${HOME}/.log_process_${id}"
 }
 
 client_file() {
@@ -64,7 +87,70 @@ client_file() {
 
     # variables
     local index=$1
-    echo ".log_client_${index}"
+    echo "\${HOME}/.log_client_${index}"
+}
+
+wait_process_started() {
+    if [ $# -ne 2 ]; then
+        echo "usage: wait_process_started id machine"
+        exit 1
+    fi
+    local id=$1
+    local machine=$2
+    local cmd
+    cmd="grep -c \"process ${id} started\" $(process_file ${id})"
+
+    local started=0
+    while [[ ${started} != 1 ]]; do
+        # shellcheck disable=SC2029
+        started=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
+}
+
+wait_client_ended() {
+    if [ $# -ne 2 ]; then
+        echo "usage: wait_client_ended index machine"
+        exit 1
+    fi
+    local index=$1
+    local machine=$2
+    local cmd
+    cmd="grep -c \"all clients ended\" $(client_file ${index})"
+
+    local ended=0
+    while [[ ${ended} != 1 ]]; do
+        # shellcheck disable=SC2029
+        ended=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
+}
+
+stop_planet_sim() {
+    if [ $# -ne 1 ]; then
+        echo "usage: stop_planet_sim machine"
+        exit 1
+    fi
+
+    # variables
+    local machine=$1
+    local cmd
+
+    # kill all planet_sim related processes
+    # TODO what about dstat?
+    cmd="ps -aux | grep -E \"(cargo|planet_sim)\" | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
+    # shellcheck disable=SC2029
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+}
+
+stop_all() {
+    # variables
+    local machine
+
+    while IFS= read -r machine; do
+        stop_planet_sim ${machine} &
+    done <"${MACHINES_FILE}"
+    wait_jobs
 }
 
 stop_process() {
@@ -75,18 +161,56 @@ stop_process() {
 
     # variables
     local machine=$1
+    local cmd
 
-    # kill process running on ${PORT}
-    ssh "${SSH_ARGS}" ${machine} fuser ${PORT}/tcp --kill </dev/null
+    # (only) kill process:
+    # - don't kill perf
+    # - don't kill flamegraph
+    cmd="ps -aux | grep planet_sim | grep -vE \"(grep|perf|flamegraph)\" | awk '{ print \"kill \"\$2 }' | bash"
+    # shellcheck disable=SC2029
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+}
+
+pull_flamegraph() {
+    if [ $# -ne 2 ]; then
+        echo "usage: pull_flamegraph id machine"
+        exit 1
+    fi
+    local id=$1
+    local machine=$2
+    local cmd="ps -aux | grep -E \"(cargo|planet_sim)\" | grep -cv grep"
+
+    local running=1
+    while [[ ${running} != 0 ]]; do
+        # shellcheck disable=SC2029
+        running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
+
+    scp "${SSH_ARGS}" "${machine}:~/planet_sim/flamegraph.svg" "flamegraph_${id}_${PROCESS_SOCKET_BUFFER_SIZE}.svg"
 }
 
 stop_processes() {
-    # stop previous processes
+    # variables
+    local id
+    local machine
+    # mapping from id to machine
+    declare -A machines
+
+    # stop processes
     for id in $(seq 1 ${PROCESSES}); do
         machine=$(topology "process" ${id} ${PROCESSES} ${CLIENT_MACHINES_NUMBER} | awk '{ print $1 }')
 
-        # stop previous process
+        # save machine
+        machines[${id}]=${machine}
+
         stop_process ${machine} &
+    done
+    wait_jobs
+
+    # wait for flamegraph to stop and pull the generated file
+    for id in $(seq 1 ${PROCESSES}); do
+        pull_flamegraph ${id} ${machines[${id}]} &
     done
     wait_jobs
 }
@@ -117,32 +241,31 @@ start_process() {
         --client_port ${CLIENT_PORT} \
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
-        --tcp_nodelay ${TCP_NODELAY}"
+        --tcp_nodelay ${TCP_NODELAY} \
+        --socket_buffer_size ${PROCESS_SOCKET_BUFFER_SIZE} \
+        --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
 
-    # compute script (based on ${RELEASE})
-    script=$(bin_script "${protocol}")
+    # compute script (based on run mode)
+    script=$(bin_script "${PROCESS_RUN_MODE}" "${protocol}")
 
     info "starting ${protocol} with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" </dev/null
-}
-
-wait_process_started() {
-    if [ $# -ne 1 ]; then
-        echo "usage: wait_process_started id"
-        exit 1
-    fi
-    local id=$1
-
-    started=0
-    while [[ ${started} != 1 ]]; do
-        started=$(grep -c "process ${id} started" "$(process_file ${id})" | xargs)
-        sleep 1
-    done
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" \>"$(process_file ${id})" 2\>\&1 </dev/null
 }
 
 start_processes() {
+    # variables
+    local id
+    local result
+    local machine
+    local sorted
+    local ip
+    local ips
+    local addresses
+    # mapping from id to machine
+    declare -A machines
+
     # start new processes
     for id in $(seq 1 ${PROCESSES}); do
         # compute topology
@@ -152,17 +275,20 @@ start_processes() {
         ip=$(echo "${result}" | awk '{ print $3 }')
         ips=$(echo "${result}" | awk '{ print $4 }')
 
+        # save machine
+        machines[${id}]=${machine}
+
         # append port to each ip
         addresses=$(echo ${ips} | tr ',' '\n' | awk -v port=${PORT} '{ print $1":"port }' | tr '\n' ',' | sed 's/,$//')
 
         # start a new process
         info "process ${id} spawned"
-        start_process ${machine} ${PROTOCOL} ${id} ${sorted} ${ip} ${addresses} >"$(process_file ${id})" 2>&1 &
+        start_process ${machine} ${PROTOCOL} ${id} ${sorted} ${ip} ${addresses} &
     done
 
     # wait for processes started
     for id in $(seq 1 ${PROCESSES}); do
-        wait_process_started ${id}
+        wait_process_started ${id} ${machines[${id}]}
     done
 }
 
@@ -205,20 +331,31 @@ start_client() {
         --address ${address} \
         --conflict_rate ${CONFLICT_RATE} \
         --commands_per_client ${COMMANDS_PER_CLIENT} \
-        --tcp_nodelay ${TCP_NODELAY}"
+        --tcp_nodelay ${TCP_NODELAY} \
+        --socket_buffer_size ${CLIENT_SOCKET_BUFFER_SIZE} \
+        --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
     # TODO for open-loop clients:
     # --interval 1
 
-    # compute script (based on ${RELEASE})
-    script=$(bin_script "client")
+    # compute script (based on run mode)
+    script=$(bin_script "${CLIENT_RUN_MODE}" "client")
 
     info "starting client with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" </dev/null
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" \>"$(client_file ${index})" 2\>\&1 </dev/null
 }
 
 run_clients() {
+    # variables
+    local index
+    local result
+    local machine
+    local ip
+    local address
+    # mapping from index to machine
+    declare -A machines
+
     # start clients
     for index in $(seq 1 ${CLIENT_MACHINES_NUMBER}); do
         # compute topology
@@ -226,32 +363,39 @@ run_clients() {
         machine=$(echo "${result}" | awk '{ print $1 }')
         ip=$(echo "${result}" | awk '{ print $2 }')
 
+        # save machine
+        machines[${index}]=${machine}
+
         # append port to ip
         address="${ip}:${CLIENT_PORT}"
 
         # start a new client
         info "client ${index} spawned"
-        start_client ${machine} ${index} ${address} >"$(client_file ${index})" 2>&1 &
+        start_client ${machine} ${index} ${address} &
     done
 
-    # TODO fix this wait (it's hanging)
-    # wait for clients to end
-    wait_jobs
+    # wait for clients ended
+    for index in $(seq 1 ${CLIENT_MACHINES_NUMBER}); do
+        wait_client_ended ${index} ${machines[${index}]}
+    done
 }
 
 if [[ $1 == "stop" ]]; then
-    stop_processes
+    stop_all
 else
-    stop_processes
+    stop_all
     sleep ${KILL_WAIT}
-    info "hopefully all processes are stopped now"
+    info "hopefully everything is stopped now"
+
+    # TODO launch dstat in all all machines with something like:
+    # stat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
 
     start_processes
     info "all processes have been started"
 
     run_clients
-    info "all clients have run"
-fi
+    info "all clients have ended"
 
-# TODO launch dstat with something like:
-# dstat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
+    stop_processes
+    info "all processes have been stopped"
+fi

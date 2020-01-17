@@ -3,6 +3,7 @@
 pub mod protocol;
 
 const DEFAULT_TCP_NODELAY: bool = true;
+const DEFAULT_SOCKET_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
@@ -15,12 +16,20 @@ pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
         .unwrap_or(DEFAULT_TCP_NODELAY)
 }
 
-pub fn parse_channel_buffer_size(channel_buffer_size: Option<&str>) -> usize {
-    channel_buffer_size
-        .map(|channel_buffer_size| {
-            channel_buffer_size
+pub fn parse_socket_buffer_size(buffer_size: Option<&str>) -> usize {
+    parse_buffer_size(buffer_size, DEFAULT_SOCKET_BUFFER_SIZE)
+}
+
+pub fn parse_channel_buffer_size(buffer_size: Option<&str>) -> usize {
+    parse_buffer_size(buffer_size, DEFAULT_CHANNEL_BUFFER_SIZE)
+}
+
+fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
+    buffer_size
+        .map(|buffer_size| {
+            buffer_size
                 .parse::<usize>()
-                .expect("channel_buffer_size should be a number")
+                .expect("buffer size should be a number")
         })
-        .unwrap_or(DEFAULT_CHANNEL_BUFFER_SIZE)
+        .unwrap_or(default)
 }

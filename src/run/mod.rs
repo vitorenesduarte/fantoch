@@ -35,6 +35,7 @@ pub async fn process<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -53,6 +54,7 @@ where
         addresses,
         config,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
         semaphore,
     )
@@ -70,6 +72,7 @@ async fn process_with_notify<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
     connected: Arc<Semaphore>,
 ) -> Result<(), Box<dyn Error>>
@@ -93,14 +96,20 @@ where
         addresses,
         CONNECT_RETRIES,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
     )
     .await?;
 
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
-    let from_clients =
-        task::client::start_listener(process_id, listener, tcp_nodelay, channel_buffer_size);
+    let from_clients = task::client::start_listener(
+        process_id,
+        listener,
+        tcp_nodelay,
+        socket_buffer_size,
+        channel_buffer_size,
+    );
 
     // start executor
     let (mut from_executor, mut to_executor) =
@@ -204,6 +213,7 @@ pub async fn client<A>(
     interval_ms: Option<u64>,
     workload: Workload,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -219,6 +229,7 @@ where
                 interval_ms,
                 workload,
                 tcp_nodelay,
+                socket_buffer_size,
                 channel_buffer_size,
             ))
         } else {
@@ -227,6 +238,7 @@ where
                 address.clone(),
                 workload,
                 tcp_nodelay,
+                socket_buffer_size,
                 channel_buffer_size,
             ))
         }
@@ -234,19 +246,22 @@ where
 
     // wait for all clients to complete and aggregate their metrics
     let mut latency = Histogram::new();
-    let mut throughput = Histogram::new();
+    // let mut throughput = Histogram::new();
 
     for join_result in join_all(handles).await {
         let client = join_result?;
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
-        throughput.merge(client.throughput_histogram());
+        // throughput.merge(client.throughput_histogram());
         println!("metrics from {} collected", client.id());
     }
 
     // show global metrics
+    // TODO write both metrics (latency and throughput) to a file; the filename should be provided
+    // as input (as an Option)
     println!("latency: {:?}", latency);
-    println!("throughput: {}", throughput.all_values());
+    // println!("throughput: {}", throughput.all_values());
+    println!("all clients ended");
     Ok(())
 }
 
@@ -255,6 +270,7 @@ async fn closed_loop_client<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Client
 where
@@ -269,6 +285,7 @@ where
         address,
         workload,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
     )
     .await;
@@ -290,6 +307,7 @@ async fn open_loop_client<A>(
     interval_ms: u64,
     workload: Workload,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Client
 where
@@ -304,6 +322,7 @@ where
         address,
         workload,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
     )
     .await;
@@ -334,13 +353,14 @@ async fn client_setup<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> (Client, CommandResultReceiver, CommandSender)
 where
     A: ToSocketAddrs + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection = match task::connect(address, tcp_nodelay).await {
+    let mut connection = match task::connect(address, tcp_nodelay, socket_buffer_size).await {
         Ok(connection) => connection,
         Err(e) => {
             // TODO panicking here as not sure how to make error handling send + 'static (required
@@ -456,6 +476,9 @@ mod tests {
         let localhost = "127.0.0.1"
             .parse::<IpAddr>()
             .expect("127.0.0.1 should be a valid ip");
+        let tcp_nodelay = true;
+        let socket_buffer_size = 1000;
+        let channel_buffer_size = 10000;
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
@@ -470,8 +493,9 @@ mod tests {
                 String::from("localhost:3003"),
             ],
             config,
-            true,
-            100,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -486,8 +510,9 @@ mod tests {
                 String::from("localhost:3003"),
             ],
             config,
-            true,
-            100,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -502,8 +527,9 @@ mod tests {
                 String::from("localhost:3002"),
             ],
             config,
-            true,
-            100,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
             semaphore.clone(),
         ));
 
@@ -527,24 +553,27 @@ mod tests {
             1,
             String::from("localhost:4001"),
             workload,
-            true,
-            100,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
         ));
         let client_2_handle = task::spawn_local(client(
             vec![2, 22, 222],
             String::from("localhost:4002"),
             None,
             workload,
-            true,
-            100,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
             3,
             String::from("localhost:4003"),
             100, // 100ms interval between ops
             workload,
-            true,
-            100,
+            tcp_nodelay,
+            socket_buffer_size,
+            channel_buffer_size,
         ));
 
         // wait for the 3 clients

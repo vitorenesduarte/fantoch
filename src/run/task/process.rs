@@ -22,6 +22,7 @@ pub async fn connect_to_all<A, V>(
     addresses: Vec<A>,
     connect_retries: usize,
     tcp_nodelay: bool,
+    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Result<(ReaderReceiver<V>, BroadcastWriterSender<V>), Box<dyn Error>>
 where
@@ -30,7 +31,7 @@ where
 {
     // spawn listener
     let mut rx = task::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, tx)
+        super::listener_task(listener, tcp_nodelay, socket_buffer_size, tx)
     });
 
     // number of addresses
@@ -47,7 +48,7 @@ where
     for address in addresses {
         let mut tries = 0;
         loop {
-            match super::connect(&address, tcp_nodelay).await {
+            match super::connect(&address, tcp_nodelay, socket_buffer_size).await {
                 Ok(connection) => {
                     // save connection if connected successfully
                     outgoing.push(connection);

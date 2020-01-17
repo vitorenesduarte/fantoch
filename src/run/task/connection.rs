@@ -8,20 +8,20 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 /// Delimits frames using a length header.
 #[derive(Debug)]
 pub struct Connection {
-    stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
+    stream: Framed<TcpStream, LengthDelimitedCodec>,
 }
 
 impl Connection {
     // TODO here `BufStream` will allocate two buffers, one for reading and another one for
     // writing; this may be unnecessarily inneficient for users that will only read or write; on
     // the other end, the allocation only occurs once, so it's probably fine to do this
-    pub fn new(stream: TcpStream, tcp_nodelay: bool) -> Self {
+    pub fn new(stream: TcpStream, tcp_nodelay: bool, socket_buffer_size: usize) -> Self {
         // set TCP_NODELAY
         stream
             .set_nodelay(tcp_nodelay)
             .expect("setting TCP_NODELAY should work");
         // buffer stream
-        let stream = BufStream::new(stream);
+        // let stream = BufStream::with_capacity(socket_buffer_size, socket_buffer_size, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }

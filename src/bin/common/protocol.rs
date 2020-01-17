@@ -19,6 +19,7 @@ pub fn parse_args() -> (
     Config,
     bool,
     usize,
+    usize,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -93,6 +94,13 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("socket_buffer_size")
+                .long("socket_buffer_size")
+                .value_name("SOCKET_BUFFER_SIZE")
+                .help("set the size of the buffer in each channel used for task communication; default: 8192 (8KBs)")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("channel_buffer_size")
                 .long("channel_buffer_size")
                 .value_name("CHANNEL_BUFFER_SIZE")
@@ -110,6 +118,8 @@ pub fn parse_args() -> (
     let addresses = parse_addresses(matches.value_of("addresses"));
     let config = parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let socket_buffer_size =
+        super::parse_socket_buffer_size(matches.value_of("socket_buffer_size"));
     let channel_buffer_size =
         super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
 
@@ -121,6 +131,7 @@ pub fn parse_args() -> (
     println!("addresses: {:?}", addresses);
     println!("config: {:?}", config);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
+    println!("socket buffer size: {:?}", socket_buffer_size);
     println!("channel buffer size: {:?}", channel_buffer_size);
 
     // check that the number of sorted processes equals `n`
@@ -138,6 +149,7 @@ pub fn parse_args() -> (
         addresses,
         config,
         tcp_nodelay,
+        socket_buffer_size,
         channel_buffer_size,
     )
 }
