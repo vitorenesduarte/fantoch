@@ -4,6 +4,8 @@
 RUST_NIGHTLY="true"
 # - needed for RUN_MODE="flamegraph"
 FLAMEGRAPH="true"
+# flag indicating whether we should just remove planet_sim folder
+NUKE_PLANET_SIM="false"
 
 if [ $# -ne 1 ]; then
     echo "usage: build.sh branch"
@@ -48,6 +50,11 @@ fi
 # install dstat
 sudo apt-get install -y dstat
 
+# maybe remove planet_sim folder
+if [ "${NUKE_PLANET_SIM}" == "true" ]; then
+    rm -rf planet_sim/
+fi
+
 # clone the repository if dir does not exist
 if [[ ! -d planet_sim ]]; then
     git clone https://github.com/vitorenesduarte/planet_sim -b "${branch}"
@@ -58,6 +65,7 @@ cd planet_sim/ || {
     echo "planet_sim/ directory must exist after clone"
     exit 1
 }
+# stash before checkout to make sure checkout will succeed
 git stash
 git checkout "${branch}"
 git pull

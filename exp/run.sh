@@ -23,15 +23,17 @@ FAULTS=1
 CLIENT_MACHINES_NUMBER=3
 CLIENTS_PER_MACHINE=1000
 CONFLICT_RATE=0
-COMMANDS_PER_CLIENT=200
+COMMANDS_PER_CLIENT=10000
 
-# overall config
+# overall configurations
 TCP_NODELAY=true
+
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
-PROCESS_SOCKET_BUFFER_SIZE=$((8 * 1024))
+PROCESS_SOCKET_BUFFER_SIZE=$((42 * 1024))
 # do not buffer on the client-side
 CLIENT_SOCKET_BUFFER_SIZE=0
+
 # if this value is 100, the run doesn't finish, which probably means there's a deadlock somewhere
 # with 1000 we can see that channels fill up sometimes
 # with 10000 that doesn't seem to happen
@@ -114,7 +116,7 @@ wait_client_ended() {
     local index=$1
     local machine=$2
     local cmd
-    cmd="grep -c \"all clients ended\" $(client_file ${id})"
+    cmd="grep -c \"all clients ended\" $(client_file ${index})"
 
     local ended=0
     while [[ ${ended} != 1 ]]; do
@@ -122,6 +124,33 @@ wait_client_ended() {
         ended=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
         sleep 1
     done
+}
+
+stop_planet_sim() {
+    if [ $# -ne 1 ]; then
+        echo "usage: stop_planet_sim machine"
+        exit 1
+    fi
+
+    # variables
+    local machine=$1
+    local cmd
+
+    # kill all planet_sim related processes
+    # TODO what about dstat?
+    cmd="ps -aux | grep -E \"(cargo|planet_sim)\" | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
+    # shellcheck disable=SC2029
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+}
+
+stop_all() {
+    # variables
+    local machine
+
+    while IFS= read -r machine; do
+        stop_planet_sim ${machine} &
+    done <"${MACHINES_FILE}"
+    wait_jobs
 }
 
 stop_process() {
@@ -132,18 +161,56 @@ stop_process() {
 
     # variables
     local machine=$1
+    local cmd
 
-    # kill process running on ${PORT}
-    ssh "${SSH_ARGS}" ${machine} fuser ${PORT}/tcp --kill </dev/null
+    # (only) kill process:
+    # - don't kill perf
+    # - don't kill flamegraph
+    cmd="ps -aux | grep planet_sim | grep -vE \"(grep|perf|flamegraph)\" | awk '{ print \"kill \"\$2 }' | bash"
+    # shellcheck disable=SC2029
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+}
+
+pull_flamegraph() {
+    if [ $# -ne 2 ]; then
+        echo "usage: pull_flamegraph id machine"
+        exit 1
+    fi
+    local id=$1
+    local machine=$2
+    local cmd="ps -aux | grep -E \"(cargo|planet_sim)\" | grep -cv grep"
+
+    local running=1
+    while [[ ${running} != 0 ]]; do
+        # shellcheck disable=SC2029
+        running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
+
+    scp "${SSH_ARGS}" "${machine}:~/planet_sim/flamegraph.svg" "flamegraph_${id}_${PROCESS_SOCKET_BUFFER_SIZE}.svg"
 }
 
 stop_processes() {
-    # stop previous processes
+    # variables
+    local id
+    local machine
+    # mapping from id to machine
+    declare -A machines
+
+    # stop processes
     for id in $(seq 1 ${PROCESSES}); do
         machine=$(topology "process" ${id} ${PROCESSES} ${CLIENT_MACHINES_NUMBER} | awk '{ print $1 }')
 
-        # stop previous process
+        # save machine
+        machines[${id}]=${machine}
+
         stop_process ${machine} &
+    done
+    wait_jobs
+
+    # wait for flamegraph to stop and pull the generated file
+    for id in $(seq 1 ${PROCESSES}); do
+        pull_flamegraph ${id} ${machines[${id}]} &
     done
     wait_jobs
 }
@@ -189,6 +256,7 @@ start_process() {
 
 start_processes() {
     # variables
+    local id
     local result
     local machine
     local sorted
@@ -275,11 +343,12 @@ start_client() {
     info "starting client with: $(echo ${script} ${command_args} | tr -s ' ')"
 
     # shellcheck disable=SC2029
-    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" \>"$(client_file ${id})" 2\>\&1 </dev/null
+    ssh "${SSH_ARGS}" ${machine} "${script} ${command_args}" \>"$(client_file ${index})" 2\>\&1 </dev/null
 }
 
 run_clients() {
     # variables
+    local index
     local result
     local machine
     local ip
@@ -312,18 +381,21 @@ run_clients() {
 }
 
 if [[ $1 == "stop" ]]; then
-    stop_processes
+    stop_all
 else
-    stop_processes
+    stop_all
     sleep ${KILL_WAIT}
-    info "hopefully all processes are stopped now"
+    info "hopefully everything is stopped now"
 
     # TODO launch dstat in all all machines with something like:
-    # dstat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
+    # stat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
 
     start_processes
     info "all processes have been started"
 
     run_clients
     info "all clients have ended"
+
+    stop_processes
+    info "all processes have been stopped"
 fi

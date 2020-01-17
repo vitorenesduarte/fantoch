@@ -1,2 +1,2 @@
 clean:
-	rm -f .log_*
+	rm -f *.svg
