@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (keys_number, client_number, commands_per_client, keys_per_command) = parse_args();
 
     // get number of cpus
-    let cpus = num_cpus::get();
+    let cpus = num_cpus::get_physical();
 
     // maybe warn about number of keys
     if keys_number < cpus {
