@@ -22,7 +22,7 @@ impl Executor for TableExecutor {
         let store = KVStore::new();
         let pending = Pending::new();
 
-        TableExecutor {
+        Self {
             table,
             store,
             pending,
@@ -30,7 +30,7 @@ impl Executor for TableExecutor {
     }
 
     fn register(&mut self, cmd: &Command) {
-        // start command in `Pending`
+        // start command in pending
         assert!(self.pending.start(&cmd));
     }
 

@@ -8,7 +8,7 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 /// Delimits frames using a length header.
 #[derive(Debug)]
 pub struct Connection {
-    stream: Framed<TcpStream, LengthDelimitedCodec>,
+    stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
 }
 
 impl Connection {
@@ -21,7 +21,7 @@ impl Connection {
             .set_nodelay(tcp_nodelay)
             .expect("setting TCP_NODELAY should work");
         // buffer stream
-        // let stream = BufStream::with_capacity(socket_buffer_size, socket_buffer_size, stream);
+        let stream = BufStream::with_capacity(socket_buffer_size, socket_buffer_size, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }

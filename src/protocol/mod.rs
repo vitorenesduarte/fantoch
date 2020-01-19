@@ -4,6 +4,14 @@ mod base;
 // This module contains common data-structures between protocols.
 pub mod common;
 
+// This module contains the definition of a basic replication protocol that waits for f + 1 acks
+// before committing a command. It's for sure inconsistent and most likely non-fault-tolerant until
+// we base it on the synod module.
+// TODO evolve the synod module so that is allows patterns like Coordinated Paxos and Simple Paxos
+// from Mencius. With such patterns we can make this protocol fault-tolerant (but still
+// inconsistent).
+mod basic;
+
 // This module contains the definition of `Atlas`.
 mod atlas;
 
@@ -15,6 +23,7 @@ mod newt;
 
 // Re-exports.
 pub use atlas::Atlas;
+pub use basic::Basic;
 pub use epaxos::EPaxos;
 pub use newt::Newt;
 

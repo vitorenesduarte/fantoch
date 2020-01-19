@@ -310,6 +310,7 @@ mod tests {
 
     type ExecutionInfo = <PingPongExecutor as Executor>::ExecutionInfo;
 
+    // TODO remove this in favor of `BasicExecutor` (same for the protocol)
     struct PingPongExecutor {
         pending: HashSet<Rifl>,
     }

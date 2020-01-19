@@ -4,8 +4,12 @@
 RUST_NIGHTLY="true"
 # - needed for RUN_MODE="flamegraph"
 FLAMEGRAPH="true"
-# flag indicating whether we should just remove planet_sim folder
+# flag indicating whether we should just remove previous installations
+NUKE_RUST="false"
 NUKE_PLANET_SIM="false"
+
+# maximum number of open files
+MAX_OPEN_FILES=100000
 
 if [ $# -ne 1 ]; then
     echo "usage: build.sh branch"
@@ -14,6 +18,14 @@ fi
 
 # get branch
 branch=$1
+
+# maybe nuke previous stuff
+if [ "${NUKE_RUST}" == "true" ]; then
+    rm -rf .cargo/ .rustup/
+fi
+if [ "${NUKE_PLANET_SIM}" == "true" ]; then
+    rm -rf .planet_sim/
+fi
 
 # install rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -39,7 +51,8 @@ if [ "${FLAMEGRAPH}" == "true" ]; then
     sudo sed -i '/^kernel.perf_event_paranoid.*/d' /etc/sysctl.conf
     # - then append correct setting
     echo "kernel.perf_event_paranoid = -1" | sudo tee -a /etc/sysctl.conf
-    # - finally, reload system configuration so that changes take place
+
+    # reload system configuration so that previous changes  take place
     sudo sysctl --system
 
     # install flamegraph
@@ -47,13 +60,19 @@ if [ "${FLAMEGRAPH}" == "true" ]; then
     cargo install flamegraph
 fi
 
+# increase maximum number of open files by changing "/etc/security/limits.conf"
+# - first delete current setting, if any
+sudo sed -i '/.*soft.*nofile.*/d' /etc/security/limits.conf
+sudo sed -i '/.*hard.*nofile.*/d' /etc/security/limits.conf
+# - then append correct setting
+echo "*                soft    nofile          ${MAX_OPEN_FILES}" | sudo tee -a /etc/security/limits.conf
+echo "*                hard    nofile          ${MAX_OPEN_FILES}" | sudo tee -a /etc/security/limits.conf
+
 # install dstat
 sudo apt-get install -y dstat
 
-# maybe remove planet_sim folder
-if [ "${NUKE_PLANET_SIM}" == "true" ]; then
-    rm -rf planet_sim/
-fi
+# clean up
+sudo apt-get autoremove
 
 # clone the repository if dir does not exist
 if [[ ! -d planet_sim ]]; then

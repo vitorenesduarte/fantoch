@@ -20,7 +20,7 @@ impl Executor for GraphExecutor {
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
-        GraphExecutor {
+        Self {
             graph,
             store,
             pending,
@@ -28,7 +28,7 @@ impl Executor for GraphExecutor {
     }
 
     fn register(&mut self, cmd: &Command) {
-        // start command in `Pending`
+        // start command in pending
         assert!(self.pending.insert(cmd.rifl()));
     }
 

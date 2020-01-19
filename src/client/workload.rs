@@ -29,7 +29,7 @@ impl Workload {
     pub fn next_cmd(&mut self, rifl_gen: &mut RiflGen) -> Option<Command> {
         // check if we should generate more commands
         let result = if self.command_count < self.total_commands {
-            if self.command_count % 100 == 0 {
+            if self.command_count % 1000 == 0 {
                 println!(
                     "client {:?}: {} of {}",
                     rifl_gen.source(),

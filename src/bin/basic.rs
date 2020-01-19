@@ -1,9 +1,7 @@
 mod common;
 
-use planet_sim::protocol::{Atlas, Protocol};
+use planet_sim::protocol::{Basic, Protocol};
 use std::error::Error;
-
-// TODO can we generate all the protocol binaries with a macro?
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -19,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         socket_buffer_size,
         channel_buffer_size,
     ) = common::protocol::parse_args();
-    let process = Atlas::new(process_id, config);
+    let process = Basic::new(process_id, config);
     planet_sim::run::process(
         process,
         process_id,
