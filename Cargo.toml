@@ -18,6 +18,7 @@ bytes = "0.5.3"
 tokio = { git = "https://github.com/vitorenesduarte/tokio", branch = "buf_stream_with_capacity", features = ["full"] }
 tokio-util = { git = "https://github.com/vitorenesduarte/tokio", branch = "buf_stream_with_capacity", features = ["codec"] }
 clap = "2.33.0"
+num_cpus = "1.12.0"
 
 [dev-dependencies]
 quickcheck = "0.9.1"

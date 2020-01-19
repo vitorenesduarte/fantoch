@@ -88,3 +88,6 @@ cd planet_sim/ || {
 git stash
 git checkout "${branch}"
 git pull
+
+# use nightly
+rustup override set nightly
