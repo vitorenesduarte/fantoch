@@ -256,8 +256,10 @@ impl Sequencer {
                     );
                     // check if we generated more votes (maybe votes by other threads have been
                     // generated and it's no longer possible to generate votes)
-                    if let Ok(new_vote_start) = result {
-                        return Some((*key, new_vote_start, max_sequence));
+                    if let Ok(previous_value) = result {
+                        let vote_start = previous_value + 1;
+                        let vote_end = max_sequence;
+                        return Some((*key, vote_start, vote_end));
                     }
                 }
                 None
