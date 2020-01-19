@@ -25,8 +25,7 @@ type Key = usize;
 type Command = HashSet<Key>;
 type VoteRange = (Key, u64, u64);
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let (keys_number, client_number, commands_per_client, keys_per_command) = parse_args();
 
     // get number of cpus
@@ -40,6 +39,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
+    // create tokio runtime
+    let mut runtime = tokio::runtime::Builder::new()
+        .threaded_scheduler()
+        .core_threads(cpus)
+        .thread_name("sequencer-bench")
+        .build()
+        .expect("tokio runtime build should work");
+
+    runtime.block_on(bench(
+        cpus,
+        keys_number,
+        client_number,
+        commands_per_client,
+        keys_per_command,
+    ))
+}
+
+async fn bench(
+    cpus: usize,
+    keys_number: usize,
+    client_number: usize,
+    commands_per_client: usize,
+    keys_per_command: usize,
+) -> Result<(), Box<dyn Error>> {
     // initialize sequencer
     let sequencer = Arc::new(Sequencer::new(keys_number));
 
