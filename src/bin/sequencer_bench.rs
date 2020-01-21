@@ -9,7 +9,7 @@ use planet_sim::run::task::chan::{ChannelReceiver, ChannelSender};
 use planet_sim::time::{RunTime, SysTime};
 use rand::Rng;
 use std::cmp::max;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::iter::FromIterator;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,7 +25,7 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 10000;
 const CHANNEL_BUFFER_SIZE: usize = 10000;
 
 type Key = usize;
-type Command = HashSet<Key>;
+type Command = BTreeSet<Key>;
 type VoteRange = (Key, u64, u64);
 
 lazy_static! {
@@ -142,7 +142,7 @@ async fn client(
 
     for _ in 0..commands_per_client {
         // generate random command
-        let mut command = HashSet::new();
+        let mut command = BTreeSet::new();
         while command.len() < keys_per_command {
             // generate random key
             let key = rand::thread_rng().gen_range(0, keys_number);
