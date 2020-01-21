@@ -2,19 +2,22 @@
 
 use clap::{App, Arg};
 use futures::future::join_all;
+use lazy_static::lazy_static;
 use planet_sim::metrics::Histogram;
 use planet_sim::run::task;
 use planet_sim::run::task::chan::{ChannelReceiver, ChannelSender};
 use planet_sim::time::{RunTime, SysTime};
 use rand::Rng;
 use std::cmp::max;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::error::Error;
+use std::iter::FromIterator;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::sync::oneshot;
 
-const DEFAULT_KEYS: usize = 100;
+const KEYS: usize = 100;
+
 const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_CLIENTS: usize = 10;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 10000;
@@ -25,17 +28,22 @@ type Key = usize;
 type Command = HashSet<Key>;
 type VoteRange = (Key, u64, u64);
 
+lazy_static! {
+    static ref SEQUENCER: AtomicSequencer = AtomicSequencer::new(KEYS);
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let (keys_number, client_number, commands_per_client, keys_per_command) = parse_args();
+    let (client_number, commands_per_client, keys_per_command) = parse_args();
 
     // get number of cpus
-    let cpus = num_cpus::get_physical();
+    let cpus = num_cpus::get();
+    println!("cpus: {}", cpus);
 
     // maybe warn about number of keys
-    if keys_number < cpus {
+    if KEYS < cpus {
         println!(
             "warning: number of keys {} is lower than the number of cpus {}",
-            keys_number, cpus
+            KEYS, cpus
         );
     }
 
@@ -49,7 +57,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     runtime.block_on(bench(
         cpus,
-        keys_number,
         client_number,
         commands_per_client,
         keys_per_command,
@@ -58,23 +65,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 async fn bench(
     cpus: usize,
-    keys_number: usize,
     client_number: usize,
     commands_per_client: usize,
     keys_per_command: usize,
 ) -> Result<(), Box<dyn Error>> {
-    // initialize sequencer
-    let sequencer = Arc::new(Sequencer::new(keys_number));
-
     // create as many workers as cpus
     let to_workers: Vec<_> = (0..cpus)
-        .map(|_| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(rx, sequencer.clone())))
+        .map(|_| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(rx)))
         .collect();
 
     // spawn clients
     let handles = (0..client_number).map(|_| {
         tokio::spawn(client(
-            keys_number,
+            KEYS,
             commands_per_client,
             keys_per_command,
             to_workers.clone(),
@@ -90,7 +93,7 @@ async fn bench(
         latency.merge(&client_histogram);
         for (key, vote_start, vote_end) in votes {
             // println!("checking vote {}-{} on key {}", vote_start, vote_end, key);
-            let current_key_votes = all_votes.entry(key).or_insert_with(HashSet::new);
+            let current_key_votes = all_votes.entry(key).or_insert_with(BTreeSet::new);
             for vote in vote_start..=vote_end {
                 // insert vote and check it hasn't been added before
                 assert!(current_key_votes.insert(vote));
@@ -98,19 +101,25 @@ async fn bench(
         }
     }
 
-    // TODO check that we have all votes (no gaps that would prevent timestamp-stability)
+    // check that we have all votes (no gaps that would prevent timestamp-stability)
+    for (_key, key_votes) in all_votes {
+        // get number of votes
+        let key_votes_count = key_votes.len();
+        // we should have all votes from 1 to `key_votes_count`
+        assert_eq!(
+            key_votes,
+            BTreeSet::from_iter((1..=key_votes_count).map(|vote| vote as u64))
+        );
+    }
 
     println!("latency: {:?}", latency);
     Ok(())
 }
 
 // async fn worker(sequencer: )
-async fn worker(
-    mut requests: ChannelReceiver<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>,
-    sequencer: Arc<Sequencer>,
-) {
+async fn worker(mut requests: ChannelReceiver<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>) {
     while let Some((proposal, cmd, client)) = requests.recv().await {
-        let result = sequencer.next(proposal, cmd);
+        let result = SEQUENCER.next(proposal, cmd);
         if let Err(e) = client.send(result) {
             println!("error while sending next result to client: {:?}", e);
         }
@@ -200,11 +209,16 @@ async fn client(
     (histogram, all_votes)
 }
 
-struct Sequencer {
-    keys: Vec<AtomicU64>,
+trait Sequencer {
+    fn new(keys_number: usize) -> Self;
+    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange>;
 }
 
-impl Sequencer {
+struct LockSequencer {
+    keys: Vec<Mutex<u64>>,
+}
+
+impl Sequencer for LockSequencer {
     fn new(keys_number: usize) -> Self {
         let mut keys = Vec::with_capacity(keys_number);
         keys.resize_with(keys_number, Default::default);
@@ -212,7 +226,49 @@ impl Sequencer {
     }
 
     fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
-        let mut votes = Vec::with_capacity(cmd.len() * 2);
+        let vote_count = cmd.len();
+        let mut votes = Vec::with_capacity(vote_count);
+
+        let mut max_sequence = 0;
+
+        cmd.into_iter()
+            .map(|key| {
+                let value = self.keys[key].lock().expect("should be able to lock");
+                max_sequence = max(proposal, *value + 1);
+                (key, value)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|(key, mut previous_value)| {
+                // compute vote start and vote end
+                let vote_start = *previous_value + 1;
+
+                // save vote range
+                votes.push((key, vote_start, max_sequence));
+
+                // set new value
+                *previous_value = max_sequence;
+            });
+
+        assert_eq!(votes.capacity(), vote_count);
+        votes
+    }
+}
+
+struct AtomicSequencer {
+    keys: Vec<AtomicU64>,
+}
+
+impl Sequencer for AtomicSequencer {
+    fn new(keys_number: usize) -> Self {
+        let mut keys = Vec::with_capacity(keys_number);
+        keys.resize_with(keys_number, Default::default);
+        Self { keys }
+    }
+
+    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
+        let max_vote_count = cmd.len() * 2 - 1;
+        let mut votes = Vec::with_capacity(max_vote_count);
 
         let max_sequence = cmd
             .into_iter()
@@ -267,24 +323,16 @@ impl Sequencer {
             .collect();
 
         votes.extend(new_votes);
+        assert_eq!(votes.capacity(), max_vote_count);
         votes
     }
 }
 
-// unsafe impl Send for Sequencer {}
-
-fn parse_args() -> (usize, usize, usize, usize) {
+fn parse_args() -> (usize, usize, usize) {
     let matches = App::new("sequencer_bench")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Benchmark timestamp-assignment in newt")
-        .arg(
-            Arg::with_name("keys")
-                .long("keys")
-                .value_name("KEYS")
-                .help("total number of existing keys; default: 100")
-                .takes_value(true),
-        )
         .arg(
             Arg::with_name("clients")
                 .long("clients")
@@ -309,21 +357,15 @@ fn parse_args() -> (usize, usize, usize, usize) {
         .get_matches();
 
     // parse arguments
-    let keys = parse_keys(matches.value_of("keys"));
     let clients = parse_clients(matches.value_of("clients"));
     let commands_per_client = parse_commands_per_client(matches.value_of("commands_per_client"));
     let keys_per_command = parse_keys_per_command(matches.value_of("keys_per_command"));
 
-    println!("keys: {:?}", keys);
     println!("clients: {:?}", clients);
     println!("commands per client: {:?}", commands_per_client);
     println!("keys per command: {:?}", keys_per_command);
 
-    (keys, clients, commands_per_client, keys_per_command)
-}
-
-fn parse_keys(keys: Option<&str>) -> usize {
-    parse_number(keys).unwrap_or(DEFAULT_KEYS)
+    (clients, commands_per_client, keys_per_command)
 }
 
 fn parse_keys_per_command(keys_per_command: Option<&str>) -> usize {
