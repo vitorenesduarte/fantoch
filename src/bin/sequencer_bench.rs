@@ -2,7 +2,6 @@
 
 use clap::{App, Arg};
 use futures::future::join_all;
-use lazy_static::lazy_static;
 use planet_sim::metrics::Histogram;
 use planet_sim::run::task;
 use planet_sim::run::task::chan::{ChannelReceiver, ChannelSender};
@@ -13,11 +12,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::iter::FromIterator;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::oneshot;
 
-const KEYS: usize = 100;
-
+const DEFAULT_KEYS: usize = 100;
 const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_CLIENTS: usize = 10;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 10000;
@@ -28,22 +27,23 @@ type Key = usize;
 type Command = BTreeSet<Key>;
 type VoteRange = (Key, u64, u64);
 
-lazy_static! {
-    static ref SEQUENCER: AtomicSequencer = AtomicSequencer::new(KEYS);
-}
+// use lazy_static::lazy_static;
+// lazy_static! {
+//     static ref SEQUENCER: AtomicSequencer = AtomicSequencer::new(KEYS);
+// }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (client_number, commands_per_client, keys_per_command) = parse_args();
+    let (keys_number, client_number, commands_per_client, keys_per_command) = parse_args();
 
     // get number of cpus
     let cpus = num_cpus::get();
     println!("cpus: {}", cpus);
 
     // maybe warn about number of keys
-    if KEYS < cpus {
+    if keys_number < cpus {
         println!(
             "warning: number of keys {} is lower than the number of cpus {}",
-            KEYS, cpus
+            keys_number, cpus
         );
     }
 
@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     runtime.block_on(bench(
         cpus,
+        keys_number,
         client_number,
         commands_per_client,
         keys_per_command,
@@ -65,19 +66,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 async fn bench(
     cpus: usize,
+    keys_number: usize,
     client_number: usize,
     commands_per_client: usize,
     keys_per_command: usize,
 ) -> Result<(), Box<dyn Error>> {
+    // create sequencer
+    let sequencer = Arc::new(AtomicSequencer::new(keys_number));
+
     // create as many workers as cpus
     let to_workers: Vec<_> = (0..cpus)
-        .map(|_| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(rx)))
+        .map(|_| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(rx, sequencer.clone())))
         .collect();
 
     // spawn clients
     let handles = (0..client_number).map(|_| {
         tokio::spawn(client(
-            KEYS,
+            keys_number,
             commands_per_client,
             keys_per_command,
             to_workers.clone(),
@@ -117,9 +122,14 @@ async fn bench(
 }
 
 // async fn worker(sequencer: )
-async fn worker(mut requests: ChannelReceiver<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>) {
+async fn worker<S>(
+    mut requests: ChannelReceiver<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>,
+    sequencer: Arc<S>,
+) where
+    S: Sequencer,
+{
     while let Some((proposal, cmd, client)) = requests.recv().await {
-        let result = SEQUENCER.next(proposal, cmd);
+        let result = sequencer.next(proposal, cmd);
         if let Err(e) = client.send(result) {
             println!("error while sending next result to client: {:?}", e);
         }
@@ -328,11 +338,18 @@ impl Sequencer for AtomicSequencer {
     }
 }
 
-fn parse_args() -> (usize, usize, usize) {
+fn parse_args() -> (usize, usize, usize, usize) {
     let matches = App::new("sequencer_bench")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Benchmark timestamp-assignment in newt")
+        .arg(
+            Arg::with_name("keys")
+                .long("keys")
+                .value_name("KEYS")
+                .help("total number of keys; default: 100")
+                .takes_value(true),
+        )
         .arg(
             Arg::with_name("clients")
                 .long("clients")
@@ -357,19 +374,21 @@ fn parse_args() -> (usize, usize, usize) {
         .get_matches();
 
     // parse arguments
+    let keys = parse_keys(matches.value_of("keys"));
     let clients = parse_clients(matches.value_of("clients"));
     let commands_per_client = parse_commands_per_client(matches.value_of("commands_per_client"));
     let keys_per_command = parse_keys_per_command(matches.value_of("keys_per_command"));
 
+    println!("keys: {:?}", keys);
     println!("clients: {:?}", clients);
     println!("commands per client: {:?}", commands_per_client);
     println!("keys per command: {:?}", keys_per_command);
 
-    (clients, commands_per_client, keys_per_command)
+    (keys, clients, commands_per_client, keys_per_command)
 }
 
-fn parse_keys_per_command(keys_per_command: Option<&str>) -> usize {
-    parse_number(keys_per_command).unwrap_or(DEFAULT_KEYS_PER_COMMAND)
+fn parse_keys(keys: Option<&str>) -> usize {
+    parse_number(keys).unwrap_or(DEFAULT_KEYS)
 }
 
 fn parse_clients(clients: Option<&str>) -> usize {
@@ -378,6 +397,10 @@ fn parse_clients(clients: Option<&str>) -> usize {
 
 fn parse_commands_per_client(commands_per_client: Option<&str>) -> usize {
     parse_number(commands_per_client).unwrap_or(DEFAULT_COMMANDS_PER_CLIENT)
+}
+
+fn parse_keys_per_command(keys_per_command: Option<&str>) -> usize {
+    parse_number(keys_per_command).unwrap_or(DEFAULT_KEYS_PER_COMMAND)
 }
 
 fn parse_number(number: Option<&str>) -> Option<usize> {
