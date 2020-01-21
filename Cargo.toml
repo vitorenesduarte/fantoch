@@ -15,8 +15,8 @@ bincode = "1.2.1"
 rayon = "1.3.0"
 futures = "0.3.1"
 bytes = "0.5.3"
-tokio = { git = "https://github.com/vitorenesduarte/tokio", branch = "buf_stream_with_capacity", features = ["full"] }
-tokio-util = { git = "https://github.com/vitorenesduarte/tokio", branch = "buf_stream_with_capacity", features = ["codec"] }
+tokio = { git = "https://github.com/tokio-rs/tokio", branch = "master", features = ["full"] }
+tokio-util = { git = "https://github.com/tokio-rs/tokio", branch = "master", features = ["codec"] }
 clap = "2.33.0"
 num_cpus = "1.12.0"
 
