@@ -249,11 +249,11 @@ impl Sequencer for LockSequencer {
         let mut votes = Vec::with_capacity(vote_count);
         let mut locks = Vec::with_capacity(vote_count);
 
-        let mut max_sequence = 0;
+        let mut max_sequence = proposal;
 
         for key in cmd {
             let lock = self.keys[key].lock().await;
-            max_sequence = max(proposal, *lock + 1);
+            max_sequence = max(max_sequence, *lock + 1);
             locks.push((key, lock))
         }
 
