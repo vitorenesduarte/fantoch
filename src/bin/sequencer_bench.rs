@@ -20,6 +20,7 @@ const DEFAULT_KEYS: usize = 100;
 const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_CLIENTS: usize = 10;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 10000;
+const DEFAULT_CHECK_VOTES: bool = true;
 
 const CHANNEL_BUFFER_SIZE: usize = 10000;
 
@@ -27,13 +28,9 @@ type Key = usize;
 type Command = BTreeSet<Key>;
 type VoteRange = (Key, u64, u64);
 
-// use lazy_static::lazy_static;
-// lazy_static! {
-//     static ref SEQUENCER: AtomicSequencer = AtomicSequencer::new(KEYS);
-// }
-
 fn main() -> Result<(), Box<dyn Error>> {
-    let (keys_number, client_number, commands_per_client, keys_per_command) = parse_args();
+    let (keys_number, client_number, commands_per_client, keys_per_command, check_votes) =
+        parse_args();
 
     // get number of cpus
     let cpus = num_cpus::get();
@@ -61,6 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         client_number,
         commands_per_client,
         keys_per_command,
+        check_votes,
     ))
 }
 
@@ -70,21 +68,24 @@ async fn bench(
     client_number: usize,
     commands_per_client: usize,
     keys_per_command: usize,
+    check_votes: bool,
 ) -> Result<(), Box<dyn Error>> {
     // create sequencer
     let sequencer = Arc::new(AtomicSequencer::new(keys_number));
 
     // create as many workers as cpus
     let to_workers: Vec<_> = (0..cpus)
-        .map(|_| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(rx, sequencer.clone())))
+        .map(|id| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(id, rx, sequencer.clone())))
         .collect();
 
     // spawn clients
-    let handles = (0..client_number).map(|_| {
+    let handles = (0..client_number).map(|id| {
         tokio::spawn(client(
+            id,
             keys_number,
             commands_per_client,
             keys_per_command,
+            check_votes,
             to_workers.clone(),
         ))
     });
@@ -97,7 +98,6 @@ async fn bench(
         let (client_histogram, votes) = join_result?;
         latency.merge(&client_histogram);
         for (key, vote_start, vote_end) in votes {
-            // println!("checking vote {}-{} on key {}", vote_start, vote_end, key);
             let current_key_votes = all_votes.entry(key).or_insert_with(BTreeSet::new);
             for vote in vote_start..=vote_end {
                 // insert vote and check it hasn't been added before
@@ -123,11 +123,13 @@ async fn bench(
 
 // async fn worker(sequencer: )
 async fn worker<S>(
+    id: usize,
     mut requests: ChannelReceiver<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>,
     sequencer: Arc<S>,
 ) where
     S: Sequencer,
 {
+    println!("worker {} started...", id);
     while let Some((proposal, cmd, client)) = requests.recv().await {
         let result = sequencer.next(proposal, cmd);
         if let Err(e) = client.send(result) {
@@ -137,11 +139,15 @@ async fn worker<S>(
 }
 
 async fn client(
+    id: usize,
     keys_number: usize,
     commands_per_client: usize,
     keys_per_command: usize,
+    check_votes: bool,
     mut to_workers: Vec<ChannelSender<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>>,
 ) -> (Histogram, Vec<VoteRange>) {
+    println!("client {} started...", id);
+
     // create histogram and list with all votes received
     let mut histogram = Histogram::new();
     let mut all_votes = Vec::new();
@@ -188,7 +194,6 @@ async fn client(
         // wait for reply
         match rx.await {
             Ok(votes) => {
-                // println!("received votes {:?} from {}", votes, worker_index);
                 // register end time
                 let end_time = time.now();
 
@@ -205,7 +210,9 @@ async fn client(
                 histogram.increment(latency as u64);
 
                 // update list with all votes
-                all_votes.extend(votes);
+                if check_votes {
+                    all_votes.extend(votes);
+                }
             }
             Err(e) => {
                 println!(
@@ -338,7 +345,7 @@ impl Sequencer for AtomicSequencer {
     }
 }
 
-fn parse_args() -> (usize, usize, usize, usize) {
+fn parse_args() -> (usize, usize, usize, usize, bool) {
     let matches = App::new("sequencer_bench")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -371,6 +378,13 @@ fn parse_args() -> (usize, usize, usize, usize) {
                 .help("number of keys accessed by each command; default: 1")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("check_votes")
+                .long("check_votes")
+                .value_name("CHECK_VOTES")
+                .help("checks if votes generated are correct; default: true")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -378,13 +392,21 @@ fn parse_args() -> (usize, usize, usize, usize) {
     let clients = parse_clients(matches.value_of("clients"));
     let commands_per_client = parse_commands_per_client(matches.value_of("commands_per_client"));
     let keys_per_command = parse_keys_per_command(matches.value_of("keys_per_command"));
+    let check_votes = parse_check_votes(matches.value_of("check_votes"));
 
     println!("keys: {:?}", keys);
     println!("clients: {:?}", clients);
     println!("commands per client: {:?}", commands_per_client);
     println!("keys per command: {:?}", keys_per_command);
+    println!("check votes: {:?}", check_votes);
 
-    (keys, clients, commands_per_client, keys_per_command)
+    (
+        keys,
+        clients,
+        commands_per_client,
+        keys_per_command,
+        check_votes,
+    )
 }
 
 fn parse_keys(keys: Option<&str>) -> usize {
@@ -401,6 +423,16 @@ fn parse_commands_per_client(commands_per_client: Option<&str>) -> usize {
 
 fn parse_keys_per_command(keys_per_command: Option<&str>) -> usize {
     parse_number(keys_per_command).unwrap_or(DEFAULT_KEYS_PER_COMMAND)
+}
+
+fn parse_check_votes(check_votes: Option<&str>) -> bool {
+    check_votes
+        .map(|check_votes| {
+            check_votes
+                .parse::<bool>()
+                .expect("check votes should be a bool")
+        })
+        .unwrap_or(DEFAULT_CHECK_VOTES)
 }
 
 fn parse_number(number: Option<&str>) -> Option<usize> {
