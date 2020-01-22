@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use clap::{App, Arg};
 use futures::future::join_all;
+use futures::lock::Mutex;
 use planet_sim::metrics::Histogram;
 use planet_sim::run::task;
 use planet_sim::run::task::chan::{ChannelReceiver, ChannelSender};
@@ -14,7 +15,7 @@ use std::error::Error;
 use std::iter::FromIterator;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::oneshot;
 
 const DEFAULT_KEYS: usize = 100;
 const DEFAULT_KEYS_PER_COMMAND: usize = 1;
