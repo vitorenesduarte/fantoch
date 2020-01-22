@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use clap::{App, Arg};
 use futures::future::join_all;
-use futures::lock::Mutex;
+use parking_lot::Mutex;
 use planet_sim::metrics::Histogram;
 use planet_sim::run::task;
 use planet_sim::run::task::chan::{ChannelReceiver, ChannelSender};
@@ -253,7 +253,7 @@ impl Sequencer for LockSequencer {
         let mut max_sequence = proposal;
 
         for key in cmd {
-            let lock = self.keys[key].lock().await;
+            let lock = self.keys[key].lock();
             max_sequence = max(max_sequence, *lock + 1);
             locks.push((key, lock))
         }
