@@ -9,24 +9,36 @@ mod graph;
 mod table;
 
 // Re-exports.
+pub use basic::{BasicExecutionInfo, BasicExecutor};
 pub use graph::{GraphExecutionInfo, GraphExecutor};
 pub use table::{TableExecutionInfo, TableExecutor};
-pub use basic::{BasicExecutionInfo, BasicExecutor};
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
+use crate::kvs::Key;
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Debug + Send;
+    type ExecutionInfo: Debug + Send + ExecutionKey;
 
     fn new(config: Config) -> Self;
 
     fn register(&mut self, cmd: &Command);
 
-    fn handle(&mut self, infos: Vec<Self::ExecutionInfo>) -> Vec<CommandResult>;
+    fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<CommandResult>;
 
     fn show_metrics(&self) {
         // by default, nothing to show
+    }
+
+    fn is_parallel() -> bool {
+        false
+    }
+}
+
+pub trait ExecutionKey {
+    /// Parallel executors should implement this, otherwise a single executor will be assumed
+    fn key(&self) -> Option<Key> {
+        None
     }
 }

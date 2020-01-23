@@ -1,7 +1,7 @@
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::graph::DependencyGraph;
-use crate::executor::Executor;
+use crate::executor::{ExecutionKey, Executor};
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use std::collections::HashSet;
@@ -32,40 +32,33 @@ impl Executor for GraphExecutor {
         assert!(self.pending.insert(cmd.rifl()));
     }
 
-    fn handle(&mut self, infos: Vec<Self::ExecutionInfo>) -> Vec<CommandResult> {
+    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<CommandResult> {
         // borrow everything we'll need
         let graph = &mut self.graph;
         let store = &mut self.store;
         let pending = &mut self.pending;
 
-        infos
+        // handle each new info
+        graph.add(info.dot, info.cmd, info.clock);
+
+        // get more commands that are ready to be executed
+        let to_execute = graph.commands_to_execute();
+
+        // execute them all
+        to_execute
             .into_iter()
-            .flat_map(|info| {
-                // handle each new info
-                graph.add(info.dot, info.cmd, info.clock);
+            .filter_map(|cmd| {
+                // get command rifl
+                let rifl = cmd.rifl();
+                // execute the command
+                let result = store.execute_command(cmd);
 
-                // get more commands that are ready to be executed
-                let to_execute = graph.commands_to_execute();
-
-                // execute them all
-                to_execute
-                    .into_iter()
-                    .filter_map(|cmd| {
-                        // get command rifl
-                        let rifl = cmd.rifl();
-                        // execute the command
-                        let result = store.execute_command(cmd);
-
-                        // if it was pending locally, then it's from a client of this process
-                        if pending.remove(&rifl) {
-                            Some(result)
-                        } else {
-                            None
-                        }
-                    })
-                    // TODO can we avoid collecting here?
-                    .collect::<Vec<_>>()
-                    .into_iter()
+                // if it was pending locally, then it's from a client of this process
+                if pending.remove(&rifl) {
+                    Some(result)
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -87,3 +80,5 @@ impl GraphExecutionInfo {
         Self { dot, cmd, clock }
     }
 }
+
+impl ExecutionKey for GraphExecutionInfo {}

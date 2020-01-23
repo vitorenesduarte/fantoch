@@ -300,14 +300,16 @@ async fn executor_task<P>(
 }
 
 async fn handle_execution_info<P>(
-    execution_info: Vec<<P::Executor as Executor>::ExecutionInfo>,
+    to_executor: Vec<<P::Executor as Executor>::ExecutionInfo>,
     executor: &mut P::Executor,
     clients: &mut HashMap<ClientId, CommandResultSender>,
 ) where
     P: Protocol,
 {
     // get new commands ready
-    let ready = executor.handle(execution_info);
+    let ready = to_executor
+        .into_iter()
+        .flat_map(|info| executor.handle(info));
 
     for cmd_result in ready {
         // get client id

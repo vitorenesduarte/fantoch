@@ -1,10 +1,11 @@
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::executor::Executor;
+use crate::executor::{ExecutionKey, Executor};
 use crate::id::Rifl;
 use crate::kvs::KVStore;
 use std::collections::HashSet;
 
+impl ExecutionKey for BasicExecutionInfo {}
 pub type BasicExecutionInfo = Command;
 
 pub struct BasicExecutor {
@@ -27,26 +28,21 @@ impl Executor for BasicExecutor {
         assert!(self.pending.insert(cmd.rifl()));
     }
 
-    fn handle(&mut self, infos: Vec<Self::ExecutionInfo>) -> Vec<CommandResult> {
+    fn handle(&mut self, cmd: Self::ExecutionInfo) -> Vec<CommandResult> {
         // borrow everything we'll need
         let store = &mut self.store;
         let pending = &mut self.pending;
 
-        infos
-            .into_iter()
-            .filter_map(|cmd| {
-                // get command rifl
-                let rifl = cmd.rifl();
-                // execute the command
-                let result = store.execute_command(cmd);
+        // get command rifl
+        let rifl = cmd.rifl();
+        // execute the command
+        let result = store.execute_command(cmd);
 
-                // if it was pending locally, then it's from a client of this process
-                if pending.remove(&rifl) {
-                    Some(result)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        // if it was pending locally, then it's from a client of this process
+        if pending.remove(&rifl) {
+            vec![result]
+        } else {
+            Vec::new()
+        }
     }
 }

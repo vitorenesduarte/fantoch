@@ -162,7 +162,10 @@ where
 
                         // handle new execution info in the executor
                         let to_executor = process.to_executor();
-                        let ready = executor.handle(to_executor);
+                        let ready: Vec<_> = to_executor
+                            .into_iter()
+                            .flat_map(|info| executor.handle(info))
+                            .collect();
 
                         // schedule new messages
                         self.schedule_send(MessageRegion::Process(process_id), to_send);
@@ -299,6 +302,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::ExecutionKey;
     use crate::executor::Executor;
     use crate::id::{ProcessId, Rifl};
     use crate::metrics::F64;
@@ -308,6 +312,7 @@ mod tests {
     use std::collections::HashSet;
     use std::mem;
 
+    impl ExecutionKey for ExecutionInfo {}
     type ExecutionInfo = <PingPongExecutor as Executor>::ExecutionInfo;
 
     // TODO remove this in favor of `BasicExecutor` (same for the protocol)
@@ -336,14 +341,13 @@ mod tests {
             assert!(self.pending.insert(cmd.rifl()));
         }
 
-        fn handle(&mut self, infos: Vec<CommandResult>) -> Vec<CommandResult> {
-            infos
-                .into_iter()
-                .filter(|info| {
-                    // only return those results that belong to registered commands
-                    self.pending.remove(&info.rifl())
-                })
-                .collect()
+        fn handle(&mut self, info: CommandResult) -> Vec<CommandResult> {
+            // only return those results that belong to registered commands
+            if self.pending.remove(&info.rifl()) {
+                vec![info]
+            } else {
+                Vec::new()
+            }
         }
     }
 

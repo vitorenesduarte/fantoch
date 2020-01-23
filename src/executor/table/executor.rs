@@ -1,9 +1,9 @@
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::executor::table::MultiVotesTable;
-use crate::executor::Executor;
+use crate::executor::{ExecutionKey, Executor};
 use crate::id::Dot;
-use crate::kvs::KVStore;
+use crate::kvs::{KVStore, Key};
 use crate::protocol::common::table::{ProcessVotes, Votes};
 
 pub struct TableExecutor {
@@ -34,46 +34,39 @@ impl Executor for TableExecutor {
         assert!(self.pending.start(&cmd));
     }
 
-    fn handle(&mut self, infos: Vec<Self::ExecutionInfo>) -> Vec<CommandResult> {
+    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<CommandResult> {
         // borrow everything we'll need
         let table = &mut self.table;
         let store = &mut self.store;
         let pending = &mut self.pending;
 
-        infos
+        // handle each new info by updating the votes table
+        let to_execute = match info {
+            TableExecutionInfo::Votes {
+                dot,
+                cmd,
+                clock,
+                votes,
+            } => table.add_votes(dot, cmd, clock, votes),
+            TableExecutionInfo::PhantomVotes { process_votes } => {
+                table.add_phantom_votes(process_votes)
+            }
+        };
+
+        // get new commands that are ready to be executed
+        to_execute
             .into_iter()
-            .flat_map(|info| {
-                // handle each new info by updating the votes table
-                let to_execute = match info {
-                    TableExecutionInfo::Votes {
-                        dot,
-                        cmd,
-                        clock,
-                        votes,
-                    } => table.add_votes(dot, cmd, clock, votes),
-                    TableExecutionInfo::PhantomVotes { process_votes } => {
-                        table.add_phantom_votes(process_votes)
-                    }
-                };
+            // flatten each pair with a key and list of ready partial operations
+            .flat_map(|(key, ops)| {
+                ops.into_iter()
+                    .map(move |(rifl, op)| (key.clone(), rifl, op))
+            })
+            .filter_map(|(key, rifl, op)| {
+                // execute op in the `KVStore`
+                let op_result = store.execute(&key, op);
 
-                // get new commands that are ready to be executed
-                to_execute
-                    .into_iter()
-                    // flatten each pair with a key and list of ready partial operations
-                    .flat_map(|(key, ops)| {
-                        ops.into_iter()
-                            .map(move |(rifl, op)| (key.clone(), rifl, op))
-                    })
-                    .filter_map(|(key, rifl, op)| {
-                        // execute op in the `KVStore`
-                        let op_result = store.execute(&key, op);
-
-                        // add partial result to `Pending`
-                        pending.add_partial(rifl, key, op_result)
-                    })
-                    // TODO can we avoid collecting here?
-                    .collect::<Vec<_>>()
-                    .into_iter()
+                // add partial result to `Pending`
+                pending.add_partial(rifl, key, op_result)
             })
             .collect()
     }
@@ -108,5 +101,11 @@ impl TableExecutionInfo {
 
     pub fn phantom_votes(process_votes: ProcessVotes) -> Self {
         TableExecutionInfo::PhantomVotes { process_votes }
+    }
+}
+
+impl ExecutionKey for TableExecutionInfo {
+    fn key(&self) -> Option<Key> {
+        todo!()
     }
 }

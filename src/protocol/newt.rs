@@ -558,7 +558,10 @@ mod tests {
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
-        let mut ready = executor.handle(to_executor);
+        let mut ready: Vec<_> = to_executor
+            .into_iter()
+            .flat_map(|info| executor.handle(info))
+            .collect();
         assert_eq!(ready.len(), 1);
 
         // get that command
