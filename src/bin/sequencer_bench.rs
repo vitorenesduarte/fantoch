@@ -1,6 +1,5 @@
 #![feature(no_more_cas)]
 
-use async_trait::async_trait;
 use clap::{App, Arg};
 use futures::future::join_all;
 use parking_lot::Mutex;
@@ -132,7 +131,7 @@ async fn worker<S>(
 {
     println!("worker {} started...", id);
     while let Some((proposal, cmd, client)) = requests.recv().await {
-        let result = sequencer.next(proposal, cmd).await;
+        let result = sequencer.next(proposal, cmd);
         if let Err(e) = client.send(result) {
             println!("error while sending next result to client: {:?}", e);
         }
@@ -227,17 +226,15 @@ async fn client(
     (histogram, all_votes)
 }
 
-#[async_trait]
 trait Sequencer {
     fn new(keys_number: usize) -> Self;
-    async fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange>;
+    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange>;
 }
 
 struct LockSequencer {
     keys: Vec<Mutex<u64>>,
 }
 
-#[async_trait]
 impl Sequencer for LockSequencer {
     fn new(keys_number: usize) -> Self {
         let mut keys = Vec::with_capacity(keys_number);
@@ -245,7 +242,7 @@ impl Sequencer for LockSequencer {
         Self { keys }
     }
 
-    async fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
+    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
         let vote_count = cmd.len();
         let mut votes = Vec::with_capacity(vote_count);
         let mut locks = Vec::with_capacity(vote_count);
@@ -278,7 +275,6 @@ struct AtomicSequencer {
     keys: Vec<AtomicU64>,
 }
 
-#[async_trait]
 impl Sequencer for AtomicSequencer {
     fn new(keys_number: usize) -> Self {
         let mut keys = Vec::with_capacity(keys_number);
@@ -286,7 +282,7 @@ impl Sequencer for AtomicSequencer {
         Self { keys }
     }
 
-    async fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
+    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
         let max_vote_count = cmd.len() * 2 - 1;
         let mut votes = Vec::with_capacity(max_vote_count);
 
