@@ -1,3 +1,44 @@
+/// The architecture of this runner was thought in a way that allows all protocols that implement
+/// the `Protocol` trait to achieve their maximum throughput. Below we detail all key decisions.
+///
+/// We assume:
+/// - C clients
+/// - E executors
+/// - P protocol processes
+///
+/// 1. When a client connects for the first time it registers itself in all executors. This register
+/// request contains the channel in which executors should write command results (potentially
+/// partial command results if the command is multi-key).
+///
+/// 2. When a client issues a command, it registers this command in all executors that are
+/// responsible for executing this command. This is how each executor knows if it should notify some
+/// client when some command is executed. If the commmand is single-key, this command only needs to
+/// be registered in one executor. If multi-key, it needs to be registered in several executors if
+/// the keys accessed by the command are assigned to different executors.
+///
+/// 3. Once the command registration occurs (does the client need to wait for registration
+/// completion or can it do it asynchronously?), the command is forwarded to *ONE* protocol process
+/// (even if the command is multi-key). This single protocol process can be chosen by e.g. looking
+/// to the first key accessed by the command (we say first because keys accessed by commands are
+/// sorted so that locking them (see below) does not generate a deadlock).
+///
+/// 4. The protocol process does whatever is specified in the `Protocol` trait. This may include
+/// sending messages to other replicas/nodes, which leads to point 5.
+///
+/// 5. When a message is received, the same forward function from point 3. is used to select the
+/// protocol process that is responsible for handling that message.
+///
+/// 6. Everytime a message is handled in protocol processes, the process checks if it has new
+/// execution info. If so, it forwards this information for each responsible executor. This suggests
+/// that execution info should be of the form `[(key, execution_info)]` so that forwarding to
+/// executors is based on the `key`. The same forward function from point 2. is used to determine
+/// which executor to forward to.
+///
+/// 7. Clients aggregate partial command results to form a single command result. Once the command
+/// result is complete, the notification is sent to the actual client.
+
+const CONNECT_RETRIES: usize = 100;
+
 // This module contains the prelude.
 mod prelude;
 
@@ -22,8 +63,6 @@ use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
 use tokio::time::{self, Duration};
-
-const CONNECT_RETRIES: usize = 100;
 
 pub async fn process<A, P>(
     process: P,
