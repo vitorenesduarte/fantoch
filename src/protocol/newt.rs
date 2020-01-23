@@ -290,10 +290,11 @@ impl Newt {
         votes.merge(current_votes);
 
         // generate phantom votes if committed clock is higher than the local key's clock:
-        // - this only happens if newt is configured with tiny quorums or, in case it's not, this
-        //   process was part of the fast quorum (if it was, `info.quorum` is not empty)
-        // - n = 3 is a special case where tiny quorums don't reduce the quorum size; in this case,
-        //   we also don't generate phantom votes
+        // - not all processes are needed for stability specially when newt is *not* configured with
+        //   tiny quorums
+        // - so in case it's not, only the processes part of the fast quorum (if it was,
+        //   `info.quorum` is not empty) generate phantoms
+        // - n = 3 is a special case  where phantom votes are not generated as they are not needed
         let mut to_send = None;
         if self.bp.config.n() > 3 && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
         {
@@ -321,10 +322,6 @@ impl Newt {
             let execution_info = ExecutionInfo::votes(dot, cmd, info.clock, votes);
             self.to_executor.push(execution_info);
         }
-
-        // TODO the following is incorrect: it should only be deleted once it has been committed at
-        // all processes
-        self.cmds.remove(dot);
 
         // return `ToSend`
         to_send
@@ -551,23 +548,9 @@ mod tests {
         assert_eq!(target.len(), n);
 
         // all processes handle it
-        let mut mphantoms = simulation.forward_to_processes(mcommit);
-        // there should be one mphantom (from process 3)
-        assert_eq!(mphantoms.len(), 1);
-
-        // get mphantom
-        let mphantom = mphantoms.pop().expect("there should an mphantom");
-        let ToSend { from, target, msg } = mphantom.clone();
-
-        match msg {
-            Message::MPhantom { .. } => {
-                assert_eq!(from, process_id_3);
-                assert!(target.contains(&process_id_1));
-                assert!(target.contains(&process_id_2));
-                assert!(target.contains(&process_id_3));
-            }
-            _ => panic!("Message::MPhantom not found!"),
-        }
+        let to_sends = simulation.forward_to_processes(mcommit);
+        // there should be nothing to send
+        assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
         let (process, executor) = simulation.get_process(process_id_1);
@@ -580,22 +563,6 @@ mod tests {
 
         // get that command
         let cmd_result = ready.pop().expect("there should a command ready");
-
-        // -------------------------
-        // forward now the mphantoms
-        let to_sends = simulation.forward_to_processes(mphantom);
-        // check there's nothing to send
-        assert!(to_sends.is_empty());
-
-        // process 1 should have something to the executor
-        let (process, executor) = simulation.get_process(process_id_1);
-        let to_executor = process.to_executor();
-        assert_eq!(to_executor.len(), 1);
-
-        // handle in executor and check that it didn't generate another command
-        let ready = executor.handle(to_executor);
-        assert!(ready.is_empty());
-        // -------------------------
 
         // handle the previous command result
         let (target, cmd) = simulation
