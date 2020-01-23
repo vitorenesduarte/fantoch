@@ -30,7 +30,7 @@ TCP_NODELAY=true
 
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
-PROCESS_SOCKET_BUFFER_SIZE=$((100 * 1024))
+PROCESS_SOCKET_BUFFER_SIZE=$((0 * 1024))
 # do not buffer on the client-side
 CLIENT_SOCKET_BUFFER_SIZE=0
 

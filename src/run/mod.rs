@@ -2,7 +2,7 @@
 mod prelude;
 
 // This module contains the definition of...
-mod task;
+pub mod task;
 
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
