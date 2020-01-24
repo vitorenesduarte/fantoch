@@ -33,19 +33,18 @@ impl Executor for BasicExecutor {
         assert!(self.pending.insert(rifl));
     }
 
-    fn handle(&mut self, cmd: Self::ExecutionInfo) -> ExecutorResult {
+    fn handle(&mut self, cmd: Self::ExecutionInfo) -> Vec<ExecutorResult> {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
         let result = cmd.execute(&mut self.store);
 
         // if it was pending locally, then it's from a client of this process
-        let ready = if self.pending.remove(&rifl) {
-            vec![result]
+        if self.pending.remove(&rifl) {
+            vec![ExecutorResult::Ready(result)]
         } else {
             Vec::new()
-        };
-        ExecutorResult::Ready(ready)
+        }
     }
 
     fn parallel(&self) -> bool {

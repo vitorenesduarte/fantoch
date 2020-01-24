@@ -34,7 +34,7 @@ impl Executor for GraphExecutor {
         assert!(self.pending.insert(rifl));
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) -> ExecutorResult {
+    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
         // borrow everything we'll need
         let graph = &mut self.graph;
         let store = &mut self.store;
@@ -47,7 +47,7 @@ impl Executor for GraphExecutor {
         let to_execute = graph.commands_to_execute();
 
         // execute them all
-        let ready = to_execute
+        to_execute
             .into_iter()
             .filter_map(|cmd| {
                 // get command rifl
@@ -57,13 +57,12 @@ impl Executor for GraphExecutor {
 
                 // if it was pending locally, then it's from a client of this process
                 if pending.remove(&rifl) {
-                    Some(result)
+                    Some(ExecutorResult::Ready(result))
                 } else {
                     None
                 }
             })
-            .collect();
-        ExecutorResult::Ready(ready)
+            .collect()
     }
 
     fn parallel(&self) -> bool {

@@ -164,13 +164,13 @@ where
                         let to_executor = process.to_executor();
                         let ready: Vec<_> = to_executor
                             .into_iter()
-                            .flat_map(|info| {
-                                match executor.handle(info) {
-                                    ExecutorResult::Ready(ready) => ready,
-                                    _ => {
-                                        panic!("all commands should be ready since we don't support yet parallel executors")
-                                    }
-                                } })
+                            .flat_map(|info| executor.handle(info))
+                            .map(|result| match result {
+                                ExecutorResult::Ready(result) => result,
+                                _ => {
+                                    panic!("all results should be ready since executor we don't support yet parallel executors")
+                                }
+                            })
                             .collect();
 
                         // schedule new messages

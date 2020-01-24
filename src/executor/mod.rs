@@ -15,7 +15,7 @@ pub use table::{TableExecutionInfo, TableExecutor};
 
 use crate::command::CommandResult;
 use crate::config::Config;
-use crate::id::Rifl;
+use crate::id::{ClientId, Rifl};
 use crate::kvs::{KVOpResult, Key};
 use std::fmt::Debug;
 
@@ -26,7 +26,7 @@ pub trait Executor {
 
     fn register(&mut self, rifl: Rifl, key_count: usize);
 
-    fn handle(&mut self, infos: Self::ExecutionInfo) -> ExecutorResult;
+    fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 
     fn parallel(&self) -> bool;
 
@@ -46,6 +46,16 @@ pub trait ExecutionInfoKey {
 
 // TODO maybe extend this with variants `Nothing`, `SingleReady`, `MultiReady`, etc
 pub enum ExecutorResult {
-    Ready(Vec<CommandResult>),
+    Ready(CommandResult),
     Partial(Rifl, Key, KVOpResult),
+}
+
+impl ExecutorResult {
+    /// Check which client should receive this result.
+    fn client(&self) -> ClientId {
+        match self {
+            ExecutorResult::Ready(cmd_result) => cmd_result.rifl().source(),
+            ExecutorResult::Partial(rifl, _, _) => rifl.source(),
+        }
+    }
 }

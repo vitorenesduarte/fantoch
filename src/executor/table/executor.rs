@@ -36,7 +36,7 @@ impl Executor for TableExecutor {
         assert!(self.pending.start(rifl, key_count));
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) -> ExecutorResult {
+    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
         // borrow everything we'll need
         let table = &mut self.table;
         let store = &mut self.store;
@@ -64,11 +64,11 @@ impl Executor for TableExecutor {
 
                 // add partial result to `Pending`
                 if let Some(result) = pending.add_partial(rifl, &key, op_result) {
-                    ready.push(result);
+                    ready.push(ExecutorResult::Ready(result));
                 }
             }
         }
-        ExecutorResult::Ready(ready)
+        ready
     }
 
     fn parallel(&self) -> bool {

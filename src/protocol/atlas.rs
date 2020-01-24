@@ -605,10 +605,11 @@ mod tests {
         // handle in executor and check there's a single command ready
         let mut ready: Vec<_> = to_executor
             .into_iter()
-            .flat_map(|info| match executor.handle(info) {
-                ExecutorResult::Ready(ready) => ready,
+            .flat_map(|info| executor.handle(info))
+            .map(|result| match result {
+                ExecutorResult::Ready(result) => result,
                 _ => {
-                    panic!("all commands should be ready since executor configured as non-parallel")
+                    panic!("all results should be ready since executor configured as non-parallel")
                 }
             })
             .collect();

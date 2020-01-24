@@ -309,10 +309,11 @@ async fn handle_execution_info<P>(
     // get new commands ready
     let ready: Vec<_> = to_executor
         .into_iter()
-        .flat_map(|info| match executor.handle(info) {
-            ExecutorResult::Ready(ready) => ready,
+        .flat_map(|info| executor.handle(info))
+        .map(|result| match result {
+            ExecutorResult::Ready(result) => result,
             _ => {
-                panic!("all commands should be ready since we don't support yet parallel executors")
+                panic!("all results should be ready since executor we don't support yet parallel executors")
             }
         })
         .collect();
