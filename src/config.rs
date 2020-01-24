@@ -10,6 +10,8 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
+    /// defines whether the protocol is configured with parallel or not
+    parallel: bool,
 }
 
 impl Config {
@@ -25,11 +27,14 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
+        // by default, `parallel = false`
+        let parallel = false;
         Self {
             n,
             f,
             newt_tiny_quorums,
             transitive_conflicts,
+            parallel,
         }
     }
 
@@ -53,7 +58,7 @@ impl Config {
         self.newt_tiny_quorums = newt_tiny_quorums;
     }
 
-    /// Checks whether whether we can assume that conflicts are transitive.
+    /// Checks whether we can assume that conflicts are transitive.
     pub fn transitive_conflicts(&self) -> bool {
         self.transitive_conflicts
     }
@@ -61,6 +66,16 @@ impl Config {
     /// Changes the value of `transitive_conflicts`.
     pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
         self.transitive_conflicts = transitive_conflicts;
+    }
+
+    /// Checks whether `Protocol` should be configured with parallel.
+    pub fn parallel(&self) -> bool {
+        self.parallel
+    }
+
+    /// Changes the value of `parallel`.
+    pub fn set_parallel(&mut self, parallel: bool) {
+        self.parallel = parallel;
     }
 }
 
@@ -151,6 +166,13 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+
+        // by default, parallel is false
+        assert!(!config.parallel());
+
+        // if we change it to true, it becomes true
+        config.set_parallel(true);
+        assert!(config.parallel());
     }
 
     #[test]
