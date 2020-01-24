@@ -37,11 +37,6 @@ impl Executor for TableExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
-        // borrow everything we'll need
-        let table = &mut self.table;
-        let store = &mut self.store;
-        let pending = &mut self.pending;
-
         // handle each new info by updating the votes table
         let to_execute = match info {
             TableExecutionInfo::Votes {
@@ -49,9 +44,9 @@ impl Executor for TableExecutor {
                 cmd,
                 clock,
                 votes,
-            } => table.add_votes(dot, cmd, clock, votes),
+            } => self.table.add_votes(dot, cmd, clock, votes),
             TableExecutionInfo::PhantomVotes { process_votes } => {
-                table.add_phantom_votes(process_votes)
+                self.table.add_phantom_votes(process_votes)
             }
         };
 
@@ -60,10 +55,10 @@ impl Executor for TableExecutor {
         for (key, ops) in to_execute {
             for (rifl, op) in ops {
                 // execute op in the `KVStore`
-                let op_result = store.execute(&key, op);
+                let op_result = self.store.execute(&key, op);
 
                 // add partial result to `Pending`
-                if let Some(result) = pending.add_partial(rifl, &key, op_result) {
+                if let Some(result) = self.pending.add_partial(rifl, &key, op_result) {
                     ready.push(ExecutorResult::Ready(result));
                 }
             }
