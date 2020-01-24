@@ -48,8 +48,8 @@ before_script: |
   fi
 
 script: |
-  cargo build
-  QUICKCHECK_TESTS=10000 cargo test 
+  cargo +nightly build
+  QUICKCHECK_TESTS=10000 cargo +nightly test 
   if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
     # measure code coverage and upload to coveralls.io
 
@@ -58,7 +58,7 @@ script: |
     # </tarpaulin>
 
     # <travis>
-    cargo coveralls --lib
+    cargo +nightly coveralls --lib
     # </travis>
 
   fi
