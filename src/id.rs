@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // process ids
 pub type ProcessId = u64;
 pub type Dot = Id<ProcessId>;
 pub type DotGen = IdGen<ProcessId>;
+pub type AtomicDotGen = AtomicIdGen<ProcessId>;
 
 // client ids
 // for info on RIFL see: http://sigops.org/sosp/sosp15/current/2015-Monterey/printable/126-lee.pdf
@@ -76,6 +78,36 @@ where
     }
 }
 
+pub struct AtomicIdGen<S> {
+    source: S,
+    last_sequence: AtomicU64,
+}
+
+impl<S> AtomicIdGen<S>
+where
+    S: Copy,
+{
+    /// Creates a new generator of `Id`.
+    pub fn new(source: S) -> Self {
+        Self {
+            source,
+            last_sequence: AtomicU64::new(0),
+        }
+    }
+
+    /// Retrives source.
+    pub fn source(&self) -> S {
+        self.source
+    }
+
+    /// Generates the next `Id`.
+    pub fn next_id(&mut self) -> Id<S> {
+        // TODO can the ordering be `Ordering::Relaxed`?
+        let previous = self.last_sequence.fetch_add(1, Ordering::SeqCst);
+        Id::new(self.source, previous + 1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +119,30 @@ mod tests {
         // create id generator
         let source = 10;
         let mut gen = MyGen::new(source);
+
+        // check source
+        assert_eq!(gen.source(), source);
+
+        // check the `id` generated for `id_count` ids
+        let id_count = 100;
+
+        for seq in 1..=id_count {
+            // generate id
+            let id = gen.next_id();
+
+            // check `id`
+            assert_eq!(id.source(), source);
+            assert_eq!(id.sequence(), seq);
+        }
+    }
+
+    #[test]
+    fn atomic_next_id() {
+        type MyAtomicGen = AtomicIdGen<u64>;
+
+        // create id generator
+        let source = 10;
+        let mut gen = MyAtomicGen::new(source);
 
         // check source
         assert_eq!(gen.source(), source);

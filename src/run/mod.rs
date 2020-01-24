@@ -24,8 +24,8 @@
 /// `noOp` meaning that we would need to broadcast to all processes, which would be tricky to get
 /// correctly. In particular, when the command is being submitted, its `Dot` has not been computed
 /// yet. So the idea here is for parallel protocols to have the `DotGen` outside (and we can have a
-/// lock-free implementation of `DotGen`) and once the `Dot` is computed, the submit is forwarded to
-/// the correct protocol process.
+/// lock-free implementation of `DotGen`, check `AtomicDotGen`) and once the `Dot` is computed, the
+/// submit is forwarded to the correct protocol process.
 ///
 /// 4. The protocol process does whatever is specified in the `Protocol` trait. This may include
 /// sending messages to other replicas/nodes, which leads to point 5.
