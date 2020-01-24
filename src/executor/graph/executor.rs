@@ -61,6 +61,7 @@ impl Executor for GraphExecutor {
     }
 
     fn parallel(&self) -> bool {
+        // This is executor in never parallel
         false
     }
 

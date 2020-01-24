@@ -10,6 +10,7 @@ pub enum Stats {
     MDTM, // mean distance to mean
 }
 
+// TODO maybe use https://docs.rs/hdrhistogram/7.0.0/hdrhistogram/
 #[derive(Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Histogram {
     // raw values: we have "100%" precision as all values are stored
