@@ -17,10 +17,10 @@ pub struct Pending {
 impl Pending {
     /// Creates a new `Pending` instance.
     /// If configured with:
-    /// - `parallel_executor = false`, then results are only returned once they're complete and
-    ///   aggregation is complete
     /// - `parallel_executor = true`, then results are returned as soon as received; this structure
     ///   simply tracks if the result belongs to a client that has previously register such command.
+    /// - `parallel_executor = false`, then results are only returned once they're complete and
+    ///   aggregation is complete
     pub fn new(parallel_executor: bool) -> Self {
         Self {
             parallel_executor,
@@ -96,7 +96,8 @@ mod tests {
     #[test]
     fn pending_flow() {
         // create pending and store
-        let mut pending = Pending::new();
+        let parallel_executor = false;
+        let mut pending = Pending::new(parallel_executor);
         let mut store = KVStore::new();
 
         // keys and commands
@@ -143,7 +144,7 @@ mod tests {
 
         // check that there's only one result (since the command accessed a
         // single key)
-        let res = res.unwrap();
+        let res = res.unwrap().unwrap_ready();
         assert_eq!(res.results().len(), 1);
 
         // check that there was nothing in the kvs before
@@ -155,7 +156,7 @@ mod tests {
 
         // check that there's only one result (since the command accessed a
         // single key)
-        let res = res.unwrap();
+        let res = res.unwrap().unwrap_ready();
         assert_eq!(res.results().len(), 1);
 
         // check that there was nothing in the kvs before
@@ -168,11 +169,95 @@ mod tests {
 
         // check that there are two results (since the command accessed two
         // keys)
-        let res = res.unwrap();
+        let res = res.unwrap().unwrap_ready();
         assert_eq!(res.results().len(), 2);
 
         // check that `get_ab` saw `put_a` but not `put_b`
         assert_eq!(res.results().get(&key_a).unwrap(), &Some(foo));
         assert_eq!(res.results().get(&key_b).unwrap(), &None);
+    }
+
+    #[test]
+    fn parallel_pending_flow() {
+        // create pending and store
+        let parallel_executor = true;
+        let mut pending = Pending::new(parallel_executor);
+        let mut store = KVStore::new();
+
+        // keys and commands
+        let key_a = String::from("A");
+        let key_b = String::from("B");
+        let foo = String::from("foo");
+        let bar = String::from("bar");
+
+        // command put a
+        let put_a_rifl = Rifl::new(1, 1);
+        let put_a = Command::put(put_a_rifl, key_a.clone(), foo.clone());
+
+        // command put b
+        let put_b_rifl = Rifl::new(2, 1);
+        let put_b = Command::put(put_b_rifl, key_b.clone(), bar.clone());
+
+        // command get a and b
+        let get_ab_rifl = Rifl::new(3, 1);
+        let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+
+        // register `get_ab` and `put_b`
+        assert!(pending.start(get_ab.rifl(), get_ab.key_count()));
+        assert!(pending.start(put_b.rifl(), put_b.key_count()));
+
+        // starting a command already started `false`
+        assert!(!pending.start(put_b.rifl(), put_b.key_count()));
+
+        // add the result of get b
+        let get_b_res = store.execute(&key_b, KVOp::Get);
+        let res = pending.add_partial(get_ab_rifl, &key_b, get_b_res);
+        // there's always (as long as previously registered) a result when configured with parallel
+        // executors
+        assert!(res.is_some());
+
+        // add the result of put a before being registered
+        let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
+        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
+        // there's not a result since the command has not been registered
+        assert!(res.is_none());
+
+        // register `put_a`
+        pending.start(put_a.rifl(), put_a.key_count());
+
+        // add the result of put a
+        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
+        assert!(res.is_some());
+
+        // check partial output
+        let (rifl, key, result) = res.unwrap().unwrap_partial();
+        assert_eq!(rifl, put_a_rifl);
+        assert_eq!(key, key_a);
+        // there was nothing in the kvs before
+        assert!(result.is_none());
+
+        // add the result of put b
+        let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
+        let res = pending.add_partial(put_b_rifl, &key_b, put_b_res);
+        assert!(res.is_some());
+
+        // check partial output
+        let (rifl, key, result) = res.unwrap().unwrap_partial();
+        assert_eq!(rifl, put_b_rifl);
+        assert_eq!(key, key_b);
+        // there was nothing in the kvs before
+        assert!(result.is_none());
+
+        // add the result of get a and assert that the command is ready
+        let get_a_res = store.execute(&key_a, KVOp::Get);
+        let res = pending.add_partial(get_ab_rifl, &key_a, get_a_res);
+        assert!(res.is_some());
+
+        // check partial output
+        let (rifl, key, result) = res.unwrap().unwrap_partial();
+        assert_eq!(rifl, get_ab_rifl);
+        assert_eq!(key, key_a);
+        // check that `get_ab` saw `put_a`
+        assert_eq!(result, Some(foo));
     }
 }

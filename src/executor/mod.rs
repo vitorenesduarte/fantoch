@@ -62,12 +62,21 @@ impl ExecutorResult {
         }
     }
 
-    /// Extracts a ready `CommandResult` from self. Panics if not ready.
+    /// Extracts a ready results from self. Panics if not ready.
     pub fn unwrap_ready(self) -> CommandResult {
         match self {
             ExecutorResult::Ready(cmd_result) => cmd_result,
             ExecutorResult::Partial(_, _, _) => panic!(
                 "called `ExecutorResult::unwrap_ready()` on a `ExecutorResult::Partial` value"
+            ),
+        }
+    }
+    /// Extracts a partial result from self. Panics if not partial.
+    pub fn unwrap_partial(self) -> (Rifl, Key, KVOpResult) {
+        match self {
+            ExecutorResult::Partial(rifl, key, result) => (rifl, key, result),
+            ExecutorResult::Ready(_) => panic!(
+                "called `ExecutorResult::unwrap_partial()` on a `ExecutorResult::Ready` value"
             ),
         }
     }
