@@ -11,7 +11,9 @@ pub struct Config {
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
     /// defines whether the protocol is configured with parallel or not
-    parallel: bool,
+    parallel_protocol: bool,
+    /// defines whether the executor is configured with parallel or not
+    parallel_executor: bool,
 }
 
 impl Config {
@@ -27,14 +29,17 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
-        // by default, `parallel = false`
-        let parallel = false;
+        // by default, `parallel_protocol = false`
+        let parallel_protocol = false;
+        // by default, `parallel_executor= false`
+        let parallel_executor = false;
         Self {
             n,
             f,
             newt_tiny_quorums,
             transitive_conflicts,
-            parallel,
+            parallel_protocol,
+            parallel_executor,
         }
     }
 
@@ -69,13 +74,23 @@ impl Config {
     }
 
     /// Checks whether `Protocol` should be configured with parallel.
-    pub fn parallel(&self) -> bool {
-        self.parallel
+    pub fn parallel_protocol(&self) -> bool {
+        self.parallel_protocol
     }
 
-    /// Changes the value of `parallel`.
-    pub fn set_parallel(&mut self, parallel: bool) {
-        self.parallel = parallel;
+    /// Changes the value of `parallel_protocol`.
+    pub fn set_parallel_protocol(&mut self, parallel_protocol: bool) {
+        self.parallel_protocol = parallel_protocol;
+    }
+
+    /// Checks whether `Executor` should be configured with parallel.
+    pub fn parallel_executor(&self) -> bool {
+        self.parallel_executor
+    }
+
+    /// Changes the value of `parallel_executor`.
+    pub fn set_parallel_executor(&mut self, parallel_executor: bool) {
+        self.parallel_executor = parallel_executor;
     }
 }
 
@@ -167,12 +182,19 @@ mod tests {
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
 
-        // by default, parallel is false
-        assert!(!config.parallel());
+        // by default, parallel_protocol is false
+        assert!(!config.parallel_protocol());
 
         // if we change it to true, it becomes true
-        config.set_parallel(true);
-        assert!(config.parallel());
+        config.set_parallel_protocol(true);
+        assert!(config.parallel_protocol());
+
+        // by default, parallel_executor is false
+        assert!(!config.parallel_executor());
+
+        // if we change it to true, it becomes true
+        config.set_parallel_executor(true);
+        assert!(config.parallel_executor());
     }
 
     #[test]

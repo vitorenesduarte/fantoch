@@ -1,6 +1,6 @@
 use super::connection::{self, Connection};
 use crate::config::Config;
-use crate::executor::Executor;
+use crate::executor::{Executor, ExecutorResult};
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
@@ -307,9 +307,15 @@ async fn handle_execution_info<P>(
     P: Protocol,
 {
     // get new commands ready
-    let ready = to_executor
+    let ready: Vec<_> = to_executor
         .into_iter()
-        .flat_map(|info| executor.handle(info));
+        .flat_map(|info| match executor.handle(info) {
+            ExecutorResult::Ready(ready) => ready,
+            _ => {
+                panic!("all commands should be ready since we don't support yet parallel executors")
+            }
+        })
+        .collect();
 
     for cmd_result in ready {
         // get client id
@@ -340,7 +346,7 @@ async fn handle_from_client<P>(
     match from_client {
         FromClient::Submit(cmd) => {
             // register in executor
-            executor.register(&cmd);
+            executor.register(cmd.rifl(), cmd.key_count());
 
             // send to command to parent
             if let Err(e) = to_parent.send(cmd).await {

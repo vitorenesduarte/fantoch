@@ -5,7 +5,7 @@ pub mod pending;
 pub use pending::Pending;
 
 use crate::id::Rifl;
-use crate::kvs::{KVOp, KVOpResult, Key, Value};
+use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::{self, HashMap};
 use std::fmt::{self, Debug};
@@ -68,6 +68,21 @@ impl Command {
     /// Returns the number of keys accessed by this command.
     pub fn key_count(&self) -> usize {
         self.ops.len()
+    }
+
+    /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
+    pub fn execute(self, store: &mut KVStore) -> CommandResult {
+        let key_count = self.ops.len();
+        let mut results = HashMap::with_capacity(key_count);
+        for (key, op) in self.ops {
+            let partial_result = store.execute(&key, op);
+            results.insert(key, partial_result);
+        }
+        CommandResult {
+            rifl: self.rifl,
+            key_count,
+            results,
+        }
     }
 }
 

@@ -93,7 +93,7 @@ impl Protocol for Newt {
     }
 
     fn parallel(&self) -> bool {
-        self.bp.config.parallel()
+        self.bp.config.parallel_protocol()
     }
 
     fn show_metrics(&self) {
@@ -429,6 +429,7 @@ enum Status {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
+    use crate::executor::ExecutorResult;
     use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
@@ -521,7 +522,7 @@ mod tests {
 
         // register command in executor and submit it in newt 1
         let (process, executor) = simulation.get_process(target);
-        executor.register(&cmd);
+        executor.register(cmd.rifl(), cmd.key_count());
         let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes
@@ -566,7 +567,12 @@ mod tests {
         // handle in executor and check there's a single command ready
         let mut ready: Vec<_> = to_executor
             .into_iter()
-            .flat_map(|info| executor.handle(info))
+            .flat_map(|info| match executor.handle(info) {
+                ExecutorResult::Ready(ready) => ready,
+                _ => {
+                    panic!("all commands should be ready since executor configured as non-parallel")
+                }
+            })
             .collect();
         assert_eq!(ready.len(), 1);
 

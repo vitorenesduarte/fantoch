@@ -1,7 +1,7 @@
-use crate::command::{Command, CommandResult};
+use crate::command::Command;
 use crate::config::Config;
 use crate::executor::graph::DependencyGraph;
-use crate::executor::{ExecutionInfoKey, Executor};
+use crate::executor::{ExecutionInfoKey, Executor, ExecutorResult};
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use std::collections::HashSet;
@@ -17,6 +17,8 @@ impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
     fn new(config: Config) -> Self {
+        // this executor can never be parallel
+        assert!(!config.parallel_executor());
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -27,12 +29,12 @@ impl Executor for GraphExecutor {
         }
     }
 
-    fn register(&mut self, cmd: &Command) {
+    fn register(&mut self, rifl: Rifl, _key_count: usize) {
         // start command in pending
-        assert!(self.pending.insert(cmd.rifl()));
+        assert!(self.pending.insert(rifl));
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<CommandResult> {
+    fn handle(&mut self, info: Self::ExecutionInfo) -> ExecutorResult {
         // borrow everything we'll need
         let graph = &mut self.graph;
         let store = &mut self.store;
@@ -45,13 +47,13 @@ impl Executor for GraphExecutor {
         let to_execute = graph.commands_to_execute();
 
         // execute them all
-        to_execute
+        let ready = to_execute
             .into_iter()
             .filter_map(|cmd| {
                 // get command rifl
                 let rifl = cmd.rifl();
                 // execute the command
-                let result = store.execute_command(cmd);
+                let result = cmd.execute(store);
 
                 // if it was pending locally, then it's from a client of this process
                 if pending.remove(&rifl) {
@@ -60,7 +62,12 @@ impl Executor for GraphExecutor {
                     None
                 }
             })
-            .collect()
+            .collect();
+        ExecutorResult::Ready(ready)
+    }
+
+    fn parallel(&self) -> bool {
+        false
     }
 
     fn show_metrics(&self) {

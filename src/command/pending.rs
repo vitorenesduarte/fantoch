@@ -1,4 +1,4 @@
-use crate::command::{Command, CommandResult};
+use crate::command::CommandResult;
 use crate::id::Rifl;
 use crate::kvs::{KVOpResult, Key};
 use std::collections::HashMap;
@@ -16,19 +16,21 @@ impl Pending {
     }
 
     /// Starts tracking a command submitted by some client.
-    pub fn start(&mut self, cmd: &Command) -> bool {
+    pub fn start(&mut self, rifl: Rifl, key_count: usize) -> bool {
         // create `CommandResult`
-        let cmd_result = CommandResult::new(cmd.rifl(), cmd.key_count());
+        let cmd_result = CommandResult::new(rifl, key_count);
 
         // add it to pending
-        self.pending.insert(cmd.rifl(), cmd_result).is_none()
+        self.pending.insert(rifl, cmd_result).is_none()
     }
 
     /// Adds a new partial command result.
+    /// - By getting a reference to the `Key` we only clone when it's really needed, i.e. when we
+    ///   need to update the `CommandResult`.
     pub fn add_partial(
         &mut self,
         rifl: Rifl,
-        key: Key,
+        key: &Key,
         result: KVOpResult,
     ) -> Option<CommandResult> {
         // get current result:
@@ -38,7 +40,7 @@ impl Pending {
         let cmd_result = self.pending.get_mut(&rifl)?;
 
         // add partial result and check if it's ready
-        let is_ready = cmd_result.add_partial(key, result);
+        let is_ready = cmd_result.add_partial(key.clone(), result);
         if is_ready {
             // if it is, remove it from pending and return it
             self.pending.remove(&rifl)
@@ -51,6 +53,7 @@ impl Pending {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
     use crate::kvs::{KVOp, KVStore};
 
     #[test]
@@ -78,27 +81,27 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
-        assert!(pending.start(&get_ab));
-        assert!(pending.start(&put_b));
+        assert!(pending.start(get_ab.rifl(), get_ab.key_count()));
+        assert!(pending.start(put_b.rifl(), put_b.key_count()));
 
         // starting a command already started `false`
-        assert!(!pending.start(&put_b));
+        assert!(!pending.start(put_b.rifl(), put_b.key_count()));
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, key_b.clone(), get_b_res);
+        let res = pending.add_partial(get_ab_rifl, &key_b, get_b_res);
         assert!(res.is_none());
 
         // add the result of put a before being registered
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = pending.add_partial(put_a_rifl, key_a.clone(), put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
         assert!(res.is_none());
 
         // register `put_a`
-        pending.start(&put_a);
+        pending.start(put_a.rifl(), put_a.key_count());
 
         // add the result of put a and assert that the command is ready
-        let res = pending.add_partial(put_a_rifl, key_a.clone(), put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
         assert!(res.is_some());
 
         // check that there's only one result (since the command accessed a
@@ -111,7 +114,7 @@ mod tests {
 
         // add the result of put b and assert that the command is ready
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = pending.add_partial(put_b_rifl, key_b.clone(), put_b_res);
+        let res = pending.add_partial(put_b_rifl, &key_b, put_b_res);
 
         // check that there's only one result (since the command accessed a
         // single key)
@@ -123,7 +126,7 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, key_a.clone(), get_a_res);
+        let res = pending.add_partial(get_ab_rifl, &key_a, get_a_res);
         assert!(res.is_some());
 
         // check that there are two results (since the command accessed two

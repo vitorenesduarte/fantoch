@@ -1,12 +1,13 @@
-use crate::command::{Command, CommandResult, Pending};
+use crate::command::{Command, Pending};
 use crate::config::Config;
 use crate::executor::table::MultiVotesTable;
-use crate::executor::{ExecutionInfoKey, Executor};
-use crate::id::Dot;
+use crate::executor::{ExecutionInfoKey, Executor, ExecutorResult};
+use crate::id::{Dot, Rifl};
 use crate::kvs::{KVStore, Key};
 use crate::protocol::common::table::{ProcessVotes, Votes};
 
 pub struct TableExecutor {
+    config: Config,
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
@@ -23,18 +24,19 @@ impl Executor for TableExecutor {
         let pending = Pending::new();
 
         Self {
+            config,
             table,
             store,
             pending,
         }
     }
 
-    fn register(&mut self, cmd: &Command) {
+    fn register(&mut self, rifl: Rifl, key_count: usize) {
         // start command in pending
-        assert!(self.pending.start(&cmd));
+        assert!(self.pending.start(rifl, key_count));
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<CommandResult> {
+    fn handle(&mut self, info: Self::ExecutionInfo) -> ExecutorResult {
         // borrow everything we'll need
         let table = &mut self.table;
         let store = &mut self.store;
@@ -54,21 +56,23 @@ impl Executor for TableExecutor {
         };
 
         // get new commands that are ready to be executed
-        to_execute
-            .into_iter()
-            // flatten each pair with a key and list of ready partial operations
-            .flat_map(|(key, ops)| {
-                ops.into_iter()
-                    .map(move |(rifl, op)| (key.clone(), rifl, op))
-            })
-            .filter_map(|(key, rifl, op)| {
+        let mut ready = Vec::new();
+        for (key, ops) in to_execute {
+            for (rifl, op) in ops {
                 // execute op in the `KVStore`
                 let op_result = store.execute(&key, op);
 
                 // add partial result to `Pending`
-                pending.add_partial(rifl, key, op_result)
-            })
-            .collect()
+                if let Some(result) = pending.add_partial(rifl, &key, op_result) {
+                    ready.push(result);
+                }
+            }
+        }
+        ExecutorResult::Ready(ready)
+    }
+
+    fn parallel(&self) -> bool {
+        self.config.parallel_executor()
     }
 
     fn show_metrics(&self) {

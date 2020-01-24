@@ -13,9 +13,10 @@ pub use basic::{BasicExecutionInfo, BasicExecutor};
 pub use graph::{GraphExecutionInfo, GraphExecutor};
 pub use table::{TableExecutionInfo, TableExecutor};
 
-use crate::command::{Command, CommandResult};
+use crate::command::CommandResult;
 use crate::config::Config;
-use crate::kvs::Key;
+use crate::id::Rifl;
+use crate::kvs::{KVOpResult, Key};
 use std::fmt::Debug;
 
 pub trait Executor {
@@ -23,16 +24,14 @@ pub trait Executor {
 
     fn new(config: Config) -> Self;
 
-    fn register(&mut self, cmd: &Command);
+    fn register(&mut self, rifl: Rifl, key_count: usize);
 
-    fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<CommandResult>;
+    fn handle(&mut self, infos: Self::ExecutionInfo) -> ExecutorResult;
+
+    fn parallel(&self) -> bool;
 
     fn show_metrics(&self) {
         // by default, nothing to show
-    }
-
-    fn is_parallel(&self) -> bool {
-        false
     }
 }
 
@@ -43,4 +42,10 @@ pub trait ExecutionInfoKey {
     fn key(&self) -> Option<Key> {
         None
     }
+}
+
+// TODO maybe extend this with variants `Nothing`, `SingleReady`, `MultiReady`, etc
+pub enum ExecutorResult {
+    Ready(Vec<CommandResult>),
+    Partial(Rifl, Key, KVOpResult),
 }

@@ -1,7 +1,7 @@
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::executor::Executor;
+use crate::executor::{Executor, ExecutorResult};
 use crate::id::{ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
@@ -147,7 +147,7 @@ where
                         let (process, executor) = self.simulation.get_process(process_id);
 
                         // register command in the executor
-                        executor.register(&cmd);
+                        executor.register(cmd.rifl(), cmd.key_count());
 
                         // submit to process and schedule output messages
                         let to_send = process.submit(None, cmd);
@@ -164,7 +164,13 @@ where
                         let to_executor = process.to_executor();
                         let ready: Vec<_> = to_executor
                             .into_iter()
-                            .flat_map(|info| executor.handle(info))
+                            .flat_map(|info| {
+                                match executor.handle(info) {
+                                    ExecutorResult::Ready(ready) => ready,
+                                    _ => {
+                                        panic!("all commands should be ready since we don't support yet parallel executors")
+                                    }
+                                } })
                             .collect();
 
                         // schedule new messages
