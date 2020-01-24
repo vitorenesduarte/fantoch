@@ -209,7 +209,6 @@ impl MessageDot for Message {
 mod tests {
     use super::*;
     use crate::client::{Client, Workload};
-    use crate::executor::ExecutorResult;
     use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
@@ -345,12 +344,7 @@ mod tests {
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| executor.handle(info))
-            .map(|result| match result {
-                ExecutorResult::Ready(result) => result,
-                _ => {
-                    panic!("all results should be ready since executor configured as non-parallel")
-                }
-            })
+            .map(|result| result.unwrap_ready())
             .collect();
         assert_eq!(ready.len(), 1);
 

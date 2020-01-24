@@ -1,7 +1,7 @@
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::executor::{Executor, ExecutorResult};
+use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
@@ -165,12 +165,7 @@ where
                         let ready: Vec<_> = to_executor
                             .into_iter()
                             .flat_map(|info| executor.handle(info))
-                            .map(|result| match result {
-                                ExecutorResult::Ready(result) => result,
-                                _ => {
-                                    panic!("all results should be ready since executor we don't support yet parallel executors")
-                                }
-                            })
+                            .map(|result| result.unwrap_ready())
                             .collect();
 
                         // schedule new messages

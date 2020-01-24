@@ -44,18 +44,28 @@ pub trait ExecutionInfoKey {
     }
 }
 
-// TODO maybe extend this with variants `Nothing`, `SingleReady`, `MultiReady`, etc
 pub enum ExecutorResult {
+    /// this contains a command result that is
     Ready(CommandResult),
     Partial(Rifl, Key, KVOpResult),
 }
 
 impl ExecutorResult {
     /// Check which client should receive this result.
-    fn client(&self) -> ClientId {
+    pub fn client(&self) -> ClientId {
         match self {
             ExecutorResult::Ready(cmd_result) => cmd_result.rifl().source(),
             ExecutorResult::Partial(rifl, _, _) => rifl.source(),
+        }
+    }
+
+    /// Extracts a ready `CommandResult` from self. Panics if not ready.
+    pub fn unwrap_ready(self) -> CommandResult {
+        match self {
+            ExecutorResult::Ready(cmd_result) => cmd_result,
+            ExecutorResult::Partial(_, _, _) => panic!(
+                "called `ExecutorResult::unwrap_ready()` on a `ExecutorResult::Partial` value"
+            ),
         }
     }
 }

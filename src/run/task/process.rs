@@ -1,6 +1,6 @@
 use super::connection::{self, Connection};
 use crate::config::Config;
-use crate::executor::{Executor, ExecutorResult};
+use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
@@ -310,12 +310,7 @@ async fn handle_execution_info<P>(
     let ready: Vec<_> = to_executor
         .into_iter()
         .flat_map(|info| executor.handle(info))
-        .map(|result| match result {
-            ExecutorResult::Ready(result) => result,
-            _ => {
-                panic!("all results should be ready since executor we don't support yet parallel executors")
-            }
-        })
+        .map(|result| result.unwrap_ready())
         .collect();
 
     for cmd_result in ready {
