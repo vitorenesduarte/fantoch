@@ -1,5 +1,6 @@
-use crate::command::{Command, Pending};
+use crate::command::Command;
 use crate::config::Config;
+use crate::executor::pending::Pending;
 use crate::executor::table::MultiVotesTable;
 use crate::executor::{ExecutionInfoKey, Executor, ExecutorResult};
 use crate::id::{Dot, Rifl};

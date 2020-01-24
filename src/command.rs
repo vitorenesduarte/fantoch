@@ -1,9 +1,3 @@
-// This module contains the definition of `Pending`.
-pub mod pending;
-
-// Re-exports.
-pub use pending::Pending;
-
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
 use serde::{Deserialize, Serialize};
