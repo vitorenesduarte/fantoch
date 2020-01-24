@@ -57,12 +57,10 @@ pub trait Protocol {
     #[must_use]
     fn to_executor(&mut self) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
+    fn parallel(&self) -> bool;
+
     fn show_metrics(&self) {
         // by default, nothing to show
-    }
-
-    fn is_parallel(&self) -> bool {
-        false
     }
 }
 

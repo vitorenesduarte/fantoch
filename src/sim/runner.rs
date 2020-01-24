@@ -303,7 +303,7 @@ where
 mod tests {
     use super::*;
     use crate::metrics::F64;
-    use crate::protocol::{Basic};
+    use crate::protocol::Basic;
 
     fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
         // planet

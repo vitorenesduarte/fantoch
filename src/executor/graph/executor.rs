@@ -1,7 +1,7 @@
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::graph::DependencyGraph;
-use crate::executor::{ExecutionKey, Executor};
+use crate::executor::{ExecutionInfoKey, Executor};
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use std::collections::HashSet;
@@ -81,4 +81,4 @@ impl GraphExecutionInfo {
     }
 }
 
-impl ExecutionKey for GraphExecutionInfo {}
+impl ExecutionInfoKey for GraphExecutionInfo {}

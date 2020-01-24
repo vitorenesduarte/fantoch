@@ -1,11 +1,11 @@
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::executor::{ExecutionKey, Executor};
+use crate::executor::{ExecutionInfoKey, Executor};
 use crate::id::Rifl;
 use crate::kvs::KVStore;
 use std::collections::HashSet;
 
-impl ExecutionKey for BasicExecutionInfo {}
+impl ExecutionInfoKey for BasicExecutionInfo {}
 pub type BasicExecutionInfo = Command;
 
 pub struct BasicExecutor {

@@ -84,6 +84,10 @@ impl Protocol for EPaxos {
         }
     }
 
+    fn parallel(&self) -> bool {
+        self.bp.config.parallel()
+    }
+
     /// Returns new commands results to be sent to clients.
     fn to_executor(&mut self) -> Vec<ExecutionInfo> {
         mem::take(&mut self.to_executor)

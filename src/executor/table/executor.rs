@@ -1,7 +1,7 @@
 use crate::command::{Command, CommandResult, Pending};
 use crate::config::Config;
 use crate::executor::table::MultiVotesTable;
-use crate::executor::{ExecutionKey, Executor};
+use crate::executor::{ExecutionInfoKey, Executor};
 use crate::id::Dot;
 use crate::kvs::{KVStore, Key};
 use crate::protocol::common::table::{ProcessVotes, Votes};
@@ -104,7 +104,7 @@ impl TableExecutionInfo {
     }
 }
 
-impl ExecutionKey for TableExecutionInfo {
+impl ExecutionInfoKey for TableExecutionInfo {
     fn key(&self) -> Option<Key> {
         todo!()
     }

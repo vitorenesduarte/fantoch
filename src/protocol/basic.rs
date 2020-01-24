@@ -70,6 +70,10 @@ impl Protocol for Basic {
         mem::take(&mut self.to_executor)
     }
 
+    fn parallel(&self) -> bool {
+        self.bp.config.parallel()
+    }
+
     fn show_metrics(&self) {
         self.bp.show_metrics();
     }
