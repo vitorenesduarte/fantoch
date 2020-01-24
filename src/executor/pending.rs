@@ -18,9 +18,11 @@ impl Pending {
     /// Creates a new `Pending` instance.
     /// If configured with:
     /// - `parallel_executor = true`, then results are returned as soon as received; this structure
-    ///   simply tracks if the result belongs to a client that has previously register such command.
-    /// - `parallel_executor = false`, then results are only returned once they're complete and
-    ///   aggregation is complete
+    ///   simply tracks if the result belongs to a client that has previously registered such
+    ///   command.
+    /// - `parallel_executor = false`, then results are only returned once they're the aggregation
+    ///   of all partial results is complete; this also means that non-parallel executors can return
+    ///   the full command result without having to return partials
     pub fn new(parallel_executor: bool) -> Self {
         Self {
             parallel_executor,
