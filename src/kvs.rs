@@ -1,10 +1,22 @@
 use crate::command::{Command, CommandResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 // Definition of `Key` and `Value` types.
 pub type Key = String;
 pub type Value = String;
+
+/// Hashes the key (let's call it `h`) and returns a `h` modulo `divisor`.
+fn hash_mod<H>(key: &Key, divisor: u64) -> u64
+where
+    H: Hasher,
+{
+    let mut hasher = ahash::AHasher::default();
+    key.hash(&mut hasher);
+    let hash = hasher.finish();
+    hash % divisor
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum KVOp {
