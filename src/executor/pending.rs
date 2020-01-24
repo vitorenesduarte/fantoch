@@ -43,8 +43,7 @@ impl Pending {
     }
 
     /// Adds a new partial command result.
-    /// - By getting a reference to the `Key` we only clone when it's really needed, i.e. when we
-    ///   need to update the `CommandResult`.
+    /// By getting a reference to the `Key` we only clone when it's really needed.
     pub fn add_partial(
         &mut self,
         rifl: Rifl,
@@ -59,14 +58,16 @@ impl Pending {
             match self.parallel_pending.entry(rifl) {
                 Entry::Vacant(_) => None,
                 Entry::Occupied(mut entry) => {
+                    // decrement the number of occurrences
                     let count = entry.get_mut();
-                    assert!(*count > 0);
-                    *count -= 1;
-                    // remove entry if count reached 0
+                    *count -= 1; // TODO may underflow if there's a bug?
+
+                    // remove entry if occurrences reached 0
                     if *count == 0 {
                         entry.remove_entry();
                     }
-                    // always return partial result
+
+                    // never buffer and always return partial result
                     Some(ExecutorResult::Partial(rifl, key.clone(), result))
                 }
             }

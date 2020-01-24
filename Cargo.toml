@@ -9,7 +9,7 @@ license = "MIT/Apache-2.0"
 [dependencies]
 ahash = "0.3.2"
 bincode = "1.2.1"
-bytes = "0.5.3"
+bytes = "0.5.4"
 clap = "2.33.0"
 futures = "0.3.1"
 lazy_static = "1.4.0"
