@@ -150,7 +150,7 @@ where
                         executor.register(&cmd);
 
                         // submit to process and schedule output messages
-                        let to_send = process.submit(cmd);
+                        let to_send = process.submit(None, cmd);
                         self.schedule_send(MessageRegion::Process(process_id), Some(to_send));
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {

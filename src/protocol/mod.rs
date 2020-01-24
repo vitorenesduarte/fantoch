@@ -49,7 +49,7 @@ pub trait Protocol {
     fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
 
     #[must_use]
-    fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message>;
 
     #[must_use]
     fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Self::Message>>;
@@ -67,8 +67,9 @@ pub trait Protocol {
 }
 
 pub trait MessageDot {
-    /// Parallel protocols should implement this, otherwise a single-process protocol will be
-    /// assumed.
+    /// If `None` is returned, then the message is sent to all protocol processes.
+    /// In particular, if the protocol is not parallel, the message is sent to the single protocol
+    /// process.
     fn dot(&self) -> Option<Dot> {
         None
     }

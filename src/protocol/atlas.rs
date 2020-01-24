@@ -61,8 +61,8 @@ impl Protocol for Atlas {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, cmd: Command) -> ToSend<Message> {
-        self.handle_submit(cmd)
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+        self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
@@ -95,9 +95,9 @@ impl Protocol for Atlas {
 
 impl Atlas {
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
         // compute the command identifier
-        let dot = self.bp.next_dot();
+        let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // wrap command
         let cmd = Some(cmd);
@@ -555,7 +555,7 @@ mod tests {
         // register command in executor and submit it in atlas 1
         let (process, executor) = simulation.get_process(target);
         executor.register(&cmd);
-        let mcollect = process.submit(cmd);
+        let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
@@ -613,7 +613,7 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(cmd);
+        let ToSend { msg, .. } = process.submit(None, cmd);
         if let Message::MCollect { dot, .. } = msg {
             assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {

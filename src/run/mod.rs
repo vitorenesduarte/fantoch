@@ -18,9 +18,14 @@
 ///
 /// 3. Once the command registration occurs (does the client need to wait for registration
 /// completion or can it do it asynchronously?), the command is forwarded to *ONE* protocol process
-/// (even if the command is multi-key). This single protocol process can be chosen by e.g. looking
-/// to the first key accessed by the command (we say first because keys accessed by commands are
-/// sorted so that locking them (see below) does not generate a deadlock).
+/// (even if the command is multi-key). This single protocol process *needs to* be chosen by looking
+/// the message identifier `Dot`. Using the keys being accessed by the command will not work for all
+/// cases, for example, when recovering and the payload is not known, we only have acesss to a
+/// `noOp` meaning that we would need to broadcast to all processes, which would be tricky to get
+/// correctly. In particular, when the command is being submitted, its `Dot` has not been computed
+/// yet. So the idea here is for parallel protocols to have the `DotGen` outside (and we can have a
+/// lock-free implementation of `DotGen`) and once the `Dot` is computed, the submit is forwarded to
+/// the correct protocol process.
 ///
 /// 4. The protocol process does whatever is specified in the `Protocol` trait. This may include
 /// sending messages to other replicas/nodes, which leads to point 5.
@@ -30,9 +35,8 @@
 ///
 /// 6. Everytime a message is handled in protocol processes, the process checks if it has new
 /// execution info. If so, it forwards this information for each responsible executor. This suggests
-/// that execution info should be of the form `[(key, execution_info)]` so that forwarding to
-/// executors is based on the `key`. The same forward function from point 2. is used to determine
-/// which executor to forward to.
+/// that execution info should define to which key it refers to. This is achieved through the
+/// `ExecutionKey` trait.
 ///
 /// 7. Clients aggregate partial command results to form a single command result. Once the command
 /// result is complete, the notification is sent to the actual client.
@@ -213,7 +217,7 @@ async fn handle_from_client<P>(
     P: Protocol + 'static,
 {
     // submit command in process
-    let to_send = process.submit(cmd);
+    let to_send = process.submit(None, cmd);
     send_to_writer(process_id, Some(to_send), process, to_writer).await;
 }
 
