@@ -39,7 +39,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 
 pub trait Protocol {
-    type Message: Debug + Clone + Serialize + DeserializeOwned + Send + MessageDot;
+    type Message: Debug + Clone + Serialize + DeserializeOwned + Send + Sync + MessageDot; // TODO why is Sync needed??
     type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;

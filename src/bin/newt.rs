@@ -16,6 +16,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
+        workers,
+        executors,
     ) = common::protocol::parse_args();
     let process = Newt::new(process_id, config);
     planet_sim::run::process(
@@ -30,6 +32,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
+        workers,
+        executors,
     )
     .await?;
     Ok(())

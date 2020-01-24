@@ -41,10 +41,6 @@ impl Connection {
     {
         send(&mut self.stream, value).await;
     }
-
-    pub async fn send_serialized(&mut self, bytes: Bytes) {
-        send_serialized(&mut self.stream, bytes).await;
-    }
 }
 
 fn deserialize<V>(bytes: BytesMut) -> V
@@ -96,13 +92,6 @@ where
 {
     // TODO here we only need a reference to the value
     let bytes = serialize(&value);
-    send_serialized(sink, bytes).await;
-}
-
-async fn send_serialized<S>(sink: &mut S, bytes: Bytes)
-where
-    S: Sink<Bytes, Error = tokio::io::Error> + Unpin,
-{
     if let Err(e) = sink.send(bytes).await {
         println!("[connection] error while writing to socket: {:?}", e);
     }

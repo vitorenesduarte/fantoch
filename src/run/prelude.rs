@@ -2,9 +2,12 @@ use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::{Protocol, ToSend};
-use bytes::Bytes;
+use crate::protocol::Protocol;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+
+// common error type
+pub type RunResult<V> = Result<V, Box<dyn Error>>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProcessHi(pub ProcessId);
@@ -22,12 +25,10 @@ pub enum FromClient {
 }
 
 // list of channels used to communicate between tasks
-pub type ReaderReceiver<V> = ChannelReceiver<(ProcessId, V)>;
-pub type ReaderSender<V> = ChannelSender<(ProcessId, V)>;
-pub type BroadcastWriterReceiver<V> = ChannelReceiver<ToSend<V>>;
-pub type BroadcastWriterSender<V> = ChannelSender<ToSend<V>>;
-pub type WriterReceiver = ChannelReceiver<Bytes>;
-pub type WriterSender = ChannelSender<Bytes>;
+pub type ReaderReceiver<P> = ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
+pub type ReaderSender<P> = ChannelSender<(ProcessId, <P as Protocol>::Message)>;
+pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
+pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
 pub type ClientSender = ChannelSender<FromClient>;
 pub type CommandReceiver = ChannelReceiver<Command>;

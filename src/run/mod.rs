@@ -54,7 +54,10 @@ const CONNECT_RETRIES: usize = 100;
 // This module contains the prelude.
 mod prelude;
 
-// This module contains the definition of...
+// This module contains forwarding logic.
+mod forward;
+
+// TODO This module contains the definition of...
 pub mod task;
 
 use crate::client::{Client, Workload};
@@ -64,6 +67,7 @@ use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
+use crate::run::forward::ToWorkers;
 use crate::time::{RunTime, SysTime};
 use futures::future::{join_all, FutureExt};
 use futures::select;
@@ -88,7 +92,9 @@ pub async fn process<A, P>(
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
-) -> Result<(), Box<dyn Error>>
+    workers: usize,
+    executors: usize,
+) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + 'static, // TODO what does this 'static do?
@@ -107,6 +113,8 @@ where
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
+        workers,
+        executors,
         semaphore,
     )
     .await
@@ -125,8 +133,10 @@ async fn process_with_notify<A, P>(
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
+    workers: usize,
+    executors: usize,
     connected: Arc<Semaphore>,
-) -> Result<(), Box<dyn Error>>
+) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + 'static, // TODO what does this 'static do?
@@ -140,11 +150,15 @@ where
     // start process listener
     let listener = task::listen((ip, port)).await?;
 
+    // create forward channels
+    let (to_workers_tx, to_workers_rx) = ToWorkers::new(channel_buffer_size, workers);
+
     // connect to all processes
-    let (mut from_readers, mut to_writer) = task::process::connect_to_all::<A, P::Message>(
+    let to_writers = task::process::connect_to_all::<A, P>(
         process_id,
         listener,
         addresses,
+        to_workers_tx,
         CONNECT_RETRIES,
         tcp_nodelay,
         socket_buffer_size,
@@ -170,93 +184,94 @@ where
     connected.add_permits(1);
 
     println!("process {} started", process_id);
+    Ok(())
 
-    loop {
-        select! {
-            msg = from_readers.recv().fuse() => {
-                log!("[server] reader message: {:?}", msg);
-                if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writer, &mut to_executor).await
-                } else {
-                    println!("[server] error while receiving new process message from readers");
-                }
-            }
-            cmd = from_executor.recv().fuse() => {
-                log!("[server] from executor: {:?}", cmd);
-                if let Some(cmd) = cmd {
-                    handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
-                } else {
-                    println!("[server] error while receiving new command from executor");
-                }
-            }
-        }
-    }
+    // loop {
+    //     select! {
+    //         msg = from_readers.recv().fuse() => {
+    //             log!("[server] reader message: {:?}", msg);
+    //             if let Some((from, msg)) = msg {
+    //                 handle_from_processes(process_id, from, msg, &mut process, &mut to_writer,
+    // &mut to_executor).await             } else {
+    //                 println!("[server] error while receiving new process message from readers");
+    //             }
+    //         }
+    //         cmd = from_executor.recv().fuse() => {
+    //             log!("[server] from executor: {:?}", cmd);
+    //             if let Some(cmd) = cmd {
+    //                 handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
+    //             } else {
+    //                 println!("[server] error while receiving new command from executor");
+    //             }
+    //         }
+    //     }
+    // }
 }
 
-async fn handle_from_processes<P>(
-    process_id: ProcessId,
-    from: ProcessId,
-    msg: P::Message,
-    process: &mut P,
-    to_writer: &mut BroadcastWriterSender<P::Message>,
-    to_executor: &mut ExecutionInfoSender<P>,
-) where
-    P: Protocol + 'static,
-{
-    // handle message in process
-    let to_send = process.handle(from, msg);
-    send_to_writer(process_id, to_send, process, to_writer).await;
+// async fn handle_from_processes<P>(
+//     process_id: ProcessId,
+//     from: ProcessId,
+//     msg: P::Message,
+//     process: &mut P,
+//     to_writer: &mut BroadcastWriterSender<P::Message>,
+//     to_executor: &mut ExecutionInfoSender<P>,
+// ) where
+//     P: Protocol + 'static,
+// {
+//     // handle message in process
+//     let to_send = process.handle(from, msg);
+//     send_to_writer(process_id, to_send, process, to_writer).await;
 
-    // check if there's new execution info for the executor
-    let execution_info = process.to_executor();
-    if !execution_info.is_empty() {
-        if let Err(e) = to_executor.send(execution_info).await {
-            println!("[server] error while sending to executor: {:?}", e);
-        }
-    }
-}
+//     // check if there's new execution info for the executor
+//     let execution_info = process.to_executor();
+//     if !execution_info.is_empty() {
+//         if let Err(e) = to_executor.send(execution_info).await {
+//             println!("[server] error while sending to executor: {:?}", e);
+//         }
+//     }
+// }
 
-async fn handle_from_client<P>(
-    process_id: ProcessId,
-    cmd: Command,
-    process: &mut P,
-    to_writer: &mut BroadcastWriterSender<P::Message>,
-) where
-    P: Protocol + 'static,
-{
-    // submit command in process
-    let to_send = process.submit(None, cmd);
-    send_to_writer(process_id, Some(to_send), process, to_writer).await;
-}
+// async fn handle_from_client<P>(
+//     process_id: ProcessId,
+//     cmd: Command,
+//     process: &mut P,
+//     to_writer: &mut BroadcastWriterSender<P::Message>,
+// ) where
+//     P: Protocol + 'static,
+// {
+//     // submit command in process
+//     let to_send = process.submit(None, cmd);
+//     send_to_writer(process_id, Some(to_send), process, to_writer).await;
+// }
 
-async fn send_to_writer<P>(
-    process_id: ProcessId,
-    to_send: Option<ToSend<P::Message>>,
-    process: &mut P,
-    to_writer: &mut BroadcastWriterSender<P::Message>,
-) where
-    P: Protocol + 'static,
-{
-    if let Some(to_send) = to_send {
-        // handle msg locally if self in `to_send.target` and make sure that, if there's something
-        // to be sent, it is to self, i.e. messages from self to self shouldn't generate messages
-        if to_send.target.contains(&process_id) {
-            // TODO can we avoid cloning here?
-            if let Some(ToSend { target, msg, .. }) =
-                process.handle(process_id, to_send.msg.clone())
-            {
-                assert!(target.len() == 1);
-                assert!(target.contains(&process_id));
-                // handling this message shouldn't generate a new message
-                let nothing = process.handle(process_id, msg);
-                assert!(nothing.is_none());
-            }
-        }
-        if let Err(e) = to_writer.send(to_send).await {
-            println!("[server] error while sending to broadcast writer: {:?}", e);
-        }
-    }
-}
+// async fn send_to_writer<P>(
+//     process_id: ProcessId,
+//     to_send: Option<ToSend<P::Message>>,
+//     process: &mut P,
+//     to_writer: &mut BroadcastWriterSender<P::Message>,
+// ) where
+//     P: Protocol + 'static,
+// {
+//     if let Some(to_send) = to_send {
+//         // handle msg locally if self in `to_send.target` and make sure that, if there's
+// something         // to be sent, it is to self, i.e. messages from self to self shouldn't
+// generate messages         if to_send.target.contains(&process_id) {
+//             // TODO can we avoid cloning here?
+//             if let Some(ToSend { target, msg, .. }) =
+//                 process.handle(process_id, to_send.msg.clone())
+//             {
+//                 assert!(target.len() == 1);
+//                 assert!(target.contains(&process_id));
+//                 // handling this message shouldn't generate a new message
+//                 let nothing = process.handle(process_id, msg);
+//                 assert!(nothing.is_none());
+//             }
+//         }
+//         if let Err(e) = to_writer.send(to_send).await {
+//             println!("[server] error while sending to broadcast writer: {:?}", e);
+//         }
+//     }
+// }
 
 pub async fn client<A>(
     ids: Vec<ClientId>,
@@ -266,7 +281,7 @@ pub async fn client<A>(
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
-) -> Result<(), Box<dyn Error>>
+) -> RunResult<()>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -507,7 +522,7 @@ mod tests {
             .await;
     }
 
-    async fn run<P>() -> Result<(), Box<dyn Error>>
+    async fn run<P>() -> RunResult<()>
     where
         P: Protocol + 'static,
     {
@@ -530,6 +545,8 @@ mod tests {
         let tcp_nodelay = true;
         let socket_buffer_size = 1000;
         let channel_buffer_size = 10000;
+        let workers = 5;
+        let executors = 5;
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
@@ -547,6 +564,8 @@ mod tests {
             tcp_nodelay,
             socket_buffer_size,
             channel_buffer_size,
+            workers,
+            executors,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -564,6 +583,8 @@ mod tests {
             tcp_nodelay,
             socket_buffer_size,
             channel_buffer_size,
+            workers,
+            executors,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -581,6 +602,8 @@ mod tests {
             tcp_nodelay,
             socket_buffer_size,
             channel_buffer_size,
+            workers,
+            executors,
             semaphore.clone(),
         ));
 

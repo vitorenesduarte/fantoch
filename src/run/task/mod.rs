@@ -1,18 +1,21 @@
-// This module contains the definition of `Connection`.
+// TODO This module contains the definition of `Connection`.
 pub mod connection;
 
-// This module contains the definition of `Sender` and `Receiver`.
+// TODO This module contains the definition of `Sender` and `Receiver`.
 pub mod chan;
 
-// This module contains the definition of ...
+// TODO This module contains the definition of ...
 pub mod process;
 
-// This module contains the definition of ...
+// TODO This module contains the definition of ...
 pub mod client;
 
-use chan::{channel, ChannelReceiver, ChannelSender};
+// Re-exports.
+pub use chan::channel;
+
+use crate::run::prelude::*;
+use chan::{ChannelReceiver, ChannelSender};
 use connection::Connection;
-use std::error::Error;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::task::JoinHandle;
@@ -107,7 +110,7 @@ pub async fn connect<A>(
     address: A,
     tcp_nodelay: bool,
     socket_buffer_size: usize,
-) -> Result<Connection, Box<dyn Error>>
+) -> RunResult<Connection>
 where
     A: ToSocketAddrs,
 {
@@ -117,7 +120,7 @@ where
 }
 
 /// Listen on some address.
-pub async fn listen<A>(address: A) -> Result<TcpListener, Box<dyn Error>>
+pub async fn listen<A>(address: A) -> RunResult<TcpListener>
 where
     A: ToSocketAddrs,
 {

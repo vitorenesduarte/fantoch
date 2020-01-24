@@ -1,33 +1,32 @@
-use super::connection::{self, Connection};
+use super::connection::Connection;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
-use crate::protocol::{Protocol, ToSend};
+use crate::protocol::Protocol;
+use crate::run::forward::ToWorkers;
 use crate::run::prelude::*;
 use crate::run::task;
 use futures::future::FutureExt;
 use futures::select;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::time::Duration;
 
-pub async fn connect_to_all<A, V>(
+pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
     listener: TcpListener,
     addresses: Vec<A>,
+    to_workers: ToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
-) -> Result<(ReaderReceiver<V>, BroadcastWriterSender<V>), Box<dyn Error>>
+) -> RunResult<HashMap<ProcessId, WriterSender<P>>>
 where
     A: ToSocketAddrs + Debug,
-    V: Debug + Serialize + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
     // spawn listener
     let mut rx = task::spawn_producer(channel_buffer_size, |tx| {
@@ -81,17 +80,26 @@ where
         incoming.push(connection);
     }
 
-    Ok(handshake::<V>(process_id, channel_buffer_size, incoming, outgoing).await)
+    let to_writers = handshake::<P>(
+        process_id,
+        to_workers,
+        channel_buffer_size,
+        incoming,
+        outgoing,
+    )
+    .await;
+    Ok(to_writers)
 }
 
-async fn handshake<V>(
+async fn handshake<P>(
     process_id: ProcessId,
+    to_workers: ToWorkers<P>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
-) -> (ReaderReceiver<V>, BroadcastWriterSender<V>)
+) -> HashMap<ProcessId, WriterSender<P>>
 where
-    V: Debug + Serialize + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
     // say hi to all on both connections
     say_hi(process_id, &mut connections_0).await;
@@ -107,10 +115,9 @@ where
         id_to_connection_1.keys()
     );
 
-    (
-        start_readers::<V>(channel_buffer_size, id_to_connection_0),
-        start_broadcast_writer::<V>(process_id, channel_buffer_size, id_to_connection_1),
-    )
+    // start readers and writers
+    start_readers::<P>(to_workers, id_to_connection_0);
+    start_writers::<P>(channel_buffer_size, id_to_connection_1)
 }
 
 async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
@@ -137,29 +144,24 @@ async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connecti
     id_to_connection
 }
 
-/// Starts a reader task per connection received and returns an unbounded channel to which
-/// readers will write to.
-fn start_readers<V>(
-    channel_buffer_size: usize,
-    connections: HashMap<ProcessId, Connection>,
-) -> ReaderReceiver<V>
+/// Starts a reader task per connection received. A `ToWorkers` is passed to each reader so that
+/// these can forward immediately to the correct worker process.
+fn start_readers<P>(to_workers: ToWorkers<P>, connections: HashMap<ProcessId, Connection>)
 where
-    V: Debug + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
-    task::spawn_producers(
-        channel_buffer_size,
-        connections,
-        |(process_id, connection), tx| reader_task::<V>(process_id, connection, tx),
-    )
+    for (process_id, connection) in connections {
+        let to_workers_clone = to_workers.clone();
+        task::spawn(reader_task::<P>(to_workers_clone, process_id, connection));
+    }
 }
 
-fn start_broadcast_writer<V>(
-    process_id: ProcessId,
+fn start_writers<P>(
     channel_buffer_size: usize,
     connections: HashMap<ProcessId, Connection>,
-) -> BroadcastWriterSender<V>
+) -> HashMap<ProcessId, WriterSender<P>>
 where
-    V: Serialize + Send + 'static,
+    P: Protocol + 'static,
 {
     // mapping from process id to channel broadcast writer should write to
     let mut writers = HashMap::with_capacity(connections.len());
@@ -167,29 +169,29 @@ where
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
-        let tx = task::spawn_consumer(channel_buffer_size, |rx| writer_task(connection, rx));
+        let tx = task::spawn_consumer(channel_buffer_size, |rx| writer_task::<P>(connection, rx));
         writers.insert(process_id, tx);
     }
 
-    // spawn broadcast writer
-    task::spawn_consumer(channel_buffer_size, |rx| {
-        broadcast_writer_task::<V>(process_id, writers, rx)
-    })
+    writers
 }
 
 /// Reader task.
-async fn reader_task<V>(
+async fn reader_task<P>(
+    mut to_workers: ToWorkers<P>,
     process_id: ProcessId,
     mut connection: Connection,
-    mut parent: ReaderSender<V>,
 ) where
-    V: Debug + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = parent.send((process_id, msg)).await {
-                    println!("[reader] error notifying parent task with new msg: {:?}", e);
+                if let Err(e) = to_workers.forward(process_id, msg).await {
+                    println!(
+                        "[reader] error notifying process task with new msg: {:?}",
+                        e
+                    );
                 }
             }
             None => {
@@ -199,50 +201,14 @@ async fn reader_task<V>(
     }
 }
 
-/// Broadcast Writer task.
-async fn broadcast_writer_task<V>(
-    process_id: ProcessId,
-    mut writers: HashMap<ProcessId, WriterSender>,
-    mut parent: BroadcastWriterReceiver<V>,
-) where
-    V: Serialize + Send + 'static,
-{
-    // TODO maybe use tokio broadcast channel (only if it supports some sort of filtering or
-    // subscribing)
-    loop {
-        if let Some(ToSend { target, msg, .. }) = parent.recv().await {
-            // serialize message
-            let bytes = connection::serialize(&msg);
-
-            let filtered = target
-                .into_iter()
-                // don't send message to self
-                .filter(|id| *id != process_id);
-
-            for id in filtered {
-                // find writer
-                let writer = writers
-                    .get_mut(&id)
-                    .expect("[broadcast_writer] identifier in target should have a writer");
-                // and send
-                if let Err(e) = writer.send(bytes.clone()).await {
-                    println!(
-                        "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
-                        id, e
-                    );
-                }
-            }
-        } else {
-            println!("[broadcast_writer] error receiving message from parent");
-        }
-    }
-}
-
 /// Writer task.
-async fn writer_task(mut connection: Connection, mut parent: WriterReceiver) {
+async fn writer_task<P>(mut connection: Connection, mut parent: WriterReceiver<P>)
+where
+    P: Protocol + 'static,
+{
     loop {
-        if let Some(bytes) = parent.recv().await {
-            connection.send_serialized(bytes).await;
+        if let Some(msg) = parent.recv().await {
+            connection.send(msg).await;
         } else {
             println!("[writer] error receiving message from parent");
         }

@@ -100,7 +100,7 @@ async fn server_receive_hi(
     parent: &mut ClientSender,
 ) -> (ClientId, CommandResultReceiver) {
     // create channel where the process will write command results and where client will read them
-    let (mut tx, rx) = super::chan::channel(channel_buffer_size);
+    let (mut tx, rx) = super::channel(channel_buffer_size);
 
     // receive hi from client and register in parent, sending it tx
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {

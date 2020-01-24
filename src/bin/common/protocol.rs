@@ -8,6 +8,8 @@ const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_CLIENT_PORT: u16 = 4000;
 const DEFAULT_TCP_NODELAY: bool = true;
+const DEFAULT_WORKERS: usize = 1;
+const DEFAULT_EXECUTORS: usize = 1;
 
 pub fn parse_args() -> (
     ProcessId,
@@ -18,6 +20,8 @@ pub fn parse_args() -> (
     Vec<String>,
     Config,
     bool,
+    usize,
+    usize,
     usize,
     usize,
 ) {
@@ -90,21 +94,35 @@ pub fn parse_args() -> (
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
-                .help("set TCP_NODELAY; defaul: true")
+                .help("TCP_NODELAY; defaul: true")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("socket_buffer_size")
                 .long("socket_buffer_size")
                 .value_name("SOCKET_BUFFER_SIZE")
-                .help("set the size of the buffer in each channel used for task communication; default: 8192 (8KBs)")
+                .help("size of the buffer in each channel used for task communication; default: 8192 (8KBs)")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("channel_buffer_size")
                 .long("channel_buffer_size")
                 .value_name("CHANNEL_BUFFER_SIZE")
-                .help("set the size of the buffer in each channel used for task communication; default: 100")
+                .help("size of the buffer in each channel used for task communication; default: 100")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("workers")
+                .long("workers")
+                .value_name("WORKERS")
+                .help("number of protocol workers; default: 1")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("executors")
+                .long("executors")
+                .value_name("EXECUTORS")
+                .help("number of protocol executors; default: 1")
                 .takes_value(true),
         )
         .get_matches();
@@ -122,6 +140,8 @@ pub fn parse_args() -> (
         super::parse_socket_buffer_size(matches.value_of("socket_buffer_size"));
     let channel_buffer_size =
         super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
+    let workers = parse_workers(matches.value_of("workers"));
+    let executors = parse_executors(matches.value_of("executors"));
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -133,6 +153,8 @@ pub fn parse_args() -> (
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("socket buffer size: {:?}", socket_buffer_size);
     println!("channel buffer size: {:?}", channel_buffer_size);
+    println!("workers: {:?}", workers);
+    println!("executors: {:?}", executors);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -151,6 +173,8 @@ pub fn parse_args() -> (
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
+        workers,
+        executors,
     )
 }
 
@@ -204,4 +228,24 @@ fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
 fn parse_id(id: &str) -> ProcessId {
     id.parse::<ProcessId>()
         .expect("process id should be a number")
+}
+
+fn parse_workers(workers: Option<&str>) -> usize {
+    workers
+        .map(|workers| {
+            workers
+                .parse::<usize>()
+                .expect("workers should be a number")
+        })
+        .unwrap_or(DEFAULT_WORKERS)
+}
+
+fn parse_executors(executors: Option<&str>) -> usize {
+    executors
+        .map(|executors| {
+            executors
+                .parse::<usize>()
+                .expect("workers should be a number")
+        })
+        .unwrap_or(DEFAULT_EXECUTORS)
 }
