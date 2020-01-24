@@ -1,27 +1,45 @@
 use crate::command::CommandResult;
+use crate::executor::ExecutorResult;
 use crate::id::Rifl;
 use crate::kvs::{KVOpResult, Key};
-use std::collections::HashMap;
+use std::collections::hash_map::{Entry, HashMap};
 
 /// Structure that tracks the progress of pending commands.
 #[derive(Default)]
 pub struct Pending {
+    // TODO this should be a feature; with that, most conditionals below could be removed at
+    // compile-time
+    parallel_executor: bool,
     pending: HashMap<Rifl, CommandResult>,
+    parallel_pending: HashMap<Rifl, usize>,
 }
 
 impl Pending {
     /// Creates a new `Pending` instance.
-    pub fn new() -> Self {
-        Self::default()
+    /// If configured with:
+    /// - `parallel_executor = false`, then results are only returned once they're complete and
+    ///   aggregation is complete
+    /// - `parallel_executor = true`, then results are returned as soon as received; this structure
+    ///   simply tracks if the result belongs to a client that has previously register such command.
+    pub fn new(parallel_executor: bool) -> Self {
+        Self {
+            parallel_executor,
+            pending: HashMap::new(),
+            parallel_pending: HashMap::new(),
+        }
     }
 
     /// Starts tracking a command submitted by some client.
     pub fn start(&mut self, rifl: Rifl, key_count: usize) -> bool {
-        // create `CommandResult`
-        let cmd_result = CommandResult::new(rifl, key_count);
+        if self.parallel_executor {
+            self.parallel_pending.insert(rifl, key_count).is_none()
+        } else {
+            // create `CommandResult`
+            let cmd_result = CommandResult::new(rifl, key_count);
 
-        // add it to pending
-        self.pending.insert(rifl, cmd_result).is_none()
+            // add it to pending
+            self.pending.insert(rifl, cmd_result).is_none()
+        }
     }
 
     /// Adds a new partial command result.
@@ -32,20 +50,39 @@ impl Pending {
         rifl: Rifl,
         key: &Key,
         result: KVOpResult,
-    ) -> Option<CommandResult> {
-        // get current result:
+    ) -> Option<ExecutorResult> {
+        // get current value:
         // - if it's not part of pending, then ignore it
-        // (if it's not part of pending, it means that it is from a client
-        // from another newt process, and `pending.start` has not been called)
-        let cmd_result = self.pending.get_mut(&rifl)?;
-
-        // add partial result and check if it's ready
-        let is_ready = cmd_result.add_partial(key.clone(), result);
-        if is_ready {
-            // if it is, remove it from pending and return it
-            self.pending.remove(&rifl)
+        // (if it's not part of pending, it means that it is from a client from another newt
+        // process, and `pending.start` has not been called)
+        if self.parallel_executor {
+            match self.parallel_pending.entry(rifl) {
+                Entry::Vacant(_) => None,
+                Entry::Occupied(mut entry) => {
+                    let count = entry.get_mut();
+                    assert!(*count > 0);
+                    *count -= 1;
+                    // remove entry if count reached 0
+                    if *count == 0 {
+                        entry.remove_entry();
+                    }
+                    // always return partial result
+                    Some(ExecutorResult::Partial(rifl, key.clone(), result))
+                }
+            }
         } else {
-            None
+            let cmd_result = self.pending.get_mut(&rifl)?;
+
+            // add partial result and check if it's ready
+            let is_ready = cmd_result.add_partial(key.clone(), result);
+            if is_ready {
+                // if it is, remove it from pending and return it as ready
+                self.pending
+                    .remove(&rifl)
+                    .map(|command_result| ExecutorResult::Ready(command_result))
+            } else {
+                None
+            }
         }
     }
 }

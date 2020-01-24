@@ -1,5 +1,5 @@
 // This module contains the definition of `Pending`.
-pub mod pending;
+mod pending;
 
 // This module contains the implementation of a basic executor that executes operations as soon as
 // it receives them.

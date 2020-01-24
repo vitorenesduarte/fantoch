@@ -22,7 +22,7 @@ impl Executor for TableExecutor {
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
         let table = MultiVotesTable::new(config.n(), stability_threshold);
         let store = KVStore::new();
-        let pending = Pending::new();
+        let pending = Pending::new(config.parallel_executor());
 
         Self {
             config,
@@ -52,7 +52,7 @@ impl Executor for TableExecutor {
         };
 
         // get new commands that are ready to be executed
-        let mut ready = Vec::new();
+        let mut results = Vec::new();
         for (key, ops) in to_execute {
             for (rifl, op) in ops {
                 // execute op in the `KVStore`
@@ -60,11 +60,11 @@ impl Executor for TableExecutor {
 
                 // add partial result to `Pending`
                 if let Some(result) = self.pending.add_partial(rifl, &key, op_result) {
-                    ready.push(ExecutorResult::Ready(result));
+                    results.push(result);
                 }
             }
         }
-        ready
+        results
     }
 
     fn parallel(&self) -> bool {
