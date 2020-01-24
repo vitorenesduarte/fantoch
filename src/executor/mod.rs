@@ -42,7 +42,7 @@ pub trait ExecutionInfoKey {
     /// If `None` is returned, then the execution info is sent to all executor processes.
     /// In particular, if the executor is not parallel, the execution info is sent to the single
     /// executor process.
-    fn key(&self) -> Option<Key> {
+    fn key(&self) -> Option<&Key> {
         None
     }
 }

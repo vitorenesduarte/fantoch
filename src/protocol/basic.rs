@@ -1,6 +1,6 @@
 use crate::command::Command;
 use crate::config::Config;
-use crate::executor::{BasicExecutor, Executor};
+use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
@@ -159,8 +159,14 @@ impl Basic {
     ) -> Option<ToSend<Message>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
-        // create execution info
-        self.to_executor.push(cmd);
+        // create execution info:
+        // - one entry per key being accessed will be created, which allows the basic executor to
+        //   run in parallel
+        let rifl = cmd.rifl();
+        self.to_executor.extend(
+            cmd.into_iter()
+                .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op)),
+        );
 
         // TODO the following is incorrect: it should only be deleted once it has been committed at
         // all processes

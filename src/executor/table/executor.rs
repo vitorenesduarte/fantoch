@@ -34,7 +34,7 @@ impl Executor for TableExecutor {
 
     fn register(&mut self, rifl: Rifl, key_count: usize) {
         // start command in pending
-        assert!(self.pending.start(rifl, key_count));
+        assert!(self.pending.register(rifl, key_count));
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
@@ -105,7 +105,7 @@ impl TableExecutionInfo {
 }
 
 impl ExecutionInfoKey for TableExecutionInfo {
-    fn key(&self) -> Option<Key> {
+    fn key(&self) -> Option<&Key> {
         todo!()
     }
 }

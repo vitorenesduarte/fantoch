@@ -30,7 +30,7 @@ impl Pending {
     }
 
     /// Starts tracking a command submitted by some client.
-    pub fn start(&mut self, rifl: Rifl, key_count: usize) -> bool {
+    pub fn register(&mut self, rifl: Rifl, key_count: usize) -> bool {
         if self.parallel_executor {
             self.parallel_pending.insert(rifl, key_count).is_none()
         } else {
@@ -53,7 +53,7 @@ impl Pending {
         // get current value:
         // - if it's not part of pending, then ignore it
         // (if it's not part of pending, it means that it is from a client from another newt
-        // process, and `pending.start` has not been called)
+        // process, and `pending.register` has not been called)
         if self.parallel_executor {
             match self.parallel_pending.entry(rifl) {
                 Entry::Vacant(_) => None,
@@ -120,11 +120,11 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
-        assert!(pending.start(get_ab.rifl(), get_ab.key_count()));
-        assert!(pending.start(put_b.rifl(), put_b.key_count()));
+        assert!(pending.register(get_ab.rifl(), get_ab.key_count()));
+        assert!(pending.register(put_b.rifl(), put_b.key_count()));
 
         // starting a command already started `false`
-        assert!(!pending.start(put_b.rifl(), put_b.key_count()));
+        assert!(!pending.register(put_b.rifl(), put_b.key_count()));
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);
@@ -137,7 +137,7 @@ mod tests {
         assert!(res.is_none());
 
         // register `put_a`
-        pending.start(put_a.rifl(), put_a.key_count());
+        pending.register(put_a.rifl(), put_a.key_count());
 
         // add the result of put a and assert that the command is ready
         let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
@@ -204,11 +204,11 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
-        assert!(pending.start(get_ab.rifl(), get_ab.key_count()));
-        assert!(pending.start(put_b.rifl(), put_b.key_count()));
+        assert!(pending.register(get_ab.rifl(), get_ab.key_count()));
+        assert!(pending.register(put_b.rifl(), put_b.key_count()));
 
         // starting a command already started `false`
-        assert!(!pending.start(put_b.rifl(), put_b.key_count()));
+        assert!(!pending.register(put_b.rifl(), put_b.key_count()));
 
         // add the result of get b
         let get_b_res = store.execute(&key_b, KVOp::Get);
@@ -224,7 +224,7 @@ mod tests {
         assert!(res.is_none());
 
         // register `put_a`
-        pending.start(put_a.rifl(), put_a.key_count());
+        pending.register(put_a.rifl(), put_a.key_count());
 
         // add the result of put a
         let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
