@@ -44,12 +44,10 @@ impl Pending {
 
     /// Adds a new partial command result.
     /// By getting a reference to the `Key` we only clone when it's really needed.
-    pub fn add_partial(
-        &mut self,
-        rifl: Rifl,
-        key: &Key,
-        result: KVOpResult,
-    ) -> Option<ExecutorResult> {
+    pub fn add_partial<P>(&mut self, rifl: Rifl, partial: P) -> Option<ExecutorResult>
+    where
+        P: FnOnce() -> (Key, KVOpResult),
+    {
         // get current value:
         // - if it's not part of pending, then ignore it
         // (if it's not part of pending, it means that it is from a client from another newt
@@ -68,14 +66,16 @@ impl Pending {
                     }
 
                     // never buffer and always return partial result
-                    Some(ExecutorResult::Partial(rifl, key.clone(), result))
+                    let (key, op_result) = partial();
+                    Some(ExecutorResult::Partial(rifl, key, op_result))
                 }
             }
         } else {
             let cmd_result = self.pending.get_mut(&rifl)?;
 
             // add partial result and check if it's ready
-            let is_ready = cmd_result.add_partial(key.clone(), result);
+            let (key, op_result) = partial();
+            let is_ready = cmd_result.add_partial(key, op_result);
             if is_ready {
                 // if it is, remove it from pending and return it as ready
                 self.pending
@@ -128,19 +128,19 @@ mod tests {
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, &key_b, get_b_res);
+        let res = pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
         assert!(res.is_none());
 
         // add the result of put a before being registered
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_none());
 
         // register `put_a`
         pending.register(put_a.rifl(), put_a.key_count());
 
         // add the result of put a and assert that the command is ready
-        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_some());
 
         // check that there's only one result (since the command accessed a
@@ -153,7 +153,7 @@ mod tests {
 
         // add the result of put b and assert that the command is ready
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = pending.add_partial(put_b_rifl, &key_b, put_b_res);
+        let res = pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
 
         // check that there's only one result (since the command accessed a
         // single key)
@@ -165,7 +165,7 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, &key_a, get_a_res);
+        let res = pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
         assert!(res.is_some());
 
         // check that there are two results (since the command accessed two
@@ -212,14 +212,14 @@ mod tests {
 
         // add the result of get b
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, &key_b, get_b_res);
+        let res = pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
         // there's always (as long as previously registered) a result when configured with parallel
         // executors
         assert!(res.is_some());
 
         // add the result of put a before being registered
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         // there's not a result since the command has not been registered
         assert!(res.is_none());
 
@@ -227,7 +227,7 @@ mod tests {
         pending.register(put_a.rifl(), put_a.key_count());
 
         // add the result of put a
-        let res = pending.add_partial(put_a_rifl, &key_a, put_a_res.clone());
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_some());
 
         // check partial output
@@ -239,7 +239,7 @@ mod tests {
 
         // add the result of put b
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = pending.add_partial(put_b_rifl, &key_b, put_b_res);
+        let res = pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
         assert!(res.is_some());
 
         // check partial output
@@ -251,7 +251,7 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, &key_a, get_a_res);
+        let res = pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
         assert!(res.is_some());
 
         // check partial output

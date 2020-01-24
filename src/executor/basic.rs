@@ -30,13 +30,14 @@ impl Executor for BasicExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
+        let BasicExecutionInfo { rifl, key, op } = info;
         // execute op in the `KVStore`
-        let op_result = self.store.execute(&info.key, info.op);
+        let op_result = self.store.execute(&key, op);
 
         // add partial result to `Pending`
         // TODO here we're passing a ref but we actually own `info.key`, so that's a waste for the
         // case where it ends up being cloned in `add_partial`
-        if let Some(result) = self.pending.add_partial(info.rifl, &info.key, op_result) {
+        if let Some(result) = self.pending.add_partial(rifl, || (key, op_result)) {
             vec![result]
         } else {
             Vec::new()
