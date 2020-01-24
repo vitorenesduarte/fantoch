@@ -457,7 +457,17 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {}
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MCollect { dot, .. } => Some(dot),
+            Self::MCollectAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+            Self::MConsensus { dot, .. } => Some(dot),
+            Self::MConsensusAck { dot, .. } => Some(dot),
+        }
+    }
+}
 
 /// `Status` of commands.
 #[derive(PartialEq)]
