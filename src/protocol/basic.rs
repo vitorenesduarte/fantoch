@@ -195,7 +195,15 @@ pub enum Message {
     MCommit { dot: Dot, cmd: Command },
 }
 
-impl MessageDot for Message {}
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MStore { dot, .. } => Some(dot),
+            Self::MStoreAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -68,7 +68,7 @@ pub trait MessageDot {
     /// If `None` is returned, then the message is sent to all protocol processes.
     /// In particular, if the protocol is not parallel, the message is sent to the single protocol
     /// process.
-    fn dot(&self) -> Option<Dot> {
+    fn dot(&self) -> Option<&Dot> {
         None
     }
 }
