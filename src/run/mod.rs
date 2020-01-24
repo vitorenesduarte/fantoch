@@ -27,19 +27,27 @@
 /// is computed, the submit is forwarded to the correct protocol process. For maximum parallelism,
 /// this generator can live in the clients and have a lock-free implementation (see `AtomicIdGen`).
 ///
-/// 4. The protocol process does whatever is specified in the `Protocol` trait. This may include
-/// sending messages to other replicas/nodes, which leads to point 5.
+/// 4. When the protocol process receives the new command from a client it does whatever is
+/// specified in the `Protocol` trait, which may include sending messages to other replicas/nodes,
+/// which leads to point 5.
 ///
-/// 5. When a message is received, the same forward function from point 3. is used to select the
-/// protocol process that is responsible for handling that message.
+/// 5. When a message is received from other replicas, the same forward function from point 3. is
+/// used to select the protocol process that is responsible for handling that message. This suggests
+/// a message should define which `Dot` it refers to. This is achieved through the `MessageDot`
+/// trait.
 ///
-/// 6. Everytime a message is handled in protocol processes, the process checks if it has new
-/// execution info. If so, it forwards this information for each responsible executor. This suggests
-/// that execution info should define to which key it refers to. This is achieved through the
-/// `ExecutionKey` trait.
+/// 6. Everytime a message is handled in a protocol process, the process checks if it has new
+/// execution info. If so, it forwards each execution info to the responsible executor. This
+/// suggests that execution info should define to which key it refers to. This is achieved through
+/// the `ExecutionInfoKey` trait.
 ///
-/// 7. Clients aggregate partial command results to form a single command result. Once the command
-/// result is complete, the notification is sent to the actual client.
+/// 7. When execution info is handled in a executor, the executor may have new (potentially partial
+/// if the executor is parallel) command results. If the command was previously registered by some
+/// client, the result is forwarded to such client.
+///
+/// 8. When command results are received by a client, they may have to be aggregated in case the
+/// executor is parallel. Once the full command result is complete, the notification is sent to the
+/// actual client.
 
 const CONNECT_RETRIES: usize = 100;
 
