@@ -31,7 +31,7 @@ pub trait Executor {
         // by default, nothing to show
     }
 
-    fn is_parallel() -> bool {
+    fn is_parallel(&self) -> bool {
         false
     }
 }

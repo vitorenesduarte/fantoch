@@ -7,12 +7,12 @@ use std::hash::{Hash, Hasher};
 pub type Key = String;
 pub type Value = String;
 
-/// Hashes the key (let's call it `h`) and returns a `h` modulo `divisor`.
+/// Hashes the key (let's call the hash `h`) and returns a `h` modulo `divisor`.
 fn hash_mod<H>(key: &Key, divisor: u64) -> u64
 where
-    H: Hasher,
+    H: Hasher + Default,
 {
-    let mut hasher = ahash::AHasher::default();
+    let mut hasher = H::default();
     key.hash(&mut hasher);
     let hash = hasher.finish();
     hash % divisor

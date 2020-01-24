@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::{BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::info::{Commands, Info};
-use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -190,6 +190,8 @@ pub enum Message {
     MStoreAck { dot: Dot },
     MCommit { dot: Dot, cmd: Command },
 }
+
+impl MessageDot for Message {}
 
 #[cfg(test)]
 mod tests {

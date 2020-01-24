@@ -6,7 +6,7 @@ use crate::protocol::common::{
     info::{Commands, Info},
     table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
 };
-use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::cmp;
@@ -410,6 +410,8 @@ pub enum Message {
         process_votes: ProcessVotes,
     },
 }
+
+impl MessageDot for Message {}
 
 /// `Status` of commands.
 #[derive(PartialEq)]

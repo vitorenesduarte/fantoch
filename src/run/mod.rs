@@ -11,8 +11,8 @@
 /// partial command results if the command is multi-key).
 ///
 /// 2. When a client issues a command, it registers this command in all executors that are
-/// responsible for executing this command. This is how each executor knows if it should notify some
-/// client when some command is executed. If the commmand is single-key, this command only needs to
+/// responsible for executing this command. This is how each executor knows if it should notify this
+/// client when the command is executed. If the commmand is single-key, this command only needs to
 /// be registered in one executor. If multi-key, it needs to be registered in several executors if
 /// the keys accessed by the command are assigned to different executors.
 ///

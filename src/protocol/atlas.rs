@@ -7,7 +7,7 @@ use crate::protocol::common::{
     info::{Commands, Info},
     synod::{Synod, SynodMessage},
 };
-use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::util;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -452,6 +452,8 @@ pub enum Message {
         ballot: u64,
     },
 }
+
+impl MessageDot for Message {}
 
 /// `Status` of commands.
 #[derive(PartialEq)]

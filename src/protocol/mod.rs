@@ -32,14 +32,14 @@ pub use base::BaseProcess;
 use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::ProcessId;
+use crate::id::{Dot, ProcessId};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
 pub trait Protocol {
-    type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
+    type Message: Debug + Clone + Serialize + DeserializeOwned + Send + MessageDot;
     type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;
@@ -59,6 +59,18 @@ pub trait Protocol {
 
     fn show_metrics(&self) {
         // by default, nothing to show
+    }
+
+    fn is_parallel(&self) -> bool {
+        false
+    }
+}
+
+pub trait MessageDot {
+    /// Parallel protocols should implement this, otherwise a single-process protocol will be
+    /// assumed.
+    fn dot(&self) -> Option<Dot> {
+        None
     }
 }
 
