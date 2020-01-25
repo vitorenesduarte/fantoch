@@ -1,3 +1,4 @@
+use super::pool;
 use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, MessageKey};
@@ -6,7 +7,6 @@ use crate::kvs::Key;
 use crate::protocol::{MessageDot, Protocol};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use super::pool;
 use std::hash::{Hash, Hasher};
 
 // common error type
@@ -17,14 +17,14 @@ pub struct ProcessHi(pub ProcessId);
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientHi(pub ClientId);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FromClient {
     // clients can register
     Register(ClientId, CommandResultSender),
     // unregister
     Unregister(ClientId),
-    // or submit new commands
-    Submit(Command),
+    // register for notifications on a partial about this `Rifl`.
+    WaitRifl(Rifl),
 }
 
 // list of channels used to communicate between tasks
@@ -53,7 +53,7 @@ impl pool::Index for (Dot, Command) {
 
 // 2. workers receive messages from readers
 pub type ReaderToWorkers<P> = pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
-// The following allows e.g. (ProcessId, <P as Protocol>::Message) to be forwarded
+// The following allows e.g. (ProcessId, <P as Protocol>::Message) to be `ToPool::forward`
 impl<A, B> pool::Index for (A, B)
 where
     B: MessageDot,
@@ -64,9 +64,9 @@ where
 }
 
 // 3. executors receive messages from clients
-pub type ClientToExecutors = pool::ToPool<Rifl>;
-// The following allows a client to `ToPool::forward_after` (Key, Rifl)
-impl pool::Index for (Key, Rifl) {
+pub type ClientToExecutors = pool::ToPool<FromClient>;
+// The following allows e.g. (Key, FromClient::WaitRifl(rifl)) to be `ToPool::forward_after`
+impl pool::Index for (Key, FromClient) {
     fn index(&self) -> Option<usize> {
         Some(key_index(&self.0))
     }

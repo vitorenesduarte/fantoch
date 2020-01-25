@@ -10,30 +10,32 @@ use tokio::net::TcpListener;
 pub fn start_listener(
     process_id: ProcessId,
     listener: TcpListener,
+    client_to_workers: ClientToWorkers,
+    client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
-) -> ClientReceiver {
-    super::spawn_producer(channel_buffer_size, |tx| {
-        client_listener_task(
-            process_id,
-            listener,
-            tcp_nodelay,
-            socket_buffer_size,
-            channel_buffer_size,
-            tx,
-        )
-    })
+) {
+    super::spawn(client_listener_task(
+        process_id,
+        listener,
+        client_to_workers,
+        client_to_executors,
+        tcp_nodelay,
+        socket_buffer_size,
+        channel_buffer_size,
+    ));
 }
 
 /// Listen on new client connections and spawn a client task for each new connection.
 async fn client_listener_task(
     process_id: ProcessId,
     listener: TcpListener,
+    client_to_workers: ClientToWorkers,
+    client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
-    parent: ClientSender,
 ) {
     // start listener task
     let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
@@ -51,7 +53,8 @@ async fn client_listener_task(
                     process_id,
                     channel_buffer_size,
                     connection,
-                    parent.clone(),
+                    client_to_workers.clone(),
+                    client_to_executors.clone(),
                 ));
             }
             None => {
@@ -67,13 +70,14 @@ async fn client_server_task(
     process_id: ProcessId,
     channel_buffer_size: usize,
     mut connection: Connection,
-    mut parent: ClientSender,
+    mut client_to_workers: ClientToWorkers,
+    mut client_to_executors: ClientToExecutors,
 ) {
     let (client_id, mut parent_results) = server_receive_hi(
         process_id,
         channel_buffer_size,
         &mut connection,
-        &mut parent,
+        &mut client_to_executors,
     )
     .await;
 
@@ -81,7 +85,7 @@ async fn client_server_task(
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &mut parent).await {
+                if !client_server_task_handle_cmd(cmd, client_id, &mut client_to_workers, &mut client_to_executors).await {
                     return;
                 }
             }
@@ -97,12 +101,12 @@ async fn server_receive_hi(
     process_id: ProcessId,
     channel_buffer_size: usize,
     connection: &mut Connection,
-    parent: &mut ClientSender,
+    client_to_executors: &mut ClientToExecutors,
 ) -> (ClientId, CommandResultReceiver) {
     // create channel where the process will write command results and where client will read them
     let (mut tx, rx) = super::channel(channel_buffer_size);
 
-    // receive hi from client and register in parent, sending it tx
+    // receive hi from client
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
         println!("[client_server] received hi from client {}", client_id);
         client_id
@@ -113,10 +117,13 @@ async fn server_receive_hi(
     // set channel name
     tx.set_name(format!("client_server_{}", client_id));
 
-    // notify parent with the channel where it should write command results
-    if let Err(e) = parent.send(FromClient::Register(client_id, tx)).await {
+    // register client in all executors
+    if let Err(e) = client_to_executors
+        .broadcast(FromClient::Register(client_id, tx))
+        .await
+    {
         println!(
-            "[client_server] error while registering client in parent: {:?}",
+            "[client_server] error while registering client in executors: {:?}",
             e
         );
     }
@@ -132,21 +139,27 @@ async fn server_receive_hi(
 async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
-    parent: &mut ClientSender,
+    client_to_workers: &mut ClientToWorkers,
+    client_to_executors: &mut ClientToExecutors,
 ) -> bool {
     if let Some(cmd) = cmd {
-        if let Err(e) = parent.send(FromClient::Submit(cmd)).await {
-            println!(
-                "[client_server] error while sending new command to parent: {:?}",
-                e
-            );
-        }
-        true
+        todo!("register command in executor and send it to the correct worker");
+    // if let Err(e) = parent.send(FromClient::Submit(cmd)).await {
+    //     println!(
+    //         "[client_server] error while sending new command to parent: {:?}",
+    //         e
+    //     );
+    // }
+    // true
     } else {
         println!("[client_server] client disconnected.");
-        if let Err(e) = parent.send(FromClient::Unregister(client_id)).await {
+        // unregister client in all executors
+        if let Err(e) = client_to_executors
+            .broadcast(FromClient::Unregister(client_id))
+            .await
+        {
             println!(
-                "[client_server] error while sending unregister to parent: {:?}",
+                "[client_server] error while unregistering client in executors: {:?}",
                 e
             );
         }

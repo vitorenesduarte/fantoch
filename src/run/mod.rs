@@ -148,15 +148,15 @@ where
     // start process listener
     let listener = task::listen((ip, port)).await?;
 
-    // create forward channels
-    let (to_workers_tx, to_workers_rx) = ReaderToWorkers::<P>::new(channel_buffer_size, workers);
+    // create forward channels: reader -> workers
+    let (reader_to_workers, from_readers) = ReaderToWorkers::<P>::new(channel_buffer_size, workers);
 
     // connect to all processes
     let to_writers = task::process::connect_to_all::<A, P>(
         process_id,
         listener,
         addresses,
-        to_workers_tx,
+        reader_to_workers,
         CONNECT_RETRIES,
         tcp_nodelay,
         socket_buffer_size,
@@ -166,17 +166,28 @@ where
 
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
-    let from_clients = task::client::start_listener(
+
+    // create forward channels: client -> workers
+    let (client_to_workers, from_clients_to_workers) =
+        ClientToWorkers::new(channel_buffer_size, workers);
+
+    // create forward channels: client -> executors
+    let (client_to_executors, from_clients_to_executors) =
+        ClientToExecutors::new(channel_buffer_size, executors);
+
+    task::client::start_listener(
         process_id,
         listener,
+        client_to_workers,
+        client_to_executors,
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
     );
 
     // start executor
-    let (mut from_executor, mut to_executor) =
-        task::process::start_executor::<P>(config, channel_buffer_size, from_clients);
+    // let (mut from_executor, mut to_executor) =
+    //     task::process::start_executor::<P>(config, channel_buffer_size, from_clients);
 
     // notify parent that we're connected
     connected.add_permits(1);

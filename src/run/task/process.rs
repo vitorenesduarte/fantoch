@@ -305,14 +305,9 @@ async fn handle_from_client<P>(
     P: Protocol,
 {
     match from_client {
-        FromClient::Submit(cmd) => {
+        FromClient::WaitRifl(rifl) => {
             // register in executor
-            executor.register(&cmd);
-
-            // send to command to parent
-            if let Err(e) = to_parent.send(cmd).await {
-                println!("[executor] error while sending to parent: {:?}", e);
-            }
+            executor.register_rifl(rifl);
         }
         FromClient::Register(client_id, tx) => {
             println!("[executor] client {} registered", client_id);

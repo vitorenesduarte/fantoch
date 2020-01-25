@@ -51,6 +51,18 @@ where
         self.do_forward(index, transform(value)).await
     }
 
+    /// Forwards a message to the pool. Note that this implementation is not as efficient as it
+    /// could be, as it's only meant to be used for setup/periodic messages.
+    pub async fn broadcast(&mut self, msg: M) -> RunResult<()>
+    where
+        M: Clone,
+    {
+        for tx in self.pool.iter_mut() {
+            tx.send(msg.clone()).await?;
+        }
+        Ok(())
+    }
+
     async fn do_forward(&mut self, index: Option<usize>, msg: M) -> RunResult<()> {
         match index {
             Some(index) => {
