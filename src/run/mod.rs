@@ -39,7 +39,7 @@
 /// 6. Everytime a message is handled in a protocol process, the process checks if it has new
 /// execution info. If so, it forwards each execution info to the responsible executor. This
 /// suggests that execution info should define to which key it refers to. This is achieved through
-/// the `ExecutionInfoKey` trait.
+/// the `MessageKey` trait.
 ///
 /// 7. When execution info is handled in a executor, the executor may have new (potentially partial
 /// if the executor is parallel) command results. If the command was previously registered by some
@@ -54,8 +54,8 @@ const CONNECT_RETRIES: usize = 100;
 // This module contains the prelude.
 mod prelude;
 
-// This module contains forwarding logic.
-pub mod forward;
+// This module contains the definition of `ToPool`.
+mod pool;
 
 // TODO This module contains the definition of...
 pub mod task;
@@ -67,7 +67,6 @@ use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
-use crate::run::forward::ReaderToWorkers;
 use crate::time::{RunTime, SysTime};
 use futures::future::{join_all, FutureExt};
 use futures::select;

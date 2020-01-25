@@ -4,7 +4,6 @@ use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::Protocol;
-use crate::run::forward::ReaderToWorkers;
 use crate::run::prelude::*;
 use crate::run::task;
 use futures::future::FutureExt;
