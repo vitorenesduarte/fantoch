@@ -33,6 +33,7 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
+use crate::run::forward::MessageDot;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -61,15 +62,6 @@ pub trait Protocol {
 
     fn show_metrics(&self) {
         // by default, nothing to show
-    }
-}
-
-pub trait MessageDot {
-    /// If `None` is returned, then the message is sent to all protocol processes.
-    /// In particular, if the protocol is not parallel, the message is sent to the single protocol
-    /// process.
-    fn dot(&self) -> Option<&Dot> {
-        None
     }
 }
 

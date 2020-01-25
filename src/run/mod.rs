@@ -55,7 +55,7 @@ const CONNECT_RETRIES: usize = 100;
 mod prelude;
 
 // This module contains forwarding logic.
-mod forward;
+pub mod forward;
 
 // TODO This module contains the definition of...
 pub mod task;
@@ -72,7 +72,6 @@ use crate::time::{RunTime, SysTime};
 use futures::future::{join_all, FutureExt};
 use futures::select;
 use prelude::*;
-use std::error::Error;
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;

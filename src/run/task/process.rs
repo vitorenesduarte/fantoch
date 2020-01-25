@@ -4,7 +4,7 @@ use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::Protocol;
-use crate::run::forward::ToWorkers;
+use crate::run::forward::ReaderToWorkers;
 use crate::run::prelude::*;
 use crate::run::task;
 use futures::future::FutureExt;
@@ -18,7 +18,7 @@ pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
     listener: TcpListener,
     addresses: Vec<A>,
-    to_workers: ToWorkers<P>,
+    to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
     socket_buffer_size: usize,
@@ -93,7 +93,7 @@ where
 
 async fn handshake<P>(
     process_id: ProcessId,
-    to_workers: ToWorkers<P>,
+    to_workers: ReaderToWorkers<P>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
@@ -146,7 +146,7 @@ async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connecti
 
 /// Starts a reader task per connection received. A `ToWorkers` is passed to each reader so that
 /// these can forward immediately to the correct worker process.
-fn start_readers<P>(to_workers: ToWorkers<P>, connections: HashMap<ProcessId, Connection>)
+fn start_readers<P>(to_workers: ReaderToWorkers<P>, connections: HashMap<ProcessId, Connection>)
 where
     P: Protocol + 'static,
 {
@@ -178,7 +178,7 @@ where
 
 /// Reader task.
 async fn reader_task<P>(
-    mut to_workers: ToWorkers<P>,
+    mut to_workers: ReaderToWorkers<P>,
     process_id: ProcessId,
     mut connection: Connection,
 ) where
@@ -187,7 +187,7 @@ async fn reader_task<P>(
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = to_workers.forward(process_id, msg).await {
+                if let Err(e) = to_workers.forward((process_id, msg)).await {
                     println!(
                         "[reader] error notifying process task with new msg: {:?}",
                         e
