@@ -1,6 +1,7 @@
+use crate::command::Command;
 use crate::config::Config;
 use crate::executor::pending::Pending;
-use crate::executor::{Executor, MessageKey, ExecutorResult};
+use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVStore, Key};
 
@@ -24,9 +25,13 @@ impl Executor for BasicExecutor {
         }
     }
 
-    fn register(&mut self, rifl: Rifl, key_count: usize) {
+    fn register(&mut self, cmd: &Command) {
         // start command in pending
-        assert!(self.pending.register(rifl, key_count));
+        assert!(self.pending.register(cmd));
+    }
+
+    fn register_rifl(&mut self, rifl: Rifl) {
+        self.pending.register_rifl(rifl);
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {

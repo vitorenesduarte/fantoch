@@ -16,7 +16,7 @@ pub use basic::{BasicExecutionInfo, BasicExecutor};
 pub use graph::{GraphExecutionInfo, GraphExecutor};
 pub use table::{TableExecutionInfo, TableExecutor};
 
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, Rifl};
 use crate::kvs::{KVOpResult, Key};
@@ -27,7 +27,10 @@ pub trait Executor {
 
     fn new(config: Config) -> Self;
 
-    fn register(&mut self, rifl: Rifl, key_count: usize);
+    fn register(&mut self, cmd: &Command);
+
+    // Parallel executors may receive several registers for the same `Rifl`.
+    fn register_rifl(&mut self, rifl: Rifl);
 
     fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 

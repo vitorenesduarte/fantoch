@@ -1,4 +1,4 @@
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::executor::ExecutorResult;
 use crate::id::Rifl;
 use crate::kvs::{KVOpResult, Key};
@@ -32,7 +32,11 @@ impl Pending {
     }
 
     /// Starts tracking a command submitted by some client.
-    pub fn register(&mut self, rifl: Rifl, key_count: usize) -> bool {
+    pub fn register(&mut self, cmd: &Command) -> bool {
+        // get command rifl and key count
+        let rifl = cmd.rifl();
+        let key_count = cmd.key_count();
+
         if self.parallel_executor {
             self.parallel_pending.insert(rifl, key_count).is_none()
         } else {
@@ -41,6 +45,21 @@ impl Pending {
 
             // add it to pending
             self.pending.insert(rifl, cmd_result).is_none()
+        }
+    }
+
+    /// Increases the number of expected notifications on some `Rifl` by one.
+    pub fn register_rifl(&mut self, rifl: Rifl) {
+        if self.parallel_executor {
+            let key_count = self.parallel_pending.entry(rifl).or_insert(0);
+            *key_count += 1;
+        } else {
+            // maybe update `CommandResult`
+            let cmd_result = self
+                .pending
+                .entry(rifl)
+                .or_insert_with(|| CommandResult::new(rifl, 0));
+            cmd_result.increment_key_count();
         }
     }
 
@@ -122,11 +141,11 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
-        assert!(pending.register(get_ab.rifl(), get_ab.key_count()));
-        assert!(pending.register(put_b.rifl(), put_b.key_count()));
+        assert!(pending.register(&get_ab));
+        assert!(pending.register(&put_b));
 
         // starting a command already started `false`
-        assert!(!pending.register(put_b.rifl(), put_b.key_count()));
+        assert!(!pending.register(&put_b));
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);
@@ -139,7 +158,7 @@ mod tests {
         assert!(res.is_none());
 
         // register `put_a`
-        pending.register(put_a.rifl(), put_a.key_count());
+        pending.register(&put_a);
 
         // add the result of put a and assert that the command is ready
         let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
@@ -206,11 +225,11 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // register `get_ab` and `put_b`
-        assert!(pending.register(get_ab.rifl(), get_ab.key_count()));
-        assert!(pending.register(put_b.rifl(), put_b.key_count()));
+        assert!(pending.register(&get_ab));
+        assert!(pending.register(&put_b));
 
         // starting a command already started `false`
-        assert!(!pending.register(put_b.rifl(), put_b.key_count()));
+        assert!(!pending.register(&put_b));
 
         // add the result of get b
         let get_b_res = store.execute(&key_b, KVOp::Get);
@@ -226,7 +245,7 @@ mod tests {
         assert!(res.is_none());
 
         // register `put_a`
-        pending.register(put_a.rifl(), put_a.key_count());
+        pending.register(&put_a);
 
         // add the result of put a
         let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));

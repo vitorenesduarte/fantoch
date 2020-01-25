@@ -583,7 +583,7 @@ mod tests {
 
         // register command in executor and submit it in epaxos 1
         let (process, executor) = simulation.get_process(target);
-        executor.register(cmd.rifl(), cmd.key_count());
+        executor.register(&cmd);
         let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes

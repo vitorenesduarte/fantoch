@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::config::Config;
 use crate::executor::graph::DependencyGraph;
-use crate::executor::{Executor, MessageKey, ExecutorResult};
+use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
 use std::collections::HashSet;
@@ -29,7 +29,11 @@ impl Executor for GraphExecutor {
         }
     }
 
-    fn register(&mut self, rifl: Rifl, _key_count: usize) {
+    fn register(&mut self, cmd: &Command) {
+        self.register_rifl(cmd.rifl());
+    }
+
+    fn register_rifl(&mut self, rifl: Rifl) {
         // start command in pending
         assert!(self.pending.insert(rifl));
     }

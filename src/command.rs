@@ -128,6 +128,10 @@ impl CommandResult {
         self.results.len() == self.key_count
     }
 
+    pub fn increment_key_count(&mut self) {
+        self.key_count += 1;
+    }
+
     /// Returns the command identifier.
     pub fn rifl(&self) -> Rifl {
         self.rifl

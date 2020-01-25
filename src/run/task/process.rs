@@ -308,7 +308,7 @@ async fn handle_from_client<P>(
     match from_client {
         FromClient::Submit(cmd) => {
             // register in executor
-            executor.register(cmd.rifl(), cmd.key_count());
+            executor.register(&cmd);
 
             // send to command to parent
             if let Err(e) = to_parent.send(cmd).await {
