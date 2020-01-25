@@ -48,6 +48,10 @@
 /// 8. When command results are received by a client, they may have to be aggregated in case the
 /// executor is parallel. Once the full command result is complete, the notification is sent to the
 /// actual client.
+///
+/// Other notes:
+/// - the runner allows `Protocol` workers to share state; however, it assumes that `Executor`
+///   workers never do
 
 const CONNECT_RETRIES: usize = 100;
 
@@ -149,7 +153,8 @@ where
     let listener = task::listen((ip, port)).await?;
 
     // create forward channels: reader -> workers
-    let (reader_to_workers, from_readers) = ReaderToWorkers::<P>::new(channel_buffer_size, workers);
+    let (reader_to_workers, reader_to_workers_rxs) =
+        ReaderToWorkers::<P>::new(channel_buffer_size, workers);
 
     // connect to all processes
     let to_writers = task::process::connect_to_all::<A, P>(
@@ -171,11 +176,11 @@ where
     let atomic_dot_gen = AtomicDotGen::new(process_id);
 
     // create forward channels: client -> workers
-    let (client_to_workers, from_clients_to_workers) =
+    let (client_to_workers, client_to_workers_rxs) =
         ClientToWorkers::new(channel_buffer_size, workers);
 
     // create forward channels: client -> executors
-    let (client_to_executors, from_clients_to_executors) =
+    let (client_to_executors, client_to_executors_rxs) =
         ClientToExecutors::new(channel_buffer_size, executors);
 
     task::client::start_listener(
@@ -189,9 +194,16 @@ where
         channel_buffer_size,
     );
 
-    // start executor
-    // let (mut from_executor, mut to_executor) =
-    //     task::process::start_executor::<P>(config, channel_buffer_size, from_clients);
+    // create forward channels: worker -> executors
+    let (worker_to_executors, worker_to_executors_rxs) =
+        WorkerToExecutors::<P>::new(channel_buffer_size, executors);
+
+    // start executors
+    task::process::start_executors::<P>(
+        config,
+        client_to_executors_rxs,
+        worker_to_executors_rxs,
+    );
 
     // notify parent that we're connected
     connected.add_permits(1);

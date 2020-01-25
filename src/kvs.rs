@@ -14,7 +14,7 @@ pub enum KVOp {
 
 pub type KVOpResult = Option<Value>;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KVStore {
     store: HashMap<Key, Value>,
 }

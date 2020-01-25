@@ -39,9 +39,9 @@ pub type CommandSender = ChannelSender<Command>;
 pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
 pub type CommandResultSender = ChannelSender<CommandResult>;
 pub type ExecutionInfoReceiver<P> =
-    ChannelReceiver<Vec<<<P as Protocol>::Executor as Executor>::ExecutionInfo>>;
+    ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
-    ChannelSender<Vec<<<P as Protocol>::Executor as Executor>::ExecutionInfo>>;
+    ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;

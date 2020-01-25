@@ -50,6 +50,7 @@ pub trait MessageKey {
     }
 }
 
+#[derive(Debug)]
 pub enum ExecutorResult {
     /// this contains a command result that is
     Ready(CommandResult),
