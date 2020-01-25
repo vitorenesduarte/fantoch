@@ -67,7 +67,7 @@ use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
-use crate::run::forward::ToWorkers;
+use crate::run::forward::ReaderToWorkers;
 use crate::time::{RunTime, SysTime};
 use futures::future::{join_all, FutureExt};
 use futures::select;
@@ -150,7 +150,7 @@ where
     let listener = task::listen((ip, port)).await?;
 
     // create forward channels
-    let (to_workers_tx, to_workers_rx) = ToWorkers::new(channel_buffer_size, workers);
+    let (to_workers_tx, to_workers_rx) = ReaderToWorkers::<P>::new(channel_buffer_size, workers);
 
     // connect to all processes
     let to_writers = task::process::connect_to_all::<A, P>(

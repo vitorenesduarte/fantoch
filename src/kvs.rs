@@ -1,21 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 
 // Definition of `Key` and `Value` types.
 pub type Key = String;
 pub type Value = String;
-
-/// Hashes the key (let's call the hash `h`) and returns a `h` modulo `divisor`.
-fn hash_mod<H>(key: &Key, divisor: u64) -> u64
-where
-    H: Hasher + Default,
-{
-    let mut hasher = H::default();
-    key.hash(&mut hasher);
-    let hash = hasher.finish();
-    hash % divisor
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum KVOp {

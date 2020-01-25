@@ -23,7 +23,7 @@ use crate::kvs::{KVOpResult, Key};
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Debug + Send + ExecutionInfoKey;
+    type ExecutionInfo: Debug + Send + MessageKey;
 
     fn new(config: Config) -> Self;
 
@@ -38,10 +38,10 @@ pub trait Executor {
     }
 }
 
-pub trait ExecutionInfoKey {
-    /// If `None` is returned, then the execution info is sent to all executor processes.
-    /// In particular, if the executor is not parallel, the execution info is sent to the single
-    /// executor process.
+pub trait MessageKey {
+    /// If `None` is returned, then the message is sent to all executor processes.
+    /// In particular, if the executor is not parallel, the message is sent to the single executor
+    /// process.
     fn key(&self) -> Option<&Key> {
         None
     }

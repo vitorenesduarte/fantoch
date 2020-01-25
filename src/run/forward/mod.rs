@@ -1,40 +1,51 @@
-// This module contains the definition of `ToWorkers`.
-mod workers;
-
-// This module contains the definition of `ToExecutors`.
-mod executors;
-
-// Re-exports.
-pub use workers::ToWorkers;
-// pub use executors::ToExecutors;
+// This module contains the definition of `ToPool`.
+mod pool;
 
 use crate::command::Command;
-use crate::id::{Dot, ProcessId};
+use crate::executor::MessageKey;
+use crate::id::{Dot, ProcessId, Rifl};
+use crate::kvs::Key;
+use crate::protocol::MessageDot;
 use crate::protocol::Protocol;
+use std::hash::{Hash, Hasher};
 
-pub trait MessageDot {
-    /// If `None` is returned, then the message is sent to all protocol processes.
-    /// In particular, if the protocol is not parallel, the message is sent to the single protocol
-    /// process.
-    fn dot(&self) -> Option<&Dot> {
-        None
+// workers receive messages from:
+// - clients
+// - readers
+pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;
+
+impl pool::Index for (Dot, Command) {
+    fn index(&self) -> Option<usize> {
+        Some(dot_index(&self.0))
     }
 }
 
-pub type ClientToWorkers = ToWorkers<(Dot, Command)>;
-impl MessageDot for (Dot, Command) {
-    fn dot(&self) -> Option<&Dot> {
-        Some(&self.0)
-    }
-}
-
-pub type ReaderToWorkers<P> = ToWorkers<(ProcessId, <P as Protocol>::Message)>;
+pub type ReaderToWorkers<P> = pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
 // The following allows e.g. (ProcessId, <P as Protocol>::Message) to be forwarded
-impl<A, B> MessageDot for (A, B)
+impl<A, B> pool::Index for (A, B)
 where
     B: MessageDot,
 {
-    fn dot(&self) -> Option<&Dot> {
-        self.1.dot()
+    fn index(&self) -> Option<usize> {
+        self.1.dot().map(|dot| dot_index(dot))
     }
+}
+
+// executors receive messages from:
+// - clients
+// - workers
+pub type ClientToExecutors = pool::ToPool<(Rifl, usize)>;
+
+// The index of a dot is its sequence
+fn dot_index(dot: &Dot) -> usize {
+    dot.sequence() as usize
+}
+
+type DefaultHasher = ahash::AHasher;
+
+// The index of a key is its hash
+fn key_index(key: &Key) -> usize {
+    let mut hasher = DefaultHasher::default();
+    key.hash(&mut hasher);
+    hasher.finish() as usize
 }

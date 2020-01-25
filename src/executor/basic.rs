@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::executor::pending::Pending;
-use crate::executor::{ExecutionInfoKey, Executor, ExecutorResult};
+use crate::executor::{Executor, MessageKey, ExecutorResult};
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVStore, Key};
 
@@ -62,7 +62,7 @@ impl BasicExecutionInfo {
     }
 }
 
-impl ExecutionInfoKey for BasicExecutionInfo {
+impl MessageKey for BasicExecutionInfo {
     fn key(&self) -> Option<&Key> {
         Some(&self.key)
     }
