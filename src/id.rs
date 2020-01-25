@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 // process ids
 pub type ProcessId = u64;
@@ -66,7 +67,7 @@ where
         }
     }
 
-    /// Retrives source.
+    /// Retrieves source.
     pub fn source(&self) -> S {
         self.source
     }
@@ -78,9 +79,10 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct AtomicIdGen<S> {
     source: S,
-    last_sequence: AtomicU64,
+    last_sequence: Arc<AtomicU64>,
 }
 
 impl<S> AtomicIdGen<S>
@@ -91,17 +93,17 @@ where
     pub fn new(source: S) -> Self {
         Self {
             source,
-            last_sequence: AtomicU64::new(0),
+            last_sequence: Arc::new(AtomicU64::new(0)),
         }
     }
 
-    /// Retrives source.
+    /// Retrieves source.
     pub fn source(&self) -> S {
         self.source
     }
 
     /// Generates the next `Id`.
-    pub fn next_id(&mut self) -> Id<S> {
+    pub fn next_id(&self) -> Id<S> {
         // TODO can the ordering be `Ordering::Relaxed`?
         let previous = self.last_sequence.fetch_add(1, Ordering::SeqCst);
         Id::new(self.source, previous + 1)

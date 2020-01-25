@@ -41,14 +41,14 @@ where
         self.do_forward(index, msg).await
     }
 
-    /// Forwards message `transform(value)` to the pool worker with id `value.index() % pool_size`.
-    pub async fn forward_after<V, F>(&mut self, value: V, transform: F) -> RunResult<()>
+    /// Forwards message `map(value)` to the pool worker with id `value.index() % pool_size`.
+    pub async fn forward_map<V, F>(&mut self, value: V, map: F) -> RunResult<()>
     where
         V: Index,
         F: FnOnce(V) -> M,
     {
         let index = value.index();
-        self.do_forward(index, transform(value)).await
+        self.do_forward(index, map(value)).await
     }
 
     /// Forwards a message to the pool. Note that this implementation is not as efficient as it

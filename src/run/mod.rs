@@ -63,7 +63,7 @@ pub mod task;
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::id::{ClientId, ProcessId};
+use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::protocol::{Protocol, ToSend};
@@ -167,6 +167,9 @@ where
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
 
+    // create atomic dot generator to be used by clients
+    let atomic_dot_gen = AtomicDotGen::new(process_id);
+
     // create forward channels: client -> workers
     let (client_to_workers, from_clients_to_workers) =
         ClientToWorkers::new(channel_buffer_size, workers);
@@ -178,6 +181,7 @@ where
     task::client::start_listener(
         process_id,
         listener,
+        atomic_dot_gen,
         client_to_workers,
         client_to_executors,
         tcp_nodelay,

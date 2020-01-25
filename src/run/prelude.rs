@@ -65,8 +65,8 @@ where
 
 // 3. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<FromClient>;
-// The following allows e.g. (Key, FromClient::WaitRifl(rifl)) to be `ToPool::forward_after`
-impl pool::Index for (Key, FromClient) {
+// The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
+impl pool::Index for (&Key, Rifl) {
     fn index(&self) -> Option<usize> {
         Some(key_index(&self.0))
     }

@@ -1,6 +1,6 @@
 use super::connection::Connection;
 use crate::command::{Command, CommandResult};
-use crate::id::{ClientId, ProcessId};
+use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::log;
 use crate::run::prelude::*;
 use futures::future::FutureExt;
@@ -10,6 +10,7 @@ use tokio::net::TcpListener;
 pub fn start_listener(
     process_id: ProcessId,
     listener: TcpListener,
+    atomic_dot_gen: AtomicDotGen,
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
@@ -19,6 +20,7 @@ pub fn start_listener(
     super::spawn(client_listener_task(
         process_id,
         listener,
+        atomic_dot_gen,
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
@@ -31,6 +33,7 @@ pub fn start_listener(
 async fn client_listener_task(
     process_id: ProcessId,
     listener: TcpListener,
+    atomic_dot_gen: AtomicDotGen,
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
@@ -51,10 +54,11 @@ async fn client_listener_task(
                 // this client to notify parent
                 super::spawn(client_server_task(
                     process_id,
-                    channel_buffer_size,
-                    connection,
+                    atomic_dot_gen.clone(),
                     client_to_workers.clone(),
                     client_to_executors.clone(),
+                    channel_buffer_size,
+                    connection,
                 ));
             }
             None => {
@@ -68,10 +72,11 @@ async fn client_listener_task(
 /// parent (new command results).
 async fn client_server_task(
     process_id: ProcessId,
-    channel_buffer_size: usize,
-    mut connection: Connection,
+    atomic_dot_gen: AtomicDotGen,
     mut client_to_workers: ClientToWorkers,
     mut client_to_executors: ClientToExecutors,
+    channel_buffer_size: usize,
+    mut connection: Connection,
 ) {
     let (client_id, mut parent_results) = server_receive_hi(
         process_id,
@@ -85,7 +90,7 @@ async fn client_server_task(
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &mut client_to_workers, &mut client_to_executors).await {
+                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors).await {
                     return;
                 }
             }
@@ -139,18 +144,33 @@ async fn server_receive_hi(
 async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
+    atomic_dot_gen: &AtomicDotGen,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
 ) -> bool {
     if let Some(cmd) = cmd {
-        todo!("register command in executor and send it to the correct worker");
-    // if let Err(e) = parent.send(FromClient::Submit(cmd)).await {
-    //     println!(
-    //         "[client_server] error while sending new command to parent: {:?}",
-    //         e
-    //     );
-    // }
-    // true
+        // register command in all executors
+        for key in cmd.keys() {
+            if let Err(e) = client_to_executors
+                .forward_map((key, cmd.rifl()), |(_, rifl)| FromClient::WaitRifl(rifl))
+                .await
+            {
+                println!(
+                    "[client_server] error while registering new command in executor: {:?}",
+                    e
+                );
+            }
+        }
+        // create dot for this command
+        let dot = atomic_dot_gen.next_id();
+        // forward command to worker process
+        if let Err(e) = client_to_workers.forward((dot, cmd)).await {
+            println!(
+                "[client_server] error while sending new command to protocol worker: {:?}",
+                e
+            );
+        }
+        true
     } else {
         println!("[client_server] client disconnected.");
         // unregister client in all executors
