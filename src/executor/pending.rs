@@ -127,9 +127,9 @@ mod tests {
 
     #[test]
     fn aggregated_pending_flow() {
-        // create aggregated_pending and store
-        let agggregate = false;
-        let mut aggregated_pending = Pending::new(agggregate);
+        // create pending and store
+        let agggregate = true;
+        let mut pending = Pending::new(agggregate);
         let mut store = KVStore::new();
 
         // keys and commands
@@ -151,27 +151,27 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // wait for `get_ab` and `put_b`
-        assert!(aggregated_pending.wait_for(&get_ab));
-        assert!(aggregated_pending.wait_for(&put_b));
+        assert!(pending.wait_for(&get_ab));
+        assert!(pending.wait_for(&put_b));
 
         // starting a command already started `false`
-        assert!(!aggregated_pending.wait_for(&put_b));
+        assert!(!pending.wait_for(&put_b));
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = aggregated_pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
+        let res = pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
         assert!(res.is_none());
 
         // add the result of put a before being waited for
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = aggregated_pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_none());
 
         // wait for `put_a`
-        aggregated_pending.wait_for(&put_a);
+        pending.wait_for(&put_a);
 
         // add the result of put a and assert that the command is ready
-        let res = aggregated_pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_some());
 
         // check that there's only one result (since the command accessed a
@@ -184,7 +184,7 @@ mod tests {
 
         // add the result of put b and assert that the command is ready
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = aggregated_pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
+        let res = pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
 
         // check that there's only one result (since the command accessed a
         // single key)
@@ -196,7 +196,7 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = aggregated_pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
+        let res = pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
         assert!(res.is_some());
 
         // check that there are two results (since the command accessed two
@@ -211,9 +211,9 @@ mod tests {
 
     #[test]
     fn pending_flow() {
-        // create aggregated_pending and store
-        let agggregate = true;
-        let mut aggregated_pending = Pending::new(agggregate);
+        // create pending and store
+        let agggregate = false;
+        let mut pending = Pending::new(agggregate);
         let mut store = KVStore::new();
 
         // keys and commands
@@ -235,30 +235,30 @@ mod tests {
         let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // wait for `get_ab` and `put_b`
-        assert!(aggregated_pending.wait_for(&get_ab));
-        assert!(aggregated_pending.wait_for(&put_b));
+        assert!(pending.wait_for(&get_ab));
+        assert!(pending.wait_for(&put_b));
 
         // starting a command already started `false`
-        assert!(!aggregated_pending.wait_for(&put_b));
+        assert!(!pending.wait_for(&put_b));
 
         // add the result of get b
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = aggregated_pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
+        let res = pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
         // there's always (as long as previously waited for) a result when configured with parallel
         // executors
         assert!(res.is_some());
 
         // add the result of put a before being waited for
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = aggregated_pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         // there's not a result since the command has not been waited for
         assert!(res.is_none());
 
         // wait for `put_a`
-        aggregated_pending.wait_for(&put_a);
+        pending.wait_for(&put_a);
 
         // add the result of put a
-        let res = aggregated_pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_some());
 
         // check partial output
@@ -270,7 +270,7 @@ mod tests {
 
         // add the result of put b
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = aggregated_pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
+        let res = pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
         assert!(res.is_some());
 
         // check partial output
@@ -282,7 +282,7 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = aggregated_pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
+        let res = pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
         assert!(res.is_some());
 
         // check partial output
