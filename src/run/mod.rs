@@ -153,7 +153,7 @@ where
 
     // create forward channels: reader -> workers
     let (reader_to_workers, reader_to_workers_rxs) =
-        ReaderToWorkers::<P>::new(channel_buffer_size, workers);
+        ReaderToWorkers::<P>::new("reader_to_workers", channel_buffer_size, workers);
 
     // connect to all processes
     let to_writers = task::process::connect_to_all::<A, P>(
@@ -176,11 +176,11 @@ where
 
     // create forward channels: client -> workers
     let (client_to_workers, client_to_workers_rxs) =
-        ClientToWorkers::new(channel_buffer_size, workers);
+        ClientToWorkers::new("client_to_workers", channel_buffer_size, workers);
 
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) =
-        ClientToExecutors::new(channel_buffer_size, executors);
+        ClientToExecutors::new("client_to_executors", channel_buffer_size, executors);
 
     task::client::start_listener(
         process_id,
@@ -195,7 +195,7 @@ where
 
     // create forward channels: worker -> executors
     let (worker_to_executors, worker_to_executors_rxs) =
-        WorkerToExecutors::<P>::new(channel_buffer_size, executors);
+        WorkerToExecutors::<P>::new("worker_to_executors", channel_buffer_size, executors);
 
     // start executors
     task::executor::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);

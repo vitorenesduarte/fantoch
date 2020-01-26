@@ -177,7 +177,7 @@ where
 
 /// Reader task.
 async fn reader_task<P>(
-    mut to_workers: ReaderToWorkers<P>,
+    mut reader_to_workers: ReaderToWorkers<P>,
     process_id: ProcessId,
     mut connection: Connection,
 ) where
@@ -186,7 +186,7 @@ async fn reader_task<P>(
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = to_workers.forward((process_id, msg)).await {
+                if let Err(e) = reader_to_workers.forward((process_id, msg)).await {
                     println!(
                         "[reader] error notifying process task with new msg: {:?}",
                         e

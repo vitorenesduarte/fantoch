@@ -7,8 +7,9 @@ pub trait Index {
     fn index(&self) -> Option<usize>;
 }
 
-// #[derive(Clone)]
+#[derive(Clone)]
 pub struct ToPool<M> {
+    name: String,
     pool: Vec<ChannelSender<M>>,
 }
 
@@ -17,7 +18,11 @@ where
     M: Debug + 'static,
 {
     /// Creates a pool with size `pool_size`.
-    pub fn new(channel_buffer_size: usize, pool_size: usize) -> (Self, Vec<ChannelReceiver<M>>) {
+    pub fn new<S: Into<String>>(
+        name: S,
+        channel_buffer_size: usize,
+        pool_size: usize,
+    ) -> (Self, Vec<ChannelReceiver<M>>) {
         let mut pool = Vec::with_capacity(pool_size);
         // create a channel per pool worker:
         // - save the sender-side so it can be used by to forward messages to the pool
@@ -29,7 +34,12 @@ where
                 rx
             })
             .collect();
-        (Self { pool }, rxs)
+        // create pool
+        let to_pool = Self {
+            name: name.into(),
+            pool,
+        };
+        (to_pool, rxs)
     }
 
     /// Returns the size of the pool.
@@ -71,6 +81,7 @@ where
     async fn do_forward(&mut self, index: Option<usize>, msg: M) -> RunResult<()> {
         match index {
             Some(index) => {
+                println!("index: {} {} of {}", self.name, index, self.pool_size());
                 // the actual index is computed based on the pool size
                 let index = index % self.pool.len();
                 self.pool[index].send(msg).await
@@ -80,15 +91,6 @@ where
                 // TODO implement this once we have Paxos
                 todo!()
             }
-        }
-    }
-}
-
-// TODO somehow, rustc can't derive this Clone impl; why?
-impl<M> Clone for ToPool<M> {
-    fn clone(&self) -> Self {
-        Self {
-            pool: self.pool.clone(),
         }
     }
 }
