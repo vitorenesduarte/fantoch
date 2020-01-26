@@ -68,8 +68,8 @@ sudo sed -i '/.*hard.*nofile.*/d' /etc/security/limits.conf
 echo "*                soft    nofile          ${MAX_OPEN_FILES}" | sudo tee -a /etc/security/limits.conf
 echo "*                hard    nofile          ${MAX_OPEN_FILES}" | sudo tee -a /etc/security/limits.conf
 
-# install dstat
-sudo apt-get install -y dstat
+# install dstat and lsof
+sudo apt-get install -y dstat lsof
 
 # clean up
 sudo apt-get autoremove

@@ -9,7 +9,7 @@ source "${DIR}/util.sh"
 KILL_WAIT=3
 
 # mode can be: release, flamegraph, leaks
-PROCESS_RUN_MODE="flamegraph"
+PROCESS_RUN_MODE="release"
 CLIENT_RUN_MODE="release"
 
 # processes config
@@ -19,18 +19,24 @@ PROTOCOL="basic"
 PROCESSES=3
 FAULTS=1
 
+# parallelism config
+WORKERS=32
+EXECUTORS=32
+
 # clients config
 CLIENT_MACHINES_NUMBER=3
 CLIENTS_PER_MACHINE=2000
 CONFLICT_RATE=0
 COMMANDS_PER_CLIENT=10000
 
-# overall configurations
-TCP_NODELAY=true
-
+# process tcp config
+PROCESS_TCP_NODELAY=true
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
 PROCESS_SOCKET_BUFFER_SIZE=$((0 * 1024))
+
+# client tcp config
+CLIENT_TCP_NODELAY=true
 # do not buffer on the client-side
 CLIENT_SOCKET_BUFFER_SIZE=0
 
@@ -134,13 +140,20 @@ stop_planet_sim() {
 
     # variables
     local machine=$1
-    local cmd
-
-    # kill all planet_sim related processes
     # TODO what about dstat?
-    cmd="ps -aux | grep -E \"(cargo|planet_sim)\" | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
+    local cmd
+    cmd="lsof -i :${PORT} -i :${CLIENT_PORT} | grep -v PID | awk '{ print \"kill -SIGKILL \"\$2 }' | sort -u | bash"
     # shellcheck disable=SC2029
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+
+    cmd="lsof -i :${PORT} -i :${CLIENT_PORT} | wc -l"
+
+    local running=-1
+    while [[ ${running} != 0 ]]; do
+        # shellcheck disable=SC2029
+        running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        sleep 1
+    done
 }
 
 stop_all() {
@@ -241,9 +254,11 @@ start_process() {
         --client_port ${CLIENT_PORT} \
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
-        --tcp_nodelay ${TCP_NODELAY} \
+        --tcp_nodelay ${PROCESS_TCP_NODELAY} \
         --socket_buffer_size ${PROCESS_SOCKET_BUFFER_SIZE} \
-        --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
+        --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
+        --workers ${WORKERS} \
+        --executors ${EXECUTORS}"
 
     # compute script (based on run mode)
     script=$(bin_script "${PROCESS_RUN_MODE}" "${protocol}")
@@ -331,7 +346,7 @@ start_client() {
         --address ${address} \
         --conflict_rate ${CONFLICT_RATE} \
         --commands_per_client ${COMMANDS_PER_CLIENT} \
-        --tcp_nodelay ${TCP_NODELAY} \
+        --tcp_nodelay ${CLIENT_TCP_NODELAY} \
         --socket_buffer_size ${CLIENT_SOCKET_BUFFER_SIZE} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
     # TODO for open-loop clients:
