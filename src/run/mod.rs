@@ -309,6 +309,7 @@ where
         let cmd_result = read.recv().await;
         handle_cmd_result(&mut client, &time, cmd_result);
     }
+    println!("closed loop client {} exited loop", client_id);
 
     // return client
     client
