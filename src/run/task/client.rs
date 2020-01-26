@@ -1,7 +1,7 @@
 use super::connection::Connection;
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
-use crate::id::{AtomicDotGen, ClientId, ProcessId};
+use crate::id::{AtomicDotGen, ClientId, DotGen, ProcessId};
 use crate::log;
 use crate::run::prelude::*;
 use futures::future::FutureExt;
@@ -91,11 +91,13 @@ async fn client_server_task(
     let aggregate = true;
     let mut pending = Pending::new(aggregate);
 
+    let mut dot_gen = DotGen::new(client_id);
+
     loop {
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
+                if !client_server_task_handle_cmd(cmd, client_id, &mut dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
                     return;
                 }
             }
@@ -157,7 +159,7 @@ async fn server_receive_hi(
 async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
-    atomic_dot_gen: &AtomicDotGen,
+    dot_gen: &mut DotGen,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
     rifl_acks: &mut RiflAckReceiver,
@@ -193,7 +195,7 @@ async fn client_server_task_handle_cmd(
         }
 
         // create dot for this command
-        let dot = atomic_dot_gen.next_id();
+        let dot = dot_gen.next_id();
         // forward command to worker process
         if let Err(e) = client_to_workers.forward((dot, cmd)).await {
             println!(
