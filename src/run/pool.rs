@@ -18,17 +18,19 @@ where
 {
     /// Creates a pool with size `pool_size`.
     pub fn new(channel_buffer_size: usize, pool_size: usize) -> (Self, Vec<ChannelReceiver<M>>) {
+        println!("pool size: {}", pool_size);
         let mut pool = Vec::with_capacity(pool_size);
         // create a channel per pool worker:
         // - save the sender-side so it can be used by to forward messages to the pool
         // - return the receiver-side so it can be used by the pool workers
         let rxs = (0..pool_size)
-            .map(|index| {
+            .map(|_| {
                 let (tx, rx) = task::chan::channel(channel_buffer_size);
-                pool[index] = tx;
+                pool.push(tx);
                 rx
             })
             .collect();
+        println!("rxs: {:?}", rxs);
         (Self { pool }, rxs)
     }
 
