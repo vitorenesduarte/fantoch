@@ -5,13 +5,13 @@ release=""
 
 case $1 in
 1) 
-  cargo run ${release} --bin client -- --ids 1-3 --address localhost:4001 --commands_per_client 1000 --interval 1
+  cargo run ${release} --bin client -- --ids 1-3 --address localhost:4001 --commands_per_client 10000 --interval 1
   ;;
 2)
-  cargo run ${release} --bin client -- --id 4-6 --address localhost:4002 --commands_per_client 1000 --interval 1
+  cargo run ${release} --bin client -- --ids 4-6 --address localhost:4002 --commands_per_client 10000 --interval 1
   ;;
 3)
-  cargo run ${release} --bin client -- --id 7-9 --address localhost:4003 --commands_per_client 1000 --interval 1
+  cargo run ${release} --bin client -- --ids 7-9 --address localhost:4003 --commands_per_client 10000 --interval 1
   ;;
 *)
   echo "client id $0 invalid"
