@@ -81,9 +81,9 @@ where
     async fn do_forward(&mut self, index: Option<usize>, msg: M) -> RunResult<()> {
         match index {
             Some(index) => {
-                println!("index: {} {} of {}", self.name, index, self.pool_size());
                 // the actual index is computed based on the pool size
                 let index = index % self.pool.len();
+                println!("index: {} {} of {}", self.name, index, self.pool_size());
                 self.pool[index].send(msg).await
             }
             None => {
