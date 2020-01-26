@@ -54,7 +54,7 @@ impl Executor for BasicExecutor {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicExecutionInfo {
     rifl: Rifl,
     key: Key,

@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 
+#[derive(Clone)]
 pub struct Metrics<K, V> {
     collected: HashMap<K, Histogram>,
     aggregated: HashMap<K, V>,

@@ -11,6 +11,7 @@ use futures::select;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
+use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 pub async fn connect_to_all<A, P>(
@@ -214,29 +215,29 @@ where
     }
 }
 
-/// Starts the executor.
+/// Starts executors.
 pub fn start_executors<P>(
     config: Config,
-    client_to_executors_rxs: Vec<ClientReceiver>,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
+    client_to_executors_rxs: Vec<ClientReceiver>,
 ) where
     P: Protocol + 'static,
 {
     // zip rxs'
-    let incoming = client_to_executors_rxs
+    let incoming = worker_to_executors_rxs
         .into_iter()
-        .zip(worker_to_executors_rxs.into_iter());
+        .zip(client_to_executors_rxs.into_iter());
 
     // create executor workers
-    for (from_clients, from_workers) in incoming {
-        task::spawn(executor_task::<P>(config, from_clients, from_workers));
+    for (from_workers, from_clients) in incoming {
+        task::spawn(executor_task::<P>(config, from_workers, from_clients));
     }
 }
 
 async fn executor_task<P>(
     config: Config,
-    mut from_clients: ClientReceiver,
     mut from_workers: ExecutionInfoReceiver<P>,
+    mut from_clients: ClientReceiver,
 ) where
     P: Protocol,
 {
@@ -321,3 +322,88 @@ async fn handle_from_client<P>(
         }
     }
 }
+
+/// Starts process workers.
+pub fn start_processes<P>(
+    process: P,
+    reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
+    client_to_workers_rxs: Vec<SubmitReceiver>,
+    to_writers: HashMap<ProcessId, WriterSender<P>>,
+    worker_to_executors: WorkerToExecutors<P>,
+) -> Vec<JoinHandle<()>>
+where
+    P: Protocol + Send + 'static,
+{
+    // zip rxs'
+    let incoming = reader_to_workers_rxs
+        .into_iter()
+        .zip(client_to_workers_rxs.into_iter());
+
+    // create executor workers
+    incoming
+        .map(|(from_readers, from_clients)| {
+            task::spawn(process_task::<P>(
+                process.clone(),
+                from_readers,
+                from_clients,
+                to_writers.clone(),
+                worker_to_executors.clone(),
+            ))
+        })
+        .collect()
+}
+
+async fn process_task<P>(
+    process: P,
+    from_readers: ReaderReceiver<P>,
+    from_clients: SubmitReceiver,
+    to_writers: HashMap<ProcessId, WriterSender<P>>,
+    worker_to_executors: WorkerToExecutors<P>,
+) where
+    P: Protocol + 'static,
+{
+    // loop {
+    // select! {
+    // msg = from_readers.recv().fuse() => {
+    //     log!("[server] reader message: {:?}", msg);
+    //     if let Some((from, msg)) = msg {
+    //         handle_from_processes(process_id, from, msg, &mut process, &mut to_writer, &mut
+    // to_executor).await     } else {
+    //         println!("[server] error while receiving new process message from readers");
+    //     }
+    // }
+    // }
+    // }
+}
+
+// cmd = from_clients.recv().fuse() => {
+//     log!("[server] from clients: {:?}", cmd);
+//     if let Some(cmd) = cmd {
+//         handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
+//     } else {
+//         println!("[server] error while receiving new command from executor");
+//     }
+// }
+
+// async fn handle_from_processes<P>(
+//     process_id: ProcessId,
+//     from: ProcessId,
+//     msg: P::Message,
+//     process: &mut P,
+//     to_writer: &mut BroadcastWriterSender<P::Message>,
+//     to_executor: &mut ExecutionInfoSender<P>,
+// ) where
+//     P: Protocol + 'static,
+// {
+//     // handle message in process
+//     let to_send = process.handle(from, msg);
+//     send_to_writer(process_id, to_send, process, to_writer).await;
+
+//     // check if there's new execution info for the executor
+//     let execution_info = process.to_executor();
+//     if !execution_info.is_empty() {
+//         if let Err(e) = to_executor.send(execution_info).await {
+//             println!("[server] error while sending to executor: {:?}", e);
+//         }
+//     }
+// }

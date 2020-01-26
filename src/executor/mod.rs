@@ -23,7 +23,7 @@ use crate::kvs::{KVOpResult, Key};
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Debug + Send + MessageKey;
+    type ExecutionInfo: Clone + Debug + Send + MessageKey;
 
     fn new(config: Config) -> Self;
 

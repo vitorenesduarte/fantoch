@@ -38,7 +38,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-pub trait Protocol {
+pub trait Protocol: Clone {
     type Message: Debug + Clone + Serialize + DeserializeOwned + Send + Sync + MessageDot; // TODO why is Sync needed??
     type Executor: Executor + Send;
 

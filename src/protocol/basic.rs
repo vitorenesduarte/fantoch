@@ -11,6 +11,7 @@ use std::mem;
 
 type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 
+#[derive(Clone)]
 pub struct Basic {
     bp: BaseProcess,
     cmds: Commands<CommandInfo>,
@@ -178,6 +179,7 @@ impl Basic {
 }
 
 // `CommandInfo` contains all information required in the life-cyle of a `Command`
+#[derive(Clone)]
 struct CommandInfo {
     cmd: Option<Command>,
     missing_acks: usize,

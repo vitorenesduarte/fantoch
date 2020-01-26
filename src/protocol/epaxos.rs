@@ -18,6 +18,7 @@ use threshold::VClock;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
+#[derive(Clone)]
 pub struct EPaxos {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
@@ -415,6 +416,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `CommandInfo` contains all information required in the life-cyle of a
 // `Command`
+#[derive(Clone)]
 struct CommandInfo {
     status: Status,
     quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
@@ -485,7 +487,7 @@ impl MessageDot for Message {}
 // }
 
 /// `Status` of commands.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Status {
     START,
     COLLECT,

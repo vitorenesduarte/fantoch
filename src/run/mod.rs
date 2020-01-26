@@ -99,7 +99,7 @@ pub async fn process<A, P>(
 ) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
-    P: Protocol + 'static, // TODO what does this 'static do?
+    P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
     // create semaphore for callers that don't care about the connected notification
     let semaphore = Arc::new(Semaphore::new(0));
@@ -141,7 +141,7 @@ async fn process_with_notify<A, P>(
 ) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
-    P: Protocol + 'static, // TODO what does this 'static do?
+    P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
     // discover processes
     process.discover(sorted_processes);
@@ -199,62 +199,27 @@ where
         WorkerToExecutors::<P>::new(channel_buffer_size, executors);
 
     // start executors
-    task::process::start_executors::<P>(
-        config,
-        client_to_executors_rxs,
-        worker_to_executors_rxs,
+    task::process::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
+
+    let handles = task::process::start_processes::<P>(
+        process,
+        reader_to_workers_rxs,
+        client_to_workers_rxs,
+        to_writers,
+        worker_to_executors,
     );
 
     // notify parent that we're connected
     connected.add_permits(1);
 
     println!("process {} started", process_id);
-    Ok(())
 
-    // loop {
-    //     select! {
-    //         msg = from_readers.recv().fuse() => {
-    //             log!("[server] reader message: {:?}", msg);
-    //             if let Some((from, msg)) = msg {
-    //                 handle_from_processes(process_id, from, msg, &mut process, &mut to_writer,
-    // &mut to_executor).await             } else {
-    //                 println!("[server] error while receiving new process message from readers");
-    //             }
-    //         }
-    //         cmd = from_executor.recv().fuse() => {
-    //             log!("[server] from executor: {:?}", cmd);
-    //             if let Some(cmd) = cmd {
-    //                 handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
-    //             } else {
-    //                 println!("[server] error while receiving new command from executor");
-    //             }
-    //         }
-    //     }
+    // for join_result in join_all(handles).await {
+    //     println!("process ended {}", join_result?);
     // }
+
+    Ok(())
 }
-
-// async fn handle_from_processes<P>(
-//     process_id: ProcessId,
-//     from: ProcessId,
-//     msg: P::Message,
-//     process: &mut P,
-//     to_writer: &mut BroadcastWriterSender<P::Message>,
-//     to_executor: &mut ExecutionInfoSender<P>,
-// ) where
-//     P: Protocol + 'static,
-// {
-//     // handle message in process
-//     let to_send = process.handle(from, msg);
-//     send_to_writer(process_id, to_send, process, to_writer).await;
-
-//     // check if there's new execution info for the executor
-//     let execution_info = process.to_executor();
-//     if !execution_info.is_empty() {
-//         if let Err(e) = to_executor.send(execution_info).await {
-//             println!("[server] error while sending to executor: {:?}", e);
-//         }
-//     }
-// }
 
 // async fn handle_from_client<P>(
 //     process_id: ProcessId,
@@ -549,7 +514,7 @@ mod tests {
 
     async fn run<P>() -> RunResult<()>
     where
-        P: Protocol + 'static,
+        P: Protocol + Send + 'static,
     {
         // create config
         let n = 3;

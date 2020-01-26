@@ -38,6 +38,7 @@ pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
 pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
 pub type CommandResultSender = ChannelSender<CommandResult>;
+pub type SubmitReceiver = ChannelReceiver<(Dot, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
