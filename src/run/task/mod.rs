@@ -5,6 +5,9 @@ pub mod connection;
 pub mod chan;
 
 // TODO This module contains the definition of ...
+pub mod executor;
+
+// TODO This module contains the definition of ...
 pub mod process;
 
 // TODO This module contains the definition of ...

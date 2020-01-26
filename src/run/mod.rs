@@ -198,7 +198,7 @@ where
         WorkerToExecutors::<P>::new(channel_buffer_size, executors);
 
     // start executors
-    task::process::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
+    task::executor::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
 
     let handles = task::process::start_processes::<P>(
         process,  
@@ -492,8 +492,8 @@ mod tests {
         let tcp_nodelay = true;
         let socket_buffer_size = 1000;
         let channel_buffer_size = 10000;
-        let workers = 5;
-        let executors = 5;
+        let workers = 2;
+        let executors = 2;
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(

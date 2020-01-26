@@ -134,7 +134,7 @@ pub fn parse_args() -> (
     let port = parse_port(matches.value_of("port"));
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
-    let config = parse_config(matches.value_of("n"), matches.value_of("f"));
+    let mut config = parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let socket_buffer_size =
         super::parse_socket_buffer_size(matches.value_of("socket_buffer_size"));
@@ -142,6 +142,10 @@ pub fn parse_args() -> (
         super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
+
+    // set parallel protocol and parallel executors cf. #workers and #executors
+    config.set_parallel_protocol(workers > 1);
+    config.set_parallel_executor(executors > 1);
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);

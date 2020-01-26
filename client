@@ -5,7 +5,7 @@ release=""
 
 case $1 in
 1) 
-  cargo run ${release} --bin client -- --ids 1-3 --address localhost:4001 --commands_per_client 10000 --interval 1
+  cargo run ${release} --bin client -- --ids 1-3 --address localhost:4001 --commands_per_client 10000
   ;;
 2)
   cargo run ${release} --bin client -- --ids 4-6 --address localhost:4002 --commands_per_client 10000 --interval 1
