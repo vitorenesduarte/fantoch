@@ -29,11 +29,9 @@ pub enum FromClient {
 
 // list of channels used to communicate between tasks
 pub type ReaderReceiver<P> = ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
-pub type ReaderSender<P> = ChannelSender<(ProcessId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
 pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
-pub type ClientSender = ChannelSender<FromClient>;
 pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
 pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
@@ -41,8 +39,6 @@ pub type CommandResultSender = ChannelSender<CommandResult>;
 pub type SubmitReceiver = ChannelReceiver<(Dot, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
-pub type ExecutionInfoSender<P> =
-    ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;

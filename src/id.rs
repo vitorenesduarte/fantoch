@@ -145,7 +145,7 @@ mod tests {
 
         // create id generator
         let source = 10;
-        let mut gen = MyAtomicGen::new(source);
+        let gen = MyAtomicGen::new(source);
 
         // check source
         assert_eq!(gen.source(), source);

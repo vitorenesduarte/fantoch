@@ -1,7 +1,8 @@
 use super::connection::Connection;
+use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{ClientId, ProcessId};
+use crate::id::{ClientId, Dot, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
@@ -260,7 +261,7 @@ async fn executor_task<P>(
             from_client = from_clients.recv().fuse() => {
                 log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client::<P>(from_client, &mut executor, &mut clients).await;
+                    executor_handle_from_client::<P>(from_client, &mut executor, &mut clients).await;
                 } else {
                     println!("[executor] error while receiving new command from clients");
                 }
@@ -298,7 +299,7 @@ async fn handle_execution_info<P>(
     }
 }
 
-async fn handle_from_client<P>(
+async fn executor_handle_from_client<P>(
     from_client: FromClient,
     executor: &mut P::Executor,
     clients: &mut HashMap<ClientId, CommandResultSender>,
@@ -375,18 +376,17 @@ async fn process_task<P>(
                     println!("[server] error while receiving new process message from readers");
                 }
             }
+            cmd = from_clients.recv().fuse() => {
+                log!("[server] from clients: {:?}", cmd);
+                if let Some((dot, cmd)) = cmd {
+                    process_handle_from_client(process_id, dot, cmd, &mut process, &mut to_writers).await
+                } else {
+                    println!("[server] error while receiving new command from executor");
+                }
+            }
         }
     }
 }
-
-// cmd = from_clients.recv().fuse() => {
-//     log!("[server] from clients: {:?}", cmd);
-//     if let Some(cmd) = cmd {
-//         handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
-//     } else {
-//         println!("[server] error while receiving new command from executor");
-//     }
-// }
 
 async fn handle_from_processes<P>(
     process_id: ProcessId,
@@ -399,8 +399,9 @@ async fn handle_from_processes<P>(
     P: Protocol + 'static,
 {
     // handle message in process
-    let to_send = process.handle(from, msg);
-    handle_to_send(process_id, to_send, process, to_writers).await;
+    if let Some(to_send) = process.handle(from, msg) {
+        handle_to_send(process_id, to_send, process, to_writers).await;
+    }
 
     // check if there's new execution info for the executor
     for execution_info in process.to_executor() {
@@ -415,21 +416,21 @@ async fn handle_from_processes<P>(
 
 async fn handle_to_send<P>(
     process_id: ProcessId,
-    to_send: Option<ToSend<P::Message>>,
+    to_send: ToSend<P::Message>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
 ) where
     P: Protocol + 'static,
 {
-    if let Some(ToSend { target, msg, .. }) = to_send {
-        for destination in target {
-            if destination == process_id {
-                // handle msg locally if self in `to_send.target`
-                handle_message_from_self::<P>(process_id, msg.clone(), process)
-            } else {
-                // send message to correct writer
-                send_to_writer::<P>(destination, msg.clone(), to_writers).await
-            }
+    // unpack to send
+    let ToSend { target, msg, .. } = to_send;
+    for destination in target {
+        if destination == process_id {
+            // handle msg locally if self in `to_send.target`
+            handle_message_from_self::<P>(process_id, msg.clone(), process)
+        } else {
+            // send message to correct writer
+            send_to_writer::<P>(destination, msg.clone(), to_writers).await
         }
     }
 }
@@ -465,15 +466,16 @@ async fn send_to_writer<P>(
     }
 }
 
-// async fn handle_from_client<P>(
-//     process_id: ProcessId,
-//     cmd: Command,
-//     process: &mut P,
-//     to_writer: &mut BroadcastWriterSender<P::Message>,
-// ) where
-//     P: Protocol + 'static,
-// {
-//     // submit command in process
-//     let to_send = process.submit(None, cmd);
-//     send_to_writer(process_id, Some(to_send), process, to_writer).await;
-// }
+async fn process_handle_from_client<P>(
+    process_id: ProcessId,
+    dot: Dot,
+    cmd: Command,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+) where
+    P: Protocol + 'static,
+{
+    // submit command in process
+    let to_send = process.submit(Some(dot), cmd);
+    handle_to_send(process_id, to_send, process, to_writers).await;
+}
