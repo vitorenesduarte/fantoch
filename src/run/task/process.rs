@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::log;
-use crate::protocol::Protocol;
+use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
 use crate::run::task;
 use futures::future::FutureExt;
@@ -326,6 +326,7 @@ async fn handle_from_client<P>(
 /// Starts process workers.
 pub fn start_processes<P>(
     process: P,
+    process_id: ProcessId,
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
     to_writers: HashMap<ProcessId, WriterSender<P>>,
@@ -344,6 +345,7 @@ where
         .map(|(from_readers, from_clients)| {
             task::spawn(process_task::<P>(
                 process.clone(),
+                process_id,
                 from_readers,
                 from_clients,
                 to_writers.clone(),
@@ -354,26 +356,27 @@ where
 }
 
 async fn process_task<P>(
-    process: P,
-    from_readers: ReaderReceiver<P>,
-    from_clients: SubmitReceiver,
-    to_writers: HashMap<ProcessId, WriterSender<P>>,
-    worker_to_executors: WorkerToExecutors<P>,
+    mut process: P,
+    process_id: ProcessId,
+    mut from_readers: ReaderReceiver<P>,
+    mut from_clients: SubmitReceiver,
+    mut to_writers: HashMap<ProcessId, WriterSender<P>>,
+    mut worker_to_executors: WorkerToExecutors<P>,
 ) where
     P: Protocol + 'static,
 {
-    // loop {
-    // select! {
-    // msg = from_readers.recv().fuse() => {
-    //     log!("[server] reader message: {:?}", msg);
-    //     if let Some((from, msg)) = msg {
-    //         handle_from_processes(process_id, from, msg, &mut process, &mut to_writer, &mut
-    // to_executor).await     } else {
-    //         println!("[server] error while receiving new process message from readers");
-    //     }
-    // }
-    // }
-    // }
+    loop {
+        select! {
+            msg = from_readers.recv().fuse() => {
+                log!("[server] reader message: {:?}", msg);
+                if let Some((from, msg)) = msg {
+                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors).await
+                } else {
+                    println!("[server] error while receiving new process message from readers");
+                }
+            }
+        }
+    }
 }
 
 // cmd = from_clients.recv().fuse() => {
@@ -385,25 +388,92 @@ async fn process_task<P>(
 //     }
 // }
 
-// async fn handle_from_processes<P>(
+async fn handle_from_processes<P>(
+    process_id: ProcessId,
+    from: ProcessId,
+    msg: P::Message,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+) where
+    P: Protocol + 'static,
+{
+    // handle message in process
+    let to_send = process.handle(from, msg);
+    handle_to_send(process_id, to_send, process, to_writers).await;
+
+    // check if there's new execution info for the executor
+    for execution_info in process.to_executor() {
+        if let Err(e) = worker_to_executors.forward(execution_info).await {
+            println!(
+                "[server] error while sending new execution info to executor: {:?}",
+                e
+            );
+        }
+    }
+}
+
+async fn handle_to_send<P>(
+    process_id: ProcessId,
+    to_send: Option<ToSend<P::Message>>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+) where
+    P: Protocol + 'static,
+{
+    if let Some(ToSend { target, msg, .. }) = to_send {
+        for destination in target {
+            if destination == process_id {
+                // handle msg locally if self in `to_send.target`
+                handle_message_from_self::<P>(process_id, msg.clone(), process)
+            } else {
+                // send message to correct writer
+                send_to_writer::<P>(destination, msg.clone(), to_writers).await
+            }
+        }
+    }
+}
+
+fn handle_message_from_self<P>(process_id: ProcessId, msg: P::Message, process: &mut P)
+where
+    P: Protocol + 'static,
+{
+    // make sure that, if there's something to be sent, it is to self, i.e. messages from self to
+    // self shouldn't generate messages TODO can we avoid cloning here?
+    if let Some(ToSend { target, msg, .. }) = process.handle(process_id, msg) {
+        assert!(target.len() == 1);
+        assert!(target.contains(&process_id));
+        // handling this message shouldn't generate a new message
+        let nothing = process.handle(process_id, msg);
+        assert!(nothing.is_none());
+    }
+}
+
+async fn send_to_writer<P>(
+    to: ProcessId,
+    msg: P::Message,
+    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+) where
+    P: Protocol + 'static,
+{
+    // find writer
+    let writer = to_writers
+        .get_mut(&to)
+        .expect("[server] identifier in target should have a writer");
+    if let Err(e) = writer.send(msg).await {
+        println!("[server] error while sending to broadcast writer: {:?}", e);
+    }
+}
+
+// async fn handle_from_client<P>(
 //     process_id: ProcessId,
-//     from: ProcessId,
-//     msg: P::Message,
+//     cmd: Command,
 //     process: &mut P,
 //     to_writer: &mut BroadcastWriterSender<P::Message>,
-//     to_executor: &mut ExecutionInfoSender<P>,
 // ) where
 //     P: Protocol + 'static,
 // {
-//     // handle message in process
-//     let to_send = process.handle(from, msg);
-//     send_to_writer(process_id, to_send, process, to_writer).await;
-
-//     // check if there's new execution info for the executor
-//     let execution_info = process.to_executor();
-//     if !execution_info.is_empty() {
-//         if let Err(e) = to_executor.send(execution_info).await {
-//             println!("[server] error while sending to executor: {:?}", e);
-//         }
-//     }
+//     // submit command in process
+//     let to_send = process.submit(None, cmd);
+//     send_to_writer(process_id, Some(to_send), process, to_writer).await;
 // }
