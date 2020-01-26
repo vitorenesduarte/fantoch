@@ -79,7 +79,7 @@ async fn client_server_task(
     channel_buffer_size: usize,
     mut connection: Connection,
 ) {
-    let (client_id, mut executor_results) = server_receive_hi(
+    let (client_id, mut rifl_acks, mut executor_results) = server_receive_hi(
         process_id,
         channel_buffer_size,
         &mut connection,
@@ -95,7 +95,7 @@ async fn client_server_task(
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut pending).await {
+                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
                     return;
                 }
             }
@@ -112,10 +112,7 @@ async fn server_receive_hi(
     channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
-) -> (ClientId, ExecutorResultReceiver) {
-    // create channel where the process will write command results and where client will read them
-    let (mut tx, rx) = super::channel(channel_buffer_size);
-
+) -> (ClientId, RiflAckReceiver, ExecutorResultReceiver) {
     // receive hi from client
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
         println!("[client_server] received hi from client {}", client_id);
@@ -124,12 +121,23 @@ async fn server_receive_hi(
         panic!("[client_server] couldn't receive client id from connected client");
     };
 
-    // set channel name
-    tx.set_name(format!("client_server_{}", client_id));
+    // create channel where the executors will write:
+    // - ack rifl after wait_for_rifl
+    // - executor results
+    let (mut rifl_acks_tx, rifl_acks_rx) = super::channel(channel_buffer_size);
+    let (mut executor_results_tx, executor_results_rx) = super::channel(channel_buffer_size);
+
+    // set channels name
+    rifl_acks_tx.set_name(format!("client_server_rifl_acks_{}", client_id));
+    executor_results_tx.set_name(format!("client_server_executor_results_{}", client_id));
 
     // register client in all executors
     if let Err(e) = client_to_executors
-        .broadcast(FromClient::Register(client_id, tx))
+        .broadcast(FromClient::Register(
+            client_id,
+            rifl_acks_tx,
+            executor_results_tx,
+        ))
         .await
     {
         println!(
@@ -143,7 +151,7 @@ async fn server_receive_hi(
     connection.send(hi).await;
 
     // return client id and channel where client should read executor results
-    (client_id, rx)
+    (client_id, rifl_acks_rx, executor_results_rx)
 }
 
 async fn client_server_task_handle_cmd(
@@ -152,6 +160,7 @@ async fn client_server_task_handle_cmd(
     atomic_dot_gen: &AtomicDotGen,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
+    rifl_acks: &mut RiflAckReceiver,
     pending: &mut Pending,
 ) -> bool {
     if let Some(cmd) = cmd {
@@ -161,7 +170,7 @@ async fn client_server_task_handle_cmd(
             pending.wait_for(&cmd);
         }
 
-        // register command in all executors
+        // TODO can we make the following loop run in parallel?
         for key in cmd.keys() {
             if let Err(e) = client_to_executors
                 .forward_map((key, cmd.rifl()), |(_, rifl)| FromClient::WaitForRifl(rifl))
@@ -171,6 +180,15 @@ async fn client_server_task_handle_cmd(
                     "[client_server] error while registering new command in executor: {:?}",
                     e
                 );
+            }
+        }
+
+        // TODO can we make the following loop run in parallel?
+        for _ in cmd.keys() {
+            if let Some(rifl) = rifl_acks.recv().await {
+                assert_eq!(rifl, cmd.rifl());
+            } else {
+                println!("[client_server] couldn't receive rifl ack from executor");
             }
         }
 

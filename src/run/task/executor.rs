@@ -38,15 +38,17 @@ async fn executor_task<P>(
     // create executor
     let mut executor = P::Executor::new(config);
 
-    // mapping from client id to its channel
-    let mut clients = HashMap::new();
+    // mapping from client id to its rifl acks channel
+    let mut client_rifl_acks = HashMap::new();
+    // mapping from client id to its executor results channel
+    let mut client_executor_results = HashMap::new();
 
     loop {
         select! {
             execution_info = from_workers.recv().fuse() => {
                 log!("[executor] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(execution_info, &mut executor, &mut clients).await;
+                    handle_execution_info::<P>(execution_info, &mut executor, &mut client_executor_results).await;
                 } else {
                     println!("[executor] error while receiving execution info from parent");
                 }
@@ -54,7 +56,7 @@ async fn executor_task<P>(
             from_client = from_clients.recv().fuse() => {
                 log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client::<P>(from_client, &mut executor, &mut clients).await;
+                    handle_from_client::<P>(from_client, &mut executor, &mut client_rifl_acks, &mut client_executor_results).await;
                 } else {
                     println!("[executor] error while receiving new command from clients");
                 }
@@ -66,7 +68,7 @@ async fn executor_task<P>(
 async fn handle_execution_info<P>(
     execution_info: <P::Executor as Executor>::ExecutionInfo,
     executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, ExecutorResultSender>,
+    client_executor_results: &mut HashMap<ClientId, ExecutorResultSender>,
 ) where
     P: Protocol,
 {
@@ -75,14 +77,14 @@ async fn handle_execution_info<P>(
         // get client id
         let client_id = executor_result.client();
         // get client channel
-        let tx = clients
+        let tx = client_executor_results
             .get_mut(&client_id)
             .expect("command result should belong to a registered client");
 
         // send executor result to client
         if let Err(e) = tx.send(executor_result).await {
             println!(
-                "[executor] error while sending to executor result to client {}: {:?}",
+                "[executor] error while sending executor result to client {}: {:?}",
                 client_id, e
             );
         }
@@ -92,23 +94,44 @@ async fn handle_execution_info<P>(
 async fn handle_from_client<P>(
     from_client: FromClient,
     executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, ExecutorResultSender>,
+    client_rifl_acks: &mut HashMap<ClientId, RiflAckSender>,
+    client_executor_results: &mut HashMap<ClientId, ExecutorResultSender>,
 ) where
     P: Protocol,
 {
     match from_client {
+        // TODO maybe send the channel in the wait for rifl msg
         FromClient::WaitForRifl(rifl) => {
             // register in executor
             executor.wait_for_rifl(rifl);
+
+            // get client id
+            let client_id = rifl.source();
+            // get client channel
+            let tx = client_rifl_acks
+                .get_mut(&client_id)
+                .expect("wait for rifl should belong to a registered client");
+
+            // send executor result to client
+            if let Err(e) = tx.send(rifl).await {
+                println!(
+                    "[executor] error while sending rifl ack to client {}: {:?}",
+                    client_id, e
+                );
+            }
         }
-        FromClient::Register(client_id, tx) => {
+        FromClient::Register(client_id, rifl_acks_tx, executor_results_tx) => {
             println!("[executor] client {} registered", client_id);
-            let res = clients.insert(client_id, tx);
+            let res = client_rifl_acks.insert(client_id, rifl_acks_tx);
+            assert!(res.is_none());
+            let res = client_executor_results.insert(client_id, executor_results_tx);
             assert!(res.is_none());
         }
         FromClient::Unregister(client_id) => {
             println!("[executor] client {} unregistered", client_id);
-            let res = clients.remove(&client_id);
+            let res = client_rifl_acks.remove(&client_id);
+            assert!(res.is_some());
+            let res = client_executor_results.remove(&client_id);
             assert!(res.is_some());
         }
     }

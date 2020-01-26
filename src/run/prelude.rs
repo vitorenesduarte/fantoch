@@ -20,7 +20,7 @@ pub struct ClientHi(pub ClientId);
 #[derive(Debug, Clone)]
 pub enum FromClient {
     // clients can register
-    Register(ClientId, ExecutorResultSender),
+    Register(ClientId, RiflAckSender, ExecutorResultSender),
     // unregister
     Unregister(ClientId),
     // register for notifications on a partial about this `Rifl`.
@@ -28,6 +28,8 @@ pub enum FromClient {
 }
 
 // list of channels used to communicate between tasks
+pub type RiflAckReceiver = ChannelReceiver<Rifl>;
+pub type RiflAckSender = ChannelSender<Rifl>;
 pub type ReaderReceiver<P> = ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
 pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
