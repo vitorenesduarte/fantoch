@@ -22,6 +22,7 @@ FAULTS=1
 # parallelism config
 WORKERS=32
 EXECUTORS=32
+MULTIPLEXING=8
 
 # clients config
 CLIENT_MACHINES_NUMBER=3
@@ -258,7 +259,8 @@ start_process() {
         --socket_buffer_size ${PROCESS_SOCKET_BUFFER_SIZE} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
         --workers ${WORKERS} \
-        --executors ${EXECUTORS}"
+        --executors ${EXECUTORS} \
+        --multiplexing ${MULTIPLEXING}"
 
     # compute script (based on run mode)
     script=$(bin_script "${PROCESS_RUN_MODE}" "${protocol}")
