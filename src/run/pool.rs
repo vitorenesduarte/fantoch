@@ -1,3 +1,4 @@
+use crate::log;
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
@@ -83,7 +84,7 @@ where
             Some(index) => {
                 // the actual index is computed based on the pool size
                 let index = index % self.pool.len();
-                println!("index: {} {} of {}", self.name, index, self.pool_size());
+                log!("index: {} {} of {}", self.name, index, self.pool_size());
                 self.pool[index].send(msg).await
             }
             None => {
