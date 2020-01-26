@@ -24,7 +24,7 @@ pub enum FromClient {
     // unregister
     Unregister(ClientId),
     // register for notifications on a partial about this `Rifl`.
-    WaitRifl(Rifl),
+    WaitForRifl(Rifl),
 }
 
 // list of channels used to communicate between tasks

@@ -533,7 +533,7 @@ mod tests {
 
         // register command in executor and submit it in newt 1
         let (process, executor) = simulation.get_process(target);
-        executor.register(&cmd);
+        executor.wait_for(&cmd);
         let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes

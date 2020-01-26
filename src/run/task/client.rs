@@ -152,7 +152,7 @@ async fn client_server_task_handle_cmd(
         // register command in all executors
         for key in cmd.keys() {
             if let Err(e) = client_to_executors
-                .forward_map((key, cmd.rifl()), |(_, rifl)| FromClient::WaitRifl(rifl))
+                .forward_map((key, cmd.rifl()), |(_, rifl)| FromClient::WaitForRifl(rifl))
                 .await
             {
                 println!(

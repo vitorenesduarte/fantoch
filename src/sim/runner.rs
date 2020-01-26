@@ -147,7 +147,7 @@ where
                         let (process, executor) = self.simulation.get_process(process_id);
 
                         // register command in the executor
-                        executor.register(&cmd);
+                        executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
                         let to_send = process.submit(None, cmd);

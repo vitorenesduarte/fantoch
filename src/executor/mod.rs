@@ -27,10 +27,10 @@ pub trait Executor {
 
     fn new(config: Config) -> Self;
 
-    fn register(&mut self, cmd: &Command);
+    fn wait_for(&mut self, cmd: &Command);
 
-    // Parallel executors may receive several registers for the same `Rifl`.
-    fn register_rifl(&mut self, rifl: Rifl);
+    // Parallel executors may receive several waits for the same `Rifl`.
+    fn wait_for_rifl(&mut self, rifl: Rifl);
 
     fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 
@@ -52,8 +52,9 @@ pub trait MessageKey {
 
 #[derive(Debug)]
 pub enum ExecutorResult {
-    /// this contains a command result that is
+    /// this contains a complete command result
     Ready(CommandResult),
+    /// this contains a partial command result
     Partial(Rifl, Key, KVOpResult),
 }
 

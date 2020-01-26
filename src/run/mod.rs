@@ -201,7 +201,7 @@ where
     task::executor::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
 
     let handles = task::process::start_processes::<P>(
-        process,  
+        process,
         process_id,
         reader_to_workers_rxs,
         client_to_workers_rxs,
@@ -476,7 +476,7 @@ mod tests {
         // create config
         let n = 3;
         let f = 1;
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
 
         // create processes
         let process_1 = P::new(1, config);
@@ -494,6 +494,10 @@ mod tests {
         let channel_buffer_size = 10000;
         let workers = 2;
         let executors = 2;
+
+        // set parallel protocol and executors in config
+        config.set_parallel_protocol(true);
+        config.set_parallel_executor(true);
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(

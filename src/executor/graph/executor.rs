@@ -29,11 +29,11 @@ impl Executor for GraphExecutor {
         }
     }
 
-    fn register(&mut self, cmd: &Command) {
-        self.register_rifl(cmd.rifl());
+    fn wait_for(&mut self, cmd: &Command) {
+        self.wait_for_rifl(cmd.rifl());
     }
 
-    fn register_rifl(&mut self, rifl: Rifl) {
+    fn wait_for_rifl(&mut self, rifl: Rifl) {
         // start command in pending
         assert!(self.pending.insert(rifl));
     }

@@ -100,9 +100,9 @@ async fn handle_from_client<P>(
     P: Protocol,
 {
     match from_client {
-        FromClient::WaitRifl(rifl) => {
+        FromClient::WaitForRifl(rifl) => {
             // register in executor
-            executor.register_rifl(rifl);
+            executor.wait_for_rifl(rifl);
         }
         FromClient::Register(client_id, tx) => {
             println!("[executor] client {} registered", client_id);

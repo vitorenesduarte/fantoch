@@ -32,13 +32,13 @@ impl Executor for TableExecutor {
         }
     }
 
-    fn register(&mut self, cmd: &Command) {
+    fn wait_for(&mut self, cmd: &Command) {
         // start command in pending
-        assert!(self.pending.register(cmd));
+        assert!(self.pending.wait_for(cmd));
     }
 
-    fn register_rifl(&mut self, rifl: Rifl) {
-        self.pending.register_rifl(rifl);
+    fn wait_for_rifl(&mut self, rifl: Rifl) {
+        self.pending.wait_for_rifl(rifl);
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
