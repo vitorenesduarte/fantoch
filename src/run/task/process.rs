@@ -76,7 +76,7 @@ where
     }
 
     // receive from listener all connected (incoming)
-    for _ in 0..n {
+    for _ in 0..(n * multiplexing) {
         let connection = rx
             .recv()
             .await
