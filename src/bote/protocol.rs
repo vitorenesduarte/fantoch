@@ -31,7 +31,7 @@ impl Protocol {
     }
 
     fn minority(n: usize) -> usize {
-        (n / 2)
+        n / 2
     }
 }
 

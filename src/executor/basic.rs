@@ -30,12 +30,10 @@ impl Executor for BasicExecutor {
     fn wait_for(&mut self, cmd: &Command) {
         // start command in pending
         assert!(self.pending.wait_for(cmd));
-        println!("pending (wait_for): {}", self.pending.len());
     }
 
     fn wait_for_rifl(&mut self, rifl: Rifl) {
         self.pending.wait_for_rifl(rifl);
-        println!("pending (wait_for_rifl): {}", self.pending.len());
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
@@ -44,10 +42,7 @@ impl Executor for BasicExecutor {
         let op_result = self.store.execute(&key, op);
 
         // add partial result to `Pending`
-        // TODO here we're passing a ref but we actually own `info.key`, so that's a waste for the
-        // case where it ends up being cloned in `add_partial`
         if let Some(result) = self.pending.add_partial(rifl, || (key, op_result)) {
-            println!("pending (handle): {}", self.pending.len());
             vec![result]
         } else {
             Vec::new()
