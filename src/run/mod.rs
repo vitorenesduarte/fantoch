@@ -95,6 +95,7 @@ pub async fn process<A, P>(
     channel_buffer_size: usize,
     workers: usize,
     executors: usize,
+    multiplexing: usize,
 ) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -116,6 +117,7 @@ where
         channel_buffer_size,
         workers,
         executors,
+        multiplexing,
         semaphore,
     )
     .await
@@ -136,6 +138,7 @@ async fn process_with_notify<A, P>(
     channel_buffer_size: usize,
     workers: usize,
     executors: usize,
+    multiplexing: usize,
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
 where
@@ -165,6 +168,7 @@ where
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
+        multiplexing,
     )
     .await?;
 
@@ -495,6 +499,7 @@ mod tests {
         let channel_buffer_size = 10000;
         let workers = 2;
         let executors = 2;
+        let multiplexing = 3;
 
         // set parallel protocol and executors in config
         config.set_parallel_protocol(true);
@@ -518,6 +523,7 @@ mod tests {
             channel_buffer_size,
             workers,
             executors,
+            multiplexing,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -537,6 +543,7 @@ mod tests {
             channel_buffer_size,
             workers,
             executors,
+            multiplexing,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -556,6 +563,7 @@ mod tests {
             channel_buffer_size,
             workers,
             executors,
+            multiplexing,
             semaphore.clone(),
         ));
 

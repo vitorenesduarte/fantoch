@@ -10,6 +10,7 @@ const DEFAULT_CLIENT_PORT: u16 = 4000;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
+const DEFAULT_MULTIPLEXING: usize = 1;
 
 pub fn parse_args() -> (
     ProcessId,
@@ -20,6 +21,7 @@ pub fn parse_args() -> (
     Vec<String>,
     Config,
     bool,
+    usize,
     usize,
     usize,
     usize,
@@ -125,6 +127,13 @@ pub fn parse_args() -> (
                 .help("number of protocol executors; default: 1")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("multiplexing")
+                .long("multiplexing")
+                .value_name("MULTIPLEXING")
+                .help("number of connections between replicas; default: 1")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -142,6 +151,7 @@ pub fn parse_args() -> (
         super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
+    let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
 
     // set parallel protocol and parallel executors cf. #workers and #executors
     config.set_parallel_protocol(workers > 1);
@@ -159,6 +169,7 @@ pub fn parse_args() -> (
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("workers: {:?}", workers);
     println!("executors: {:?}", executors);
+    println!("multiplexing: {:?}", multiplexing);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -179,6 +190,7 @@ pub fn parse_args() -> (
         channel_buffer_size,
         workers,
         executors,
+        multiplexing,
     )
 }
 
@@ -252,4 +264,14 @@ fn parse_executors(executors: Option<&str>) -> usize {
                 .expect("workers should be a number")
         })
         .unwrap_or(DEFAULT_EXECUTORS)
+}
+
+fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
+    multiplexing
+        .map(|multiplexing| {
+            multiplexing
+                .parse::<usize>()
+                .expect("multiplexing should be a number")
+        })
+        .unwrap_or(DEFAULT_MULTIPLEXING)
 }

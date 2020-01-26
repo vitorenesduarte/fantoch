@@ -7,6 +7,7 @@ use crate::run::prelude::*;
 use crate::run::task;
 use futures::future::FutureExt;
 use futures::select;
+use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
@@ -22,7 +23,8 @@ pub async fn connect_to_all<A, P>(
     tcp_nodelay: bool,
     socket_buffer_size: usize,
     channel_buffer_size: usize,
-) -> RunResult<HashMap<ProcessId, WriterSender<P>>>
+    multiplexing: usize,
+) -> RunResult<HashMap<ProcessId, Vec<WriterSender<P>>>>
 where
     A: ToSocketAddrs + Debug,
     P: Protocol + 'static,
@@ -39,31 +41,34 @@ where
     // - even though TCP is full-duplex, due to the current tokio non-parallel-tcp-socket-read-write
     //   limitation, we going to use in streams for reading and out streams for writing, which can
     //   be done in parallel
-    let mut outgoing = Vec::with_capacity(n);
-    let mut incoming = Vec::with_capacity(n);
+    let mut outgoing = Vec::with_capacity(n * multiplexing);
+    let mut incoming = Vec::with_capacity(n * multiplexing);
 
     // connect to all addresses (outgoing)
     for address in addresses {
-        let mut tries = 0;
-        loop {
-            match super::connect(&address, tcp_nodelay, socket_buffer_size).await {
-                Ok(connection) => {
-                    // save connection if connected successfully
-                    outgoing.push(connection);
-                    break;
-                }
-                Err(e) => {
-                    // if not, try again if we shouldn't give up (due to too many attempts)
-                    tries += 1;
-                    if tries < connect_retries {
-                        println!("failed to connect to {:?}: {}", address, e);
-                        println!(
-                            "will try again in 1 second ({} out of {})",
-                            tries, connect_retries,
-                        );
-                        tokio::time::delay_for(Duration::from_secs(1)).await;
-                    } else {
-                        return Err(e);
+        // create `multiplexing` connections per address
+        for _ in 0..multiplexing {
+            let mut tries = 0;
+            loop {
+                match super::connect(&address, tcp_nodelay, socket_buffer_size).await {
+                    Ok(connection) => {
+                        // save connection if connected successfully
+                        outgoing.push(connection);
+                        break;
+                    }
+                    Err(e) => {
+                        // if not, try again if we shouldn't give up (due to too many attempts)
+                        tries += 1;
+                        if tries < connect_retries {
+                            println!("failed to connect to {:?}: {}", address, e);
+                            println!(
+                                "will try again in 1 second ({} out of {})",
+                                tries, connect_retries,
+                            );
+                            tokio::time::delay_for(Duration::from_secs(1)).await;
+                        } else {
+                            return Err(e);
+                        }
                     }
                 }
             }
@@ -81,6 +86,7 @@ where
 
     let to_writers = handshake::<P>(
         process_id,
+        n,
         to_workers,
         channel_buffer_size,
         incoming,
@@ -92,11 +98,12 @@ where
 
 async fn handshake<P>(
     process_id: ProcessId,
+    n: usize,
     to_workers: ReaderToWorkers<P>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
-) -> HashMap<ProcessId, WriterSender<P>>
+) -> HashMap<ProcessId, Vec<WriterSender<P>>>
 where
     P: Protocol + 'static,
 {
@@ -108,15 +115,10 @@ where
     // receive hi from all on both connections
     let id_to_connection_0 = receive_hi(connections_0).await;
     let id_to_connection_1 = receive_hi(connections_1).await;
-    println!(
-        "received hi from all processes: {:?} | {:?}",
-        id_to_connection_0.keys(),
-        id_to_connection_1.keys()
-    );
 
     // start readers and writers
     start_readers::<P>(to_workers, id_to_connection_0);
-    start_writers::<P>(channel_buffer_size, id_to_connection_1)
+    start_writers::<P>(n, channel_buffer_size, id_to_connection_1)
 }
 
 async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
@@ -127,15 +129,14 @@ async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
     }
 }
 
-async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connection> {
-    let mut id_to_connection = HashMap::with_capacity(connections.len());
+async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)> {
+    let mut id_to_connection = Vec::with_capacity(connections.len());
 
     // receive hi from each connection
     for mut connection in connections {
         if let Some(ProcessHi(from)) = connection.recv().await {
             // save entry and check it has not been inserted before
-            let res = id_to_connection.insert(from, connection);
-            assert!(res.is_none());
+            id_to_connection.push((from, connection));
         } else {
             panic!("error receiving hi");
         }
@@ -145,7 +146,7 @@ async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connecti
 
 /// Starts a reader task per connection received. A `ToWorkers` is passed to each reader so that
 /// these can forward immediately to the correct worker process.
-fn start_readers<P>(to_workers: ReaderToWorkers<P>, connections: HashMap<ProcessId, Connection>)
+fn start_readers<P>(to_workers: ReaderToWorkers<P>, connections: Vec<(ProcessId, Connection)>)
 where
     P: Protocol + 'static,
 {
@@ -156,22 +157,25 @@ where
 }
 
 fn start_writers<P>(
+    n: usize,
     channel_buffer_size: usize,
-    connections: HashMap<ProcessId, Connection>,
-) -> HashMap<ProcessId, WriterSender<P>>
+    connections: Vec<(ProcessId, Connection)>,
+) -> HashMap<ProcessId, Vec<WriterSender<P>>>
 where
     P: Protocol + 'static,
 {
     // mapping from process id to channel broadcast writer should write to
-    let mut writers = HashMap::with_capacity(connections.len());
+    let mut writers = HashMap::with_capacity(n);
 
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
         let tx = task::spawn_consumer(channel_buffer_size, |rx| writer_task::<P>(connection, rx));
-        writers.insert(process_id, tx);
+        writers.entry(process_id).or_insert_with(Vec::new).push(tx);
     }
 
+    // check `writers` size
+    assert_eq!(writers.len(), n);
     writers
 }
 
@@ -220,7 +224,7 @@ pub fn start_processes<P>(
     process_id: ProcessId,
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
-    to_writers: HashMap<ProcessId, WriterSender<P>>,
+    to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     worker_to_executors: WorkerToExecutors<P>,
 ) -> Vec<JoinHandle<()>>
 where
@@ -251,7 +255,7 @@ async fn process_task<P>(
     process_id: ProcessId,
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
-    mut to_writers: HashMap<ProcessId, WriterSender<P>>,
+    mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut worker_to_executors: WorkerToExecutors<P>,
 ) where
     P: Protocol + 'static,
@@ -283,7 +287,7 @@ async fn handle_from_processes<P>(
     from: ProcessId,
     msg: P::Message,
     process: &mut P,
-    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     worker_to_executors: &mut WorkerToExecutors<P>,
 ) where
     P: Protocol + 'static,
@@ -308,7 +312,7 @@ async fn handle_to_send<P>(
     process_id: ProcessId,
     to_send: ToSend<P::Message>,
     process: &mut P,
-    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
 ) where
     P: Protocol + 'static,
 {
@@ -343,15 +347,19 @@ where
 async fn send_to_writer<P>(
     to: ProcessId,
     msg: P::Message,
-    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
 ) where
     P: Protocol + 'static,
 {
-    // find writer
-    let writer = to_writers
+    // find all writers
+    let writers = to_writers
         .get_mut(&to)
         .expect("[server] identifier in target should have a writer");
-    if let Err(e) = writer.send(msg).await {
+
+    // pick a random one
+    let writer_index = rand::thread_rng().gen_range(0, writers.len());
+
+    if let Err(e) = writers[writer_index].send(msg).await {
         println!("[server] error while sending to broadcast writer: {:?}", e);
     }
 }
@@ -361,7 +369,7 @@ async fn handle_from_client<P>(
     dot: Dot,
     cmd: Command,
     process: &mut P,
-    to_writers: &mut HashMap<ProcessId, WriterSender<P>>,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
 ) where
     P: Protocol + 'static,
 {

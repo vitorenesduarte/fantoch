@@ -20,6 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         channel_buffer_size,
         workers,
         executors,
+        multiplexing,
     ) = common::protocol::parse_args();
     let process = Atlas::new(process_id, config);
     planet_sim::run::process(
@@ -36,6 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         channel_buffer_size,
         workers,
         executors,
+        multiplexing,
     )
     .await?;
     Ok(())
