@@ -9,7 +9,7 @@ use std::collections::hash_map::{Entry, HashMap};
 pub struct Pending {
     // TODO this should be a feature; with that, most conditionals below could be removed at
     // compile-time
-    agggregate: bool,
+    aggregate: bool,
     aggregated_pending: HashMap<Rifl, CommandResult>,
     pending: HashMap<Rifl, usize>,
 }
@@ -22,11 +22,22 @@ impl Pending {
     /// - `agggregate = true`, then results are only returned once they're the aggregation of all
     ///   partial results is complete; this also means that non-parallel executors can return the
     ///   full command result without having to return partials
-    pub fn new(agggregate: bool) -> Self {
+    pub fn new(aggregate: bool) -> Self {
         Self {
-            agggregate,
+            aggregate,
             aggregated_pending: HashMap::new(),
             pending: HashMap::new(),
+        }
+    }
+
+    /// Returns the number of pending commands.
+    pub fn len(&self) -> usize {
+        if self.aggregate {
+            assert!(self.pending.is_empty());
+            self.aggregated_pending.len()
+        } else {
+            assert!(self.aggregated_pending.is_empty());
+            self.pending.len()
         }
     }
 
@@ -36,7 +47,7 @@ impl Pending {
         let rifl = cmd.rifl();
         let key_count = cmd.key_count();
 
-        if self.agggregate {
+        if self.aggregate {
             // create `CommandResult`
             let cmd_result = CommandResult::new(rifl, key_count);
 
@@ -49,7 +60,7 @@ impl Pending {
 
     /// Increases the number of expected notifications on some `Rifl` by one.
     pub fn wait_for_rifl(&mut self, rifl: Rifl) {
-        if self.agggregate {
+        if self.aggregate {
             // maybe update `CommandResult`
             let cmd_result = self
                 .aggregated_pending
@@ -72,7 +83,7 @@ impl Pending {
         // - if it's not part of pending, then ignore it
         // (if it's not part of pending, it means that it is from a client from another newt
         // process, and `pending.wait_for*` has not been called)
-        if self.agggregate {
+        if self.aggregate {
             let cmd_result = self.aggregated_pending.get_mut(&rifl)?;
 
             // add partial result and check if it's ready
