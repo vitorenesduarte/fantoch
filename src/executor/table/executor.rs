@@ -22,7 +22,9 @@ impl Executor for TableExecutor {
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
         let table = MultiVotesTable::new(config.n(), stability_threshold);
         let store = KVStore::new();
-        let pending = Pending::new(config.parallel_executor());
+        // aggregate results if not parallel executor
+        let aggregate = !config.parallel_executor();
+        let pending = Pending::new(aggregate);
 
         Self {
             config,

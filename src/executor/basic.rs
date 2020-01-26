@@ -16,7 +16,9 @@ impl Executor for BasicExecutor {
 
     fn new(config: Config) -> Self {
         let store = KVStore::new();
-        let pending = Pending::new(config.parallel_executor());
+        // aggregate results if not parallel executor
+        let aggregate = !config.parallel_executor();
+        let pending = Pending::new(aggregate);
 
         Self {
             config,
