@@ -1,5 +1,6 @@
 use super::connection::Connection;
-use crate::command::{Command, CommandResult};
+use crate::command::Command;
+use crate::executor::{ExecutorResult, Pending};
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::log;
 use crate::run::prelude::*;
@@ -78,7 +79,7 @@ async fn client_server_task(
     channel_buffer_size: usize,
     mut connection: Connection,
 ) {
-    let (client_id, mut parent_results) = server_receive_hi(
+    let (client_id, mut executor_results) = server_receive_hi(
         process_id,
         channel_buffer_size,
         &mut connection,
@@ -86,17 +87,21 @@ async fn client_server_task(
     )
     .await;
 
+    // create pending
+    let aggregate = true;
+    let mut pending = Pending::new(aggregate);
+
     loop {
         select! {
             cmd = connection.recv().fuse() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors).await {
+                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut pending).await {
                     return;
                 }
             }
-            cmd_result = parent_results.recv().fuse() => {
-                log!("[client_server] new command result: {:?}", cmd_result);
-                client_server_task_handle_cmd_result(cmd_result, &mut connection).await;
+            executor_result = executor_results.recv().fuse() => {
+                log!("[client_server] new executor result: {:?}", executor_result);
+                client_server_task_handle_executor_result(executor_result, &mut connection, &mut pending).await;
             }
         }
     }
@@ -107,7 +112,7 @@ async fn server_receive_hi(
     channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
-) -> (ClientId, CommandResultReceiver) {
+) -> (ClientId, ExecutorResultReceiver) {
     // create channel where the process will write command results and where client will read them
     let (mut tx, rx) = super::channel(channel_buffer_size);
 
@@ -137,7 +142,7 @@ async fn server_receive_hi(
     let hi = ProcessHi(process_id);
     connection.send(hi).await;
 
-    // return client id and channel where client should read command results
+    // return client id and channel where client should read executor results
     (client_id, rx)
 }
 
@@ -147,8 +152,15 @@ async fn client_server_task_handle_cmd(
     atomic_dot_gen: &AtomicDotGen,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
+    pending: &mut Pending,
 ) -> bool {
     if let Some(cmd) = cmd {
+        // if there's more than one executor, then we'll receive partial results; in this case,
+        // register command in pending
+        if client_to_executors.pool_size() > 1 {
+            pending.wait_for(&cmd);
+        }
+
         // register command in all executors
         for key in cmd.keys() {
             if let Err(e) = client_to_executors
@@ -161,6 +173,7 @@ async fn client_server_task_handle_cmd(
                 );
             }
         }
+
         // create dot for this command
         let dot = atomic_dot_gen.next_id();
         // forward command to worker process
@@ -187,14 +200,27 @@ async fn client_server_task_handle_cmd(
     }
 }
 
-async fn client_server_task_handle_cmd_result(
-    cmd_result: Option<CommandResult>,
+async fn client_server_task_handle_executor_result(
+    executor_result: Option<ExecutorResult>,
     connection: &mut Connection,
+    pending: &mut Pending,
 ) {
-    if let Some(cmd_result) = cmd_result {
-        connection.send(cmd_result).await;
+    if let Some(executor_result) = executor_result {
+        match executor_result {
+            ExecutorResult::Ready(cmd_result) => {
+                // if the command result is ready, simply send ti
+                connection.send(cmd_result).await;
+            }
+            ExecutorResult::Partial(rifl, key, op_result) => {
+                if let Some(result) = pending.add_partial(rifl, || (key, op_result)) {
+                    // since pending is in aggregate mode, if there's a result, then it's ready
+                    let cmd_result = result.unwrap_ready();
+                    connection.send(cmd_result).await;
+                }
+            }
+        }
     } else {
-        println!("[client_server] error while receiving new command result from parent");
+        println!("[client_server] error while receiving new executor result from executor");
     }
 }
 

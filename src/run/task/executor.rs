@@ -66,7 +66,7 @@ async fn executor_task<P>(
 async fn handle_execution_info<P>(
     execution_info: <P::Executor as Executor>::ExecutionInfo,
     executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, CommandResultSender>,
+    clients: &mut HashMap<ClientId, ExecutorResultSender>,
 ) where
     P: Protocol,
 {
@@ -79,11 +79,8 @@ async fn handle_execution_info<P>(
             .get_mut(&client_id)
             .expect("command result should belong to a registered client");
 
-        // TODO handle partial results
-        let cmd_result = executor_result.unwrap_ready();
-
         // send executor result to client
-        if let Err(e) = tx.send(cmd_result).await {
+        if let Err(e) = tx.send(executor_result).await {
             println!(
                 "[executor] error while sending to executor result to client {}: {:?}",
                 client_id, e
@@ -95,7 +92,7 @@ async fn handle_execution_info<P>(
 async fn handle_from_client<P>(
     from_client: FromClient,
     executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, CommandResultSender>,
+    clients: &mut HashMap<ClientId, ExecutorResultSender>,
 ) where
     P: Protocol,
 {

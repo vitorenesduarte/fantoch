@@ -1,7 +1,7 @@
 use super::pool;
 use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
-use crate::executor::{Executor, MessageKey};
+use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
 use crate::protocol::{MessageDot, Protocol};
@@ -20,7 +20,7 @@ pub struct ClientHi(pub ClientId);
 #[derive(Debug, Clone)]
 pub enum FromClient {
     // clients can register
-    Register(ClientId, CommandResultSender),
+    Register(ClientId, ExecutorResultSender),
     // unregister
     Unregister(ClientId),
     // register for notifications on a partial about this `Rifl`.
@@ -36,6 +36,8 @@ pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
 pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
 pub type CommandResultSender = ChannelSender<CommandResult>;
+pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
+pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
 pub type SubmitReceiver = ChannelReceiver<(Dot, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;

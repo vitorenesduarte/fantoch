@@ -14,6 +14,7 @@ mod table;
 // Re-exports.
 pub use basic::{BasicExecutionInfo, BasicExecutor};
 pub use graph::{GraphExecutionInfo, GraphExecutor};
+pub use pending::Pending;
 pub use table::{TableExecutionInfo, TableExecutor};
 
 use crate::command::{Command, CommandResult};

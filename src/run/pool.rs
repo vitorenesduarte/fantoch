@@ -32,6 +32,11 @@ where
         (Self { pool }, rxs)
     }
 
+    /// Returns the size of the pool.
+    pub fn pool_size(&self) -> usize {
+        self.pool.len()
+    }
+
     /// Forwards message `msg` to the pool worker with id `msg.index() % pool_size`.
     pub async fn forward(&mut self, msg: M) -> RunResult<()>
     where
