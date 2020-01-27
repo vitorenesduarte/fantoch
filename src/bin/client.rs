@@ -9,11 +9,23 @@ const RANGE_SEP: &str = "-";
 const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let (ids, address, interval, workload, tcp_nodelay, socket_buffer_size, channel_buffer_size) =
         parse_args();
-    planet_sim::run::client(
+
+    // get number of cpus
+    let cpus = num_cpus::get();
+    println!("cpus: {}", cpus);
+
+    // create tokio runtime
+    let mut runtime = tokio::runtime::Builder::new()
+        .threaded_scheduler()
+        .core_threads(cpus)
+        .thread_name("runner")
+        .build()
+        .expect("tokio runtime build should work");
+
+    runtime.block_on(planet_sim::run::client(
         ids,
         address,
         interval,
@@ -21,9 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tcp_nodelay,
         socket_buffer_size,
         channel_buffer_size,
-    )
-    .await?;
-    Ok(())
+    ))
 }
 
 fn parse_args() -> (
