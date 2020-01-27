@@ -22,6 +22,7 @@ impl Connection {
             .set_nodelay(tcp_nodelay)
             .expect("setting TCP_NODELAY should work");
 
+        // change SO_RCVBUF and SO_SNDBUF and compute buffer capacity
         let buffer_capacity = if let Some(tcp_buffer_size) = tcp_buffer_size {
             stream
                 .set_recv_buffer_size(tcp_buffer_size)
@@ -130,6 +131,7 @@ where
     V: Serialize,
 {
     let bytes = serialize(&value);
+    println!("msg size: {}", bytes.len());
     if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_ready(cx)).await {
         println!("[connection] error while polling socket ready: {:?}", e);
     }
