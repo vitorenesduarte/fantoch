@@ -1,7 +1,7 @@
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::io::{self, BufStream};
+use tokio::io::{self, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
@@ -39,7 +39,7 @@ impl Connection {
     where
         V: Serialize,
     {
-        send(&mut self.stream, value).await;
+        send(self.stream.get_mut(), value).await;
     }
 }
 
@@ -87,12 +87,12 @@ where
 /// `send`.
 async fn send<S, V>(sink: &mut S, value: V)
 where
-    S: Sink<Bytes, Error = io::Error> + Unpin,
+    S: AsyncWriteExt + Unpin,
     V: Serialize,
 {
     // TODO here we only need a reference to the value
     let bytes = serialize(&value);
-    if let Err(e) = sink.send(bytes).await {
+    if let Err(e) = sink.write_all(&bytes).await {
         println!("[connection] error while writing to socket: {:?}", e);
     }
 }
