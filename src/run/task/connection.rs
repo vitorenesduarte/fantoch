@@ -17,14 +17,16 @@ impl Connection {
     // writing; this may be unnecessarily inneficient for users that will only read or write; on
     // the other end, the allocation only occurs once, so it's probably fine to do this
     pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) -> Self {
-        stream
-            .set_recv_buffer_size(tcp_buffer_size)
-            .expect("setting tcp recv buffer should work");
-        stream
-            .set_send_buffer_size(tcp_buffer_size)
-            .expect("setting tcp send buffer should work");
-        println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
-        println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
+        if tcp_buffer_size > 0 {
+            stream
+                .set_recv_buffer_size(tcp_buffer_size)
+                .expect("setting tcp recv buffer should work");
+            stream
+                .set_send_buffer_size(tcp_buffer_size)
+                .expect("setting tcp send buffer should work");
+            println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
+            println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
+        }
         // set TCP_NODELAY
         stream
             .set_nodelay(tcp_nodelay)
