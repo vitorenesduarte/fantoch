@@ -29,6 +29,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut runtime = tokio::runtime::Builder::new()
         .threaded_scheduler()
         .core_threads(cpus)
+        .enable_io()
+        .enable_time()
         .thread_name("runner")
         .build()
         .expect("tokio runtime build should work");
