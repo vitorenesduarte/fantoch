@@ -53,6 +53,7 @@
 /// - the runner allows `Protocol` workers to share state; however, it assumes that `Executor`
 ///   workers never do
 
+const CLIENT_TCP_BUFFER_SIZE: usize = 0;
 const CONNECT_RETRIES: usize = 100;
 
 // This module contains the prelude.
@@ -91,7 +92,8 @@ pub async fn process<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: usize,
     channel_buffer_size: usize,
     workers: usize,
     executors: usize,
@@ -113,7 +115,8 @@ where
         addresses,
         config,
         tcp_nodelay,
-        socket_buffer_size,
+        tcp_buffer_size,
+        tcp_flush_interval,
         channel_buffer_size,
         workers,
         executors,
@@ -134,7 +137,8 @@ async fn process_with_notify<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: usize,
     channel_buffer_size: usize,
     workers: usize,
     executors: usize,
@@ -166,7 +170,8 @@ where
         reader_to_workers,
         CONNECT_RETRIES,
         tcp_nodelay,
-        socket_buffer_size,
+        tcp_buffer_size,
+        tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
     )
@@ -193,7 +198,7 @@ where
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
-        socket_buffer_size,
+        tcp_buffer_size,
         channel_buffer_size,
     );
 
@@ -230,7 +235,6 @@ pub async fn client<A>(
     interval_ms: Option<u64>,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> RunResult<()>
 where
@@ -246,7 +250,6 @@ where
                 interval_ms,
                 workload,
                 tcp_nodelay,
-                socket_buffer_size,
                 channel_buffer_size,
             ))
         } else {
@@ -255,7 +258,6 @@ where
                 address.clone(),
                 workload,
                 tcp_nodelay,
-                socket_buffer_size,
                 channel_buffer_size,
             ))
         }
@@ -287,7 +289,6 @@ async fn closed_loop_client<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Client
 where
@@ -302,7 +303,6 @@ where
         address,
         workload,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     )
     .await;
@@ -325,7 +325,6 @@ async fn open_loop_client<A>(
     interval_ms: u64,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Client
 where
@@ -340,7 +339,6 @@ where
         address,
         workload,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     )
     .await;
@@ -371,23 +369,28 @@ async fn client_setup<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> (Client, CommandResultReceiver, CommandSender)
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection =
-        match task::connect(address, tcp_nodelay, socket_buffer_size, CONNECT_RETRIES).await {
-            Ok(connection) => connection,
-            Err(e) => {
-                // TODO panicking here as not sure how to make error handling send + 'static
-                // (required by tokio::spawn) and still be able to use the ?
-                // operator
-                panic!("[client] error connecting at client {}: {:?}", client_id, e);
-            }
-        };
+    let mut connection = match task::connect(
+        address,
+        tcp_nodelay,
+        CLIENT_TCP_BUFFER_SIZE,
+        CONNECT_RETRIES,
+    )
+    .await
+    {
+        Ok(connection) => connection,
+        Err(e) => {
+            // TODO panicking here as not sure how to make error handling send + 'static
+            // (required by tokio::spawn) and still be able to use the ?
+            // operator
+            panic!("[client] error connecting at client {}: {:?}", client_id, e);
+        }
+    };
 
     // create client
     let mut client = Client::new(client_id, workload);
@@ -497,7 +500,8 @@ mod tests {
             .parse::<IpAddr>()
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
-        let socket_buffer_size = 1000;
+        let tcp_buffer_size = 1024;
+        let tcp_flush_interval = 100; // micros
         let channel_buffer_size = 10000;
         let workers = 2;
         let executors = 2;
@@ -521,7 +525,8 @@ mod tests {
             ],
             config,
             tcp_nodelay,
-            socket_buffer_size,
+            tcp_buffer_size,
+            tcp_flush_interval,
             channel_buffer_size,
             workers,
             executors,
@@ -541,7 +546,8 @@ mod tests {
             ],
             config,
             tcp_nodelay,
-            socket_buffer_size,
+            tcp_buffer_size,
+            tcp_flush_interval,
             channel_buffer_size,
             workers,
             executors,
@@ -561,7 +567,8 @@ mod tests {
             ],
             config,
             tcp_nodelay,
-            socket_buffer_size,
+            tcp_buffer_size,
+            tcp_flush_interval,
             channel_buffer_size,
             workers,
             executors,
@@ -590,7 +597,6 @@ mod tests {
             String::from("localhost:4001"),
             workload,
             tcp_nodelay,
-            socket_buffer_size,
             channel_buffer_size,
         ));
         let client_2_handle = task::spawn_local(client(
@@ -599,7 +605,6 @@ mod tests {
             None,
             workload,
             tcp_nodelay,
-            socket_buffer_size,
             channel_buffer_size,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
@@ -608,7 +613,6 @@ mod tests {
             100, // 100ms interval between ops
             workload,
             tcp_nodelay,
-            socket_buffer_size,
             channel_buffer_size,
         ));
 

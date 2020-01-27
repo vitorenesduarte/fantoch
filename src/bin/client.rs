@@ -10,8 +10,7 @@ const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload, tcp_nodelay, socket_buffer_size, channel_buffer_size) =
-        parse_args();
+    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) = parse_args();
 
     // get number of cpus
     let cpus = num_cpus::get();
@@ -33,20 +32,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         interval,
         workload,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     ))
 }
 
-fn parse_args() -> (
-    Vec<ClientId>,
-    String,
-    Option<u64>,
-    Workload,
-    bool,
-    usize,
-    usize,
-) {
+fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -96,13 +86,6 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("socket_buffer_size")
-                .long("socket_buffer_size")
-                .value_name("SOCKET_BUFFER_SIZE")
-                .help("set the size of the buffer in each channel used for task communication; default: 8192 (8KBs)")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("channel_buffer_size")
                 .long("channel_buffer_size")
                 .value_name("CHANNEL_BUFFER_SIZE")
@@ -120,8 +103,6 @@ fn parse_args() -> (
         matches.value_of("commands_per_client"),
     );
     let tcp_nodelay = common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
-    let socket_buffer_size =
-        common::parse_socket_buffer_size(matches.value_of("socket_buffer_size"));
     let channel_buffer_size =
         common::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
 
@@ -131,7 +112,6 @@ fn parse_args() -> (
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
-    println!("socket buffer size: {:?}", socket_buffer_size);
 
     (
         ids,
@@ -139,7 +119,6 @@ fn parse_args() -> (
         interval,
         workload,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     )
 }

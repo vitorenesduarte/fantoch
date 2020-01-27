@@ -21,7 +21,8 @@ pub async fn connect_to_all<A, P>(
     to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: usize,
     channel_buffer_size: usize,
     multiplexing: usize,
 ) -> RunResult<HashMap<ProcessId, Vec<WriterSender<P>>>>
@@ -31,7 +32,7 @@ where
 {
     // spawn listener
     let mut rx = task::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, socket_buffer_size, tx)
+        super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
     // number of addresses
@@ -49,7 +50,7 @@ where
         // create `multiplexing` connections per address
         for _ in 0..multiplexing {
             let connection =
-                super::connect(&address, tcp_nodelay, socket_buffer_size, connect_retries).await?;
+                super::connect(&address, tcp_nodelay, tcp_buffer_size, connect_retries).await?;
             // save connection if connected successfully
             outgoing.push(connection);
         }
@@ -68,6 +69,7 @@ where
         process_id,
         n,
         to_workers,
+        tcp_flush_interval,
         channel_buffer_size,
         incoming,
         outgoing,
@@ -80,6 +82,7 @@ async fn handshake<P>(
     process_id: ProcessId,
     n: usize,
     to_workers: ReaderToWorkers<P>,
+    tcp_flush_interval: usize,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
@@ -98,7 +101,12 @@ where
 
     // start readers and writers
     start_readers::<P>(to_workers, id_to_connection_0);
-    start_writers::<P>(n, channel_buffer_size, id_to_connection_1)
+    start_writers::<P>(
+        n,
+        tcp_flush_interval,
+        channel_buffer_size,
+        id_to_connection_1,
+    )
 }
 
 async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
@@ -138,6 +146,7 @@ where
 
 fn start_writers<P>(
     n: usize,
+    tcp_flush_interval: usize,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, Connection)>,
 ) -> HashMap<ProcessId, Vec<WriterSender<P>>>
@@ -150,7 +159,9 @@ where
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
-        let tx = task::spawn_consumer(channel_buffer_size, |rx| writer_task::<P>(connection, rx));
+        let tx = task::spawn_consumer(channel_buffer_size, |rx| {
+            writer_task::<P>(tcp_flush_interval, connection, rx)
+        });
         writers.entry(process_id).or_insert_with(Vec::new).push(tx);
     }
 
@@ -185,12 +196,15 @@ async fn reader_task<P>(
 }
 
 /// Writer task.
-async fn writer_task<P>(mut connection: Connection, mut parent: WriterReceiver<P>)
-where
+async fn writer_task<P>(
+    tcp_flush_interval: usize,
+    mut connection: Connection,
+    mut parent: WriterReceiver<P>,
+) where
     P: Protocol + 'static,
 {
     // create interval
-    let mut interval = time::interval(Duration::from_millis(1));
+    let mut interval = time::interval(Duration::from_micros(tcp_flush_interval as u64));
 
     loop {
         select! {

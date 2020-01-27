@@ -26,6 +26,7 @@ pub fn parse_args() -> (
     usize,
     usize,
     usize,
+    usize,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -100,17 +101,26 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("socket_buffer_size")
-                .long("socket_buffer_size")
-                .value_name("SOCKET_BUFFER_SIZE")
-                .help("size of the buffer in each channel used for task communication; default: 8192 (8KBs)")
+            Arg::with_name("tcp_buffer_size")
+                .long("tcp_buffer_size")
+                .value_name("TCP_BUFFER_SIZE")
+                .help("size of the TCP buffer; default: 8192 (8KBs)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("tcp_flush_interval")
+                .long("tcp_flush_interval")
+                .value_name("TCP_FLUSH_INTERVAL")
+                .help("TCP flush interval (in microseconds); default: 100")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("channel_buffer_size")
                 .long("channel_buffer_size")
                 .value_name("CHANNEL_BUFFER_SIZE")
-                .help("size of the buffer in each channel used for task communication; default: 100")
+                .help(
+                    "size of the buffer in each channel used for task communication; default: 100",
+                )
                 .takes_value(true),
         )
         .arg(
@@ -145,8 +155,10 @@ pub fn parse_args() -> (
     let addresses = parse_addresses(matches.value_of("addresses"));
     let mut config = parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
-    let socket_buffer_size =
-        super::parse_socket_buffer_size(matches.value_of("socket_buffer_size"));
+    let tcp_buffer_size = super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
+    let tcp_flush_interval =
+        super::parse_tcp_flush_interval(matches.value_of("tcp_flush_interval"));
+
     let channel_buffer_size =
         super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
     let workers = parse_workers(matches.value_of("workers"));
@@ -165,7 +177,8 @@ pub fn parse_args() -> (
     println!("addresses: {:?}", addresses);
     println!("config: {:?}", config);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
-    println!("socket buffer size: {:?}", socket_buffer_size);
+    println!("tcp buffer size: {:?}", tcp_buffer_size);
+    println!("tcp flush interval: {:?}", tcp_flush_interval);
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("workers: {:?}", workers);
     println!("executors: {:?}", executors);
@@ -186,7 +199,8 @@ pub fn parse_args() -> (
         addresses,
         config,
         tcp_nodelay,
-        socket_buffer_size,
+        tcp_buffer_size,
+        tcp_flush_interval,
         channel_buffer_size,
         workers,
         executors,
