@@ -120,6 +120,7 @@ where
 {
     // TODO here we only need a reference to the value
     let bytes = serialize(&value);
+    println!("send size: {}", bytes.len());
     if let Err(e) = sink.send(bytes).await {
         println!("[connection] error while writing to socket: {:?}", e);
     }
@@ -131,6 +132,7 @@ where
     V: Serialize,
 {
     let bytes = serialize(&value);
+    println!("write size: {}", bytes.len());
     if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_ready(cx)).await {
         println!("[connection] error while polling socket ready: {:?}", e);
     }
