@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
-use tokio::time::Duration;
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
@@ -48,30 +47,10 @@ where
     for address in addresses {
         // create `multiplexing` connections per address
         for _ in 0..multiplexing {
-            let mut tries = 0;
-            loop {
-                match super::connect(&address, tcp_nodelay, socket_buffer_size).await {
-                    Ok(connection) => {
-                        // save connection if connected successfully
-                        outgoing.push(connection);
-                        break;
-                    }
-                    Err(e) => {
-                        // if not, try again if we shouldn't give up (due to too many attempts)
-                        tries += 1;
-                        if tries < connect_retries {
-                            println!("failed to connect to {:?}: {}", address, e);
-                            println!(
-                                "will try again in 1 second ({} out of {})",
-                                tries, connect_retries,
-                            );
-                            tokio::time::delay_for(Duration::from_secs(1)).await;
-                        } else {
-                            return Err(e);
-                        }
-                    }
-                }
-            }
+            let connection =
+                super::connect(&address, tcp_nodelay, socket_buffer_size, connect_retries).await?;
+            // save connection if connected successfully
+            outgoing.push(connection);
         }
     }
 

@@ -19,9 +19,11 @@ pub use chan::channel;
 use crate::run::prelude::*;
 use chan::{ChannelReceiver, ChannelSender};
 use connection::Connection;
+use std::fmt::Debug;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::task::JoinHandle;
+use tokio::time::Duration;
 
 /// Just a wrapper around tokio::spawn.
 pub fn spawn<F>(task: F) -> JoinHandle<F::Output>
@@ -113,13 +115,34 @@ pub async fn connect<A>(
     address: A,
     tcp_nodelay: bool,
     socket_buffer_size: usize,
+    connect_retries: usize,
 ) -> RunResult<Connection>
 where
-    A: ToSocketAddrs,
+    A: ToSocketAddrs + Clone + Debug,
 {
-    let stream = TcpStream::connect(address).await?;
-    let connection = Connection::new(stream, tcp_nodelay, socket_buffer_size);
-    Ok(connection)
+    let mut tries = 0;
+    loop {
+        match TcpStream::connect(address.clone()).await {
+            Ok(stream) => {
+                let connection = Connection::new(stream, tcp_nodelay, socket_buffer_size);
+                return Ok(connection);
+            }
+            Err(e) => {
+                // if not, try again if we shouldn't give up (due to too many attempts)
+                tries += 1;
+                if tries < connect_retries {
+                    println!("failed to connect to {:?}: {}", address, e);
+                    println!(
+                        "will try again in 1 second ({} out of {})",
+                        tries, connect_retries,
+                    );
+                    tokio::time::delay_for(Duration::from_secs(1)).await;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
 }
 
 /// Listen on some address.

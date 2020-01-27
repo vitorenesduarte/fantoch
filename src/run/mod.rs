@@ -291,7 +291,7 @@ async fn closed_loop_client<A>(
     channel_buffer_size: usize,
 ) -> Client
 where
-    A: ToSocketAddrs + Debug + Send + 'static + Sync,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // create system time
     let time = RunTime;
@@ -329,7 +329,7 @@ async fn open_loop_client<A>(
     channel_buffer_size: usize,
 ) -> Client
 where
-    A: ToSocketAddrs + Debug + Send + 'static + Sync,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // create system time
     let time = RunTime;
@@ -375,17 +375,19 @@ async fn client_setup<A>(
     channel_buffer_size: usize,
 ) -> (Client, CommandResultReceiver, CommandSender)
 where
-    A: ToSocketAddrs + Debug + Send + 'static + Sync,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection = match task::connect(address, tcp_nodelay, socket_buffer_size).await {
-        Ok(connection) => connection,
-        Err(e) => {
-            // TODO panicking here as not sure how to make error handling send + 'static (required
-            // by tokio::spawn) and still be able to use the ? operator
-            panic!("[client] error connecting at client {}: {:?}", client_id, e);
-        }
-    };
+    let mut connection =
+        match task::connect(address, tcp_nodelay, socket_buffer_size, CONNECT_RETRIES).await {
+            Ok(connection) => connection,
+            Err(e) => {
+                // TODO panicking here as not sure how to make error handling send + 'static
+                // (required by tokio::spawn) and still be able to use the ?
+                // operator
+                panic!("[client] error connecting at client {}: {:?}", client_id, e);
+            }
+        };
 
     // create client
     let mut client = Client::new(client_id, workload);
