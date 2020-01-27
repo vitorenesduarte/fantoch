@@ -22,20 +22,22 @@ impl Connection {
             .set_nodelay(tcp_nodelay)
             .expect("setting TCP_NODELAY should work");
 
-        // buffer stream
-        let stream = if let Some(tcp_buffer_size) = tcp_buffer_size {
+        let buffer_capacity = if let Some(tcp_buffer_size) = tcp_buffer_size {
             stream
                 .set_recv_buffer_size(tcp_buffer_size)
                 .expect("setting tcp recv buffer should work");
             stream
                 .set_send_buffer_size(tcp_buffer_size)
                 .expect("setting tcp send buffer should work");
-            println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
-            println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
-            BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream)
+            tcp_buffer_size
         } else {
-            BufStream::with_capacity(0, 0, stream)
+            0
         };
+        println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
+        println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
+
+        // buffer stream
+        let stream = BufStream::with_capacity(buffer_capacity, buffer_capacity, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }
