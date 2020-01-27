@@ -1,6 +1,7 @@
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use serde::{de::DeserializeOwned, Serialize};
+use std::pin::Pin;
 use tokio::io::{self, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
@@ -8,7 +9,8 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 /// Delimits frames using a length header.
 #[derive(Debug)]
 pub struct Connection {
-    stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
+    stream: Framed<TcpStream, LengthDelimitedCodec>,
+    // stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
 }
 
 impl Connection {
@@ -21,7 +23,7 @@ impl Connection {
             .set_nodelay(tcp_nodelay)
             .expect("setting TCP_NODELAY should work");
         // buffer stream
-        let stream = BufStream::with_capacity(socket_buffer_size, socket_buffer_size, stream);
+        // let stream = BufStream::with_capacity(socket_buffer_size, socket_buffer_size, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }
@@ -39,7 +41,18 @@ impl Connection {
     where
         V: Serialize,
     {
-        send(self.stream.get_mut(), value).await;
+        send(&mut self.stream, value).await;
+    }
+
+    pub async fn write<V>(&mut self, value: V)
+    where
+        V: Serialize,
+    {
+        write(&mut self.stream, value).await;
+    }
+
+    pub async fn flush(&mut self) {
+        flush(&mut self.stream).await;
     }
 }
 
@@ -87,12 +100,36 @@ where
 /// `send`.
 async fn send<S, V>(sink: &mut S, value: V)
 where
-    S: AsyncWriteExt + Unpin,
+    S: Sink<Bytes, Error = io::Error> + Unpin,
     V: Serialize,
 {
     // TODO here we only need a reference to the value
     let bytes = serialize(&value);
-    if let Err(e) = sink.write_all(&bytes).await {
+    if let Err(e) = sink.send(bytes).await {
         println!("[connection] error while writing to socket: {:?}", e);
+    }
+}
+
+async fn write<S, V>(mut sink: S, value: V)
+where
+    S: Sink<Bytes, Error = io::Error> + Unpin,
+    V: Serialize,
+{
+    let bytes = serialize(&value);
+    if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_ready(cx)).await {
+        println!("[connection] error while polling socket ready: {:?}", e);
+    }
+
+    if let Err(e) = Pin::new(&mut sink).start_send(bytes) {
+        println!("[connection] error while starting send to socket: {:?}", e);
+    }
+}
+
+async fn flush<S>(mut sink: S)
+where
+    S: Sink<Bytes, Error = io::Error> + Unpin,
+{
+    if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_flush(cx)).await {
+        println!("[connection] error while flushing socket: {:?}", e);
     }
 }

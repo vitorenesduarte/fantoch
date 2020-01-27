@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
+use tokio::time::{self, Duration};
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
@@ -188,11 +189,22 @@ async fn writer_task<P>(mut connection: Connection, mut parent: WriterReceiver<P
 where
     P: Protocol + 'static,
 {
+    // create interval
+    let mut interval = time::interval(Duration::from_millis(1));
+
     loop {
-        if let Some(msg) = parent.recv().await {
-            connection.send(msg).await;
-        } else {
-            println!("[writer] error receiving message from parent");
+        select! {
+            msg = parent.recv().fuse() => {
+                if let Some(msg) = msg {
+                    connection.write(msg).await;
+                } else {
+                    println!("[writer] error receiving message from parent");
+                }
+            }
+            _ = interval.tick().fuse() => {
+                // flush socket
+                connection.flush().await;
+            }
         }
     }
 }
