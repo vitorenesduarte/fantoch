@@ -53,7 +53,6 @@
 /// - the runner allows `Protocol` workers to share state; however, it assumes that `Executor`
 ///   workers never do
 
-const CLIENT_TCP_BUFFER_SIZE: usize = 0;
 const CONNECT_RETRIES: usize = 100;
 
 // This module contains the prelude.
@@ -170,7 +169,7 @@ where
         reader_to_workers,
         CONNECT_RETRIES,
         tcp_nodelay,
-        tcp_buffer_size,
+        Some(tcp_buffer_size),
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
@@ -198,7 +197,6 @@ where
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
-        tcp_buffer_size,
         channel_buffer_size,
     );
 
@@ -378,7 +376,7 @@ where
     let mut connection = match task::connect(
         address,
         tcp_nodelay,
-        CLIENT_TCP_BUFFER_SIZE,
+        None,
         CONNECT_RETRIES,
     )
     .await

@@ -21,7 +21,7 @@ pub async fn connect_to_all<A, P>(
     to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
-    tcp_buffer_size: usize,
+    tcp_buffer_size: Option<usize>,
     tcp_flush_interval: usize,
     channel_buffer_size: usize,
     multiplexing: usize,

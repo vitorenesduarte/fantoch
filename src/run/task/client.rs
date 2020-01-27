@@ -15,7 +15,6 @@ pub fn start_listener(
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) {
     super::spawn(client_listener_task(
@@ -25,7 +24,6 @@ pub fn start_listener(
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     ));
 }
@@ -38,12 +36,11 @@ async fn client_listener_task(
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) {
     // start listener task
     let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, socket_buffer_size, tx)
+        super::listener_task(listener, tcp_nodelay, None, tx)
     });
 
     loop {

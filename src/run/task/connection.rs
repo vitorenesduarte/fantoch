@@ -16,8 +16,14 @@ impl Connection {
     // TODO here `BufStream` will allocate two buffers, one for reading and another one for
     // writing; this may be unnecessarily inneficient for users that will only read or write; on
     // the other end, the allocation only occurs once, so it's probably fine to do this
-    pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) -> Self {
-        if tcp_buffer_size > 0 {
+    pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: Option<usize>) -> Self {
+        // set TCP_NODELAY
+        stream
+            .set_nodelay(tcp_nodelay)
+            .expect("setting TCP_NODELAY should work");
+
+        // buffer stream
+        let stream = if let Some(tcp_buffer_size) = tcp_buffer_size {
             stream
                 .set_recv_buffer_size(tcp_buffer_size)
                 .expect("setting tcp recv buffer should work");
@@ -26,13 +32,10 @@ impl Connection {
                 .expect("setting tcp send buffer should work");
             println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
             println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
-        }
-        // set TCP_NODELAY
-        stream
-            .set_nodelay(tcp_nodelay)
-            .expect("setting TCP_NODELAY should work");
-        // buffer stream
-        let stream = BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream);
+            BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream)
+        } else {
+            BufStream::with_capacity(0, 0, stream)
+        };
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }
