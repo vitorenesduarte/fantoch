@@ -130,8 +130,8 @@ async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)
     id_to_connection
 }
 
-/// Starts a reader task per connection received. A `ToWorkers` is passed to each reader so that
-/// these can forward immediately to the correct worker process.
+/// Starts a reader task per connection received. A `ReaderToWorkers` is passed to each reader so
+/// that these can forward immediately to the correct worker process.
 fn start_readers<P>(to_workers: ReaderToWorkers<P>, connections: Vec<(ProcessId, Connection)>)
 where
     P: Protocol + 'static,
@@ -209,6 +209,7 @@ async fn writer_task<P>(
             tokio::select! {
                 msg = parent.recv() => {
                     if let Some(msg) = msg {
+                        // connection write *doesn't* flush
                         connection.write(msg).await;
                     } else {
                         println!("[writer] error receiving message from parent");
@@ -223,6 +224,7 @@ async fn writer_task<P>(
     } else {
         loop {
             if let Some(msg) = parent.recv().await {
+                // connection write *does* flush
                 connection.send(msg).await;
             } else {
                 println!("[writer] error receiving message from parent");
@@ -331,6 +333,7 @@ async fn handle_to_send<P>(
 {
     // unpack to send
     let ToSend { target, msg, .. } = to_send;
+    // TODO can we avoid cloning here?
     for destination in target {
         if destination == process_id {
             // handle msg locally if self in `to_send.target`
@@ -347,7 +350,7 @@ where
     P: Protocol + 'static,
 {
     // make sure that, if there's something to be sent, it is to self, i.e. messages from self to
-    // self shouldn't generate messages TODO can we avoid cloning here?
+    // self shouldn't generate messages
     if let Some(ToSend { target, msg, .. }) = process.handle(process_id, msg) {
         assert!(target.len() == 1);
         assert!(target.contains(&process_id));
@@ -373,7 +376,7 @@ async fn send_to_writer<P>(
     let writer_index = rand::thread_rng().gen_range(0, writers.len());
 
     if let Err(e) = writers[writer_index].send(msg).await {
-        println!("[server] error while sending to broadcast writer: {:?}", e);
+        println!("[server] error while sending to writer: {:?}", e);
     }
 }
 
