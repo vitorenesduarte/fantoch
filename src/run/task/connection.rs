@@ -1,11 +1,13 @@
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use serde::{de::DeserializeOwned, Serialize};
+use std::pin::Pin;
 use tokio::io::{self, BufStream};
 use tokio::net::TcpStream;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// Delimits frames using a length header.
+/// TODO take a look at async_bincode: https://docs.rs/async-bincode/0.5.1/async_bincode/index.html
 #[derive(Debug)]
 pub struct Connection {
     stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
@@ -15,13 +17,11 @@ impl Connection {
     // TODO here `BufStream` will allocate two buffers, one for reading and another one for
     // writing; this may be unnecessarily inneficient for users that will only read or write; on
     // the other end, the allocation only occurs once, so it's probably fine to do this
-    pub fn new(stream: TcpStream, tcp_nodelay: bool, socket_buffer_size: usize) -> Self {
-        // set TCP_NODELAY
-        stream
-            .set_nodelay(tcp_nodelay)
-            .expect("setting TCP_NODELAY should work");
+    pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) -> Self {
+        // configure stream
+        configure(&stream, tcp_nodelay, tcp_buffer_size);
         // buffer stream
-        let stream = BufStream::with_capacity(socket_buffer_size, socket_buffer_size, stream);
+        let stream = BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }
@@ -42,9 +42,44 @@ impl Connection {
         send(&mut self.stream, value).await;
     }
 
-    pub async fn send_serialized(&mut self, bytes: Bytes) {
-        send_serialized(&mut self.stream, bytes).await;
+    pub async fn write<V>(&mut self, value: V)
+    where
+        V: Serialize,
+    {
+        write(&mut self.stream, value).await;
     }
+
+    pub async fn flush(&mut self) {
+        flush(&mut self.stream).await;
+    }
+}
+
+fn configure(stream: &TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) {
+    // set TCP_NODELAY
+    stream
+        .set_nodelay(tcp_nodelay)
+        .expect("setting TCP_NODELAY should work");
+
+    // maybe adapt SO_RCVBUF and SO_SNDBUF and compute buffer capacity
+    // change SO_RCVBUF if lower than `tcp_buffer_size`
+    if let Ok(so_rcvbuf) = stream.recv_buffer_size() {
+        if so_rcvbuf < tcp_buffer_size {
+            stream
+                .set_recv_buffer_size(tcp_buffer_size)
+                .expect("setting tcp recv buffer should work");
+        }
+    }
+    println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
+
+    // change SO_SNFBUF if lower than `tcp_buffer_size`
+    if let Ok(so_sndbuf) = stream.send_buffer_size() {
+        if so_sndbuf < tcp_buffer_size {
+            stream
+                .set_send_buffer_size(tcp_buffer_size)
+                .expect("setting tcp send buffer should work");
+        }
+    }
+    println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
 }
 
 fn deserialize<V>(bytes: BytesMut) -> V
@@ -96,14 +131,31 @@ where
 {
     // TODO here we only need a reference to the value
     let bytes = serialize(&value);
-    send_serialized(sink, bytes).await;
-}
-
-async fn send_serialized<S>(sink: &mut S, bytes: Bytes)
-where
-    S: Sink<Bytes, Error = tokio::io::Error> + Unpin,
-{
     if let Err(e) = sink.send(bytes).await {
         println!("[connection] error while writing to socket: {:?}", e);
+    }
+}
+
+async fn write<S, V>(mut sink: S, value: V)
+where
+    S: Sink<Bytes, Error = io::Error> + Unpin,
+    V: Serialize,
+{
+    let bytes = serialize(&value);
+    if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_ready(cx)).await {
+        println!("[connection] error while polling socket ready: {:?}", e);
+    }
+
+    if let Err(e) = Pin::new(&mut sink).start_send(bytes) {
+        println!("[connection] error while starting send to socket: {:?}", e);
+    }
+}
+
+async fn flush<S>(mut sink: S)
+where
+    S: Sink<Bytes, Error = io::Error> + Unpin,
+{
+    if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_flush(cx)).await {
+        println!("[connection] error while flushing socket: {:?}", e);
     }
 }

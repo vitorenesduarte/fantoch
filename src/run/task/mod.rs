@@ -1,21 +1,29 @@
 // This module contains the definition of `Connection`.
 pub mod connection;
 
-// This module contains the definition of `Sender` and `Receiver`.
+// This module contains the definition of `ChannelSender` and `ChannelReceiver`.
 pub mod chan;
 
-// This module contains the definition of ...
+// This module contains executor's implementation.
+pub mod executor;
+
+// This module contains process's implementation.
 pub mod process;
 
-// This module contains the definition of ...
+// This module contains client's implementation.
 pub mod client;
 
-use chan::{channel, ChannelReceiver, ChannelSender};
+// Re-exports.
+pub use chan::channel;
+
+use crate::run::prelude::*;
+use chan::{ChannelReceiver, ChannelSender};
 use connection::Connection;
-use std::error::Error;
+use std::fmt::Debug;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::task::JoinHandle;
+use tokio::time::Duration;
 
 /// Just a wrapper around tokio::spawn.
 pub fn spawn<F>(task: F) -> JoinHandle<F::Output>
@@ -106,18 +114,39 @@ where
 pub async fn connect<A>(
     address: A,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
-) -> Result<Connection, Box<dyn Error>>
+    tcp_buffer_size: usize,
+    connect_retries: usize,
+) -> RunResult<Connection>
 where
-    A: ToSocketAddrs,
+    A: ToSocketAddrs + Clone + Debug,
 {
-    let stream = TcpStream::connect(address).await?;
-    let connection = Connection::new(stream, tcp_nodelay, socket_buffer_size);
-    Ok(connection)
+    let mut tries = 0;
+    loop {
+        match TcpStream::connect(address.clone()).await {
+            Ok(stream) => {
+                let connection = Connection::new(stream, tcp_nodelay, tcp_buffer_size);
+                return Ok(connection);
+            }
+            Err(e) => {
+                // if not, try again if we shouldn't give up (due to too many attempts)
+                tries += 1;
+                if tries < connect_retries {
+                    println!("failed to connect to {:?}: {}", address, e);
+                    println!(
+                        "will try again in 1 second ({} out of {})",
+                        tries, connect_retries,
+                    );
+                    tokio::time::delay_for(Duration::from_secs(1)).await;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
 }
 
 /// Listen on some address.
-pub async fn listen<A>(address: A) -> Result<TcpListener, Box<dyn Error>>
+pub async fn listen<A>(address: A) -> RunResult<TcpListener>
 where
     A: ToSocketAddrs,
 {
@@ -128,7 +157,7 @@ where
 async fn listener_task(
     mut listener: TcpListener,
     tcp_nodelay: bool,
-    socket_buffer_capacity: usize,
+    tcp_buffer_size: usize,
     mut parent: ChannelSender<Connection>,
 ) {
     loop {
@@ -137,7 +166,7 @@ async fn listener_task(
                 println!("[listener] new connection: {:?}", addr);
 
                 // create connection
-                let connection = Connection::new(stream, tcp_nodelay, socket_buffer_capacity);
+                let connection = Connection::new(stream, tcp_nodelay, tcp_buffer_size);
 
                 if let Err(e) = parent.send(connection).await {
                     println!("[listener] error sending stream to parent process: {:?}", e);

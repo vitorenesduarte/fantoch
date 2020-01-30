@@ -1,4 +1,3 @@
-use crate::command::{Command, CommandResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -15,7 +14,7 @@ pub enum KVOp {
 
 pub type KVOpResult = Option<Value>;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KVStore {
     store: HashMap<Key, Value>,
 }
@@ -34,21 +33,6 @@ impl KVStore {
             KVOp::Put(value) => self.store.insert(key.clone(), value),
             KVOp::Delete => self.store.remove(key),
         }
-    }
-
-    /// Executes a full `Command` in the `KVStore`.
-    /// TODO there should be a way to do the following more efficiently
-    pub fn execute_command(&mut self, cmd: Command) -> CommandResult {
-        // create a `CommandResult`
-        let mut result = CommandResult::new(cmd.rifl(), cmd.key_count());
-
-        cmd.into_iter().for_each(|(key, op)| {
-            // execute each op in the command and add its partial result to `CommandResult`
-            let partial_result = self.execute(&key, op);
-            result.add_partial(key, partial_result);
-        });
-
-        result
     }
 }
 

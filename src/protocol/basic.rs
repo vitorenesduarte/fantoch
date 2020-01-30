@@ -1,9 +1,9 @@
 use crate::command::Command;
 use crate::config::Config;
-use crate::executor::{BasicExecutor, Executor};
+use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::info::{Commands, Info};
-use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -11,6 +11,7 @@ use std::mem;
 
 type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 
+#[derive(Clone)]
 pub struct Basic {
     bp: BaseProcess,
     cmds: Commands<CommandInfo>,
@@ -52,8 +53,8 @@ impl Protocol for Basic {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, cmd: Command) -> ToSend<Message> {
-        self.handle_submit(cmd)
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+        self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
@@ -70,6 +71,10 @@ impl Protocol for Basic {
         mem::take(&mut self.to_executor)
     }
 
+    fn parallel() -> bool {
+        true
+    }
+
     fn show_metrics(&self) {
         self.bp.show_metrics();
     }
@@ -77,9 +82,9 @@ impl Protocol for Basic {
 
 impl Basic {
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
         // compute the command identifier
-        let dot = self.bp.next_dot();
+        let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // create `MStore` and target
         let mstore = Message::MStore { dot, cmd };
@@ -155,8 +160,14 @@ impl Basic {
     ) -> Option<ToSend<Message>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
-        // create execution info
-        self.to_executor.push(cmd);
+        // create execution info:
+        // - one entry per key being accessed will be created, which allows the basic executor to
+        //   run in parallel
+        let rifl = cmd.rifl();
+        self.to_executor.extend(
+            cmd.into_iter()
+                .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op)),
+        );
 
         // TODO the following is incorrect: it should only be deleted once it has been committed at
         // all processes
@@ -168,6 +179,7 @@ impl Basic {
 }
 
 // `CommandInfo` contains all information required in the life-cyle of a `Command`
+#[derive(Clone)]
 struct CommandInfo {
     cmd: Option<Command>,
     missing_acks: usize,
@@ -189,6 +201,16 @@ pub enum Message {
     MStore { dot: Dot, cmd: Command },
     MStoreAck { dot: Dot },
     MCommit { dot: Dot, cmd: Command },
+}
+
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MStore { dot, .. } => Some(dot),
+            Self::MStoreAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -283,8 +305,8 @@ mod tests {
 
         // register command in executor and submit it in basic 1
         let (process, executor) = simulation.get_process(target);
-        executor.register(&cmd);
-        let mcollect = process.submit(cmd);
+        executor.wait_for(&cmd);
+        let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
@@ -327,7 +349,11 @@ mod tests {
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
-        let mut ready = executor.handle(to_executor);
+        let mut ready: Vec<_> = to_executor
+            .into_iter()
+            .flat_map(|info| executor.handle(info))
+            .map(|result| result.unwrap_ready())
+            .collect();
         assert_eq!(ready.len(), 1);
 
         // get that command
@@ -339,7 +365,7 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(cmd);
+        let ToSend { msg, .. } = process.submit(None, cmd);
         if let Message::MStore { dot, .. } = msg {
             assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {

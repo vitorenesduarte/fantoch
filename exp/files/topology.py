@@ -53,19 +53,18 @@ if ttype == "process":
     # index should be between 1 and n
     assert index >= 1 and index <= n
 
+    # get my machine and ip
+    (my_machine, my_ip) = data[index - 1]
+
     # compute sorted
     sorted = sorted_by_distance(index, n)
 
     # compute ip and ips to connect to (all but me)
     ips = []
-    for p in range(1, n + 1):
+    for p in list(range(index + 1, n + 1)) + list(range(1, index)):
         # find process ip
-        (machine, ip) = data[p - 1]
-        if p == index:
-            my_machine = machine
-            my_ip = ip
-        else:
-            ips.append(ip)
+        (_, ip) = data[p - 1]
+        ips.append(ip)
 
     sorted = ",".join(map(str, sorted))
     ips = ",".join(ips)

@@ -147,10 +147,10 @@ where
                         let (process, executor) = self.simulation.get_process(process_id);
 
                         // register command in the executor
-                        executor.register(&cmd);
+                        executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
-                        let to_send = process.submit(cmd);
+                        let to_send = process.submit(None, cmd);
                         self.schedule_send(MessageRegion::Process(process_id), Some(to_send));
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
@@ -162,7 +162,11 @@ where
 
                         // handle new execution info in the executor
                         let to_executor = process.to_executor();
-                        let ready = executor.handle(to_executor);
+                        let ready: Vec<_> = to_executor
+                            .into_iter()
+                            .flat_map(|info| executor.handle(info))
+                            .map(|result| result.unwrap_ready())
+                            .collect();
 
                         // schedule new messages
                         self.schedule_send(MessageRegion::Process(process_id), to_send);
@@ -299,152 +303,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::Executor;
-    use crate::id::{ProcessId, Rifl};
     use crate::metrics::F64;
-    use crate::protocol::BaseProcess;
-    use crate::singleton;
-    use serde::{Deserialize, Serialize};
-    use std::collections::HashSet;
-    use std::mem;
-
-    type ExecutionInfo = <PingPongExecutor as Executor>::ExecutionInfo;
-
-    // TODO remove this in favor of `BasicExecutor` (same for the protocol)
-    struct PingPongExecutor {
-        pending: HashSet<Rifl>,
-    }
-
-    impl PingPongExecutor {
-        fn new() -> Self {
-            PingPongExecutor {
-                pending: HashSet::new(),
-            }
-        }
-    }
-
-    impl Executor for PingPongExecutor {
-        type ExecutionInfo = CommandResult;
-
-        fn new(_config: Config) -> Self {
-            // ignore config
-            PingPongExecutor::new()
-        }
-
-        fn register(&mut self, cmd: &Command) {
-            // add to pending and make sure it was not there
-            assert!(self.pending.insert(cmd.rifl()));
-        }
-
-        fn handle(&mut self, infos: Vec<CommandResult>) -> Vec<CommandResult> {
-            infos
-                .into_iter()
-                .filter(|info| {
-                    // only return those results that belong to registered commands
-                    self.pending.remove(&info.rifl())
-                })
-                .collect()
-        }
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    enum Message {
-        Ping(Rifl),
-        Pong(Rifl),
-    }
-
-    // Protocol that pings the closest f + 1 processes and returns reply to client.
-    struct PingPong {
-        bp: BaseProcess,
-        acks: HashMap<Rifl, usize>,
-        to_executor: Vec<ExecutionInfo>,
-    }
-
-    impl Protocol for PingPong {
-        type Message = Message;
-        type Executor = PingPongExecutor;
-
-        fn new(process_id: ProcessId, config: Config) -> Self {
-            // fast quorum size is f + 1
-            let fast_quorum_size = config.f() + 1;
-            // write quorum size can be 0 since it won't be used
-            let write_quorum_size = 0;
-            let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
-
-            // create `PingPong`
-            Self {
-                bp,
-                acks: HashMap::new(),
-                to_executor: Vec::new(),
-            }
-        }
-
-        fn id(&self) -> ProcessId {
-            self.bp.process_id
-        }
-
-        fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
-            self.bp.discover(processes)
-        }
-
-        fn submit(&mut self, cmd: Command) -> ToSend<Self::Message> {
-            // get rifl
-            let rifl = cmd.rifl();
-            // create entry in acks
-            self.acks.insert(rifl, 0);
-
-            // create message
-            let msg = Message::Ping(rifl);
-            // get the fast quorum
-            let fast_quorum = self.bp.fast_quorum();
-
-            // send message to fast quorum
-            ToSend {
-                from: self.id(),
-                target: fast_quorum,
-                msg,
-            }
-        }
-
-        fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Self::Message>> {
-            match msg {
-                Message::Ping(rifl) => {
-                    // create msg
-                    let msg = Message::Pong(rifl);
-                    // reply back
-                    Some(ToSend {
-                        from: self.id(),
-                        target: singleton![from],
-                        msg,
-                    })
-                }
-                Message::Pong(rifl) => {
-                    // increase ack count
-                    let ack_count = self
-                        .acks
-                        .get_mut(&rifl)
-                        .expect("there should be an ack count for this rifl");
-                    *ack_count += 1;
-
-                    // notify client if enough acks
-                    if *ack_count == self.bp.fast_quorum().len() {
-                        // remove from acks
-                        self.acks.remove(&rifl);
-                        // create fake command result
-                        let ready = CommandResult::new(rifl, 0);
-                        self.to_executor.push(ready);
-                    }
-                    // nothing to send
-                    None
-                }
-            }
-        }
-
-        /// Returns new commands results to be sent to clients.
-        fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-            mem::take(&mut self.to_executor)
-        }
-    }
+    use crate::protocol::Basic;
 
     fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
         // planet
@@ -470,7 +330,7 @@ mod tests {
         let client_regions = vec![Region::new("us-west1"), Region::new("us-west2")];
 
         // create runner
-        let mut runner: Runner<PingPong> = Runner::new(
+        let mut runner: Runner<Basic> = Runner::new(
             planet,
             config,
             workload,

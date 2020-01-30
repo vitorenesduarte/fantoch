@@ -10,6 +10,10 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
+    /// defines the number of `Protocol` workers
+    workers: usize,
+    /// defines the number of `Executor` workers
+    executors: usize,
 }
 
 impl Config {
@@ -25,11 +29,16 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
+        // by default there's one worker for `Protocol` and one worker for `Executor`
+        let workers = 1;
+        let executors = 1;
         Self {
             n,
             f,
             newt_tiny_quorums,
             transitive_conflicts,
+            workers,
+            executors,
         }
     }
 
@@ -53,7 +62,7 @@ impl Config {
         self.newt_tiny_quorums = newt_tiny_quorums;
     }
 
-    /// Checks whether whether we can assume that conflicts are transitive.
+    /// Checks whether we can assume that conflicts are transitive.
     pub fn transitive_conflicts(&self) -> bool {
         self.transitive_conflicts
     }
@@ -61,6 +70,26 @@ impl Config {
     /// Changes the value of `transitive_conflicts`.
     pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
         self.transitive_conflicts = transitive_conflicts;
+    }
+
+    /// Checks the number of `Protocol` workers.
+    pub fn workers(&self) -> usize {
+        self.workers
+    }
+
+    /// Changes the value of `Protocol` workers.
+    pub fn set_workers(&mut self, workers: usize) {
+        self.workers = workers;
+    }
+
+    /// Checks the number of `Executor`'s.
+    pub fn executors(&self) -> usize {
+        self.executors
+    }
+
+    /// Changes the value of `Executor`'s.
+    pub fn set_executors(&mut self, executors: usize) {
+        self.executors = executors;
     }
 }
 
@@ -151,6 +180,16 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+
+        // by default, there's one protocol worker and one executor worker
+        assert_eq!(config.workers(), 1);
+        assert_eq!(config.executors(), 1);
+
+        // change their values and check they have changed
+        config.set_workers(10);
+        config.set_executors(20);
+        assert_eq!(config.workers(), 10);
+        assert_eq!(config.executors(), 20);
     }
 
     #[test]

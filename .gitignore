@@ -1,5 +1,4 @@
 target/
 .idea/
 *.data
-Cargo.lock
 .log_*

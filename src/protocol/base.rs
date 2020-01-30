@@ -6,6 +6,7 @@ use std::fmt;
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
+#[derive(Clone)]
 pub struct BaseProcess {
     pub process_id: ProcessId,
     pub config: Config,

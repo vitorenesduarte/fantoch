@@ -1,52 +1,69 @@
-use crate::command::{Command, CommandResult};
+use crate::command::Command;
 use crate::config::Config;
-use crate::executor::Executor;
+use crate::executor::pending::Pending;
+use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::Rifl;
-use crate::kvs::KVStore;
-use std::collections::HashSet;
-
-pub type BasicExecutionInfo = Command;
+use crate::kvs::{KVOp, KVStore, Key};
 
 pub struct BasicExecutor {
     store: KVStore,
-    pending: HashSet<Rifl>,
+    pending: Pending,
 }
 
 impl Executor for BasicExecutor {
     type ExecutionInfo = BasicExecutionInfo;
 
-    fn new(_config: Config) -> Self {
+    fn new(config: Config) -> Self {
         let store = KVStore::new();
-        let pending = HashSet::new();
+        // aggregate results if the number of executors is 1
+        let aggregate = config.executors() == 1;
+        let pending = Pending::new(aggregate);
 
         Self { store, pending }
     }
 
-    fn register(&mut self, cmd: &Command) {
+    fn wait_for(&mut self, cmd: &Command) {
         // start command in pending
-        assert!(self.pending.insert(cmd.rifl()));
+        assert!(self.pending.wait_for(cmd));
     }
 
-    fn handle(&mut self, infos: Vec<Self::ExecutionInfo>) -> Vec<CommandResult> {
-        // borrow everything we'll need
-        let store = &mut self.store;
-        let pending = &mut self.pending;
+    fn wait_for_rifl(&mut self, rifl: Rifl) {
+        self.pending.wait_for_rifl(rifl);
+    }
 
-        infos
-            .into_iter()
-            .filter_map(|cmd| {
-                // get command rifl
-                let rifl = cmd.rifl();
-                // execute the command
-                let result = store.execute_command(cmd);
+    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
+        let BasicExecutionInfo { rifl, key, op } = info;
+        // execute op in the `KVStore`
+        let op_result = self.store.execute(&key, op);
 
-                // if it was pending locally, then it's from a client of this process
-                if pending.remove(&rifl) {
-                    Some(result)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        // add partial result to `Pending`
+        if let Some(result) = self.pending.add_partial(rifl, || (key, op_result)) {
+            vec![result]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn parallel() -> bool {
+        true
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BasicExecutionInfo {
+    rifl: Rifl,
+    key: Key,
+    op: KVOp,
+}
+
+impl BasicExecutionInfo {
+    pub fn new(rifl: Rifl, key: Key, op: KVOp) -> Self {
+        Self { rifl, key, op }
+    }
+}
+
+impl MessageKey for BasicExecutionInfo {
+    fn key(&self) -> Option<&Key> {
+        Some(&self.key)
     }
 }

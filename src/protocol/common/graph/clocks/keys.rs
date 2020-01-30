@@ -5,6 +5,7 @@ use crate::util;
 use std::collections::HashMap;
 use threshold::VClock;
 
+#[derive(Clone)]
 pub struct KeysClocks {
     n: usize, // number of processes
     clocks: HashMap<Key, VClock<ProcessId>>,

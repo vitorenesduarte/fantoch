@@ -1,37 +1,36 @@
-use super::connection::{self, Connection};
-use crate::config::Config;
-use crate::executor::Executor;
-use crate::id::{ClientId, ProcessId};
+use super::connection::Connection;
+use crate::command::Command;
+use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
 use crate::run::task;
-use futures::future::FutureExt;
-use futures::select;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use rand::Rng;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
-use tokio::time::Duration;
+use tokio::task::JoinHandle;
+use tokio::time::{self, Duration};
 
-pub async fn connect_to_all<A, V>(
+pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
     listener: TcpListener,
     addresses: Vec<A>,
+    to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
-) -> Result<(ReaderReceiver<V>, BroadcastWriterSender<V>), Box<dyn Error>>
+    multiplexing: usize,
+) -> RunResult<HashMap<ProcessId, Vec<WriterSender<P>>>>
 where
     A: ToSocketAddrs + Debug,
-    V: Debug + Serialize + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
     // spawn listener
     let mut rx = task::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, socket_buffer_size, tx)
+        super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
     // number of addresses
@@ -41,39 +40,22 @@ where
     // - even though TCP is full-duplex, due to the current tokio non-parallel-tcp-socket-read-write
     //   limitation, we going to use in streams for reading and out streams for writing, which can
     //   be done in parallel
-    let mut outgoing = Vec::with_capacity(n);
-    let mut incoming = Vec::with_capacity(n);
+    let mut outgoing = Vec::with_capacity(n * multiplexing);
+    let mut incoming = Vec::with_capacity(n * multiplexing);
 
     // connect to all addresses (outgoing)
     for address in addresses {
-        let mut tries = 0;
-        loop {
-            match super::connect(&address, tcp_nodelay, socket_buffer_size).await {
-                Ok(connection) => {
-                    // save connection if connected successfully
-                    outgoing.push(connection);
-                    break;
-                }
-                Err(e) => {
-                    // if not, try again if we shouldn't give up (due to too many attempts)
-                    tries += 1;
-                    if tries < connect_retries {
-                        println!("failed to connect to {:?}: {}", address, e);
-                        println!(
-                            "will try again in 1 second ({} out of {})",
-                            tries, connect_retries,
-                        );
-                        tokio::time::delay_for(Duration::from_secs(1)).await;
-                    } else {
-                        return Err(e);
-                    }
-                }
-            }
+        // create `multiplexing` connections per address
+        for _ in 0..multiplexing {
+            let connection =
+                super::connect(&address, tcp_nodelay, tcp_buffer_size, connect_retries).await?;
+            // save connection if connected successfully
+            outgoing.push(connection);
         }
     }
 
     // receive from listener all connected (incoming)
-    for _ in 0..n {
+    for _ in 0..(n * multiplexing) {
         let connection = rx
             .recv()
             .await
@@ -81,17 +63,30 @@ where
         incoming.push(connection);
     }
 
-    Ok(handshake::<V>(process_id, channel_buffer_size, incoming, outgoing).await)
+    let to_writers = handshake::<P>(
+        process_id,
+        n,
+        to_workers,
+        tcp_flush_interval,
+        channel_buffer_size,
+        incoming,
+        outgoing,
+    )
+    .await;
+    Ok(to_writers)
 }
 
-async fn handshake<V>(
+async fn handshake<P>(
     process_id: ProcessId,
+    n: usize,
+    to_workers: ReaderToWorkers<P>,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
-) -> (ReaderReceiver<V>, BroadcastWriterSender<V>)
+) -> HashMap<ProcessId, Vec<WriterSender<P>>>
 where
-    V: Debug + Serialize + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
     // say hi to all on both connections
     say_hi(process_id, &mut connections_0).await;
@@ -101,15 +96,14 @@ where
     // receive hi from all on both connections
     let id_to_connection_0 = receive_hi(connections_0).await;
     let id_to_connection_1 = receive_hi(connections_1).await;
-    println!(
-        "received hi from all processes: {:?} | {:?}",
-        id_to_connection_0.keys(),
-        id_to_connection_1.keys()
-    );
 
-    (
-        start_readers::<V>(channel_buffer_size, id_to_connection_0),
-        start_broadcast_writer::<V>(process_id, channel_buffer_size, id_to_connection_1),
+    // start readers and writers
+    start_readers::<P>(to_workers, id_to_connection_0);
+    start_writers::<P>(
+        n,
+        tcp_flush_interval,
+        channel_buffer_size,
+        id_to_connection_1,
     )
 }
 
@@ -121,15 +115,14 @@ async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
     }
 }
 
-async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connection> {
-    let mut id_to_connection = HashMap::with_capacity(connections.len());
+async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)> {
+    let mut id_to_connection = Vec::with_capacity(connections.len());
 
     // receive hi from each connection
     for mut connection in connections {
         if let Some(ProcessHi(from)) = connection.recv().await {
             // save entry and check it has not been inserted before
-            let res = id_to_connection.insert(from, connection);
-            assert!(res.is_none());
+            id_to_connection.push((from, connection));
         } else {
             panic!("error receiving hi");
         }
@@ -137,59 +130,60 @@ async fn receive_hi(connections: Vec<Connection>) -> HashMap<ProcessId, Connecti
     id_to_connection
 }
 
-/// Starts a reader task per connection received and returns an unbounded channel to which
-/// readers will write to.
-fn start_readers<V>(
-    channel_buffer_size: usize,
-    connections: HashMap<ProcessId, Connection>,
-) -> ReaderReceiver<V>
+/// Starts a reader task per connection received. A `ReaderToWorkers` is passed to each reader so
+/// that these can forward immediately to the correct worker process.
+fn start_readers<P>(to_workers: ReaderToWorkers<P>, connections: Vec<(ProcessId, Connection)>)
 where
-    V: Debug + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
-    task::spawn_producers(
-        channel_buffer_size,
-        connections,
-        |(process_id, connection), tx| reader_task::<V>(process_id, connection, tx),
-    )
+    for (process_id, connection) in connections {
+        let to_workers_clone = to_workers.clone();
+        task::spawn(reader_task::<P>(to_workers_clone, process_id, connection));
+    }
 }
 
-fn start_broadcast_writer<V>(
-    process_id: ProcessId,
+fn start_writers<P>(
+    n: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
-    connections: HashMap<ProcessId, Connection>,
-) -> BroadcastWriterSender<V>
+    connections: Vec<(ProcessId, Connection)>,
+) -> HashMap<ProcessId, Vec<WriterSender<P>>>
 where
-    V: Serialize + Send + 'static,
+    P: Protocol + 'static,
 {
     // mapping from process id to channel broadcast writer should write to
-    let mut writers = HashMap::with_capacity(connections.len());
+    let mut writers = HashMap::with_capacity(n);
 
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
-        let tx = task::spawn_consumer(channel_buffer_size, |rx| writer_task(connection, rx));
-        writers.insert(process_id, tx);
+        let tx = task::spawn_consumer(channel_buffer_size, |rx| {
+            writer_task::<P>(tcp_flush_interval, connection, rx)
+        });
+        writers.entry(process_id).or_insert_with(Vec::new).push(tx);
     }
 
-    // spawn broadcast writer
-    task::spawn_consumer(channel_buffer_size, |rx| {
-        broadcast_writer_task::<V>(process_id, writers, rx)
-    })
+    // check `writers` size
+    assert_eq!(writers.len(), n);
+    writers
 }
 
 /// Reader task.
-async fn reader_task<V>(
+async fn reader_task<P>(
+    mut reader_to_workers: ReaderToWorkers<P>,
     process_id: ProcessId,
     mut connection: Connection,
-    mut parent: ReaderSender<V>,
 ) where
-    V: Debug + DeserializeOwned + Send + 'static,
+    P: Protocol + 'static,
 {
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = parent.send((process_id, msg)).await {
-                    println!("[reader] error notifying parent task with new msg: {:?}", e);
+                if let Err(e) = reader_to_workers.forward((process_id, msg)).await {
+                    println!(
+                        "[reader] error notifying process task with new msg: {:?}",
+                        e
+                    );
                 }
             }
             None => {
@@ -199,161 +193,203 @@ async fn reader_task<V>(
     }
 }
 
-/// Broadcast Writer task.
-async fn broadcast_writer_task<V>(
-    process_id: ProcessId,
-    mut writers: HashMap<ProcessId, WriterSender>,
-    mut parent: BroadcastWriterReceiver<V>,
-) where
-    V: Serialize + Send + 'static,
-{
-    // TODO maybe use tokio broadcast channel (only if it supports some sort of filtering or
-    // subscribing)
-    loop {
-        if let Some(ToSend { target, msg, .. }) = parent.recv().await {
-            // serialize message
-            let bytes = connection::serialize(&msg);
-
-            let filtered = target
-                .into_iter()
-                // don't send message to self
-                .filter(|id| *id != process_id);
-
-            for id in filtered {
-                // find writer
-                let writer = writers
-                    .get_mut(&id)
-                    .expect("[broadcast_writer] identifier in target should have a writer");
-                // and send
-                if let Err(e) = writer.send(bytes.clone()).await {
-                    println!(
-                        "[broadcast_writer] error sending bytes to writer {:?}: {:?}",
-                        id, e
-                    );
-                }
-            }
-        } else {
-            println!("[broadcast_writer] error receiving message from parent");
-        }
-    }
-}
-
 /// Writer task.
-async fn writer_task(mut connection: Connection, mut parent: WriterReceiver) {
-    loop {
-        if let Some(bytes) = parent.recv().await {
-            connection.send_serialized(bytes).await;
-        } else {
-            println!("[writer] error receiving message from parent");
-        }
-    }
-}
-
-/// Starts the executor.
-pub fn start_executor<P>(
-    config: Config,
-    channel_buffer_size: usize,
-    from_clients: ClientReceiver,
-) -> (CommandReceiver, ExecutionInfoSender<P>)
-where
+async fn writer_task<P>(
+    tcp_flush_interval: Option<usize>,
+    mut connection: Connection,
+    mut parent: WriterReceiver<P>,
+) where
     P: Protocol + 'static,
 {
-    task::spawn_producer_and_consumer(channel_buffer_size, |tx, rx| {
-        executor_task::<P>(config, tx, rx, from_clients)
-    })
-}
-
-async fn executor_task<P>(
-    config: Config,
-    mut to_parent: CommandSender,
-    mut from_parent: ExecutionInfoReceiver<P>,
-    mut from_clients: ClientReceiver,
-) where
-    P: Protocol,
-{
-    // create executor
-    let mut executor = P::Executor::new(config);
-
-    // mapping from client id to its channel
-    let mut clients = HashMap::new();
-
-    loop {
-        select! {
-            execution_info = from_parent.recv().fuse() => {
-                log!("[executor] from parent: {:?}", execution_info);
-                if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(execution_info, &mut executor, &mut clients).await;
-                } else {
-                    println!("[executor] error while receiving execution info from parent");
+    // if flush interval higher than 0, then flush periodically; otherwise, flush on every write
+    if let Some(tcp_flush_interval) = tcp_flush_interval {
+        // create interval
+        let mut interval = time::interval(Duration::from_micros(tcp_flush_interval as u64));
+        loop {
+            tokio::select! {
+                msg = parent.recv() => {
+                    if let Some(msg) = msg {
+                        // connection write *doesn't* flush
+                        connection.write(msg).await;
+                    } else {
+                        println!("[writer] error receiving message from parent");
+                    }
+                }
+                _ = interval.tick() => {
+                    // flush socket
+                    connection.flush().await;
                 }
             }
-            from_client = from_clients.recv().fuse() => {
-                log!("[executor] from client: {:?}", from_client);
-                if let Some(from_client) = from_client {
-                    handle_from_client::<P>(from_client, &mut executor, &mut clients, &mut to_parent).await;
+        }
+    } else {
+        loop {
+            if let Some(msg) = parent.recv().await {
+                // connection write *does* flush
+                connection.send(msg).await;
+            } else {
+                println!("[writer] error receiving message from parent");
+            }
+        }
+    }
+}
+
+/// Starts process workers.
+pub fn start_processes<P>(
+    process: P,
+    process_id: ProcessId,
+    reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
+    client_to_workers_rxs: Vec<SubmitReceiver>,
+    to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
+    worker_to_executors: WorkerToExecutors<P>,
+) -> Vec<JoinHandle<()>>
+where
+    P: Protocol + Send + 'static,
+{
+    // zip rxs'
+    let incoming = reader_to_workers_rxs
+        .into_iter()
+        .zip(client_to_workers_rxs.into_iter());
+
+    // create executor workers
+    incoming
+        .map(|(from_readers, from_clients)| {
+            task::spawn(process_task::<P>(
+                process.clone(),
+                process_id,
+                from_readers,
+                from_clients,
+                to_writers.clone(),
+                worker_to_executors.clone(),
+            ))
+        })
+        .collect()
+}
+
+async fn process_task<P>(
+    mut process: P,
+    process_id: ProcessId,
+    mut from_readers: ReaderReceiver<P>,
+    mut from_clients: SubmitReceiver,
+    mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
+    mut worker_to_executors: WorkerToExecutors<P>,
+) where
+    P: Protocol + 'static,
+{
+    loop {
+        tokio::select! {
+            msg = from_readers.recv() => {
+                log!("[server] reader message: {:?}", msg);
+                if let Some((from, msg)) = msg {
+                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors).await
                 } else {
-                    println!("[executor] error while receiving new command from clients");
+                    println!("[server] error while receiving new process message from readers");
+                }
+            }
+            cmd = from_clients.recv() => {
+                log!("[server] from clients: {:?}", cmd);
+                if let Some((dot, cmd)) = cmd {
+                    handle_from_client(process_id, dot, cmd, &mut process, &mut to_writers).await
+                } else {
+                    println!("[server] error while receiving new command from executor");
                 }
             }
         }
     }
 }
 
-async fn handle_execution_info<P>(
-    execution_info: Vec<<P::Executor as Executor>::ExecutionInfo>,
-    executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, CommandResultSender>,
+async fn handle_from_processes<P>(
+    process_id: ProcessId,
+    from: ProcessId,
+    msg: P::Message,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
-    // get new commands ready
-    let ready = executor.handle(execution_info);
+    // handle message in process
+    if let Some(to_send) = process.handle(from, msg) {
+        handle_to_send(process_id, to_send, process, to_writers).await;
+    }
 
-    for cmd_result in ready {
-        // get client id
-        let client_id = cmd_result.rifl().source();
-        // get client channel
-        let tx = clients
-            .get_mut(&client_id)
-            .expect("command result should belong to a registered client");
-
-        // send command result to client
-        if let Err(e) = tx.send(cmd_result).await {
+    // check if there's new execution info for the executor
+    for execution_info in process.to_executor() {
+        if let Err(e) = worker_to_executors.forward(execution_info).await {
             println!(
-                "[executor] error while sending to command result to client {}: {:?}",
-                client_id, e
+                "[server] error while sending new execution info to executor: {:?}",
+                e
             );
         }
     }
 }
 
-async fn handle_from_client<P>(
-    from_client: FromClient,
-    executor: &mut P::Executor,
-    clients: &mut HashMap<ClientId, CommandResultSender>,
-    to_parent: &mut CommandSender,
+async fn handle_to_send<P>(
+    process_id: ProcessId,
+    to_send: ToSend<P::Message>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
-    match from_client {
-        FromClient::Submit(cmd) => {
-            // register in executor
-            executor.register(&cmd);
-
-            // send to command to parent
-            if let Err(e) = to_parent.send(cmd).await {
-                println!("[executor] error while sending to parent: {:?}", e);
-            }
-        }
-        FromClient::Register(client_id, tx) => {
-            println!("[executor] client {} registered", client_id);
-            let res = clients.insert(client_id, tx);
-            assert!(res.is_none());
-        }
-        FromClient::Unregister(client_id) => {
-            println!("[executor] client {} unregistered", client_id);
-            let res = clients.remove(&client_id);
-            assert!(res.is_some());
+    // unpack to send
+    let ToSend { target, msg, .. } = to_send;
+    // TODO can we avoid cloning here?
+    for destination in target {
+        if destination == process_id {
+            // handle msg locally if self in `to_send.target`
+            handle_message_from_self::<P>(process_id, msg.clone(), process)
+        } else {
+            // send message to correct writer
+            send_to_writer::<P>(destination, msg.clone(), to_writers).await
         }
     }
+}
+
+fn handle_message_from_self<P>(process_id: ProcessId, msg: P::Message, process: &mut P)
+where
+    P: Protocol + 'static,
+{
+    // make sure that, if there's something to be sent, it is to self, i.e. messages from self to
+    // self shouldn't generate messages
+    if let Some(ToSend { target, msg, .. }) = process.handle(process_id, msg) {
+        assert!(target.len() == 1);
+        assert!(target.contains(&process_id));
+        // handling this message shouldn't generate a new message
+        let nothing = process.handle(process_id, msg);
+        assert!(nothing.is_none());
+    }
+}
+
+async fn send_to_writer<P>(
+    to: ProcessId,
+    msg: P::Message,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+) where
+    P: Protocol + 'static,
+{
+    // find all writers
+    let writers = to_writers
+        .get_mut(&to)
+        .expect("[server] identifier in target should have a writer");
+
+    // pick a random one
+    let writer_index = rand::thread_rng().gen_range(0, writers.len());
+
+    if let Err(e) = writers[writer_index].send(msg).await {
+        println!("[server] error while sending to writer: {:?}", e);
+    }
+}
+
+async fn handle_from_client<P>(
+    process_id: ProcessId,
+    dot: Dot,
+    cmd: Command,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+) where
+    P: Protocol + 'static,
+{
+    // submit command in process
+    let to_send = process.submit(Some(dot), cmd);
+    handle_to_send(process_id, to_send, process, to_writers).await;
 }

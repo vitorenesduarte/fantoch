@@ -1,4 +1,4 @@
-use std::error::Error;
+use crate::run::prelude::*;
 use std::fmt::Debug;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -30,7 +30,7 @@ where
         self.name = Some(name);
     }
 
-    pub async fn send(&mut self, value: M) -> Result<(), Box<dyn Error>> {
+    pub async fn send(&mut self, value: M) -> RunResult<()> {
         match self.sender.try_send(value) {
             Ok(()) => {
                 // if it was sent, we're done

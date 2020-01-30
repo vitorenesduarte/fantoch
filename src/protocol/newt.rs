@@ -6,7 +6,7 @@ use crate::protocol::common::{
     info::{Commands, Info},
     table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
 };
-use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::cmp;
@@ -16,6 +16,7 @@ use std::mem;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
+#[derive(Clone)]
 pub struct Newt {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
@@ -59,8 +60,8 @@ impl Protocol for Newt {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, cmd: Command) -> ToSend<Self::Message> {
-        self.handle_submit(cmd)
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+        self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
@@ -92,6 +93,10 @@ impl Protocol for Newt {
         mem::take(&mut self.to_executor)
     }
 
+    fn parallel() -> bool {
+        true
+    }
+
     fn show_metrics(&self) {
         self.bp.show_metrics();
     }
@@ -99,9 +104,9 @@ impl Protocol for Newt {
 
 impl Newt {
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
         // compute the command identifier
-        let dot = self.bp.next_dot();
+        let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // compute its clock
         let clock = self.keys_clocks.clock(&cmd) + 1;
@@ -290,10 +295,11 @@ impl Newt {
         votes.merge(current_votes);
 
         // generate phantom votes if committed clock is higher than the local key's clock:
-        // - this only happens if newt is configured with tiny quorums or, in case it's not, this
-        //   process was part of the fast quorum (if it was, `info.quorum` is not empty)
-        // - n = 3 is a special case where tiny quorums don't reduce the quorum size; in this case,
-        //   we also don't generate phantom votes
+        // - not all processes are needed for stability specially when newt is *not* configured with
+        //   tiny quorums
+        // - so in case it's not, only the processes part of the fast quorum (if it was,
+        //   `info.quorum` is not empty) generate phantoms
+        // - n = 3 is a special case  where phantom votes are not generated as they are not needed
         let mut to_send = None;
         if self.bp.config.n() > 3 && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
         {
@@ -321,10 +327,6 @@ impl Newt {
             let execution_info = ExecutionInfo::votes(dot, cmd, info.clock, votes);
             self.to_executor.push(execution_info);
         }
-
-        // TODO the following is incorrect: it should only be deleted once it has been committed at
-        // all processes
-        self.cmds.remove(dot);
 
         // return `ToSend`
         to_send
@@ -362,6 +364,7 @@ impl Newt {
 
 // `CommandInfo` contains all information required in the life-cyle of a
 // `Command`
+#[derive(Clone)]
 struct CommandInfo {
     status: Status,
     quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
@@ -414,8 +417,20 @@ pub enum Message {
     },
 }
 
+impl MessageDot for Message {}
+// impl MessageDot for Message {
+//     fn dot(&self) -> Option<&Dot> {
+//         match self {
+//             Self::MCollect { dot, .. } => Some(dot),
+//             Self::MCollectAck { dot, .. } => Some(dot),
+//             Self::MCommit { dot, .. } => Some(dot),
+//             Self::MPhantom { dot, .. } => Some(dot),
+//         }
+//     }
+// }
+
 /// `Status` of commands.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Status {
     START,
     COLLECT,
@@ -518,8 +533,8 @@ mod tests {
 
         // register command in executor and submit it in newt 1
         let (process, executor) = simulation.get_process(target);
-        executor.register(&cmd);
-        let mcollect = process.submit(cmd);
+        executor.wait_for(&cmd);
+        let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
@@ -551,40 +566,8 @@ mod tests {
         assert_eq!(target.len(), n);
 
         // all processes handle it
-        let mut mphantoms = simulation.forward_to_processes(mcommit);
-        // there should be one mphantom (from process 3)
-        assert_eq!(mphantoms.len(), 1);
-
-        // get mphantom
-        let mphantom = mphantoms.pop().expect("there should an mphantom");
-        let ToSend { from, target, msg } = mphantom.clone();
-
-        match msg {
-            Message::MPhantom { .. } => {
-                assert_eq!(from, process_id_3);
-                assert!(target.contains(&process_id_1));
-                assert!(target.contains(&process_id_2));
-                assert!(target.contains(&process_id_3));
-            }
-            _ => panic!("Message::MPhantom not found!"),
-        }
-
-        // process 1 should have something to the executor
-        let (process, executor) = simulation.get_process(process_id_1);
-        let to_executor = process.to_executor();
-        assert_eq!(to_executor.len(), 1);
-
-        // handle in executor and check there's a single command ready
-        let mut ready = executor.handle(to_executor);
-        assert_eq!(ready.len(), 1);
-
-        // get that command
-        let cmd_result = ready.pop().expect("there should a command ready");
-
-        // -------------------------
-        // forward now the mphantoms
-        let to_sends = simulation.forward_to_processes(mphantom);
-        // check there's nothing to send
+        let to_sends = simulation.forward_to_processes(mcommit);
+        // there should be nothing to send
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
@@ -592,10 +575,16 @@ mod tests {
         let to_executor = process.to_executor();
         assert_eq!(to_executor.len(), 1);
 
-        // handle in executor and check that it didn't generate another command
-        let ready = executor.handle(to_executor);
-        assert!(ready.is_empty());
-        // -------------------------
+        // handle in executor and check there's a single command ready
+        let mut ready: Vec<_> = to_executor
+            .into_iter()
+            .flat_map(|info| executor.handle(info))
+            .map(|result| result.unwrap_ready())
+            .collect();
+        assert_eq!(ready.len(), 1);
+
+        // get that command
+        let cmd_result = ready.pop().expect("there should a command ready");
 
         // handle the previous command result
         let (target, cmd) = simulation
@@ -603,7 +592,7 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(cmd);
+        let ToSend { msg, .. } = process.submit(None, cmd);
         if let Message::MCollect { dot, .. } = msg {
             assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {

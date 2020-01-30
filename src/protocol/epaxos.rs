@@ -7,7 +7,7 @@ use crate::protocol::common::{
     info::{Commands, Info},
     synod::{Synod, SynodMessage},
 };
-use crate::protocol::{BaseProcess, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::util;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ use threshold::VClock;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
+#[derive(Clone)]
 pub struct EPaxos {
     bp: BaseProcess,
     keys_clocks: KeysClocks,
@@ -62,8 +63,8 @@ impl Protocol for EPaxos {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, cmd: Command) -> ToSend<Message> {
-        self.handle_submit(cmd)
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+        self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
@@ -84,6 +85,10 @@ impl Protocol for EPaxos {
         }
     }
 
+    fn parallel() -> bool {
+        true
+    }
+
     /// Returns new commands results to be sent to clients.
     fn to_executor(&mut self) -> Vec<ExecutionInfo> {
         mem::take(&mut self.to_executor)
@@ -101,9 +106,9 @@ impl EPaxos {
     }
 
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
         // compute the command identifier
-        let dot = self.bp.next_dot();
+        let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // wrap command
         let cmd = Some(cmd);
@@ -411,6 +416,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `CommandInfo` contains all information required in the life-cyle of a
 // `Command`
+#[derive(Clone)]
 struct CommandInfo {
     status: Status,
     quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
@@ -467,8 +473,21 @@ pub enum Message {
     },
 }
 
+impl MessageDot for Message {}
+// impl MessageDot for Message {
+//     fn dot(&self) -> Option<&Dot> {
+//         match self {
+//             Self::MCollect { dot, .. } => Some(dot),
+//             Self::MCollectAck { dot, .. } => Some(dot),
+//             Self::MCommit { dot, .. } => Some(dot),
+//             Self::MConsensus { dot, .. } => Some(dot),
+//             Self::MConsensusAck { dot, .. } => Some(dot),
+//         }
+//     }
+// }
+
 /// `Status` of commands.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Status {
     START,
     COLLECT,
@@ -566,8 +585,8 @@ mod tests {
 
         // register command in executor and submit it in epaxos 1
         let (process, executor) = simulation.get_process(target);
-        executor.register(&cmd);
-        let mcollect = process.submit(cmd);
+        executor.wait_for(&cmd);
+        let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes
         let ToSend { target, .. } = mcollect.clone();
@@ -605,7 +624,11 @@ mod tests {
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
-        let mut ready = executor.handle(to_executor);
+        let mut ready: Vec<_> = to_executor
+            .into_iter()
+            .flat_map(|info| executor.handle(info))
+            .map(|result| result.unwrap_ready())
+            .collect();
         assert_eq!(ready.len(), 1);
 
         // get that command
@@ -617,7 +640,7 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(cmd);
+        let ToSend { msg, .. } = process.submit(None, cmd);
         if let Message::MCollect { dot, .. } = msg {
             assert_eq!(dot, Dot::new(process_id_1, 2));
         } else {

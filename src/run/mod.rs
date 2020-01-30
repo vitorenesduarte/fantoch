@@ -1,29 +1,86 @@
-// This module contains the prelude.
+/// The architecture of this runner was thought in a way that allows all protocols that implement
+/// the `Protocol` trait to achieve their maximum throughput. Below we detail all key decisions.
+///
+/// We assume:
+/// - C clients
+/// - E executors
+/// - P protocol processes
+///
+/// 1. When a client connects for the first time it registers itself in all executors. This register
+/// request contains the channel in which executors should write command results (potentially
+/// partial command results if the command is multi-key).
+///
+/// 2. When a client issues a command, it registers this command in all executors that are
+/// responsible for executing this command. This is how each executor knows if it should notify this
+/// client when the command is executed. If the commmand is single-key, this command only needs to
+/// be registered in one executor. If multi-key, it needs to be registered in several executors if
+/// the keys accessed by the command are assigned to different executors.
+///
+/// 3. Once the command registration occurs (and the client must wait for an ack from the executor,
+/// otherwise the execution info can reach the executor before the "wait for rifl" registration from
+/// the client), the command is forwarded to *ONE* protocol process (even if the command is
+/// multi-key). This single protocol process *needs to* be chosen by looking the message identifier
+/// `Dot`. Using the keys being accessed by the command will not work for all cases, for example,
+/// when recovering and the payload is not known, we only have acesss to a `noOp` meaning that we
+/// would need to broadcast to all processes, which would be tricky to get correctly. In particular,
+/// when the command is being submitted, its `Dot` has not been computed yet. So the idea here is
+/// for parallel protocols to have the `DotGen` outside and once the `Dot` is computed, the submit
+/// is forwarded to the correct protocol process. For maximum parallelism, this generator can live
+/// in the clients and have a lock-free implementation (see `AtomicIdGen`).
+//
+/// 4. When the protocol process receives the new command from a client it does whatever is
+/// specified in the `Protocol` trait, which may include sending messages to other replicas/nodes,
+/// which leads to point 5.
+///
+/// 5. When a message is received from other replicas, the same forward function from point 3. is
+/// used to select the protocol process that is responsible for handling that message. This suggests
+/// a message should define which `Dot` it refers to. This is achieved through the `MessageDot`
+/// trait.
+///
+/// 6. Everytime a message is handled in a protocol process, the process checks if it has new
+/// execution info. If so, it forwards each execution info to the responsible executor. This
+/// suggests that execution info should define to which key it refers to. This is achieved through
+/// the `MessageKey` trait.
+///
+/// 7. When execution info is handled in an executor, the executor may have new (potentially partial
+/// if the executor is parallel) command results. If the command was previously registered by some
+/// client, the result is forwarded to such client.
+///
+/// 8. When command results are received by a client, they may have to be aggregated in case the
+/// executor is parallel. Once the full command result is complete, the notification is sent to the
+/// actual client.
+///
+/// Other notes:
+/// - the runner allows `Protocol` workers to share state; however, it assumes that `Executor`
+///   workers never do
+
+const CONNECT_RETRIES: usize = 100;
+
+// This module contains the "runner" prelude.
 mod prelude;
 
-// This module contains the definition of...
+// This module contains the definition of `ToPool`.
+mod pool;
+
+// This module contains the implementation of channels, clients, connections, executors, and process
+// workers.
 pub mod task;
 
 use crate::client::{Client, Workload};
-use crate::command::{Command, CommandResult};
+use crate::command::CommandResult;
 use crate::config::Config;
-use crate::id::{ClientId, ProcessId};
-use crate::log;
+use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
-use crate::protocol::{Protocol, ToSend};
+use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
-use futures::future::{join_all, FutureExt};
-use futures::select;
+use futures::future::join_all;
 use prelude::*;
-use std::error::Error;
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
 use tokio::time::{self, Duration};
-
-const CONNECT_RETRIES: usize = 100;
 
 pub async fn process<A, P>(
     process: P,
@@ -35,12 +92,14 @@ pub async fn process<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
-) -> Result<(), Box<dyn Error>>
+    multiplexing: usize,
+) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
-    P: Protocol + 'static, // TODO what does this 'static do?
+    P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
     // create semaphore for callers that don't care about the connected notification
     let semaphore = Arc::new(Semaphore::new(0));
@@ -54,8 +113,10 @@ where
         addresses,
         config,
         tcp_nodelay,
-        socket_buffer_size,
+        tcp_buffer_size,
+        tcp_flush_interval,
         channel_buffer_size,
+        multiplexing,
         semaphore,
     )
     .await
@@ -72,13 +133,15 @@ async fn process_with_notify<A, P>(
     addresses: Vec<A>,
     config: Config,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
+    multiplexing: usize,
     connected: Arc<Semaphore>,
-) -> Result<(), Box<dyn Error>>
+) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
-    P: Protocol + 'static, // TODO what does this 'static do?
+    P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
     // discover processes
     process.discover(sorted_processes);
@@ -89,122 +152,83 @@ where
     // start process listener
     let listener = task::listen((ip, port)).await?;
 
+    // adjust number of workers depending on whether the protocol is parallel
+    // if process.parallel() {}
+
+    // create forward channels: reader -> workers
+    let (reader_to_workers, reader_to_workers_rxs) =
+        ReaderToWorkers::<P>::new("reader_to_workers", channel_buffer_size, config.workers());
+
     // connect to all processes
-    let (mut from_readers, mut to_writer) = task::process::connect_to_all::<A, P::Message>(
+    let to_writers = task::process::connect_to_all::<A, P>(
         process_id,
         listener,
         addresses,
+        reader_to_workers,
         CONNECT_RETRIES,
         tcp_nodelay,
-        socket_buffer_size,
+        tcp_buffer_size,
+        tcp_flush_interval,
         channel_buffer_size,
+        multiplexing,
     )
     .await?;
 
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
-    let from_clients = task::client::start_listener(
+
+    // create atomic dot generator to be used by clients
+    let atomic_dot_gen = AtomicDotGen::new(process_id);
+
+    // create forward channels: client -> workers
+    let (client_to_workers, client_to_workers_rxs) =
+        ClientToWorkers::new("client_to_workers", channel_buffer_size, config.workers());
+
+    // create forward channels: client -> executors
+    let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
+        "client_to_executors",
+        channel_buffer_size,
+        config.executors(),
+    );
+
+    task::client::start_listener(
         process_id,
         listener,
+        atomic_dot_gen,
+        client_to_workers,
+        client_to_executors,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     );
 
-    // start executor
-    let (mut from_executor, mut to_executor) =
-        task::process::start_executor::<P>(config, channel_buffer_size, from_clients);
+    // create forward channels: worker -> executors
+    let (worker_to_executors, worker_to_executors_rxs) = WorkerToExecutors::<P>::new(
+        "worker_to_executors",
+        channel_buffer_size,
+        config.executors(),
+    );
+
+    // start executors
+    task::executor::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
+
+    let handles = task::process::start_processes::<P>(
+        process,
+        process_id,
+        reader_to_workers_rxs,
+        client_to_workers_rxs,
+        to_writers,
+        worker_to_executors,
+    );
+    println!("process {} started", process_id);
 
     // notify parent that we're connected
     connected.add_permits(1);
 
-    println!("process {} started", process_id);
-
-    loop {
-        select! {
-            msg = from_readers.recv().fuse() => {
-                log!("[server] reader message: {:?}", msg);
-                if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writer, &mut to_executor).await
-                } else {
-                    println!("[server] error while receiving new process message from readers");
-                }
-            }
-            cmd = from_executor.recv().fuse() => {
-                log!("[server] from executor: {:?}", cmd);
-                if let Some(cmd) = cmd {
-                    handle_from_client(process_id, cmd, &mut process, &mut to_writer).await
-                } else {
-                    println!("[server] error while receiving new command from executor");
-                }
-            }
-        }
+    for join_result in join_all(handles).await {
+        println!("process ended {:?}", join_result?);
     }
-}
 
-async fn handle_from_processes<P>(
-    process_id: ProcessId,
-    from: ProcessId,
-    msg: P::Message,
-    process: &mut P,
-    to_writer: &mut BroadcastWriterSender<P::Message>,
-    to_executor: &mut ExecutionInfoSender<P>,
-) where
-    P: Protocol + 'static,
-{
-    // handle message in process
-    let to_send = process.handle(from, msg);
-    send_to_writer(process_id, to_send, process, to_writer).await;
-
-    // check if there's new execution info for the executor
-    let execution_info = process.to_executor();
-    if !execution_info.is_empty() {
-        if let Err(e) = to_executor.send(execution_info).await {
-            println!("[server] error while sending to executor: {:?}", e);
-        }
-    }
-}
-
-async fn handle_from_client<P>(
-    process_id: ProcessId,
-    cmd: Command,
-    process: &mut P,
-    to_writer: &mut BroadcastWriterSender<P::Message>,
-) where
-    P: Protocol + 'static,
-{
-    // submit command in process
-    let to_send = process.submit(cmd);
-    send_to_writer(process_id, Some(to_send), process, to_writer).await;
-}
-
-async fn send_to_writer<P>(
-    process_id: ProcessId,
-    to_send: Option<ToSend<P::Message>>,
-    process: &mut P,
-    to_writer: &mut BroadcastWriterSender<P::Message>,
-) where
-    P: Protocol + 'static,
-{
-    if let Some(to_send) = to_send {
-        // handle msg locally if self in `to_send.target` and make sure that, if there's something
-        // to be sent, it is to self, i.e. messages from self to self shouldn't generate messages
-        if to_send.target.contains(&process_id) {
-            // TODO can we avoid cloning here?
-            if let Some(ToSend { target, msg, .. }) =
-                process.handle(process_id, to_send.msg.clone())
-            {
-                assert!(target.len() == 1);
-                assert!(target.contains(&process_id));
-                // handling this message shouldn't generate a new message
-                let nothing = process.handle(process_id, msg);
-                assert!(nothing.is_none());
-            }
-        }
-        if let Err(e) = to_writer.send(to_send).await {
-            println!("[server] error while sending to broadcast writer: {:?}", e);
-        }
-    }
+    Ok(())
 }
 
 pub async fn client<A>(
@@ -213,9 +237,8 @@ pub async fn client<A>(
     interval_ms: Option<u64>,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
-) -> Result<(), Box<dyn Error>>
+) -> RunResult<()>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -229,7 +252,6 @@ where
                 interval_ms,
                 workload,
                 tcp_nodelay,
-                socket_buffer_size,
                 channel_buffer_size,
             ))
         } else {
@@ -238,7 +260,6 @@ where
                 address.clone(),
                 workload,
                 tcp_nodelay,
-                socket_buffer_size,
                 channel_buffer_size,
             ))
         }
@@ -270,11 +291,10 @@ async fn closed_loop_client<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Client
 where
-    A: ToSocketAddrs + Debug + Send + 'static + Sync,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // create system time
     let time = RunTime;
@@ -285,7 +305,6 @@ where
         address,
         workload,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     )
     .await;
@@ -296,6 +315,7 @@ where
         let cmd_result = read.recv().await;
         handle_cmd_result(&mut client, &time, cmd_result);
     }
+    println!("closed loop client {} exited loop", client_id);
 
     // return client
     client
@@ -307,11 +327,10 @@ async fn open_loop_client<A>(
     interval_ms: u64,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> Client
 where
-    A: ToSocketAddrs + Debug + Send + 'static + Sync,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // create system time
     let time = RunTime;
@@ -322,7 +341,6 @@ where
         address,
         workload,
         tcp_nodelay,
-        socket_buffer_size,
         channel_buffer_size,
     )
     .await;
@@ -331,12 +349,12 @@ where
     let mut interval = time::interval(Duration::from_millis(interval_ms));
 
     loop {
-        select! {
-            _ = interval.tick().fuse() => {
+        tokio::select! {
+            _ = interval.tick() => {
                 // submit new command on every tick (if there are still commands to be generated)
                 next_cmd(&mut client, &time, &mut write).await;
             }
-            cmd_result = read.recv().fuse() => {
+            cmd_result = read.recv() => {
                 if handle_cmd_result(&mut client, &time, cmd_result) {
                     // check if we have generated all commands and received all the corresponding command results, exit
                     break;
@@ -353,21 +371,23 @@ async fn client_setup<A>(
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
-    socket_buffer_size: usize,
     channel_buffer_size: usize,
 ) -> (Client, CommandResultReceiver, CommandSender)
 where
-    A: ToSocketAddrs + Debug + Send + 'static + Sync,
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection = match task::connect(address, tcp_nodelay, socket_buffer_size).await {
-        Ok(connection) => connection,
-        Err(e) => {
-            // TODO panicking here as not sure how to make error handling send + 'static (required
-            // by tokio::spawn) and still be able to use the ? operator
-            panic!("[client] error connecting at client {}: {:?}", client_id, e);
-        }
-    };
+    let tcp_buffer_size = 0;
+    let mut connection =
+        match task::connect(address, tcp_nodelay, tcp_buffer_size, CONNECT_RETRIES).await {
+            Ok(connection) => connection,
+            Err(e) => {
+                // TODO panicking here as not sure how to make error handling send + 'static
+                // (required by tokio::spawn) and still be able to use the ?
+                // operator
+                panic!("[client] error connecting at client {}: {:?}", client_id, e);
+            }
+        };
 
     // create client
     let mut client = Client::new(client_id, workload);
@@ -417,7 +437,7 @@ fn handle_cmd_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::Newt;
+    use crate::protocol::Basic;
     use tokio::task;
     use tokio::time::Duration;
 
@@ -448,7 +468,7 @@ mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<Newt>().await {
+                match run::<Basic>().await {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
@@ -456,14 +476,14 @@ mod tests {
             .await;
     }
 
-    async fn run<P>() -> Result<(), Box<dyn Error>>
+    async fn run<P>() -> RunResult<()>
     where
-        P: Protocol + 'static,
+        P: Protocol + Send + 'static,
     {
         // create config
         let n = 3;
         let f = 1;
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
 
         // create processes
         let process_1 = P::new(1, config);
@@ -477,8 +497,16 @@ mod tests {
             .parse::<IpAddr>()
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
-        let socket_buffer_size = 1000;
+        let tcp_buffer_size = 1024;
+        let tcp_flush_interval = Some(100); // micros
         let channel_buffer_size = 10000;
+        let workers = 2;
+        let executors = 2;
+        let multiplexing = 3;
+
+        // set parallel protocol and executors in config
+        config.set_workers(workers);
+        config.set_executors(executors);
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
@@ -494,8 +522,10 @@ mod tests {
             ],
             config,
             tcp_nodelay,
-            socket_buffer_size,
+            tcp_buffer_size,
+            tcp_flush_interval,
             channel_buffer_size,
+            multiplexing,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -511,8 +541,10 @@ mod tests {
             ],
             config,
             tcp_nodelay,
-            socket_buffer_size,
+            tcp_buffer_size,
+            tcp_flush_interval,
             channel_buffer_size,
+            multiplexing,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -528,8 +560,10 @@ mod tests {
             ],
             config,
             tcp_nodelay,
-            socket_buffer_size,
+            tcp_buffer_size,
+            tcp_flush_interval,
             channel_buffer_size,
+            multiplexing,
             semaphore.clone(),
         ));
 
@@ -554,7 +588,6 @@ mod tests {
             String::from("localhost:4001"),
             workload,
             tcp_nodelay,
-            socket_buffer_size,
             channel_buffer_size,
         ));
         let client_2_handle = task::spawn_local(client(
@@ -563,7 +596,6 @@ mod tests {
             None,
             workload,
             tcp_nodelay,
-            socket_buffer_size,
             channel_buffer_size,
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
@@ -572,7 +604,6 @@ mod tests {
             100, // 100ms interval between ops
             workload,
             tcp_nodelay,
-            socket_buffer_size,
             channel_buffer_size,
         ));
 

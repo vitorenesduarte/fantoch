@@ -32,14 +32,14 @@ pub use base::BaseProcess;
 use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::ProcessId;
+use crate::id::{Dot, ProcessId};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-pub trait Protocol {
-    type Message: Debug + Clone + Serialize + DeserializeOwned + Send;
+pub trait Protocol: Clone {
+    type Message: Debug + Clone + Serialize + DeserializeOwned + Send + Sync + MessageDot; // TODO why is Sync needed??
     type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;
@@ -49,7 +49,7 @@ pub trait Protocol {
     fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
 
     #[must_use]
-    fn submit(&mut self, cmd: Command) -> ToSend<Self::Message>;
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message>;
 
     #[must_use]
     fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Self::Message>>;
@@ -57,8 +57,21 @@ pub trait Protocol {
     #[must_use]
     fn to_executor(&mut self) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
+    fn parallel() -> bool {
+        false
+    }
+
     fn show_metrics(&self) {
         // by default, nothing to show
+    }
+}
+
+pub trait MessageDot {
+    /// If `None` is returned, then the message is sent to all protocol processes.
+    /// In particular, if the protocol is not parallel, the message is sent to the single protocol
+    /// process.
+    fn dot(&self) -> Option<&Dot> {
+        None
     }
 }
 
