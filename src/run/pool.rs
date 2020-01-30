@@ -80,18 +80,20 @@ where
     }
 
     async fn do_forward(&mut self, index: Option<usize>, msg: M) -> RunResult<()> {
-        match index {
+        let index = match index {
             Some(index) => {
                 // the actual index is computed based on the pool size
-                let index = index % self.pool.len();
-                log!("index: {} {} of {}", self.name, index, self.pool_size());
-                self.pool[index].send(msg).await
+                index % self.pool.len()
             }
             None => {
-                // in this case, there's a single pool handling all messages;
-                // TODO implement this once we have Paxos
-                todo!()
+                // in this case, there's a single pool handling all messages:
+                // - check that the pool has size 1 and forward to the single worker
+                assert_eq!(self.pool.len(), 1);
+                1
             }
-        }
+        };
+
+        log!("index: {} {} of {}", self.name, index, self.pool_size());
+        self.pool[index].send(msg).await
     }
 }
