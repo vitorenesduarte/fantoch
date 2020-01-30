@@ -7,6 +7,7 @@ use tokio::net::TcpStream;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// Delimits frames using a length header.
+/// TODO take a look at async_bincode: https://docs.rs/async-bincode/0.5.1/async_bincode/index.html
 #[derive(Debug)]
 pub struct Connection {
     stream: Framed<BufStream<TcpStream>, LengthDelimitedCodec>,
@@ -22,14 +23,24 @@ impl Connection {
             .set_nodelay(tcp_nodelay)
             .expect("setting TCP_NODELAY should work");
 
-        // change SO_RCVBUF and SO_SNDBUF and compute buffer capacity
+        // maybe adapt SO_RCVBUF and SO_SNDBUF and compute buffer capacity
         let buffer_capacity = if let Some(tcp_buffer_size) = tcp_buffer_size {
-            stream
-                .set_recv_buffer_size(tcp_buffer_size)
-                .expect("setting tcp recv buffer should work");
-            stream
-                .set_send_buffer_size(tcp_buffer_size)
-                .expect("setting tcp send buffer should work");
+            // change SO_RCVBUF if lower than `tcp_buffer_size`
+            if let Ok(so_rcvbuf) = stream.recv_buffer_size() {
+                if so_rcvbuf < tcp_buffer_size {
+                    stream
+                        .set_recv_buffer_size(tcp_buffer_size)
+                        .expect("setting tcp recv buffer should work");
+                }
+            }
+            // change SO_SNFBUF if lower than `tcp_buffer_size`
+            if let Ok(so_sndbuf) = stream.send_buffer_size() {
+                if so_sndbuf < tcp_buffer_size {
+                    stream
+                        .set_send_buffer_size(tcp_buffer_size)
+                        .expect("setting tcp send buffer should work");
+                }
+            }
             tcp_buffer_size
         } else {
             0
