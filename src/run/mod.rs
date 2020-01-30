@@ -16,17 +16,18 @@
 /// be registered in one executor. If multi-key, it needs to be registered in several executors if
 /// the keys accessed by the command are assigned to different executors.
 ///
-/// 3. Once the command registration occurs (does the client need to wait for registration
-/// completion or can it do it asynchronously?), the command is forwarded to *ONE* protocol process
-/// (even if the command is multi-key). This single protocol process *needs to* be chosen by looking
-/// the message identifier `Dot`. Using the keys being accessed by the command will not work for all
-/// cases, for example, when recovering and the payload is not known, we only have acesss to a
-/// `noOp` meaning that we would need to broadcast to all processes, which would be tricky to get
-/// correctly. In particular, when the command is being submitted, its `Dot` has not been computed
-/// yet. So the idea here is for parallel protocols to have the `DotGen` outside and once the `Dot`
-/// is computed, the submit is forwarded to the correct protocol process. For maximum parallelism,
-/// this generator can live in the clients and have a lock-free implementation (see `AtomicIdGen`).
-///
+/// 3. Once the command registration occurs (and the client must wait for an ack from the executor,
+/// otherwise the execution info can reach the executor before the "wait for rifl" registration from
+/// the client), the command is forwarded to *ONE* protocol process (even if the command is
+/// multi-key). This single protocol process *needs to* be chosen by looking the message identifier
+/// `Dot`. Using the keys being accessed by the command will not work for all cases, for example,
+/// when recovering and the payload is not known, we only have acesss to a `noOp` meaning that we
+/// would need to broadcast to all processes, which would be tricky to get correctly. In particular,
+/// when the command is being submitted, its `Dot` has not been computed yet. So the idea here is
+/// for parallel protocols to have the `DotGen` outside and once the `Dot` is computed, the submit
+/// is forwarded to the correct protocol process. For maximum parallelism, this generator can live
+/// in the clients and have a lock-free implementation (see `AtomicIdGen`).
+//
 /// 4. When the protocol process receives the new command from a client it does whatever is
 /// specified in the `Protocol` trait, which may include sending messages to other replicas/nodes,
 /// which leads to point 5.
