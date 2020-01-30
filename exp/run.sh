@@ -20,13 +20,13 @@ PROCESSES=3
 FAULTS=1
 
 # parallelism config
-WORKERS=32
-EXECUTORS=32
-MULTIPLEXING=8
+WORKERS=8
+EXECUTORS=8
+MULTIPLEXING=2
 
 # clients config
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=2000
+CLIENTS_PER_MACHINE=500
 CONFLICT_RATE=0
 COMMANDS_PER_CLIENT=10000
 
@@ -34,12 +34,11 @@ COMMANDS_PER_CLIENT=10000
 PROCESS_TCP_NODELAY=true
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
-PROCESS_SOCKET_BUFFER_SIZE=$((0 * 1024))
+PROCESS_TCP_BUFFER_SIZE=$((512 * 1024))
+PROCESS_TCP_FLUSH_INTERVAL=100
 
 # client tcp config
 CLIENT_TCP_NODELAY=true
-# do not buffer on the client-side
-CLIENT_SOCKET_BUFFER_SIZE=0
 
 # if this value is 100, the run doesn't finish, which probably means there's a deadlock somewhere
 # with 1000 we can see that channels fill up sometimes
@@ -256,7 +255,8 @@ start_process() {
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
         --tcp_nodelay ${PROCESS_TCP_NODELAY} \
-        --socket_buffer_size ${PROCESS_SOCKET_BUFFER_SIZE} \
+        --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
+        --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
         --workers ${WORKERS} \
         --executors ${EXECUTORS} \
@@ -349,7 +349,6 @@ start_client() {
         --conflict_rate ${CONFLICT_RATE} \
         --commands_per_client ${COMMANDS_PER_CLIENT} \
         --tcp_nodelay ${CLIENT_TCP_NODELAY} \
-        --socket_buffer_size ${CLIENT_SOCKET_BUFFER_SIZE} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
     # TODO for open-loop clients:
     # --interval 1
