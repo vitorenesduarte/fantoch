@@ -10,6 +10,9 @@ NUKE_PLANET_SIM="false"
 
 # maximum number of open files
 MAX_OPEN_FILES=100000
+# maximum buffer sizes
+MAX_SO_RCVBUF=$((10 * 1024 * 1024)) # 10mb
+MAX_SO_SNDBUF=$((10 * 1024 * 1024)) # 10mb
 
 if [ $# -ne 1 ]; then
     echo "usage: build.sh branch"
@@ -24,7 +27,7 @@ if [ "${NUKE_RUST}" == "true" ]; then
     rm -rf .cargo/ .rustup/
 fi
 if [ "${NUKE_PLANET_SIM}" == "true" ]; then
-    rm -rf .planet_sim/
+    rm -rf planet_sim/
 fi
 
 # install rust
@@ -68,8 +71,19 @@ sudo sed -i '/.*hard.*nofile.*/d' /etc/security/limits.conf
 echo "*                soft    nofile          ${MAX_OPEN_FILES}" | sudo tee -a /etc/security/limits.conf
 echo "*                hard    nofile          ${MAX_OPEN_FILES}" | sudo tee -a /etc/security/limits.conf
 
-# install dstat and lsof
-sudo apt-get install -y dstat lsof
+# increase max size for SO_RCVBUF and SO_SNDBUF
+# - first delete current setting, if any
+sudo sed -i '/^net.core.rmem_max.*/d' /etc/sysctl.conf
+sudo sed -i '/^net.core.wmem_max.*/d' /etc/sysctl.conf
+# - then append correct setting
+echo "net.core.rmem_max = ${MAX_SO_RCVBUF}" | sudo tee -a /etc/sysctl.conf
+echo "net.core.wmem_max = ${MAX_SO_SNDBUF}" | sudo tee -a /etc/sysctl.conf
+
+# reload system configuration so that previous changes  take place
+sudo sysctl --system
+
+# install htop, dstat and lsof
+sudo apt-get install -y htop dstat lsof
 
 # clean up
 sudo apt-get autoremove
