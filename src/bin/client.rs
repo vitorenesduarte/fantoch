@@ -12,21 +12,7 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 fn main() -> Result<(), Box<dyn Error>> {
     let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) = parse_args();
 
-    // get number of cpus
-    let cpus = num_cpus::get();
-    println!("cpus: {}", cpus);
-
-    // create tokio runtime
-    let mut runtime = tokio::runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(cpus)
-        .enable_io()
-        .enable_time()
-        .thread_name("runner")
-        .build()
-        .expect("tokio runtime build should work");
-
-    runtime.block_on(planet_sim::run::client(
+    common::tokio_runtime().block_on(planet_sim::run::client(
         ids,
         address,
         interval,

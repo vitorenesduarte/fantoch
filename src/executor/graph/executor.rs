@@ -17,8 +17,6 @@ impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
     fn new(config: Config) -> Self {
-        // this executor can never be parallel
-        assert!(!config.parallel_executor());
         let graph = DependencyGraph::new(&config);
         let store = KVStore::new();
         let pending = HashSet::new();
@@ -62,11 +60,6 @@ impl Executor for GraphExecutor {
                 }
             })
             .collect()
-    }
-
-    fn parallel(&self) -> bool {
-        // This is executor in never parallel
-        false
     }
 
     fn show_metrics(&self) {

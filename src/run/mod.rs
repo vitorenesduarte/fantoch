@@ -93,8 +93,6 @@ pub async fn process<A, P>(
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
-    workers: usize,
-    executors: usize,
     multiplexing: usize,
 ) -> RunResult<()>
 where
@@ -116,8 +114,6 @@ where
         tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
-        workers,
-        executors,
         multiplexing,
         semaphore,
     )
@@ -138,8 +134,6 @@ async fn process_with_notify<A, P>(
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
-    workers: usize,
-    executors: usize,
     multiplexing: usize,
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
@@ -156,9 +150,12 @@ where
     // start process listener
     let listener = task::listen((ip, port)).await?;
 
+    // adjust number of workers depending on whether the protocol is parallel
+    // if process.parallel() {}
+
     // create forward channels: reader -> workers
     let (reader_to_workers, reader_to_workers_rxs) =
-        ReaderToWorkers::<P>::new("reader_to_workers", channel_buffer_size, workers);
+        ReaderToWorkers::<P>::new("reader_to_workers", channel_buffer_size, config.workers());
 
     // connect to all processes
     let to_writers = task::process::connect_to_all::<A, P>(
@@ -183,11 +180,14 @@ where
 
     // create forward channels: client -> workers
     let (client_to_workers, client_to_workers_rxs) =
-        ClientToWorkers::new("client_to_workers", channel_buffer_size, workers);
+        ClientToWorkers::new("client_to_workers", channel_buffer_size, config.workers());
 
     // create forward channels: client -> executors
-    let (client_to_executors, client_to_executors_rxs) =
-        ClientToExecutors::new("client_to_executors", channel_buffer_size, executors);
+    let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
+        "client_to_executors",
+        channel_buffer_size,
+        config.executors(),
+    );
 
     task::client::start_listener(
         process_id,
@@ -200,8 +200,11 @@ where
     );
 
     // create forward channels: worker -> executors
-    let (worker_to_executors, worker_to_executors_rxs) =
-        WorkerToExecutors::<P>::new("worker_to_executors", channel_buffer_size, executors);
+    let (worker_to_executors, worker_to_executors_rxs) = WorkerToExecutors::<P>::new(
+        "worker_to_executors",
+        channel_buffer_size,
+        config.executors(),
+    );
 
     // start executors
     task::executor::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
@@ -500,8 +503,8 @@ mod tests {
         let multiplexing = 3;
 
         // set parallel protocol and executors in config
-        config.set_parallel_protocol(true);
-        config.set_parallel_executor(true);
+        config.set_workers(workers);
+        config.set_executors(executors);
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
@@ -520,8 +523,6 @@ mod tests {
             tcp_buffer_size,
             tcp_flush_interval,
             channel_buffer_size,
-            workers,
-            executors,
             multiplexing,
             semaphore.clone(),
         ));
@@ -541,8 +542,6 @@ mod tests {
             tcp_buffer_size,
             tcp_flush_interval,
             channel_buffer_size,
-            workers,
-            executors,
             multiplexing,
             semaphore.clone(),
         ));
@@ -562,8 +561,6 @@ mod tests {
             tcp_buffer_size,
             tcp_flush_interval,
             channel_buffer_size,
-            workers,
-            executors,
             multiplexing,
             semaphore.clone(),
         ));

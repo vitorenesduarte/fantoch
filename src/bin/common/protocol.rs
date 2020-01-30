@@ -25,8 +25,6 @@ pub fn parse_args() -> (
     Option<usize>,
     usize,
     usize,
-    usize,
-    usize,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -124,17 +122,17 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("workers")
-                .long("workers")
-                .value_name("WORKERS")
+            Arg::with_name("protocol_workers")
+                .long("protocol_workers")
+                .value_name("PROTOCOL_WORKERS")
                 .help("number of protocol workers; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("executors")
-                .long("executors")
-                .value_name("EXECUTORS")
-                .help("number of protocol executors; default: 1")
+            Arg::with_name("executor_workers")
+                .long("executor_workers")
+                .value_name("EXECUTOR_WORKERS")
+                .help("number of executor workers; default: 1")
                 .takes_value(true),
         )
         .arg(
@@ -165,9 +163,9 @@ pub fn parse_args() -> (
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
 
-    // set parallel protocol and parallel executors cf. #workers and #executors
-    config.set_parallel_protocol(workers > 1);
-    config.set_parallel_executor(executors > 1);
+    // set number of protocol workers and executors
+    config.set_workers(workers);
+    config.set_executors(executors);
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -180,8 +178,6 @@ pub fn parse_args() -> (
     println!("tcp buffer size: {:?}", tcp_buffer_size);
     println!("tcp flush interval: {:?}", tcp_flush_interval);
     println!("channel buffer size: {:?}", channel_buffer_size);
-    println!("workers: {:?}", workers);
-    println!("executors: {:?}", executors);
     println!("multiplexing: {:?}", multiplexing);
 
     // check that the number of sorted processes equals `n`
@@ -202,8 +198,6 @@ pub fn parse_args() -> (
         tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
-        workers,
-        executors,
         multiplexing,
     )
 }
@@ -275,7 +269,7 @@ fn parse_executors(executors: Option<&str>) -> usize {
         .map(|executors| {
             executors
                 .parse::<usize>()
-                .expect("workers should be a number")
+                .expect("executors should be a number")
         })
         .unwrap_or(DEFAULT_EXECUTORS)
 }

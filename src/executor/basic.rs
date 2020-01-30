@@ -6,7 +6,6 @@ use crate::id::Rifl;
 use crate::kvs::{KVOp, KVStore, Key};
 
 pub struct BasicExecutor {
-    config: Config,
     store: KVStore,
     pending: Pending,
 }
@@ -16,15 +15,11 @@ impl Executor for BasicExecutor {
 
     fn new(config: Config) -> Self {
         let store = KVStore::new();
-        // aggregate results if not parallel executor
-        let aggregate = !config.parallel_executor();
+        // aggregate results if the number of executors is 1
+        let aggregate = config.executors() == 1;
         let pending = Pending::new(aggregate);
 
-        Self {
-            config,
-            store,
-            pending,
-        }
+        Self { store, pending }
     }
 
     fn wait_for(&mut self, cmd: &Command) {
@@ -49,8 +44,8 @@ impl Executor for BasicExecutor {
         }
     }
 
-    fn parallel(&self) -> bool {
-        self.config.parallel_executor()
+    fn parallel() -> bool {
+        true
     }
 }
 

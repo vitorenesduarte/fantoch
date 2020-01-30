@@ -10,10 +10,10 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
-    /// defines whether the protocol is configured with parallel or not
-    parallel_protocol: bool,
-    /// defines whether the executor is configured with parallel or not
-    parallel_executor: bool,
+    /// defines the number of `Protocol` workers
+    workers: usize,
+    /// defines the number of `Executor` workers
+    executors: usize,
 }
 
 impl Config {
@@ -29,17 +29,16 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
-        // by default, `parallel_protocol = false`
-        let parallel_protocol = false;
-        // by default, `parallel_executor= false`
-        let parallel_executor = false;
+        // by default there's one worker for `Protocol` and one worker for `Executor`
+        let workers = 1;
+        let executors = 1;
         Self {
             n,
             f,
             newt_tiny_quorums,
             transitive_conflicts,
-            parallel_protocol,
-            parallel_executor,
+            workers,
+            executors,
         }
     }
 
@@ -73,24 +72,24 @@ impl Config {
         self.transitive_conflicts = transitive_conflicts;
     }
 
-    /// Checks whether `Protocol` should be configured with parallel.
-    pub fn parallel_protocol(&self) -> bool {
-        self.parallel_protocol
+    /// Checks the number of `Protocol` workers.
+    pub fn workers(&self) -> usize {
+        self.workers
     }
 
-    /// Changes the value of `parallel_protocol`.
-    pub fn set_parallel_protocol(&mut self, parallel_protocol: bool) {
-        self.parallel_protocol = parallel_protocol;
+    /// Changes the value of `Protocol` workers.
+    pub fn set_workers(&mut self, workers: usize) {
+        self.workers = workers;
     }
 
-    /// Checks whether `Executor` should be configured with parallel.
-    pub fn parallel_executor(&self) -> bool {
-        self.parallel_executor
+    /// Checks the number of `Executor`'s.
+    pub fn executors(&self) -> usize {
+        self.executors
     }
 
-    /// Changes the value of `parallel_executor`.
-    pub fn set_parallel_executor(&mut self, parallel_executor: bool) {
-        self.parallel_executor = parallel_executor;
+    /// Changes the value of `Executor`'s.
+    pub fn set_executors(&mut self, executors: usize) {
+        self.executors = executors;
     }
 }
 
@@ -182,19 +181,15 @@ mod tests {
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
 
-        // by default, parallel_protocol is false
-        assert!(!config.parallel_protocol());
+        // by default, there's one protocol worker and one executor worker
+        assert_eq!(config.workers(), 1);
+        assert_eq!(config.executors(), 1);
 
-        // if we change it to true, it becomes true
-        config.set_parallel_protocol(true);
-        assert!(config.parallel_protocol());
-
-        // by default, parallel_executor is false
-        assert!(!config.parallel_executor());
-
-        // if we change it to true, it becomes true
-        config.set_parallel_executor(true);
-        assert!(config.parallel_executor());
+        // change their values and check they have changed
+        config.set_workers(10);
+        config.set_executors(20);
+        assert_eq!(config.workers(), 10);
+        assert_eq!(config.executors(), 20);
     }
 
     #[test]

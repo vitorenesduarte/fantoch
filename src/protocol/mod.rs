@@ -57,7 +57,9 @@ pub trait Protocol: Clone {
     #[must_use]
     fn to_executor(&mut self) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
-    fn parallel(&self) -> bool;
+    fn parallel() -> bool {
+        false
+    }
 
     fn show_metrics(&self) {
         // by default, nothing to show

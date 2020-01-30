@@ -85,8 +85,8 @@ impl Protocol for EPaxos {
         }
     }
 
-    fn parallel(&self) -> bool {
-        self.bp.config.parallel_protocol()
+    fn parallel() -> bool {
+        true
     }
 
     /// Returns new commands results to be sent to clients.

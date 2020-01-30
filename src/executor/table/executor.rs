@@ -8,7 +8,6 @@ use crate::kvs::{KVStore, Key};
 use crate::protocol::common::table::{ProcessVotes, Votes};
 
 pub struct TableExecutor {
-    config: Config,
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
@@ -22,12 +21,11 @@ impl Executor for TableExecutor {
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
         let table = MultiVotesTable::new(config.n(), stability_threshold);
         let store = KVStore::new();
-        // aggregate results if not parallel executor
-        let aggregate = !config.parallel_executor();
+        // aggregate results if the number of executors is 1
+        let aggregate = config.executors() == 1;
         let pending = Pending::new(aggregate);
 
         Self {
-            config,
             table,
             store,
             pending,
@@ -73,8 +71,8 @@ impl Executor for TableExecutor {
         results
     }
 
-    fn parallel(&self) -> bool {
-        self.config.parallel_executor()
+    fn parallel() -> bool {
+        true
     }
 
     fn show_metrics(&self) {

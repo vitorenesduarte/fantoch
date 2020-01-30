@@ -89,8 +89,8 @@ impl Protocol for Atlas {
         mem::take(&mut self.to_executor)
     }
 
-    fn parallel(&self) -> bool {
-        self.bp.config.parallel_protocol()
+    fn parallel() -> bool {
+        true
     }
 
     fn show_metrics(&self) {
