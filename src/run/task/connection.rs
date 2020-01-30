@@ -17,39 +17,11 @@ impl Connection {
     // TODO here `BufStream` will allocate two buffers, one for reading and another one for
     // writing; this may be unnecessarily inneficient for users that will only read or write; on
     // the other end, the allocation only occurs once, so it's probably fine to do this
-    pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: Option<usize>) -> Self {
-        // set TCP_NODELAY
-        stream
-            .set_nodelay(tcp_nodelay)
-            .expect("setting TCP_NODELAY should work");
-
-        // maybe adapt SO_RCVBUF and SO_SNDBUF and compute buffer capacity
-        let buffer_capacity = if let Some(tcp_buffer_size) = tcp_buffer_size {
-            // change SO_RCVBUF if lower than `tcp_buffer_size`
-            if let Ok(so_rcvbuf) = stream.recv_buffer_size() {
-                if so_rcvbuf < tcp_buffer_size {
-                    stream
-                        .set_recv_buffer_size(tcp_buffer_size)
-                        .expect("setting tcp recv buffer should work");
-                }
-            }
-            // change SO_SNFBUF if lower than `tcp_buffer_size`
-            if let Ok(so_sndbuf) = stream.send_buffer_size() {
-                if so_sndbuf < tcp_buffer_size {
-                    stream
-                        .set_send_buffer_size(tcp_buffer_size)
-                        .expect("setting tcp send buffer should work");
-                }
-            }
-            tcp_buffer_size
-        } else {
-            0
-        };
-        println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
-        println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
-
+    pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) -> Self {
+        // configure stream
+        configure(&stream, tcp_nodelay, tcp_buffer_size);
         // buffer stream
-        let stream = BufStream::with_capacity(buffer_capacity, buffer_capacity, stream);
+        let stream = BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }
@@ -80,6 +52,34 @@ impl Connection {
     pub async fn flush(&mut self) {
         flush(&mut self.stream).await;
     }
+}
+
+fn configure(stream: &TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) {
+    // set TCP_NODELAY
+    stream
+        .set_nodelay(tcp_nodelay)
+        .expect("setting TCP_NODELAY should work");
+
+    // maybe adapt SO_RCVBUF and SO_SNDBUF and compute buffer capacity
+    // change SO_RCVBUF if lower than `tcp_buffer_size`
+    if let Ok(so_rcvbuf) = stream.recv_buffer_size() {
+        if so_rcvbuf < tcp_buffer_size {
+            stream
+                .set_recv_buffer_size(tcp_buffer_size)
+                .expect("setting tcp recv buffer should work");
+        }
+    }
+    println!("SO_RCVBUF: {:?}", stream.recv_buffer_size());
+
+    // change SO_SNFBUF if lower than `tcp_buffer_size`
+    if let Ok(so_sndbuf) = stream.send_buffer_size() {
+        if so_sndbuf < tcp_buffer_size {
+            stream
+                .set_send_buffer_size(tcp_buffer_size)
+                .expect("setting tcp send buffer should work");
+        }
+    }
+    println!("SO_SNDBUF: {:?}", stream.send_buffer_size());
 }
 
 fn deserialize<V>(bytes: BytesMut) -> V

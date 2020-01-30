@@ -114,7 +114,7 @@ where
 pub async fn connect<A>(
     address: A,
     tcp_nodelay: bool,
-    tcp_buffer_size: Option<usize>,
+    tcp_buffer_size: usize,
     connect_retries: usize,
 ) -> RunResult<Connection>
 where
@@ -157,7 +157,7 @@ where
 async fn listener_task(
     mut listener: TcpListener,
     tcp_nodelay: bool,
-    tcp_buffer_size: Option<usize>,
+    tcp_buffer_size: usize,
     mut parent: ChannelSender<Connection>,
 ) {
     loop {

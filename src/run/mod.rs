@@ -92,7 +92,7 @@ pub async fn process<A, P>(
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     workers: usize,
     executors: usize,
@@ -137,7 +137,7 @@ async fn process_with_notify<A, P>(
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     workers: usize,
     executors: usize,
@@ -169,7 +169,7 @@ where
         reader_to_workers,
         CONNECT_RETRIES,
         tcp_nodelay,
-        Some(tcp_buffer_size),
+        tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
@@ -373,22 +373,17 @@ where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // connect to process
-    let mut connection = match task::connect(
-        address,
-        tcp_nodelay,
-        None,
-        CONNECT_RETRIES,
-    )
-    .await
-    {
-        Ok(connection) => connection,
-        Err(e) => {
-            // TODO panicking here as not sure how to make error handling send + 'static
-            // (required by tokio::spawn) and still be able to use the ?
-            // operator
-            panic!("[client] error connecting at client {}: {:?}", client_id, e);
-        }
-    };
+    let tcp_buffer_size = 0;
+    let mut connection =
+        match task::connect(address, tcp_nodelay, tcp_buffer_size, CONNECT_RETRIES).await {
+            Ok(connection) => connection,
+            Err(e) => {
+                // TODO panicking here as not sure how to make error handling send + 'static
+                // (required by tokio::spawn) and still be able to use the ?
+                // operator
+                panic!("[client] error connecting at client {}: {:?}", client_id, e);
+            }
+        };
 
     // create client
     let mut client = Client::new(client_id, workload);
@@ -499,7 +494,7 @@ mod tests {
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
-        let tcp_flush_interval = 100; // micros
+        let tcp_flush_interval = Some(100); // micros
         let channel_buffer_size = 10000;
         let workers = 2;
         let executors = 2;

@@ -39,8 +39,9 @@ async fn client_listener_task(
     channel_buffer_size: usize,
 ) {
     // start listener task
+    let tcp_buffer_size = 0;
     let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, None, tx)
+        super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
     loop {

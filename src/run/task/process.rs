@@ -21,8 +21,8 @@ pub async fn connect_to_all<A, P>(
     to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
-    tcp_buffer_size: Option<usize>,
-    tcp_flush_interval: usize,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     multiplexing: usize,
 ) -> RunResult<HashMap<ProcessId, Vec<WriterSender<P>>>>
@@ -82,7 +82,7 @@ async fn handshake<P>(
     process_id: ProcessId,
     n: usize,
     to_workers: ReaderToWorkers<P>,
-    tcp_flush_interval: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
@@ -146,7 +146,7 @@ where
 
 fn start_writers<P>(
     n: usize,
-    tcp_flush_interval: usize,
+    tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, Connection)>,
 ) -> HashMap<ProcessId, Vec<WriterSender<P>>>
@@ -197,27 +197,37 @@ async fn reader_task<P>(
 
 /// Writer task.
 async fn writer_task<P>(
-    tcp_flush_interval: usize,
+    tcp_flush_interval: Option<usize>,
     mut connection: Connection,
     mut parent: WriterReceiver<P>,
 ) where
     P: Protocol + 'static,
 {
-    // create interval
-    let mut interval = time::interval(Duration::from_micros(tcp_flush_interval as u64));
-
-    loop {
-        select! {
-            msg = parent.recv().fuse() => {
-                if let Some(msg) = msg {
-                    connection.write(msg).await;
-                } else {
-                    println!("[writer] error receiving message from parent");
+    // if flush interval higher than 0, then flush periodically; otherwise, flush on every write
+    if let Some(tcp_flush_interval) = tcp_flush_interval {
+        // create interval
+        let mut interval = time::interval(Duration::from_micros(tcp_flush_interval as u64));
+        loop {
+            select! {
+                msg = parent.recv().fuse() => {
+                    if let Some(msg) = msg {
+                        connection.write(msg).await;
+                    } else {
+                        println!("[writer] error receiving message from parent");
+                    }
+                }
+                _ = interval.tick().fuse() => {
+                    // flush socket
+                    connection.flush().await;
                 }
             }
-            _ = interval.tick().fuse() => {
-                // flush socket
-                connection.flush().await;
+        }
+    } else {
+        loop {
+            if let Some(msg) = parent.recv().await {
+                connection.send(msg).await;
+            } else {
+                println!("[writer] error receiving message from parent");
             }
         }
     }

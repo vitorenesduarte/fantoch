@@ -22,7 +22,7 @@ pub fn parse_args() -> (
     Config,
     bool,
     usize,
-    usize,
+    Option<usize>,
     usize,
     usize,
     usize,
@@ -111,7 +111,7 @@ pub fn parse_args() -> (
             Arg::with_name("tcp_flush_interval")
                 .long("tcp_flush_interval")
                 .value_name("TCP_FLUSH_INTERVAL")
-                .help("TCP flush interval (in microseconds); default: 100")
+                .help("TCP flush interval (in microseconds); if 0, then flush occurs on every send; default: 0")
                 .takes_value(true),
         )
         .arg(
