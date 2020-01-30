@@ -105,3 +105,6 @@ git pull
 
 # use nightly
 rustup override set nightly
+
+# build all the binaries in release mode
+cargo build --release --bins
