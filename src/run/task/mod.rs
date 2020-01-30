@@ -1,16 +1,16 @@
-// TODO This module contains the definition of `Connection`.
+// This module contains the definition of `Connection`.
 pub mod connection;
 
-// TODO This module contains the definition of `Sender` and `Receiver`.
+// This module contains the definition of `ChannelSender` and `ChannelReceiver`.
 pub mod chan;
 
-// TODO This module contains the definition of ...
+// This module contains executor's implementation.
 pub mod executor;
 
-// TODO This module contains the definition of ...
+// This module contains process's implementation.
 pub mod process;
 
-// TODO This module contains the definition of ...
+// This module contains client's implementation.
 pub mod client;
 
 // Re-exports.

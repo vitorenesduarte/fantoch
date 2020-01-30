@@ -42,7 +42,7 @@
 /// suggests that execution info should define to which key it refers to. This is achieved through
 /// the `MessageKey` trait.
 ///
-/// 7. When execution info is handled in a executor, the executor may have new (potentially partial
+/// 7. When execution info is handled in an executor, the executor may have new (potentially partial
 /// if the executor is parallel) command results. If the command was previously registered by some
 /// client, the result is forwarded to such client.
 ///
@@ -56,13 +56,14 @@
 
 const CONNECT_RETRIES: usize = 100;
 
-// This module contains the prelude.
+// This module contains the "runner" prelude.
 mod prelude;
 
 // This module contains the definition of `ToPool`.
 mod pool;
 
-// TODO This module contains the definition of...
+// This module contains the implementation of channels, clients, connections, executors, and process
+// workers.
 pub mod task;
 
 use crate::client::{Client, Workload};
