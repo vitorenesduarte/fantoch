@@ -5,9 +5,9 @@ use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
 use crate::protocol::{MessageDot, Protocol};
+use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::hash::{Hash, Hasher};
 
 // common error type
 pub type RunResult<V> = Result<V, Box<dyn Error>>;
@@ -95,11 +95,7 @@ fn dot_index(dot: &Dot) -> usize {
     dot.sequence() as usize
 }
 
-type DefaultHasher = ahash::AHasher;
-
 // The index of a key is its hash
 fn key_index(key: &Key) -> usize {
-    let mut hasher = DefaultHasher::default();
-    key.hash(&mut hasher);
-    hasher.finish() as usize
+    util::key_hash(key) as usize
 }
