@@ -71,8 +71,7 @@ use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
-use futures::future::{join_all, FutureExt};
-use futures::select;
+use futures::future::join_all;
 use prelude::*;
 use std::fmt::Debug;
 use std::net::IpAddr;
@@ -345,12 +344,12 @@ where
     let mut interval = time::interval(Duration::from_millis(interval_ms));
 
     loop {
-        select! {
-            _ = interval.tick().fuse() => {
+        tokio::select! {
+            _ = interval.tick() => {
                 // submit new command on every tick (if there are still commands to be generated)
                 next_cmd(&mut client, &time, &mut write).await;
             }
-            cmd_result = read.recv().fuse() => {
+            cmd_result = read.recv() => {
                 if handle_cmd_result(&mut client, &time, cmd_result) {
                     // check if we have generated all commands and received all the corresponding command results, exit
                     break;

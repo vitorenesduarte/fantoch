@@ -5,8 +5,6 @@ use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
 use crate::run::task;
-use futures::future::FutureExt;
-use futures::select;
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -208,15 +206,15 @@ async fn writer_task<P>(
         // create interval
         let mut interval = time::interval(Duration::from_micros(tcp_flush_interval as u64));
         loop {
-            select! {
-                msg = parent.recv().fuse() => {
+            tokio::select! {
+                msg = parent.recv() => {
                     if let Some(msg) = msg {
                         connection.write(msg).await;
                     } else {
                         println!("[writer] error receiving message from parent");
                     }
                 }
-                _ = interval.tick().fuse() => {
+                _ = interval.tick() => {
                     // flush socket
                     connection.flush().await;
                 }
@@ -276,8 +274,8 @@ async fn process_task<P>(
     P: Protocol + 'static,
 {
     loop {
-        select! {
-            msg = from_readers.recv().fuse() => {
+        tokio::select! {
+            msg = from_readers.recv() => {
                 log!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
                     handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors).await
@@ -285,7 +283,7 @@ async fn process_task<P>(
                     println!("[server] error while receiving new process message from readers");
                 }
             }
-            cmd = from_clients.recv().fuse() => {
+            cmd = from_clients.recv() => {
                 log!("[server] from clients: {:?}", cmd);
                 if let Some((dot, cmd)) = cmd {
                     handle_from_client(process_id, dot, cmd, &mut process, &mut to_writers).await

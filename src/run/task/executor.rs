@@ -5,8 +5,6 @@ use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
-use futures::future::FutureExt;
-use futures::select;
 use std::collections::HashMap;
 
 /// Starts executors.
@@ -44,8 +42,8 @@ async fn executor_task<P>(
     let mut client_executor_results = HashMap::new();
 
     loop {
-        select! {
-            execution_info = from_workers.recv().fuse() => {
+        tokio::select! {
+            execution_info = from_workers.recv() => {
                 log!("[executor] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     handle_execution_info::<P>(execution_info, &mut executor, &mut client_executor_results).await;
@@ -53,7 +51,7 @@ async fn executor_task<P>(
                     println!("[executor] error while receiving execution info from parent");
                 }
             }
-            from_client = from_clients.recv().fuse() => {
+            from_client = from_clients.recv() => {
                 log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
                     handle_from_client::<P>(from_client, &mut executor, &mut client_rifl_acks, &mut client_executor_results).await;
