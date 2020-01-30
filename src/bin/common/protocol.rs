@@ -122,17 +122,17 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("protocol_workers")
-                .long("protocol_workers")
-                .value_name("PROTOCOL_WORKERS")
+            Arg::with_name("workers")
+                .long("workers")
+                .value_name("WORKERS")
                 .help("number of protocol workers; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("executor_workers")
-                .long("executor_workers")
-                .value_name("EXECUTOR_WORKERS")
-                .help("number of executor workers; default: 1")
+            Arg::with_name("executors")
+                .long("executors")
+                .value_name("EXECUTORS")
+                .help("number of executors; default: 1")
                 .takes_value(true),
         )
         .arg(
