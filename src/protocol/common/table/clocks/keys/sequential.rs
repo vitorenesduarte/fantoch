@@ -1,3 +1,4 @@
+use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
@@ -5,14 +6,14 @@ use crate::protocol::common::table::{ProcessVotes, VoteRange};
 use std::collections::HashMap;
 
 #[derive(Clone)]
-pub struct KeysClocks {
+pub struct SequentialKeyClocks {
     id: ProcessId,
     clocks: HashMap<Key, u64>,
 }
 
-impl KeysClocks {
-    /// Create a new `KeysClocks` instance.
-    pub fn new(id: ProcessId) -> Self {
+impl KeyClocks for SequentialKeyClocks {
+    /// Create a new `SequentialKeyClocks` instance.
+    fn new(id: ProcessId) -> Self {
         Self {
             id,
             clocks: HashMap::new(),
@@ -22,7 +23,7 @@ impl KeysClocks {
     /// Retrieves the current clock for some command.
     /// If the command touches multiple keys, returns the maximum between the
     /// clocks associated with each key.
-    pub fn clock(&self, cmd: &Command) -> u64 {
+    fn clock(&self, cmd: &Command) -> u64 {
         cmd.keys()
             .map(|key| self.key_clock(key))
             .max()
@@ -30,7 +31,7 @@ impl KeysClocks {
     }
 
     /// Vote up-to `clock`.
-    pub fn process_votes(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
+    fn process_votes(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
         cmd.keys()
             .filter_map(|key| {
                 // get a mutable reference to current clock value
@@ -56,7 +57,9 @@ impl KeysClocks {
             })
             .collect()
     }
+}
 
+impl SequentialKeyClocks {
     /// Retrieves the current clock for `key`.
     #[allow(clippy::ptr_arg)]
     fn key_clock(&self, key: &Key) -> u64 {
@@ -80,7 +83,7 @@ mod tests {
     #[test]
     fn keys_clocks_flow() {
         // create key clocks
-        let mut clocks = KeysClocks::new(1);
+        let mut clocks = SequentialKeyClocks::new(1);
 
         // keys
         let key_a = String::from("A");
@@ -155,7 +158,7 @@ mod tests {
     #[test]
     fn keys_clocks_no_double_votes() {
         // create key clocks
-        let mut clocks = KeysClocks::new(1);
+        let mut clocks = SequentialKeyClocks::new(1);
 
         // command
         let key = String::from("A");

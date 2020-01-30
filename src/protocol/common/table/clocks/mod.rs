@@ -1,9 +1,10 @@
-// This module contains the definition of `KeysClocks`.
+// This module contains the definition of `KeyClocks`.
 mod keys;
 
 // This module contains the definition of `QuorumClocks`.
 mod quorum;
 
-// Re-export `KeysClocks` and `QuorumClocks`.
-pub use keys::KeysClocks;
+// Re-exports.
+pub use keys::sequential::SequentialKeyClocks;
+pub use keys::KeyClocks;
 pub use quorum::QuorumClocks;
