@@ -22,20 +22,19 @@ FAULTS=1
 # parallelism config
 WORKERS=8
 EXECUTORS=8
-MULTIPLEXING=2
+MULTIPLEXING=1
 
 # clients config
 CLIENT_MACHINES_NUMBER=3
-CLIENTS_PER_MACHINE=500
 CONFLICT_RATE=0
-COMMANDS_PER_CLIENT=10000
+COMMANDS_PER_CLIENT=50000
 
 # process tcp config
 PROCESS_TCP_NODELAY=true
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
-PROCESS_TCP_BUFFER_SIZE=$((512 * 1024))
-PROCESS_TCP_FLUSH_INTERVAL=100
+PROCESS_TCP_BUFFER_SIZE=$((0 * 1024))
+PROCESS_TCP_FLUSH_INTERVAL=0
 
 # client tcp config
 CLIENT_TCP_NODELAY=true
@@ -130,6 +129,19 @@ wait_client_ended() {
         ended=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
         sleep 1
     done
+}
+
+fetch_client_log() {
+    if [ $# -ne 2 ]; then
+        echo "usage: fetch_client_log index machine"
+        exit 1
+    fi
+    local index=$1
+    local machine=$2
+    local cmd
+    cmd="grep latency $(client_file ${index})"
+    # shellcheck disable=SC2029
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 }
 
 stop_planet_sim() {
@@ -311,8 +323,8 @@ start_processes() {
 
 # start client
 start_client() {
-    if [ $# -ne 3 ]; then
-        echo "usage: start_client machine index address"
+    if [ $# -ne 4 ]; then
+        echo "usage: start_client machine index address clients_per_machine"
         exit 1
     fi
 
@@ -320,6 +332,7 @@ start_client() {
     local machine=$1
     local index=$2
     local address=$3
+    local clients_per_machine=$4
     local id_start
     local id_end
     local command_args
@@ -338,9 +351,9 @@ start_client() {
 
     # compute id start and id end
     # - first compute the id end
-    id_end="$((index * CLIENTS_PER_MACHINE))"
-    # - to compute id start simply just subtract ${CLIENTS_PER_MACHINE} and add 1
-    id_start="$((id_end - CLIENTS_PER_MACHINE + 1))"
+    id_end="$((index * clients_per_machine))"
+    # - to compute id start simply just subtract ${clients_per_machine} and add 1
+    id_start="$((id_end - clients_per_machine + 1))"
 
     # create commands args
     command_args="\
@@ -363,7 +376,13 @@ start_client() {
 }
 
 run_clients() {
+    if [ $# -ne 2 ]; then
+        echo "usage: run_clients clients_per_machine output_log"
+        exit 1
+    fi
     # variables
+    local clients_per_machine=$1
+    local output_log=$2
     local index
     local result
     local machine
@@ -387,31 +406,40 @@ run_clients() {
 
         # start a new client
         info "client ${index} spawned"
-        start_client ${machine} ${index} ${address} &
+        start_client ${machine} ${index} ${address} ${clients_per_machine} &
     done
 
     # wait for clients ended
     for index in $(seq 1 ${CLIENT_MACHINES_NUMBER}); do
         wait_client_ended ${index} ${machines[${index}]}
     done
+
+    # fetch client logs
+    for index in $(seq 1 ${CLIENT_MACHINES_NUMBER}); do
+        fetch_client_log ${index} ${machines[${index}]} >>${output_log}
+    done
 }
 
 if [[ $1 == "stop" ]]; then
     stop_all
 else
-    stop_all
-    sleep ${KILL_WAIT}
-    info "hopefully everything is stopped now"
+    output_log=.run_log
+    for clients_per_machine in 1 2 4 8 16 32 64 128 256 512; do
+        echo "C=${clients_per_machine}" >>${output_log}
+        stop_all
+        sleep ${KILL_WAIT}
+        info "hopefully everything is stopped now"
 
-    # TODO launch dstat in all all machines with something like:
-    # stat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
+        # TODO launch dstat in all all machines with something like:
+        # stat -tsmdn -c -C 0,1,2,3,4,5,6,7,8,9,10,11,total --noheaders --output a.csv
 
-    start_processes
-    info "all processes have been started"
+        start_processes
+        info "all processes have been started"
 
-    run_clients
-    info "all clients have ended"
+        run_clients ${clients_per_machine} ${output_log}
+        info "all clients have ended"
 
-    stop_processes
-    info "all processes have been stopped"
+        stop_processes
+        info "all processes have been stopped"
+    done
 fi
