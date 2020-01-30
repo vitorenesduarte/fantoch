@@ -1,7 +1,8 @@
 use crate::command::Command;
 use crate::id::RiflGen;
-use crate::kvs::Key;
-use rand::Rng;
+use crate::kvs::{Key, Value};
+use rand::{distributions::Alphanumeric, Rng};
+use std::iter;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Workload {
@@ -9,18 +10,25 @@ pub struct Workload {
     conflict_rate: usize,
     /// number of commands to be submitted in this workload
     total_commands: usize,
+    /// size of payload in command (in bytes)
+    payload_size: usize,
     /// number of commands already issued in this workload
     command_count: usize,
 }
 
 impl Workload {
-    pub fn new(conflict_rate: usize, total_commands: usize) -> Self {
+    pub fn new(
+        conflict_rate: usize,
+        total_commands: usize,
+        payload_size: usize,
+    ) -> Self {
         // check conflict rate value
         assert!(conflict_rate <= 100);
 
         Self {
             conflict_rate,
             total_commands,
+            payload_size,
             command_count: 0,
         }
     }
@@ -72,7 +80,7 @@ impl Workload {
         let key = self.gen_cmd_key(&rifl_gen);
         // TODO: generate something with a given payload size if outside of
         // simulation
-        let value = String::from("");
+        let value = self.gen_cmd_value();
 
         // generate put command
         // TODO: make it configurable so that we can generate other commands
@@ -80,9 +88,9 @@ impl Workload {
         Command::put(rifl, key, value)
     }
 
-    /// Generate a command given
+    /// Generate a command key based on the conflict rate provided.
     fn gen_cmd_key(&mut self, rifl_gen: &RiflGen) -> Key {
-        // check if we should generate a conflict
+        // check if we should generate a conflict:
         let should_conflict = match rand::thread_rng().gen_range(0, 100) {
             0 => false,
             n => n < self.conflict_rate,
@@ -94,6 +102,15 @@ impl Workload {
             // avoid conflict with unique client key
             rifl_gen.source().to_string()
         }
+    }
+
+    /// Generate a command payload with the payload size provided.
+    fn gen_cmd_value(&self) -> Value {
+        let mut rng = rand::thread_rng();
+        iter::repeat(())
+            .map(|()| rng.sample(Alphanumeric))
+            .take(self.payload_size)
+            .collect()
     }
 }
 
