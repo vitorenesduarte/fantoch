@@ -3,7 +3,7 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, EPaxos, Newt, Protocol};
+use planet_sim::protocol::{Atlas, EPaxos, Protocol, SequentialNewt};
 use planet_sim::sim::Runner;
 use std::thread;
 
@@ -12,7 +12,7 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 fn main() {
     println!(">running newt n = 5 | f = 1...");
     let config = Config::new(5, 1);
-    run_in_thread(move || increasing_load::<Newt>(config));
+    run_in_thread(move || increasing_load::<SequentialNewt>(config));
 
     println!(">running atlas n = 5 | f = 1...");
     let mut config = Config::new(5, 1);

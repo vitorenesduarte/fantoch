@@ -1,8 +1,8 @@
-// This module contains the definition of `KeysClocks` and `QuorumClocks`.
+// This module contains the definition of `KeyClocks` and `QuorumClocks`.
 mod clocks;
 
 // Re-exports.
-pub use clocks::{KeysClocks, QuorumClocks};
+pub use clocks::{KeyClocks, QuorumClocks, SequentialKeyClocks};
 
 use crate::id::ProcessId;
 use crate::kvs::Key;
@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use crate::command::Command;
     use crate::id::Rifl;
-    use crate::protocol::common::table::KeysClocks;
+    use crate::protocol::common::table::SequentialKeyClocks;
     use std::cmp::max;
 
     impl VoteRange {
@@ -126,8 +126,8 @@ mod tests {
     #[test]
     fn votes_flow() {
         // create clocks
-        let mut clocks_p0 = KeysClocks::new(0);
-        let mut clocks_p1 = KeysClocks::new(1);
+        let mut clocks_p0 = SequentialKeyClocks::new(0);
+        let mut clocks_p1 = SequentialKeyClocks::new(1);
 
         // keys
         let key_a = String::from("A");

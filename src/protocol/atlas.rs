@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::{
-    graph::{KeysClocks, QuorumClocks},
+    graph::{KeyClocks, QuorumClocks},
     info::{Commands, Info},
     synod::{Synod, SynodMessage},
 };
@@ -21,7 +21,7 @@ type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 #[derive(Clone)]
 pub struct Atlas {
     bp: BaseProcess,
-    keys_clocks: KeysClocks,
+    keys_clocks: KeyClocks,
     cmds: Commands<CommandInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
@@ -37,7 +37,7 @@ impl Protocol for Atlas {
 
         // create protocol data-structures
         let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
-        let keys_clocks = KeysClocks::new(config.n());
+        let keys_clocks = KeyClocks::new(config.n());
         let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
 

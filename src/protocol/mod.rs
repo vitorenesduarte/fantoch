@@ -25,7 +25,7 @@ mod newt;
 pub use atlas::Atlas;
 pub use basic::Basic;
 pub use epaxos::EPaxos;
-pub use newt::Newt;
+pub use newt::SequentialNewt;
 
 pub use base::BaseProcess;
 

@@ -4,7 +4,7 @@ use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::{
     info::{Commands, Info},
-    table::{KeysClocks, ProcessVotes, QuorumClocks, Votes},
+    table::{KeyClocks, ProcessVotes, QuorumClocks, SequentialKeyClocks, Votes},
 };
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
@@ -14,17 +14,19 @@ use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 use std::mem;
 
+pub type SequentialNewt = Newt<SequentialKeyClocks>;
+
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
 #[derive(Clone)]
-pub struct Newt {
+pub struct Newt<KC> {
     bp: BaseProcess,
-    keys_clocks: KeysClocks,
+    key_clocks: KC,
     cmds: Commands<CommandInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Protocol for Newt {
+impl<KC: KeyClocks> Protocol for Newt<KC> {
     type Message = Message;
     type Executor = TableExecutor;
 
@@ -35,14 +37,14 @@ impl Protocol for Newt {
 
         // create protocol data-structures
         let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
-        let keys_clocks = KeysClocks::new(process_id);
+        let key_clocks = KC::new(process_id);
         let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
 
         // create `Newt`
         Self {
             bp,
-            keys_clocks,
+            key_clocks,
             cmds,
             to_executor,
         }
@@ -102,14 +104,14 @@ impl Protocol for Newt {
     }
 }
 
-impl Newt {
+impl<KC: KeyClocks> Newt<KC> {
     /// Handles a submit operation by a client.
     fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // compute its clock
-        let clock = self.keys_clocks.clock(&cmd) + 1;
+        let clock = self.key_clocks.clock(&cmd) + 1;
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -156,9 +158,9 @@ impl Newt {
         // TODO can we somehow combine the next 2 operations in order to save map lookups?
 
         // compute command clock
-        let clock = cmp::max(remote_clock, self.keys_clocks.clock(&cmd) + 1);
+        let clock = cmp::max(remote_clock, self.key_clocks.clock(&cmd) + 1);
         // compute votes consumed by this command
-        let process_votes = self.keys_clocks.process_votes(&cmd, clock);
+        let process_votes = self.key_clocks.process_votes(&cmd, clock);
         // check that there's one vote per key
         assert_eq!(process_votes.len(), cmd.key_count());
 
@@ -220,7 +222,7 @@ impl Newt {
         //   execution of this command
         match info.cmd.as_ref() {
             Some(cmd) => {
-                let local_votes = self.keys_clocks.process_votes(cmd, max_clock);
+                let local_votes = self.key_clocks.process_votes(cmd, max_clock);
                 // update votes with local votes
                 info.votes.add(local_votes);
             }
@@ -305,7 +307,7 @@ impl Newt {
         {
             if let Some(cmd) = info.cmd.as_ref() {
                 // if not a no op, check if we can generate more votes that can speed-up execution
-                let process_votes = self.keys_clocks.process_votes(cmd, info.clock);
+                let process_votes = self.key_clocks.process_votes(cmd, info.clock);
 
                 // create `MPhantom` if there are new votes
                 if !process_votes.is_empty() {
@@ -489,9 +491,9 @@ mod tests {
         let executor_3 = TableExecutor::new(config);
 
         // newts
-        let mut newt_1 = Newt::new(process_id_1, config);
-        let mut newt_2 = Newt::new(process_id_2, config);
-        let mut newt_3 = Newt::new(process_id_3, config);
+        let mut newt_1 = SequentialNewt::new(process_id_1, config);
+        let mut newt_2 = SequentialNewt::new(process_id_2, config);
+        let mut newt_3 = SequentialNewt::new(process_id_3, config);
 
         // discover processes in all newts
         let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());

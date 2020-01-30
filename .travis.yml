@@ -58,7 +58,7 @@ script: |
     # </tarpaulin>
 
     # <travis>
-    cargo coveralls --lib
+    cargo coveralls --lib || echo "cargo coveralls has failed"
     # </travis>
 
   fi

@@ -6,14 +6,14 @@ use std::collections::HashMap;
 use threshold::VClock;
 
 #[derive(Clone)]
-pub struct KeysClocks {
+pub struct KeyClocks {
     n: usize, // number of processes
     clocks: HashMap<Key, VClock<ProcessId>>,
     noop_clock: VClock<ProcessId>,
 }
 
-impl KeysClocks {
-    /// Create a new `KeysClocks` instance.
+impl KeyClocks {
+    /// Create a new `KeyClocks` instance.
     pub fn new(n: usize) -> Self {
         Self {
             n,
@@ -101,7 +101,7 @@ mod tests {
     fn keys_clocks_flow() {
         // create key clocks
         let n = 1;
-        let mut clocks = KeysClocks::new(n);
+        let mut clocks = KeyClocks::new(n);
 
         // create dot gen
         let process_id = 1;
