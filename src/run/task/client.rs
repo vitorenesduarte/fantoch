@@ -167,6 +167,9 @@ async fn client_server_task_handle_cmd(
         }
 
         // TODO can we make the following loop run in parallel?
+        // - I think that the main problem is that we need a reference to `client_to_executors` and
+        //   having different futures holding a reference to it doesn't work
+        // - given this, I think that we need to add the parallelism inside `Pool` and not here
         for key in cmd.keys() {
             if let Err(e) = client_to_executors
                 .forward_map((key, cmd.rifl()), |(_, rifl)| FromClient::WaitForRifl(rifl))
