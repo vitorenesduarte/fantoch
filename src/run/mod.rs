@@ -435,7 +435,7 @@ fn handle_cmd_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::Newt;
+    use crate::protocol::Basic;
     use tokio::task;
     use tokio::time::Duration;
 
@@ -466,7 +466,7 @@ mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<Newt>().await {
+                match run::<Basic>().await {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
