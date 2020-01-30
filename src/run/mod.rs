@@ -623,7 +623,9 @@ mod tests {
         // create workload
         let conflict_rate = 100;
         let total_commands = 100;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // clients:
         // - the first spawns 1 closed-loop client (1)

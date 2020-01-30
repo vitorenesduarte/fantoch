@@ -559,7 +559,9 @@ mod tests {
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // create client 1 that is connected to newt 1
         let client_id = 1;

@@ -359,7 +359,9 @@ mod tests {
         // clients workload
         let conflict_rate = 100;
         let total_commands = 10;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // process regions
         let process_regions = vec![

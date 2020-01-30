@@ -8,6 +8,7 @@ use std::error::Error;
 const RANGE_SEP: &str = "-";
 const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
+const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) =
@@ -66,6 +67,13 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("payload_size")
+                .long("payload_size")
+                .value_name("PAYLOAD_SIZE")
+                .help("size of the command payload; default: 100 (bytes)")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
@@ -88,6 +96,7 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
     let workload = parse_workload(
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
+        matches.value_of("payload_size"),
     );
     let tcp_nodelay =
         common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
@@ -147,10 +156,12 @@ fn parse_interval(interval: Option<&str>) -> Option<u64> {
 fn parse_workload(
     conflict_rate: Option<&str>,
     commands_per_client: Option<&str>,
+    payload_size: Option<&str>,
 ) -> Workload {
     let conflict_rate = parse_conflict_rate(conflict_rate);
     let commands_per_client = parse_commands_per_client(commands_per_client);
-    Workload::new(conflict_rate, commands_per_client)
+    let payload_size = parse_payload_size(payload_size);
+    Workload::new(conflict_rate, commands_per_client, payload_size)
 }
 
 fn parse_conflict_rate(number: Option<&str>) -> usize {
@@ -171,4 +182,14 @@ fn parse_commands_per_client(number: Option<&str>) -> usize {
                 .expect("commands per client should be a number")
         })
         .unwrap_or(DEFAULT_COMMANDS_PER_CLIENT)
+}
+
+fn parse_payload_size(number: Option<&str>) -> usize {
+    number
+        .map(|number| {
+            number
+                .parse::<usize>()
+                .expect("payload size should be a number")
+        })
+        .unwrap_or(DEFAULT_PAYLOAD_SIZE)
 }

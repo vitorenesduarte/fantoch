@@ -48,7 +48,8 @@ fn equidistant<P: Protocol>() {
     // clients workload
     let conflict_rate = 2;
     let total_commands = 500;
-    let workload = Workload::new(conflict_rate, total_commands);
+    let payload_size = 0;
+    let workload = Workload::new(conflict_rate, total_commands, payload_size);
 
     for &(n, f) in &configs {
         // create planet and regions
@@ -92,7 +93,8 @@ fn increasing_load<P: Protocol>(config: Config) {
     // clients workload
     let conflict_rate = 10;
     let total_commands = 500;
-    let workload = Workload::new(conflict_rate, total_commands);
+    let payload_size = 0;
+    let workload = Workload::new(conflict_rate, total_commands, payload_size);
 
     for &clients_per_region in &cs {
         println!("running clients={}", clients_per_region);
@@ -177,7 +179,8 @@ fn increasing_regions<P: Protocol>() {
     // clients workload
     let conflict_rate = 2;
     let total_commands = 500;
-    let workload = Workload::new(conflict_rate, total_commands);
+    let payload_size = 0;
+    let workload = Workload::new(conflict_rate, total_commands, payload_size);
 
     // clients per region
     let clients_per_region = 1000 / 13;

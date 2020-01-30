@@ -4,6 +4,8 @@ use crate::kvs::{Key, Value};
 use rand::{distributions::Alphanumeric, Rng};
 use std::iter;
 
+const BLACK_COLOR: &str = "black";
+
 #[derive(Debug, Clone, Copy)]
 pub struct Workload {
     /// conflict rate  of this workload
@@ -97,7 +99,7 @@ impl Workload {
         };
         if should_conflict {
             // black color to generate a conflict
-            String::from("black")
+            BLACK_COLOR.to_owned()
         } else {
             // avoid conflict with unique client key
             rifl_gen.source().to_string()
@@ -126,15 +128,18 @@ mod tests {
 
         // total commands
         let total_commands = 100;
+        let payload_size = 100;
 
         // create conflicting workload
         let conflict_rate = 100;
-        let mut workload = Workload::new(conflict_rate, total_commands);
+        let mut workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
         assert_eq!(workload.gen_cmd_key(&rifl_gen), String::from("black"));
 
         // create non-conflicting workload
         let conflict_rate = 0;
-        let mut workload = Workload::new(conflict_rate, total_commands);
+        let mut workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
         assert_eq!(workload.gen_cmd_key(&rifl_gen), String::from("1"));
     }
 
@@ -146,14 +151,24 @@ mod tests {
 
         // total commands
         let total_commands = 10;
+        let payload_size = 100;
 
         // create workload
         let conflict_rate = 100;
-        let mut workload = Workload::new(conflict_rate, total_commands);
+        let mut workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // the first 10 commands are `Some`
         for _ in 1..=10 {
-            assert!(workload.next_cmd(&mut rifl_gen).is_some());
+            if let Some(cmd) = workload.next_cmd(&mut rifl_gen) {
+                let (key, value) = cmd.into_iter().next().unwrap();
+                // since the conflict is 100, the key should be BLACK
+                assert_eq!(key, BLACK_COLOR);
+                // check that the value size is `payload_size`
+                assert_eq!(value.len(), payload_size);
+            } else {
+                panic!("there should be a next command in this workload");
+            }
         }
 
         // check the workload is finished
