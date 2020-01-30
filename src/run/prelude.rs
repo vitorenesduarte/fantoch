@@ -46,7 +46,7 @@ pub type ExecutionInfoReceiver<P> =
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;
-impl pool::Index for (Dot, Command) {
+impl pool::PoolIndex for (Dot, Command) {
     fn index(&self) -> Option<usize> {
         Some(dot_index(&self.0))
     }
@@ -55,7 +55,7 @@ impl pool::Index for (Dot, Command) {
 // 2. workers receive messages from readers
 pub type ReaderToWorkers<P> = pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
 // The following allows e.g. (ProcessId, <P as Protocol>::Message) to be `ToPool::forward`
-impl<A, B> pool::Index for (A, B)
+impl<A, B> pool::PoolIndex for (A, B)
 where
     B: MessageDot,
 {
@@ -67,7 +67,7 @@ where
 // 3. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<FromClient>;
 // The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
-impl pool::Index for (&Key, Rifl) {
+impl pool::PoolIndex for (&Key, Rifl) {
     fn index(&self) -> Option<usize> {
         Some(key_index(&self.0))
     }
@@ -77,7 +77,7 @@ impl pool::Index for (&Key, Rifl) {
 pub type WorkerToExecutors<P> =
     pool::ToPool<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 // The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo to be forwarded
-impl<A> pool::Index for A
+impl<A> pool::PoolIndex for A
 where
     A: MessageKey,
 {

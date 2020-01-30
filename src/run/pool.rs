@@ -4,7 +4,7 @@ use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
 use std::fmt::Debug;
 
-pub trait Index {
+pub trait PoolIndex {
     fn index(&self) -> Option<usize>;
 }
 
@@ -51,7 +51,7 @@ where
     /// Forwards message `msg` to the pool worker with id `msg.index() % pool_size`.
     pub async fn forward(&mut self, msg: M) -> RunResult<()>
     where
-        M: Index,
+        M: PoolIndex,
     {
         let index = msg.index();
         self.do_forward(index, msg).await
@@ -60,7 +60,7 @@ where
     /// Forwards message `map(value)` to the pool worker with id `value.index() % pool_size`.
     pub async fn forward_map<V, F>(&mut self, value: V, map: F) -> RunResult<()>
     where
-        V: Index,
+        V: PoolIndex,
         F: FnOnce(V) -> M,
     {
         let index = value.index();
