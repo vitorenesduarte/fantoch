@@ -14,13 +14,15 @@ impl VertexIndex {
         Default::default()
     }
 
-    /// Indexes a new vertex, returning whether a vertex with this dot was already indexed or not.
+    /// Indexes a new vertex, returning whether a vertex with this dot was
+    /// already indexed or not.
     pub fn index(&mut self, vertex: Vertex) -> bool {
         let res = self.index.insert(vertex.dot(), UnsafeCell::new(vertex));
         res.is_none()
     }
 
-    /// Returns a mutable reference to an indexed vertex (if previously indexed).
+    /// Returns a mutable reference to an indexed vertex (if previously
+    /// indexed).
     pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
         self.index.get(dot).map(|cell| unsafe { &mut *cell.get() })
     }
@@ -63,8 +65,8 @@ impl PendingIndex {
         });
     }
 
-    /// Generic function to update a set of pending commands associated with each color touched by a
-    /// given command.
+    /// Generic function to update a set of pending commands associated with
+    /// each color touched by a given command.
     fn update_index<F>(&mut self, vertex: &Vertex, mut update: F)
     where
         F: FnMut(&mut HashSet<Dot>),
@@ -73,7 +75,9 @@ impl PendingIndex {
             // get current set of pending commands for this key
             let pending = match self.index.get_mut(key) {
                 Some(pending) => pending,
-                None => self.index.entry(key.clone()).or_insert_with(HashSet::new),
+                None => {
+                    self.index.entry(key.clone()).or_insert_with(HashSet::new)
+                }
             };
             // update pending
             update(pending)

@@ -1,58 +1,65 @@
-/// The architecture of this runner was thought in a way that allows all protocols that implement
-/// the `Protocol` trait to achieve their maximum throughput. Below we detail all key decisions.
+/// The architecture of this runner was thought in a way that allows all
+/// protocols that implement the `Protocol` trait to achieve their maximum
+/// throughput. Below we detail all key decisions.
 ///
 /// We assume:
 /// - C clients
 /// - E executors
 /// - P protocol processes
 ///
-/// 1. When a client connects for the first time it registers itself in all executors. This register
-/// request contains the channel in which executors should write command results (potentially
-/// partial command results if the command is multi-key).
+/// 1. When a client connects for the first time it registers itself in all
+/// executors. This register request contains the channel in which executors
+/// should write command results (potentially partial command results if the
+/// command is multi-key).
 ///
-/// 2. When a client issues a command, it registers this command in all executors that are
-/// responsible for executing this command. This is how each executor knows if it should notify this
-/// client when the command is executed. If the commmand is single-key, this command only needs to
-/// be registered in one executor. If multi-key, it needs to be registered in several executors if
-/// the keys accessed by the command are assigned to different executors.
+/// 2. When a client issues a command, it registers this command in all
+/// executors that are responsible for executing this command. This is how each
+/// executor knows if it should notify this client when the command is executed.
+/// If the commmand is single-key, this command only needs to be registered in
+/// one executor. If multi-key, it needs to be registered in several executors
+/// if the keys accessed by the command are assigned to different executors.
 ///
-/// 3. Once the command registration occurs (and the client must wait for an ack from the executor,
-/// otherwise the execution info can reach the executor before the "wait for rifl" registration from
-/// the client), the command is forwarded to *ONE* protocol process (even if the command is
-/// multi-key). This single protocol process *needs to* be chosen by looking the message identifier
-/// `Dot`. Using the keys being accessed by the command will not work for all cases, for example,
-/// when recovering and the payload is not known, we only have acesss to a `noOp` meaning that we
-/// would need to broadcast to all processes, which would be tricky to get correctly. In particular,
-/// when the command is being submitted, its `Dot` has not been computed yet. So the idea here is
-/// for parallel protocols to have the `DotGen` outside and once the `Dot` is computed, the submit
-/// is forwarded to the correct protocol process. For maximum parallelism, this generator can live
-/// in the clients and have a lock-free implementation (see `AtomicIdGen`).
+/// 3. Once the command registration occurs (and the client must wait for an ack
+/// from the executor, otherwise the execution info can reach the executor
+/// before the "wait for rifl" registration from the client), the command is
+/// forwarded to *ONE* protocol process (even if the command is multi-key). This
+/// single protocol process *needs to* be chosen by looking the message
+/// identifier `Dot`. Using the keys being accessed by the command will not work
+/// for all cases, for example, when recovering and the payload is not known, we
+/// only have acesss to a `noOp` meaning that we would need to broadcast to all
+/// processes, which would be tricky to get correctly. In particular,
+/// when the command is being submitted, its `Dot` has not been computed yet. So
+/// the idea here is for parallel protocols to have the `DotGen` outside and
+/// once the `Dot` is computed, the submit is forwarded to the correct protocol
+/// process. For maximum parallelism, this generator can live in the clients and
+/// have a lock-free implementation (see `AtomicIdGen`).
 //
-/// 4. When the protocol process receives the new command from a client it does whatever is
-/// specified in the `Protocol` trait, which may include sending messages to other replicas/nodes,
-/// which leads to point 5.
+/// 4. When the protocol process receives the new command from a client it does
+/// whatever is specified in the `Protocol` trait, which may include sending
+/// messages to other replicas/nodes, which leads to point 5.
 ///
-/// 5. When a message is received from other replicas, the same forward function from point 3. is
-/// used to select the protocol process that is responsible for handling that message. This suggests
-/// a message should define which `Dot` it refers to. This is achieved through the `MessageDot`
-/// trait.
+/// 5. When a message is received from other replicas, the same forward function
+/// from point 3. is used to select the protocol process that is responsible for
+/// handling that message. This suggests a message should define which `Dot` it
+/// refers to. This is achieved through the `MessageDot` trait.
 ///
-/// 6. Everytime a message is handled in a protocol process, the process checks if it has new
-/// execution info. If so, it forwards each execution info to the responsible executor. This
-/// suggests that execution info should define to which key it refers to. This is achieved through
-/// the `MessageKey` trait.
+/// 6. Everytime a message is handled in a protocol process, the process checks
+/// if it has new execution info. If so, it forwards each execution info to the
+/// responsible executor. This suggests that execution info should define to
+/// which key it refers to. This is achieved through the `MessageKey` trait.
 ///
-/// 7. When execution info is handled in an executor, the executor may have new (potentially partial
-/// if the executor is parallel) command results. If the command was previously registered by some
-/// client, the result is forwarded to such client.
+/// 7. When execution info is handled in an executor, the executor may have new
+/// (potentially partial if the executor is parallel) command results. If the
+/// command was previously registered by some client, the result is forwarded to
+/// such client.
 ///
-/// 8. When command results are received by a client, they may have to be aggregated in case the
-/// executor is parallel. Once the full command result is complete, the notification is sent to the
-/// actual client.
+/// 8. When command results are received by a client, they may have to be
+/// aggregated in case the executor is parallel. Once the full command result is
+/// complete, the notification is sent to the actual client.
 ///
 /// Other notes:
-/// - the runner allows `Protocol` workers to share state; however, it assumes that `Executor`
-///   workers never do
+/// - the runner allows `Protocol` workers to share state; however, it assumes
+///   that `Executor` workers never do
 
 const CONNECT_RETRIES: usize = 100;
 
@@ -62,8 +69,8 @@ mod prelude;
 // This module contains the definition of `ToPool`.
 mod pool;
 
-// This module contains the implementation of channels, clients, connections, executors, and process
-// workers.
+// This module contains the implementation of channels, clients, connections,
+// executors, and process workers.
 pub mod task;
 
 use crate::client::{Client, Workload};
@@ -101,7 +108,8 @@ where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
-    // create semaphore for callers that don't care about the connected notification
+    // create semaphore for callers that don't care about the connected
+    // notification
     let semaphore = Arc::new(Semaphore::new(0));
     process_with_notify::<A, P>(
         process,
@@ -156,8 +164,11 @@ where
     // if process.parallel() {}
 
     // create forward channels: reader -> workers
-    let (reader_to_workers, reader_to_workers_rxs) =
-        ReaderToWorkers::<P>::new("reader_to_workers", channel_buffer_size, config.workers());
+    let (reader_to_workers, reader_to_workers_rxs) = ReaderToWorkers::<P>::new(
+        "reader_to_workers",
+        channel_buffer_size,
+        config.workers(),
+    );
 
     // connect to all processes
     let to_writers = task::process::connect_to_all::<A, P>(
@@ -181,8 +192,11 @@ where
     let atomic_dot_gen = AtomicDotGen::new(process_id);
 
     // create forward channels: client -> workers
-    let (client_to_workers, client_to_workers_rxs) =
-        ClientToWorkers::new("client_to_workers", channel_buffer_size, config.workers());
+    let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(
+        "client_to_workers",
+        channel_buffer_size,
+        config.workers(),
+    );
 
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
@@ -202,14 +216,19 @@ where
     );
 
     // create forward channels: worker -> executors
-    let (worker_to_executors, worker_to_executors_rxs) = WorkerToExecutors::<P>::new(
-        "worker_to_executors",
-        channel_buffer_size,
-        config.executors(),
-    );
+    let (worker_to_executors, worker_to_executors_rxs) =
+        WorkerToExecutors::<P>::new(
+            "worker_to_executors",
+            channel_buffer_size,
+            config.executors(),
+        );
 
     // start executors
-    task::executor::start_executors::<P>(config, worker_to_executors_rxs, client_to_executors_rxs);
+    task::executor::start_executors::<P>(
+        config,
+        worker_to_executors_rxs,
+        client_to_executors_rxs,
+    );
 
     let handles = task::process::start_processes::<P>(
         process,
@@ -278,8 +297,8 @@ where
     }
 
     // show global metrics
-    // TODO write both metrics (latency and throughput) to a file; the filename should be provided
-    // as input (as an Option)
+    // TODO write both metrics (latency and throughput) to a file; the filename
+    // should be provided as input (as an Option)
     println!("latency: {:?}", latency);
     // println!("throughput: {}", throughput.all_values());
     println!("all clients ended");
@@ -378,36 +397,51 @@ where
 {
     // connect to process
     let tcp_buffer_size = 0;
-    let mut connection =
-        match task::connect(address, tcp_nodelay, tcp_buffer_size, CONNECT_RETRIES).await {
-            Ok(connection) => connection,
-            Err(e) => {
-                // TODO panicking here as not sure how to make error handling send + 'static
-                // (required by tokio::spawn) and still be able to use the ?
-                // operator
-                panic!("[client] error connecting at client {}: {:?}", client_id, e);
-            }
-        };
+    let mut connection = match task::connect(
+        address,
+        tcp_nodelay,
+        tcp_buffer_size,
+        CONNECT_RETRIES,
+    )
+    .await
+    {
+        Ok(connection) => connection,
+        Err(e) => {
+            // TODO panicking here as not sure how to make error handling send +
+            // 'static (required by tokio::spawn) and still be able
+            // to use the ? operator
+            panic!(
+                "[client] error connecting at client {}: {:?}",
+                client_id, e
+            );
+        }
+    };
 
     // create client
     let mut client = Client::new(client_id, workload);
 
     // say hi
-    let process_id = task::client::client_say_hi(client_id, &mut connection).await;
+    let process_id =
+        task::client::client_say_hi(client_id, &mut connection).await;
 
     // discover process (although this won't be used)
     client.discover(vec![process_id]);
 
     // start client read-write task
-    let (read, write) = task::client::start_client_rw_task(channel_buffer_size, connection);
+    let (read, write) =
+        task::client::start_client_rw_task(channel_buffer_size, connection);
 
     // return client its connection
     (client, read, write)
 }
 
-/// Generate the next command, returning a boolean representing whether a new command was generated
-/// or not.
-async fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &mut CommandSender) -> bool {
+/// Generate the next command, returning a boolean representing whether a new
+/// command was generated or not.
+async fn next_cmd(
+    client: &mut Client,
+    time: &dyn SysTime,
+    write: &mut CommandSender,
+) -> bool {
     if let Some((_, cmd)) = client.next_cmd(time) {
         if let Err(e) = write.send(cmd).await {
             println!(
@@ -421,7 +455,8 @@ async fn next_cmd(client: &mut Client, time: &dyn SysTime, write: &mut CommandSe
     }
 }
 
-/// Handles a command result. The returned boolean indicates whether this client is finished or not.
+/// Handles a command result. The returned boolean indicates whether this client
+/// is finished or not.
 fn handle_cmd_result(
     client: &mut Client,
     time: &dyn SysTime,
@@ -460,8 +495,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_run() {
-        // test with newt
+    async fn run_basic_test() {
+        run_test::<Basic>().await
+    }
+
+    async fn run_test<P>()
+    where
+        P: Protocol + Send + 'static,
+    {
         // create local task set
         let local = task::LocalSet::new();
 

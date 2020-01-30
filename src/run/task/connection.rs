@@ -14,14 +14,20 @@ pub struct Connection {
 }
 
 impl Connection {
-    // TODO here `BufStream` will allocate two buffers, one for reading and another one for
-    // writing; this may be unnecessarily inneficient for users that will only read or write; on
-    // the other end, the allocation only occurs once, so it's probably fine to do this
-    pub fn new(stream: TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) -> Self {
+    // TODO here `BufStream` will allocate two buffers, one for reading and
+    // another one for writing; this may be unnecessarily inneficient for
+    // users that will only read or write; on the other end, the allocation
+    // only occurs once, so it's probably fine to do this
+    pub fn new(
+        stream: TcpStream,
+        tcp_nodelay: bool,
+        tcp_buffer_size: usize,
+    ) -> Self {
         // configure stream
         configure(&stream, tcp_nodelay, tcp_buffer_size);
         // buffer stream
-        let stream = BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream);
+        let stream =
+            BufStream::with_capacity(tcp_buffer_size, tcp_buffer_size, stream);
         // frame stream
         let stream = Framed::new(stream, LengthDelimitedCodec::new());
         Connection { stream }
@@ -94,13 +100,16 @@ where
     V: Serialize,
 {
     // TODO can we avoid `Bytes`?
-    let bytes = bincode::serialize(value).expect("[connection] serialize should work");
+    let bytes =
+        bincode::serialize(value).expect("[connection] serialize should work");
     Bytes::from(bytes)
 }
 
-/// By implementing this method based on `Stream`s, it will make it trivial in the future to
-/// support it for e.g. `FramedRead<BufReader<ReadHalf<TcpStream>>, LengthDelimitedCodec>`. At this
-/// point this makes no sense as `ReadHalf` needs to lock `TcpStream` in order to perform a `recv`.
+/// By implementing this method based on `Stream`s, it will make it trivial in
+/// the future to support it for e.g.
+/// `FramedRead<BufReader<ReadHalf<TcpStream>>, LengthDelimitedCodec>`. At this
+/// point this makes no sense as `ReadHalf` needs to lock `TcpStream` in order
+/// to perform a `recv`.
 async fn next<S, V>(stream: &mut S) -> Option<V>
 where
     S: Stream<Item = Result<BytesMut, io::Error>> + Unpin,
@@ -120,10 +129,10 @@ where
     }
 }
 
-/// By implementing this method based on `Sink`s, it will make it trivial in the future to
-/// support it for e.g. `FramedWrite<BufWriter<WriteHalf<TcpStream>>, LengthDelimitedCodec>`. At
-/// this point this makes no sense as `WriteHalf` needs to lock `TcpStream` in order to perform a
-/// `send`.
+/// By implementing this method based on `Sink`s, it will make it trivial in the
+/// future to support it for e.g. `FramedWrite<BufWriter<WriteHalf<TcpStream>>,
+/// LengthDelimitedCodec>`. At this point this makes no sense as `WriteHalf`
+/// needs to lock `TcpStream` in order to perform a `send`.
 async fn send<S, V>(sink: &mut S, value: V)
 where
     S: Sink<Bytes, Error = io::Error> + Unpin,
@@ -142,7 +151,9 @@ where
     V: Serialize,
 {
     let bytes = serialize(&value);
-    if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_ready(cx)).await {
+    if let Err(e) =
+        futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_ready(cx)).await
+    {
         println!("[connection] error while polling socket ready: {:?}", e);
     }
 
@@ -155,7 +166,9 @@ async fn flush<S>(mut sink: S)
 where
     S: Sink<Bytes, Error = io::Error> + Unpin,
 {
-    if let Err(e) = futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_flush(cx)).await {
+    if let Err(e) =
+        futures::future::poll_fn(|cx| Pin::new(&mut sink).poll_flush(cx)).await
+    {
         println!("[connection] error while flushing socket: {:?}", e);
     }
 }

@@ -89,8 +89,8 @@ where
     tx
 }
 
-/// Spawns a producer and a consumer, returning one two channel: one consumer-end and one
-/// producer-end of the. channel.
+/// Spawns a producer and a consumer, returning one two channel: one
+/// consumer-end and one producer-end of the. channel.
 pub fn spawn_producer_and_consumer<M, N, F>(
     channel_buffer_size: usize,
     task: impl FnOnce(ChannelSender<M>, ChannelReceiver<N>) -> F,
@@ -100,10 +100,10 @@ where
     F::Output: Send + 'static,
 {
     // create two channels and:
-    // - pass the producer-end of the 1st channel and the consumer-end of the 2nd channel to the
-    //   task
-    // - return the consumer-end of the 1st channel and the producer-end of the 2nd channel to the
-    //   caller
+    // - pass the producer-end of the 1st channel and the consumer-end of the
+    //   2nd channel to the task
+    // - return the consumer-end of the 1st channel and the producer-end of the
+    //   2nd channel to the caller
     let (tx1, rx1) = channel(channel_buffer_size);
     let (tx2, rx2) = channel(channel_buffer_size);
     spawn(task(tx1, rx2));
@@ -124,11 +124,13 @@ where
     loop {
         match TcpStream::connect(address.clone()).await {
             Ok(stream) => {
-                let connection = Connection::new(stream, tcp_nodelay, tcp_buffer_size);
+                let connection =
+                    Connection::new(stream, tcp_nodelay, tcp_buffer_size);
                 return Ok(connection);
             }
             Err(e) => {
-                // if not, try again if we shouldn't give up (due to too many attempts)
+                // if not, try again if we shouldn't give up (due to too many
+                // attempts)
                 tries += 1;
                 if tries < connect_retries {
                     println!("failed to connect to {:?}: {}", address, e);
@@ -166,13 +168,16 @@ async fn listener_task(
                 println!("[listener] new connection: {:?}", addr);
 
                 // create connection
-                let connection = Connection::new(stream, tcp_nodelay, tcp_buffer_size);
+                let connection =
+                    Connection::new(stream, tcp_nodelay, tcp_buffer_size);
 
                 if let Err(e) = parent.send(connection).await {
                     println!("[listener] error sending stream to parent process: {:?}", e);
                 }
             }
-            Err(e) => println!("[listener] couldn't accept new connection: {:?}", e),
+            Err(e) => {
+                println!("[listener] couldn't accept new connection: {:?}", e)
+            }
         }
     }
 }

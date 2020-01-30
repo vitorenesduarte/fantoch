@@ -61,7 +61,10 @@ where
     }
 
     /// Forward a `ToSend`.
-    pub fn forward_to_processes(&mut self, to_send: ToSend<P::Message>) -> Vec<ToSend<P::Message>> {
+    pub fn forward_to_processes(
+        &mut self,
+        to_send: ToSend<P::Message>,
+    ) -> Vec<ToSend<P::Message>> {
         // extract `ToSend` arguments
         let ToSend { from, target, msg } = to_send;
 
@@ -107,11 +110,17 @@ where
 
     /// Returns the process registered with this identifier.
     /// It panics if the process is not registered.
-    pub fn get_process(&mut self, process_id: ProcessId) -> &mut (P, P::Executor) {
+    pub fn get_process(
+        &mut self,
+        process_id: ProcessId,
+    ) -> &mut (P, P::Executor) {
         self.processes
             .get_mut(&process_id)
             .unwrap_or_else(|| {
-                panic!("process {} should have been registered before", process_id);
+                panic!(
+                    "process {} should have been registered before",
+                    process_id
+                );
             })
             .get_mut()
     }
@@ -122,7 +131,10 @@ where
         self.clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
-                panic!("client {} should have been registered before", client_id);
+                panic!(
+                    "client {} should have been registered before",
+                    client_id
+                );
             })
             .get_mut()
     }

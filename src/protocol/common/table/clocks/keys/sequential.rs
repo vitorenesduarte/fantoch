@@ -35,8 +35,9 @@ impl KeyClocks for SequentialKeyClocks {
         cmd.keys()
             .filter_map(|key| {
                 // get a mutable reference to current clock value
-                // TODO refactoring the following match block into a function will not work due to
-                // limitations in the borrow-checker
+                // TODO refactoring the following match block into a function
+                // will not work due to limitations in the
+                // borrow-checker
                 // - see: https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
                 // - this is supposed to be fixed by polonius: http://smallcultfollowing.com/babysteps/blog/2018/06/15/mir-based-borrow-check-nll-status-update/#polonius
                 let current = match self.clocks.get_mut(key) {
@@ -99,7 +100,8 @@ mod tests {
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
-        let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab =
+            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // -------------------------
         // first clock for command a

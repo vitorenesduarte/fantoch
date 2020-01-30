@@ -4,12 +4,12 @@ mod base;
 // This module contains common data-structures between protocols.
 pub mod common;
 
-// This module contains the definition of a basic replication protocol that waits for f + 1 acks
-// before committing a command. It's for sure inconsistent and most likely non-fault-tolerant until
-// we base it on the synod module.
-// TODO evolve the synod module so that is allows patterns like Coordinated Paxos and Simple Paxos
-// from Mencius. With such patterns we can make this protocol fault-tolerant (but still
-// inconsistent).
+// This module contains the definition of a basic replication protocol that
+// waits for f + 1 acks before committing a command. It's for sure inconsistent
+// and most likely non-fault-tolerant until we base it on the synod module.
+// TODO evolve the synod module so that is allows patterns like Coordinated
+// Paxos and Simple Paxos from Mencius. With such patterns we can make this
+// protocol fault-tolerant (but still inconsistent).
 mod basic;
 
 // This module contains the definition of `Atlas`.
@@ -39,7 +39,13 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 
 pub trait Protocol: Clone {
-    type Message: Debug + Clone + Serialize + DeserializeOwned + Send + Sync + MessageDot; // TODO why is Sync needed??
+    type Message: Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + MessageDot; // TODO why is Sync needed??
     type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;
@@ -49,13 +55,23 @@ pub trait Protocol: Clone {
     fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
 
     #[must_use]
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message>;
+    fn submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Self::Message>;
 
     #[must_use]
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Self::Message>>;
+    fn handle(
+        &mut self,
+        from: ProcessId,
+        msg: Self::Message,
+    ) -> Option<ToSend<Self::Message>>;
 
     #[must_use]
-    fn to_executor(&mut self) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
+    fn to_executor(
+        &mut self,
+    ) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
     fn parallel() -> bool {
         false
@@ -67,9 +83,9 @@ pub trait Protocol: Clone {
 }
 
 pub trait MessageDot {
-    /// If `None` is returned, then the message is sent to all protocol processes.
-    /// In particular, if the protocol is not parallel, the message is sent to the single protocol
-    /// process.
+    /// If `None` is returned, then the message is sent to all protocol
+    /// processes. In particular, if the protocol is not parallel, the
+    /// message is sent to the single protocol process.
     fn dot(&self) -> Option<&Dot> {
         None
     }

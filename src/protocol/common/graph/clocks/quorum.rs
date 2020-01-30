@@ -41,7 +41,10 @@ impl QuorumClocks {
     }
 
     /// Computes the threshold union.
-    pub fn threshold_union(&self, threshold: usize) -> (VClock<ProcessId>, bool) {
+    pub fn threshold_union(
+        &self,
+        threshold: usize,
+    ) -> (VClock<ProcessId>, bool) {
         self.threshold_clock.threshold_union(threshold as u64)
     }
 

@@ -145,7 +145,8 @@ fn increasing_load_fpaxos(config: Config) {
         });
 
         // global histogram
-        let histogram = Histogram::from(latencies.into_iter().map(|(_, latency)| latency));
+        let histogram =
+            Histogram::from(latencies.into_iter().map(|(_, latency)| latency));
         println!("n = {} AND c = 1 |  {:?}", config.n(), histogram);
     });
 }
@@ -214,9 +215,11 @@ fn run<P: Protocol>(
     client_regions: Vec<Region>,
     planet: Planet,
 ) {
-    // compute number of regions and total number of expected commands per region
+    // compute number of regions and total number of expected commands per
+    // region
     let region_count = client_regions.len();
-    let expected_commands = workload.total_commands() * clients_per_region * region_count;
+    let expected_commands =
+        workload.total_commands() * clients_per_region * region_count;
 
     // run simulation and get latencies
     let mut runner: Runner<P> = Runner::new(
@@ -233,7 +236,8 @@ fn run<P: Protocol>(
     // compute stats
     let (issued_commands, histogram) = latencies.into_iter().fold(
         (0, Histogram::new()),
-        |(issued_commands_acc, mut histogram_acc), (region, (issued_commands, histogram))| {
+        |(issued_commands_acc, mut histogram_acc),
+         (region, (issued_commands, histogram))| {
             println!("region = {:?} |   {:?}", region, histogram);
             // merge histograms
             histogram_acc.merge(&histogram);

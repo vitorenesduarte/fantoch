@@ -31,7 +31,8 @@ impl KeyClocks {
                     let clock = match self.clocks.get_mut(key) {
                         Some(clock) => clock,
                         None => {
-                            // if key is not present, create bottom vclock for this key
+                            // if key is not present, create bottom vclock for
+                            // this key
                             let bottom = Self::bottom_clock(self.n);
                             // and insert it
                             self.clocks.entry(key.clone()).or_insert(bottom)
@@ -48,15 +49,16 @@ impl KeyClocks {
         }
     }
 
-    /// Computes a clock for some command representing the `Dot`s of all conflicting commands
-    /// observed.
+    /// Computes a clock for some command representing the `Dot`s of all
+    /// conflicting commands observed.
     pub fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
         let clock = Self::bottom_clock(self.n);
         self.clock_with_past(cmd, clock)
     }
 
-    /// Computes a clock for some command representing the `Dot`s of all conflicting commands
-    /// observed, given an initial clock already with conflicting commands (that we denote by past).
+    /// Computes a clock for some command representing the `Dot`s of all
+    /// conflicting commands observed, given an initial clock already with
+    /// conflicting commands (that we denote by past).
     pub fn clock_with_past(
         &self,
         cmd: &Option<Command>,
@@ -115,11 +117,13 @@ mod tests {
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = Some(Command::put(cmd_a_rifl, key_a.clone(), value.clone()));
+        let cmd_a =
+            Some(Command::put(cmd_a_rifl, key_a.clone(), value.clone()));
 
         // command b
         let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_b = Some(Command::put(cmd_b_rifl, key_b.clone(), value.clone()));
+        let cmd_b =
+            Some(Command::put(cmd_b_rifl, key_b.clone(), value.clone()));
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
@@ -133,7 +137,8 @@ mod tests {
 
         // command c
         let cmd_c_rifl = Rifl::new(103, 1); // client 103, 1st op
-        let cmd_c = Some(Command::put(cmd_c_rifl, key_c.clone(), value.clone()));
+        let cmd_c =
+            Some(Command::put(cmd_c_rifl, key_c.clone(), value.clone()));
 
         // noop
         let noop = None;

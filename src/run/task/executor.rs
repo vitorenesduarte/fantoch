@@ -70,7 +70,8 @@ async fn handle_execution_info<P>(
 ) where
     P: Protocol,
 {
-    // forward executor results (commands or partial commands) to clients that are waiting for them
+    // forward executor results (commands or partial commands) to clients that
+    // are waiting for them
     for executor_result in executor.handle(execution_info) {
         // get client id
         let client_id = executor_result.client();
@@ -122,7 +123,8 @@ async fn handle_from_client<P>(
             println!("[executor] client {} registered", client_id);
             let res = client_rifl_acks.insert(client_id, rifl_acks_tx);
             assert!(res.is_none());
-            let res = client_executor_results.insert(client_id, executor_results_tx);
+            let res =
+                client_executor_results.insert(client_id, executor_results_tx);
             assert!(res.is_none());
         }
         FromClient::Unregister(client_id) => {

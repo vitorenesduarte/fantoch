@@ -4,7 +4,9 @@ use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::{
     info::{Commands, Info},
-    table::{KeyClocks, ProcessVotes, QuorumClocks, SequentialKeyClocks, Votes},
+    table::{
+        KeyClocks, ProcessVotes, QuorumClocks, SequentialKeyClocks, Votes,
+    },
 };
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
@@ -33,12 +35,19 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     /// Creates a new `Newt` process.
     fn new(process_id: ProcessId, config: Config) -> Self {
         // compute fast and write quorum sizes
-        let (fast_quorum_size, write_quorum_size, _) = config.newt_quorum_sizes();
+        let (fast_quorum_size, write_quorum_size, _) =
+            config.newt_quorum_sizes();
 
         // create protocol data-structures
-        let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
+        let bp = BaseProcess::new(
+            process_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
         let key_clocks = KC::new(process_id);
-        let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let cmds =
+            Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
 
         // create `Newt`
@@ -62,12 +71,20 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+    fn submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Self::Message> {
         self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Message>> {
+    fn handle(
+        &mut self,
+        from: ProcessId,
+        msg: Self::Message,
+    ) -> Option<ToSend<Message>> {
         match msg {
             Message::MCollect {
                 dot,
@@ -86,7 +103,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 clock,
                 votes,
             } => self.handle_mcommit(dot, cmd, clock, votes),
-            Message::MPhantom { dot, process_votes } => self.handle_mphantom(dot, process_votes),
+            Message::MPhantom { dot, process_votes } => {
+                self.handle_mphantom(dot, process_votes)
+            }
         }
     }
 
@@ -106,7 +125,11 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
 impl<KC: KeyClocks> Newt<KC> {
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -155,7 +178,8 @@ impl<KC: KeyClocks> Newt<KC> {
             return None;
         }
 
-        // TODO can we somehow combine the next 2 operations in order to save map lookups?
+        // TODO can we somehow combine the next 2 operations in order to save
+        // map lookups?
 
         // compute command clock
         let clock = cmp::max(remote_clock, self.key_clocks.clock(&cmd) + 1);
@@ -213,13 +237,14 @@ impl<KC: KeyClocks> Newt<KC> {
         // update votes with remote votes
         info.votes.add(remote_votes);
 
-        // update quorum clocks while computing max clock and its number of occurences
+        // update quorum clocks while computing max clock and its number of
+        // occurences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
-        // - this prevents us from generating votes (either when clients submit new operations or
-        //   when handling `MCollect` from other processes) that could potentially delay the
-        //   execution of this command
+        // - this prevents us from generating votes (either when clients submit
+        //   new operations or when handling `MCollect` from other processes)
+        //   that could potentially delay the execution of this command
         match info.cmd.as_ref() {
             Some(cmd) => {
                 let local_votes = self.key_clocks.process_votes(cmd, max_clock);
@@ -237,13 +262,14 @@ impl<KC: KeyClocks> Newt<KC> {
             // - if `max_clock` was reported by at least f processes
             if max_count >= self.bp.config.f() {
                 self.bp.fast_path();
-                // reset local votes as we're going to receive them right away; this also prevents a
-                // `info.votes.clone()`
+                // reset local votes as we're going to receive them right away;
+                // this also prevents a `info.votes.clone()`
                 let votes = Self::reset_votes(&mut info.votes);
 
                 // create `MCommit` and target
-                // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
-                // members, or send the payload to all in a slim-MConsensus
+                // TODO create a slim-MCommit that only sends the payload to the
+                // non-fast-quorum members, or send the payload
+                // to all in a slim-MConsensus
                 let mcommit = Message::MCommit {
                     dot,
                     cmd: info.cmd.clone(),
@@ -291,23 +317,29 @@ impl<KC: KeyClocks> Newt<KC> {
         info.cmd = cmd;
         info.clock = clock;
 
-        // get current votes (probably from phantom messages) merge them with received votes so that
-        // all together can be added to a votes table
+        // get current votes (probably from phantom messages) merge them with
+        // received votes so that all together can be added to a votes
+        // table
         let current_votes = Self::reset_votes(&mut info.votes);
         votes.merge(current_votes);
 
-        // generate phantom votes if committed clock is higher than the local key's clock:
-        // - not all processes are needed for stability specially when newt is *not* configured with
-        //   tiny quorums
-        // - so in case it's not, only the processes part of the fast quorum (if it was,
-        //   `info.quorum` is not empty) generate phantoms
-        // - n = 3 is a special case  where phantom votes are not generated as they are not needed
+        // generate phantom votes if committed clock is higher than the local
+        // key's clock:
+        // - not all processes are needed for stability specially when newt is
+        //   *not* configured with tiny quorums
+        // - so in case it's not, only the processes part of the fast quorum (if
+        //   it was, `info.quorum` is not empty) generate phantoms
+        // - n = 3 is a special case  where phantom votes are not generated as
+        //   they are not needed
         let mut to_send = None;
-        if self.bp.config.n() > 3 && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
+        if self.bp.config.n() > 3
+            && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
         {
             if let Some(cmd) = info.cmd.as_ref() {
-                // if not a no op, check if we can generate more votes that can speed-up execution
-                let process_votes = self.key_clocks.process_votes(cmd, info.clock);
+                // if not a no op, check if we can generate more votes that can
+                // speed-up execution
+                let process_votes =
+                    self.key_clocks.process_votes(cmd, info.clock);
 
                 // create `MPhantom` if there are new votes
                 if !process_votes.is_empty() {
@@ -323,10 +355,12 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // create execution info if not a noop
-        // TODO if noOp, should we add `Votes` to the table, or there will be no votes?
+        // TODO if noOp, should we add `Votes` to the table, or there will be no
+        // votes?
         if let Some(cmd) = info.cmd.clone() {
             // create execution info
-            let execution_info = ExecutionInfo::votes(dot, cmd, info.clock, votes);
+            let execution_info =
+                ExecutionInfo::votes(dot, cmd, info.clock, votes);
             self.to_executor.push(execution_info);
         }
 
@@ -358,7 +392,8 @@ impl<KC: KeyClocks> Newt<KC> {
         None
     }
 
-    // Replaces the value `local_votes` with empty votes, returning the previous votes.
+    // Replaces the value `local_votes` with empty votes, returning the previous
+    // votes.
     fn reset_votes(local_votes: &mut Votes) -> Votes {
         mem::take(local_votes)
     }
@@ -369,8 +404,9 @@ impl<KC: KeyClocks> Newt<KC> {
 #[derive(Clone)]
 struct CommandInfo {
     status: Status,
-    quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
-    cmd: Option<Command>,        // `None` if noOp
+    quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
+                                  * works in recovery */
+    cmd: Option<Command>, // `None` if noOp
     clock: u64,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
@@ -496,11 +532,23 @@ mod tests {
         let mut newt_3 = SequentialNewt::new(process_id_3, config);
 
         // discover processes in all newts
-        let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &europe_west2,
+            &planet,
+            processes.clone(),
+        );
         newt_1.discover(sorted);
-        let sorted = util::sort_processes_by_distance(&europe_west3, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &europe_west3,
+            &planet,
+            processes.clone(),
+        );
         newt_2.discover(sorted);
-        let sorted = util::sort_processes_by_distance(&us_west1, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &us_west1,
+            &planet,
+            processes.clone(),
+        );
         newt_3.discover(sorted);
 
         // register processes
@@ -519,7 +567,11 @@ mod tests {
         let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        let sorted = util::sort_processes_by_distance(&client_region, &planet, processes);
+        let sorted = util::sort_processes_by_distance(
+            &client_region,
+            &planet,
+            processes,
+        );
         assert!(client_1.discover(sorted));
 
         // start client
@@ -551,14 +603,16 @@ mod tests {
         assert_eq!(mcollectacks.len(), 2 * f);
 
         // handle the first mcollectack
-        let mcommits = simulation
-            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        let mcommits = simulation.forward_to_processes(
+            mcollectacks.pop().expect("there should be an mcollect ack"),
+        );
         // no mcommit yet
         assert!(mcommits.is_empty());
 
         // handle the second mcollectack
-        let mut mcommits = simulation
-            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        let mut mcommits = simulation.forward_to_processes(
+            mcollectacks.pop().expect("there should be an mcollect ack"),
+        );
         // there's a commit now
         assert_eq!(mcommits.len(), 1);
 

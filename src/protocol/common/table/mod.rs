@@ -35,8 +35,8 @@ impl Votes {
     }
 
     /// Merge with another `Votes`.
-    /// Performance should be better if `self.votes.len() > remote_votes.len()` than with the
-    /// opposite.
+    /// Performance should be better if `self.votes.len() > remote_votes.len()`
+    /// than with the opposite.
     pub fn merge(&mut self, remote_votes: Votes) {
         remote_votes.into_iter().for_each(|(key, key_votes)| {
             // add new votes to current set of votes
@@ -140,7 +140,8 @@ mod tests {
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_ab = Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab =
+            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
         let mut votes_ab = Votes::new();
 
         // orders on each process:

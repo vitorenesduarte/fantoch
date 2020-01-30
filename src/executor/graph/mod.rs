@@ -4,7 +4,8 @@ mod tarjan;
 /// This module contains the definition of `VertexIndex` and `PendingIndex`.
 mod index;
 
-/// This modules contains the definition of `GraphExecutor` and `GraphExecutionInfo`.
+/// This modules contains the definition of `GraphExecutor` and
+/// `GraphExecutionInfo`.
 mod executor;
 
 // Re-exports.
@@ -177,15 +178,18 @@ impl DependencyGraph {
 
                     for dot in pending {
                         if !visited.contains(&dot) {
-                            // only try to find new SCCs from non-visited commands
+                            // only try to find new SCCs from non-visited
+                            // commands
                             match self.find_scc(dot) {
                                 FinderInfo::Found(new_keys) => {
-                                    // if new SCCs were found, restart the process with new keys
+                                    // if new SCCs were found, restart the
+                                    // process with new keys
                                     keys.extend(new_keys);
                                     return self.try_pending(keys);
                                 }
                                 FinderInfo::NotFound(new_visited) => {
-                                    // if no SCCs were found, try other pending commands
+                                    // if no SCCs were found, try other pending
+                                    // commands
                                     visited.extend(new_visited);
                                 }
                             }
@@ -193,23 +197,32 @@ impl DependencyGraph {
                     }
                 }
                 None => {
-                    // once there are no more keys to try, no command in pending should be possible
-                    // to be executed, so we give up!
+                    // once there are no more keys to try, no command in pending
+                    // should be possible to be executed, so
+                    // we give up!
                     return;
                 }
             }
         }
     }
 
-    fn measure_strong_connect(&mut self, finder: &mut TarjanSCCFinder, dot: Dot) -> FinderResult {
+    fn measure_strong_connect(
+        &mut self,
+        finder: &mut TarjanSCCFinder,
+        dot: Dot,
+    ) -> FinderResult {
         // get the vertex
         let vertex = self
             .vertex_index
             .get_mut(&dot)
             .expect("root vertex must exist");
 
-        let (duration, finder_result) =
-            elapsed!(finder.strong_connect(dot, vertex, &self.executed_clock, &self.vertex_index));
+        let (duration, finder_result) = elapsed!(finder.strong_connect(
+            dot,
+            vertex,
+            &self.executed_clock,
+            &self.vertex_index
+        ));
         self.metrics
             .collect(MetricsKind::StrongConnect, duration.as_micros() as u64);
         finder_result
@@ -257,12 +270,14 @@ mod tests {
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
-        let cmd_0 = Command::put(Rifl::new(1, 1), String::from("A"), String::new());
+        let cmd_0 =
+            Command::put(Rifl::new(1, 1), String::from("A"), String::new());
         let clock_0 = util::vclock(vec![0, 1]);
 
         // cmd 1
         let dot_1 = Dot::new(2, 1);
-        let cmd_1 = Command::put(Rifl::new(2, 1), String::from("A"), String::new());
+        let cmd_1 =
+            Command::put(Rifl::new(2, 1), String::from("A"), String::new());
         let clock_1 = util::vclock(vec![1, 0]);
 
         // add cmd 0
@@ -526,11 +541,15 @@ mod tests {
         });
     }
 
-    fn random_adds(n: usize, events_per_process: usize) -> Vec<(Dot, VClock<ProcessId>)> {
+    fn random_adds(
+        n: usize,
+        events_per_process: usize,
+    ) -> Vec<(Dot, VClock<ProcessId>)> {
         // create dots
         let dots: Vec<_> = util::process_ids(n)
             .flat_map(|process_id| {
-                (1..=events_per_process).map(move |event| Dot::new(process_id, event as u64))
+                (1..=events_per_process)
+                    .map(move |event| Dot::new(process_id, event as u64))
             })
             .collect();
 
@@ -596,7 +615,10 @@ mod tests {
         });
     }
 
-    fn check_termination(n: usize, args: Vec<(Dot, VClock<ProcessId>)>) -> Vec<Rifl> {
+    fn check_termination(
+        n: usize,
+        args: Vec<(Dot, VClock<ProcessId>)>,
+    ) -> Vec<Rifl> {
         // create queue
         let f = 1;
         let config = Config::new(n, f);

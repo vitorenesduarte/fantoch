@@ -37,7 +37,9 @@ impl Executor for BasicExecutor {
         let op_result = self.store.execute(&key, op);
 
         // add partial result to `Pending`
-        if let Some(result) = self.pending.add_partial(rifl, || (key, op_result)) {
+        if let Some(result) =
+            self.pending.add_partial(rifl, || (key, op_result))
+        {
             vec![result]
         } else {
             Vec::new()

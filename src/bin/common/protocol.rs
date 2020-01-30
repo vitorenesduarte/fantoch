@@ -146,19 +146,22 @@ pub fn parse_args() -> (
 
     // parse arguments
     let process_id = parse_process_id(matches.value_of("id"));
-    let sorted_processes = parse_sorted_processes(matches.value_of("sorted_processes"));
+    let sorted_processes =
+        parse_sorted_processes(matches.value_of("sorted_processes"));
     let ip = parse_ip(matches.value_of("ip"));
     let port = parse_port(matches.value_of("port"));
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
     let mut config = parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
-    let tcp_buffer_size = super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
+    let tcp_buffer_size =
+        super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
     let tcp_flush_interval =
         super::parse_tcp_flush_interval(matches.value_of("tcp_flush_interval"));
 
-    let channel_buffer_size =
-        super::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
+    let channel_buffer_size = super::parse_channel_buffer_size(
+        matches.value_of("channel_buffer_size"),
+    );
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
@@ -225,8 +228,10 @@ fn parse_port(port: Option<&str>) -> u16 {
 }
 
 fn parse_client_port(port: Option<&str>) -> u16 {
-    port.map(|port| port.parse::<u16>().expect("client port should be a number"))
-        .unwrap_or(DEFAULT_CLIENT_PORT)
+    port.map(|port| {
+        port.parse::<u16>().expect("client port should be a number")
+    })
+    .unwrap_or(DEFAULT_CLIENT_PORT)
 }
 
 fn parse_addresses(addresses: Option<&str>) -> Vec<String> {

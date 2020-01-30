@@ -25,7 +25,8 @@ impl QuorumClocks {
         }
     }
 
-    /// Adds a new `clock` reported by `process_id` and returns the maximum clock seen until now.
+    /// Adds a new `clock` reported by `process_id` and returns the maximum
+    /// clock seen until now.
     pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
         assert!(self.participants.len() < self.q);
 

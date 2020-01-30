@@ -63,7 +63,9 @@ impl Executor for TableExecutor {
                 let op_result = self.store.execute(&key, op);
 
                 // add partial result to `Pending`
-                if let Some(result) = self.pending.add_partial(rifl, || (key.clone(), op_result)) {
+                if let Some(result) =
+                    self.pending.add_partial(rifl, || (key.clone(), op_result))
+                {
                     results.push(result);
                 }
             }

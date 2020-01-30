@@ -36,9 +36,15 @@ impl Protocol for Atlas {
         let (fast_quorum_size, write_quorum_size) = config.atlas_quorum_sizes();
 
         // create protocol data-structures
-        let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
+        let bp = BaseProcess::new(
+            process_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
         let keys_clocks = KeyClocks::new(config.n());
-        let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let cmds =
+            Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
 
         // create `Atlas`
@@ -62,12 +68,20 @@ impl Protocol for Atlas {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+    fn submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Self::Message> {
         self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Message>> {
+    fn handle(
+        &mut self,
+        from: ProcessId,
+        msg: Self::Message,
+    ) -> Option<ToSend<Message>> {
         match msg {
             Message::MCollect {
                 dot,
@@ -75,12 +89,18 @@ impl Protocol for Atlas {
                 quorum,
                 clock,
             } => self.handle_mcollect(from, dot, cmd, quorum, clock),
-            Message::MCollectAck { dot, clock } => self.handle_mcollectack(from, dot, clock),
-            Message::MCommit { dot, value } => self.handle_mcommit(from, dot, value),
+            Message::MCollectAck { dot, clock } => {
+                self.handle_mcollectack(from, dot, clock)
+            }
+            Message::MCommit { dot, value } => {
+                self.handle_mcommit(from, dot, value)
+            }
             Message::MConsensus { dot, ballot, value } => {
                 self.handle_mconsensus(from, dot, ballot, value)
             }
-            Message::MConsensusAck { dot, ballot } => self.handle_mconsensusack(from, dot, ballot),
+            Message::MConsensusAck { dot, ballot } => {
+                self.handle_mconsensusack(from, dot, ballot)
+            }
         }
     }
 
@@ -100,7 +120,11 @@ impl Protocol for Atlas {
 
 impl Atlas {
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -108,10 +132,12 @@ impl Atlas {
         let cmd = Some(cmd);
 
         // compute its clock
-        // - here we shouldn't save the command in `keys_clocks`; if we do, it will be declared as a
-        //   dependency of itself when this message is handled by its own coordinator, which
-        //   prevents fast paths with f > 1
-        // TODO is there a parallel with newt? or it doesn't suffer from this problem?
+        // - here we shouldn't save the command in `keys_clocks`; if we do, it
+        //   will be declared as a dependency of itself when this message is
+        //   handled by its own coordinator, which prevents fast paths with f >
+        //   1
+        // TODO is there a parallel with newt? or it doesn't suffer from this
+        // problem?
         let clock = self.keys_clocks.clock(&cmd);
 
         // create `MCollect` and target
@@ -164,7 +190,8 @@ impl Atlas {
             self.keys_clocks.clock_with_past(&cmd, remote_clock)
         };
 
-        // save command in order to be declared as a conflict for following commands
+        // save command in order to be declared as a conflict for following
+        // commands
         self.keys_clocks.add(dot, &cmd);
 
         // update command info
@@ -213,12 +240,14 @@ impl Atlas {
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
-            // compute the threshold union while checking whether it's equal to their union
+            // compute the threshold union while checking whether it's equal to
+            // their union
             let (final_clock, equal_to_union) =
                 info.quorum_clocks.threshold_union(self.bp.config.f());
 
             // create consensus value
-            // TODO can the following be more performant or at least more ergonomic?
+            // TODO can the following be more performant or at least more
+            // ergonomic?
             let cmd = info.synod.value().clone().cmd;
             let value = ConsensusValue::with(cmd, final_clock);
 
@@ -227,8 +256,9 @@ impl Atlas {
             if equal_to_union {
                 self.bp.fast_path();
                 // fast path: create `MCommit`
-                // TODO create a slim-MCommit that only sends the payload to the non-fast-quorum
-                // members, or send the payload to all in a slim-MConsensus
+                // TODO create a slim-MCommit that only sends the payload to the
+                // non-fast-quorum members, or send the payload
+                // to all in a slim-MConsensus
                 let mcommit = Message::MCommit { dot, value };
                 let target = self.bp.all();
 
@@ -382,8 +412,9 @@ impl Atlas {
     }
 }
 
-// consensus value is a pair where the first component is the command (noop if `None`) and the
-// second component its dependencies represented as a vector clock.
+// consensus value is a pair where the first component is the command (noop if
+// `None`) and the second component its dependencies represented as a vector
+// clock.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     cmd: Option<Command>,
@@ -411,15 +442,21 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 #[derive(Clone)]
 struct CommandInfo {
     status: Status,
-    quorum: BTreeSet<ProcessId>, // this should be a `BTreeSet` so that `==` works in recovery
+    quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
+                                  * works in recovery */
     synod: Synod<ConsensusValue>,
-    // `quorum_clocks` is used by the coordinator to compute the threshold clock when deciding
-    // whether to take the fast path
+    // `quorum_clocks` is used by the coordinator to compute the threshold
+    // clock when deciding whether to take the fast path
     quorum_clocks: QuorumClocks,
 }
 
 impl Info for CommandInfo {
-    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
+    fn new(
+        process_id: ProcessId,
+        n: usize,
+        f: usize,
+        fast_quorum_size: usize,
+    ) -> Self {
         // create bottom consensus value
         let initial_value = ConsensusValue::new(n);
         Self {
@@ -532,11 +569,23 @@ mod tests {
         let mut atlas_3 = Atlas::new(process_id_3, config);
 
         // discover processes in all atlas
-        let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &europe_west2,
+            &planet,
+            processes.clone(),
+        );
         atlas_1.discover(sorted);
-        let sorted = util::sort_processes_by_distance(&europe_west3, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &europe_west3,
+            &planet,
+            processes.clone(),
+        );
         atlas_2.discover(sorted);
-        let sorted = util::sort_processes_by_distance(&us_west1, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &us_west1,
+            &planet,
+            processes.clone(),
+        );
         atlas_3.discover(sorted);
 
         // register processes
@@ -555,7 +604,11 @@ mod tests {
         let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        let sorted = util::sort_processes_by_distance(&client_region, &planet, processes);
+        let sorted = util::sort_processes_by_distance(
+            &client_region,
+            &planet,
+            processes,
+        );
         assert!(client_1.discover(sorted));
 
         // start client
@@ -587,14 +640,16 @@ mod tests {
         assert_eq!(mcollectacks.len(), 2 * f);
 
         // handle the first mcollectack
-        let mcommits = simulation
-            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        let mcommits = simulation.forward_to_processes(
+            mcollectacks.pop().expect("there should be an mcollect ack"),
+        );
         // no mcommit yet
         assert!(mcommits.is_empty());
 
         // handle the second mcollectack
-        let mut mcommits = simulation
-            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        let mut mcommits = simulation.forward_to_processes(
+            mcollectacks.pop().expect("there should be an mcollect ack"),
+        );
         // there's a commit now
         assert_eq!(mcommits.len(), 1);
 

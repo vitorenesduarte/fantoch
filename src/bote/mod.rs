@@ -1,4 +1,5 @@
-// This module contains the definition of `Protocol`, `ClientPlacement` and `ProtocolStats`.
+// This module contains the definition of `Protocol`, `ClientPlacement` and
+// `ProtocolStats`.
 pub mod protocol;
 
 // This module contains the definition of `Search`.
@@ -25,7 +26,8 @@ impl Bote {
         Self { planet }
     }
 
-    /// Computes stats for a leaderless-based protocol with a given `quorum_size`.
+    /// Computes stats for a leaderless-based protocol with a given
+    /// `quorum_size`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -40,10 +42,12 @@ impl Bote {
             .iter()
             .map(|client| {
                 // compute the latency from this client to the closest region
-                let (client_to_closest, closest) = self.nth_closest(1, client, servers);
+                let (client_to_closest, closest) =
+                    self.nth_closest(1, client, servers);
 
                 // compute the latency from such region to its closest quorum
-                let closest_to_quorum = self.quorum_latency(closest, servers, quorum_size);
+                let closest_to_quorum =
+                    self.quorum_latency(closest, servers, quorum_size);
 
                 // client perceived latency is the sum of both
                 (client, client_to_closest + closest_to_quorum)
@@ -51,7 +55,8 @@ impl Bote {
             .collect()
     }
 
-    /// Computes stats for a leader-based protocol with a given `quorum_size` for some `leader`.
+    /// Computes stats for a leader-based protocol with a given `quorum_size`
+    /// for some `leader`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -64,22 +69,24 @@ impl Bote {
         quorum_size: usize,
     ) -> Vec<(&'a Region, u64)> {
         // compute the latency from leader to its closest quorum
-        let leader_to_quorum = self.quorum_latency(leader, servers, quorum_size);
+        let leader_to_quorum =
+            self.quorum_latency(leader, servers, quorum_size);
 
         // compute perceived latency for each client
         clients
             .iter()
             .map(|client| {
                 // compute the latency from client to leader
-                let client_to_leader = self.planet.ping_latency(client, &leader).unwrap();
+                let client_to_leader =
+                    self.planet.ping_latency(client, &leader).unwrap();
                 // client perceived latency is the sum of both
                 (client, client_to_leader + leader_to_quorum)
             })
             .collect()
     }
 
-    /// Computes the best leader (for some criteria) and its stats for a leader-based protocol with
-    /// a given `quorum_size`.
+    /// Computes the best leader (for some criteria) and its stats for a
+    /// leader-based protocol with a given `quorum_size`.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -110,8 +117,8 @@ impl Bote {
             .expect("the best leader should exist")
     }
 
-    /// Computes stats for a leader-based protocol with a given `quorum_size` for each possible
-    /// leader.
+    /// Computes stats for a leader-based protocol with a given `quorum_size`
+    /// for each possible leader.
     ///
     /// Takes as input two lists of regions:
     /// - one list being the regions where `servers` are
@@ -127,7 +134,8 @@ impl Bote {
             .iter()
             .map(|leader| {
                 // compute stats
-                let latency_per_client = self.leader(leader, servers, clients, quorum_size);
+                let latency_per_client =
+                    self.leader(leader, servers, clients, quorum_size);
                 let stats = Histogram::from(
                     latency_per_client
                         .into_iter()
@@ -139,8 +147,14 @@ impl Bote {
     }
 
     /// Computes the latency to closest quorum of size `quorum_size`.
-    /// It takes as input the considered source region `from` and all available `regions`.
-    fn quorum_latency(&self, from: &Region, regions: &[Region], quorum_size: usize) -> u64 {
+    /// It takes as input the considered source region `from` and all available
+    /// `regions`.
+    fn quorum_latency(
+        &self,
+        from: &Region,
+        regions: &[Region],
+        quorum_size: usize,
+    ) -> u64 {
         let (latency, _) = self.nth_closest(quorum_size, &from, &regions);
         *latency
     }
@@ -149,7 +163,12 @@ impl Bote {
     /// This same method can be used to find the:
     /// - latency to the closest quorum
     /// - latency to the closest region
-    fn nth_closest(&self, nth: usize, from: &Region, regions: &[Region]) -> &(u64, Region) {
+    fn nth_closest(
+        &self,
+        nth: usize,
+        from: &Region,
+        regions: &[Region],
+    ) -> &(u64, Region) {
         self.planet
             // sort by distance
             .sorted(from)
@@ -180,7 +199,8 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2
         let quorum_size = 2;
@@ -211,12 +231,15 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 3
         let quorum_size = 3;
         let stats = bote.leaderless(&regions, &regions, quorum_size);
-        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
+        let histogram = Histogram::from(
+            stats.into_iter().map(|(_client, latency)| latency),
+        );
         // w1 -> 9, w2 -> 11, w3 -> 8, w4 -> 8, w6 -> 15
         assert_eq!(histogram.mean().round(), "9.2");
         assert_eq!(histogram.cov().round(), "0.3");
@@ -225,7 +248,9 @@ mod tests {
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&regions, &regions, quorum_size);
-        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
+        let histogram = Histogram::from(
+            stats.into_iter().map(|(_client, latency)| latency),
+        );
         // w1 -> 11, w2 -> 14, w3 -> 9, w4 -> 10, w6 -> 15
         assert_eq!(histogram.mean().round(), "10.8");
         assert_eq!(histogram.cov().round(), "0.2");
@@ -244,7 +269,8 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let servers = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let servers =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // subset of clients: w1 w2
         let clients = vec![w1.clone(), w2.clone()];
@@ -252,7 +278,9 @@ mod tests {
         // quorum size 3
         let quorum_size = 3;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
-        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
+        let histogram = Histogram::from(
+            stats.into_iter().map(|(_client, latency)| latency),
+        );
         // w1 -> 9, w2 -> 11
         assert_eq!(histogram.mean().round(), "9.0");
         assert_eq!(histogram.cov().round(), "0.2");
@@ -261,7 +289,9 @@ mod tests {
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
-        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
+        let histogram = Histogram::from(
+            stats.into_iter().map(|(_client, latency)| latency),
+        );
         // w1 -> 11, w2 -> 14
         assert_eq!(histogram.mean().round(), "11.5");
         assert_eq!(histogram.cov().round(), "0.2");
@@ -273,7 +303,9 @@ mod tests {
         // quorum size 3
         let quorum_size = 3;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
-        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
+        let histogram = Histogram::from(
+            stats.into_iter().map(|(_client, latency)| latency),
+        );
         // w1 -> 9, w3 -> 8, w6 -> 15
         assert_eq!(histogram.mean().round(), "9.7");
         assert_eq!(histogram.cov().round(), "0.4");
@@ -282,7 +314,9 @@ mod tests {
         // quorum size 4
         let quorum_size = 4;
         let stats = bote.leaderless(&servers, &clients, quorum_size);
-        let histogram = Histogram::from(stats.into_iter().map(|(_client, latency)| latency));
+        let histogram = Histogram::from(
+            stats.into_iter().map(|(_client, latency)| latency),
+        );
         // w1 -> 11, w3 -> 9, w6 -> 15
         assert_eq!(histogram.mean().round(), "10.7");
         assert_eq!(histogram.cov().round(), "0.3");
@@ -301,7 +335,8 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2:
         let quorum_size = 2;
@@ -344,7 +379,8 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let servers = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let servers =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2:
         let quorum_size = 2;
@@ -418,11 +454,13 @@ mod tests {
         let w3 = Region::new("europe-west3");
         let w4 = Region::new("europe-west4");
         let w6 = Region::new("europe-west6");
-        let regions = vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
+        let regions =
+            vec![w1.clone(), w2.clone(), w3.clone(), w4.clone(), w6.clone()];
 
         // quorum size 2:
         let quorum_size = 2;
-        let (_, stats) = bote.best_leader(&regions, &regions, quorum_size, Stats::Mean);
+        let (_, stats) =
+            bote.best_leader(&regions, &regions, quorum_size, Stats::Mean);
 
         assert_eq!(stats.mean().round(), "14.0");
         assert_eq!(stats.cov().round(), "0.3");

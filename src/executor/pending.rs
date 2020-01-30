@@ -7,8 +7,8 @@ use std::collections::hash_map::{Entry, HashMap};
 /// Structure that tracks the progress of pending commands.
 #[derive(Default)]
 pub struct Pending {
-    // TODO this should be a feature; with that, most conditionals below could be removed at
-    // compile-time
+    // TODO this should be a feature; with that, most conditionals below could
+    // be removed at compile-time
     aggregate: bool,
     aggregated_pending: HashMap<Rifl, CommandResult>,
     pending: HashMap<Rifl, usize>,
@@ -17,11 +17,13 @@ pub struct Pending {
 impl Pending {
     /// Creates a new `Pending` instance.
     /// If configured with:
-    /// - `agggregate = false`, then results are returned as soon as received; this structure simply
-    ///   tracks if the result belongs to a client that has previously waited for such command.
-    /// - `agggregate = true`, then results are only returned once they're the aggregation of all
-    ///   partial results is complete; this also means that non-parallel executors can return the
-    ///   full command result without having to return partials
+    /// - `agggregate = false`, then results are returned as soon as received;
+    ///   this structure simply tracks if the result belongs to a client that
+    ///   has previously waited for such command.
+    /// - `agggregate = true`, then results are only returned once they're the
+    ///   aggregation of all partial results is complete; this also means that
+    ///   non-parallel executors can return the full command result without
+    ///   having to return partials
     pub fn new(aggregate: bool) -> Self {
         Self {
             aggregate,
@@ -74,15 +76,21 @@ impl Pending {
     }
 
     /// Adds a new partial command result.
-    /// By getting a reference to the `Key` we only clone when it's really needed.
-    pub fn add_partial<P>(&mut self, rifl: Rifl, partial: P) -> Option<ExecutorResult>
+    /// By getting a reference to the `Key` we only clone when it's really
+    /// needed.
+    pub fn add_partial<P>(
+        &mut self,
+        rifl: Rifl,
+        partial: P,
+    ) -> Option<ExecutorResult>
     where
         P: FnOnce() -> (Key, KVOpResult),
     {
         // get current value:
         // - if it's not part of pending, then ignore it
-        // (if it's not part of pending, it means that it is from a client from another newt
-        // process, and `pending.wait_for*` has not been called)
+        // (if it's not part of pending, it means that it is from a client from
+        // another newt process, and `pending.wait_for*` has not been
+        // called)
         if self.aggregate {
             let cmd_result = self.aggregated_pending.get_mut(&rifl)?;
 
@@ -90,7 +98,8 @@ impl Pending {
             let (key, op_result) = partial();
             let is_ready = cmd_result.add_partial(key, op_result);
             if is_ready {
-                // if it is, remove it from aggregated_pending and return it as ready
+                // if it is, remove it from aggregated_pending and return it as
+                // ready
                 self.aggregated_pending
                     .remove(&rifl)
                     .map(|command_result| ExecutorResult::Ready(command_result))
@@ -148,7 +157,8 @@ mod tests {
 
         // command get a and b
         let get_ab_rifl = Rifl::new(3, 1);
-        let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let get_ab =
+            Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // wait for `get_ab` and `put_b`
         assert!(pending.wait_for(&get_ab));
@@ -159,19 +169,22 @@ mod tests {
 
         // add the result of get b and assert that the command is not ready yet
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
+        let res =
+            pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
         assert!(res.is_none());
 
         // add the result of put a before being waited for
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending
+            .add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_none());
 
         // wait for `put_a`
         pending.wait_for(&put_a);
 
         // add the result of put a and assert that the command is ready
-        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending
+            .add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_some());
 
         // check that there's only one result (since the command accessed a
@@ -184,7 +197,8 @@ mod tests {
 
         // add the result of put b and assert that the command is ready
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
+        let res =
+            pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
 
         // check that there's only one result (since the command accessed a
         // single key)
@@ -196,7 +210,8 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
+        let res =
+            pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
         assert!(res.is_some());
 
         // check that there are two results (since the command accessed two
@@ -232,7 +247,8 @@ mod tests {
 
         // command get a and b
         let get_ab_rifl = Rifl::new(3, 1);
-        let get_ab = Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let get_ab =
+            Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // wait for `get_ab` and `put_b`
         assert!(pending.wait_for(&get_ab));
@@ -243,14 +259,16 @@ mod tests {
 
         // add the result of get b
         let get_b_res = store.execute(&key_b, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
-        // there's always (as long as previously waited for) a result when configured with parallel
-        // executors
+        let res =
+            pending.add_partial(get_ab_rifl, || (key_b.clone(), get_b_res));
+        // there's always (as long as previously waited for) a result when
+        // configured with parallel executors
         assert!(res.is_some());
 
         // add the result of put a before being waited for
         let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
-        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending
+            .add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         // there's not a result since the command has not been waited for
         assert!(res.is_none());
 
@@ -258,7 +276,8 @@ mod tests {
         pending.wait_for(&put_a);
 
         // add the result of put a
-        let res = pending.add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
+        let res = pending
+            .add_partial(put_a_rifl, || (key_a.clone(), put_a_res.clone()));
         assert!(res.is_some());
 
         // check partial output
@@ -270,7 +289,8 @@ mod tests {
 
         // add the result of put b
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
-        let res = pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
+        let res =
+            pending.add_partial(put_b_rifl, || (key_b.clone(), put_b_res));
         assert!(res.is_some());
 
         // check partial output
@@ -282,7 +302,8 @@ mod tests {
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
-        let res = pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
+        let res =
+            pending.add_partial(get_ab_rifl, || (key_a.clone(), get_a_res));
         assert!(res.is_some());
 
         // check partial output

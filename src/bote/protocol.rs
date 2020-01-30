@@ -63,7 +63,12 @@ impl ProtocolStats {
         Default::default()
     }
 
-    pub fn get(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> &Histogram {
+    pub fn get(
+        &self,
+        protocol: Protocol,
+        f: usize,
+        placement: ClientPlacement,
+    ) -> &Histogram {
         let key = Self::key(protocol, f, placement);
         self.get_and_unwrap(&key)
     }
@@ -79,7 +84,12 @@ impl ProtocolStats {
         self.0.insert(key, stats);
     }
 
-    pub fn fmt(&self, protocol: Protocol, f: usize, placement: ClientPlacement) -> String {
+    pub fn fmt(
+        &self,
+        protocol: Protocol,
+        f: usize,
+        placement: ClientPlacement,
+    ) -> String {
         let key = Self::key(protocol, f, placement);
         let stats = self.get_and_unwrap(&key);
         format!("{}={:?}", key, stats)

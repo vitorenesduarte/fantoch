@@ -1,8 +1,8 @@
 // This module contains the definition of `Pending`.
 mod pending;
 
-// This module contains the implementation of a basic executor that executes operations as soon as
-// it receives them.
+// This module contains the implementation of a basic executor that executes
+// operations as soon as it receives them.
 mod basic;
 
 // This module contains the implementation of a dependency graph executor.
@@ -45,9 +45,9 @@ pub trait Executor {
 }
 
 pub trait MessageKey {
-    /// If `None` is returned, then the message is sent to all executor processes.
-    /// In particular, if the executor is not parallel, the message is sent to the single executor
-    /// process.
+    /// If `None` is returned, then the message is sent to all executor
+    /// processes. In particular, if the executor is not parallel, the
+    /// message is sent to the single executor process.
     fn key(&self) -> Option<&Key> {
         None
     }

@@ -10,7 +10,8 @@ const DEFAULT_CONFLICT_RATE: usize = 100;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) = parse_args();
+    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) =
+        parse_args();
 
     common::tokio_runtime().block_on(planet_sim::run::client(
         ids,
@@ -88,9 +89,11 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
         matches.value_of("conflict_rate"),
         matches.value_of("commands_per_client"),
     );
-    let tcp_nodelay = common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
-    let channel_buffer_size =
-        common::parse_channel_buffer_size(matches.value_of("channel_buffer_size"));
+    let tcp_nodelay =
+        common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
+    let channel_buffer_size = common::parse_channel_buffer_size(
+        matches.value_of("channel_buffer_size"),
+    );
 
     println!("ids: {:?}", ids);
     println!("client number: {}", ids.len());
@@ -141,7 +144,10 @@ fn parse_interval(interval: Option<&str>) -> Option<u64> {
     })
 }
 
-fn parse_workload(conflict_rate: Option<&str>, commands_per_client: Option<&str>) -> Workload {
+fn parse_workload(
+    conflict_rate: Option<&str>,
+    commands_per_client: Option<&str>,
+) -> Workload {
     let conflict_rate = parse_conflict_rate(conflict_rate);
     let commands_per_client = parse_commands_per_client(commands_per_client);
     Workload::new(conflict_rate, commands_per_client)

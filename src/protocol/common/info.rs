@@ -2,7 +2,12 @@ use crate::id::{Dot, ProcessId};
 use std::collections::HashMap;
 
 pub trait Info {
-    fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self;
+    fn new(
+        process_id: ProcessId,
+        n: usize,
+        f: usize,
+        fast_quorum_size: usize,
+    ) -> Self;
 }
 
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
@@ -19,7 +24,12 @@ impl<I> Commands<I>
 where
     I: Info,
 {
-    pub fn new(process_id: ProcessId, n: usize, f: usize, fast_quorum_size: usize) -> Self {
+    pub fn new(
+        process_id: ProcessId,
+        n: usize,
+        f: usize,
+        fast_quorum_size: usize,
+    ) -> Self {
         Self {
             process_id,
             n,
@@ -32,7 +42,8 @@ where
     // Returns the `Info` associated with `Dot`.
     // If no `Info` is associated, an empty `Info` is returned.
     pub fn get(&mut self, dot: Dot) -> &mut I {
-        // TODO borrow everything we need so that the borrow checker does not complain
+        // TODO borrow everything we need so that the borrow checker does not
+        // complain
         let process_id = self.process_id;
         let n = self.n;
         let f = self.f;

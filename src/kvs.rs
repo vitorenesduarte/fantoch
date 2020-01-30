@@ -5,7 +5,9 @@ use std::collections::HashMap;
 pub type Key = String;
 pub type Value = String;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub enum KVOp {
     Get,
     Put(Value),
@@ -68,7 +70,10 @@ mod tests {
         assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // put key_a z -> some(x)
-        assert_eq!(store.execute(&key_a, KVOp::Put(z.clone())), Some(x.clone()));
+        assert_eq!(
+            store.execute(&key_a, KVOp::Put(z.clone())),
+            Some(x.clone())
+        );
         // get key_a    -> some(z)
         assert_eq!(store.execute(&key_a, KVOp::Get), Some(z.clone()));
         // get key_b    -> some(y)

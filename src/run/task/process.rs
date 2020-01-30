@@ -37,9 +37,10 @@ where
     let n = addresses.len();
 
     // create list of in and out connections:
-    // - even though TCP is full-duplex, due to the current tokio non-parallel-tcp-socket-read-write
-    //   limitation, we going to use in streams for reading and out streams for writing, which can
-    //   be done in parallel
+    // - even though TCP is full-duplex, due to the current tokio
+    //   non-parallel-tcp-socket-read-write limitation, we going to use in
+    //   streams for reading and out streams for writing, which can be done in
+    //   parallel
     let mut outgoing = Vec::with_capacity(n * multiplexing);
     let mut incoming = Vec::with_capacity(n * multiplexing);
 
@@ -47,8 +48,13 @@ where
     for address in addresses {
         // create `multiplexing` connections per address
         for _ in 0..multiplexing {
-            let connection =
-                super::connect(&address, tcp_nodelay, tcp_buffer_size, connect_retries).await?;
+            let connection = super::connect(
+                &address,
+                tcp_nodelay,
+                tcp_buffer_size,
+                connect_retries,
+            )
+            .await?;
             // save connection if connected successfully
             outgoing.push(connection);
         }
@@ -115,7 +121,9 @@ async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
     }
 }
 
-async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)> {
+async fn receive_hi(
+    connections: Vec<Connection>,
+) -> Vec<(ProcessId, Connection)> {
     let mut id_to_connection = Vec::with_capacity(connections.len());
 
     // receive hi from each connection
@@ -130,10 +138,13 @@ async fn receive_hi(connections: Vec<Connection>) -> Vec<(ProcessId, Connection)
     id_to_connection
 }
 
-/// Starts a reader task per connection received. A `ReaderToWorkers` is passed to each reader so
-/// that these can forward immediately to the correct worker process.
-fn start_readers<P>(to_workers: ReaderToWorkers<P>, connections: Vec<(ProcessId, Connection)>)
-where
+/// Starts a reader task per connection received. A `ReaderToWorkers` is passed
+/// to each reader so that these can forward immediately to the correct worker
+/// process.
+fn start_readers<P>(
+    to_workers: ReaderToWorkers<P>,
+    connections: Vec<(ProcessId, Connection)>,
+) where
     P: Protocol + 'static,
 {
     for (process_id, connection) in connections {
@@ -179,7 +190,9 @@ async fn reader_task<P>(
     loop {
         match connection.recv().await {
             Some(msg) => {
-                if let Err(e) = reader_to_workers.forward((process_id, msg)).await {
+                if let Err(e) =
+                    reader_to_workers.forward((process_id, msg)).await
+                {
                     println!(
                         "[reader] error notifying process task with new msg: {:?}",
                         e
@@ -201,10 +214,12 @@ async fn writer_task<P>(
 ) where
     P: Protocol + 'static,
 {
-    // if flush interval higher than 0, then flush periodically; otherwise, flush on every write
+    // if flush interval higher than 0, then flush periodically; otherwise,
+    // flush on every write
     if let Some(tcp_flush_interval) = tcp_flush_interval {
         // create interval
-        let mut interval = time::interval(Duration::from_micros(tcp_flush_interval as u64));
+        let mut interval =
+            time::interval(Duration::from_micros(tcp_flush_interval as u64));
         loop {
             tokio::select! {
                 msg = parent.recv() => {
@@ -345,12 +360,15 @@ async fn handle_to_send<P>(
     }
 }
 
-fn handle_message_from_self<P>(process_id: ProcessId, msg: P::Message, process: &mut P)
-where
+fn handle_message_from_self<P>(
+    process_id: ProcessId,
+    msg: P::Message,
+    process: &mut P,
+) where
     P: Protocol + 'static,
 {
-    // make sure that, if there's something to be sent, it is to self, i.e. messages from self to
-    // self shouldn't generate messages
+    // make sure that, if there's something to be sent, it is to self, i.e.
+    // messages from self to self shouldn't generate messages
     if let Some(ToSend { target, msg, .. }) = process.handle(process_id, msg) {
         assert!(target.len() == 1);
         assert!(target.contains(&process_id));

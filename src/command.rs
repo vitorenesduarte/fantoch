@@ -18,7 +18,10 @@ impl Command {
     }
 
     /// Create a new `Command` from an iterator.
-    pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(rifl: Rifl, iter: I) -> Self {
+    pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(
+        rifl: Rifl,
+        iter: I,
+    ) -> Self {
         Self::new(rifl, HashMap::from_iter(iter))
     }
 
@@ -40,7 +43,8 @@ impl Command {
 
     /// Creates a multi-put command.
     pub fn multi_put(rifl: Rifl, kvs: Vec<(Key, Value)>) -> Self {
-        let commands = kvs.into_iter().map(|(key, value)| (key, KVOp::Put(value)));
+        let commands =
+            kvs.into_iter().map(|(key, value)| (key, KVOp::Put(value)));
         Self::from(rifl, commands)
     }
 
@@ -153,7 +157,10 @@ mod tests {
         let cmd_a = Command::multi_get(rifl, vec![String::from("A")]);
         let cmd_b = Command::multi_get(rifl, vec![String::from("B")]);
         let cmd_c = Command::multi_get(rifl, vec![String::from("C")]);
-        let cmd_ab = Command::multi_get(rifl, vec![String::from("A"), String::from("B")]);
+        let cmd_ab = Command::multi_get(
+            rifl,
+            vec![String::from("A"), String::from("B")],
+        );
 
         // check command a conflicts
         assert!(cmd_a.conflicts(&cmd_a));

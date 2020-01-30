@@ -38,7 +38,8 @@ macro_rules! elapsed {
     }};
 }
 
-/// Returns an iterator with all process identifiers in a system with `n` processes.
+/// Returns an iterator with all process identifiers in a system with `n`
+/// processes.
 pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
     (1..=n).map(|id| id as u64)
@@ -80,7 +81,8 @@ pub fn sort_processes_by_distance(
 use threshold::{Clock, EventSet, MaxSet, VClock};
 
 #[cfg(test)]
-/// Returns a new `VClock` setting its frontier with the sequences in the iterator.
+/// Returns a new `VClock` setting its frontier with the sequences in the
+/// iterator.
 pub fn vclock<I: IntoIterator<Item = u64>>(iter: I) -> VClock<ProcessId> {
     Clock::from(
         iter.into_iter()

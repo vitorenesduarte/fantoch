@@ -1,4 +1,5 @@
-// This module contains the implementation of data structured used to hold info about commands.
+// This module contains the implementation of data structured used to hold info
+// about commands.
 pub mod info;
 
 // This module contains definitions common to dependency-graph-based protocols.

@@ -37,8 +37,12 @@ impl TarjanSCCFinder {
     /// Returns a list with the SCCs found and a set with all dots visited.
     /// It also resets the ids of all vertices still on the stack.
     #[must_use]
-    pub fn finalize(self, vertex_index: &VertexIndex) -> (Vec<SCC>, HashSet<Dot>) {
-        // reset the id of each dot in the stack, while computing the set of visited dots
+    pub fn finalize(
+        self,
+        vertex_index: &VertexIndex,
+    ) -> (Vec<SCC>, HashSet<Dot>) {
+        // reset the id of each dot in the stack, while computing the set of
+        // visited dots
         let visited = self
             .stack
             .into_iter()
@@ -85,10 +89,11 @@ impl TarjanSCCFinder {
 
         // compute non-executed deps for each process
         for (process_id, to) in vertex.clock().clone().frontier() {
-            // get min event from which we need to start checking for dependencies
+            // get min event from which we need to start checking for
+            // dependencies
             let from = if self.transitive_conflicts {
-                // if we can assume that conflicts are transitive, it is enough to check for the
-                // highest dependency
+                // if we can assume that conflicts are transitive, it is enough
+                // to check for the highest dependency
                 to
             } else {
                 let executed = executed_clock_frontier
@@ -100,13 +105,14 @@ impl TarjanSCCFinder {
             // OPTIMIZATION: start from the highest dep to the lowest:
             // - assuming we will give up, we give up faster this way
             // THE BENEFITS ARE HUGE!!!
-            // - obviously, this is only relevant when we can't assume that conflicts are transitive
+            // - obviously, this is only relevant when we can't assume that
+            //   conflicts are transitive
             // - when we can, the following loop has a single iteration
             for dep in (from..=to).rev() {
                 // ignore dependency if already executed:
-                // - we need this check because the clock may not be contiguous, i.e.
-                //   `executed_clock_frontier` is simply a safe approximation of what's been
-                //   executed
+                // - we need this check because the clock may not be contiguous,
+                //   i.e. `executed_clock_frontier` is simply a safe
+                //   approximation of what's been executed
                 if executed_clock.contains(process_id, dep) {
                     continue;
                 }
@@ -117,25 +123,35 @@ impl TarjanSCCFinder {
 
                 match vertex_index.get_mut(&dep_dot) {
                     None => {
-                        // not necesserarily a missing dependency, since it may not conflict
-                        // with `dot` but we can't be sure until we have it locally
+                        // not necesserarily a missing dependency, since it may
+                        // not conflict with `dot` but
+                        // we can't be sure until we have it locally
                         log!("Finder::strong_connect missing {:?}", dep_dot);
                         return FinderResult::MissingDependency;
                     }
                     Some(dep_vertex) => {
                         // ignore non-conflicting commands:
-                        // - this check is only necesssary if we can't assume that conflicts are
-                        //   trnasitive
-                        if !self.transitive_conflicts && !vertex.conflicts(&dep_vertex) {
-                            log!("Finder::strong_connect non-conflicting {:?}", dep_dot);
+                        // - this check is only necesssary if we can't assume
+                        //   that conflicts are trnasitive
+                        if !self.transitive_conflicts
+                            && !vertex.conflicts(&dep_vertex)
+                        {
+                            log!(
+                                "Finder::strong_connect non-conflicting {:?}",
+                                dep_dot
+                            );
                             continue;
                         }
 
                         // if not visited, visit
                         if dep_vertex.id() == 0 {
-                            log!("Finder::strong_connect non-visited {:?}", dep_dot);
+                            log!(
+                                "Finder::strong_connect non-visited {:?}",
+                                dep_dot
+                            );
 
-                            // OPTIMIZATION: passing the vertex as an argument to `strong_connect`
+                            // OPTIMIZATION: passing the vertex as an argument
+                            // to `strong_connect`
                             // is also essential to avoid double look-up
                             let result = self.strong_connect(
                                 dep_dot,
@@ -150,13 +166,17 @@ impl TarjanSCCFinder {
                             }
 
                             // min low with dep low
-                            vertex.update_low(|low| cmp::min(low, dep_vertex.low()));
+                            vertex.update_low(|low| {
+                                cmp::min(low, dep_vertex.low())
+                            });
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack() {
                                 log!("Finder::strong_connect dependency on stack {:?}", dep_dot);
                                 // min low with dep id
-                                vertex.update_low(|low| cmp::min(low, dep_vertex.id()));
+                                vertex.update_low(|low| {
+                                    cmp::min(low, dep_vertex.id())
+                                });
                             }
                         }
                     }
@@ -164,7 +184,8 @@ impl TarjanSCCFinder {
             }
         }
 
-        // if after visiting all neighbors, an SCC was found if vertex.id == vertex.low
+        // if after visiting all neighbors, an SCC was found if vertex.id ==
+        // vertex.low
         // - good news: the SCC members are on the stack
         if vertex.id() == vertex.low() {
             let mut scc = SCC::new();
@@ -276,7 +297,8 @@ impl Vertex {
         self.on_stack = on_stack;
     }
 
-    /// This vertex conflicts with another vertex by checking if their commands conflict.
+    /// This vertex conflicts with another vertex by checking if their commands
+    /// conflict.
     fn conflicts(&self, other: &Vertex) -> bool {
         self.cmd.conflicts(&other.cmd)
     }

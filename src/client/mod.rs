@@ -27,8 +27,9 @@ pub struct Client {
     pending: Pending,
     /// an histogram with all latencies observed by this client
     latency_histogram: Histogram,
-    /// an histogram with all the times in which commands were returned to this client; this is
-    /// useful for throughput/time plots or in general to compute throughput
+    /// an histogram with all the times in which commands were returned to this
+    /// client; this is useful for throughput/time plots or in general to
+    /// compute throughput
     throughput_histogram: Histogram,
 }
 
@@ -62,7 +63,10 @@ impl Client {
     }
 
     /// Generates the next command in this client's workload.
-    pub fn next_cmd(&mut self, time: &dyn SysTime) -> Option<(ProcessId, Command)> {
+    pub fn next_cmd(
+        &mut self,
+        time: &dyn SysTime,
+    ) -> Option<(ProcessId, Command)> {
         self.process_id.and_then(|process_id| {
             // generate next command in the workload if some process_id
             self.workload.next_cmd(&mut self.rifl_gen).map(|cmd| {
@@ -73,9 +77,14 @@ impl Client {
         })
     }
 
-    /// Handle executed command and return a boolean indicating whether we have generated all
-    /// commands and receive all the corresponding command results.
-    pub fn handle(&mut self, cmd_result: CommandResult, time: &dyn SysTime) -> bool {
+    /// Handle executed command and return a boolean indicating whether we have
+    /// generated all commands and receive all the corresponding command
+    /// results.
+    pub fn handle(
+        &mut self,
+        cmd_result: CommandResult,
+        time: &dyn SysTime,
+    ) -> bool {
         // end command in pending and save command latency
         let (latency, return_time) = self.pending.end(cmd_result.rifl(), time);
         self.latency_histogram.increment(latency);
@@ -144,7 +153,8 @@ mod tests {
         assert_eq!(client.process_id, None);
 
         // check discover with processes
-        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        let sorted =
+            util::sort_processes_by_distance(&region, &planet, processes);
         assert!(client.discover(sorted));
         assert_eq!(client.process_id, Some(2));
     }
@@ -167,7 +177,8 @@ mod tests {
         let mut client = gen_client(total_commands);
 
         // discover
-        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        let sorted =
+            util::sort_processes_by_distance(&region, &planet, processes);
         client.discover(sorted);
 
         // create system time

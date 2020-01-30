@@ -20,16 +20,18 @@ impl<A> Schedule<A> {
         let schedule_time = time.now() + delay;
 
         // get already scheduled actions for this `time` and insert new `action`
-        let actions = self.schedule.entry(schedule_time).or_insert_with(Vec::new);
+        let actions =
+            self.schedule.entry(schedule_time).or_insert_with(Vec::new);
         actions.push(action);
     }
 
     /// Retrieve the next list of schedule actions.
     pub fn next_actions(&mut self, time: &mut SimTime) -> Option<Vec<A>> {
         // get min time
-        // TODO this can be improved once BTreeMap's `first` API stabilizes; or better, what we need
-        // here is a `remove_first` API
-        let min_time = self.schedule.iter().map(|(min_time, _)| *min_time).next();
+        // TODO this can be improved once BTreeMap's `first` API stabilizes; or
+        // better, what we need here is a `remove_first` API
+        let min_time =
+            self.schedule.iter().map(|(min_time, _)| *min_time).next();
 
         // return next actions
         min_time.map(|min_time| {

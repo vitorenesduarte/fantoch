@@ -15,7 +15,9 @@ pub type ClientId = u64;
 pub type Rifl = Id<ClientId>;
 pub type RiflGen = IdGen<ClientId>;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct Id<S> {
     source: S,
     sequence: u64,

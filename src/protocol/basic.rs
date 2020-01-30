@@ -29,8 +29,14 @@ impl Protocol for Basic {
         let write_quorum_size = 0; // there's no write quorum as we have 100% fast paths
 
         // create protocol data-structures
-        let bp = BaseProcess::new(process_id, config, fast_quorum_size, write_quorum_size);
-        let cmds = Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let bp = BaseProcess::new(
+            process_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
+        let cmds =
+            Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
 
         // create `Basic`
@@ -53,16 +59,26 @@ impl Protocol for Basic {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Self::Message> {
+    fn submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Self::Message> {
         self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
-    fn handle(&mut self, from: ProcessId, msg: Self::Message) -> Option<ToSend<Message>> {
+    fn handle(
+        &mut self,
+        from: ProcessId,
+        msg: Self::Message,
+    ) -> Option<ToSend<Message>> {
         match msg {
             Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
             Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
-            Message::MCommit { dot, cmd } => self.handle_mcommit(from, dot, cmd),
+            Message::MCommit { dot, cmd } => {
+                self.handle_mcommit(from, dot, cmd)
+            }
         }
     }
 
@@ -82,7 +98,11 @@ impl Protocol for Basic {
 
 impl Basic {
     /// Handles a submit operation by a client.
-    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) -> ToSend<Message> {
+    fn handle_submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+    ) -> ToSend<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -124,7 +144,11 @@ impl Basic {
         })
     }
 
-    fn handle_mstoreack(&mut self, from: ProcessId, dot: Dot) -> Option<ToSend<Message>> {
+    fn handle_mstoreack(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+    ) -> Option<ToSend<Message>> {
         log!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
         // get cmd info
@@ -161,16 +185,16 @@ impl Basic {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // create execution info:
-        // - one entry per key being accessed will be created, which allows the basic executor to
-        //   run in parallel
+        // - one entry per key being accessed will be created, which allows the
+        //   basic executor to run in parallel
         let rifl = cmd.rifl();
         self.to_executor.extend(
             cmd.into_iter()
                 .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op)),
         );
 
-        // TODO the following is incorrect: it should only be deleted once it has been committed at
-        // all processes
+        // TODO the following is incorrect: it should only be deleted once it
+        // has been committed at all processes
         self.cmds.remove(dot);
 
         // nothing to send
@@ -178,7 +202,8 @@ impl Basic {
     }
 }
 
-// `CommandInfo` contains all information required in the life-cyle of a `Command`
+// `CommandInfo` contains all information required in the life-cyle of a
+// `Command`
 #[derive(Clone)]
 struct CommandInfo {
     cmd: Option<Command>,
@@ -186,7 +211,12 @@ struct CommandInfo {
 }
 
 impl Info for CommandInfo {
-    fn new(_process_id: ProcessId, _n: usize, _f: usize, fast_quorum_size: usize) -> Self {
+    fn new(
+        _process_id: ProcessId,
+        _n: usize,
+        _f: usize,
+        fast_quorum_size: usize,
+    ) -> Self {
         // create bottom consensus value
         Self {
             cmd: None,
@@ -266,11 +296,23 @@ mod tests {
         let mut basic_3 = Basic::new(process_id_3, config);
 
         // discover processes in all basic
-        let sorted = util::sort_processes_by_distance(&europe_west2, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &europe_west2,
+            &planet,
+            processes.clone(),
+        );
         basic_1.discover(sorted);
-        let sorted = util::sort_processes_by_distance(&europe_west3, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &europe_west3,
+            &planet,
+            processes.clone(),
+        );
         basic_2.discover(sorted);
-        let sorted = util::sort_processes_by_distance(&us_west1, &planet, processes.clone());
+        let sorted = util::sort_processes_by_distance(
+            &us_west1,
+            &planet,
+            processes.clone(),
+        );
         basic_3.discover(sorted);
 
         // register processes
@@ -289,7 +331,11 @@ mod tests {
         let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        let sorted = util::sort_processes_by_distance(&client_region, &planet, processes);
+        let sorted = util::sort_processes_by_distance(
+            &client_region,
+            &planet,
+            processes,
+        );
         assert!(client_1.discover(sorted));
 
         // start client
@@ -321,14 +367,16 @@ mod tests {
         assert_eq!(mcollectacks.len(), 2 * f);
 
         // handle the first mcollectack
-        let mcommits = simulation
-            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        let mcommits = simulation.forward_to_processes(
+            mcollectacks.pop().expect("there should be an mcollect ack"),
+        );
         // no mcommit yet
         assert!(mcommits.is_empty());
 
         // handle the second mcollectack
-        let mut mcommits = simulation
-            .forward_to_processes(mcollectacks.pop().expect("there should be an mcollect ack"));
+        let mut mcommits = simulation.forward_to_processes(
+            mcollectacks.pop().expect("there should be an mcollect ack"),
+        );
         // there's a commit now
         assert_eq!(mcommits.len(), 1);
 

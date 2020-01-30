@@ -26,7 +26,8 @@ where
     ) -> (Self, Vec<ChannelReceiver<M>>) {
         let mut pool = Vec::with_capacity(pool_size);
         // create a channel per pool worker:
-        // - save the sender-side so it can be used by to forward messages to the pool
+        // - save the sender-side so it can be used by to forward messages to
+        //   the pool
         // - return the receiver-side so it can be used by the pool workers
         let rxs = (0..pool_size)
             .map(|_| {
@@ -48,7 +49,8 @@ where
         self.pool.len()
     }
 
-    /// Forwards message `msg` to the pool worker with id `msg.index() % pool_size`.
+    /// Forwards message `msg` to the pool worker with id `msg.index() %
+    /// pool_size`.
     pub async fn forward(&mut self, msg: M) -> RunResult<()>
     where
         M: PoolIndex,
@@ -57,7 +59,8 @@ where
         self.do_forward(index, msg).await
     }
 
-    /// Forwards message `map(value)` to the pool worker with id `value.index() % pool_size`.
+    /// Forwards message `map(value)` to the pool worker with id `value.index()
+    /// % pool_size`.
     pub async fn forward_map<V, F>(&mut self, value: V, map: F) -> RunResult<()>
     where
         V: PoolIndex,
@@ -67,8 +70,9 @@ where
         self.do_forward(index, map(value)).await
     }
 
-    /// Forwards a message to the pool. Note that this implementation is not as efficient as it
-    /// could be, as it's only meant to be used for setup/periodic messages.
+    /// Forwards a message to the pool. Note that this implementation is not as
+    /// efficient as it could be, as it's only meant to be used for
+    /// setup/periodic messages.
     pub async fn broadcast(&mut self, msg: M) -> RunResult<()>
     where
         M: Clone,
@@ -79,7 +83,11 @@ where
         Ok(())
     }
 
-    async fn do_forward(&mut self, index: Option<usize>, msg: M) -> RunResult<()> {
+    async fn do_forward(
+        &mut self,
+        index: Option<usize>,
+        msg: M,
+    ) -> RunResult<()> {
         let index = match index {
             Some(index) => {
                 // the actual index is computed based on the pool size
@@ -87,7 +95,8 @@ where
             }
             None => {
                 // in this case, there's a single pool handling all messages:
-                // - check that the pool has size 1 and forward to the single worker
+                // - check that the pool has size 1 and forward to the single
+                //   worker
                 assert_eq!(self.pool.len(), 1);
                 1
             }

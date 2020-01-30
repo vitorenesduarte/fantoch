@@ -29,8 +29,13 @@ type Command = BTreeSet<Key>;
 type VoteRange = (Key, u64, u64);
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (keys_number, client_number, commands_per_client, keys_per_command, check_votes) =
-        parse_args();
+    let (
+        keys_number,
+        client_number,
+        commands_per_client,
+        keys_per_command,
+        check_votes,
+    ) = parse_args();
 
     // get number of cpus
     let cpus = num_cpus::get();
@@ -75,7 +80,11 @@ async fn bench(
 
     // create as many workers as cpus
     let to_workers: Vec<_> = (0..cpus)
-        .map(|id| task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| worker(id, rx, sequencer.clone())))
+        .map(|id| {
+            task::spawn_consumer(CHANNEL_BUFFER_SIZE, |rx| {
+                worker(id, rx, sequencer.clone())
+            })
+        })
         .collect();
 
     // spawn clients
@@ -98,7 +107,8 @@ async fn bench(
         let (client_histogram, votes) = join_result?;
         latency.merge(&client_histogram);
         for (key, vote_start, vote_end) in votes {
-            let current_key_votes = all_votes.entry(key).or_insert_with(BTreeSet::new);
+            let current_key_votes =
+                all_votes.entry(key).or_insert_with(BTreeSet::new);
             for vote in vote_start..=vote_end {
                 // insert vote and check it hasn't been added before
                 assert!(current_key_votes.insert(vote));
@@ -106,7 +116,8 @@ async fn bench(
         }
     }
 
-    // check that we have all votes (no gaps that would prevent timestamp-stability)
+    // check that we have all votes (no gaps that would prevent
+    // timestamp-stability)
     for (_key, key_votes) in all_votes {
         // get number of votes
         let key_votes_count = key_votes.len();
@@ -124,7 +135,11 @@ async fn bench(
 // async fn worker(sequencer: )
 async fn worker<S>(
     id: usize,
-    mut requests: ChannelReceiver<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>,
+    mut requests: ChannelReceiver<(
+        u64,
+        Command,
+        oneshot::Sender<Vec<VoteRange>>,
+    )>,
     sequencer: Arc<S>,
 ) where
     S: Sequencer,
@@ -144,7 +159,9 @@ async fn client(
     commands_per_client: usize,
     keys_per_command: usize,
     check_votes: bool,
-    mut to_workers: Vec<ChannelSender<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>>,
+    mut to_workers: Vec<
+        ChannelSender<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>,
+    >,
 ) -> (Histogram, Vec<VoteRange>) {
     println!("client {} started...", id);
 
@@ -188,7 +205,10 @@ async fn client(
 
         // send request to worker
         if let Err(e) = to_workers[worker_index].send(request).await {
-            println!("error sending request to worker {}: {:?}", worker_index, e);
+            println!(
+                "error sending request to worker {}: {:?}",
+                worker_index, e
+            );
         }
 
         // wait for reply
@@ -326,8 +346,9 @@ impl Sequencer for AtomicSequencer {
                         Ordering::Relaxed,
                         Ordering::Relaxed,
                     );
-                    // check if we generated more votes (maybe votes by other threads have been
-                    // generated and it's no longer possible to generate votes)
+                    // check if we generated more votes (maybe votes by other
+                    // threads have been generated and it's
+                    // no longer possible to generate votes)
                     if let Ok(previous_value) = result {
                         let vote_start = previous_value + 1;
                         let vote_end = max_sequence;
@@ -389,8 +410,10 @@ fn parse_args() -> (usize, usize, usize, usize, bool) {
     // parse arguments
     let keys = parse_keys(matches.value_of("keys"));
     let clients = parse_clients(matches.value_of("clients"));
-    let commands_per_client = parse_commands_per_client(matches.value_of("commands_per_client"));
-    let keys_per_command = parse_keys_per_command(matches.value_of("keys_per_command"));
+    let commands_per_client =
+        parse_commands_per_client(matches.value_of("commands_per_client"));
+    let keys_per_command =
+        parse_keys_per_command(matches.value_of("keys_per_command"));
     let check_votes = parse_check_votes(matches.value_of("check_votes"));
 
     println!("keys: {:?}", keys);

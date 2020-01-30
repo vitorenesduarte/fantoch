@@ -1,4 +1,5 @@
-/// This modules contains the definition of `TableExecutor` and `TableExecutionInfo`.
+/// This modules contains the definition of `TableExecutor` and
+/// `TableExecutionInfo`.
 mod executor;
 
 // Re-exports.
@@ -55,7 +56,8 @@ impl MultiVotesTable {
 
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
-        let (duration, result) = elapsed!(self.add_cmd_and_find(sort_id, cmd, votes));
+        let (duration, result) =
+            elapsed!(self.add_cmd_and_find(sort_id, cmd, votes));
         self.metrics
             .collect(MetricsKind::AddVotes, duration.as_micros() as u64);
         result
@@ -67,7 +69,8 @@ impl MultiVotesTable {
         &mut self,
         process_votes: ProcessVotes,
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
-        let (duration, result) = elapsed!(self.add_votes_and_find(process_votes));
+        let (duration, result) =
+            elapsed!(self.add_votes_and_find(process_votes));
         self.metrics
             .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
         result
@@ -97,7 +100,10 @@ impl MultiVotesTable {
     }
 
     #[must_use]
-    fn add_votes_and_find(&mut self, process_votes: ProcessVotes) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
+    fn add_votes_and_find(
+        &mut self,
+        process_votes: ProcessVotes,
+    ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
         process_votes
             .into_iter()
             .filter_map(|(key, range)| {
@@ -111,7 +117,11 @@ impl MultiVotesTable {
 
     // Generic function to be used when updating some votes table.
     #[must_use]
-    fn update_table<F>(&mut self, key: Key, update: F) -> Option<(Key, Vec<(Rifl, KVOp)>)>
+    fn update_table<F>(
+        &mut self,
+        key: Key,
+        update: F,
+    ) -> Option<(Key, Vec<(Rifl, KVOp)>)>
     where
         F: FnOnce(&mut VotesTable),
     {
@@ -152,8 +162,8 @@ impl fmt::Debug for MetricsKind {
 struct VotesTable {
     n: usize,
     stability_threshold: usize,
-    // `votes_clock` collects all votes seen until now so that we can compute which
-    // timestamp is stable
+    // `votes_clock` collects all votes seen until now so that we can compute
+    // which timestamp is stable
     votes_clock: AEClock<ProcessId>,
     ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
@@ -170,7 +180,13 @@ impl VotesTable {
         }
     }
 
-    fn add(&mut self, sort_id: SortId, rifl: Rifl, op: KVOp, vote_ranges: Vec<VoteRange>) {
+    fn add(
+        &mut self,
+        sort_id: SortId,
+        rifl: Rifl,
+        op: KVOp,
+        vote_ranges: Vec<VoteRange>,
+    ) {
         // add op to the sorted list of ops to be executed
         let res = self.ops.insert(sort_id, (rifl, op));
         // and check there was nothing there for this exact same position
@@ -184,19 +200,22 @@ impl VotesTable {
 
     fn add_vote_range(&mut self, range: VoteRange) {
         // assert there's at least one new vote
-        assert!(self
-            .votes_clock
-            .add_range(&range.voter(), range.start(), range.end()));
+        assert!(self.votes_clock.add_range(
+            &range.voter(),
+            range.start(),
+            range.end()
+        ));
         // assert that the clock size didn't change
         assert_eq!(self.votes_clock.len(), self.n);
     }
 
     fn stable_ops(&mut self) -> Vec<(Rifl, KVOp)> {
         // compute *next* stable sort id:
-        // - if clock 10 is stable, then we can execute all ops with an id smaller than `(11,0)`
-        // - if id with `(11,0)` is also part of this local structure, we can also execute it
-        //   without 11 being stable, because, once 11 is stable, it will be the first to be
-        //   executed either way
+        // - if clock 10 is stable, then we can execute all ops with an id
+        //   smaller than `(11,0)`
+        // - if id with `(11,0)` is also part of this local structure, we can
+        //   also execute it without 11 being stable, because, once 11 is
+        //   stable, it will be the first to be executed either way
         let stable_clock = self.stable_clock();
         let first_dot = Dot::new(1, 0);
         let next_stable = (stable_clock + 1, first_dot);
@@ -204,11 +223,13 @@ impl VotesTable {
         // in fact, in the above example, if `(11,0)` is executed, we can also
         // execute `(11,1)`, and with that, execute `(11,2)` and so on
         // TODO loop while the previous flow is true and also return those ops
-        // ACTUALLY maybe we can't since now we need to use dots (and not process ids) to break ties
+        // ACTUALLY maybe we can't since now we need to use dots (and not
+        // process ids) to break ties
 
         // compute the list of ops that can be executed now
         let stable = {
-            // remove from `self.ops` ops higher than `next_stable`, including `next_stable`
+            // remove from `self.ops` ops higher than `next_stable`, including
+            // `next_stable`
             let mut remaining = self.ops.split_off(&next_stable);
             // swap remaining with `self.ops`
             mem::swap(&mut remaining, &mut self.ops);
@@ -385,8 +406,8 @@ mod tests {
         let process_id_4 = 4;
         let process_id_5 = 5;
 
-        // let's consider that n = 5 and f = 1 and we're using write quorums of size f + 1
-        // so the threshold should be n - f = 4;
+        // let's consider that n = 5 and f = 1 and we're using write quorums of
+        // size f + 1 so the threshold should be n - f = 4;
         let n = 5;
         let f = 1;
         let stability_threshold = n - f;
@@ -526,7 +547,8 @@ mod tests {
 
         // p2 votes on key A
         let process_id = 2;
-        let process_votes = vec![(key_a.clone(), VoteRange::new(process_id, 1, 1))];
+        let process_votes =
+            vec![(key_a.clone(), VoteRange::new(process_id, 1, 1))];
         // check stable clocks
         let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
         assert!(stable.is_empty());
@@ -547,7 +569,8 @@ mod tests {
 
         // p4 votes on key B
         let process_id = 4;
-        let process_votes = vec![(key_b.clone(), VoteRange::new(process_id, 1, 1))];
+        let process_votes =
+            vec![(key_b.clone(), VoteRange::new(process_id, 1, 1))];
         // check stable clocks
         let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
         assert!(stable.is_empty());

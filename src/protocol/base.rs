@@ -185,14 +185,16 @@ mod tests {
         let planet = Planet::new("latency/");
         let fast_quorum_size = 6;
         let write_quorum_size = 4;
-        let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
+        let mut bp =
+            BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
         assert_eq!(bp.all_processes, None);
 
         // discover processes and check we're connected
-        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        let sorted =
+            util::sort_processes_by_distance(&region, &planet, processes);
         assert!(bp.discover(sorted));
 
         // check set of all processes
@@ -238,10 +240,12 @@ mod tests {
         let planet = Planet::new("latency/");
         let fast_quorum_size = 3;
         let write_quorum_size = 4;
-        let mut bp = BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
+        let mut bp =
+            BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
 
         // discover processes and check we're connected
-        let sorted = util::sort_processes_by_distance(&region, &planet, processes);
+        let sorted =
+            util::sort_processes_by_distance(&region, &planet, processes);
         assert!(bp.discover(sorted));
 
         // check set of all processes

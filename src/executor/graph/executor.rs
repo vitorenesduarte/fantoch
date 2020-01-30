@@ -52,7 +52,8 @@ impl Executor for GraphExecutor {
                 // execute the command
                 let result = cmd.execute(&mut self.store);
 
-                // if it was pending locally, then it's from a client of this process
+                // if it was pending locally, then it's from a client of this
+                // process
                 if self.pending.remove(&rifl) {
                     Some(ExecutorResult::Ready(result))
                 } else {

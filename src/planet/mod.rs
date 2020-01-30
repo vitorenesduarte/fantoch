@@ -37,7 +37,10 @@ impl Planet {
     }
 
     /// Creates a equidistant `Planet`.
-    pub fn equidistant(planet_distance: u64, region_number: usize) -> (Vec<Region>, Self) {
+    pub fn equidistant(
+        planet_distance: u64,
+        region_number: usize,
+    ) -> (Vec<Region>, Self) {
         // create regions
         let regions: Vec<_> = (0..region_number)
             .map(|i| {
@@ -57,7 +60,8 @@ impl Planet {
                     .clone()
                     .into_iter()
                     .map(|to| {
-                        let distance = if from == to { 0 } else { planet_distance };
+                        let distance =
+                            if from == to { 0 } else { planet_distance };
                         (to, distance)
                     })
                     .collect();
@@ -117,7 +121,10 @@ impl Planet {
 }
 
 impl Planet {
-    pub fn distance_matrix(&self, regions: Vec<Region>) -> Result<String, fmt::Error> {
+    pub fn distance_matrix(
+        &self,
+        regions: Vec<Region>,
+    ) -> Result<String, fmt::Error> {
         let mut output = String::new();
 
         // start header

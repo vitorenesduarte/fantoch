@@ -26,7 +26,8 @@ pub fn start_listener(
     ));
 }
 
-/// Listen on new client connections and spawn a client task for each new connection.
+/// Listen on new client connections and spawn a client task for each new
+/// connection.
 async fn client_listener_task(
     process_id: ProcessId,
     listener: TcpListener,
@@ -47,8 +48,9 @@ async fn client_listener_task(
         match rx.recv().await {
             Some(connection) => {
                 println!("[client_listener] new connection");
-                // start client server task and give it the producer-end of the channel in order for
-                // this client to notify parent
+                // start client server task and give it the producer-end of the
+                // channel in order for this client to notify
+                // parent
                 super::spawn(client_server_task(
                     process_id,
                     atomic_dot_gen.clone(),
@@ -59,14 +61,16 @@ async fn client_listener_task(
                 ));
             }
             None => {
-                println!("[client_listener] error receiving message from listener");
+                println!(
+                    "[client_listener] error receiving message from listener"
+                );
             }
         }
     }
 }
 
-/// Client server-side task. Checks messages both from the client connection (new commands) and
-/// parent (new command results).
+/// Client server-side task. Checks messages both from the client connection
+/// (new commands) and parent (new command results).
 async fn client_server_task(
     process_id: ProcessId,
     atomic_dot_gen: AtomicDotGen,
@@ -114,18 +118,22 @@ async fn server_receive_hi(
         println!("[client_server] received hi from client {}", client_id);
         client_id
     } else {
-        panic!("[client_server] couldn't receive client id from connected client");
+        panic!(
+            "[client_server] couldn't receive client id from connected client"
+        );
     };
 
     // create channel where the executors will write:
     // - ack rifl after wait_for_rifl
     // - executor results
     let (mut rifl_acks_tx, rifl_acks_rx) = super::channel(channel_buffer_size);
-    let (mut executor_results_tx, executor_results_rx) = super::channel(channel_buffer_size);
+    let (mut executor_results_tx, executor_results_rx) =
+        super::channel(channel_buffer_size);
 
     // set channels name
     rifl_acks_tx.set_name(format!("client_server_rifl_acks_{}", client_id));
-    executor_results_tx.set_name(format!("client_server_executor_results_{}", client_id));
+    executor_results_tx
+        .set_name(format!("client_server_executor_results_{}", client_id));
 
     // register client in all executors
     if let Err(e) = client_to_executors
@@ -160,19 +168,23 @@ async fn client_server_task_handle_cmd(
     pending: &mut Pending,
 ) -> bool {
     if let Some(cmd) = cmd {
-        // if there's more than one executor, then we'll receive partial results; in this case,
-        // register command in pending
+        // if there's more than one executor, then we'll receive partial
+        // results; in this case, register command in pending
         if client_to_executors.pool_size() > 1 {
             pending.wait_for(&cmd);
         }
 
         // TODO can we make the following loop run in parallel?
-        // - I think that the main problem is that we need a reference to `client_to_executors` and
-        //   having different futures holding a reference to it doesn't work
-        // - given this, I think that we need to add the parallelism inside `Pool` and not here
+        // - I think that the main problem is that we need a reference to
+        //   `client_to_executors` and having different futures holding a
+        //   reference to it doesn't work
+        // - given this, I think that we need to add the parallelism inside
+        //   `Pool` and not here
         for key in cmd.keys() {
             if let Err(e) = client_to_executors
-                .forward_map((key, cmd.rifl()), |(_, rifl)| FromClient::WaitForRifl(rifl))
+                .forward_map((key, cmd.rifl()), |(_, rifl)| {
+                    FromClient::WaitForRifl(rifl)
+                })
                 .await
             {
                 println!(
@@ -187,7 +199,9 @@ async fn client_server_task_handle_cmd(
             if let Some(rifl) = rifl_acks.recv().await {
                 assert_eq!(rifl, cmd.rifl());
             } else {
-                println!("[client_server] couldn't receive rifl ack from executor");
+                println!(
+                    "[client_server] couldn't receive rifl ack from executor"
+                );
             }
         }
 
@@ -229,8 +243,11 @@ async fn client_server_task_handle_executor_result(
                 connection.send(cmd_result).await;
             }
             ExecutorResult::Partial(rifl, key, op_result) => {
-                if let Some(result) = pending.add_partial(rifl, || (key, op_result)) {
-                    // since pending is in aggregate mode, if there's a result, then it's ready
+                if let Some(result) =
+                    pending.add_partial(rifl, || (key, op_result))
+                {
+                    // since pending is in aggregate mode, if there's a result,
+                    // then it's ready
                     let cmd_result = result.unwrap_ready();
                     connection.send(cmd_result).await;
                 }
@@ -241,7 +258,10 @@ async fn client_server_task_handle_executor_result(
     }
 }
 
-pub async fn client_say_hi(client_id: ClientId, connection: &mut Connection) -> ProcessId {
+pub async fn client_say_hi(
+    client_id: ClientId,
+    connection: &mut Connection,
+) -> ProcessId {
     // say hi
     let hi = ClientHi(client_id);
     connection.send(hi).await;

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Deserialize, Serialize,
+)]
 pub struct Region {
     name: String,
 }

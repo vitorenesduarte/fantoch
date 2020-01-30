@@ -110,23 +110,26 @@ impl Histogram {
         // create data iterator of values in the histogram
         let mut data = self.values.iter();
 
-        // compute left and right value that will be used to compute the percentile
+        // compute left and right value that will be used to compute the
+        // percentile
         let left_value;
         let right_value;
 
         loop {
-            let (value, count) = data.next().expect("there should a next histogram value");
+            let (value, count) =
+                data.next().expect("there should a next histogram value");
 
             match index.cmp(&count) {
                 Ordering::Equal => {
-                    // if it's the same, this is the left value and the next histogram value is the
-                    // right value
+                    // if it's the same, this is the left value and the next
+                    // histogram value is the right value
                     left_value = *value as f64;
                     right_value = data.next().map(|(value, _)| *value as f64);
                     break;
                 }
                 Ordering::Less => {
-                    // if index is smaller, this value is both the left and the right value
+                    // if index is smaller, this value is both the left and the
+                    // right value
                     left_value = *value as f64;
                     right_value = Some(left_value);
                     break;
@@ -139,7 +142,8 @@ impl Histogram {
         }
 
         let value = if is_whole_number {
-            (left_value + right_value.expect("there should be a right value")) / 2.0
+            (left_value + right_value.expect("there should be a right value"))
+                / 2.0
         } else {
             left_value
         };
@@ -158,13 +162,14 @@ impl Histogram {
     }
 
     fn sum_and_count(&self) -> (u64, usize) {
-        self.values
-            .iter()
-            .fold((0, 0), |(sum_acc, count_acc), (value, count)| {
+        self.values.iter().fold(
+            (0, 0),
+            |(sum_acc, count_acc), (value, count)| {
                 // compute the actual sum for this value
                 let sum = value * (*count as u64);
                 (sum_acc + sum, count_acc + count)
-            })
+            },
+        )
     }
 
     fn count(&self) -> usize {
@@ -189,7 +194,8 @@ impl Histogram {
             .map(|(x, x_count)| (*x as f64, *x_count as f64))
             .map(|(x, x_count)| {
                 let diff = mean - x;
-                // as `x` was reported `x_count` times, we multiply the squared diff by it
+                // as `x` was reported `x_count` times, we multiply the squared
+                // diff by it
                 (diff * diff) * x_count
             })
             .sum::<f64>();
@@ -206,7 +212,8 @@ impl Histogram {
             .map(|(x, x_count)| (*x as f64, *x_count as f64))
             .map(|(x, x_count)| {
                 let diff = mean - x;
-                // as `x` was reported `x_count` times, we multiply the absolute value by it
+                // as `x` was reported `x_count` times, we multiply the absolute
+                // value by it
                 diff.abs() * x_count
             })
             .sum::<f64>();
@@ -230,8 +237,10 @@ impl fmt::Debug for Histogram {
     }
 }
 
-pub fn histogram_merge<K>(map: &mut BTreeMap<K, usize>, other: &BTreeMap<K, usize>)
-where
+pub fn histogram_merge<K>(
+    map: &mut BTreeMap<K, usize>,
+    other: &BTreeMap<K, usize>,
+) where
     K: Ord + Eq + Clone,
 {
     // create iterators for `map` and `other`
@@ -242,8 +251,9 @@ where
     let mut map_current = map_iter.next();
     let mut other_current = other_iter.next();
 
-    // create vec where we'll store all entries with keys that are in `map`, are smaller than the
-    // larger key in `map`, but can't be inserted when interating `map`
+    // create vec where we'll store all entries with keys that are in `map`, are
+    // smaller than the larger key in `map`, but can't be inserted when
+    // interating `map`
     let mut absent = Vec::new();
 
     loop {
@@ -272,22 +282,26 @@ where
                 }
             }
             (None, Some(entry)) => {
-                // the key in `entry` is the first key from `other` that is larger than the larger
-                // key in `map`; save entry and break out of the loop
+                // the key in `entry` is the first key from `other` that is
+                // larger than the larger key in `map`; save
+                // entry and break out of the loop
                 absent.push(entry);
                 break;
             }
             (_, None) => {
-                // there's nothing else to do here as in these (two) cases we have already
-                // incorporated all entries from `other`
+                // there's nothing else to do here as in these (two) cases we
+                // have already incorporated all entries from
+                // `other`
                 break;
             }
         };
     }
 
     // extend `map` with keys from `other` that are not in `map`:
-    // - `absent`: keys from `other` that are smaller than the larger key in `map`
-    // - `other_iter`: keys from `other` that are larger than the larger key in `map`
+    // - `absent`: keys from `other` that are smaller than the larger key in
+    //   `map`
+    // - `other_iter`: keys from `other` that are larger than the larger key in
+    //   `map`
     map.extend(absent.into_iter().map(|(key, value)| (key.clone(), *value)));
     map.extend(other_iter.map(|(key, value)| (key.clone(), *value)));
 }
@@ -322,12 +336,14 @@ mod proptests {
         // create hashmaps and merge them
         let mut hashmap = HashMap::from_iter(map.clone());
         let other_hashmap = HashMap::from_iter(other.clone());
-        let (naive_time, _) = elapsed!(hash_merge(&mut hashmap, &other_hashmap));
+        let (naive_time, _) =
+            elapsed!(hash_merge(&mut hashmap, &other_hashmap));
 
         // create btreemaps and merge them
         let mut btreemap = BTreeMap::from_iter(map.clone());
         let other_btreemap = BTreeMap::from_iter(other.clone());
-        let (time, _) = elapsed!(histogram_merge(&mut btreemap, &other_btreemap));
+        let (time, _) =
+            elapsed!(histogram_merge(&mut btreemap, &other_btreemap));
 
         // show merge times
         println!("{} {}", naive_time.as_nanos(), time.as_nanos());
@@ -403,8 +419,8 @@ mod tests {
     #[test]
     fn percentile() {
         let data = vec![
-            43, 54, 56, 61, 62, 66, 68, 69, 69, 70, 71, 72, 77, 78, 79, 85, 87, 88, 89, 93, 95, 96,
-            98, 99, 99,
+            43, 54, 56, 61, 62, 66, 68, 69, 69, 70, 71, 72, 77, 78, 79, 85, 87,
+            88, 89, 93, 95, 96, 98, 99, 99,
         ];
         let stats = Histogram::from(data);
 

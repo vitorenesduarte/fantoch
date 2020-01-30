@@ -30,7 +30,8 @@ pub enum FromClient {
 // list of channels used to communicate between tasks
 pub type RiflAckReceiver = ChannelReceiver<Rifl>;
 pub type RiflAckSender = ChannelSender<Rifl>;
-pub type ReaderReceiver<P> = ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
+pub type ReaderReceiver<P> =
+    ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
 pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
@@ -53,8 +54,10 @@ impl pool::PoolIndex for (Dot, Command) {
 }
 
 // 2. workers receive messages from readers
-pub type ReaderToWorkers<P> = pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
-// The following allows e.g. (ProcessId, <P as Protocol>::Message) to be `ToPool::forward`
+pub type ReaderToWorkers<P> =
+    pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
+// The following allows e.g. (ProcessId, <P as Protocol>::Message) to be
+// `ToPool::forward`
 impl<A, B> pool::PoolIndex for (A, B)
 where
     B: MessageDot,
@@ -76,7 +79,8 @@ impl pool::PoolIndex for (&Key, Rifl) {
 // 4. executors receive messages from workers
 pub type WorkerToExecutors<P> =
     pool::ToPool<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
-// The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo to be forwarded
+// The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo
+// to be forwarded
 impl<A> pool::PoolIndex for A
 where
     A: MessageKey,

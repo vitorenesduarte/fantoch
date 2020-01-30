@@ -59,8 +59,8 @@ impl Workload {
         self.total_commands
     }
 
-    /// Returns a boolean indicating whether the workload has finished, i.e. all commands have been
-    /// issued.
+    /// Returns a boolean indicating whether the workload has finished, i.e. all
+    /// commands have been issued.
     pub fn finished(&self) -> bool {
         self.command_count == self.total_commands
     }
@@ -70,11 +70,13 @@ impl Workload {
         // generate rifl, key and value
         let rifl = rifl_gen.next_id();
         let key = self.gen_cmd_key(&rifl_gen);
-        // TODO: generate something with a given payload size if outside of simulation
+        // TODO: generate something with a given payload size if outside of
+        // simulation
         let value = String::from("");
 
         // generate put command
-        // TODO: make it configurable so that we can generate other commands besides put commands.
+        // TODO: make it configurable so that we can generate other commands
+        // besides put commands.
         Command::put(rifl, key, value)
     }
 

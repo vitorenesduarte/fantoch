@@ -38,7 +38,8 @@ impl<P> Runner<P>
 where
     P: Protocol,
 {
-    /// Create a new `Runner` from a `planet`, a `config`, and two lists of regions:
+    /// Create a new `Runner` from a `planet`, a `config`, and two lists of
+    /// regions:
     /// - `process_regions`: list of regions where processes are located
     /// - `client_regions`: list of regions where clients are located
     pub fn new(
@@ -76,7 +77,11 @@ where
         // register processes
         processes.into_iter().for_each(|(region, mut process)| {
             // discover
-            let sorted = util::sort_processes_by_distance(&region, &planet, to_discover.clone());
+            let sorted = util::sort_processes_by_distance(
+                &region,
+                &planet,
+                to_discover.clone(),
+            );
             assert!(process.discover(sorted));
 
             // create executor for this process
@@ -95,8 +100,11 @@ where
                 client_id += 1;
                 let mut client = Client::new(client_id, workload);
                 // discover
-                let sorted =
-                    util::sort_processes_by_distance(&region, &planet, to_discover.clone());
+                let sorted = util::sort_processes_by_distance(
+                    &region,
+                    &planet,
+                    to_discover.clone(),
+                );
                 assert!(client.discover(sorted));
                 // and register it
                 simulation.register_client(client);
@@ -144,18 +152,23 @@ where
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
                         // get process and executor
-                        let (process, executor) = self.simulation.get_process(process_id);
+                        let (process, executor) =
+                            self.simulation.get_process(process_id);
 
                         // register command in the executor
                         executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
                         let to_send = process.submit(None, cmd);
-                        self.schedule_send(MessageRegion::Process(process_id), Some(to_send));
+                        self.schedule_send(
+                            MessageRegion::Process(process_id),
+                            Some(to_send),
+                        );
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
                         // get process and executor
-                        let (process, executor) = self.simulation.get_process(process_id);
+                        let (process, executor) =
+                            self.simulation.get_process(process_id);
 
                         // handle message and get ready commands
                         let to_send = process.handle(from, msg);
@@ -169,17 +182,28 @@ where
                             .collect();
 
                         // schedule new messages
-                        self.schedule_send(MessageRegion::Process(process_id), to_send);
+                        self.schedule_send(
+                            MessageRegion::Process(process_id),
+                            to_send,
+                        );
 
                         // schedule new command results
                         ready.into_iter().for_each(|cmd_result| {
-                            self.schedule_to_client(MessageRegion::Process(process_id), cmd_result)
+                            self.schedule_to_client(
+                                MessageRegion::Process(process_id),
+                                cmd_result,
+                            )
                         });
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
                         // handle new command result in client
-                        let submit = self.simulation.forward_to_client(cmd_result, &self.time);
-                        self.schedule_submit(MessageRegion::Client(client_id), submit);
+                        let submit = self
+                            .simulation
+                            .forward_to_client(cmd_result, &self.time);
+                        self.schedule_submit(
+                            MessageRegion::Client(client_id),
+                            submit,
+                        );
                     }
                 }
             })
@@ -195,24 +219,40 @@ where
         if let Some((process_id, cmd)) = submit {
             // create action and schedule it
             let action = ScheduleAction::SubmitToProc(process_id, cmd);
-            self.schedule_it(from_region, MessageRegion::Process(process_id), action);
+            self.schedule_it(
+                from_region,
+                MessageRegion::Process(process_id),
+                action,
+            );
         }
     }
 
     /// (maybe) Schedules a new send from some process.
-    fn schedule_send(&mut self, from_region: MessageRegion, to_send: Option<ToSend<P::Message>>) {
+    fn schedule_send(
+        &mut self,
+        from_region: MessageRegion,
+        to_send: Option<ToSend<P::Message>>,
+    ) {
         if let Some(ToSend { from, target, msg }) = to_send {
             // for each process in target, schedule message delivery
             target.into_iter().for_each(|to| {
                 // otherwise, create action and schedule it
                 let action = ScheduleAction::SendToProc(from, to, msg.clone());
-                self.schedule_it(from_region.clone(), MessageRegion::Process(to), action);
+                self.schedule_it(
+                    from_region.clone(),
+                    MessageRegion::Process(to),
+                    action,
+                );
             });
         }
     }
 
     /// Schedules a new command result.
-    fn schedule_to_client(&mut self, from_region: MessageRegion, cmd_result: CommandResult) {
+    fn schedule_to_client(
+        &mut self,
+        from_region: MessageRegion,
+        cmd_result: CommandResult,
+    ) {
         // create action and schedule it
         let client_id = cmd_result.rifl().source();
         let action = ScheduleAction::SendToClient(client_id, cmd_result);
@@ -248,7 +288,8 @@ where
         }
     }
 
-    /// Computes the distance between two regions which is half the ping latency.
+    /// Computes the distance between two regions which is half the ping
+    /// latency.
     fn distance(&self, from: &Region, to: &Region) -> u64 {
         let ping_latency = self
             .planet
@@ -279,12 +320,13 @@ where
 
         for (&client_id, region) in self.client_to_region.iter() {
             // get current metrics from this region
-            let (total_issued_commands, histogram) = match region_to_latencies.get_mut(region) {
-                Some(v) => v,
-                None => region_to_latencies
-                    .entry(region.clone())
-                    .or_insert((0, Histogram::new())),
-            };
+            let (total_issued_commands, histogram) =
+                match region_to_latencies.get_mut(region) {
+                    Some(v) => v,
+                    None => region_to_latencies
+                        .entry(region.clone())
+                        .or_insert((0, Histogram::new())),
+                };
 
             // get client from simulation
             let client = simulation.get_client(client_id);
@@ -327,7 +369,8 @@ mod tests {
         ];
 
         // client regions
-        let client_regions = vec![Region::new("us-west1"), Region::new("us-west2")];
+        let client_regions =
+            vec![Region::new("us-west1"), Region::new("us-west2")];
 
         // create runner
         let mut runner: Runner<Basic> = Runner::new(
@@ -361,12 +404,13 @@ mod tests {
     #[test]
     fn runner_single_client_per_region() {
         // expected stats:
-        // - client us-west1: since us-west1 is a process, from client's perspective it should be
-        //   the latency of accessing the coordinator (0ms) plus the latency of accessing the
-        //   closest fast quorum
-        // - client us-west2: since us-west2 is _not_ a process, from client's perspective it should
-        //   be the latency of accessing the coordinator us-west1 (12ms + 12ms) plus the latency of
-        //   accessing the closest fast quorum
+        // - client us-west1: since us-west1 is a process, from client's
+        //   perspective it should be the latency of accessing the coordinator
+        //   (0ms) plus the latency of accessing the closest fast quorum
+        // - client us-west2: since us-west2 is _not_ a process, from client's
+        //   perspective it should be the latency of accessing the coordinator
+        //   us-west1 (12ms + 12ms) plus the latency of accessing the closest
+        //   fast quorum
 
         // clients per region
         let clients_per_region = 1;

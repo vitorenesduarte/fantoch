@@ -29,7 +29,8 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
-        // by default there's one worker for `Protocol` and one worker for `Executor`
+        // by default there's one worker for `Protocol` and one worker for
+        // `Executor`
         let workers = 1;
         let executors = 1;
         Self {
@@ -111,29 +112,35 @@ impl Config {
     /// Computes `EPaxos` fast and write quorum sizes.
     pub fn epaxos_quorum_sizes(&self) -> (usize, usize) {
         let n = self.n;
-        // ignore config.f() since EPaxos always tolerates a minority of failures
+        // ignore config.f() since EPaxos always tolerates a minority of
+        // failures
         let f = EPaxos::allowed_faults(n);
         let fast_quorum_size = f + ((f + 1) / 2 as usize);
         let write_quorum_size = f + 1;
         (fast_quorum_size, write_quorum_size)
     }
 
-    /// Computes `Newt` fast quorum size, stability threshold and write quorum size.
+    /// Computes `Newt` fast quorum size, stability threshold and write quorum
+    /// size.
     ///
-    /// The threshold should be n - q + 1, where n is the number of processes and q the size of the
-    /// quorum used to compute clocks. In `Newt` e.g. with tiny quorums, although the fast quorum is
-    /// 2f (which would suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that all
-    /// clocks are computed from f + 1 processes. So, n - q + 1 = n - (f + 1) + 1 = n - f.
+    /// The threshold should be n - q + 1, where n is the number of processes
+    /// and q the size of the quorum used to compute clocks. In `Newt` e.g.
+    /// with tiny quorums, although the fast quorum is 2f (which would
+    /// suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that
+    /// all clocks are computed from f + 1 processes. So, n - q + 1 = n - (f
+    /// + 1) + 1 = n - f.
     ///
     /// In general, the stability threshold is given by:
     ///   "n - (fast_quorum_size - f + 1) + 1 = n - fast_quorum_size + f"
-    /// - this ensures that the stability threshold plus the minimum number of processes where
-    ///   clocks are computed (i.e. fast_quorum_size - f + 1) is greater than n
+    /// - this ensures that the stability threshold plus the minimum number of
+    ///   processes where clocks are computed (i.e. fast_quorum_size - f + 1) is
+    ///   greater than n
     pub fn newt_quorum_sizes(&self) -> (usize, usize, usize) {
         let n = self.n;
         let f = self.f;
         let minority = n / 2;
-        let (fast_quorum_size, stability_threshold) = if self.newt_tiny_quorums {
+        let (fast_quorum_size, stability_threshold) = if self.newt_tiny_quorums
+        {
             (2 * f, n - f)
         } else {
             (minority + f, minority + 1)
