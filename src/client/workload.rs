@@ -119,6 +119,7 @@ impl Workload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kvs::KVOp;
 
     #[test]
     fn gen_cmd_key() {
@@ -134,7 +135,7 @@ mod tests {
         let conflict_rate = 100;
         let mut workload =
             Workload::new(conflict_rate, total_commands, payload_size);
-        assert_eq!(workload.gen_cmd_key(&rifl_gen), String::from("black"));
+        assert_eq!(workload.gen_cmd_key(&rifl_gen), BLACK_COLOR);
 
         // create non-conflicting workload
         let conflict_rate = 0;
@@ -165,7 +166,11 @@ mod tests {
                 // since the conflict is 100, the key should be BLACK
                 assert_eq!(key, BLACK_COLOR);
                 // check that the value size is `payload_size`
-                assert_eq!(value.len(), payload_size);
+                if let KVOp::Put(payload) = value {
+                    assert_eq!(payload.len(), payload_size);
+                } else {
+                    panic!("workload should generate PUT commands");
+                }
             } else {
                 panic!("there should be a next command in this workload");
             }
