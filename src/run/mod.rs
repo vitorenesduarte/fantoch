@@ -472,7 +472,7 @@ fn handle_cmd_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::Basic;
+    use crate::protocol::{Basic, SequentialNewt};
     use tokio::task;
     use tokio::time::Duration;
 
@@ -497,6 +497,11 @@ mod tests {
     #[tokio::test]
     async fn run_basic_test() {
         run_test::<Basic>().await
+    }
+
+    #[tokio::test]
+    async fn run_sequential_newt_test() {
+        run_test::<SequentialNewt>().await
     }
 
     async fn run_test<P>()
