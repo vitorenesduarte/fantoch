@@ -113,7 +113,7 @@ impl AtomicKeyClocks {
             .expect("atomic bump should always succeed")
     }
 
-    // Bump the `key` clock if lower than `up_to`.
+    // Bump the `key` clock to `up_to` if lower than `up_to`.
     fn maybe_bump(&self, key: &Key, up_to: u64) -> Option<u64> {
         self.clocks
             .get(&key)

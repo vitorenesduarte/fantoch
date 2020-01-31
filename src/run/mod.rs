@@ -473,6 +473,7 @@ fn handle_cmd_result(
 mod tests {
     use super::*;
     use crate::protocol::{Basic, SequentialNewt};
+    use rand::Rng;
     use tokio::task;
     use tokio::time::Duration;
 
@@ -554,17 +555,25 @@ mod tests {
         config.set_workers(workers);
         config.set_executors(executors);
 
+        // get ports and client ports
+        let p1_port = get_available_port();
+        let p2_port = get_available_port();
+        let p3_port = get_available_port();
+        let p1_client_port = get_available_port();
+        let p2_client_port = get_available_port();
+        let p3_client_port = get_available_port();
+
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
             process_1,
             1,
             vec![1, 2, 3],
             localhost,
-            3001,
-            4001,
+            p1_port,
+            p1_client_port,
             vec![
-                String::from("localhost:3002"),
-                String::from("localhost:3003"),
+                format!("localhost:{}", p2_port),
+                format!("localhost:{}", p3_port),
             ],
             config,
             tcp_nodelay,
@@ -579,11 +588,11 @@ mod tests {
             2,
             vec![2, 3, 1],
             localhost,
-            3002,
-            4002,
+            p2_port,
+            p2_client_port,
             vec![
-                String::from("localhost:3001"),
-                String::from("localhost:3003"),
+                format!("localhost:{}", p1_port),
+                format!("localhost:{}", p3_port),
             ],
             config,
             tcp_nodelay,
@@ -598,11 +607,11 @@ mod tests {
             3,
             vec![3, 1, 2],
             localhost,
-            3003,
-            4003,
+            p3_port,
+            p3_client_port,
             vec![
-                String::from("localhost:3001"),
-                String::from("localhost:3002"),
+                format!("localhost:{}", p1_port),
+                format!("localhost:{}", p2_port),
             ],
             config,
             tcp_nodelay,
@@ -633,14 +642,14 @@ mod tests {
         // - the third spawns 1 open-loop client (3)
         let client_1_handle = task::spawn_local(closed_loop_client(
             1,
-            String::from("localhost:4001"),
+            format!("localhost:{}", p1_client_port),
             workload,
             tcp_nodelay,
             channel_buffer_size,
         ));
         let client_2_handle = task::spawn_local(client(
             vec![2, 22, 222],
-            String::from("localhost:4002"),
+            format!("localhost:{}", p2_client_port),
             None,
             workload,
             tcp_nodelay,
@@ -648,7 +657,7 @@ mod tests {
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
             3,
-            String::from("localhost:4003"),
+            format!("localhost:{}", p3_client_port),
             100, // 100ms interval between ops
             workload,
             tcp_nodelay,
@@ -660,5 +669,22 @@ mod tests {
         let _ = client_2_handle.await.expect("client 2 should finish");
         let _ = client_3_handle.await.expect("client 3 should finish");
         Ok(())
+    }
+
+    // adapted from: https://github.com/rust-lang-nursery/rust-cookbook/issues/500
+    fn get_available_port() -> u16 {
+        loop {
+            let port = rand::thread_rng().gen_range(1025, 65535);
+            if port_is_available(port) {
+                return port;
+            }
+        }
+    }
+
+    fn port_is_available(port: u16) -> bool {
+        match std::net::TcpListener::bind(("127.0.0.1", port)) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
