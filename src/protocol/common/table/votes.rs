@@ -33,6 +33,13 @@ impl Votes {
         current_votes.push(vote);
     }
 
+    /// Sets the votes on some `Key`.
+    #[allow(clippy::ptr_arg)]
+    pub fn set(&mut self, key: Key, key_votes: Vec<VoteRange>) {
+        let res = self.votes.insert(key, key_votes);
+        assert!(res.is_none());
+    }
+
     /// Merge with another `Votes`.
     /// Performance should be better if `self.votes.len() > remote_votes.len()`
     /// than with the opposite.

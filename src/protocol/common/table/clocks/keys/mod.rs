@@ -2,10 +2,10 @@
 mod sequential;
 
 // This module contains the definition of `AtomicKeyClocks`.
-// mod atomic;
+mod atomic;
 
 // Re-exports.
-// pub use atomic::AtomicKeyClocks;
+pub use atomic::AtomicKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
@@ -82,6 +82,12 @@ mod tests {
     fn sequential_key_clocks() {
         keys_clocks_flow::<SequentialKeyClocks>();
         keys_clocks_no_double_votes::<SequentialKeyClocks>();
+    }
+
+    #[test]
+    fn atomic_key_clocks() {
+        keys_clocks_flow::<AtomicKeyClocks>();
+        keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
     fn keys_clocks_flow<KC: KeyClocks>() {

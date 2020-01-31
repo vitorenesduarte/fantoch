@@ -24,12 +24,10 @@ impl KeyClocks for AtomicKeyClocks {
     }
 
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
-        // create votes
-        let mut votes = Votes::new(Some(cmd));
-
-        // vote on each key:
-        // - first round of votes and compute highest sequence
-        let clock = cmd
+        // first round of votes:
+        // - vote on each key and compute the highest clock seen
+        let mut first_round_votes = Vec::with_capacity(cmd.key_count());
+        let highest = cmd
             .keys()
             .map(|key| {
                 let previous_value = self
@@ -40,7 +38,7 @@ impl KeyClocks for AtomicKeyClocks {
                         Ordering::Relaxed,
                         Ordering::Relaxed,
                     )
-                    .expect("updates always succeed");
+                    .expect("first-round atomic always succeed as we must bump the clock");
 
                 // compute vote start and vote end
                 let vote_start = previous_value + 1;
@@ -48,7 +46,7 @@ impl KeyClocks for AtomicKeyClocks {
 
                 // create vote range and save it
                 let vr = VoteRange::new(self.id, vote_start, vote_end);
-                votes.add(key, vr);
+                first_round_votes.push((key.clone(), vr));
 
                 // return vote end
                 vote_end
@@ -56,71 +54,75 @@ impl KeyClocks for AtomicKeyClocks {
             .max()
             .expect("there should be a maximum sequence");
 
-        let new_votes: Vec<_> = votes
-            .iter()
-            .filter_map(|(key, _vote_start, vote_end)| {
-                // check if we should vote more
-                if *vote_end < max_sequence {
-                    let result = self.keys[*key].fetch_update(
-                        |value| {
-                            if value < max_sequence {
-                                Some(max_sequence)
-                            } else {
-                                None
-                            }
-                        },
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
-                    );
-                    // check if we generated more votes (maybe votes by other
-                    // threads have been generated and it's
-                    // no longer possible to generate votes)
-                    if let Ok(previous_value) = result {
-                        let vote_start = previous_value + 1;
-                        let vote_end = max_sequence;
-                        return Some((*key, vote_start, vote_end));
-                    }
-                }
-                None
-            })
-            .collect();
+        // create votes
+        let mut votes = Votes::new(Some(cmd));
 
-        votes.extend(new_votes);
-        assert_eq!(votes.capacity(), max_vote_count);
-        votes
+        // second round of votes:
+        // - vote on the keys that have a clock lower than the compute `highest`
+        first_round_votes.into_iter().for_each(|(key, first_vr)| {
+            // check if we should vote more
+            if first_vr.end() < highest {
+                let result = self.clocks.get(&key).fetch_update(
+                    |value| {
+                        if value < highest {
+                            Some(highest)
+                        } else {
+                            None
+                        }
+                    },
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                );
+                // check if we generated more votes (maybe votes by other
+                // threads have been generated and it's no longer possible to
+                // generate votes)
+                if let Ok(previous_value) = result {
+                    // compute vote start and vote end
+                    let vote_start = previous_value + 1;
+                    let vote_end = highest;
+
+                    // create second vote range and save it
+                    let second_vr =
+                        VoteRange::new(self.id, vote_start, vote_end);
+                    // save the two votes on this key
+                    // TODO try to compress the two vote ranges
+                    votes.set(key, vec![first_vr, second_vr]);
+                } else {
+                    // save the single vote on this key
+                    votes.set(key, vec![first_vr]);
+                }
+            }
+        });
+        (highest, votes)
     }
 
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
-        // TODO copy here to please the borrow-checker
-        let id = self.id;
-        cmd.keys()
-            .filter_map(|key| {
-                // get a mutable reference to current clock value
-                let current = self.clocks.get_mut(key);
+        // create votes
+        let mut votes = Votes::new(Some(cmd));
 
-                // if we should vote
-                if *current < clock {
-                    // vote from the current clock value + 1 until `clock`
-                    let vr = VoteRange::new(id, *current + 1, clock);
-                    // update current clock to be `clock`
-                    *current = clock;
-                    Some((key.clone(), vr))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-}
+        cmd.keys().for_each(|key| {
+            let result = self.clocks.get(&key).fetch_update(
+                |value| {
+                    if value < clock {
+                        Some(clock)
+                    } else {
+                        None
+                    }
+                },
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            );
+            if let Ok(previous_value) = result {
+                // compute vote start and vote end
+                let vote_start = previous_value + 1;
+                let vote_end = clock;
 
-impl AtomicKeyClocks {
-    /// Retrieves the current clock for some command.
-    /// If the command touches multiple keys, returns the maximum between the
-    /// clocks associated with each key.
-    fn clock(&self, cmd: &Command) -> u64 {
-        cmd.keys()
-            .map(|key| *self.clocks.get(key))
-            .max()
-            .expect("there must be at least one key in the command")
+                // create second vote range and save it
+                let vr = VoteRange::new(self.id, vote_start, vote_end);
+                votes.set(key.clone(), vec![vr]);
+            }
+        });
+
+        votes
     }
 }
