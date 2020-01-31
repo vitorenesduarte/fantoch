@@ -1,3 +1,5 @@
+#![feature(no_more_cas)]
+
 // This module contains the definition of `Region` and `Planet`.
 pub mod planet;
 

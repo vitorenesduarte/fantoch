@@ -35,6 +35,8 @@ impl KeyClocks for SequentialKeyClocks {
 
         // TODO copy here to please the borrow-checker
         let id = self.id;
+
+        // vote on each key
         cmd.keys().for_each(|key| {
             // get a mutable reference to current clock value
             let current = self.clocks.get_mut(key);

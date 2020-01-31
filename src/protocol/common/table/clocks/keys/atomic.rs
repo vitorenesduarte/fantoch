@@ -1,10 +1,8 @@
-#![feature(no_more_cas)]
-
 use super::Clocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
-use crate::protocol::common::table::{ProcessVotes, VoteRange};
+use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -25,24 +23,14 @@ impl KeyClocks for AtomicKeyClocks {
         }
     }
 
-    fn bump_and_vote(
-        &mut self,
-        cmd: &Command,
-        min_clock: u64,
-    ) -> (u64, ProcessVotes) {
-        // create a list of votes with the maximum possible number of votes:
-        // - in the sequential version, we *must* have `cmd.key_count()` votes
-        // - here, since we do two rounds of voting, we can have *almost* `2 *
-        //   cmd.key_count()`
-        // - in the second round we don't generate votes *at least* in the key
-        //   responsible for the highest clock, and thus, at most we have `2 *
-        //   cmd.key_count() - 1` votes
-        let max_vote_count = 2 * cmd.key_count() - 1;
-        let mut votes = Vec::with_capacity(max_vote_count);
+    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+        // create votes
+        let mut votes = Votes::new(Some(cmd));
 
-        // first round of votes and compute highest sequence
+        // vote on each key:
+        // - first round of votes and compute highest sequence
         let clock = cmd
-            .into_iter()
+            .keys()
             .map(|key| {
                 let previous_value = self
                     .clocks
@@ -60,7 +48,7 @@ impl KeyClocks for AtomicKeyClocks {
 
                 // create vote range and save it
                 let vr = VoteRange::new(self.id, vote_start, vote_end);
-                votes.push(vr);
+                votes.add(key, vr);
 
                 // return vote end
                 vote_end
@@ -102,7 +90,7 @@ impl KeyClocks for AtomicKeyClocks {
         votes
     }
 
-    fn vote(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
+    fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
         // TODO copy here to please the borrow-checker
         let id = self.id;
         cmd.keys()
