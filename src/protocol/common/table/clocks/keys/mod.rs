@@ -33,6 +33,7 @@ pub trait KeyClocks: Clone {
 
 #[derive(Clone)]
 struct Clocks<T> {
+    mask: usize,
     clocks: Vec<T>,
 }
 
@@ -45,10 +46,13 @@ impl<T> Clocks<T> {
     {
         // compute the actual number of buckets
         let bucket_number = 2 ^ key_buckets_power;
+        // compute mask
+        let mask = bucket_number - 1;
+        // create clocks
         let mut clocks = Vec::with_capacity(bucket_number);
         // init all buckets with the bucket default value
         clocks.resize_with(bucket_number, Default::default);
-        Self { clocks }
+        Self { mask, clocks }
     }
 
     fn get(&self, key: &Key) -> &T {
@@ -68,7 +72,8 @@ impl<T> Clocks<T> {
     // Compute bucket index based on the hash of the key.
     fn bucket_index(&self, key: &Key) -> usize {
         let key_hash = util::key_hash(key) as usize;
-        key_hash % self.clocks.len()
+        // key_hash % self.clocks.len()
+        key_hash & self.mask
     }
 }
 
