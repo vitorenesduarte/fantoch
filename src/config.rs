@@ -14,6 +14,9 @@ pub struct Config {
     workers: usize,
     /// defines the number of `Executor` workers
     executors: usize,
+    /// defines a n-th power of base 2; this number will be the number key
+    /// buckets in `KeyClocks`
+    key_buckets_power: usize,
 }
 
 impl Config {
@@ -33,6 +36,7 @@ impl Config {
         // `Executor`
         let workers = 1;
         let executors = 1;
+        let key_buckets_power = 16; // this gives 2^16 = 65536 buckets (memory size of 512KB)
         Self {
             n,
             f,
@@ -40,6 +44,7 @@ impl Config {
             transitive_conflicts,
             workers,
             executors,
+            key_buckets_power,
         }
     }
 
@@ -91,6 +96,16 @@ impl Config {
     /// Changes the value of `Executor`'s.
     pub fn set_executors(&mut self, executors: usize) {
         self.executors = executors;
+    }
+
+    /// Checks the key buckets power number.
+    pub fn key_buckets_power(&self) -> usize {
+        self.key_buckets_power
+    }
+
+    /// Changes the value of the key buckets power number.
+    pub fn set_key_buckets_power(&mut self, key_buckets_power: usize){
+        self.key_buckets_power = key_buckets_power;
     }
 }
 
@@ -197,6 +212,12 @@ mod tests {
         config.set_executors(20);
         assert_eq!(config.workers(), 10);
         assert_eq!(config.executors(), 20);
+
+        // by default, the key buckets power is 16
+        assert_eq!(config.key_buckets_power(), 16);
+        // but that can be changed
+        config.set_key_buckets_power(17);
+        assert_eq!(config.key_buckets_power(), 17);
     }
 
     #[test]

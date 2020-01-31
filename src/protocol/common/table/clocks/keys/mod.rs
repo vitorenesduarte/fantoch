@@ -1,15 +1,26 @@
+// This module contains the definition of `SequentialKeyClocks`.
 mod sequential;
 
+// This module contains the definition of `AtomicKeyClocks`.
+mod atomic;
+
 // Re-exports.
+pub use atomic::AtomicKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
 use crate::id::ProcessId;
+use crate::kvs::Key;
 use crate::protocol::common::table::ProcessVotes;
+use crate::util;
 
 pub trait KeyClocks: Clone {
-    /// Create a new `KeyClocks` instance.
-    fn new(id: ProcessId) -> Self;
+    /// Create a new `KeyClocks` instance given the:
+    /// - local process identifier
+    /// - the n-th power number of base 2 that will be the number of buckets to
+    ///   be created (if two keys hash to the same bucket, then there's a
+    ///   false-positive conflict)
+    fn new(id: ProcessId, key_buckets_power: usize) -> Self;
 
     /// Bump clocks to at least `min_clock` and return the new clock (that might
     /// be `min_clock` in case it was higher than any of the local clocks). Also
@@ -22,6 +33,47 @@ pub trait KeyClocks: Clone {
 
     /// Votes up to `clock` and returns the consumed votes.
     fn vote(&mut self, cmd: &Command, clock: u64) -> ProcessVotes;
+}
+
+#[derive(Clone)]
+struct Clocks<T> {
+    clocks: Vec<T>,
+}
+
+impl<T> Clocks<T> {
+    // Function to be used by the implementors of `KeyClocks` to create their
+    // clocks.
+    fn new(key_buckets_power: usize) -> Self
+    where
+        T: Default,
+    {
+        // compute the actual number of buckets
+        let bucket_number = 2 ^ key_buckets_power;
+        let mut clocks = Vec::with_capacity(bucket_number);
+        // init all buckets with the bucket default value
+        clocks.resize_with(bucket_number, Default::default);
+        Self { clocks }
+    }
+
+    fn get(&self, key: &Key) -> &T {
+        let index = self.bucket_index(key);
+        // TODO remove unsafe if the can the compiler figure out that this
+        // access is safe
+        unsafe { self.clocks.get_unchecked(index) }
+    }
+
+    fn get_mut(&mut self, key: &Key) -> &mut T {
+        let index = self.bucket_index(key);
+        // TODO remove unsafe if the can the compiler figure out that this
+        // access is safe
+        unsafe { self.clocks.get_unchecked_mut(index) }
+    }
+
+    // Compute bucket index based on the hash of the key.
+    fn bucket_index(&self, key: &Key) -> usize {
+        let key_hash = util::key_hash(key) as usize;
+        key_hash % self.clocks.len()
+    }
 }
 
 #[cfg(test)]
@@ -38,7 +90,8 @@ mod tests {
 
     fn keys_clocks_flow<KC: KeyClocks>() {
         // create key clocks
-        let mut clocks = KC::new(1);
+        let key_buckets_power = 10;
+        let mut clocks = KC::new(1, key_buckets_power);
 
         // keys
         let key_a = String::from("A");
@@ -89,7 +142,8 @@ mod tests {
 
     fn keys_clocks_no_double_votes<KC: KeyClocks>() {
         // create key clocks
-        let mut clocks = KC::new(1);
+        let key_buckets_power = 10;
+        let mut clocks = KC::new(1, key_buckets_power);
 
         // command
         let key = String::from("A");

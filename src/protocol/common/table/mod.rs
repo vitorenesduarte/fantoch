@@ -125,8 +125,9 @@ mod tests {
     #[test]
     fn votes_flow() {
         // create clocks
-        let mut clocks_p0 = SequentialKeyClocks::new(0);
-        let mut clocks_p1 = SequentialKeyClocks::new(1);
+        let key_buckets_power = 10;
+        let mut clocks_p0 = SequentialKeyClocks::new(0, key_buckets_power);
+        let mut clocks_p1 = SequentialKeyClocks::new(1, key_buckets_power);
 
         // keys
         let key_a = String::from("A");
