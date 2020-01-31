@@ -32,17 +32,6 @@ impl Pending {
         }
     }
 
-    /// Returns the number of pending commands.
-    pub fn len(&self) -> usize {
-        if self.aggregate {
-            assert!(self.pending.is_empty());
-            self.aggregated_pending.len()
-        } else {
-            assert!(self.aggregated_pending.is_empty());
-            self.pending.len()
-        }
-    }
-
     /// Starts tracking a command submitted by some client.
     pub fn wait_for(&mut self, cmd: &Command) -> bool {
         // get command rifl and key count
@@ -102,7 +91,7 @@ impl Pending {
                 // ready
                 self.aggregated_pending
                     .remove(&rifl)
-                    .map(|command_result| ExecutorResult::Ready(command_result))
+                    .map(ExecutorResult::Ready)
             } else {
                 None
             }
