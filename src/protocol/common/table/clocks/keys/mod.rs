@@ -181,7 +181,8 @@ mod tests {
             .expect("process should have voted on this key");
         // check that there's only one vote
         assert_eq!(ranges.len(), 1);
-        let vr = ranges[0];
-        (vr.start()..=vr.end()).collect()
+        let start = ranges[0].start();
+        let end = ranges[0].end();
+        (start..=end).collect()
     }
 }
