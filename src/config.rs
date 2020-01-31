@@ -104,7 +104,7 @@ impl Config {
     }
 
     /// Changes the value of the key buckets power number.
-    pub fn set_key_buckets_power(&mut self, key_buckets_power: usize){
+    pub fn set_key_buckets_power(&mut self, key_buckets_power: usize) {
         self.key_buckets_power = key_buckets_power;
     }
 }

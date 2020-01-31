@@ -5,7 +5,7 @@ use crate::executor::table::MultiVotesTable;
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, Rifl};
 use crate::kvs::{KVStore, Key};
-use crate::protocol::common::table::{Votes};
+use crate::protocol::common::table::Votes;
 
 pub struct TableExecutor {
     table: MultiVotesTable,

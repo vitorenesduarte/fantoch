@@ -2,6 +2,7 @@ use super::Clocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
+use crate::kvs::Key;
 use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,16 +31,8 @@ impl KeyClocks for AtomicKeyClocks {
         let highest = cmd
             .keys()
             .map(|key| {
-                let previous_value = self
-                    .clocks
-                    .get(key)
-                    .fetch_update(
-                        |value| Some(cmp::max(min_clock, value + 1)),
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
-                    )
-                    .expect("first-round atomic always succeed as we must bump the clock");
-
+                // bump the `key` clock
+                let previous_value = self.bump(key, min_clock);
                 // compute vote start and vote end
                 let vote_start = previous_value + 1;
                 let vote_end = cmp::max(min_clock, previous_value + 1);
@@ -62,21 +55,11 @@ impl KeyClocks for AtomicKeyClocks {
         first_round_votes.into_iter().for_each(|(key, first_vr)| {
             // check if we should vote more
             if first_vr.end() < highest {
-                let result = self.clocks.get(&key).fetch_update(
-                    |value| {
-                        if value < highest {
-                            Some(highest)
-                        } else {
-                            None
-                        }
-                    },
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                );
-                // check if we generated more votes (maybe votes by other
-                // threads have been generated and it's no longer possible to
-                // generate votes)
-                if let Ok(previous_value) = result {
+                // try to bump up to `highest`
+                // - we really mean try because maybe votes by other threads
+                //   have been generated and it's no longer possible to generate
+                //   votes below `highest`
+                if let Some(previous_value) = self.maybe_bump(&key, highest) {
                     // compute vote start and vote end
                     let vote_start = previous_value + 1;
                     let vote_end = highest;
@@ -85,8 +68,8 @@ impl KeyClocks for AtomicKeyClocks {
                     let second_vr =
                         VoteRange::new(self.id, vote_start, vote_end);
                     // save the two votes on this key
-                    // TODO try to compress the two vote ranges
-                    votes.set(key, VoteRange::try_compress(first_vr, second_vr));
+                    votes
+                        .set(key, VoteRange::try_compress(first_vr, second_vr));
                     return;
                 }
             }
@@ -102,18 +85,7 @@ impl KeyClocks for AtomicKeyClocks {
         let mut votes = Votes::new(Some(cmd));
 
         cmd.keys().for_each(|key| {
-            let result = self.clocks.get(&key).fetch_update(
-                |value| {
-                    if value < clock {
-                        Some(clock)
-                    } else {
-                        None
-                    }
-                },
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            );
-            if let Ok(previous_value) = result {
+            if let Some(previous_value) = self.maybe_bump(key, clock) {
                 // compute vote start and vote end
                 let vote_start = previous_value + 1;
                 let vote_end = clock;
@@ -125,5 +97,37 @@ impl KeyClocks for AtomicKeyClocks {
         });
 
         votes
+    }
+}
+
+impl AtomicKeyClocks {
+    // Bump the `key` clock to at least `min_clock`.
+    fn bump(&self, key: &Key, min_clock: u64) -> u64 {
+        self.clocks
+            .get(key)
+            .fetch_update(
+                |value| Some(cmp::max(min_clock, value + 1)),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .expect("atomic bump should always succeed")
+    }
+
+    // Bump the `key` clock if lower than `up_to`.
+    fn maybe_bump(&self, key: &Key, up_to: u64) -> Option<u64> {
+        self.clocks
+            .get(&key)
+            .fetch_update(
+                |value| {
+                    if value < up_to {
+                        Some(up_to)
+                    } else {
+                        None
+                    }
+                },
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .ok()
     }
 }
