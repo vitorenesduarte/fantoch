@@ -114,7 +114,6 @@ mod tests {
     use crate::command::Command;
     use crate::id::Rifl;
     use crate::protocol::common::table::SequentialKeyClocks;
-    use std::cmp::max;
 
     impl VoteRange {
         /// Get all votes in this range.
@@ -149,34 +148,30 @@ mod tests {
         // - p1: Submit(ab), MCollect(a), MCommit(ab)
 
         // ------------------------
-        // submit command a by p0
-        let clock_a = clocks_p0.clock(&cmd_a) + 1;
-        assert_eq!(clock_a, 1);
-
-        // ------------------------
+        // submit command a by p0 AND
         // (local) MCollect handle by p0 (command a)
-        let clock_a_p0 = max(clock_a, clocks_p0.clock(&cmd_a) + 1);
-        let process_votes_a_p0 = clocks_p0.process_votes(&cmd_a, clock_a_p0);
+        let (clock_a_p0, process_votes_a_p0) =
+            clocks_p0.bump_and_vote(&cmd_a, 0);
+        assert_eq!(clock_a_p0, 1);
 
         // -------------------------
-        // submit command ab by p1
-        let clock_ab = clocks_p1.clock(&cmd_ab) + 1;
-        assert_eq!(clock_ab, 1);
-
-        // -------------------------
+        // submit command ab by p1 AND
         // (local) MCollect handle by p1 (command ab)
-        let clock_ab_p1 = max(clock_ab, clocks_p1.clock(&cmd_ab) + 1);
-        let process_votes_ab_p1 = clocks_p1.process_votes(&cmd_ab, clock_ab_p1);
+        let (clock_ab_p1, process_votes_ab_p1) =
+            clocks_p1.bump_and_vote(&cmd_ab, 0);
+        assert_eq!(clock_ab_p1, 1);
 
         // -------------------------
         // (remote) MCollect handle by p1 (command a)
-        let clock_a_p1 = max(clock_a, clocks_p1.clock(&cmd_a) + 1);
-        let process_votes_a_p1 = clocks_p1.process_votes(&cmd_a, clock_a_p1);
+        let (clock_a_p1, process_votes_a_p1) =
+            clocks_p1.bump_and_vote(&cmd_a, clock_a_p0);
+        assert_eq!(clock_a_p1, 2);
 
         // -------------------------
         // (remote) MCollect handle by p0 (command ab)
-        let clock_ab_p0 = max(clock_ab, clocks_p0.clock(&cmd_ab) + 1);
-        let process_votes_ab_p0 = clocks_p0.process_votes(&cmd_ab, clock_ab_p0);
+        let (clock_ab_p0, process_votes_ab_p0) =
+            clocks_p0.bump_and_vote(&cmd_ab, clock_ab_p1);
+        assert_eq!(clock_ab_p0, 2);
 
         // -------------------------
         // MCollectAck handles by p0 (command a)

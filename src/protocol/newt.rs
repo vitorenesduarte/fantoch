@@ -11,7 +11,6 @@ use crate::protocol::common::{
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::cmp;
 use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 use std::mem;
@@ -133,8 +132,15 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // compute its clock
-        let clock = self.key_clocks.clock(&cmd) + 1;
+        // compute its clock:
+        // - this may also consume votes since we're bumping the clocks here
+        // - for that reason, we'll store these votes locally and not recompute
+        //   them once we receive the `MCollect` from self
+        let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
+
+        // save consumed votes in local info
+        let info = self.cmds.get(dot);
+        info.votes.add(process_votes);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -178,15 +184,20 @@ impl<KC: KeyClocks> Newt<KC> {
             return None;
         }
 
-        // TODO can we somehow combine the next 2 operations in order to save
-        // map lookups?
+        // check if it's a message from self
+        let message_from_self = from == self.bp.process_id;
 
-        // compute command clock
-        let clock = cmp::max(remote_clock, self.key_clocks.clock(&cmd) + 1);
-        // compute votes consumed by this command
-        let process_votes = self.key_clocks.process_votes(&cmd, clock);
-        // check that there's one vote per key
-        assert_eq!(process_votes.len(), cmd.key_count());
+        // if it is, do not recompute clock and votes
+        let (clock, process_votes) = if message_from_self {
+            (remote_clock, ProcessVotes::new())
+        } else {
+            // get command clock and votes consumed
+            let (clock, process_votes) =
+                self.key_clocks.bump_and_vote(&cmd, remote_clock);
+            // check that there's one vote per key
+            assert_eq!(process_votes.len(), cmd.key_count());
+            (clock, process_votes)
+        };
 
         // update command info
         info.status = Status::COLLECT;
@@ -247,7 +258,7 @@ impl<KC: KeyClocks> Newt<KC> {
         //   that could potentially delay the execution of this command
         match info.cmd.as_ref() {
             Some(cmd) => {
-                let local_votes = self.key_clocks.process_votes(cmd, max_clock);
+                let local_votes = self.key_clocks.vote(cmd, max_clock);
                 // update votes with local votes
                 info.votes.add(local_votes);
             }
@@ -338,8 +349,7 @@ impl<KC: KeyClocks> Newt<KC> {
             if let Some(cmd) = info.cmd.as_ref() {
                 // if not a no op, check if we can generate more votes that can
                 // speed-up execution
-                let process_votes =
-                    self.key_clocks.process_votes(cmd, info.clock);
+                let process_votes = self.key_clocks.vote(cmd, info.clock);
 
                 // create `MPhantom` if there are new votes
                 if !process_votes.is_empty() {

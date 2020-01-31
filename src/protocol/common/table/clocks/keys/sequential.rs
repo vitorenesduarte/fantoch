@@ -3,6 +3,7 @@ use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
 use crate::protocol::common::table::{ProcessVotes, VoteRange};
+use std::cmp;
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -20,18 +21,22 @@ impl KeyClocks for SequentialKeyClocks {
         }
     }
 
-    /// Retrieves the current clock for some command.
-    /// If the command touches multiple keys, returns the maximum between the
-    /// clocks associated with each key.
-    fn clock(&self, cmd: &Command) -> u64 {
-        cmd.keys()
-            .map(|key| self.key_clock(key))
-            .max()
-            .expect("there must be at least one key in the command")
+    fn bump_and_vote(
+        &mut self,
+        cmd: &Command,
+        min_clock: u64,
+    ) -> (u64, ProcessVotes) {
+        // bump to at least `min_clock`
+        let clock = cmp::max(min_clock, self.clock(cmd) + 1);
+
+        // compute votes up to that clock
+        let votes = self.vote(cmd, clock);
+
+        // return both
+        (clock, votes)
     }
 
-    /// Vote up-to `clock`.
-    fn process_votes(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
+    fn vote(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
         cmd.keys()
             .filter_map(|key| {
                 // get a mutable reference to current clock value
@@ -61,6 +66,16 @@ impl KeyClocks for SequentialKeyClocks {
 }
 
 impl SequentialKeyClocks {
+    /// Retrieves the current clock for some command.
+    /// If the command touches multiple keys, returns the maximum between the
+    /// clocks associated with each key.
+    fn clock(&self, cmd: &Command) -> u64 {
+        cmd.keys()
+            .map(|key| self.key_clock(key))
+            .max()
+            .expect("there must be at least one key in the command")
+    }
+
     /// Retrieves the current clock for `key`.
     #[allow(clippy::ptr_arg)]
     fn key_clock(&self, key: &Key) -> u64 {
@@ -112,7 +127,7 @@ mod tests {
         let clock = clock + 1;
 
         // get process votes
-        let process_votes = clocks.process_votes(&cmd_a, clock);
+        let process_votes = clocks.vote(&cmd_a, clock);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![1]);
 
@@ -125,7 +140,7 @@ mod tests {
         let clock = clock + 1;
 
         // get process votes
-        let process_votes = clocks.process_votes(&cmd_a, clock);
+        let process_votes = clocks.vote(&cmd_a, clock);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![2]);
 
@@ -138,7 +153,7 @@ mod tests {
         let clock = clock + 1;
 
         // get process votes
-        let process_votes = clocks.process_votes(&cmd_ab, clock);
+        let process_votes = clocks.vote(&cmd_ab, clock);
         assert_eq!(process_votes.len(), 2); // two keys
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![3]);
         assert_eq!(get_key_votes(&key_b, &process_votes), vec![1, 2, 3]);
@@ -152,7 +167,7 @@ mod tests {
         let clock = clock + 1;
 
         // get process votes
-        let process_votes = clocks.process_votes(&cmd_a, clock);
+        let process_votes = clocks.vote(&cmd_a, clock);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![4]);
     }
@@ -168,29 +183,29 @@ mod tests {
         let cmd = Command::get(cmd_rifl, key.clone());
 
         // get process votes up to 5
-        let process_votes = clocks.process_votes(&cmd, 5);
+        let process_votes = clocks.vote(&cmd, 5);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![1, 2, 3, 4, 5]);
 
         // get process votes up to 5 again: should get no votes
-        let process_votes = clocks.process_votes(&cmd, 5);
+        let process_votes = clocks.vote(&cmd, 5);
         assert!(process_votes.is_empty());
 
         // get process votes up to 6
-        let process_votes = clocks.process_votes(&cmd, 6);
+        let process_votes = clocks.vote(&cmd, 6);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![6]);
 
         // get process votes up to 2: should get no votes
-        let process_votes = clocks.process_votes(&cmd, 2);
+        let process_votes = clocks.vote(&cmd, 2);
         assert!(process_votes.is_empty());
 
         // get process votes up to 3: should get no votes
-        let process_votes = clocks.process_votes(&cmd, 3);
+        let process_votes = clocks.vote(&cmd, 3);
         assert!(process_votes.is_empty());
 
         // get process votes up to 10
-        let process_votes = clocks.process_votes(&cmd, 10);
+        let process_votes = clocks.vote(&cmd, 10);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![7, 8, 9, 10]);
     }
