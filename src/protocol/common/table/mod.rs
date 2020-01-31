@@ -4,6 +4,7 @@ mod clocks;
 // Re-exports.
 pub use clocks::{KeyClocks, QuorumClocks, SequentialKeyClocks};
 
+use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,7 @@ use std::collections::hash_map::{self, HashMap};
 use std::fmt;
 
 /// `ProcessVotes` are the Votes by some process on some command.
-pub type ProcessVotes = HashMap<Key, VoteRange>;
+// pub type ProcessVotes = HashMap<Key, VoteRange>;
 
 /// Votes are all Votes on some command.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -21,17 +22,24 @@ pub struct Votes {
 
 impl Votes {
     /// Creates an empty `Votes` instance.
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(cmd: Option<&Command>) -> Self {
+        // create votes map with the correct size if we know the command,
+        // otherwise size 0
+        let capacity = cmd.map(|cmd| cmd.key_count()).unwrap_or(0);
+        Self {
+            votes: HashMap::with_capacity(capacity),
+        }
     }
 
-    /// Add `ProcessVotes` to `Votes`.
-    pub fn add(&mut self, process_votes: ProcessVotes) {
-        process_votes.into_iter().for_each(|(key, vote)| {
-            // add new vote to current set of votes
-            let current_votes = self.get_key_votes(key);
-            current_votes.push(vote);
-        });
+    /// Add new vote range to `Votes`.
+    #[allow(clippy::ptr_arg)]
+    pub fn add(&mut self, key: &Key, vote: VoteRange) {
+        // add new vote to current set of votes
+        let current_votes = match self.votes.get_mut(key) {
+            Some(current_votes) => current_votes,
+            None => self.votes.entry(key.clone()).or_insert_with(Vec::new),
+        };
+        current_votes.push(vote);
     }
 
     /// Merge with another `Votes`.
@@ -40,9 +48,15 @@ impl Votes {
     pub fn merge(&mut self, remote_votes: Votes) {
         remote_votes.into_iter().for_each(|(key, key_votes)| {
             // add new votes to current set of votes
-            let current_votes = self.get_key_votes(key);
+            let current_votes = self.votes.entry(key).or_insert_with(Vec::new);
             current_votes.extend(key_votes);
         });
+    }
+
+    /// Gets the current votes on some key.
+    #[allow(clippy::ptr_arg)]
+    pub fn get(&self, key: &Key) -> Option<&Vec<VoteRange>> {
+        self.votes.get(key)
     }
 
     /// Removes the votes on some key.
@@ -51,8 +65,14 @@ impl Votes {
         self.votes.remove(key)
     }
 
-    fn get_key_votes(&mut self, key: Key) -> &mut Vec<VoteRange> {
-        self.votes.entry(key).or_insert_with(Vec::new)
+    /// Get the number of votes.
+    pub fn len(&self) -> usize {
+        self.votes.len()
+    }
+
+    /// Checks if `Votes` is empty.
+    pub fn is_empty(&self) -> bool {
+        self.votes.is_empty()
     }
 }
 
@@ -136,13 +156,13 @@ mod tests {
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
         let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
-        let mut votes_a = Votes::new();
+        let mut votes_a = Votes::new(Some(&cmd_a));
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab =
             Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
-        let mut votes_ab = Votes::new();
+        let mut votes_ab = Votes::new(Some(&cmd_ab));
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)
@@ -176,8 +196,8 @@ mod tests {
 
         // -------------------------
         // MCollectAck handles by p0 (command a)
-        votes_a.add(process_votes_a_p0);
-        votes_a.add(process_votes_a_p1);
+        votes_a.merge(process_votes_a_p0);
+        votes_a.merge(process_votes_a_p1);
 
         // there's a single key
         assert_eq!(votes_a.votes.len(), 1);
@@ -199,8 +219,8 @@ mod tests {
 
         // -------------------------
         // MCollectAck handles by p1 (command ab)
-        votes_ab.add(process_votes_ab_p1);
-        votes_ab.add(process_votes_ab_p0);
+        votes_ab.merge(process_votes_ab_p1);
+        votes_ab.merge(process_votes_ab_p0);
 
         // there are two keys
         assert_eq!(votes_ab.votes.len(), 2);

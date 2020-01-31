@@ -5,7 +5,7 @@ use crate::executor::table::MultiVotesTable;
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, Rifl};
 use crate::kvs::{KVStore, Key};
-use crate::protocol::common::table::{ProcessVotes, Votes};
+use crate::protocol::common::table::{Votes};
 
 pub struct TableExecutor {
     table: MultiVotesTable,
@@ -50,8 +50,8 @@ impl Executor for TableExecutor {
                 clock,
                 votes,
             } => self.table.add_votes(dot, cmd, clock, votes),
-            TableExecutionInfo::PhantomVotes { process_votes } => {
-                self.table.add_phantom_votes(process_votes)
+            TableExecutionInfo::PhantomVotes { votes } => {
+                self.table.add_phantom_votes(votes)
             }
         };
 
@@ -91,7 +91,7 @@ pub enum TableExecutionInfo {
         votes: Votes,
     },
     PhantomVotes {
-        process_votes: ProcessVotes,
+        votes: Votes,
     },
 }
 
@@ -105,8 +105,8 @@ impl TableExecutionInfo {
         }
     }
 
-    pub fn phantom_votes(process_votes: ProcessVotes) -> Self {
-        TableExecutionInfo::PhantomVotes { process_votes }
+    pub fn phantom_votes(votes: Votes) -> Self {
+        TableExecutionInfo::PhantomVotes { votes }
     }
 }
 

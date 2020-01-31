@@ -2,11 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::{
-    info::{Commands, Info},
-    table::{
-        KeyClocks, ProcessVotes, QuorumClocks, SequentialKeyClocks, Votes,
-    },
+use crate::protocol::common::info::{Commands, Info};
+use crate::protocol::common::table::{
+    KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
 };
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
@@ -138,9 +136,10 @@ impl<KC: KeyClocks> Newt<KC> {
         //   them once we receive the `MCollect` from self
         let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
 
-        // save consumed votes in local info
+        // get cmd info
         let info = self.cmds.get(dot);
-        info.votes.add(process_votes);
+        // bootstrap votes with initial consumed votes
+        info.votes = process_votes;
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -189,7 +188,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // if it is, do not recompute clock and votes
         let (clock, process_votes) = if message_from_self {
-            (remote_clock, ProcessVotes::new())
+            (remote_clock, Votes::new(None))
         } else {
             // get command clock and votes consumed
             let (clock, process_votes) =
@@ -226,7 +225,7 @@ impl<KC: KeyClocks> Newt<KC> {
         from: ProcessId,
         dot: Dot,
         clock: u64,
-        remote_votes: ProcessVotes,
+        remote_votes: Votes,
     ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {}",
@@ -246,7 +245,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // update votes with remote votes
-        info.votes.add(remote_votes);
+        info.votes.merge(remote_votes);
 
         // update quorum clocks while computing max clock and its number of
         // occurences
@@ -260,7 +259,7 @@ impl<KC: KeyClocks> Newt<KC> {
             Some(cmd) => {
                 let local_votes = self.key_clocks.vote(cmd, max_clock);
                 // update votes with local votes
-                info.votes.add(local_votes);
+                info.votes.merge(local_votes);
             }
             None => {
                 panic!("there should be a command payload in the MCollectAck handler");
@@ -381,9 +380,9 @@ impl<KC: KeyClocks> Newt<KC> {
     fn handle_mphantom(
         &mut self,
         dot: Dot,
-        process_votes: ProcessVotes,
+        votes: Votes,
     ) -> Option<ToSend<Message>> {
-        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
+        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, votes);
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -391,11 +390,11 @@ impl<KC: KeyClocks> Newt<KC> {
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
             // create execution info
-            let execution_info = ExecutionInfo::phantom_votes(process_votes);
+            let execution_info = ExecutionInfo::phantom_votes(votes);
             self.to_executor.push(execution_info);
         } else {
             // if not committed yet, update votes with remote votes
-            info.votes.add(process_votes);
+            info.votes.merge(votes);
         }
 
         // nothing to send
@@ -433,7 +432,7 @@ impl Info for CommandInfo {
             quorum: BTreeSet::new(),
             cmd: None,
             clock: 0,
-            votes: Votes::new(),
+            votes: Votes::new(None),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
@@ -451,7 +450,7 @@ pub enum Message {
     MCollectAck {
         dot: Dot,
         clock: u64,
-        process_votes: ProcessVotes,
+        process_votes: Votes,
     },
     MCommit {
         dot: Dot,
@@ -461,7 +460,7 @@ pub enum Message {
     },
     MPhantom {
         dot: Dot,
-        process_votes: ProcessVotes,
+        process_votes: Votes,
     },
 }
 

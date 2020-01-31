@@ -2,16 +2,16 @@
 mod sequential;
 
 // This module contains the definition of `AtomicKeyClocks`.
-mod atomic;
+// mod atomic;
 
 // Re-exports.
-pub use atomic::AtomicKeyClocks;
+// pub use atomic::AtomicKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
-use crate::protocol::common::table::ProcessVotes;
+use crate::protocol::common::table::Votes;
 use crate::util;
 
 pub trait KeyClocks: Clone {
@@ -25,14 +25,10 @@ pub trait KeyClocks: Clone {
     /// Bump clocks to at least `min_clock` and return the new clock (that might
     /// be `min_clock` in case it was higher than any of the local clocks). Also
     /// returns the consumed votes.
-    fn bump_and_vote(
-        &mut self,
-        cmd: &Command,
-        min_clock: u64,
-    ) -> (u64, ProcessVotes);
+    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes);
 
     /// Votes up to `clock` and returns the consumed votes.
-    fn vote(&mut self, cmd: &Command, clock: u64) -> ProcessVotes;
+    fn vote(&mut self, cmd: &Command, clock: u64) -> Votes;
 }
 
 #[derive(Clone)]
@@ -179,10 +175,13 @@ mod tests {
     }
 
     // Returns the list of votes on some key.
-    fn get_key_votes(key: &Key, votes: &ProcessVotes) -> Vec<u64> {
-        let vr = votes
+    fn get_key_votes(key: &Key, votes: &Votes) -> Vec<u64> {
+        let ranges = votes
             .get(key)
             .expect("process should have voted on this key");
+        // check that there's only one vote
+        assert_eq!(ranges.len(), 1);
+        let vr = ranges[0];
         (vr.start()..=vr.end()).collect()
     }
 }

@@ -10,7 +10,7 @@ use crate::elapsed;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
 use crate::metrics::Metrics;
-use crate::protocol::common::table::{ProcessVotes, VoteRange, Votes};
+use crate::protocol::common::table::{VoteRange, Votes};
 use crate::util;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -67,10 +67,9 @@ impl MultiVotesTable {
     #[must_use]
     pub fn add_phantom_votes(
         &mut self,
-        process_votes: ProcessVotes,
+        votes: Votes,
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
-        let (duration, result) =
-            elapsed!(self.add_votes_and_find(process_votes));
+        let (duration, result) = elapsed!(self.add_votes_and_find(votes));
         self.metrics
             .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
         result
@@ -102,14 +101,14 @@ impl MultiVotesTable {
     #[must_use]
     fn add_votes_and_find(
         &mut self,
-        process_votes: ProcessVotes,
+        votes: Votes,
     ) -> Vec<(Key, Vec<(Rifl, KVOp)>)> {
-        process_votes
+        votes
             .into_iter()
-            .filter_map(|(key, range)| {
+            .filter_map(|(key, vote_ranges)| {
                 self.update_table(key, |table| {
-                    // add range to table
-                    table.add_vote_range(range);
+                    // add ranges to table
+                    table.add_vote_ranges(vote_ranges);
                 })
             })
             .collect()
@@ -193,20 +192,21 @@ impl VotesTable {
         assert!(res.is_none());
 
         // update votes with the votes used on this command
-        vote_ranges
-            .into_iter()
-            .for_each(|range| self.add_vote_range(range));
+        self.add_vote_ranges(vote_ranges);
     }
 
-    fn add_vote_range(&mut self, range: VoteRange) {
-        // assert there's at least one new vote
-        assert!(self.votes_clock.add_range(
-            &range.voter(),
-            range.start(),
-            range.end()
-        ));
-        // assert that the clock size didn't change
-        assert_eq!(self.votes_clock.len(), self.n);
+    // TODO optimize me
+    fn add_vote_ranges(&mut self, vote_ranges: Vec<VoteRange>) {
+        vote_ranges.into_iter().for_each(|vote_range| {
+            // assert there's at least one new vote
+            assert!(self.votes_clock.add_range(
+                &vote_range.voter(),
+                vote_range.start(),
+                vote_range.end()
+            ));
+            // assert that the clock size didn't change
+            assert_eq!(self.votes_clock.len(), self.n);
+        });
     }
 
     fn stable_ops(&mut self) -> Vec<(Rifl, KVOp)> {
@@ -513,8 +513,6 @@ mod tests {
 
     #[test]
     fn phantom_votes() {
-        use std::iter::FromIterator;
-
         // create table
         let n = 5;
         let stability_threshold = 3;
@@ -540,7 +538,7 @@ mod tests {
             (key_b.clone(), VoteRange::new(process_id, 1, 1)),
         ];
         // check stable clocks
-        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        let stable = table.add_phantom_votes(to_votes(process_votes));
         assert!(stable.is_empty());
         assert_eq!(stable_clock(&table, &key_a), 0);
         assert_eq!(stable_clock(&table, &key_b), 0);
@@ -550,7 +548,7 @@ mod tests {
         let process_votes =
             vec![(key_a.clone(), VoteRange::new(process_id, 1, 1))];
         // check stable clocks
-        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        let stable = table.add_phantom_votes(to_votes(process_votes));
         assert!(stable.is_empty());
         assert_eq!(stable_clock(&table, &key_a), 0);
         assert_eq!(stable_clock(&table, &key_b), 0);
@@ -562,7 +560,7 @@ mod tests {
             (key_b.clone(), VoteRange::new(process_id, 1, 1)),
         ];
         // check stable clocks
-        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        let stable = table.add_phantom_votes(to_votes(process_votes));
         assert!(stable.is_empty());
         assert_eq!(stable_clock(&table, &key_a), 1);
         assert_eq!(stable_clock(&table, &key_b), 0);
@@ -572,9 +570,17 @@ mod tests {
         let process_votes =
             vec![(key_b.clone(), VoteRange::new(process_id, 1, 1))];
         // check stable clocks
-        let stable = table.add_phantom_votes(HashMap::from_iter(process_votes));
+        let stable = table.add_phantom_votes(to_votes(process_votes));
         assert!(stable.is_empty());
         assert_eq!(stable_clock(&table, &key_a), 1);
         assert_eq!(stable_clock(&table, &key_b), 1);
+    }
+
+    fn to_votes(process_votes: Vec<(Key, VoteRange)>) -> Votes {
+        let mut votes = Votes::new(None);
+        process_votes
+            .into_iter()
+            .for_each(|(key, range)| votes.add(&key, range));
+        votes
     }
 }

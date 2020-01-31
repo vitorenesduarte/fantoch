@@ -2,7 +2,7 @@ use super::Clocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
-use crate::protocol::common::table::{ProcessVotes, VoteRange};
+use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
 
 #[derive(Clone)]
@@ -18,11 +18,7 @@ impl KeyClocks for SequentialKeyClocks {
         Self { id, clocks }
     }
 
-    fn bump_and_vote(
-        &mut self,
-        cmd: &Command,
-        min_clock: u64,
-    ) -> (u64, ProcessVotes) {
+    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // bump to at least `min_clock`
         let clock = cmp::max(min_clock, self.clock(cmd) + 1);
 
@@ -33,26 +29,28 @@ impl KeyClocks for SequentialKeyClocks {
         (clock, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, clock: u64) -> ProcessVotes {
+    fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
+        // create votes
+        let mut votes = Votes::new(Some(cmd));
+
         // TODO copy here to please the borrow-checker
         let id = self.id;
-        cmd.keys()
-            .filter_map(|key| {
-                // get a mutable reference to current clock value
-                let current = self.clocks.get_mut(key);
+        cmd.keys().for_each(|key| {
+            // get a mutable reference to current clock value
+            let current = self.clocks.get_mut(key);
 
-                // if we should vote
-                if *current < clock {
-                    // vote from the current clock value + 1 until `clock`
-                    let vr = VoteRange::new(id, *current + 1, clock);
-                    // update current clock to be `clock`
-                    *current = clock;
-                    Some((key.clone(), vr))
-                } else {
-                    None
-                }
-            })
-            .collect()
+            // if we should vote
+            if *current < clock {
+                // vote from the current clock value + 1 until `clock`
+                let vr = VoteRange::new(id, *current + 1, clock);
+                // update current clock to be `clock`
+                *current = clock;
+                votes.add(key, vr);
+            }
+        });
+
+        // return votes
+        votes
     }
 }
 

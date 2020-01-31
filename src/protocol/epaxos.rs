@@ -2,11 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::{
-    graph::{KeyClocks, QuorumClocks},
-    info::{Commands, Info},
-    synod::{Synod, SynodMessage},
-};
+use crate::protocol::common::graph::{KeyClocks, QuorumClocks};
+use crate::protocol::common::info::{Commands, Info};
+use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::util;
 use crate::{log, singleton};
