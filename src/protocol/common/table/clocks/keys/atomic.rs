@@ -86,12 +86,13 @@ impl KeyClocks for AtomicKeyClocks {
                         VoteRange::new(self.id, vote_start, vote_end);
                     // save the two votes on this key
                     // TODO try to compress the two vote ranges
-                    votes.set(key, vec![first_vr, second_vr]);
-                } else {
-                    // save the single vote on this key
-                    votes.set(key, vec![first_vr]);
+                    votes.set(key, VoteRange::try_compress(first_vr, second_vr));
+                    return;
                 }
             }
+            // if we didn't vote agian, then simply save the single vote from
+            // the first round
+            votes.set(key, vec![first_vr]);
         });
         (highest, votes)
     }
