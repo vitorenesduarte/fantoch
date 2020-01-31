@@ -63,6 +63,10 @@ impl Executor for GraphExecutor {
             .collect()
     }
 
+    fn parallel() -> bool {
+        false
+    }
+
     fn show_metrics(&self) {
         self.graph.show_metrics();
     }

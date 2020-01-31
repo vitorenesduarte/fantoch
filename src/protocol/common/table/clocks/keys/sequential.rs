@@ -54,6 +54,10 @@ impl KeyClocks for SequentialKeyClocks {
         // return votes
         votes
     }
+
+    fn parallel() -> bool {
+        false
+    }
 }
 
 impl SequentialKeyClocks {

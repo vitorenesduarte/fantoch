@@ -104,7 +104,7 @@ impl Protocol for EPaxos {
     }
 
     fn parallel() -> bool {
-        true
+        false
     }
 
     /// Returns new commands results to be sent to clients.

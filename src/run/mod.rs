@@ -76,6 +76,7 @@ pub mod task;
 use crate::client::{Client, Workload};
 use crate::command::CommandResult;
 use crate::config::Config;
+use crate::executor::Executor;
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::protocol::Protocol;
@@ -151,6 +152,22 @@ where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
+    // panic if protocol is not parallel and we have more than one worker
+    if config.workers() > 1 && !P::parallel() {
+        panic!(
+            "running non-parallel protocol with {} workers",
+            config.workers()
+        )
+    }
+
+    // panic if executor is not parallel and we have more than one executor
+    if config.executors() > 1 && !P::Executor::parallel() {
+        panic!(
+            "running non-parallel executor with {} executors",
+            config.executors()
+        )
+    }
+
     // discover processes
     process.discover(sorted_processes);
 
@@ -159,9 +176,6 @@ where
 
     // start process listener
     let listener = task::listen((ip, port)).await?;
-
-    // adjust number of workers depending on whether the protocol is parallel
-    // if process.parallel() {}
 
     // create forward channels: reader -> workers
     let (reader_to_workers, reader_to_workers_rxs) = ReaderToWorkers::<P>::new(
@@ -472,7 +486,7 @@ fn handle_cmd_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{Basic, SequentialNewt};
+    use crate::protocol::{AtomicNewt, Basic, SequentialNewt};
     use rand::Rng;
     use tokio::task;
     use tokio::time::Duration;
@@ -497,15 +511,30 @@ mod tests {
 
     #[tokio::test]
     async fn run_basic_test() {
-        run_test::<Basic>().await
+        // basic is a parallel protocol with parallel execution
+        let workers = 2;
+        let executors = 3;
+        run_test::<Basic>(workers, executors).await
     }
 
     #[tokio::test]
     async fn run_sequential_newt_test() {
-        run_test::<SequentialNewt>().await
+        // sequential newt can only handle one worker but many executors
+        let workers = 1;
+        let executors = 2;
+        run_test::<SequentialNewt>(workers, executors).await
     }
 
-    async fn run_test<P>()
+    #[tokio::test]
+    async fn run_atomic_newt_test() {
+        // atomic newt can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 3;
+        let executors = 1;
+        run_test::<AtomicNewt>(workers, executors).await
+    }
+
+    async fn run_test<P>(workers: usize, executors: usize)
     where
         P: Protocol + Send + 'static,
     {
@@ -515,7 +544,7 @@ mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<Basic>().await {
+                match run::<P>(workers, executors).await {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
@@ -523,7 +552,7 @@ mod tests {
             .await;
     }
 
-    async fn run<P>() -> RunResult<()>
+    async fn run<P>(workers: usize, executors: usize) -> RunResult<()>
     where
         P: Protocol + Send + 'static,
     {
@@ -547,9 +576,7 @@ mod tests {
         let tcp_buffer_size = 1024;
         let tcp_flush_interval = Some(100); // micros
         let channel_buffer_size = 10000;
-        let workers = 2;
-        let executors = 2;
-        let multiplexing = 3;
+        let multiplexing = 2;
 
         // set parallel protocol and executors in config
         config.set_workers(workers);

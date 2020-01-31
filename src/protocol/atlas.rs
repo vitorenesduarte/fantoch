@@ -108,7 +108,7 @@ impl Protocol for Atlas {
     }
 
     fn parallel() -> bool {
-        true
+        false
     }
 
     fn show_metrics(&self) {

@@ -35,9 +35,7 @@ pub trait Executor {
 
     fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 
-    fn parallel() -> bool {
-        false
-    }
+    fn parallel() -> bool;
 
     fn show_metrics(&self) {
         // by default, nothing to show

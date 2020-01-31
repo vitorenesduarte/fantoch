@@ -29,6 +29,8 @@ pub trait KeyClocks: Clone {
 
     /// Votes up to `clock` and returns the consumed votes.
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes;
+
+    fn parallel() -> bool;
 }
 
 #[derive(Clone)]

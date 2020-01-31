@@ -4,7 +4,7 @@ use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::table::{
-    KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
+    AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
 };
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
@@ -14,6 +14,7 @@ use std::iter::FromIterator;
 use std::mem;
 
 pub type SequentialNewt = Newt<SequentialKeyClocks>;
+pub type AtomicNewt = Newt<AtomicKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
@@ -112,7 +113,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     }
 
     fn parallel() -> bool {
-        true
+        KC::parallel()
     }
 
     fn show_metrics(&self) {
@@ -262,7 +263,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 info.votes.merge(local_votes);
             }
             None => {
-                panic!("there should be a command payload in the MCollectAck handler");
+                panic!("nthere should be a command payload in the MCollectAck handler");
             }
         }
 
@@ -364,13 +365,14 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // create execution info if not a noop
-        // TODO if noOp, should we add `Votes` to the table, or there will be no
-        // votes?
         if let Some(cmd) = info.cmd.clone() {
             // create execution info
             let execution_info =
                 ExecutionInfo::votes(dot, cmd, info.clock, votes);
             self.to_executor.push(execution_info);
+        } else {
+            // TODO if noOp, we should add `Votes` to all table
+            panic!("noOp votes should be broadcast to all executors");
         }
 
         // return `ToSend`
@@ -464,17 +466,16 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {}
-// impl MessageDot for Message {
-//     fn dot(&self) -> Option<&Dot> {
-//         match self {
-//             Self::MCollect { dot, .. } => Some(dot),
-//             Self::MCollectAck { dot, .. } => Some(dot),
-//             Self::MCommit { dot, .. } => Some(dot),
-//             Self::MPhantom { dot, .. } => Some(dot),
-//         }
-//     }
-// }
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MCollect { dot, .. } => Some(dot),
+            Self::MCollectAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+            Self::MPhantom { dot, .. } => Some(dot),
+        }
+    }
+}
 
 /// `Status` of commands.
 #[derive(PartialEq, Clone)]

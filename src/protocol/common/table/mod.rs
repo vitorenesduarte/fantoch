@@ -5,5 +5,7 @@ mod votes;
 mod clocks;
 
 // Re-exports.
-pub use clocks::{KeyClocks, QuorumClocks, SequentialKeyClocks};
+pub use clocks::{
+    AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks,
+};
 pub use votes::{VoteRange, Votes};

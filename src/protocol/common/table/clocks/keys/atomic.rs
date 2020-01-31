@@ -98,6 +98,10 @@ impl KeyClocks for AtomicKeyClocks {
 
         votes
     }
+
+    fn parallel() -> bool {
+        true
+    }
 }
 
 impl AtomicKeyClocks {
