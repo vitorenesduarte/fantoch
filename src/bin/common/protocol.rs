@@ -11,7 +11,6 @@ const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
-const DEFAULT_KEY_BUCKETS_POWER: usize = 16;
 
 pub fn parse_args() -> (
     ProcessId,
@@ -173,13 +172,10 @@ pub fn parse_args() -> (
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
-    let key_buckets_power =
-        parse_key_buckets_power(matches.value_of("key_buckets_power"));
 
     // update config
     config.set_workers(workers);
     config.set_executors(executors);
-    config.set_key_buckets_power(key_buckets_power);
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -298,14 +294,4 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
                 .expect("multiplexing should be a number")
         })
         .unwrap_or(DEFAULT_MULTIPLEXING)
-}
-
-fn parse_key_buckets_power(key_buckets_power: Option<&str>) -> usize {
-    key_buckets_power
-        .map(|key_buckets_power| {
-            key_buckets_power
-                .parse::<usize>()
-                .expect("key buckets power should be a number")
-        })
-        .unwrap_or(DEFAULT_KEY_BUCKETS_POWER)
 }

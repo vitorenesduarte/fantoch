@@ -97,16 +97,6 @@ impl Config {
     pub fn set_executors(&mut self, executors: usize) {
         self.executors = executors;
     }
-
-    /// Checks the key buckets power number.
-    pub fn key_buckets_power(&self) -> usize {
-        self.key_buckets_power
-    }
-
-    /// Changes the value of the key buckets power number.
-    pub fn set_key_buckets_power(&mut self, key_buckets_power: usize) {
-        self.key_buckets_power = key_buckets_power;
-    }
 }
 
 impl Config {
@@ -212,12 +202,6 @@ mod tests {
         config.set_executors(20);
         assert_eq!(config.workers(), 10);
         assert_eq!(config.executors(), 20);
-
-        // by default, the key buckets power is 16
-        assert_eq!(config.key_buckets_power(), 16);
-        // but that can be changed
-        config.set_key_buckets_power(17);
-        assert_eq!(config.key_buckets_power(), 17);
     }
 
     #[test]

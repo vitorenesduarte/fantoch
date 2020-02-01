@@ -12,15 +12,14 @@ use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
 use crate::protocol::common::table::Votes;
-use crate::util;
+use dashmap::mapref::one::Ref;
+use dashmap::DashMap;
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 pub trait KeyClocks: Clone {
-    /// Create a new `KeyClocks` instance given the:
-    /// - local process identifier
-    /// - the n-th power number of base 2 that will be the number of buckets to
-    ///   be created (if two keys hash to the same bucket, then there's a
-    ///   false-positive conflict)
-    fn new(id: ProcessId, key_buckets_power: usize) -> Self;
+    /// Create a new `KeyClocks` instance given the local process identifier.
+    fn new(id: ProcessId) -> Self;
 
     /// Bump clocks to at least `min_clock` and return the new clock (that might
     /// be `min_clock` in case it was higher than any of the local clocks). Also
@@ -34,48 +33,45 @@ pub trait KeyClocks: Clone {
 }
 
 #[derive(Clone)]
-struct Clocks<T> {
-    mask: usize,
-    clocks: Vec<T>,
+struct SharedClocks<V> {
+    insert_lock: Arc<Mutex<()>>,
+    clocks: DashMap<Key, V>,
 }
 
-impl<T> Clocks<T> {
+impl<V> SharedClocks<V>
+where
+    V: Default,
+{
     // Function to be used by the implementors of `KeyClocks` to create their
     // clocks.
-    fn new(key_buckets_power: usize) -> Self
-    where
-        T: Default,
-    {
-        // compute the actual number of buckets
-        let bucket_number = 2 ^ key_buckets_power;
-        // compute mask
-        let mask = bucket_number - 1;
+    fn new() -> Self {
+        // create insert lock
+        let insert_lock = Arc::new(Mutex::new(()));
         // create clocks
-        let mut clocks = Vec::with_capacity(bucket_number);
-        // init all buckets with the bucket default value
-        clocks.resize_with(bucket_number, Default::default);
-        Self { mask, clocks }
+        let clocks = DashMap::new();
+        Self {
+            insert_lock,
+            clocks,
+        }
     }
 
-    fn get(&self, key: &Key) -> &T {
-        let index = self.bucket_index(key);
-        // TODO remove unsafe if the can the compiler figure out that this
-        // access is safe
-        unsafe { self.clocks.get_unchecked(index) }
+    fn get(&self, key: &Key) -> Ref<Key, V> {
+        match self.clocks.get(key) {
+            Some(value) => value,
+            None => {
+                self.maybe_insert(key);
+                self.get(key)
+            }
+        }
     }
 
-    fn get_mut(&mut self, key: &Key) -> &mut T {
-        let index = self.bucket_index(key);
-        // TODO remove unsafe if the can the compiler figure out that this
-        // access is safe
-        unsafe { self.clocks.get_unchecked_mut(index) }
-    }
-
-    // Compute bucket index based on the hash of the key.
-    fn bucket_index(&self, key: &Key) -> usize {
-        let key_hash = util::key_hash(key) as usize;
-        // key_hash % self.clocks.len()
-        key_hash & self.mask
+    fn maybe_insert(&self, key: &Key) {
+        // acquire the write lock
+        let _lock = self.insert_lock.lock();
+        // insert entry if it doesn't yet exist:
+        // - maybe another thread tried to `maybe_insert` and was able to insert
+        //   before us
+        self.clocks.entry(key.clone()).or_default();
     }
 }
 
@@ -99,8 +95,7 @@ mod tests {
 
     fn keys_clocks_flow<KC: KeyClocks>() {
         // create key clocks
-        let key_buckets_power = 10;
-        let mut clocks = KC::new(1, key_buckets_power);
+        let mut clocks = KC::new(1);
 
         // keys
         let key_a = String::from("A");
@@ -151,8 +146,7 @@ mod tests {
 
     fn keys_clocks_no_double_votes<KC: KeyClocks>() {
         // create key clocks
-        let key_buckets_power = 10;
-        let mut clocks = KC::new(1, key_buckets_power);
+        let mut clocks = KC::new(1);
 
         // command
         let key = String::from("A");

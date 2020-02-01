@@ -1,4 +1,4 @@
-use super::Clocks;
+use super::SharedClocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
@@ -11,13 +11,13 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AtomicKeyClocks {
     id: ProcessId,
-    clocks: Arc<Clocks<AtomicU64>>,
+    clocks: Arc<SharedClocks<AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
-    fn new(id: ProcessId, key_buckets_power: usize) -> Self {
-        let clocks = Clocks::new(key_buckets_power);
+    fn new(id: ProcessId) -> Self {
+        let clocks = SharedClocks::new();
         Self {
             id,
             clocks: Arc::new(clocks),

@@ -112,6 +112,8 @@ impl TableExecutionInfo {
 
 impl MessageKey for TableExecutionInfo {
     fn key(&self) -> Option<&Key> {
-        todo!()
+        // maybe instead, we should have a split function
+        // maybe no
+        todo!("maybe have a split function")
     }
 }

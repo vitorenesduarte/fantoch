@@ -43,7 +43,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_clocks = KC::new(process_id, config.key_buckets_power());
+        let key_clocks = KC::new(process_id);
         let cmds =
             Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();

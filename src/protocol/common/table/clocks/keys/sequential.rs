@@ -1,20 +1,21 @@
-use super::Clocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
+use crate::kvs::Key;
 use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct SequentialKeyClocks {
     id: ProcessId,
-    clocks: Clocks<u64>,
+    clocks: HashMap<Key, u64>,
 }
 
 impl KeyClocks for SequentialKeyClocks {
     /// Create a new `SequentialKeyClocks` instance.
-    fn new(id: ProcessId, key_buckets_power: usize) -> Self {
-        let clocks = Clocks::new(key_buckets_power);
+    fn new(id: ProcessId) -> Self {
+        let clocks = HashMap::new();
         Self { id, clocks }
     }
 
@@ -33,18 +34,18 @@ impl KeyClocks for SequentialKeyClocks {
         // create votes
         let mut votes = Votes::new(Some(cmd));
 
-        // TODO copy here to please the borrow-checker
-        let id = self.id;
-
         // vote on each key
         cmd.keys().for_each(|key| {
             // get a mutable reference to current clock value
-            let current = self.clocks.get_mut(key);
+            let current = match self.clocks.get_mut(key) {
+                Some(current) => current,
+                None => self.clocks.entry(key.clone()).or_insert(0),
+            };
 
             // if we should vote
             if *current < clock {
                 // vote from the current clock value + 1 until `clock`
-                let vr = VoteRange::new(id, *current + 1, clock);
+                let vr = VoteRange::new(self.id, *current + 1, clock);
                 // update current clock to be `clock`
                 *current = clock;
                 votes.add(key, vr);
@@ -66,8 +67,11 @@ impl SequentialKeyClocks {
     /// clocks associated with each key.
     fn clock(&self, cmd: &Command) -> u64 {
         cmd.keys()
-            .map(|key| *self.clocks.get(key))
+            .filter_map(|key| self.clocks.get(key))
             .max()
-            .expect("there must be at least one key in the command")
+            .cloned()
+            // if keys don't exist yet, we may have no maximum; in that case we
+            // should return 0
+            .unwrap_or(0)
     }
 }
