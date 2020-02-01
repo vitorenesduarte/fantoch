@@ -12,6 +12,8 @@ use aggregate::AggregatePending;
 use simple::SimplePending;
 
 pub struct Pending {
+    // TODO can we not have both simple and aggregate pending and move that
+    // decision to compile-time
     aggregate: bool,
     simple_pending: SimplePending,
     aggregate_pending: AggregatePending,

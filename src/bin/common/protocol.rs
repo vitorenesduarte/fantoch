@@ -142,13 +142,6 @@ pub fn parse_args() -> (
                 .help("number of connections between replicas; default: 1")
                 .takes_value(true),
         )
-        .arg(
-            Arg::with_name("key_buckets_power")
-                .long("key_buckets_power")
-                .value_name("KEY_BUCKETS_POWER")
-                .help("the n-th power of base 2; the result is the number of key buckets; default: 16 (65536 buckets, memory size of 512KB)")
-                .takes_value(true),
-        )
         .get_matches();
 
     // parse arguments
