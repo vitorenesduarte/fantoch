@@ -133,6 +133,11 @@ impl VoteRange {
             vec![a, b]
         }
     }
+
+    /// Get all votes in this range.
+    pub fn votes(&self) -> Vec<u64> {
+        (self.start..=self.end).collect()
+    }
 }
 
 impl fmt::Debug for VoteRange {
@@ -151,13 +156,6 @@ mod tests {
     use crate::command::Command;
     use crate::id::Rifl;
     use crate::protocol::common::table::{KeyClocks, SequentialKeyClocks};
-
-    impl VoteRange {
-        /// Get all votes in this range.
-        fn votes(&self) -> Vec<u64> {
-            (self.start..=self.end).collect()
-        }
-    }
 
     #[test]
     fn vote_range_compress() {

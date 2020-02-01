@@ -135,3 +135,121 @@ impl AtomicKeyClocks {
             .ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::id::Rifl;
+    use rand::Rng;
+    use std::collections::BTreeSet;
+    use std::iter::FromIterator;
+    use std::thread;
+
+    #[test]
+    fn atomic_clocks_test() {
+        let nthreads = 16;
+        let ops_number = 1_000_000;
+        let max_keys_per_command = 4;
+        let max_keys = 1024;
+        test(nthreads, ops_number, max_keys_per_command, max_keys);
+    }
+
+    fn test(
+        nthreads: usize,
+        ops_number: usize,
+        max_keys_per_command: usize,
+        max_keys: usize,
+    ) {
+        // create clocks
+        let process_id = 1;
+        let clocks = AtomicKeyClocks::new(process_id);
+
+        // spawn workers
+        let handles: Vec<_> = (0..nthreads)
+            .map(|_| {
+                let clocks_clone = clocks.clone();
+                thread::spawn(move || {
+                    worker(
+                        clocks_clone,
+                        ops_number,
+                        max_keys_per_command,
+                        max_keys,
+                    )
+                })
+            })
+            .collect();
+
+        // wait for all workers and aggregate their votes
+        let mut all_votes = Votes::new(None);
+        for handle in handles {
+            let votes = handle.join().expect("worker should finish");
+            all_votes.merge(votes);
+        }
+
+        // verify votes
+        for (_, key_votes) in all_votes {
+            // create set will all votes expanded
+            let mut expanded = BTreeSet::new();
+            for vote_range in key_votes {
+                for vote in vote_range.votes() {
+                    // insert vote and check it hasn't been added before
+                    expanded.insert(vote);
+                }
+            }
+
+            // check that we have all votes (i.e. we don't have gaps that would
+            // prevent timestamp-stability)
+            let vote_count = expanded.len();
+            // we should have all votes from 1 to `vote_cound`
+            assert_eq!(
+                expanded,
+                BTreeSet::from_iter((1..=vote_count).map(|vote| vote as u64))
+            );
+        }
+    }
+
+    fn worker(
+        mut clocks: AtomicKeyClocks,
+        ops_number: usize,
+        max_keys_per_command: usize,
+        max_keys: usize,
+    ) -> Votes {
+        // all votes worker has generated
+        let mut all_votes = Votes::new(None);
+
+        // highest clock seen
+        let mut highest = 0;
+
+        for _ in 0..ops_number {
+            let cmd = gen_cmd(max_keys_per_command, max_keys);
+            // get votes
+            let (new_highest, votes) = clocks.bump_and_vote(&cmd, highest);
+            // update highest
+            highest = new_highest;
+            // save votes
+            all_votes.merge(votes);
+        }
+
+        all_votes
+    }
+
+    fn gen_cmd(max_keys_per_command: usize, max_keys: usize) -> Command {
+        // get random
+        let mut rng = rand::thread_rng();
+        // select keys per command
+        let key_number = rng.gen_range(1, max_keys_per_command + 1);
+        // generate command data
+        let cmd_data: Vec<_> = (0..key_number)
+            .map(|_| {
+                // select random key
+                let key = format!("{}", rng.gen_range(0, max_keys));
+                let value = String::from("");
+                (key, value)
+            })
+            .collect();
+        // create fake rifl
+        let rifl = Rifl::new(0, 0);
+        // create multi put command
+        Command::multi_put(rifl, cmd_data)
+    }
+}
