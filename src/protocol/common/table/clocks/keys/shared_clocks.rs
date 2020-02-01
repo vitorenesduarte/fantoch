@@ -18,8 +18,8 @@ where
         Self { clocks }
     }
 
-    // Tries to retrive the current value one `key`. If there's no associated
-    // value, an entry will be created.
+    // Tries to retrieve the current value associated with `key`. If there's no
+    // associated value, an entry will be created.
     pub fn get(&self, key: &Key) -> Ref<Key, V> {
         match self.clocks.get(key) {
             Some(value) => value,
@@ -35,7 +35,7 @@ where
         // - maybe another thread tried to `maybe_insert` and was able to insert
         //   before us
         // - replacing the following line with what follows should make the
-        //   tests as blindly inserting would mean we could lose updates
+        //   tests fail (blindly inserting means that we could lose updates)
         // `self.clocks.insert(key.clone(), V::default());`
         self.clocks.entry(key.clone()).or_default();
     }

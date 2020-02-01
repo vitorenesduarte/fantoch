@@ -51,7 +51,8 @@ impl KeyClocks for AtomicKeyClocks {
         let mut votes = Votes::new(Some(cmd));
 
         // second round of votes:
-        // - vote on the keys that have a clock lower than the compute `highest`
+        // - vote on the keys that have a clock lower than the computed
+        //   `highest`
         first_round_votes.into_iter().for_each(|(key, first_vr)| {
             // check if we should vote more
             if first_vr.end() < highest {
@@ -59,6 +60,9 @@ impl KeyClocks for AtomicKeyClocks {
                 // - we really mean try because maybe votes by other threads
                 //   have been generated and it's no longer possible to generate
                 //   votes below `highest`
+                // - this means that this second round is actually optional is
+                //   it's only here for performance reasons (i.e. reduce
+                //   execution delay)
                 if let Some(previous_value) = self.maybe_bump(&key, highest) {
                     // compute vote start and vote end
                     let vote_start = previous_value + 1;

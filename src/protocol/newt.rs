@@ -263,7 +263,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 info.votes.merge(local_votes);
             }
             None => {
-                panic!("nthere should be a command payload in the MCollectAck handler");
+                panic!("there should be a command payload in the MCollectAck handler");
             }
         }
 
@@ -371,7 +371,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 ExecutionInfo::votes(dot, cmd, info.clock, votes);
             self.to_executor.push(execution_info);
         } else {
-            // TODO if noOp, we should add `Votes` to all table
+            // TODO if noOp, we should add `Votes` to all tables
             panic!("noOp votes should be broadcast to all executors");
         }
 
