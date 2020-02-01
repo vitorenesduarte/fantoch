@@ -91,9 +91,10 @@ impl Workload {
     /// Generate a command key based on the conflict rate provided.
     fn gen_cmd_key(&mut self, rifl_gen: &RiflGen) -> Key {
         // check if we should generate a conflict:
-        let should_conflict = match rand::thread_rng().gen_range(0, 100) {
+        let should_conflict = match self.conflict_rate {
             0 => false,
-            n => n < self.conflict_rate,
+            100 => true,
+            c => c < rand::thread_rng().gen_range(0, 100),
         };
         if should_conflict {
             // black color to generate a conflict
@@ -149,16 +150,16 @@ mod tests {
         let mut rifl_gen = RiflGen::new(client_id);
 
         // total commands
-        let total_commands = 10;
-        let payload_size = 100;
+        let total_commands = 10000;
+        let payload_size = 10;
 
         // create workload
         let conflict_rate = 100;
         let mut workload =
             Workload::new(conflict_rate, total_commands, payload_size);
 
-        // the first 10 commands are `Some`
-        for _ in 1..=10 {
+        // the first `total_commands` commands are `Some`
+        for _ in 1..=total_commands {
             if let Some(cmd) = workload.next_cmd(&mut rifl_gen) {
                 let (key, value) = cmd.into_iter().next().unwrap();
                 // since the conflict is 100, the key should be BLACK
