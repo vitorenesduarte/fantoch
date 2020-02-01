@@ -1,4 +1,4 @@
-use super::SharedClocks;
+use super::shared_clocks::SharedClocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;

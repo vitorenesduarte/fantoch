@@ -1,6 +1,9 @@
 // This module contains the definition of `SequentialKeyClocks`.
 mod sequential;
 
+// This module contains the definition of `SharedClocks`.
+mod shared_clocks;
+
 // This module contains the definition of `AtomicKeyClocks`.
 mod atomic;
 
@@ -10,12 +13,7 @@ pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
 use crate::id::ProcessId;
-use crate::kvs::Key;
 use crate::protocol::common::table::Votes;
-use dashmap::mapref::one::Ref;
-use dashmap::DashMap;
-use parking_lot::Mutex;
-use std::sync::Arc;
 
 pub trait KeyClocks: Clone {
     /// Create a new `KeyClocks` instance given the local process identifier.
@@ -30,49 +28,6 @@ pub trait KeyClocks: Clone {
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes;
 
     fn parallel() -> bool;
-}
-
-#[derive(Clone)]
-struct SharedClocks<V> {
-    insert_lock: Arc<Mutex<()>>,
-    clocks: DashMap<Key, V>,
-}
-
-impl<V> SharedClocks<V>
-where
-    V: Default,
-{
-    // Function to be used by the implementors of `KeyClocks` to create their
-    // clocks.
-    fn new() -> Self {
-        // create insert lock
-        let insert_lock = Arc::new(Mutex::new(()));
-        // create clocks
-        let clocks = DashMap::new();
-        Self {
-            insert_lock,
-            clocks,
-        }
-    }
-
-    fn get(&self, key: &Key) -> Ref<Key, V> {
-        match self.clocks.get(key) {
-            Some(value) => value,
-            None => {
-                self.maybe_insert(key);
-                self.get(key)
-            }
-        }
-    }
-
-    fn maybe_insert(&self, key: &Key) {
-        // acquire the write lock
-        let _lock = self.insert_lock.lock();
-        // insert entry if it doesn't yet exist:
-        // - maybe another thread tried to `maybe_insert` and was able to insert
-        //   before us
-        self.clocks.entry(key.clone()).or_default();
-    }
 }
 
 #[cfg(test)]
