@@ -14,9 +14,6 @@ pub struct Config {
     workers: usize,
     /// defines the number of `Executor` workers
     executors: usize,
-    /// defines a n-th power of base 2; this number will be the number key
-    /// buckets in `KeyClocks`
-    key_buckets_power: usize,
 }
 
 impl Config {
@@ -36,7 +33,6 @@ impl Config {
         // `Executor`
         let workers = 1;
         let executors = 1;
-        let key_buckets_power = 16; // this gives 2^16 = 65536 buckets (memory size of 512KB)
         Self {
             n,
             f,
@@ -44,7 +40,6 @@ impl Config {
             transitive_conflicts,
             workers,
             executors,
-            key_buckets_power,
         }
     }
 
