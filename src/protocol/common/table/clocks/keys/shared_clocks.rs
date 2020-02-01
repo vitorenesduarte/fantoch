@@ -34,6 +34,9 @@ where
         // insert entry only if it doesn't yet exist:
         // - maybe another thread tried to `maybe_insert` and was able to insert
         //   before us
+        // - replacing the following line with what follows should make the
+        //   tests as blindly inserting would mean we could lose updates
+        // `self.clocks.insert(key.clone(), V::default());`
         self.clocks.entry(key.clone()).or_default();
     }
 }

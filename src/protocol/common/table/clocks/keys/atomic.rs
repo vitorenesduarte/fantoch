@@ -140,6 +140,7 @@ impl AtomicKeyClocks {
 mod tests {
     use super::*;
     use crate::id::Rifl;
+    use quickcheck::TestResult;
     use quickcheck_macros::quickcheck;
     use rand::Rng;
     use std::collections::BTreeSet;
@@ -148,11 +149,13 @@ mod tests {
 
     #[test]
     fn atomic_clocks_test() {
-        let nthreads = 8;
-        let ops_number = 10_000;
+        let nthreads = 4;
+        let ops_number = 1000;
         let max_keys_per_command = 4;
-        let max_keys = 32;
-        test(nthreads, ops_number, max_keys_per_command, max_keys);
+        let max_keys = 16;
+        for _ in 0..200 {
+            test(nthreads, ops_number, max_keys_per_command, max_keys);
+        }
     }
 
     #[quickcheck]
@@ -161,8 +164,16 @@ mod tests {
         ops_numbers: usize,
         max_keys_per_command: usize,
         max_keys: usize,
-    ) -> bool {
-        test(nthreads, ops_numbers, max_keys, max_keys_per_command)
+    ) -> TestResult {
+        if max_keys_per_command == 0 || max_keys == 0 {
+            return TestResult::discard();
+        }
+        TestResult::from_bool(test(
+            nthreads,
+            ops_numbers,
+            max_keys,
+            max_keys_per_command,
+        ))
     }
 
     fn test(
