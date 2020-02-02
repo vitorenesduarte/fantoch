@@ -2,7 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::pending::Pending;
 use crate::executor::table::MultiVotesTable;
-use crate::executor::{Executor, ExecutorResult, MessageKey};
+use crate::executor::{
+    ExecutionInfoSplit, Executor, ExecutorResult, MessageKey,
+};
 use crate::id::{Dot, Rifl};
 use crate::kvs::{KVStore, Key};
 use crate::protocol::common::table::Votes;
@@ -107,6 +109,12 @@ impl TableExecutionInfo {
 
     pub fn phantom_votes(votes: Votes) -> Self {
         TableExecutionInfo::PhantomVotes { votes }
+    }
+}
+
+impl ExecutionInfoSplit for TableExecutionInfo {
+    fn split(self) -> Vec<Self> {
+        vec![]
     }
 }
 

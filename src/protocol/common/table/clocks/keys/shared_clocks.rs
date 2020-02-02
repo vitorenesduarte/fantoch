@@ -37,8 +37,8 @@ where
         // - replacing this function with what follows should make the tests
         //   fail (blindly inserting means that we could lose updates)
         // `self.clocks.insert(key.clone(), V::default());`
-        // - `Entry::or_*` methods should ensure that we don't lose any updates.
-        //   See: https://github.com/xacrimon/dashmap/issues/47
+        // - `Entry::or_*` methods from `dashmap` ensure that we don't lose any
+        //   updates. See: https://github.com/xacrimon/dashmap/issues/47
         self.clocks.entry(key.clone()).or_default();
     }
 }

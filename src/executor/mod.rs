@@ -24,7 +24,7 @@ use crate::kvs::{KVOpResult, Key};
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Clone + Debug + Send + MessageKey;
+    type ExecutionInfo: Clone + Debug + Send + ExecutionInfoSplit + MessageKey;
 
     fn new(config: Config) -> Self;
 
@@ -43,10 +43,16 @@ pub trait Executor {
     }
 }
 
+pub trait ExecutionInfoSplit: Sized {
+    fn split(self) -> Vec<Self> {
+        panic!("called `ExecutionInfoSplit::split` on a `ExecutionInfo` from a non-parallel `Executor`")
+    }
+}
+
 pub trait MessageKey {
-    /// If `None` is returned, then the message is sent to all executor
-    /// processes. In particular, if the executor is not parallel, the
-    /// message is sent to the single executor process.
+    /// If `None` is returned, then the message is sent the *single* executor
+    /// process. If there's more than one executor, and this function
+    /// returns `None`, the runtime will panic.
     fn key(&self) -> Option<&Key> {
         None
     }

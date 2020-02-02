@@ -1,4 +1,4 @@
-use crate::command::{Command};
+use crate::command::Command;
 use crate::executor::ExecutorResult;
 use crate::id::Rifl;
 use crate::kvs::{KVOpResult, Key};
