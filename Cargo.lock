@@ -924,9 +924,9 @@ dependencies = [
 
 [[package]]
 name = "threshold"
-version = "0.6.6"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb1a01f6272abf527c7737df8420813c6a6c065f676ba0a0b1b8d749d8147e67"
+checksum = "23ddfb82b4ca54bc4d212a8bc8fee2ab3bb766d258360d7e79d3b213d4f04f50"
 dependencies = [
  "serde",
 ]
