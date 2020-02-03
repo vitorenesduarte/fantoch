@@ -33,7 +33,6 @@ pub trait Executor {
     // Parallel executors may receive several waits for the same `Rifl`.
     fn wait_for_rifl(&mut self, rifl: Rifl);
 
-    // TODO we can return an iterator here
     #[must_use]
     fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 
