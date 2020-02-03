@@ -140,11 +140,13 @@ impl<KC: KeyClocks> EPaxos<KC> {
         let cmd = Some(cmd);
 
         // compute its clock
-        // - similarly to Atlas, here we shouldn't save the command in
-        //   `keys_clocks`; if we do, it will be declared as a dependency of
+        // - similarly to Atlas, here we don't save the command in
+        //   `keys_clocks`; if we did, it would be declared as a dependency of
         //   itself when this message is handled by its own coordinator, which
-        //   prevents fast paths with f > 1
-        let clock = self.keys_clocks.clock(&cmd);
+        //   prevents fast paths with f > 1; in fact we do, but since the
+        //   coordinator does not recompute this value in the MCollect handler,
+        //   it's effectively the same
+        let clock = self.keys_clocks.add(dot, &cmd, None);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -188,16 +190,16 @@ impl<KC: KeyClocks> EPaxos<KC> {
             return None;
         }
 
-        // optimization: compute clock if not from self
-        let clock = if from == self.bp.process_id {
+        // check if it's a message from self
+        let message_from_self = from == self.bp.process_id;
+
+        let clock = if message_from_self {
+            // if it is, do not recompute clock
             remote_clock
         } else {
-            self.keys_clocks.clock_with_past(&cmd, remote_clock)
+            // otherwise, compute clock with the remote clock as past
+            self.keys_clocks.add(dot, &cmd, Some(remote_clock))
         };
-
-        // save command in order to be declared as a conflict for following
-        // commands
-        self.keys_clocks.add(dot, &cmd);
 
         // update command info
         info.status = Status::COLLECT;

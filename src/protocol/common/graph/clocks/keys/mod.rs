@@ -12,17 +12,18 @@ pub trait KeyClocks: Clone {
     /// Create a new `KeyClocks` instance given the number of processes.
     fn new(n: usize) -> Self;
 
-    /// Adds a command's `Dot` to the clock of each key touched by the command.
-    fn add(&mut self, dot: Dot, cmd: &Option<Command>);
-
-    /// Votes up to `clock` and returns the consumed votes.
-    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId>;
-
-    fn clock_with_past(
-        &self,
+    /// Adds a command's `Dot` to the clock of each key touched by the command,
+    /// returning the set of local conflicting commands.
+    fn add(
+        &mut self,
+        dot: Dot,
         cmd: &Option<Command>,
-        past: VClock<ProcessId>,
+        past: Option<VClock<ProcessId>>,
     ) -> VClock<ProcessId>;
+
+    /// Checks the current `clock` for some command.
+    /// Atlas and EPaxos implementation don't actually use this.
+    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId>;
 
     fn parallel() -> bool;
 }
@@ -31,7 +32,7 @@ pub trait KeyClocks: Clone {
 mod tests {
     use super::*;
     use crate::id::{DotGen, Rifl};
-use crate::util;
+    use crate::util;
 
     #[test]
     fn sequential_key_clocks() {
@@ -86,7 +87,7 @@ use crate::util;
         assert_eq!(conf, util::vclock(vec![0]));
 
         // add A with {1,1}
-        clocks.add(dot_gen.next_id(), &cmd_a);
+        clocks.add(dot_gen.next_id(), &cmd_a, None);
 
         // 1. conf with {1,1} for A
         // 2. empty conf for B
@@ -100,7 +101,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![1]));
 
         // add noop with {1,2}
-        clocks.add(dot_gen.next_id(), &noop);
+        clocks.add(dot_gen.next_id(), &noop, None);
 
         // conf with {1,2} for A, B, A-B, C and noop
         assert_eq!(clocks.clock(&cmd_a), util::vclock(vec![2]));
@@ -110,7 +111,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![2]));
 
         // add B with {1,3}
-        clocks.add(dot_gen.next_id(), &cmd_b);
+        clocks.add(dot_gen.next_id(), &cmd_b, None);
 
         // 1. conf with {1,2} for A
         // 2. conf with {1,3} for B
@@ -124,7 +125,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![3]));
 
         // add B with {1,4}
-        clocks.add(dot_gen.next_id(), &cmd_b);
+        clocks.add(dot_gen.next_id(), &cmd_b, None);
 
         // 1. conf with {1,2} for A
         // 2. conf with {1,4} for B
@@ -138,7 +139,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![4]));
 
         // add A-B with {1,5}
-        clocks.add(dot_gen.next_id(), &cmd_ab);
+        clocks.add(dot_gen.next_id(), &cmd_ab, None);
 
         // 1. conf with {1,5} for A
         // 2. conf with {1,5} for B
@@ -152,7 +153,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![5]));
 
         // add A with {1,6}
-        clocks.add(dot_gen.next_id(), &cmd_a);
+        clocks.add(dot_gen.next_id(), &cmd_a, None);
 
         // 1. conf with {1,6} for A
         // 2. conf with {1,5} for B
@@ -166,7 +167,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![6]));
 
         // add C with {1,7}
-        clocks.add(dot_gen.next_id(), &cmd_c);
+        clocks.add(dot_gen.next_id(), &cmd_c, None);
 
         // 1. conf with {1,6} for A
         // 2. conf with {1,5} for B
@@ -180,7 +181,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![7]));
 
         // add noop with {1,8}
-        clocks.add(dot_gen.next_id(), &noop);
+        clocks.add(dot_gen.next_id(), &noop, None);
 
         // conf with {1,8} for A, B, A-B, C and noop
         assert_eq!(clocks.clock(&cmd_a), util::vclock(vec![8]));
@@ -190,7 +191,7 @@ use crate::util;
         assert_eq!(clocks.clock(&noop), util::vclock(vec![8]));
 
         // add B with {1,9}
-        clocks.add(dot_gen.next_id(), &cmd_b);
+        clocks.add(dot_gen.next_id(), &cmd_b, None);
 
         // 1. conf with {1,8} for A
         // 2. conf with {1,9} for B

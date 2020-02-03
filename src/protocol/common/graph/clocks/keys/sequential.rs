@@ -24,6 +24,37 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     /// Adds a command's `Dot` to the clock of each key touched by the command.
+    fn add(
+        &mut self,
+        dot: Dot,
+        cmd: &Option<Command>,
+        past: Option<VClock<ProcessId>>,
+    ) -> VClock<ProcessId> {
+        // first compute clock
+        let clock = match past {
+            Some(past) => self.clock_with_past(cmd, past),
+            None => self.clock(cmd),
+        };
+        // then register this command
+        self.add(dot, cmd);
+        // and finally return the computed clock
+        clock
+    }
+
+    /// Computes a clock for some command representing the `Dot`s of all
+    /// conflicting commands observed.
+    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
+        let clock = Self::bottom_clock(self.n);
+        self.clock_with_past(cmd, clock)
+    }
+
+    fn parallel() -> bool {
+        false
+    }
+}
+
+impl SequentialKeyClocks {
+    /// Adds a command's `Dot` to the clock of each key touched by the command.
     fn add(&mut self, dot: Dot, cmd: &Option<Command>) {
         match cmd {
             Some(cmd) => {
@@ -48,13 +79,6 @@ impl KeyClocks for SequentialKeyClocks {
                 self.noop_clock.add(&dot.source(), dot.sequence());
             }
         }
-    }
-
-    /// Computes a clock for some command representing the `Dot`s of all
-    /// conflicting commands observed.
-    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let clock = Self::bottom_clock(self.n);
-        self.clock_with_past(cmd, clock)
     }
 
     /// Computes a clock for some command representing the `Dot`s of all
@@ -88,12 +112,6 @@ impl KeyClocks for SequentialKeyClocks {
         past
     }
 
-    fn parallel() -> bool {
-        false
-    }
-}
-
-impl SequentialKeyClocks {
     // Creates a bottom clock of size `n`.
     fn bottom_clock(n: usize) -> VClock<ProcessId> {
         let ids = util::process_ids(n);

@@ -187,11 +187,12 @@ impl<KC: KeyClocks> Newt<KC> {
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
 
-        // if it is, do not recompute clock and votes
         let (clock, process_votes) = if message_from_self {
+            // if it is, do not recompute clock and votes
             (remote_clock, Votes::new(None))
         } else {
-            // get command clock and votes consumed
+            // otherwise, compute clock considering the `remote_clock` as its
+            // minimum value
             let (clock, process_votes) =
                 self.key_clocks.bump_and_vote(&cmd, remote_clock);
             // check that there's one vote per key
