@@ -4,8 +4,8 @@ use crate::executor::pending::Pending;
 use crate::executor::table::MultiVotesTable;
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, Rifl};
-use crate::kvs::{KVStore, Key};
-use crate::protocol::common::table::{ProcessVotes, Votes};
+use crate::kvs::{KVOp, KVStore, Key};
+use crate::protocol::common::table::VoteRange;
 
 pub struct TableExecutor {
     table: MultiVotesTable,
@@ -42,35 +42,26 @@ impl Executor for TableExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
-        // handle each new info by updating the votes table
-        let to_execute = match info {
+        // handle each new info by updating the votes table and execute ready
+        // commands
+        match info {
             TableExecutionInfo::Votes {
                 dot,
-                cmd,
                 clock,
+                rifl,
+                key,
+                op,
                 votes,
-            } => self.table.add_votes(dot, cmd, clock, votes),
-            TableExecutionInfo::PhantomVotes { process_votes } => {
-                self.table.add_phantom_votes(process_votes)
+            } => {
+                let to_execute =
+                    self.table.add_votes(dot, clock, rifl, &key, op, votes);
+                self.execute(key, to_execute)
             }
-        };
-
-        // get new commands that are ready to be executed
-        let mut results = Vec::new();
-        for (key, ops) in to_execute {
-            for (rifl, op) in ops {
-                // execute op in the `KVStore`
-                let op_result = self.store.execute(&key, op);
-
-                // add partial result to `Pending`
-                if let Some(result) =
-                    self.pending.add_partial(rifl, || (key.clone(), op_result))
-                {
-                    results.push(result);
-                }
+            TableExecutionInfo::PhantomVotes { key, votes } => {
+                let to_execute = self.table.add_phantom_votes(&key, votes);
+                self.execute(key, to_execute)
             }
         }
-        results
     }
 
     fn parallel() -> bool {
@@ -82,36 +73,68 @@ impl Executor for TableExecutor {
     }
 }
 
+impl TableExecutor {
+    fn execute<I>(&mut self, key: Key, to_execute: I) -> Vec<ExecutorResult>
+    where
+        I: Iterator<Item = (Rifl, KVOp)>,
+    {
+        to_execute
+            .filter_map(|(rifl, op)| {
+                // execute op in the `KVStore`
+                let op_result = self.store.execute(&key, op);
+
+                // add partial result to `Pending`
+                self.pending.add_partial(rifl, || (key.clone(), op_result))
+            })
+            .collect()
+    }
+}
 #[derive(Debug, Clone)]
 pub enum TableExecutionInfo {
     Votes {
         dot: Dot,
-        cmd: Command,
         clock: u64,
-        votes: Votes,
+        rifl: Rifl,
+        key: Key,
+        op: KVOp,
+        votes: Vec<VoteRange>,
     },
     PhantomVotes {
-        process_votes: ProcessVotes,
+        key: Key,
+        votes: Vec<VoteRange>,
     },
 }
 
 impl TableExecutionInfo {
-    pub fn votes(dot: Dot, cmd: Command, clock: u64, votes: Votes) -> Self {
+    pub fn votes(
+        dot: Dot,
+        clock: u64,
+        rifl: Rifl,
+        key: Key,
+        op: KVOp,
+        votes: Vec<VoteRange>,
+    ) -> Self {
         TableExecutionInfo::Votes {
             dot,
-            cmd,
             clock,
+            rifl,
+            key,
+            op,
             votes,
         }
     }
 
-    pub fn phantom_votes(process_votes: ProcessVotes) -> Self {
-        TableExecutionInfo::PhantomVotes { process_votes }
+    pub fn phantom_votes(key: Key, votes: Vec<VoteRange>) -> Self {
+        TableExecutionInfo::PhantomVotes { key, votes }
     }
 }
 
 impl MessageKey for TableExecutionInfo {
     fn key(&self) -> Option<&Key> {
-        todo!()
+        let key = match self {
+            TableExecutionInfo::Votes { key, .. } => key,
+            TableExecutionInfo::PhantomVotes { key, .. } => key,
+        };
+        Some(&key)
     }
 }

@@ -2,11 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::{
-    graph::{KeyClocks, QuorumClocks},
-    info::{Commands, Info},
-    synod::{Synod, SynodMessage},
-};
+use crate::protocol::common::graph::{KeyClocks, QuorumClocks};
+use crate::protocol::common::info::{Commands, Info};
+use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::util;
 use crate::{log, singleton};
@@ -110,7 +108,7 @@ impl Protocol for Atlas {
     }
 
     fn parallel() -> bool {
-        true
+        false
     }
 
     fn show_metrics(&self) {
@@ -596,7 +594,9 @@ mod tests {
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // create client 1 that is connected to atlas 1
         let client_id = 1;

@@ -1,7 +1,10 @@
 use crate::command::Command;
 use crate::id::RiflGen;
-use crate::kvs::Key;
-use rand::Rng;
+use crate::kvs::{Key, Value};
+use rand::{distributions::Alphanumeric, Rng};
+use std::iter;
+
+const BLACK_COLOR: &str = "black";
 
 #[derive(Debug, Clone, Copy)]
 pub struct Workload {
@@ -9,18 +12,25 @@ pub struct Workload {
     conflict_rate: usize,
     /// number of commands to be submitted in this workload
     total_commands: usize,
+    /// size of payload in command (in bytes)
+    payload_size: usize,
     /// number of commands already issued in this workload
     command_count: usize,
 }
 
 impl Workload {
-    pub fn new(conflict_rate: usize, total_commands: usize) -> Self {
+    pub fn new(
+        conflict_rate: usize,
+        total_commands: usize,
+        payload_size: usize,
+    ) -> Self {
         // check conflict rate value
         assert!(conflict_rate <= 100);
 
         Self {
             conflict_rate,
             total_commands,
+            payload_size,
             command_count: 0,
         }
     }
@@ -28,7 +38,7 @@ impl Workload {
     /// Generate the next command.
     pub fn next_cmd(&mut self, rifl_gen: &mut RiflGen) -> Option<Command> {
         // check if we should generate more commands
-        let result = if self.command_count < self.total_commands {
+        if self.command_count < self.total_commands {
             if self.command_count % 1000 == 0 {
                 println!(
                     "client {:?}: {} of {}",
@@ -44,9 +54,7 @@ impl Workload {
             Some(self.gen_cmd(rifl_gen))
         } else {
             None
-        };
-
-        result
+        }
     }
 
     /// Returns the number of commands already issued.
@@ -72,7 +80,7 @@ impl Workload {
         let key = self.gen_cmd_key(&rifl_gen);
         // TODO: generate something with a given payload size if outside of
         // simulation
-        let value = String::from("");
+        let value = self.gen_cmd_value();
 
         // generate put command
         // TODO: make it configurable so that we can generate other commands
@@ -80,26 +88,37 @@ impl Workload {
         Command::put(rifl, key, value)
     }
 
-    /// Generate a command given
+    /// Generate a command key based on the conflict rate provided.
     fn gen_cmd_key(&mut self, rifl_gen: &RiflGen) -> Key {
-        // check if we should generate a conflict
-        let should_conflict = match rand::thread_rng().gen_range(0, 100) {
+        // check if we should generate a conflict:
+        let should_conflict = match self.conflict_rate {
             0 => false,
-            n => n < self.conflict_rate,
+            100 => true,
+            c => c < rand::thread_rng().gen_range(0, 100),
         };
         if should_conflict {
             // black color to generate a conflict
-            String::from("black")
+            BLACK_COLOR.to_owned()
         } else {
             // avoid conflict with unique client key
             rifl_gen.source().to_string()
         }
+    }
+
+    /// Generate a command payload with the payload size provided.
+    fn gen_cmd_value(&self) -> Value {
+        let mut rng = rand::thread_rng();
+        iter::repeat(())
+            .map(|()| rng.sample(Alphanumeric))
+            .take(self.payload_size)
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kvs::KVOp;
 
     #[test]
     fn gen_cmd_key() {
@@ -109,15 +128,18 @@ mod tests {
 
         // total commands
         let total_commands = 100;
+        let payload_size = 100;
 
         // create conflicting workload
         let conflict_rate = 100;
-        let mut workload = Workload::new(conflict_rate, total_commands);
-        assert_eq!(workload.gen_cmd_key(&rifl_gen), String::from("black"));
+        let mut workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
+        assert_eq!(workload.gen_cmd_key(&rifl_gen), BLACK_COLOR);
 
         // create non-conflicting workload
         let conflict_rate = 0;
-        let mut workload = Workload::new(conflict_rate, total_commands);
+        let mut workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
         assert_eq!(workload.gen_cmd_key(&rifl_gen), String::from("1"));
     }
 
@@ -128,15 +150,29 @@ mod tests {
         let mut rifl_gen = RiflGen::new(client_id);
 
         // total commands
-        let total_commands = 10;
+        let total_commands = 10000;
+        let payload_size = 10;
 
         // create workload
         let conflict_rate = 100;
-        let mut workload = Workload::new(conflict_rate, total_commands);
+        let mut workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
-        // the first 10 commands are `Some`
-        for _ in 1..=10 {
-            assert!(workload.next_cmd(&mut rifl_gen).is_some());
+        // the first `total_commands` commands are `Some`
+        for _ in 1..=total_commands {
+            if let Some(cmd) = workload.next_cmd(&mut rifl_gen) {
+                let (key, value) = cmd.into_iter().next().unwrap();
+                // since the conflict is 100, the key should be BLACK
+                assert_eq!(key, BLACK_COLOR);
+                // check that the value size is `payload_size`
+                if let KVOp::Put(payload) = value {
+                    assert_eq!(payload.len(), payload_size);
+                } else {
+                    panic!("workload should generate PUT commands");
+                }
+            } else {
+                panic!("there should be a next command in this workload");
+            }
         }
 
         // check the workload is finished

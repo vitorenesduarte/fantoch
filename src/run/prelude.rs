@@ -5,9 +5,9 @@ use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
 use crate::protocol::{MessageDot, Protocol};
+use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::hash::{Hash, Hasher};
 
 // common error type
 pub type RunResult<V> = Result<V, Box<dyn Error>>;
@@ -58,9 +58,9 @@ pub type ReaderToWorkers<P> =
     pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
 // The following allows e.g. (ProcessId, <P as Protocol>::Message) to be
 // `ToPool::forward`
-impl<A, B> pool::PoolIndex for (A, B)
+impl<A> pool::PoolIndex for (ProcessId, A)
 where
-    B: MessageDot,
+    A: MessageDot,
 {
     fn index(&self) -> Option<usize> {
         self.1.dot().map(|dot| dot_index(dot))
@@ -95,11 +95,7 @@ fn dot_index(dot: &Dot) -> usize {
     dot.sequence() as usize
 }
 
-type DefaultHasher = ahash::AHasher;
-
 // The index of a key is its hash
 fn key_index(key: &Key) -> usize {
-    let mut hasher = DefaultHasher::default();
-    key.hash(&mut hasher);
-    hasher.finish() as usize
+    util::key_hash(key) as usize
 }

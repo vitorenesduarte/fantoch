@@ -33,11 +33,11 @@ pub trait Executor {
     // Parallel executors may receive several waits for the same `Rifl`.
     fn wait_for_rifl(&mut self, rifl: Rifl);
 
+    // TODO we can return an iterator here
+    #[must_use]
     fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 
-    fn parallel() -> bool {
-        false
-    }
+    fn parallel() -> bool;
 
     fn show_metrics(&self) {
         // by default, nothing to show
@@ -45,9 +45,9 @@ pub trait Executor {
 }
 
 pub trait MessageKey {
-    /// If `None` is returned, then the message is sent to all executor
-    /// processes. In particular, if the executor is not parallel, the
-    /// message is sent to the single executor process.
+    /// If `None` is returned, then the message is sent the *single* executor
+    /// process. If there's more than one executor, and this function
+    /// returns `None`, the runtime will panic.
     fn key(&self) -> Option<&Key> {
         None
     }

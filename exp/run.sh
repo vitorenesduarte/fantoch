@@ -15,7 +15,7 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="basic"
+PROTOCOL="atomic_newt"
 PROCESSES=3
 FAULTS=1
 
@@ -28,6 +28,7 @@ MULTIPLEXING=2
 CLIENT_MACHINES_NUMBER=3
 CONFLICT_RATE=0
 COMMANDS_PER_CLIENT=50000
+PAYLOAD_SIZE=0
 
 # process tcp config
 PROCESS_TCP_NODELAY=true
@@ -361,6 +362,7 @@ start_client() {
         --address ${address} \
         --conflict_rate ${CONFLICT_RATE} \
         --commands_per_client ${COMMANDS_PER_CLIENT} \
+        --payload_size ${PAYLOAD_SIZE} \
         --tcp_nodelay ${CLIENT_TCP_NODELAY} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE}"
     # TODO for open-loop clients:
@@ -424,7 +426,6 @@ if [[ $1 == "stop" ]]; then
     stop_all
 else
     output_log=.run_log
-    # for clients_per_machine in 1 2 4 8 16 32 64 128 256 512; do
     for clients_per_machine in 16 32 64 128 256 512 1024; do
         echo "C=${clients_per_machine}" >>${output_log}
         stop_all

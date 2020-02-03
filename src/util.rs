@@ -1,6 +1,8 @@
 use crate::id::ProcessId;
+use crate::kvs::Key;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 #[macro_export]
 macro_rules! singleton {
@@ -36,6 +38,15 @@ macro_rules! elapsed {
         let time = start.elapsed();
         (time, result)
     }};
+}
+
+type DefaultHasher = ahash::AHasher;
+
+/// Compute the hash of a key.
+pub fn key_hash(key: &Key) -> u64 {
+    let mut hasher = DefaultHasher::default();
+    key.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Returns an iterator with all process identifiers in a system with `n`

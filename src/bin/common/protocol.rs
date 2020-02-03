@@ -166,7 +166,7 @@ pub fn parse_args() -> (
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
 
-    // set number of protocol workers and executors
+    // update config
     config.set_workers(workers);
     config.set_executors(executors);
 

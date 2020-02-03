@@ -2,21 +2,19 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, TableExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::{
-    info::{Commands, Info},
-    table::{
-        KeyClocks, ProcessVotes, QuorumClocks, SequentialKeyClocks, Votes,
-    },
+use crate::protocol::common::info::{Commands, Info};
+use crate::protocol::common::table::{
+    AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
 };
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::cmp;
 use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 use std::mem;
 
 pub type SequentialNewt = Newt<SequentialKeyClocks>;
+pub type AtomicNewt = Newt<AtomicKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
@@ -115,7 +113,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     }
 
     fn parallel() -> bool {
-        true
+        KC::parallel()
     }
 
     fn show_metrics(&self) {
@@ -133,8 +131,16 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // compute its clock
-        let clock = self.key_clocks.clock(&cmd) + 1;
+        // compute its clock:
+        // - this may also consume votes since we're bumping the clocks here
+        // - for that reason, we'll store these votes locally and not recompute
+        //   them once we receive the `MCollect` from self
+        let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
+
+        // get cmd info
+        let info = self.cmds.get(dot);
+        // bootstrap votes with initial consumed votes
+        info.votes = process_votes;
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -178,15 +184,20 @@ impl<KC: KeyClocks> Newt<KC> {
             return None;
         }
 
-        // TODO can we somehow combine the next 2 operations in order to save
-        // map lookups?
+        // check if it's a message from self
+        let message_from_self = from == self.bp.process_id;
 
-        // compute command clock
-        let clock = cmp::max(remote_clock, self.key_clocks.clock(&cmd) + 1);
-        // compute votes consumed by this command
-        let process_votes = self.key_clocks.process_votes(&cmd, clock);
-        // check that there's one vote per key
-        assert_eq!(process_votes.len(), cmd.key_count());
+        // if it is, do not recompute clock and votes
+        let (clock, process_votes) = if message_from_self {
+            (remote_clock, Votes::new(None))
+        } else {
+            // get command clock and votes consumed
+            let (clock, process_votes) =
+                self.key_clocks.bump_and_vote(&cmd, remote_clock);
+            // check that there's one vote per key
+            assert_eq!(process_votes.len(), cmd.key_count());
+            (clock, process_votes)
+        };
 
         // update command info
         info.status = Status::COLLECT;
@@ -215,7 +226,7 @@ impl<KC: KeyClocks> Newt<KC> {
         from: ProcessId,
         dot: Dot,
         clock: u64,
-        remote_votes: ProcessVotes,
+        remote_votes: Votes,
     ) -> Option<ToSend<Message>> {
         log!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {}",
@@ -235,7 +246,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // update votes with remote votes
-        info.votes.add(remote_votes);
+        info.votes.merge(remote_votes);
 
         // update quorum clocks while computing max clock and its number of
         // occurences
@@ -247,9 +258,9 @@ impl<KC: KeyClocks> Newt<KC> {
         //   that could potentially delay the execution of this command
         match info.cmd.as_ref() {
             Some(cmd) => {
-                let local_votes = self.key_clocks.process_votes(cmd, max_clock);
+                let local_votes = self.key_clocks.vote(cmd, max_clock);
                 // update votes with local votes
-                info.votes.add(local_votes);
+                info.votes.merge(local_votes);
             }
             None => {
                 panic!("there should be a command payload in the MCollectAck handler");
@@ -338,8 +349,7 @@ impl<KC: KeyClocks> Newt<KC> {
             if let Some(cmd) = info.cmd.as_ref() {
                 // if not a no op, check if we can generate more votes that can
                 // speed-up execution
-                let process_votes =
-                    self.key_clocks.process_votes(cmd, info.clock);
+                let process_votes = self.key_clocks.vote(cmd, info.clock);
 
                 // create `MPhantom` if there are new votes
                 if !process_votes.is_empty() {
@@ -355,14 +365,25 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // create execution info if not a noop
-        // TODO if noOp, should we add `Votes` to the table, or there will be no
-        // votes?
         if let Some(cmd) = info.cmd.clone() {
             // create execution info
-            let execution_info =
-                ExecutionInfo::votes(dot, cmd, info.clock, votes);
-            self.to_executor.push(execution_info);
+            let rifl = cmd.rifl();
+            let execution_info = cmd.into_iter().map(|(key, op)| {
+                // find votes on this key
+                let key_votes = votes
+                    .remove(&key)
+                    .expect("there should be votes on all command keys");
+                ExecutionInfo::votes(dot, info.clock, rifl, key, op, key_votes)
+            });
+            self.to_executor.extend(execution_info);
+        } else {
+            // TODO if noOp, we should add `Votes` to all tables
+            panic!("noOp votes should be broadcast to all executors");
         }
+
+        // TODO the following is incorrect: it should only be deleted once it
+        // has been committed at all processes
+        self.cmds.remove(dot);
 
         // return `ToSend`
         to_send
@@ -371,9 +392,9 @@ impl<KC: KeyClocks> Newt<KC> {
     fn handle_mphantom(
         &mut self,
         dot: Dot,
-        process_votes: ProcessVotes,
+        votes: Votes,
     ) -> Option<ToSend<Message>> {
-        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, process_votes);
+        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, votes);
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -381,11 +402,13 @@ impl<KC: KeyClocks> Newt<KC> {
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
             // create execution info
-            let execution_info = ExecutionInfo::phantom_votes(process_votes);
-            self.to_executor.push(execution_info);
+            let execution_info = votes.into_iter().map(|(key, key_votes)| {
+                ExecutionInfo::phantom_votes(key, key_votes)
+            });
+            self.to_executor.extend(execution_info);
         } else {
             // if not committed yet, update votes with remote votes
-            info.votes.add(process_votes);
+            info.votes.merge(votes);
         }
 
         // nothing to send
@@ -423,7 +446,7 @@ impl Info for CommandInfo {
             quorum: BTreeSet::new(),
             cmd: None,
             clock: 0,
-            votes: Votes::new(),
+            votes: Votes::new(None),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
@@ -441,7 +464,7 @@ pub enum Message {
     MCollectAck {
         dot: Dot,
         clock: u64,
-        process_votes: ProcessVotes,
+        process_votes: Votes,
     },
     MCommit {
         dot: Dot,
@@ -451,21 +474,20 @@ pub enum Message {
     },
     MPhantom {
         dot: Dot,
-        process_votes: ProcessVotes,
+        process_votes: Votes,
     },
 }
 
-impl MessageDot for Message {}
-// impl MessageDot for Message {
-//     fn dot(&self) -> Option<&Dot> {
-//         match self {
-//             Self::MCollect { dot, .. } => Some(dot),
-//             Self::MCollectAck { dot, .. } => Some(dot),
-//             Self::MCommit { dot, .. } => Some(dot),
-//             Self::MPhantom { dot, .. } => Some(dot),
-//         }
-//     }
-// }
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MCollect { dot, .. } => Some(dot),
+            Self::MCollectAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+            Self::MPhantom { dot, .. } => Some(dot),
+        }
+    }
+}
 
 /// `Status` of commands.
 #[derive(PartialEq, Clone)]
@@ -559,7 +581,9 @@ mod tests {
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // create client 1 that is connected to newt 1
         let client_id = 1;

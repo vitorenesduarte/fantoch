@@ -188,10 +188,10 @@ impl Basic {
         // - one entry per key being accessed will be created, which allows the
         //   basic executor to run in parallel
         let rifl = cmd.rifl();
-        self.to_executor.extend(
-            cmd.into_iter()
-                .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op)),
-        );
+        let execution_info = cmd
+            .into_iter()
+            .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
+        self.to_executor.extend(execution_info);
 
         // TODO the following is incorrect: it should only be deleted once it
         // has been committed at all processes
@@ -323,7 +323,9 @@ mod tests {
         // client workload
         let conflict_rate = 100;
         let total_commands = 10;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // create client 1 that is connected to basic 1
         let client_id = 1;

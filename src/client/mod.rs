@@ -123,7 +123,9 @@ mod tests {
     fn gen_client(total_commands: usize) -> Client {
         // workload
         let conflict_rate = 100;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // client
         let id = 1;

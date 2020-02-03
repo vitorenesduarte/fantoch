@@ -25,7 +25,7 @@ mod newt;
 pub use atlas::Atlas;
 pub use basic::Basic;
 pub use epaxos::EPaxos;
-pub use newt::SequentialNewt;
+pub use newt::{AtomicNewt, SequentialNewt};
 
 pub use base::BaseProcess;
 
@@ -73,9 +73,7 @@ pub trait Protocol: Clone {
         &mut self,
     ) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
 
-    fn parallel() -> bool {
-        false
-    }
+    fn parallel() -> bool;
 
     fn show_metrics(&self) {
         // by default, nothing to show

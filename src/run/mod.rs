@@ -76,6 +76,7 @@ pub mod task;
 use crate::client::{Client, Workload};
 use crate::command::CommandResult;
 use crate::config::Config;
+use crate::executor::Executor;
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::protocol::Protocol;
@@ -151,6 +152,22 @@ where
     A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
 {
+    // panic if protocol is not parallel and we have more than one worker
+    if config.workers() > 1 && !P::parallel() {
+        panic!(
+            "running non-parallel protocol with {} workers",
+            config.workers()
+        )
+    }
+
+    // panic if executor is not parallel and we have more than one executor
+    if config.executors() > 1 && !P::Executor::parallel() {
+        panic!(
+            "running non-parallel executor with {} executors",
+            config.executors()
+        )
+    }
+
     // discover processes
     process.discover(sorted_processes);
 
@@ -159,9 +176,6 @@ where
 
     // start process listener
     let listener = task::listen((ip, port)).await?;
-
-    // adjust number of workers depending on whether the protocol is parallel
-    // if process.parallel() {}
 
     // create forward channels: reader -> workers
     let (reader_to_workers, reader_to_workers_rxs) = ReaderToWorkers::<P>::new(
@@ -472,7 +486,8 @@ fn handle_cmd_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::Basic;
+    use crate::protocol::{AtomicNewt, Basic, SequentialNewt};
+    use rand::Rng;
     use tokio::task;
     use tokio::time::Duration;
 
@@ -496,10 +511,30 @@ mod tests {
 
     #[tokio::test]
     async fn run_basic_test() {
-        run_test::<Basic>().await
+        // basic is a parallel protocol with parallel execution
+        let workers = 2;
+        let executors = 3;
+        run_test::<Basic>(workers, executors).await
     }
 
-    async fn run_test<P>()
+    #[tokio::test]
+    async fn run_sequential_newt_test() {
+        // sequential newt can only handle one worker but many executors
+        let workers = 1;
+        let executors = 2;
+        run_test::<SequentialNewt>(workers, executors).await
+    }
+
+    #[tokio::test]
+    async fn run_atomic_newt_test() {
+        // atomic newt can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 3;
+        let executors = 1;
+        run_test::<AtomicNewt>(workers, executors).await
+    }
+
+    async fn run_test<P>(workers: usize, executors: usize)
     where
         P: Protocol + Send + 'static,
     {
@@ -509,7 +544,7 @@ mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<Basic>().await {
+                match run::<P>(workers, executors).await {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
@@ -517,7 +552,7 @@ mod tests {
             .await;
     }
 
-    async fn run<P>() -> RunResult<()>
+    async fn run<P>(workers: usize, executors: usize) -> RunResult<()>
     where
         P: Protocol + Send + 'static,
     {
@@ -541,13 +576,19 @@ mod tests {
         let tcp_buffer_size = 1024;
         let tcp_flush_interval = Some(100); // micros
         let channel_buffer_size = 10000;
-        let workers = 2;
-        let executors = 2;
-        let multiplexing = 3;
+        let multiplexing = 2;
 
         // set parallel protocol and executors in config
         config.set_workers(workers);
         config.set_executors(executors);
+
+        // get ports and client ports
+        let p1_port = get_available_port();
+        let p2_port = get_available_port();
+        let p3_port = get_available_port();
+        let p1_client_port = get_available_port();
+        let p2_client_port = get_available_port();
+        let p3_client_port = get_available_port();
 
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
@@ -555,11 +596,11 @@ mod tests {
             1,
             vec![1, 2, 3],
             localhost,
-            3001,
-            4001,
+            p1_port,
+            p1_client_port,
             vec![
-                String::from("localhost:3002"),
-                String::from("localhost:3003"),
+                format!("localhost:{}", p2_port),
+                format!("localhost:{}", p3_port),
             ],
             config,
             tcp_nodelay,
@@ -574,11 +615,11 @@ mod tests {
             2,
             vec![2, 3, 1],
             localhost,
-            3002,
-            4002,
+            p2_port,
+            p2_client_port,
             vec![
-                String::from("localhost:3001"),
-                String::from("localhost:3003"),
+                format!("localhost:{}", p1_port),
+                format!("localhost:{}", p3_port),
             ],
             config,
             tcp_nodelay,
@@ -593,11 +634,11 @@ mod tests {
             3,
             vec![3, 1, 2],
             localhost,
-            3003,
-            4003,
+            p3_port,
+            p3_client_port,
             vec![
-                String::from("localhost:3001"),
-                String::from("localhost:3002"),
+                format!("localhost:{}", p1_port),
+                format!("localhost:{}", p2_port),
             ],
             config,
             tcp_nodelay,
@@ -618,7 +659,9 @@ mod tests {
         // create workload
         let conflict_rate = 100;
         let total_commands = 100;
-        let workload = Workload::new(conflict_rate, total_commands);
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
         // clients:
         // - the first spawns 1 closed-loop client (1)
@@ -626,14 +669,14 @@ mod tests {
         // - the third spawns 1 open-loop client (3)
         let client_1_handle = task::spawn_local(closed_loop_client(
             1,
-            String::from("localhost:4001"),
+            format!("localhost:{}", p1_client_port),
             workload,
             tcp_nodelay,
             channel_buffer_size,
         ));
         let client_2_handle = task::spawn_local(client(
             vec![2, 22, 222],
-            String::from("localhost:4002"),
+            format!("localhost:{}", p2_client_port),
             None,
             workload,
             tcp_nodelay,
@@ -641,7 +684,7 @@ mod tests {
         ));
         let client_3_handle = task::spawn_local(open_loop_client(
             3,
-            String::from("localhost:4003"),
+            format!("localhost:{}", p3_client_port),
             100, // 100ms interval between ops
             workload,
             tcp_nodelay,
@@ -653,5 +696,22 @@ mod tests {
         let _ = client_2_handle.await.expect("client 2 should finish");
         let _ = client_3_handle.await.expect("client 3 should finish");
         Ok(())
+    }
+
+    // adapted from: https://github.com/rust-lang-nursery/rust-cookbook/issues/500
+    fn get_available_port() -> u16 {
+        loop {
+            let port = rand::thread_rng().gen_range(1025, 65535);
+            if port_is_available(port) {
+                return port;
+            }
+        }
+    }
+
+    fn port_is_available(port: u16) -> bool {
+        match std::net::TcpListener::bind(("127.0.0.1", port)) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
