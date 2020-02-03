@@ -381,6 +381,10 @@ impl<KC: KeyClocks> Newt<KC> {
             panic!("noOp votes should be broadcast to all executors");
         }
 
+        // TODO the following is incorrect: it should only be deleted once it
+        // has been committed at all processes
+        self.cmds.remove(dot);
+
         // return `ToSend`
         to_send
     }
