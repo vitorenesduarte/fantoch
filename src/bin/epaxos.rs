@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{EPaxos, Protocol};
+use planet_sim::protocol::{SequentialEPaxos, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         channel_buffer_size,
         multiplexing,
     ) = common::protocol::parse_args();
-    let process = EPaxos::new(process_id, config);
+    let process = SequentialEPaxos::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
         process,

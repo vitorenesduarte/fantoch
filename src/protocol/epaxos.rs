@@ -2,7 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::graph::{KeyClocks, QuorumClocks};
+use crate::protocol::common::graph::{
+    KeyClocks, QuorumClocks, SequentialKeyClocks,
+};
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
@@ -14,17 +16,19 @@ use std::iter::FromIterator;
 use std::mem;
 use threshold::VClock;
 
+pub type SequentialEPaxos = EPaxos<SequentialKeyClocks>;
+
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Clone)]
-pub struct EPaxos {
+pub struct EPaxos<KC> {
     bp: BaseProcess,
-    keys_clocks: KeyClocks,
+    keys_clocks: KC,
     cmds: Commands<CommandInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Protocol for EPaxos {
+impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     type Message = Message;
     type Executor = GraphExecutor;
 
@@ -41,7 +45,7 @@ impl Protocol for EPaxos {
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KeyClocks::new(config.n());
+        let keys_clocks = KC::new(config.n());
         let f = Self::allowed_faults(config.n());
         let cmds = Commands::new(process_id, config.n(), f, fast_quorum_size);
         let to_executor = Vec::new();
@@ -117,7 +121,7 @@ impl Protocol for EPaxos {
     }
 }
 
-impl EPaxos {
+impl<KC: KeyClocks> EPaxos<KC> {
     /// EPaxos always tolerates a minority of faults.
     pub fn allowed_faults(n: usize) -> usize {
         n / 2
@@ -577,9 +581,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(config);
 
         // epaxos
-        let mut epaxos_1 = EPaxos::new(process_id_1, config);
-        let mut epaxos_2 = EPaxos::new(process_id_2, config);
-        let mut epaxos_3 = EPaxos::new(process_id_3, config);
+        let mut epaxos_1 = SequentialEPaxos::new(process_id_1, config);
+        let mut epaxos_2 = SequentialEPaxos::new(process_id_2, config);
+        let mut epaxos_3 = SequentialEPaxos::new(process_id_3, config);
 
         // discover processes in all epaxos
         let sorted = util::sort_processes_by_distance(

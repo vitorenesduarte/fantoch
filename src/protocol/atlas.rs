@@ -2,7 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::graph::{KeyClocks, QuorumClocks};
+use crate::protocol::common::graph::{
+    KeyClocks, QuorumClocks, SequentialKeyClocks,
+};
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
@@ -14,17 +16,19 @@ use std::iter::FromIterator;
 use std::mem;
 use threshold::VClock;
 
+pub type SequentialAtlas = Atlas<SequentialKeyClocks>;
+
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Clone)]
-pub struct Atlas {
+pub struct Atlas<KC> {
     bp: BaseProcess,
-    keys_clocks: KeyClocks,
+    keys_clocks: KC,
     cmds: Commands<CommandInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Protocol for Atlas {
+impl<KC: KeyClocks> Protocol for Atlas<KC> {
     type Message = Message;
     type Executor = GraphExecutor;
 
@@ -40,7 +44,7 @@ impl Protocol for Atlas {
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KeyClocks::new(config.n());
+        let keys_clocks = KC::new(config.n());
         let cmds =
             Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
@@ -116,7 +120,7 @@ impl Protocol for Atlas {
     }
 }
 
-impl Atlas {
+impl<KC: KeyClocks> Atlas<KC> {
     /// Handles a submit operation by a client.
     fn handle_submit(
         &mut self,
@@ -562,9 +566,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(config);
 
         // atlas
-        let mut atlas_1 = Atlas::new(process_id_1, config);
-        let mut atlas_2 = Atlas::new(process_id_2, config);
-        let mut atlas_3 = Atlas::new(process_id_3, config);
+        let mut atlas_1 = SequentialAtlas::new(process_id_1, config);
+        let mut atlas_2 = SequentialAtlas::new(process_id_2, config);
+        let mut atlas_3 = SequentialAtlas::new(process_id_3, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(
