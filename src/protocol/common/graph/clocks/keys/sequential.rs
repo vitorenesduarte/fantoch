@@ -23,7 +23,9 @@ impl KeyClocks for SequentialKeyClocks {
         }
     }
 
-    /// Adds a command's `Dot` to the clock of each key touched by the command.
+    /// Adds a command's `Dot` to the clock of each key touched by the command,
+    /// returning the set of local conflicting commands including past in them
+    /// in case there's a past.
     fn add(
         &mut self,
         dot: Dot,
@@ -41,8 +43,7 @@ impl KeyClocks for SequentialKeyClocks {
         clock
     }
 
-    /// Computes a clock for some command representing the `Dot`s of all
-    /// conflicting commands observed.
+    /// Checks the current `clock` for some command.
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
         let clock = Self::bottom_clock(self.n);
         self.clock_with_past(cmd, clock)

@@ -13,7 +13,8 @@ pub trait KeyClocks: Clone {
     fn new(n: usize) -> Self;
 
     /// Adds a command's `Dot` to the clock of each key touched by the command,
-    /// returning the set of local conflicting commands.
+    /// returning the set of local conflicting commands including past in them
+    /// in case there's a past.
     fn add(
         &mut self,
         dot: Dot,
