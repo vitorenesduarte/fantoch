@@ -527,6 +527,7 @@ mod tests {
     use crate::sim::Simulation;
     use crate::time::SimTime;
 
+    #[test]
     fn sequential_atlas_test() {
         atlas_flow::<SequentialKeyClocks>()
     }
