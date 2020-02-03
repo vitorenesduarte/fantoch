@@ -144,8 +144,6 @@ impl AtomicKeyClocks {
 mod tests {
     use super::*;
     use crate::id::Rifl;
-    use quickcheck::TestResult;
-    use quickcheck_macros::quickcheck;
     use rand::Rng;
     use std::collections::BTreeSet;
     use std::iter::FromIterator;
@@ -153,31 +151,16 @@ mod tests {
 
     #[test]
     fn atomic_clocks_test() {
-        let nthreads = 4;
+        let min_nthreads = 2;
+        let max_nthreads = 8;
         let ops_number = 1000;
         let max_keys_per_command = 4;
         let max_keys = 16;
-        for _ in 0..100 {
+        for _ in 0..200 {
+            let nthreads =
+                rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
             test(nthreads, ops_number, max_keys_per_command, max_keys);
         }
-    }
-
-    #[quickcheck]
-    fn atomic_clocks_prop_test(
-        nthreads: usize,
-        ops_numbers: usize,
-        max_keys_per_command: usize,
-        max_keys: usize,
-    ) -> TestResult {
-        if max_keys_per_command == 0 || max_keys == 0 {
-            return TestResult::discard();
-        }
-        TestResult::from_bool(test(
-            nthreads,
-            ops_numbers,
-            max_keys,
-            max_keys_per_command,
-        ))
     }
 
     fn test(
@@ -185,7 +168,7 @@ mod tests {
         ops_number: usize,
         max_keys_per_command: usize,
         max_keys: usize,
-    ) -> bool {
+    ) {
         // create clocks
         let process_id = 1;
         let clocks = AtomicKeyClocks::new(process_id);
@@ -232,9 +215,6 @@ mod tests {
                 BTreeSet::from_iter((1..=vote_count).map(|vote| vote as u64))
             );
         }
-        // too lazy to get an actual boolean that represents the run, so we'll
-        // just panic in case we would return false
-        true
     }
 
     fn worker(
