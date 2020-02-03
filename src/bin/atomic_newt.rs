@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{Protocol, AtomicNewt};
+use planet_sim::protocol::{AtomicNewt, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

@@ -50,7 +50,7 @@ impl MultiVotesTable {
         key: &Key,
         op: KVOp,
         votes: Vec<VoteRange>,
-    ) -> Vec<(Rifl, KVOp)> {
+    ) -> impl Iterator<Item = (Rifl, KVOp)> {
         // add ops and votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
         let (duration, result) =
@@ -66,7 +66,7 @@ impl MultiVotesTable {
         &mut self,
         key: &Key,
         votes: Vec<VoteRange>,
-    ) -> Vec<(Rifl, KVOp)> {
+    ) -> impl Iterator<Item = (Rifl, KVOp)> {
         let (duration, result) = elapsed!(self.add_votes_and_find(key, votes));
         self.metrics
             .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
@@ -82,10 +82,11 @@ impl MultiVotesTable {
         key: &Key,
         op: KVOp,
         votes: Vec<VoteRange>,
-    ) -> Vec<(Rifl, KVOp)> {
+    ) -> impl Iterator<Item = (Rifl, KVOp)> {
         self.update_table(key, |table| {
             // add op and votes to the table
-            table.add(dot, clock, rifl, op, votes)
+            table.add(dot, clock, rifl, op, votes);
+            table.stable_ops()
         })
     }
 
@@ -94,18 +95,20 @@ impl MultiVotesTable {
         &mut self,
         key: &Key,
         votes: Vec<VoteRange>,
-    ) -> Vec<(Rifl, KVOp)> {
+    ) -> impl Iterator<Item = (Rifl, KVOp)> {
         self.update_table(key, |table| {
             // add ranges to table
-            table.add_votes(votes)
+            table.add_votes(votes);
+            table.stable_ops()
         })
     }
 
     // Generic function to be used when updating some votes table.
     #[must_use]
-    fn update_table<F>(&mut self, key: &Key, update: F) -> Vec<(Rifl, KVOp)>
+    fn update_table<F, I>(&mut self, key: &Key, update: F) -> I
     where
-        F: FnOnce(&mut VotesTable),
+        F: FnOnce(&mut VotesTable) -> I,
+        I: Iterator<Item = (Rifl, KVOp)>,
     {
         let table = match self.tables.get_mut(key) {
             Some(table) => table,
@@ -115,9 +118,8 @@ impl MultiVotesTable {
                 self.tables.entry(key.clone()).or_insert(table)
             }
         };
-        // update table and get new ops to be executed
-        update(table);
-        table.stable_ops()
+        // update table
+        update(table)
     }
 }
 
@@ -194,7 +196,7 @@ impl VotesTable {
         });
     }
 
-    fn stable_ops(&mut self) -> Vec<(Rifl, KVOp)> {
+    fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
         // compute *next* stable sort id:
         // - if clock 10 is stable, then we can execute all ops with an id
         //   smaller than `(11,0)`
@@ -223,10 +225,7 @@ impl VotesTable {
         };
 
         // return stable ops
-        stable
-            .into_iter()
-            .map(|(_, id_and_action)| id_and_action)
-            .collect()
+        stable.into_iter().map(|(_, id_and_action)| id_and_action)
     }
 
     // Computes the (potentially) new stable clock in this table.
@@ -329,31 +328,31 @@ mod tests {
         // add a1 to table
         table.add(a1_dot, a1_clock, a1_rifl, a1.clone(), a1_votes.clone());
         // get stable: a1
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(a1_rifl, a1.clone())]);
 
         // add d1 to table
         table.add(d1_dot, d1_clock, d1_rifl, d1.clone(), d1_votes.clone());
         // get stable: none
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // add c1 to table
         table.add(c1_dot, c1_clock, c1_rifl, c1.clone(), c1_votes.clone());
         // get stable: c1 then d1
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(c1_rifl, c1.clone()), (d1_rifl, d1.clone())]);
 
         // add e2 to table
         table.add(e2_dot, e2_clock, e2_rifl, e2.clone(), e2_votes.clone());
         // get stable: none
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // add e1 to table
         table.add(e1_dot, e2_clock, e1_rifl, e1.clone(), e1_votes.clone());
         // get stable: none
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(e1_rifl, e1.clone()), (e2_rifl, e2.clone())]);
 
         // run all the permutations of the above and check that the final total
@@ -420,7 +419,7 @@ mod tests {
         // add a1 to table
         table.add(a1_dot, a1_clock, a1_rifl, a1.clone(), a1_votes.clone());
         // get stable: none
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // c1
@@ -439,7 +438,7 @@ mod tests {
         // add c1 to table
         table.add(c1_dot, c1_clock, c1_rifl, c1.clone(), c1_votes.clone());
         // get stable: none
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // e1
@@ -457,7 +456,7 @@ mod tests {
         // add e1 to table
         table.add(e1_dot, e1_clock, e1_rifl, e1.clone(), e1_votes.clone());
         // get stable: a1 and e1
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(a1_rifl, a1.clone()), (e1_rifl, e1.clone())]);
 
         // a2
@@ -476,7 +475,7 @@ mod tests {
         // add a2 to table
         table.add(a2_dot, a2_clock, a2_rifl, a2.clone(), a2_votes.clone());
         // get stable: none
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // d1
@@ -495,7 +494,7 @@ mod tests {
         // add d1 to table
         table.add(d1_dot, d1_clock, d1_rifl, d1.clone(), d1_votes.clone());
         // get stable
-        let stable = table.stable_ops();
+        let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(
             stable,
             vec![
@@ -529,14 +528,16 @@ mod tests {
         // p1 votes on key A
         let process_id = 1;
         let stable = table
-            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)]);
+            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
+            .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
         assert_eq!(stable_clock(&table, &key_a), 0);
 
         // p1 votes on key b
         let stable = table
-            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)]);
+            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
+            .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
         assert_eq!(stable_clock(&table, &key_a), 0);
@@ -545,7 +546,8 @@ mod tests {
         // p2 votes on key A
         let process_id = 2;
         let stable = table
-            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)]);
+            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
+            .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
         assert_eq!(stable_clock(&table, &key_a), 0);
@@ -554,7 +556,8 @@ mod tests {
         // p3 votes on key A
         let process_id = 3;
         let stable = table
-            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)]);
+            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
+            .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
         assert_eq!(stable_clock(&table, &key_a), 1);
@@ -562,7 +565,8 @@ mod tests {
 
         // p3 votes on key B
         let stable = table
-            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)]);
+            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
+            .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
         assert_eq!(stable_clock(&table, &key_a), 1);
@@ -571,7 +575,8 @@ mod tests {
         // p4 votes on key B
         let process_id = 4;
         let stable = table
-            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)]);
+            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
+            .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
         assert_eq!(stable_clock(&table, &key_a), 1);

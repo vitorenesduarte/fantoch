@@ -42,8 +42,9 @@ impl Executor for TableExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
-        // handle each new info by updating the votes table
-        let (key, to_execute) = match info {
+        // handle each new info by updating the votes table and execute ready
+        // commands
+        match info {
             TableExecutionInfo::Votes {
                 dot,
                 clock,
@@ -52,26 +53,15 @@ impl Executor for TableExecutor {
                 op,
                 votes,
             } => {
-                let to_execute = self.table.add_votes(dot, clock, rifl, &key, op, votes);
-                (key, to_execute)
+                let to_execute =
+                    self.table.add_votes(dot, clock, rifl, &key, op, votes);
+                self.execute(key, to_execute)
             }
             TableExecutionInfo::PhantomVotes { key, votes } => {
                 let to_execute = self.table.add_phantom_votes(&key, votes);
-                (key, to_execute)
+                self.execute(key, to_execute)
             }
-        };
-
-        // get new commands that are ready to be executed
-        to_execute
-            .into_iter()
-            .filter_map(|(rifl, op)| {
-                // execute op in the `KVStore`
-                let op_result = self.store.execute(&key, op);
-
-                // add partial result to `Pending`
-                self.pending.add_partial(rifl, || (key.clone(), op_result))
-            })
-            .collect()
+        }
     }
 
     fn parallel() -> bool {
@@ -83,6 +73,22 @@ impl Executor for TableExecutor {
     }
 }
 
+impl TableExecutor {
+    fn execute<I>(&mut self, key: Key, to_execute: I) -> Vec<ExecutorResult>
+    where
+        I: Iterator<Item = (Rifl, KVOp)>,
+    {
+        to_execute
+            .filter_map(|(rifl, op)| {
+                // execute op in the `KVStore`
+                let op_result = self.store.execute(&key, op);
+
+                // add partial result to `Pending`
+                self.pending.add_partial(rifl, || (key.clone(), op_result))
+            })
+            .collect()
+    }
+}
 #[derive(Debug, Clone)]
 pub enum TableExecutionInfo {
     Votes {
