@@ -527,8 +527,11 @@ mod tests {
     use crate::sim::Simulation;
     use crate::time::SimTime;
 
-    #[test]
-    fn atlas_flow() {
+    fn sequential_atlas_test() {
+        atlas_flow::<SequentialKeyClocks>()
+    }
+
+    fn atlas_flow<KC: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -566,9 +569,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(config);
 
         // atlas
-        let mut atlas_1 = SequentialAtlas::new(process_id_1, config);
-        let mut atlas_2 = SequentialAtlas::new(process_id_2, config);
-        let mut atlas_3 = SequentialAtlas::new(process_id_3, config);
+        let mut atlas_1 = Atlas::<KC>::new(process_id_1, config);
+        let mut atlas_2 = Atlas::<KC>::new(process_id_2, config);
+        let mut atlas_3 = Atlas::<KC>::new(process_id_3, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(

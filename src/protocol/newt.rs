@@ -507,7 +507,16 @@ mod tests {
     use crate::util;
 
     #[test]
-    fn newt_flow() {
+    fn sequential_newt_test() {
+        newt_flow::<SequentialKeyClocks>();
+    }
+
+    #[test]
+    fn atomic_newt_test() {
+        newt_flow::<AtomicKeyClocks>();
+    }
+
+    fn newt_flow<KC: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -549,9 +558,9 @@ mod tests {
         let executor_3 = TableExecutor::new(config);
 
         // newts
-        let mut newt_1 = SequentialNewt::new(process_id_1, config);
-        let mut newt_2 = SequentialNewt::new(process_id_2, config);
-        let mut newt_3 = SequentialNewt::new(process_id_3, config);
+        let mut newt_1 = Newt::<KC>::new(process_id_1, config);
+        let mut newt_2 = Newt::<KC>::new(process_id_2, config);
+        let mut newt_3 = Newt::<KC>::new(process_id_3, config);
 
         // discover processes in all newts
         let sorted = util::sort_processes_by_distance(

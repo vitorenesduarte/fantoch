@@ -543,7 +543,11 @@ mod tests {
     use crate::time::SimTime;
 
     #[test]
-    fn epaxos_flow() {
+    fn sequential_epaxos_test() {
+        epaxos_flow::<SequentialKeyClocks>();
+    }
+
+    fn epaxos_flow<KC: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -581,9 +585,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(config);
 
         // epaxos
-        let mut epaxos_1 = SequentialEPaxos::new(process_id_1, config);
-        let mut epaxos_2 = SequentialEPaxos::new(process_id_2, config);
-        let mut epaxos_3 = SequentialEPaxos::new(process_id_3, config);
+        let mut epaxos_1 = EPaxos::<KC>::new(process_id_1, config);
+        let mut epaxos_2 = EPaxos::<KC>::new(process_id_2, config);
+        let mut epaxos_3 = EPaxos::<KC>::new(process_id_3, config);
 
         // discover processes in all epaxos
         let sorted = util::sort_processes_by_distance(
