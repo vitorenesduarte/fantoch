@@ -2,12 +2,10 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::pending::Pending;
 use crate::executor::table::MultiVotesTable;
-use crate::executor::{
-    ExecutionInfoSplit, Executor, ExecutorResult, MessageKey,
-};
+use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, Rifl};
-use crate::kvs::{KVStore, Key};
-use crate::protocol::common::table::Votes;
+use crate::kvs::{KVOp, KVStore, Key};
+use crate::protocol::common::table::VoteRange;
 
 pub struct TableExecutor {
     table: MultiVotesTable,
@@ -45,34 +43,35 @@ impl Executor for TableExecutor {
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
         // handle each new info by updating the votes table
-        let to_execute = match info {
+        let (key, to_execute) = match info {
             TableExecutionInfo::Votes {
                 dot,
-                cmd,
                 clock,
+                rifl,
+                key,
+                op,
                 votes,
-            } => self.table.add_votes(dot, cmd, clock, votes),
-            TableExecutionInfo::PhantomVotes { votes } => {
-                self.table.add_phantom_votes(votes)
+            } => {
+                let to_execute = self.table.add_votes(dot, clock, rifl, &key, op, votes);
+                (key, to_execute)
+            }
+            TableExecutionInfo::PhantomVotes { key, votes } => {
+                let to_execute = self.table.add_phantom_votes(&key, votes);
+                (key, to_execute)
             }
         };
 
         // get new commands that are ready to be executed
-        let mut results = Vec::new();
-        for (key, ops) in to_execute {
-            for (rifl, op) in ops {
+        to_execute
+            .into_iter()
+            .filter_map(|(rifl, op)| {
                 // execute op in the `KVStore`
                 let op_result = self.store.execute(&key, op);
 
                 // add partial result to `Pending`
-                if let Some(result) =
-                    self.pending.add_partial(rifl, || (key.clone(), op_result))
-                {
-                    results.push(result);
-                }
-            }
-        }
-        results
+                self.pending.add_partial(rifl, || (key.clone(), op_result))
+            })
+            .collect()
     }
 
     fn parallel() -> bool {
@@ -88,40 +87,48 @@ impl Executor for TableExecutor {
 pub enum TableExecutionInfo {
     Votes {
         dot: Dot,
-        cmd: Command,
         clock: u64,
-        votes: Votes,
+        rifl: Rifl,
+        key: Key,
+        op: KVOp,
+        votes: Vec<VoteRange>,
     },
     PhantomVotes {
-        votes: Votes,
+        key: Key,
+        votes: Vec<VoteRange>,
     },
 }
 
 impl TableExecutionInfo {
-    pub fn votes(dot: Dot, cmd: Command, clock: u64, votes: Votes) -> Self {
+    pub fn votes(
+        dot: Dot,
+        clock: u64,
+        rifl: Rifl,
+        key: Key,
+        op: KVOp,
+        votes: Vec<VoteRange>,
+    ) -> Self {
         TableExecutionInfo::Votes {
             dot,
-            cmd,
             clock,
+            rifl,
+            key,
+            op,
             votes,
         }
     }
 
-    pub fn phantom_votes(votes: Votes) -> Self {
-        TableExecutionInfo::PhantomVotes { votes }
-    }
-}
-
-impl ExecutionInfoSplit for TableExecutionInfo {
-    fn split(self) -> Vec<Self> {
-        vec![]
+    pub fn phantom_votes(key: Key, votes: Vec<VoteRange>) -> Self {
+        TableExecutionInfo::PhantomVotes { key, votes }
     }
 }
 
 impl MessageKey for TableExecutionInfo {
     fn key(&self) -> Option<&Key> {
-        // maybe instead, we should have a split function
-        // maybe no
-        todo!("maybe have a split function")
+        let key = match self {
+            TableExecutionInfo::Votes { key, .. } => key,
+            TableExecutionInfo::PhantomVotes { key, .. } => key,
+        };
+        Some(&key)
     }
 }

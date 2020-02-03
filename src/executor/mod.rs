@@ -24,7 +24,7 @@ use crate::kvs::{KVOpResult, Key};
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Clone + Debug + Send + ExecutionInfoSplit + MessageKey;
+    type ExecutionInfo: Clone + Debug + Send + MessageKey;
 
     fn new(config: Config) -> Self;
 
@@ -33,6 +33,7 @@ pub trait Executor {
     // Parallel executors may receive several waits for the same `Rifl`.
     fn wait_for_rifl(&mut self, rifl: Rifl);
 
+    // TODO we can return an iterator here
     #[must_use]
     fn handle(&mut self, infos: Self::ExecutionInfo) -> Vec<ExecutorResult>;
 
@@ -40,12 +41,6 @@ pub trait Executor {
 
     fn show_metrics(&self) {
         // by default, nothing to show
-    }
-}
-
-pub trait ExecutionInfoSplit: Sized {
-    fn split(self) -> Vec<Self> {
-        panic!("called `ExecutionInfoSplit::split` on a `ExecutionInfo` from a non-parallel `Executor`")
     }
 }
 

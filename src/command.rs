@@ -82,11 +82,6 @@ impl Command {
             results,
         }
     }
-
-    // Unpacks the `Command` into its `Rifl` and operations.
-    pub fn unpack(self) -> (Rifl, HashMap<Key, KVOp>) {
-        (self.rifl, self.ops)
-    }
 }
 
 impl IntoIterator for Command {

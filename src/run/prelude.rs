@@ -58,9 +58,9 @@ pub type ReaderToWorkers<P> =
     pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
 // The following allows e.g. (ProcessId, <P as Protocol>::Message) to be
 // `ToPool::forward`
-impl<A, B> pool::PoolIndex for (A, B)
+impl<A> pool::PoolIndex for (ProcessId, A)
 where
-    B: MessageDot,
+    A: MessageDot,
 {
     fn index(&self) -> Option<usize> {
         self.1.dot().map(|dot| dot_index(dot))

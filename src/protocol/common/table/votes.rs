@@ -59,7 +59,7 @@ impl Votes {
 
     /// Removes the votes on some key.
     #[allow(clippy::ptr_arg)]
-    pub fn remove_votes(&mut self, key: &Key) -> Option<Vec<VoteRange>> {
+    pub fn remove(&mut self, key: &Key) -> Option<Vec<VoteRange>> {
         self.votes.remove(key)
     }
 

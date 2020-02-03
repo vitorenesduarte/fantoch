@@ -367,9 +367,15 @@ impl<KC: KeyClocks> Newt<KC> {
         // create execution info if not a noop
         if let Some(cmd) = info.cmd.clone() {
             // create execution info
-            let execution_info =
-                ExecutionInfo::votes(dot, cmd, info.clock, votes);
-            self.to_executor.push(execution_info);
+            let rifl = cmd.rifl();
+            let execution_info = cmd.into_iter().map(|(key, op)| {
+                // find votes on this key
+                let key_votes = votes
+                    .remove(&key)
+                    .expect("there should be votes on all command keys");
+                ExecutionInfo::votes(dot, info.clock, rifl, key, op, key_votes)
+            });
+            self.to_executor.extend(execution_info);
         } else {
             // TODO if noOp, we should add `Votes` to all tables
             panic!("noOp votes should be broadcast to all executors");
@@ -392,8 +398,10 @@ impl<KC: KeyClocks> Newt<KC> {
         // TODO if there's ever a Status::EXECUTE, this check might be incorrect
         if info.status == Status::COMMIT {
             // create execution info
-            let execution_info = ExecutionInfo::phantom_votes(votes);
-            self.to_executor.push(execution_info);
+            let execution_info = votes.into_iter().map(|(key, key_votes)| {
+                ExecutionInfo::phantom_votes(key, key_votes)
+            });
+            self.to_executor.extend(execution_info);
         } else {
             // if not committed yet, update votes with remote votes
             info.votes.merge(votes);

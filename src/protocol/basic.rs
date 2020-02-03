@@ -188,10 +188,10 @@ impl Basic {
         // - one entry per key being accessed will be created, which allows the
         //   basic executor to run in parallel
         let rifl = cmd.rifl();
-        self.to_executor.extend(
-            cmd.into_iter()
-                .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op)),
-        );
+        let execution_info = cmd
+            .into_iter()
+            .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
+        self.to_executor.extend(execution_info);
 
         // TODO the following is incorrect: it should only be deleted once it
         // has been committed at all processes
