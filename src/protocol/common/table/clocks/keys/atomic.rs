@@ -1,8 +1,8 @@
-use super::shared_clocks::SharedClocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
+use crate::protocol::common::shared_clocks::SharedClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
