@@ -74,7 +74,7 @@ impl KeyClocks for LockedKeyClocks {
     }
 
     fn parallel() -> bool {
-        false
+        true
     }
 }
 
