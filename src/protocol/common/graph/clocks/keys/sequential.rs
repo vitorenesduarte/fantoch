@@ -2,7 +2,6 @@ use super::KeyClocks;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
-use crate::util;
 use std::collections::HashMap;
 use threshold::VClock;
 
@@ -19,7 +18,7 @@ impl KeyClocks for SequentialKeyClocks {
         Self {
             n,
             clocks: HashMap::new(),
-            noop_clock: Self::bottom_clock(n),
+            noop_clock: super::bottom_clock(n),
         }
     }
 
@@ -66,7 +65,7 @@ impl SequentialKeyClocks {
                         None => {
                             // if key is not present, create bottom vclock for
                             // this key
-                            let bottom = Self::bottom_clock(self.n);
+                            let bottom = super::bottom_clock(self.n);
                             // and insert it
                             self.clocks.entry(key.clone()).or_insert(bottom)
                         }
@@ -84,7 +83,7 @@ impl SequentialKeyClocks {
 
     /// Checks the current `clock` for some command.
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let clock = Self::bottom_clock(self.n);
+        let clock = super::bottom_clock(self.n);
         self.clock_with_past(cmd, clock)
     }
 
@@ -117,11 +116,5 @@ impl SequentialKeyClocks {
         }
 
         past
-    }
-
-    // Creates a bottom clock of size `n`.
-    fn bottom_clock(n: usize) -> VClock<ProcessId> {
-        let ids = util::process_ids(n);
-        VClock::with(ids)
     }
 }

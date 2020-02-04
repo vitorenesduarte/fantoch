@@ -9,6 +9,7 @@ pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
+use crate::util;
 use crate::id::{Dot, ProcessId};
 use threshold::VClock;
 
@@ -32,6 +33,12 @@ pub trait KeyClocks: Clone {
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId>;
 
     fn parallel() -> bool;
+}
+
+// Creates a bottom clock of size `n`.
+fn bottom_clock(n: usize) -> VClock<ProcessId> {
+    let ids = util::process_ids(n);
+    VClock::with(ids)
 }
 
 #[cfg(test)]

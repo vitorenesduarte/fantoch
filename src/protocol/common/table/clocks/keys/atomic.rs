@@ -17,11 +17,12 @@ pub struct AtomicKeyClocks {
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
     fn new(id: ProcessId) -> Self {
+        // create shared clocks
         let clocks = SharedClocks::new();
-        Self {
-            id,
-            clocks: Arc::new(clocks),
-        }
+        // wrap them in an arc
+        let clocks = Arc::new(clocks);
+
+        Self { id, clocks }
     }
 
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {

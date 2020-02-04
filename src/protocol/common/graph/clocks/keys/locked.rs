@@ -1,25 +1,40 @@
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
-use crate::kvs::Key;
-use crate::util;
-use std::collections::HashMap;
+use crate::protocol::common::shared_clocks::SharedClocks;
+use parking_lot::RwLock;
+use std::sync::Arc;
 use threshold::VClock;
+
+// all VClock's are protected by a rw-lock
+type Clock = RwLock<VClock<ProcessId>>;
 
 #[derive(Clone)]
 pub struct LockedKeyClocks {
     n: usize, // number of processes
-    clocks: HashMap<Key, VClock<ProcessId>>,
-    noop_clock: VClock<ProcessId>,
+    clocks: Arc<SharedClocks<Clock>>,
+    noop_clock: Arc<Clock>,
 }
 
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
     fn new(n: usize) -> Self {
+        // create shared clocks
+        let clocks = SharedClocks::new();
+        // wrap them in an arc
+        let clocks = Arc::new(clocks);
+
+        // create noop clock
+        let noop_clock = super::bottom_clock(n);
+        // protect it with a rw-lock
+        let noop_clock = RwLock::new(noop_clock);
+        // wrap it in an arc
+        let noop_clock = Arc::new(noop_clock);
+
         Self {
             n,
-            clocks: HashMap::new(),
-            noop_clock: Self::bottom_clock(n),
+            clocks,
+            noop_clock,
         }
     }
 
@@ -32,21 +47,28 @@ impl KeyClocks for LockedKeyClocks {
         cmd: &Option<Command>,
         past: Option<VClock<ProcessId>>,
     ) -> VClock<ProcessId> {
-        // first compute clock
+        // we start with past in case there's one, or bottom otherwise
         let clock = match past {
-            Some(past) => self.clock_with_past(cmd, past),
-            None => self.clock(cmd),
+            Some(past) => past,
+            None => super::bottom_clock(self.n),
         };
-        // then register this command
-        self.add(dot, cmd);
-        // and finally return the computed clock
-        clock
+
+        // check if we have a noop or not and compute conflicts accordingly
+        match cmd {
+            Some(cmd) => self.add_cmd(dot, cmd, clock),
+            None => self.add_noop(dot, clock),
+        }
     }
 
     /// Checks the current `clock` for some command.
     #[cfg(test)]
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        self.clock(cmd)
+        let mut clock = super::bottom_clock(self.n);
+        match cmd {
+            Some(cmd) => self.cmd_clock(cmd, &mut clock),
+            None => self.noop_clock(&mut clock),
+        }
+        clock
     }
 
     fn parallel() -> bool {
@@ -55,73 +77,84 @@ impl KeyClocks for LockedKeyClocks {
 }
 
 impl LockedKeyClocks {
-    /// Adds a command's `Dot` to the clock of each key touched by the command.
-    fn add(&mut self, dot: Dot, cmd: &Option<Command>) {
-        match cmd {
-            Some(cmd) => {
-                cmd.keys().for_each(|key| {
-                    // get current clock for this key
-                    let clock = match self.clocks.get_mut(key) {
-                        Some(clock) => clock,
-                        None => {
-                            // if key is not present, create bottom vclock for
-                            // this key
-                            let bottom = Self::bottom_clock(self.n);
-                            // and insert it
-                            self.clocks.entry(key.clone()).or_insert(bottom)
-                        }
-                    };
-                    // add command dot to each clock
-                    clock.add(&dot.source(), dot.sequence());
-                });
-            }
-            None => {
-                // add command dot only to the noop clock
-                self.noop_clock.add(&dot.source(), dot.sequence());
-            }
-        }
-    }
-
-    /// Checks the current `clock` for some command.
-    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let clock = Self::bottom_clock(self.n);
-        self.clock_with_past(cmd, clock)
-    }
-
-    /// Computes a clock for some command representing the `Dot`s of all
-    /// conflicting commands observed, given an initial clock already with
-    /// conflicting commands (that we denote by past).
-    fn clock_with_past(
+    fn add_cmd(
         &self,
-        cmd: &Option<Command>,
-        mut past: VClock<ProcessId>,
+        dot: Dot,
+        cmd: &Command,
+        mut clock: VClock<ProcessId>,
     ) -> VClock<ProcessId> {
-        // always join with `self.noop_conf`
-        past.join(&self.noop_clock);
+        // include the noop clock:
+        // - for this operation we only need a read lock
+        clock.join(&*self.noop_clock.read());
 
-        match cmd {
-            Some(cmd) => {
-                // join with the clocks of all keys touched by `cmd`
-                cmd.keys().for_each(|key| {
-                    if let Some(clock) = self.clocks.get(key) {
-                        past.join(clock);
-                    }
-                });
-            }
-            None => {
-                // join with the clocks of *all keys*
-                self.clocks.iter().for_each(|(_key, clock)| {
-                    past.join(clock);
-                });
-            }
-        }
+        // iterate through all command keys, grab a write lock, get their
+        // current clock and add ourselves to it
+        cmd.keys().for_each(|key| {
+            // get current clock
+            let clock_entry = self.clocks.get(key);
+            // grab a write lock
+            let mut current_clock = clock_entry.write();
+            // merge it with our clock
+            clock.join(&current_clock);
+            // add `dot` to the clock
+            current_clock.add(&dot.source(), dot.sequence());
+        });
 
-        past
+        // and finally return the computed clock
+        clock
     }
 
-    // Creates a bottom clock of size `n`.
-    fn bottom_clock(n: usize) -> VClock<ProcessId> {
-        let ids = util::process_ids(n);
-        VClock::with(ids)
+    fn add_noop(
+        &self,
+        dot: Dot,
+        mut clock: VClock<ProcessId>,
+    ) -> VClock<ProcessId> {
+        // grab a write lock to the noop clock and:
+        // - include the noop clock in the final `clock`
+        // - add ourselves to the noop clock:
+        //   * during the next iteration a new key in the map might be created
+        //     and we may miss it
+        //   * by first adding ourselves to the noop clock we make sure that,
+        //     even though we will not see that newly created key, that key will
+        //     see us
+        let mut noop_clock = self.noop_clock.write();
+        clock.join(&noop_clock);
+        noop_clock.add(&dot.source(), dot.sequence());
+        // release the lock
+        drop(noop_clock);
+
+        // compute the clock for this noop
+        self.noop_clock(&mut clock);
+
+        clock
+    }
+
+    fn noop_clock(&self, clock: &mut VClock<ProcessId>) {
+        // iterate through all keys, grab a read lock, and include their current
+        // clock in the final `clock`
+        self.clocks.iter().for_each(|entry| {
+            // grab a read lock
+            let current_clock = entry.value().read();
+            // merge it with our clock
+            clock.join(&current_clock);
+        });
+    }
+
+    #[cfg(test)]
+    // TODO this is similar to a loop in `add_cmd`; can we refactor? yes but the
+    // code would be more complicated (e.g. we would grab a read or a write lock
+    // depending on whether we're adding the command to the current clocks),
+    // thus it's probably not worth it
+    fn cmd_clock(&self, cmd: &Command, clock: &mut VClock<ProcessId>) {
+        // iterate through all command keys, grab a readlock, and include their
+        // current clock in the final `clock`
+        cmd.keys().for_each(|key| {
+            // get current clock
+            let clock_entry = self.clocks.get(key);
+            // grab a read lock
+            let current_clock = clock_entry.read();
+            // merge it with our clock
+            clock.join(&current_clock);
+        });
     }
 }
