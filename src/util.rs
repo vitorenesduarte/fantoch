@@ -104,7 +104,8 @@ pub fn vclock<I: IntoIterator<Item = u64>>(iter: I) -> VClock<ProcessId> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use super::*;
     use crate::command::Command;
     use crate::id::Rifl;
     use rand::Rng;
@@ -130,11 +131,6 @@ mod tests {
         // create multi put command
         Command::multi_put(rifl, cmd_data)
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     #[test]
     fn process_ids_test() {
