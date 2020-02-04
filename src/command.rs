@@ -58,6 +58,11 @@ impl Command {
         self.ops.iter().map(|(key, _)| key)
     }
 
+    /// Checks if `key` is accessed by this command.
+    pub fn contains_key(&self, key: &Key) -> bool {
+        self.ops.contains_key(key)
+    }
+
     /// Checks if a command conflicts with another given command.
     pub fn conflicts(&self, other: &Command) -> bool {
         self.ops.iter().any(|(key, _)| other.ops.contains_key(key))

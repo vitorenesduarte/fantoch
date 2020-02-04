@@ -162,3 +162,125 @@ impl LockedKeyClocks {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::id::AtomicDotGen;
+    use rand::Rng;
+    use std::collections::HashSet;
+    use std::thread;
+
+    #[test]
+    fn locked_clocks_test() {
+        let min_nthreads = 2;
+        let max_nthreads = 8;
+        let ops_number = 1000;
+        let max_keys_per_command = 4;
+        let keys_number = 16;
+        for _ in 0..200 {
+            let nthreads =
+                rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
+            test(nthreads, ops_number, max_keys_per_command, keys_number);
+        }
+    }
+
+    fn test(
+        nthreads: usize,
+        ops_number: usize,
+        max_keys_per_command: usize,
+        keys_number: usize,
+    ) {
+        // create dot gen
+        let process_id = 1;
+        let atomic_dot_gen = AtomicDotGen::new(process_id);
+        // create clocks
+        let clocks = LockedKeyClocks::new(1);
+
+        // spawn workers
+        let handles: Vec<_> = (0..nthreads)
+            .map(|_| {
+                let atomic_dot_gen_clone = atomic_dot_gen.clone();
+                let clocks_clone = clocks.clone();
+                thread::spawn(move || {
+                    worker(
+                        atomic_dot_gen_clone,
+                        clocks_clone,
+                        ops_number,
+                        max_keys_per_command,
+                        keys_number,
+                    )
+                })
+            })
+            .collect();
+
+        // wait for all workers and aggregate their clocks
+        let mut all_clocks = Vec::new();
+        let mut all_keys = HashSet::new();
+        for handle in handles {
+            let clocks = handle.join().expect("worker should finish");
+            for (dot, cmd, clock) in clocks {
+                all_keys.extend(cmd.keys().cloned());
+                all_clocks.push((dot, cmd, clock));
+            }
+        }
+
+        // for each key, check that for every two operations that access that
+        // key, one is a dependency of the other
+        for key in all_keys {
+            // get all operations with this color
+            let ops: Vec<_> = all_clocks
+                .iter()
+                .filter_map(|(dot, cmd, clock)| {
+                    if cmd.contains_key(&key) {
+                        Some((dot, clock))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // check for each possible pair of operations if they conflict
+            for i in 0..ops.len() {
+                for j in (i + 1)..ops.len() {
+                    let (dot_a, clock_a) = ops[i];
+                    let (dot_b, clock_b) = ops[j];
+                    let conflict = clock_a
+                        .contains(&dot_b.source(), dot_b.sequence())
+                        || clock_b.contains(&dot_a.source(), dot_a.sequence());
+                    assert!(conflict);
+                }
+            }
+        }
+    }
+
+    fn worker(
+        atomic_dot_gen: AtomicDotGen,
+        mut clocks: LockedKeyClocks,
+        ops_number: usize,
+        max_keys_per_command: usize,
+        keys_number: usize,
+    ) -> Vec<(Dot, Command, VClock<ProcessId>)> {
+        // all clocks worker has generated
+        let mut all_clocks = Vec::new();
+
+        for _ in 0..ops_number {
+            // generate dot
+            let dot = atomic_dot_gen.next_id();
+            // generate command
+            // TODO here we should also generate noops
+            let cmd = crate::protocol::common::tests::gen_cmd(
+                max_keys_per_command,
+                keys_number,
+            );
+            // wrap command
+            let cmd = Some(cmd);
+            // get clock
+            let clock = clocks.add(dot, &cmd, None);
+            // save clock
+            all_clocks.push((dot, cmd.unwrap(), clock));
+        }
+
+        all_clocks
+    }
+}
