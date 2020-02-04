@@ -269,10 +269,8 @@ mod tests {
             let dot = dot_gen.next_id();
             // generate command
             // TODO here we should also generate noops
-            let cmd = crate::protocol::common::tests::gen_cmd(
-                max_keys_per_command,
-                keys_number,
-            );
+            let cmd =
+                crate::util::tests::gen_cmd(max_keys_per_command, keys_number);
             // wrap command
             let cmd = Some(cmd);
             // get clock

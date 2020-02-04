@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{SequentialAtlas, Protocol};
+use planet_sim::protocol::{Protocol, SequentialAtlas};
 use std::error::Error;
 
 // TODO can we generate all the protocol binaries with a macro?

@@ -9,8 +9,8 @@ pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
-use crate::util;
 use crate::id::{Dot, ProcessId};
+use crate::util;
 use threshold::VClock;
 
 pub trait KeyClocks: Clone {

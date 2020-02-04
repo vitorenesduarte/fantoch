@@ -3,7 +3,9 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{SequentialAtlas, SequentialEPaxos, Protocol, SequentialNewt};
+use planet_sim::protocol::{
+    Protocol, SequentialAtlas, SequentialEPaxos, SequentialNewt,
+};
 use planet_sim::sim::Runner;
 use std::thread;
 

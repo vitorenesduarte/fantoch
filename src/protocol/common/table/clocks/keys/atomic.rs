@@ -230,10 +230,8 @@ mod tests {
         let mut highest = 0;
 
         for _ in 0..ops_number {
-            let cmd = crate::protocol::common::tests::gen_cmd(
-                max_keys_per_command,
-                keys_number,
-            );
+            let cmd =
+                crate::util::tests::gen_cmd(max_keys_per_command, keys_number);
             // get votes
             let (new_highest, votes) = clocks.bump_and_vote(&cmd, highest);
             // update highest
