@@ -178,10 +178,17 @@ mod tests {
         let ops_number = 1000;
         let max_keys_per_command = 4;
         let keys_number = 16;
+        let noop_probability = 50;
         for _ in 0..20 {
             let nthreads =
                 rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
-            test(nthreads, ops_number, max_keys_per_command, keys_number);
+            test(
+                nthreads,
+                ops_number,
+                max_keys_per_command,
+                keys_number,
+                noop_probability,
+            );
         }
     }
 
@@ -190,6 +197,7 @@ mod tests {
         ops_number: usize,
         max_keys_per_command: usize,
         keys_number: usize,
+        noop_probability: usize,
     ) {
         // create clocks:
         // - clocks have on entry per worker and each worker has its own
@@ -207,6 +215,7 @@ mod tests {
                         ops_number,
                         max_keys_per_command,
                         keys_number,
+                        noop_probability,
                     )
                 })
             })
@@ -218,7 +227,11 @@ mod tests {
         for handle in handles {
             let clocks = handle.join().expect("worker should finish");
             for (dot, cmd, clock) in clocks {
-                all_keys.extend(cmd.keys().cloned());
+                if let Some(cmd) = &cmd {
+                    all_keys.extend(cmd.keys().cloned().map(|key| Some(key)));
+                } else {
+                    all_keys.insert(None);
+                }
                 all_clocks.push((dot, cmd, clock));
             }
         }
@@ -229,11 +242,22 @@ mod tests {
             // get all operations with this color
             let ops: Vec<_> = all_clocks
                 .iter()
-                .filter_map(|(dot, cmd, clock)| {
-                    if cmd.contains_key(&key) {
+                .filter_map(|(dot, cmd, clock)| match (&key, cmd) {
+                    (Some(key), Some(cmd)) => {
+                        // if we have a key and not a noop, include command if
+                        // it accesses the key
+                        if cmd.contains_key(&key) {
+                            Some((dot, clock))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => {
+                        // otherwise, i.e.:
+                        // - a key and a noop
+                        // - the noop color and an op or noop
+                        // always include
                         Some((dot, clock))
-                    } else {
-                        None
                     }
                 })
                 .collect();
@@ -258,7 +282,8 @@ mod tests {
         ops_number: usize,
         max_keys_per_command: usize,
         keys_number: usize,
-    ) -> Vec<(Dot, Command, VClock<ProcessId>)> {
+        noop_probability: usize,
+    ) -> Vec<(Dot, Option<Command>, VClock<ProcessId>)> {
         // create dot gen
         let mut dot_gen = DotGen::new(process_id);
         // all clocks worker has generated
@@ -269,14 +294,15 @@ mod tests {
             let dot = dot_gen.next_id();
             // generate command
             // TODO here we should also generate noops
-            let cmd =
-                crate::util::tests::gen_cmd(max_keys_per_command, keys_number);
-            // wrap command
-            let cmd = Some(cmd);
+            let cmd = crate::util::tests::gen_cmd(
+                max_keys_per_command,
+                keys_number,
+                noop_probability,
+            );
             // get clock
             let clock = clocks.add(dot, &cmd, None);
             // save clock
-            all_clocks.push((dot, cmd.unwrap(), clock));
+            all_clocks.push((dot, cmd, clock));
         }
 
         all_clocks

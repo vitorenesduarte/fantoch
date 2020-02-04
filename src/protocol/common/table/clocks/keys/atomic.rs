@@ -230,8 +230,16 @@ mod tests {
         let mut highest = 0;
 
         for _ in 0..ops_number {
-            let cmd =
-                crate::util::tests::gen_cmd(max_keys_per_command, keys_number);
+            // TODO increase noop probability
+            let noop_probability = 0;
+            let cmd = crate::util::tests::gen_cmd(
+                max_keys_per_command,
+                keys_number,
+                noop_probability,
+            )
+            .expect(
+                "command shouldn't be a noop since the noop probability is 0",
+            );
             // get votes
             let (new_highest, votes) = clocks.bump_and_vote(&cmd, highest);
             // update highest

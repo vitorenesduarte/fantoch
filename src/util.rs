@@ -112,7 +112,12 @@ pub mod tests {
 
     // Generates a random `Command` with at most `max_keys_per_command` where
     // the number of keys is `keys_number`.
-    pub fn gen_cmd(max_keys_per_command: usize, keys_number: usize) -> Command {
+    pub fn gen_cmd(
+        max_keys_per_command: usize,
+        keys_number: usize,
+        noop_probability: usize,
+    ) -> Option<Command> {
+        assert!(noop_probability <= 100);
         // get random
         let mut rng = rand::thread_rng();
         // select keys per command
@@ -129,7 +134,7 @@ pub mod tests {
         // create fake rifl
         let rifl = Rifl::new(0, 0);
         // create multi put command
-        Command::multi_put(rifl, cmd_data)
+        Some(Command::multi_put(rifl, cmd_data))
     }
 
     #[test]
