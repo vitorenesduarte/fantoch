@@ -24,6 +24,7 @@ pub trait KeyClocks: Clone {
 
     /// Checks the current `clock` for some command.
     /// Atlas and EPaxos implementation don't actually use this.
+    #[cfg(test)]
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId>;
 
     fn parallel() -> bool;

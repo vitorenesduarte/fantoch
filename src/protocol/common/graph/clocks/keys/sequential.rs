@@ -44,9 +44,9 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     /// Checks the current `clock` for some command.
+    #[cfg(test)]
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let clock = Self::bottom_clock(self.n);
-        self.clock_with_past(cmd, clock)
+        self.clock(cmd)
     }
 
     fn parallel() -> bool {
@@ -80,6 +80,12 @@ impl SequentialKeyClocks {
                 self.noop_clock.add(&dot.source(), dot.sequence());
             }
         }
+    }
+
+    /// Checks the current `clock` for some command.
+    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
+        let clock = Self::bottom_clock(self.n);
+        self.clock_with_past(cmd, clock)
     }
 
     /// Computes a clock for some command representing the `Dot`s of all
