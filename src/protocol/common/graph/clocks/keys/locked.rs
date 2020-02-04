@@ -166,7 +166,7 @@ impl LockedKeyClocks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::AtomicDotGen;
+    use crate::id::DotGen;
     use rand::Rng;
     use std::collections::HashSet;
     use std::thread;
@@ -178,7 +178,7 @@ mod tests {
         let ops_number = 1000;
         let max_keys_per_command = 4;
         let keys_number = 16;
-        for _ in 0..200 {
+        for _ in 0..20 {
             let nthreads =
                 rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
             test(nthreads, ops_number, max_keys_per_command, keys_number);
@@ -191,20 +191,18 @@ mod tests {
         max_keys_per_command: usize,
         keys_number: usize,
     ) {
-        // create dot gen
-        let process_id = 1;
-        let atomic_dot_gen = AtomicDotGen::new(process_id);
-        // create clocks
-        let clocks = LockedKeyClocks::new(1);
+        // create clocks:
+        // - clocks have on entry per worker and each worker has its own
+        //   `DotGen`
+        let clocks = LockedKeyClocks::new(nthreads);
 
         // spawn workers
-        let handles: Vec<_> = (0..nthreads)
-            .map(|_| {
-                let atomic_dot_gen_clone = atomic_dot_gen.clone();
+        let handles: Vec<_> = (1..=nthreads)
+            .map(|process_id| {
                 let clocks_clone = clocks.clone();
                 thread::spawn(move || {
                     worker(
-                        atomic_dot_gen_clone,
+                        process_id as ProcessId,
                         clocks_clone,
                         ops_number,
                         max_keys_per_command,
@@ -255,18 +253,20 @@ mod tests {
     }
 
     fn worker(
-        atomic_dot_gen: AtomicDotGen,
+        process_id: ProcessId,
         mut clocks: LockedKeyClocks,
         ops_number: usize,
         max_keys_per_command: usize,
         keys_number: usize,
     ) -> Vec<(Dot, Command, VClock<ProcessId>)> {
+        // create dot gen
+        let mut dot_gen = DotGen::new(process_id);
         // all clocks worker has generated
         let mut all_clocks = Vec::new();
 
         for _ in 0..ops_number {
             // generate dot
-            let dot = atomic_dot_gen.next_id();
+            let dot = dot_gen.next_id();
             // generate command
             // TODO here we should also generate noops
             let cmd = crate::protocol::common::tests::gen_cmd(
