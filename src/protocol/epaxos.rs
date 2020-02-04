@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::graph::{
-    KeyClocks, QuorumClocks, SequentialKeyClocks,
+    KeyClocks, LockedKeyClocks, QuorumClocks, SequentialKeyClocks,
 };
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{Synod, SynodMessage};
@@ -17,6 +17,7 @@ use std::mem;
 use threshold::VClock;
 
 pub type SequentialEPaxos = EPaxos<SequentialKeyClocks>;
+pub type LockedEPaxos = EPaxos<LockedKeyClocks>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
@@ -108,7 +109,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     }
 
     fn parallel() -> bool {
-        false
+        KC::parallel()
     }
 
     /// Returns new commands results to be sent to clients.
@@ -515,18 +516,17 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {}
-// impl MessageDot for Message {
-//     fn dot(&self) -> Option<&Dot> {
-//         match self {
-//             Self::MCollect { dot, .. } => Some(dot),
-//             Self::MCollectAck { dot, .. } => Some(dot),
-//             Self::MCommit { dot, .. } => Some(dot),
-//             Self::MConsensus { dot, .. } => Some(dot),
-//             Self::MConsensusAck { dot, .. } => Some(dot),
-//         }
-//     }
-// }
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MCollect { dot, .. } => Some(dot),
+            Self::MCollectAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+            Self::MConsensus { dot, .. } => Some(dot),
+            Self::MConsensusAck { dot, .. } => Some(dot),
+        }
+    }
+}
 
 /// `Status` of commands.
 #[derive(PartialEq, Clone)]
@@ -547,6 +547,11 @@ mod tests {
     #[test]
     fn sequential_epaxos_test() {
         epaxos_flow::<SequentialKeyClocks>();
+    }
+
+    #[test]
+    fn locked_epaxos_test() {
+        epaxos_flow::<LockedKeyClocks>();
     }
 
     fn epaxos_flow<KC: KeyClocks>() {

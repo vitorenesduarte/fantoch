@@ -1,7 +1,11 @@
 // This module contains the definition of `SequentialKeyClocks`.
 mod sequential;
 
+// This module contains the definition of `LockedKeyClocks`.
+mod locked;
+
 // Re-exports.
+pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::command::Command;
@@ -39,6 +43,11 @@ mod tests {
     #[test]
     fn sequential_key_clocks() {
         keys_clocks_flow::<SequentialKeyClocks>();
+    }
+
+    #[test]
+    fn locked_key_clocks() {
+        keys_clocks_flow::<LockedKeyClocks>();
     }
 
     fn keys_clocks_flow<KC: KeyClocks>() {
