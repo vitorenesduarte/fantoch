@@ -1,8 +1,8 @@
-use super::shared_clocks::SharedClocks;
 use super::KeyClocks;
 use crate::command::Command;
 use crate::id::ProcessId;
 use crate::kvs::Key;
+use crate::protocol::common::shared_clocks::SharedClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -17,11 +17,12 @@ pub struct AtomicKeyClocks {
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
     fn new(id: ProcessId) -> Self {
+        // create shared clocks
         let clocks = SharedClocks::new();
-        Self {
-            id,
-            clocks: Arc::new(clocks),
-        }
+        // wrap them in an arc
+        let clocks = Arc::new(clocks);
+
+        Self { id, clocks }
     }
 
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
@@ -143,7 +144,6 @@ impl AtomicKeyClocks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::Rifl;
     use rand::Rng;
     use std::collections::BTreeSet;
     use std::iter::FromIterator;
@@ -155,11 +155,11 @@ mod tests {
         let max_nthreads = 8;
         let ops_number = 1000;
         let max_keys_per_command = 4;
-        let max_keys = 16;
+        let keys_number = 16;
         for _ in 0..200 {
             let nthreads =
                 rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
-            test(nthreads, ops_number, max_keys_per_command, max_keys);
+            test(nthreads, ops_number, max_keys_per_command, keys_number);
         }
     }
 
@@ -167,7 +167,7 @@ mod tests {
         nthreads: usize,
         ops_number: usize,
         max_keys_per_command: usize,
-        max_keys: usize,
+        keys_number: usize,
     ) {
         // create clocks
         let process_id = 1;
@@ -182,7 +182,7 @@ mod tests {
                         clocks_clone,
                         ops_number,
                         max_keys_per_command,
-                        max_keys,
+                        keys_number,
                     )
                 })
             })
@@ -221,7 +221,7 @@ mod tests {
         mut clocks: AtomicKeyClocks,
         ops_number: usize,
         max_keys_per_command: usize,
-        max_keys: usize,
+        keys_number: usize,
     ) -> Votes {
         // all votes worker has generated
         let mut all_votes = Votes::new(None);
@@ -230,7 +230,10 @@ mod tests {
         let mut highest = 0;
 
         for _ in 0..ops_number {
-            let cmd = gen_cmd(max_keys_per_command, max_keys);
+            let cmd = crate::protocol::common::tests::gen_cmd(
+                max_keys_per_command,
+                keys_number,
+            );
             // get votes
             let (new_highest, votes) = clocks.bump_and_vote(&cmd, highest);
             // update highest
@@ -240,25 +243,5 @@ mod tests {
         }
 
         all_votes
-    }
-
-    fn gen_cmd(max_keys_per_command: usize, max_keys: usize) -> Command {
-        // get random
-        let mut rng = rand::thread_rng();
-        // select keys per command
-        let key_number = rng.gen_range(1, max_keys_per_command + 1);
-        // generate command data
-        let cmd_data: Vec<_> = (0..key_number)
-            .map(|_| {
-                // select random key
-                let key = format!("{}", rng.gen_range(0, max_keys));
-                let value = String::from("");
-                (key, value)
-            })
-            .collect();
-        // create fake rifl
-        let rifl = Rifl::new(0, 0);
-        // create multi put command
-        Command::multi_put(rifl, cmd_data)
     }
 }

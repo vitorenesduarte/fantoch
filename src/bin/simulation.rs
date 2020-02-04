@@ -3,7 +3,7 @@ use planet_sim::client::Workload;
 use planet_sim::config::Config;
 use planet_sim::metrics::Histogram;
 use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{Atlas, EPaxos, Protocol, SequentialNewt};
+use planet_sim::protocol::{SequentialAtlas, SequentialEPaxos, Protocol, SequentialNewt};
 use planet_sim::sim::Runner;
 use std::thread;
 
@@ -17,17 +17,17 @@ fn main() {
     println!(">running atlas n = 5 | f = 1...");
     let mut config = Config::new(5, 1);
     config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<Atlas>(config));
+    run_in_thread(move || increasing_load::<SequentialAtlas>(config));
 
     println!(">running atlas n = 5 | f = 2...");
     let mut config = Config::new(5, 2);
     config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<Atlas>(config));
+    run_in_thread(move || increasing_load::<SequentialAtlas>(config));
 
     println!(">running epaxos n = 5...");
     let mut config = Config::new(5, 2);
     config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<EPaxos>(config));
+    run_in_thread(move || increasing_load::<SequentialEPaxos>(config));
 
     println!(">running fpaxos n = 5 | f = 1");
     let config = Config::new(5, 1);

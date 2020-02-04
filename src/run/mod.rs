@@ -486,7 +486,10 @@ fn handle_cmd_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{AtomicNewt, Basic, SequentialNewt};
+    use crate::protocol::{
+        AtomicNewt, Basic, LockedAtlas, LockedEPaxos, SequentialAtlas,
+        SequentialEPaxos, SequentialNewt,
+    };
     use rand::Rng;
     use tokio::task;
     use tokio::time::Duration;
@@ -532,6 +535,40 @@ mod tests {
         let workers = 3;
         let executors = 1;
         run_test::<AtomicNewt>(workers, executors).await
+    }
+
+    #[tokio::test]
+    async fn run_sequential_atlas_test() {
+        // sequential atlas can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        run_test::<SequentialAtlas>(workers, executors).await
+    }
+
+    #[tokio::test]
+    async fn run_locked_atlas_test() {
+        // locked atlas can handle as many workers as we want but only one
+        // executor
+        let workers = 3;
+        let executors = 1;
+        run_test::<LockedAtlas>(workers, executors).await
+    }
+
+    #[tokio::test]
+    async fn run_sequential_epaxos_test() {
+        // sequential epaxos can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        run_test::<SequentialEPaxos>(workers, executors).await
+    }
+
+    #[tokio::test]
+    async fn run_locked_epaxos_test() {
+        // locked epaxos can handle as many workers as we want but only one
+        // executor
+        let workers = 3;
+        let executors = 1;
+        run_test::<LockedEPaxos>(workers, executors).await
     }
 
     async fn run_test<P>(workers: usize, executors: usize)

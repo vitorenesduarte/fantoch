@@ -1,6 +1,11 @@
 use crate::kvs::Key;
+use ahash::RandomState;
+use dashmap::iter::Iter;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+
+type SharedClocksIter<'a, V> =
+    Iter<'a, Key, V, RandomState, DashMap<Key, V, RandomState>>;
 
 #[derive(Clone)]
 pub struct SharedClocks<V> {
@@ -28,6 +33,10 @@ where
                 self.get(key)
             }
         }
+    }
+
+    pub fn iter(&self) -> SharedClocksIter<V> {
+        self.clocks.iter()
     }
 
     fn maybe_insert(&self, key: &Key) {

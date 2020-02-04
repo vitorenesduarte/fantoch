@@ -2,7 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{Executor, GraphExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::graph::{KeyClocks, QuorumClocks};
+use crate::protocol::common::graph::{
+    KeyClocks, LockedKeyClocks, QuorumClocks, SequentialKeyClocks,
+};
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
@@ -14,17 +16,20 @@ use std::iter::FromIterator;
 use std::mem;
 use threshold::VClock;
 
+pub type SequentialAtlas = Atlas<SequentialKeyClocks>;
+pub type LockedAtlas = Atlas<LockedKeyClocks>;
+
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Clone)]
-pub struct Atlas {
+pub struct Atlas<KC> {
     bp: BaseProcess,
-    keys_clocks: KeyClocks,
+    keys_clocks: KC,
     cmds: Commands<CommandInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
-impl Protocol for Atlas {
+impl<KC: KeyClocks> Protocol for Atlas<KC> {
     type Message = Message;
     type Executor = GraphExecutor;
 
@@ -40,7 +45,7 @@ impl Protocol for Atlas {
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KeyClocks::new(config.n());
+        let keys_clocks = KC::new(config.n());
         let cmds =
             Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
         let to_executor = Vec::new();
@@ -108,7 +113,7 @@ impl Protocol for Atlas {
     }
 
     fn parallel() -> bool {
-        false
+        KC::parallel()
     }
 
     fn show_metrics(&self) {
@@ -116,7 +121,7 @@ impl Protocol for Atlas {
     }
 }
 
-impl Atlas {
+impl<KC: KeyClocks> Atlas<KC> {
     /// Handles a submit operation by a client.
     fn handle_submit(
         &mut self,
@@ -130,13 +135,12 @@ impl Atlas {
         let cmd = Some(cmd);
 
         // compute its clock
-        // - here we shouldn't save the command in `keys_clocks`; if we do, it
-        //   will be declared as a dependency of itself when this message is
+        // - here we don't save the command in `keys_clocks`; if we did, it
+        //   would be declared as a dependency of itself when this message is
         //   handled by its own coordinator, which prevents fast paths with f >
-        //   1
-        // TODO is there a parallel with newt? or it doesn't suffer from this
-        // problem?
-        let clock = self.keys_clocks.clock(&cmd);
+        //   1; in fact we do, but since the coordinator does not recompute this
+        //   value in the MCollect handler, it's effectively the same
+        let clock = self.keys_clocks.add(dot, &cmd, None);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -180,17 +184,16 @@ impl Atlas {
             return None;
         }
 
-        // optimization: compute clock if not from self
-        // TODO is there a parallel with newt?
-        let clock = if from == self.bp.process_id {
+        // check if it's a message from self
+        let message_from_self = from == self.bp.process_id;
+
+        let clock = if message_from_self {
+            // if it is, do not recompute clock
             remote_clock
         } else {
-            self.keys_clocks.clock_with_past(&cmd, remote_clock)
+            // otherwise, compute clock with the remote clock as past
+            self.keys_clocks.add(dot, &cmd, Some(remote_clock))
         };
-
-        // save command in order to be declared as a conflict for following
-        // commands
-        self.keys_clocks.add(dot, &cmd);
 
         // update command info
         info.status = Status::COLLECT;
@@ -494,18 +497,17 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {}
-// impl MessageDot for Message {
-//     fn dot(&self) -> Option<&Dot> {
-//         match self {
-//             Self::MCollect { dot, .. } => Some(dot),
-//             Self::MCollectAck { dot, .. } => Some(dot),
-//             Self::MCommit { dot, .. } => Some(dot),
-//             Self::MConsensus { dot, .. } => Some(dot),
-//             Self::MConsensusAck { dot, .. } => Some(dot),
-//         }
-//     }
-// }
+impl MessageDot for Message {
+    fn dot(&self) -> Option<&Dot> {
+        match self {
+            Self::MCollect { dot, .. } => Some(dot),
+            Self::MCollectAck { dot, .. } => Some(dot),
+            Self::MCommit { dot, .. } => Some(dot),
+            Self::MConsensus { dot, .. } => Some(dot),
+            Self::MConsensusAck { dot, .. } => Some(dot),
+        }
+    }
+}
 
 /// `Status` of commands.
 #[derive(PartialEq, Clone)]
@@ -524,7 +526,16 @@ mod tests {
     use crate::time::SimTime;
 
     #[test]
-    fn atlas_flow() {
+    fn sequential_atlas_test() {
+        atlas_flow::<SequentialKeyClocks>()
+    }
+
+    #[test]
+    fn locked_atlas_test() {
+        atlas_flow::<LockedKeyClocks>()
+    }
+
+    fn atlas_flow<KC: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -562,9 +573,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(config);
 
         // atlas
-        let mut atlas_1 = Atlas::new(process_id_1, config);
-        let mut atlas_2 = Atlas::new(process_id_2, config);
-        let mut atlas_3 = Atlas::new(process_id_3, config);
+        let mut atlas_1 = Atlas::<KC>::new(process_id_1, config);
+        let mut atlas_2 = Atlas::<KC>::new(process_id_2, config);
+        let mut atlas_3 = Atlas::<KC>::new(process_id_3, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(

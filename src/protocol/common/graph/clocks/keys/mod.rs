@@ -1,109 +1,66 @@
+// This module contains the definition of `SequentialKeyClocks`.
+mod sequential;
+
+// This module contains the definition of `LockedKeyClocks`.
+mod locked;
+
+// Re-exports.
+pub use locked::LockedKeyClocks;
+pub use sequential::SequentialKeyClocks;
+
 use crate::command::Command;
-use crate::id::{Dot, ProcessId};
-use crate::kvs::Key;
 use crate::util;
-use std::collections::HashMap;
+use crate::id::{Dot, ProcessId};
 use threshold::VClock;
 
-#[derive(Clone)]
-pub struct KeyClocks {
-    n: usize, // number of processes
-    clocks: HashMap<Key, VClock<ProcessId>>,
-    noop_clock: VClock<ProcessId>,
+pub trait KeyClocks: Clone {
+    /// Create a new `KeyClocks` instance given the number of processes.
+    fn new(n: usize) -> Self;
+
+    /// Adds a command's `Dot` to the clock of each key touched by the command,
+    /// returning the set of local conflicting commands including past in them
+    /// in case there's a past.
+    fn add(
+        &mut self,
+        dot: Dot,
+        cmd: &Option<Command>,
+        past: Option<VClock<ProcessId>>,
+    ) -> VClock<ProcessId>;
+
+    /// Checks the current `clock` for some command.
+    /// Atlas and EPaxos implementation don't actually use this.
+    #[cfg(test)]
+    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId>;
+
+    fn parallel() -> bool;
 }
 
-impl KeyClocks {
-    /// Create a new `KeyClocks` instance.
-    pub fn new(n: usize) -> Self {
-        Self {
-            n,
-            clocks: HashMap::new(),
-            noop_clock: Self::bottom_clock(n),
-        }
-    }
-
-    /// Adds a command's `Dot` to the clock of each key touched by the command.
-    pub fn add(&mut self, dot: Dot, cmd: &Option<Command>) {
-        match cmd {
-            Some(cmd) => {
-                cmd.keys().for_each(|key| {
-                    // get current clock for this key
-                    let clock = match self.clocks.get_mut(key) {
-                        Some(clock) => clock,
-                        None => {
-                            // if key is not present, create bottom vclock for
-                            // this key
-                            let bottom = Self::bottom_clock(self.n);
-                            // and insert it
-                            self.clocks.entry(key.clone()).or_insert(bottom)
-                        }
-                    };
-                    // add command dot to each clock
-                    clock.add(&dot.source(), dot.sequence());
-                });
-            }
-            None => {
-                // add command dot only to the noop clock
-                self.noop_clock.add(&dot.source(), dot.sequence());
-            }
-        }
-    }
-
-    /// Computes a clock for some command representing the `Dot`s of all
-    /// conflicting commands observed.
-    pub fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let clock = Self::bottom_clock(self.n);
-        self.clock_with_past(cmd, clock)
-    }
-
-    /// Computes a clock for some command representing the `Dot`s of all
-    /// conflicting commands observed, given an initial clock already with
-    /// conflicting commands (that we denote by past).
-    pub fn clock_with_past(
-        &self,
-        cmd: &Option<Command>,
-        mut past: VClock<ProcessId>,
-    ) -> VClock<ProcessId> {
-        // always join with `self.noop_conf`
-        past.join(&self.noop_clock);
-
-        match cmd {
-            Some(cmd) => {
-                // join with the clocks of all keys touched by `cmd`
-                cmd.keys().for_each(|key| {
-                    if let Some(clock) = self.clocks.get(key) {
-                        past.join(clock);
-                    }
-                });
-            }
-            None => {
-                // join with the clocks of *all keys*
-                self.clocks.iter().for_each(|(_key, clock)| {
-                    past.join(clock);
-                });
-            }
-        }
-
-        past
-    }
-
-    // Creates a bottom clock of size `n`.
-    fn bottom_clock(n: usize) -> VClock<ProcessId> {
-        let ids = util::process_ids(n);
-        VClock::with(ids)
-    }
+// Creates a bottom clock of size `n`.
+fn bottom_clock(n: usize) -> VClock<ProcessId> {
+    let ids = util::process_ids(n);
+    VClock::with(ids)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::id::{DotGen, Rifl};
+    use crate::util;
 
     #[test]
-    fn keys_clocks_flow() {
+    fn sequential_key_clocks() {
+        keys_clocks_flow::<SequentialKeyClocks>();
+    }
+
+    #[test]
+    fn locked_key_clocks() {
+        keys_clocks_flow::<LockedKeyClocks>();
+    }
+
+    fn keys_clocks_flow<KC: KeyClocks>() {
         // create key clocks
         let n = 1;
-        let mut clocks = KeyClocks::new(n);
+        let mut clocks = KC::new(n);
 
         // create dot gen
         let process_id = 1;
@@ -148,7 +105,7 @@ mod tests {
         assert_eq!(conf, util::vclock(vec![0]));
 
         // add A with {1,1}
-        clocks.add(dot_gen.next_id(), &cmd_a);
+        clocks.add(dot_gen.next_id(), &cmd_a, None);
 
         // 1. conf with {1,1} for A
         // 2. empty conf for B
@@ -162,7 +119,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![1]));
 
         // add noop with {1,2}
-        clocks.add(dot_gen.next_id(), &noop);
+        clocks.add(dot_gen.next_id(), &noop, None);
 
         // conf with {1,2} for A, B, A-B, C and noop
         assert_eq!(clocks.clock(&cmd_a), util::vclock(vec![2]));
@@ -172,7 +129,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![2]));
 
         // add B with {1,3}
-        clocks.add(dot_gen.next_id(), &cmd_b);
+        clocks.add(dot_gen.next_id(), &cmd_b, None);
 
         // 1. conf with {1,2} for A
         // 2. conf with {1,3} for B
@@ -186,7 +143,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![3]));
 
         // add B with {1,4}
-        clocks.add(dot_gen.next_id(), &cmd_b);
+        clocks.add(dot_gen.next_id(), &cmd_b, None);
 
         // 1. conf with {1,2} for A
         // 2. conf with {1,4} for B
@@ -200,7 +157,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![4]));
 
         // add A-B with {1,5}
-        clocks.add(dot_gen.next_id(), &cmd_ab);
+        clocks.add(dot_gen.next_id(), &cmd_ab, None);
 
         // 1. conf with {1,5} for A
         // 2. conf with {1,5} for B
@@ -214,7 +171,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![5]));
 
         // add A with {1,6}
-        clocks.add(dot_gen.next_id(), &cmd_a);
+        clocks.add(dot_gen.next_id(), &cmd_a, None);
 
         // 1. conf with {1,6} for A
         // 2. conf with {1,5} for B
@@ -228,7 +185,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![6]));
 
         // add C with {1,7}
-        clocks.add(dot_gen.next_id(), &cmd_c);
+        clocks.add(dot_gen.next_id(), &cmd_c, None);
 
         // 1. conf with {1,6} for A
         // 2. conf with {1,5} for B
@@ -242,7 +199,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![7]));
 
         // add noop with {1,8}
-        clocks.add(dot_gen.next_id(), &noop);
+        clocks.add(dot_gen.next_id(), &noop, None);
 
         // conf with {1,8} for A, B, A-B, C and noop
         assert_eq!(clocks.clock(&cmd_a), util::vclock(vec![8]));
@@ -252,7 +209,7 @@ mod tests {
         assert_eq!(clocks.clock(&noop), util::vclock(vec![8]));
 
         // add B with {1,9}
-        clocks.add(dot_gen.next_id(), &cmd_b);
+        clocks.add(dot_gen.next_id(), &cmd_b, None);
 
         // 1. conf with {1,8} for A
         // 2. conf with {1,9} for B

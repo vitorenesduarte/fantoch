@@ -1,9 +1,6 @@
 // This module contains the definition of `SequentialKeyClocks`.
 mod sequential;
 
-// This module contains the definition of `SharedClocks`.
-mod shared_clocks;
-
 // This module contains the definition of `AtomicKeyClocks`.
 mod atomic;
 

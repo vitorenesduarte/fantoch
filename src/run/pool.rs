@@ -98,7 +98,7 @@ where
                 // - check that the pool has size 1 and forward to the single
                 //   worker
                 assert_eq!(self.pool.len(), 1);
-                1
+                0
             }
         };
 
