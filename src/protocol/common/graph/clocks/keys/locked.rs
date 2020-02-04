@@ -63,7 +63,9 @@ impl KeyClocks for LockedKeyClocks {
     /// Checks the current `clock` for some command.
     #[cfg(test)]
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
+        // always start from the noop clock:
         let mut clock = super::bottom_clock(self.n);
+        clock.join(&self.noop_clock.read());
         match cmd {
             Some(cmd) => self.cmd_clock(cmd, &mut clock),
             None => self.noop_clock(&mut clock),
@@ -85,7 +87,7 @@ impl LockedKeyClocks {
     ) -> VClock<ProcessId> {
         // include the noop clock:
         // - for this operation we only need a read lock
-        clock.join(&*self.noop_clock.read());
+        clock.join(&self.noop_clock.read());
 
         // iterate through all command keys, grab a write lock, get their
         // current clock and add ourselves to it
@@ -98,6 +100,8 @@ impl LockedKeyClocks {
             clock.join(&current_clock);
             // add `dot` to the clock
             current_clock.add(&dot.source(), dot.sequence());
+            // release the lock
+            drop(current_clock);
         });
 
         // and finally return the computed clock
