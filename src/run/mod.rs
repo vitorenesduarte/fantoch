@@ -256,6 +256,8 @@ where
         client_to_workers_rxs,
         to_writers,
         worker_to_executors,
+        channel_buffer_size,
+        execution_log,
     );
     println!("process {} started", process_id);
 

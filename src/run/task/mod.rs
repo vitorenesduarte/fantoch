@@ -7,6 +7,9 @@ pub mod chan;
 // This module contains executor's implementation.
 pub mod executor;
 
+// This module contains execution logger's implementation.
+mod execution_logger;
+
 // This module contains process's implementation.
 pub mod process;
 

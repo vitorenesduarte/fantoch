@@ -1,4 +1,5 @@
 use super::connection::Connection;
+use super::execution_logger;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::log;
@@ -258,10 +259,19 @@ pub fn start_processes<P>(
     client_to_workers_rxs: Vec<SubmitReceiver>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     worker_to_executors: WorkerToExecutors<P>,
+    channel_buffer_size: usize,
+    execution_log: Option<String>,
 ) -> Vec<JoinHandle<()>>
 where
     P: Protocol + Send + 'static,
 {
+    let execution_logger_tx = execution_log.map(|execution_log| {
+        // if the execution log was set, then start the execution logger
+        task::spawn_consumer(channel_buffer_size, |rx| {
+            execution_logger::execution_logger_task::<P>(execution_log, rx)
+        })
+    });
+
     // zip rxs'
     let incoming = reader_to_workers_rxs
         .into_iter()

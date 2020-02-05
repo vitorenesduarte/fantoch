@@ -173,7 +173,7 @@ pub fn parse_args() -> (
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
-    let execution_log = parse_execution_log(matches.value_if("execution_log"));
+    let execution_log = parse_execution_log(matches.value_of("execution_log"));
 
     // update config
     config.set_workers(workers);
