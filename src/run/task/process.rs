@@ -5,6 +5,8 @@ use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
 use crate::run::task;
+use futures::future::FutureExt;
+use futures::select_biased;
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -291,8 +293,9 @@ async fn process_task<P>(
     P: Protocol + 'static,
 {
     loop {
-        tokio::select! {
-            msg = from_readers.recv() => {
+        // prioritize messages about ongoing commands
+        select_biased! {
+            msg = from_readers.recv().fuse() => {
                 log!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
                     handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors).await
@@ -300,7 +303,7 @@ async fn process_task<P>(
                     println!("[server] error while receiving new process message from readers");
                 }
             }
-            cmd = from_clients.recv() => {
+            cmd = from_clients.recv().fuse()  => {
                 log!("[server] from clients: {:?}", cmd);
                 if let Some((dot, cmd)) = cmd {
                     handle_from_client(process_id, dot, cmd, &mut process, &mut to_writers).await
