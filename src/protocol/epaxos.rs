@@ -330,6 +330,10 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.to_executor.push(execution_info);
         }
 
+        // TODO the following is incorrect: it should only be deleted once it
+        // has been committed at all processes
+        self.cmds.remove(dot);
+
         // nothing to send
         None
     }
