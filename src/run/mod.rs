@@ -70,7 +70,7 @@ mod prelude;
 mod pool;
 
 // This module contains the common read-write (+serde) utilities.
-mod rw;
+pub mod rw;
 
 // This module contains the implementation of channels, clients, connections,
 // executors, and process workers.

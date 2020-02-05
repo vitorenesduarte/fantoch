@@ -222,6 +222,7 @@ impl TarjanSCCFinder {
     }
 }
 
+#[derive(Debug)]
 pub struct Vertex {
     dot: Dot,
     cmd: Command,

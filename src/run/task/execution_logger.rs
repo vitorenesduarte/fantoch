@@ -17,7 +17,7 @@ pub async fn execution_logger_task<P>(
     P: Protocol,
 {
     println!(
-        "execution logger started! appending execution info to {}",
+        "[execution_logger] started with log {}",
         execution_log
     );
 

@@ -160,7 +160,8 @@ pub fn parse_args() -> (
     let port = parse_port(matches.value_of("port"));
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
-    let mut config = parse_config(matches.value_of("n"), matches.value_of("f"));
+    let mut config =
+        super::parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let tcp_buffer_size =
         super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
@@ -173,7 +174,8 @@ pub fn parse_args() -> (
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
-    let execution_log = parse_execution_log(matches.value_of("execution_log"));
+    let execution_log =
+        super::parse_execution_log(matches.value_of("execution_log"));
 
     // update config
     config.set_workers(workers);
@@ -253,18 +255,6 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
         .collect()
 }
 
-fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
-    let n = n
-        .expect("n should be set")
-        .parse::<usize>()
-        .expect("n should be a number");
-    let f = f
-        .expect("f should be set")
-        .parse::<usize>()
-        .expect("f should be a number");
-    Config::new(n, f)
-}
-
 fn parse_id(id: &str) -> ProcessId {
     id.parse::<ProcessId>()
         .expect("process id should be a number")
@@ -298,8 +288,4 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
                 .expect("multiplexing should be a number")
         })
         .unwrap_or(DEFAULT_MULTIPLEXING)
-}
-
-fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
-    execution_log.map(|execution_log| String::from(execution_log))
 }
