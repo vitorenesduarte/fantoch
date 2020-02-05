@@ -1,9 +1,9 @@
-use super::connection::Connection;
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::log;
 use crate::run::prelude::*;
+use crate::run::rw::Connection;
 use futures::future::FutureExt;
 use futures::select_biased;
 use tokio::net::TcpListener;

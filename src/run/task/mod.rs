@@ -1,11 +1,11 @@
-// This module contains the definition of `Connection`.
-pub mod connection;
-
 // This module contains the definition of `ChannelSender` and `ChannelReceiver`.
 pub mod chan;
 
 // This module contains executor's implementation.
 pub mod executor;
+
+// This module contains execution logger's implementation.
+mod execution_logger;
 
 // This module contains process's implementation.
 pub mod process;
@@ -17,8 +17,8 @@ pub mod client;
 pub use chan::channel;
 
 use crate::run::prelude::*;
+use crate::run::rw::Connection;
 use chan::{ChannelReceiver, ChannelSender};
-use connection::Connection;
 use std::fmt::Debug;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};

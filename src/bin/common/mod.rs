@@ -2,6 +2,8 @@
 #[allow(dead_code)]
 pub mod protocol;
 
+use planet_sim::config::Config;
+
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_FLUSH_INTERVAL: usize = 0; // microseconds
@@ -21,6 +23,18 @@ pub fn tokio_runtime() -> tokio::runtime::Runtime {
         .thread_name("runner")
         .build()
         .expect("tokio runtime build should work")
+}
+
+pub fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
+    let n = n
+        .expect("n should be set")
+        .parse::<usize>()
+        .expect("n should be a number");
+    let f = f
+        .expect("f should be set")
+        .parse::<usize>()
+        .expect("f should be a number");
+    Config::new(n, f)
 }
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
@@ -64,4 +78,8 @@ fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
                 .expect("buffer size should be a number")
         })
         .unwrap_or(default)
+}
+
+pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
+    execution_log.map(|execution_log| String::from(execution_log))
 }

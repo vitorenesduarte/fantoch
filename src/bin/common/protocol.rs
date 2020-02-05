@@ -25,6 +25,7 @@ pub fn parse_args() -> (
     Option<usize>,
     usize,
     usize,
+    Option<String>,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -142,6 +143,13 @@ pub fn parse_args() -> (
                 .help("number of connections between replicas; default: 1")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("execution_log")
+                .long("execution_log")
+                .value_name("EXECUTION_LOG")
+                .help("log file in which execution info should be written to; by default this information is not logged")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -152,7 +160,8 @@ pub fn parse_args() -> (
     let port = parse_port(matches.value_of("port"));
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
-    let mut config = parse_config(matches.value_of("n"), matches.value_of("f"));
+    let mut config =
+        super::parse_config(matches.value_of("n"), matches.value_of("f"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let tcp_buffer_size =
         super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
@@ -165,6 +174,8 @@ pub fn parse_args() -> (
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
+    let execution_log =
+        super::parse_execution_log(matches.value_of("execution_log"));
 
     // update config
     config.set_workers(workers);
@@ -182,6 +193,7 @@ pub fn parse_args() -> (
     println!("tcp flush interval: {:?}", tcp_flush_interval);
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("multiplexing: {:?}", multiplexing);
+    println!("execution log: {:?}", execution_log);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -202,6 +214,7 @@ pub fn parse_args() -> (
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
+        execution_log,
     )
 }
 
@@ -240,18 +253,6 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
         .split(LIST_SEP)
         .map(|address| address.to_string())
         .collect()
-}
-
-fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
-    let n = n
-        .expect("n should be set")
-        .parse::<usize>()
-        .expect("n should be a number");
-    let f = f
-        .expect("f should be set")
-        .parse::<usize>()
-        .expect("f should be a number");
-    Config::new(n, f)
 }
 
 fn parse_id(id: &str) -> ProcessId {

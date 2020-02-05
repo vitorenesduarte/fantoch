@@ -1,9 +1,10 @@
-use super::connection::Connection;
+use super::execution_logger;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
+use crate::run::rw::Connection;
 use crate::run::task;
 use futures::future::FutureExt;
 use futures::select_biased;
@@ -258,10 +259,19 @@ pub fn start_processes<P>(
     client_to_workers_rxs: Vec<SubmitReceiver>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     worker_to_executors: WorkerToExecutors<P>,
+    channel_buffer_size: usize,
+    execution_log: Option<String>,
 ) -> Vec<JoinHandle<()>>
 where
     P: Protocol + Send + 'static,
 {
+    let to_execution_logger = execution_log.map(|execution_log| {
+        // if the execution log was set, then start the execution logger
+        task::spawn_consumer(channel_buffer_size, |rx| {
+            execution_logger::execution_logger_task::<P>(execution_log, rx)
+        })
+    });
+
     // zip rxs'
     let incoming = reader_to_workers_rxs
         .into_iter()
@@ -277,6 +287,7 @@ where
                 from_clients,
                 to_writers.clone(),
                 worker_to_executors.clone(),
+                to_execution_logger.clone(),
             ))
         })
         .collect()
@@ -289,6 +300,7 @@ async fn process_task<P>(
     mut from_clients: SubmitReceiver,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut worker_to_executors: WorkerToExecutors<P>,
+    mut to_execution_logger: Option<ExecutionInfoSender<P>>,
 ) where
     P: Protocol + 'static,
 {
@@ -298,7 +310,7 @@ async fn process_task<P>(
             msg = from_readers.recv().fuse() => {
                 log!("[server] reader message: {:?}", msg);
                 if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors).await
+                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors, &mut to_execution_logger).await
                 } else {
                     println!("[server] error while receiving new process message from readers");
                 }
@@ -322,6 +334,7 @@ async fn handle_from_processes<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
 ) where
     P: Protocol + 'static,
 {
@@ -332,6 +345,14 @@ async fn handle_from_processes<P>(
 
     // check if there's new execution info for the executor
     for execution_info in process.to_executor() {
+        // if there's an execution logger, then also send execution info to it
+        if let Some(to_execution_logger) = to_execution_logger {
+            if let Err(e) =
+                to_execution_logger.send(execution_info.clone()).await
+            {
+                println!("[server] error while sending new execution info to execution logger: {:?}", e);
+            }
+        }
         if let Err(e) = worker_to_executors.forward(execution_info).await {
             println!(
                 "[server] error while sending new execution info to executor: {:?}",

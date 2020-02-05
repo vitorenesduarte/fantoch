@@ -21,10 +21,19 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, Rifl};
 use crate::kvs::{KVOpResult, Key};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::fmt::Debug;
 
 pub trait Executor {
-    type ExecutionInfo: Clone + Debug + Send + MessageKey;
+    // TODO why is Send needed?
+    type ExecutionInfo: Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + MessageKey; // TODO why is Sync needed??
 
     fn new(config: Config) -> Self;
 

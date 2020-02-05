@@ -69,6 +69,9 @@ mod prelude;
 // This module contains the definition of `ToPool`.
 mod pool;
 
+// This module contains the common read-write (+serde) utilities.
+pub mod rw;
+
 // This module contains the implementation of channels, clients, connections,
 // executors, and process workers.
 pub mod task;
@@ -106,6 +109,7 @@ pub async fn process<A, P>(
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     multiplexing: usize,
+    execution_log: Option<String>,
 ) -> RunResult<()>
 where
     A: ToSocketAddrs + Debug + Clone,
@@ -128,6 +132,7 @@ where
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
+        execution_log,
         semaphore,
     )
     .await
@@ -148,6 +153,7 @@ async fn process_with_notify<A, P>(
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     multiplexing: usize,
+    execution_log: Option<String>,
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
 where
@@ -253,6 +259,8 @@ where
         client_to_workers_rxs,
         to_writers,
         worker_to_executors,
+        channel_buffer_size,
+        execution_log,
     );
     println!("process {} started", process_id);
 
@@ -629,6 +637,11 @@ mod tests {
         let p2_client_port = get_available_port();
         let p3_client_port = get_available_port();
 
+        // execution logs
+        let p1_execution_log = Some(String::from("p1.execution_log"));
+        let p2_execution_log = Some(String::from("p2.execution_log"));
+        let p3_execution_log = Some(String::from("p3.execution_log"));
+
         // spawn processes
         task::spawn_local(process_with_notify::<String, P>(
             process_1,
@@ -647,6 +660,7 @@ mod tests {
             tcp_flush_interval,
             channel_buffer_size,
             multiplexing,
+            p1_execution_log,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -666,6 +680,7 @@ mod tests {
             tcp_flush_interval,
             channel_buffer_size,
             multiplexing,
+            p2_execution_log,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<String, P>(
@@ -685,6 +700,7 @@ mod tests {
             tcp_flush_interval,
             channel_buffer_size,
             multiplexing,
+            p3_execution_log,
             semaphore.clone(),
         ));
 

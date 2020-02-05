@@ -44,6 +44,8 @@ pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
 pub type SubmitReceiver = ChannelReceiver<(Dot, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
+pub type ExecutionInfoSender<P> =
+    ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;

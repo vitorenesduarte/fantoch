@@ -4,7 +4,7 @@ use crate::kvs::Key;
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct VertexIndex {
     index: HashMap<Dot, UnsafeCell<Vertex>>,
 }
@@ -33,7 +33,7 @@ impl VertexIndex {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PendingIndex {
     index: HashMap<Key, HashSet<Dot>>,
 }

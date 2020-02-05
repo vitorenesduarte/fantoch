@@ -90,6 +90,15 @@ impl DependencyGraph {
         }
     }
 
+    pub fn show_internal_status(&self) {
+        println!("vertex index:");
+        println!("{:#?}", self.vertex_index);
+        println!("pending index:");
+        println!("{:#?}", self.pending_index);
+        println!("executed:");
+        println!("{:?}", self.executed_clock);
+    }
+
     fn index(&mut self, vertex: Vertex) {
         // index in pending index
         self.pending_index.index(&vertex);

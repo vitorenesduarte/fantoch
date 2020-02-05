@@ -4,6 +4,7 @@ use crate::executor::graph::DependencyGraph;
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::KVStore;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use threshold::VClock;
 
@@ -72,7 +73,13 @@ impl Executor for GraphExecutor {
     }
 }
 
-#[derive(Debug, Clone)]
+impl GraphExecutor {
+    pub fn show_internal_status(&self) {
+        self.graph.show_internal_status();
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphExecutionInfo {
     dot: Dot,
     cmd: Command,
