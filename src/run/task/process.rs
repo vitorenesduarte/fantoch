@@ -1,10 +1,10 @@
-use super::connection::Connection;
 use super::execution_logger;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::protocol::{Protocol, ToSend};
 use crate::run::prelude::*;
+use crate::run::rw::Connection;
 use crate::run::task;
 use futures::future::FutureExt;
 use futures::select_biased;

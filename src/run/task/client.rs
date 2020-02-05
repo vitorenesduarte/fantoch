@@ -1,4 +1,4 @@
-use super::connection::Connection;
+use crate::run::rw::Connection;
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
