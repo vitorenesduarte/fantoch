@@ -25,6 +25,7 @@ pub fn parse_args() -> (
     Option<usize>,
     usize,
     usize,
+    Option<String>,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -142,6 +143,13 @@ pub fn parse_args() -> (
                 .help("number of connections between replicas; default: 1")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("execution_log")
+                .long("execution_log")
+                .value_name("EXECUTION_LOG")
+                .help("log file in which execution info should be written to; by default this information is not logged")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -165,6 +173,7 @@ pub fn parse_args() -> (
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
+    let execution_log = parse_execution_log(matches.value_if("execution_log"));
 
     // update config
     config.set_workers(workers);
@@ -182,6 +191,7 @@ pub fn parse_args() -> (
     println!("tcp flush interval: {:?}", tcp_flush_interval);
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("multiplexing: {:?}", multiplexing);
+    println!("execution log: {:?}", execution_log);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -202,6 +212,7 @@ pub fn parse_args() -> (
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
+        execution_log,
     )
 }
 
@@ -287,4 +298,8 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
                 .expect("multiplexing should be a number")
         })
         .unwrap_or(DEFAULT_MULTIPLEXING)
+}
+
+fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
+    execution_log.map(|execution_log| String::from(execution_log))
 }

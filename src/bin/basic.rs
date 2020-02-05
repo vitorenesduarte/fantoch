@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
+        execution_log,
     ) = common::protocol::parse_args();
     let process = Basic::new(process_id, config);
 
@@ -34,5 +35,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         tcp_flush_interval,
         channel_buffer_size,
         multiplexing,
+        execution_log,
     ))
 }
