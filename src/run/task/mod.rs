@@ -17,8 +17,8 @@ pub mod client;
 pub use chan::channel;
 
 use crate::run::prelude::*;
-use chan::{ChannelReceiver, ChannelSender};
 use crate::run::rw::Connection;
+use chan::{ChannelReceiver, ChannelSender};
 use std::fmt::Debug;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};

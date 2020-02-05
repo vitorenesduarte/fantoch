@@ -16,6 +16,11 @@ pub async fn execution_logger_task<P>(
 ) where
     P: Protocol,
 {
+    println!(
+        "execution logger started! appending execution info to {}",
+        execution_log
+    );
+
     // create execution log file (truncating it if already exists)
     let file = File::create(execution_log)
         .await
