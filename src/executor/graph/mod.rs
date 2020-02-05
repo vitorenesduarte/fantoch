@@ -95,6 +95,8 @@ impl DependencyGraph {
         println!("{:#?}", self.vertex_index);
         println!("pending index:");
         println!("{:#?}", self.pending_index);
+        println!("executed:");
+        println!("{:?}", self.executed_clock);
     }
 
     fn index(&mut self, vertex: Vertex) {
