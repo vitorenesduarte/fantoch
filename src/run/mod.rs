@@ -82,6 +82,8 @@ use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use futures::future::join_all;
+use futures::future::FutureExt;
+use futures::select_biased;
 use prelude::*;
 use std::fmt::Debug;
 use std::net::IpAddr;
@@ -382,16 +384,16 @@ where
     let mut interval = time::interval(Duration::from_millis(interval_ms));
 
     loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                // submit new command on every tick (if there are still commands to be generated)
-                next_cmd(&mut client, &time, &mut write).await;
-            }
-            cmd_result = read.recv() => {
+        select_biased! {
+            cmd_result = read.recv().fuse() => {
                 if handle_cmd_result(&mut client, &time, cmd_result) {
                     // check if we have generated all commands and received all the corresponding command results, exit
                     break;
                 }
+            }
+            _ = interval.tick().fuse()  => {
+                // submit new command on every tick (if there are still commands to be generated)
+                next_cmd(&mut client, &time, &mut write).await;
             }
         }
     }
