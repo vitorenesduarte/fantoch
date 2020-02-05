@@ -102,6 +102,7 @@ impl SequentialKeyClocks {
             Some(cmd) => {
                 // join with the clocks of all keys touched by `cmd`
                 cmd.keys().for_each(|key| {
+                    // if the key is not present, then ignore it
                     if let Some(clock) = self.clocks.get(key) {
                         past.join(clock);
                     }
