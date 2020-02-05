@@ -6,6 +6,7 @@ use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{Dot, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
 use crate::protocol::common::table::VoteRange;
+use serde::{Deserialize, Serialize};
 
 pub struct TableExecutor {
     table: MultiVotesTable,
@@ -89,7 +90,7 @@ impl TableExecutor {
             .collect()
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TableExecutionInfo {
     Votes {
         dot: Dot,

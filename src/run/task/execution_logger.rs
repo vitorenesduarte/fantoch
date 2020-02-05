@@ -1,4 +1,3 @@
-use crate::executor::Executor;
 use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
@@ -23,7 +22,7 @@ pub async fn execution_logger_task<P>(
         .expect("it should be possible to create execution log file");
 
     // create file logger
-    let logger = Rw::from(
+    let mut logger = Rw::from(
         EXECUTION_LOGGER_BUFFER_SIZE,
         EXECUTION_LOGGER_BUFFER_SIZE,
         file,
@@ -38,27 +37,16 @@ pub async fn execution_logger_task<P>(
             execution_info = from_workers.recv().fuse() => {
                 log!("[executor_logger] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    write_execution_info::<P>(execution_info).await
+                    // write execution info to file
+                    logger.write(execution_info).await;
                 } else {
                     println!("[executor_logger] error while receiving execution info from parent");
                 }
             }
             _ = interval.tick().fuse()  => {
                 // flush
-                flush_execution_info().await
+                logger.flush().await
             }
         }
     }
-}
-
-async fn write_execution_info<P>(
-    execution_info: <P::Executor as Executor>::ExecutionInfo,
-) where
-    P: Protocol,
-{
-    todo!()
-}
-
-async fn flush_execution_info() {
-    todo!()
 }

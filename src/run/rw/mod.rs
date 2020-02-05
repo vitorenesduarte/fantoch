@@ -6,7 +6,8 @@ pub use connection::Connection;
 
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};

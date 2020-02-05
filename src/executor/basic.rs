@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::executor::pending::Pending;
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::Rifl;
+use serde::{Deserialize, Serialize};
 use crate::kvs::{KVOp, KVStore, Key};
 
 pub struct BasicExecutor {
@@ -51,7 +52,7 @@ impl Executor for BasicExecutor {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BasicExecutionInfo {
     rifl: Rifl,
     key: Key,
