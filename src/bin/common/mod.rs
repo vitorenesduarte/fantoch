@@ -9,6 +9,7 @@ const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_FLUSH_INTERVAL: usize = 0; // microseconds
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
+#[allow(dead_code)]
 pub fn tokio_runtime() -> tokio::runtime::Runtime {
     // get number of cpus
     let cpus = num_cpus::get();

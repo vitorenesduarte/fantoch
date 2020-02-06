@@ -301,6 +301,92 @@ mod tests {
     }
 
     #[test]
+    /// We have 3 commands by the same process:
+    /// - the first (1,1) accesses key A and thus has no dependencies
+    /// - the second (1,2) accesses key B and thus has no dependencies
+    /// - the third (1,3) accesses key B and thus it depends on the second
+    ///   command (1,2)
+    ///
+    /// The commands are then received in the following order:
+    /// - (1,2) executed as it has no dependencies
+    /// - (1,3) can't be executed: this command depends on (1,2) and if we don't
+    ///   assume the transitivity of conflicts, it also depends on (1,1) that
+    ///   hasn't been executed
+    /// - (1,1) executed as it has no dependencies
+    ///
+    /// Now when (1,1) is executed, we would hope that (1,3) would also be.
+    /// However, since (1,1) accesses key A, when it is executed we don't try
+    /// the pending operation (1,3) because it accesses a different key (B).
+    /// This means that our mechanism to track pending commands does not work
+    /// when we don't assume the transitivity of conflicts.
+    ///
+    /// Maybe this can be fixed by simply tracking one missing dependency per
+    /// pending command, when that dependency is executed, if we still can't be
+    /// executed it's because there's another missing dependency that, and now
+    /// we wait for that one to be executed.
+    fn pending_on_different_key_regression_test() {
+        // create config
+        let n = 1;
+        let f = 1;
+        let mut config = Config::new(n, f);
+
+        // cmd 1
+        let dot_1 = Dot::new(1, 1);
+        let cmd_1 =
+            Command::put(Rifl::new(1, 1), String::from("A"), String::new());
+        let clock_1 = util::vclock(vec![0]);
+
+        // cmd 2
+        let dot_2 = Dot::new(1, 2);
+        let cmd_2 =
+            Command::put(Rifl::new(2, 1), String::from("B"), String::new());
+        let clock_2 = util::vclock(vec![0]);
+
+        // cmd 3
+        let dot_3 = Dot::new(1, 3);
+        let cmd_3 =
+            Command::put(Rifl::new(3, 1), String::from("B"), String::new());
+        let clock_3 = util::vclock(vec![2]);
+
+        for transitive_conflicts in vec![false, true] {
+            config.set_transitive_conflicts(transitive_conflicts);
+
+            // create queue
+            let mut queue = DependencyGraph::new(&config);
+
+            // add cmd 2
+            queue.add(dot_2, cmd_2.clone(), clock_2.clone());
+            assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
+
+            // add cmd 3
+            queue.add(dot_3, cmd_3.clone(), clock_3.clone());
+            if transitive_conflicts {
+                // if we assume transitive conflicts, then cmd 3 can be executed
+                assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
+            } else {
+                // otherwise, it can't as it also depends cmd 1
+                assert!(queue.commands_to_execute().is_empty());
+            }
+
+            // add cmd 1
+            queue.add(dot_1, cmd_1.clone(), clock_1.clone());
+            // cmd 1 can always be executed
+            if transitive_conflicts {
+                assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
+            } else {
+                // TODO the following fails because our mechanism to track
+                // pending commands does not work if we don't assume the
+                // transitivity of conflicts
+                //
+                // assert_eq!(
+                //     queue.commands_to_execute(),
+                //     vec![cmd_3.clone(), cmd_1.clone()]
+                // );
+            }
+        }
+    }
+
+    #[test]
     fn simple_test_add_1() {
         // the actual test_add_1 is:
         // {1, 2}, [2, 2]
