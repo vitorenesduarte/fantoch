@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // check that no leader was defined
     if config.leader().is_some() {
-        panic!("can't define a leader in leaderless protocol");
+        panic!("can't define a leader in a leaderless protocol");
     }
 
     // create process
