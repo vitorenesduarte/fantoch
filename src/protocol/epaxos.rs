@@ -16,8 +16,8 @@ use std::iter::FromIterator;
 use std::mem;
 use threshold::VClock;
 
-pub type SequentialEPaxos = EPaxos<SequentialKeyClocks>;
-pub type LockedEPaxos = EPaxos<LockedKeyClocks>;
+pub type EPaxosSequential = EPaxos<SequentialKeyClocks>;
+pub type EPaxosLocked = EPaxos<LockedKeyClocks>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 

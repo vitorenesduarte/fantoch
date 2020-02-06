@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{LockedEPaxos, Protocol};
+use planet_sim::protocol::{EPaxosLocked, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // create process
-    let process = LockedEPaxos::new(process_id, config);
+    let process = EPaxosLocked::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
         process,

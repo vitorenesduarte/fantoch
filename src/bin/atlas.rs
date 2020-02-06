@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{Protocol, SequentialAtlas};
+use planet_sim::protocol::{Protocol, AtlasSequential};
 use std::error::Error;
 
 // TODO can we generate all the protocol binaries with a macro?
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // create process
-    let process = SequentialAtlas::new(process_id, config);
+    let process = AtlasSequential::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
         process,

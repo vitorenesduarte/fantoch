@@ -22,10 +22,10 @@ mod epaxos;
 mod newt;
 
 // Re-exports.
-pub use atlas::{LockedAtlas, SequentialAtlas};
+pub use atlas::{AtlasLocked, AtlasSequential};
 pub use basic::Basic;
-pub use epaxos::{LockedEPaxos, SequentialEPaxos};
-pub use newt::{AtomicNewt, SequentialNewt};
+pub use epaxos::{EPaxosLocked, EPaxosSequential};
+pub use newt::{NewtAtomic, NewtSequential};
 
 pub use base::BaseProcess;
 

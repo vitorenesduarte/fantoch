@@ -1,5 +1,5 @@
 use crate::id::ProcessId;
-use crate::protocol::SequentialEPaxos;
+use crate::protocol::EPaxosSequential;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
@@ -130,7 +130,7 @@ impl Config {
         let n = self.n;
         // ignore config.f() since EPaxos always tolerates a minority of
         // failures
-        let f = SequentialEPaxos::allowed_faults(n);
+        let f = EPaxosSequential::allowed_faults(n);
         let fast_quorum_size = f + ((f + 1) / 2 as usize);
         let write_quorum_size = f + 1;
         (fast_quorum_size, write_quorum_size)

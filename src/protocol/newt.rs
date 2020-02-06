@@ -13,8 +13,8 @@ use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 use std::mem;
 
-pub type SequentialNewt = Newt<SequentialKeyClocks>;
-pub type AtomicNewt = Newt<AtomicKeyClocks>;
+pub type NewtSequential = Newt<SequentialKeyClocks>;
+pub type NewtAtomic = Newt<AtomicKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 

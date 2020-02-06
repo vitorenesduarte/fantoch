@@ -16,8 +16,8 @@ use std::iter::FromIterator;
 use std::mem;
 use threshold::VClock;
 
-pub type SequentialAtlas = Atlas<SequentialKeyClocks>;
-pub type LockedAtlas = Atlas<LockedKeyClocks>;
+pub type AtlasSequential = Atlas<SequentialKeyClocks>;
+pub type AtlasLocked = Atlas<LockedKeyClocks>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
