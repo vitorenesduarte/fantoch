@@ -1,3 +1,4 @@
+use crate::id::ProcessId;
 use crate::protocol::SequentialEPaxos;
 
 #[derive(Debug, Clone, Copy)]
@@ -10,6 +11,8 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
+    // starting leader process
+    leader: Option<ProcessId>,
     /// defines the number of `Protocol` workers
     workers: usize,
     /// defines the number of `Executor` workers
@@ -29,6 +32,8 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
+        // by default, there's no leader
+        let leader = None;
         // by default there's one worker for `Protocol` and one worker for
         // `Executor`
         let workers = 1;
@@ -38,6 +43,7 @@ impl Config {
             f,
             newt_tiny_quorums,
             transitive_conflicts,
+            leader,
             workers,
             executors,
         }
@@ -71,6 +77,16 @@ impl Config {
     /// Changes the value of `transitive_conflicts`.
     pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
         self.transitive_conflicts = transitive_conflicts;
+    }
+
+    /// Checks whether a starting leader has been defined.
+    pub fn leader(&self) -> Option<ProcessId> {
+        self.leader
+    }
+
+    /// Sets the starting leader.
+    pub fn set_leader(&mut self, leader: ProcessId) {
+        self.leader = Some(leader);
     }
 
     /// Checks the number of `Protocol` workers.
@@ -187,6 +203,13 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+
+        // by default, there's no leader
+        assert!(config.leader().is_none());
+        // but that can change
+        let leader = 1;
+        config.set_leader(leader);
+        assert_eq!(config.leader(), Some(leader));
 
         // by default, there's one protocol worker and one executor worker
         assert_eq!(config.workers(), 1);

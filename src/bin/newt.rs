@@ -19,6 +19,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         multiplexing,
         execution_log,
     ) = common::protocol::parse_args();
+
+    // check that no leader was defined
+    if config.leader().is_some() {
+        panic!("can't define a leader in leaderless protocol");
+    }
+
+    // create process
     let process = SequentialNewt::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
