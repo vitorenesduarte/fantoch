@@ -15,13 +15,15 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="atomic_newt"
+PROTOCOL="locked_atlas"
 PROCESSES=3
 FAULTS=1
+TRANSITIVE_CONFLICTS="true"
+EXECUTION_LOG=""
 
 # parallelism config
 WORKERS=8
-EXECUTORS=8
+EXECUTORS=1
 MULTIPLEXING=2
 
 # clients config
@@ -213,7 +215,7 @@ pull_flamegraph() {
         sleep 1
     done
 
-    scp "${SSH_ARGS}" "${machine}:~/planet_sim/flamegraph.svg" "flamegraph_${id}_${PROCESS_SOCKET_BUFFER_SIZE}.svg"
+    scp "${SSH_ARGS}" "${machine}:~/planet_sim/flamegraph.svg" "flamegraph_${id}.svg"
 }
 
 stop_processes() {
@@ -267,6 +269,7 @@ start_process() {
         --client_port ${CLIENT_PORT} \
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
+        --transitive_conflicts ${TRANSITIVE_CONFLICTS} \
         --tcp_nodelay ${PROCESS_TCP_NODELAY} \
         --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
         --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
@@ -274,6 +277,11 @@ start_process() {
         --workers ${WORKERS} \
         --executors ${EXECUTORS} \
         --multiplexing ${MULTIPLEXING}"
+
+    # if there's a ${EXECUTION_LOG} append it the ${command_args}
+    if [[ -n ${EXECUTION_LOG} ]]; then
+        command_args="${command_args} --execution_log=${EXECUTION_LOG}"
+    fi
 
     # compute script (based on run mode)
     script=$(bin_script "${PROCESS_RUN_MODE}" "${protocol}")
@@ -426,7 +434,7 @@ if [[ $1 == "stop" ]]; then
     stop_all
 else
     output_log=.run_log
-    for clients_per_machine in 16 32 64 128 256 512 1024; do
+    for clients_per_machine in 2 4 8 16 32 64 128 256 512 1024; do
         echo "C=${clients_per_machine}" >>${output_log}
         stop_all
         sleep ${KILL_WAIT}
