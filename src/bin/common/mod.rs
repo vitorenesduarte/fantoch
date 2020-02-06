@@ -4,6 +4,7 @@ pub mod protocol;
 
 use planet_sim::config::Config;
 
+const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_FLUSH_INTERVAL: usize = 0; // microseconds
@@ -26,7 +27,11 @@ pub fn tokio_runtime() -> tokio::runtime::Runtime {
         .expect("tokio runtime build should work")
 }
 
-pub fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
+pub fn parse_config(
+    n: Option<&str>,
+    f: Option<&str>,
+    transitive_conflicts: Option<&str>,
+) -> Config {
     let n = n
         .expect("n should be set")
         .parse::<usize>()
@@ -35,7 +40,17 @@ pub fn parse_config(n: Option<&str>, f: Option<&str>) -> Config {
         .expect("f should be set")
         .parse::<usize>()
         .expect("f should be a number");
-    Config::new(n, f)
+    let transitive_conflicts = transitive_conflicts
+        .map(|transitive_conflicts| {
+            transitive_conflicts
+                .parse::<bool>()
+                .expect("transitive conflicts should be a bool")
+        })
+        .unwrap_or(DEFAULT_TRANSITIVE_CONFLICTS);
+    // create config and set transitive conflicts
+    let mut config = Config::new(n, f);
+    config.set_transitive_conflicts(transitive_conflicts);
+    config
 }
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {

@@ -93,6 +93,13 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("transitive_conflicts")
+                .long("transitive_conflicts")
+                .value_name("TRANSITIVE_CONFLICTS")
+                .help("bool indicating whether we can assume that the conflict relation is transitive; default: false")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
@@ -160,8 +167,11 @@ pub fn parse_args() -> (
     let port = parse_port(matches.value_of("port"));
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
-    let mut config =
-        super::parse_config(matches.value_of("n"), matches.value_of("f"));
+    let mut config = super::parse_config(
+        matches.value_of("n"),
+        matches.value_of("f"),
+        matches.value_of("transitive_conflicts"),
+    );
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let tcp_buffer_size =
         super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
