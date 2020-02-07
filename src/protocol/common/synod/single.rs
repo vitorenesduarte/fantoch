@@ -270,7 +270,7 @@ where
                 // compute the proposal accepted at the highest ballot
                 let (highest_ballot, from) = promises
                     .iter()
-                    // get highest proposal
+                    // get highest proposal: if there's more than one proposal with the same highest ballot, then they have the same value, and thus any can be selected
                     .max_by_key(|(_process, (ballot, _value))| ballot)
                     // extract ballot and process
                     .map(|(process, (ballot, _))| (*ballot, *process))
