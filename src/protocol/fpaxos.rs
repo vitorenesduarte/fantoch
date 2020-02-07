@@ -117,7 +117,6 @@ impl FPaxos {
         _dot: Option<Dot>,
         cmd: Command,
     ) -> ToSend<Message> {
-        // create `MStore` and target
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MAccept(ballot, slot, cmd) => {
                 // in this case, we're the leader
@@ -275,183 +274,186 @@ impl MessageDot for Message {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::client::{Client, Workload};
-//     use crate::planet::{Planet, Region};
-//     use crate::sim::Simulation;
-//     use crate::time::SimTime;
-//     use crate::util;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::{Client, Workload};
+    use crate::planet::{Planet, Region};
+    use crate::sim::Simulation;
+    use crate::time::SimTime;
+    use crate::util;
 
-//     #[test]
-//     fn basic_flow() {
-//         // create simulation
-//         let mut simulation = Simulation::new();
+    #[test]
+    fn fpaxos_flow() {
+        // create simulation
+        let mut simulation = Simulation::new();
 
-//         // processes ids
-//         let process_id_1 = 1;
-//         let process_id_2 = 2;
-//         let process_id_3 = 3;
+        // processes ids
+        let process_id_1 = 1;
+        let process_id_2 = 2;
+        let process_id_3 = 3;
 
-//         // regions
-//         let europe_west2 = Region::new("europe-west2");
-//         let europe_west3 = Region::new("europe-west2");
-//         let us_west1 = Region::new("europe-west2");
+        // regions
+        let europe_west2 = Region::new("europe-west2");
+        let europe_west3 = Region::new("europe-west2");
+        let us_west1 = Region::new("europe-west2");
 
-//         // processes
-//         let processes = vec![
-//             (process_id_1, europe_west2.clone()),
-//             (process_id_2, europe_west3.clone()),
-//             (process_id_3, us_west1.clone()),
-//         ];
+        // processes
+        let processes = vec![
+            (process_id_1, europe_west2.clone()),
+            (process_id_2, europe_west3.clone()),
+            (process_id_3, us_west1.clone()),
+        ];
 
-//         // planet
-//         let planet = Planet::new("latency/");
+        // planet
+        let planet = Planet::new("latency/");
 
-//         // create system time
-//         let time = SimTime::new();
+        // create system time
+        let time = SimTime::new();
 
-//         // n and f
-//         let n = 3;
-//         let f = 1;
-//         let config = Config::new(n, f);
+        // n and f
+        let n = 3;
+        let f = 1;
+        let mut config = Config::new(n, f);
 
-//         // executors
-//         let executor_1 = SlotExecutor::new(config);
-//         let executor_2 = SlotExecutor::new(config);
-//         let executor_3 = SlotExecutor::new(config);
+        // set process 1 as the leader
+        config.set_leader(process_id_1);
 
-//         // basic
-//         let mut basic_1 = FPaxos::new(process_id_1, config);
-//         let mut basic_2 = FPaxos::new(process_id_2, config);
-//         let mut basic_3 = FPaxos::new(process_id_3, config);
+        // executors
+        let executor_1 = SlotExecutor::new(config);
+        let executor_2 = SlotExecutor::new(config);
+        let executor_3 = SlotExecutor::new(config);
 
-//         // discover processes in all basic
-//         let sorted = util::sort_processes_by_distance(
-//             &europe_west2,
-//             &planet,
-//             processes.clone(),
-//         );
-//         basic_1.discover(sorted);
-//         let sorted = util::sort_processes_by_distance(
-//             &europe_west3,
-//             &planet,
-//             processes.clone(),
-//         );
-//         basic_2.discover(sorted);
-//         let sorted = util::sort_processes_by_distance(
-//             &us_west1,
-//             &planet,
-//             processes.clone(),
-//         );
-//         basic_3.discover(sorted);
+        // fpaxos
+        let mut fpaxos_1 = FPaxos::new(process_id_1, config);
+        let mut fpaxos_2 = FPaxos::new(process_id_2, config);
+        let mut fpaxos_3 = FPaxos::new(process_id_3, config);
 
-//         // register processes
-//         simulation.register_process(basic_1, executor_1);
-//         simulation.register_process(basic_2, executor_2);
-//         simulation.register_process(basic_3, executor_3);
+        // discover processes in all fpaxos
+        let sorted = util::sort_processes_by_distance(
+            &europe_west2,
+            &planet,
+            processes.clone(),
+        );
+        fpaxos_1.discover(sorted);
+        let sorted = util::sort_processes_by_distance(
+            &europe_west3,
+            &planet,
+            processes.clone(),
+        );
+        fpaxos_2.discover(sorted);
+        let sorted = util::sort_processes_by_distance(
+            &us_west1,
+            &planet,
+            processes.clone(),
+        );
+        fpaxos_3.discover(sorted);
 
-//         // client workload
-//         let conflict_rate = 100;
-//         let total_commands = 10;
-//         let payload_size = 100;
-//         let workload =
-//             Workload::new(conflict_rate, total_commands, payload_size);
+        // register processes
+        simulation.register_process(fpaxos_1, executor_1);
+        simulation.register_process(fpaxos_2, executor_2);
+        simulation.register_process(fpaxos_3, executor_3);
 
-//         // create client 1 that is connected to basic 1
-//         let client_id = 1;
-//         let client_region = europe_west2.clone();
-//         let mut client_1 = Client::new(client_id, workload);
+        // client workload
+        let conflict_rate = 100;
+        let total_commands = 10;
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
 
-//         // discover processes in client 1
-//         let sorted = util::sort_processes_by_distance(
-//             &client_region,
-//             &planet,
-//             processes,
-//         );
-//         assert!(client_1.discover(sorted));
+        // create client 1 that is connected to fpaxos 1
+        let client_id = 1;
+        let client_region = europe_west2.clone();
+        let mut client_1 = Client::new(client_id, workload);
 
-//         // start client
-//         let (target, cmd) = client_1
-//             .next_cmd(&time)
-//             .expect("there should be a first operation");
+        // discover processes in client 1
+        let sorted = util::sort_processes_by_distance(
+            &client_region,
+            &planet,
+            processes,
+        );
+        assert!(client_1.discover(sorted));
 
-//         // check that `target` is basic 1
-//         assert_eq!(target, process_id_1);
+        // start client
+        let (target, cmd) = client_1
+            .next_cmd(&time)
+            .expect("there should be a first operation");
 
-//         // register client
-//         simulation.register_client(client_1);
+        // check that `target` is fpaxos 1
+        assert_eq!(target, process_id_1);
 
-//         // register command in executor and submit it in basic 1
-//         let (process, executor) = simulation.get_process(target);
-//         executor.wait_for(&cmd);
-//         let mcollect = process.submit(None, cmd);
+        // register client
+        simulation.register_client(client_1);
 
-//         // check that the mcollect is being sent to 2 processes
-//         let ToSend { target, .. } = mcollect.clone();
-//         assert_eq!(target.len(), 2 * f);
-//         assert!(target.contains(&1));
-//         assert!(target.contains(&2));
+        // register command in executor and submit it in fpaxos 1
+        let (process, executor) = simulation.get_process(target);
+        executor.wait_for(&cmd);
+        let maccept = process.submit(None, cmd);
 
-//         // handle mcollects
-//         let mut mcollectacks = simulation.forward_to_processes(mcollect);
+        // check that the maccept is being sent to 2 processes
+        let ToSend { target, .. } = maccept.clone();
+        assert_eq!(target.len(), 2 * f);
+        assert!(target.contains(&1));
+        assert!(target.contains(&2));
 
-//         // check that there are 2 mcollectacks
-//         assert_eq!(mcollectacks.len(), 2 * f);
+        // handle maccepts
+        let mut maccepted = simulation.forward_to_processes(maccept);
 
-//         // handle the first mcollectack
-//         let mcommits = simulation.forward_to_processes(
-//             mcollectacks.pop().expect("there should be an mcollect ack"),
-//         );
-//         // no mcommit yet
-//         assert!(mcommits.is_empty());
+        // check that there are 2 maccepted
+        assert_eq!(maccepted.len(), 2 * f);
 
-//         // handle the second mcollectack
-//         let mut mcommits = simulation.forward_to_processes(
-//             mcollectacks.pop().expect("there should be an mcollect ack"),
-//         );
-//         // there's a commit now
-//         assert_eq!(mcommits.len(), 1);
+        // handle the first maccepted
+        let mchosen = simulation.forward_to_processes(
+            maccepted.pop().expect("there should be an maccepted"),
+        );
+        // no mchosen yet
+        assert!(mchosen.is_empty());
 
-//         // check that the mcommit is sent to everyone
-//         let mcommit = mcommits.pop().expect("there should be an mcommit");
-//         let ToSend { target, .. } = mcommit.clone();
-//         assert_eq!(target.len(), n);
+        // handle the second macceptack
+        let mut mchosen = simulation.forward_to_processes(
+            maccepted.pop().expect("there should be an maccepted"),
+        );
+        // there's an mchosen now
+        assert_eq!(mchosen.len(), 1);
 
-//         // all processes handle it
-//         let to_sends = simulation.forward_to_processes(mcommit);
+        // check that the mchosen is sent to everyone
+        let mchosen = mchosen.pop().expect("there should be an mcommit");
+        let ToSend { target, .. } = mchosen.clone();
+        assert_eq!(target.len(), n);
 
-//         // check there's nothing to send
-//         assert!(to_sends.is_empty());
+        // all processes handle it
+        let to_sends = simulation.forward_to_processes(mchosen);
 
-//         // process 1 should have something to the executor
-//         let (process, executor) = simulation.get_process(process_id_1);
-//         let to_executor = process.to_executor();
-//         assert_eq!(to_executor.len(), 1);
+        // check there's nothing to send
+        assert!(to_sends.is_empty());
 
-//         // handle in executor and check there's a single command ready
-//         let mut ready: Vec<_> = to_executor
-//             .into_iter()
-//             .flat_map(|info| executor.handle(info))
-//             .map(|result| result.unwrap_ready())
-//             .collect();
-//         assert_eq!(ready.len(), 1);
+        // process 1 should have something to the executor
+        let (process, executor) = simulation.get_process(process_id_1);
+        let to_executor = process.to_executor();
+        assert_eq!(to_executor.len(), 1);
 
-//         // get that command
-//         let cmd_result = ready.pop().expect("there should a command ready");
+        // handle in executor and check there's a single command ready
+        let mut ready: Vec<_> = to_executor
+            .into_iter()
+            .flat_map(|info| executor.handle(info))
+            .map(|result| result.unwrap_ready())
+            .collect();
+        assert_eq!(ready.len(), 1);
 
-//         // handle the previous command result
-//         let (target, cmd) = simulation
-//             .forward_to_client(cmd_result, &time)
-//             .expect("there should a new submit");
+        // get that command
+        let cmd_result = ready.pop().expect("there should a command ready");
 
-//         let (process, _) = simulation.get_process(target);
-//         let ToSend { msg, .. } = process.submit(None, cmd);
-//         if let Message::MStore { dot, .. } = msg {
-//             assert_eq!(dot, Dot::new(process_id_1, 2));
-//         } else {
-//             panic!("Message::MStore not found!");
-//         }
-//     }
-// }
+        // handle the previous command result
+        let (target, cmd) = simulation
+            .forward_to_client(cmd_result, &time)
+            .expect("there should a new submit");
+
+        let (process, _) = simulation.get_process(target);
+        let ToSend { msg, .. } = process.submit(None, cmd);
+        if let Message::MAccept { slot, .. } = msg {
+            assert_eq!(slot, 2);
+        } else {
+            panic!("Message::MAccept not found!");
+        }
+    }
+}

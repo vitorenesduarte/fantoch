@@ -354,30 +354,30 @@ mod tests {
         // register command in executor and submit it in basic 1
         let (process, executor) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let mcollect = process.submit(None, cmd);
+        let mstore = process.submit(None, cmd);
 
-        // check that the mcollect is being sent to 2 processes
-        let ToSend { target, .. } = mcollect.clone();
+        // check that the mstore is being sent to 2 processes
+        let ToSend { target, .. } = mstore.clone();
         assert_eq!(target.len(), 2 * f);
         assert!(target.contains(&1));
         assert!(target.contains(&2));
 
-        // handle mcollects
-        let mut mcollectacks = simulation.forward_to_processes(mcollect);
+        // handle mstores
+        let mut mstoreacks = simulation.forward_to_processes(mstore);
 
-        // check that there are 2 mcollectacks
-        assert_eq!(mcollectacks.len(), 2 * f);
+        // check that there are 2 mstoreacks
+        assert_eq!(mstoreacks.len(), 2 * f);
 
-        // handle the first mcollectack
+        // handle the first mstoreack
         let mcommits = simulation.forward_to_processes(
-            mcollectacks.pop().expect("there should be an mcollect ack"),
+            mstoreacks.pop().expect("there should be an mstore ack"),
         );
         // no mcommit yet
         assert!(mcommits.is_empty());
 
-        // handle the second mcollectack
+        // handle the second mstoreack
         let mut mcommits = simulation.forward_to_processes(
-            mcollectacks.pop().expect("there should be an mcollect ack"),
+            mstoreacks.pop().expect("there should be an mstore ack"),
         );
         // there's a commit now
         assert_eq!(mcommits.len(), 1);
