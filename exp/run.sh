@@ -15,14 +15,15 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="locked_atlas"
+PROTOCOL="fpaxos"
 PROCESSES=3
 FAULTS=1
 TRANSITIVE_CONFLICTS="true"
 EXECUTION_LOG=""
+LEADER="1"
 
 # parallelism config
-WORKERS=8
+WORKERS=1
 EXECUTORS=1
 MULTIPLEXING=2
 
@@ -281,6 +282,11 @@ start_process() {
     # if there's a ${EXECUTION_LOG} append it the ${command_args}
     if [[ -n ${EXECUTION_LOG} ]]; then
         command_args="${command_args} --execution_log=${EXECUTION_LOG}"
+    fi
+
+    # if there's a ${LEADER} append it the ${command_args}
+    if [[ -n ${LEADER} ]]; then
+        command_args="${command_args} --leader=${LEADER}"
     fi
 
     # compute script (based on run mode)
