@@ -16,10 +16,7 @@ pub async fn execution_logger_task<P>(
 ) where
     P: Protocol,
 {
-    println!(
-        "[execution_logger] started with log {}",
-        execution_log
-    );
+    println!("[execution_logger] started with log {}", execution_log);
 
     // create execution log file (truncating it if already exists)
     let file = File::create(execution_log)

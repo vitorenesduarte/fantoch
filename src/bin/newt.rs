@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{Protocol, NewtSequential};
+use planet_sim::protocol::{NewtSequential, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

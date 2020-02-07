@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{Protocol, EPaxosSequential};
+use planet_sim::protocol::{EPaxosSequential, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
