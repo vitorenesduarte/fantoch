@@ -102,7 +102,11 @@ impl Protocol for FPaxos {
     }
 
     fn parallel() -> bool {
-        true
+        false
+    }
+
+    fn leaderless() -> bool {
+        false
     }
 
     fn show_metrics(&self) {

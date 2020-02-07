@@ -79,6 +79,10 @@ pub trait Protocol: Clone {
 
     fn parallel() -> bool;
 
+    fn leaderless() -> bool {
+        true
+    }
+
     fn show_metrics(&self) {
         // by default, nothing to show
     }

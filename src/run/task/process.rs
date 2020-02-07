@@ -304,26 +304,59 @@ async fn process_task<P>(
 ) where
     P: Protocol + 'static,
 {
-    loop {
-        // prioritize messages about ongoing commands
-        select_biased! {
-            msg = from_readers.recv().fuse() => {
-                log!("[server] reader message: {:?}", msg);
-                if let Some((from, msg)) = msg {
-                    handle_from_processes(process_id, from, msg, &mut process, &mut to_writers, &mut worker_to_executors, &mut to_execution_logger).await
-                } else {
-                    println!("[server] error while receiving new process message from readers");
+    // start a biased loop if protocol leaderless, and unbiased otherwise
+    if P::leaderless() {
+        loop {
+            // prioritize messages about ongoing commands
+            select_biased! {
+                msg = from_readers.recv().fuse() => {
+                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut worker_to_executors, &mut to_execution_logger).await
                 }
-            }
-            cmd = from_clients.recv().fuse()  => {
-                log!("[server] from clients: {:?}", cmd);
-                if let Some((dot, cmd)) = cmd {
-                    handle_from_client(process_id, dot, cmd, &mut process, &mut to_writers).await
-                } else {
-                    println!("[server] error while receiving new command from executor");
+                cmd = from_clients.recv().fuse()  => {
+                    selected_from_client(process_id, cmd, &mut process, &mut to_writers).await
                 }
             }
         }
+    } else {
+        loop {
+            tokio::select! {
+                msg = from_readers.recv() => {
+                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut worker_to_executors, &mut to_execution_logger).await
+                }
+                cmd = from_clients.recv() => {
+                    selected_from_client(process_id, cmd, &mut process, &mut to_writers).await
+                }
+            }
+        }
+    }
+}
+
+async fn selected_from_processes<P>(
+    process_id: ProcessId,
+    msg: Option<(ProcessId, P::Message)>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
+) where
+    P: Protocol + 'static,
+{
+    log!("[server] reader message: {:?}", msg);
+    if let Some((from, msg)) = msg {
+        handle_from_processes(
+            process_id,
+            from,
+            msg,
+            process,
+            to_writers,
+            worker_to_executors,
+            to_execution_logger,
+        )
+        .await
+    } else {
+        println!(
+            "[server] error while receiving new process message from readers"
+        );
     }
 }
 
@@ -419,6 +452,22 @@ async fn send_to_writer<P>(
 
     if let Err(e) = writers[writer_index].send(msg).await {
         println!("[server] error while sending to writer: {:?}", e);
+    }
+}
+
+async fn selected_from_client<P>(
+    process_id: ProcessId,
+    cmd: Option<(Dot, Command)>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+) where
+    P: Protocol + 'static,
+{
+    log!("[server] from clients: {:?}", cmd);
+    if let Some((dot, cmd)) = cmd {
+        handle_from_client(process_id, dot, cmd, process, to_writers).await
+    } else {
+        println!("[server] error while receiving new command from executor");
     }
 }
 
