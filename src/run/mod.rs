@@ -527,7 +527,8 @@ mod tests {
         // basic is a parallel protocol with parallel execution
         let workers = 2;
         let executors = 3;
-        run_test::<Basic>(workers, executors).await
+        let with_leader = false;
+        run_test::<Basic>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -535,7 +536,8 @@ mod tests {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 2;
-        run_test::<NewtSequential>(workers, executors).await
+        let with_leader = false;
+        run_test::<NewtSequential>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -544,7 +546,8 @@ mod tests {
         // only have one executor
         let workers = 3;
         let executors = 1;
-        run_test::<NewtAtomic>(workers, executors).await
+        let with_leader = false;
+        run_test::<NewtAtomic>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -552,7 +555,8 @@ mod tests {
         // atlas sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        run_test::<AtlasSequential>(workers, executors).await
+        let with_leader = false;
+        run_test::<AtlasSequential>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -561,7 +565,8 @@ mod tests {
         // executor
         let workers = 3;
         let executors = 1;
-        run_test::<AtlasLocked>(workers, executors).await
+        let with_leader = false;
+        run_test::<AtlasLocked>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -569,7 +574,8 @@ mod tests {
         // epaxos sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        run_test::<EPaxosSequential>(workers, executors).await
+        let with_leader = false;
+        run_test::<EPaxosSequential>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -578,7 +584,8 @@ mod tests {
         // executor
         let workers = 3;
         let executors = 1;
-        run_test::<EPaxosLocked>(workers, executors).await
+        let with_leader = false;
+        run_test::<EPaxosLocked>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
@@ -586,10 +593,11 @@ mod tests {
         // run fpaxos in sequential mode
         let workers = 1;
         let executors = 1;
-        run_test::<FPaxos>(workers, executors).await
+        let with_leader = true;
+        run_test::<FPaxos>(workers, executors, with_leader).await
     }
 
-    async fn run_test<P>(workers: usize, executors: usize)
+    async fn run_test<P>(workers: usize, executors: usize, with_leader: bool)
     where
         P: Protocol + Send + 'static,
     {
@@ -599,7 +607,7 @@ mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<P>(workers, executors).await {
+                match run::<P>(workers, executors, with_leader).await {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
@@ -607,7 +615,11 @@ mod tests {
             .await;
     }
 
-    async fn run<P>(workers: usize, executors: usize) -> RunResult<()>
+    async fn run<P>(
+        workers: usize,
+        executors: usize,
+        with_leader: bool,
+    ) -> RunResult<()>
     where
         P: Protocol + Send + 'static,
     {
@@ -615,6 +627,11 @@ mod tests {
         let n = 3;
         let f = 1;
         let mut config = Config::new(n, f);
+
+        // if we should set a leader, set process 1 as the leader
+        if with_leader {
+            config.set_leader(1);
+        }
 
         // create processes
         let process_1 = P::new(1, config);
