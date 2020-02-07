@@ -19,6 +19,8 @@ pub enum MultiSynodMessage<V> {
     // to be handled outside of this module
     MChosen(Slot, V),
     MForwardSubmit(V),
+    // messages to root mod
+    MSpawnCommander(Ballot, Slot, V),
     // messages to acceptor
     MPrepare(Ballot),
     MAccept(Ballot, Slot, V),
@@ -62,14 +64,10 @@ where
 
     pub fn submit(&mut self, value: V) -> MultiSynodMessage<V> {
         if let Some((ballot, slot)) = self.leader.try_submit() {
-            // create a new commander
-            let commander = Commander::spawn(self.f, ballot, value.clone());
-            // update list of commander
-            let res = self.commanders.insert(slot, commander);
-            // check that there was no other commander for this slot
-            assert!(res.is_none());
-            // create the accept message
-            MultiSynodMessage::MAccept(ballot, slot, value)
+            // if we're the leader, create a spawn commander message:
+            // - this message is to be handled locally, but it can be handled in
+            //   a different multi-synod process
+            MultiSynodMessage::MSpawnCommander(ballot, slot, value)
         } else {
             // if we're not the leader, then create an `MForwardSubmit` to be
             // sent to the leader
@@ -85,6 +83,11 @@ where
         msg: MultiSynodMessage<V>,
     ) -> Option<MultiSynodMessage<V>> {
         match msg {
+            // handle spawn commander
+            MultiSynodMessage::MSpawnCommander(b, slot, value) => {
+                let maccept = self.handle_spawn_commander(b, slot, value);
+                Some(maccept)
+            }
             // handle messages to acceptor
             MultiSynodMessage::MPrepare(b) => self.acceptor.handle_prepare(b),
             MultiSynodMessage::MAccept(b, slot, value) => {
@@ -125,6 +128,22 @@ where
             MultiSynodMessage::MChosen(_, _) => panic!("MultiSynod::MChosen messages are to be handled outside of MultiSynod"),
             MultiSynodMessage::MForwardSubmit(_) => panic!("MultiSynod::MForwardSubmit messages are to be handled outside of MultiSynod")
         }
+    }
+
+    fn handle_spawn_commander(
+        &mut self,
+        ballot: Ballot,
+        slot: Slot,
+        value: V,
+    ) -> MultiSynodMessage<V> {
+        // create a new commander
+        let commander = Commander::spawn(self.f, ballot, value.clone());
+        // update list of commander
+        let res = self.commanders.insert(slot, commander);
+        // check that there was no other commander for this slot
+        assert!(res.is_none());
+        // create the accept message
+        MultiSynodMessage::MAccept(ballot, slot, value)
     }
 }
 
@@ -301,12 +320,22 @@ mod tests {
 
         // synod 1: submit new command
         let value = 10;
-        let accept = synod_1.submit(value);
-        // since synod 1 is the leader, then the message is an accept
+        let spawn = synod_1.submit(value);
+        // since synod 1 is the leader, then the message is a spawn commander
+        match &spawn {
+            MultiSynodMessage::MSpawnCommander(_, _, _) => {}
+            _ => panic!(
+                "submitting at the leader should create an spawn commander message"
+            ),
+        };
+
+        let accept =
+            synod_1.handle(1, spawn).expect("there should be an accept");
+        // handle the spawn commander locally creating an accept message
         match &accept {
             MultiSynodMessage::MAccept(_, _, _) => {}
             _ => panic!(
-                "submitting at the leader should create an accept message"
+                "the handle of a spawn commander should result in an accept message"
             ),
         };
 

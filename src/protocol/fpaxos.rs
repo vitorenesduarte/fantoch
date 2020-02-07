@@ -86,6 +86,9 @@ impl Protocol for FPaxos {
                 let msg = self.handle_submit(None, cmd);
                 Some(msg)
             }
+            Message::MSpawnCommander { ballot, slot, cmd } => {
+                self.handle_mspawn_commander(from, ballot, slot, cmd)
+            }
             Message::MAccept { ballot, slot, cmd } => {
                 self.handle_maccept(from, ballot, slot, cmd)
             }
@@ -122,16 +125,18 @@ impl FPaxos {
         cmd: Command,
     ) -> ToSend<Message> {
         match self.multi_synod.submit(cmd) {
-            MultiSynodMessage::MAccept(ballot, slot, cmd) => {
-                // in this case, we're the leader
-                let maccept = Message::MAccept { ballot, slot, cmd };
-                let target = self.bp.write_quorum();
+            MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
+                // in this case, we're the leader:
+                // - send a spawn commander to self (that can run in a different
+                //   process for parallelism)
+                let mspawn = Message::MSpawnCommander { ballot, slot, cmd };
+                let target = singleton![self.id()];
 
                 // return `ToSend`
                 ToSend {
                     from: self.id(),
                     target,
-                    msg: maccept,
+                    msg: mspawn,
                 }
             }
             MultiSynodMessage::MForwardSubmit(cmd) => {
@@ -148,6 +153,46 @@ impl FPaxos {
                 }
             }
             msg => panic!("can't handle {:?} in handle_submit", msg),
+        }
+    }
+
+    fn handle_mspawn_commander(
+        &mut self,
+        from: ProcessId,
+        ballot: u64,
+        slot: u64,
+        cmd: Command,
+    ) -> Option<ToSend<Message>> {
+        log!(
+            "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {}",
+            self.id(),
+            ballot,
+            slot,
+            cmd,
+            from
+        );
+        // spawn commander message should come from self
+        assert_eq!(from, self.id());
+
+        // in this case, we're the leader:
+        // - handle spawn
+        // - create an maccept and send it to the write quorum
+        let maccept = self.multi_synod.handle(from, MultiSynodMessage::MSpawnCommander(ballot, slot, cmd)).expect("handling an MSpawnCommander in the local MultiSynod should output an MAccept");
+
+        match maccept {
+            MultiSynodMessage::MAccept(ballot, slot, cmd) => {
+                // create `MAccept`
+                let maccept = Message::MAccept { ballot, slot, cmd };
+                let target = self.bp.write_quorum();
+
+                // return `ToSend`
+                Some(ToSend {
+                    from: self.id(),
+                    target,
+                    msg: maccept,
+                })
+            }
+            msg => panic!("can't handle {:?} in handle_mspawn_commander", msg),
         }
     }
 
@@ -252,6 +297,11 @@ impl FPaxos {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     MForwardSubmit {
+        cmd: Command,
+    },
+    MSpawnCommander {
+        ballot: u64,
+        slot: u64,
         cmd: Command,
     },
     MAccept {
@@ -392,7 +442,16 @@ mod tests {
         // register command in executor and submit it in fpaxos 1
         let (process, executor) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let maccept = process.submit(None, cmd);
+        let spawn = process.submit(None, cmd);
+
+        // check that the register created a spawn commander to self and handle
+        // it locally
+        let ToSend { target, from, msg } = spawn.clone();
+        assert_eq!(target.len(), 1);
+        assert!(target.contains(&1));
+        let maccept = process
+            .handle(from, msg)
+            .expect("handling spawn should create an maccept message");
 
         // check that the maccept is being sent to 2 processes
         let ToSend { target, .. } = maccept.clone();
@@ -454,10 +513,10 @@ mod tests {
 
         let (process, _) = simulation.get_process(target);
         let ToSend { msg, .. } = process.submit(None, cmd);
-        if let Message::MAccept { slot, .. } = msg {
+        if let Message::MSpawnCommander { slot, .. } = msg {
             assert_eq!(slot, 2);
         } else {
-            panic!("Message::MAccept not found!");
+            panic!("Message::MSpawnCommander not found!");
         }
     }
 }
