@@ -1,8 +1,7 @@
 use crate::command::Command;
 use crate::config::Config;
-use crate::executor::{Executor, SlotExecutionInfo, SlotExecutor};
+use crate::executor::{Executor, SlotExecutor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{MultiSynod, MultiSynodMessage};
 use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
 use crate::{log, singleton};
@@ -83,17 +82,17 @@ impl Protocol for FPaxos {
         msg: Self::Message,
     ) -> Option<ToSend<Message>> {
         match msg {
+            Message::MForwardSubmit { cmd } => {
+                let msg = self.handle_submit(None, cmd);
+                Some(msg)
+            }
             Message::MAccept { ballot, slot, cmd } => {
                 self.handle_maccept(from, ballot, slot, cmd)
             }
             Message::MAccepted { ballot, slot } => {
                 self.handle_maccepted(from, ballot, slot)
             }
-            // Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
-            // Message::MCommit { dot, cmd } => {
-            //     self.handle_mcommit(from, dot, cmd)
-            // }
-            _ => todo!("missing handlers"),
+            Message::MChosen { slot, cmd } => self.handle_mchosen(slot, cmd),
         }
     }
 
@@ -210,7 +209,17 @@ impl FPaxos {
         {
             match msg {
                 MultiSynodMessage::MChosen(slot, cmd) => {
-                    // TODO notify executor
+                    // create `MChosen`
+                    let mcommit = Message::MChosen { slot, cmd };
+                    let target = self.bp.all();
+
+                    // return `ToSend`
+                    let to_send = ToSend {
+                        from: self.id(),
+                        target,
+                        msg: mcommit,
+                    };
+                    return Some(to_send);
                 }
                 msg => panic!("can't handle {:?} in handle_maccepted", msg),
             }
@@ -220,31 +229,28 @@ impl FPaxos {
         None
     }
 
-    // fn handle_mcommit(
-    //     &mut self,
-    //     _from: ProcessId,
-    //     dot: Dot,
-    //     cmd: Command,
-    // ) -> Option<ToSend<Message>> {
-    //     log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
+    fn handle_mchosen(
+        &mut self,
+        slot: u64,
+        cmd: Command,
+    ) -> Option<ToSend<Message>> {
+        log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
 
-    //     // create execution info
-    //     let fake_slot = 0;
-    //     let execution_info = SlotExecutionInfo::new(fake_slot, cmd);
-    //     self.to_executor.push(execution_info);
+        // create execution info
+        let execution_info = ExecutionInfo::new(slot, cmd);
+        self.to_executor.push(execution_info);
 
-    //     // TODO the following is incorrect: it should only be deleted once it
-    //     // has been committed at all processes
-    //     self.cmds.remove(dot);
-
-    //     // nothing to send
-    //     None
-    // }
+        // nothing to send
+        None
+    }
 }
 
 // `FPaxos` protocol messages
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Message {
+    MForwardSubmit {
+        cmd: Command,
+    },
     MAccept {
         ballot: u64,
         slot: u64,
@@ -254,14 +260,8 @@ pub enum Message {
         ballot: u64,
         slot: u64,
     },
-    MForwardSubmit {
-        cmd: Command,
-    },
-    MStoreAck {
-        dot: Dot,
-    },
-    MCommit {
-        dot: Dot,
+    MChosen {
+        slot: u64,
         cmd: Command,
     },
 }
