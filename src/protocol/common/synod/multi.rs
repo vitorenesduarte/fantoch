@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn multi_synod_flow() {
         // n and f
-        let n = 5;
+        let n = 3;
         let f = 1;
 
         // initial leader is 1
@@ -298,21 +298,9 @@ mod tests {
         let mut synod_1 = MultiSynod::<usize>::new(1, initial_leader, n, f);
         let mut synod_2 = MultiSynod::<usize>::new(2, initial_leader, n, f);
         let mut synod_3 = MultiSynod::<usize>::new(3, initial_leader, n, f);
-        let mut synod_4 = MultiSynod::<usize>::new(4, initial_leader, n, f);
-        let mut synod_5 = MultiSynod::<usize>::new(5, initial_leader, n, f);
-
-        let value = 10;
-
-        // synod 5: submit new command
-        // since synod 5 is *not* the leader, then the message is an mforward
-        match synod_5.submit(value) {
-            MultiSynodMessage::MForwardSubmit(_) => {}
-            _ => panic!(
-                "submitting at a non-leader should create an mfoward message"
-            ),
-        };
 
         // synod 1: submit new command
+        let value = 10;
         let accept = synod_1.submit(value);
         // since synod 1 is the leader, then the message is an accept
         match &accept {
@@ -328,53 +316,29 @@ mod tests {
             .expect("there should an accept from 1");
         let accepted_2 = synod_2
             .handle(1, accept.clone())
-            .expect("there should an accept from 5");
+            .expect("there should an accept from 2");
 
         // synod 1: handle accepts
         let result = synod_1.handle(1, accepted_1);
         assert!(result.is_none());
         let chosen = synod_1
-            .handle(5, accepted_2)
+            .handle(2, accepted_2)
             .expect("there should be a chosen message");
 
         // check that `valeu` was chosen at slot 1
         let slot = 1;
         assert_eq!(chosen, MultiSynodMessage::MChosen(slot, value));
+
+        // synod 3: submit new command
+        // since synod 3 is *not* the leader, then the message is an mforward
+        let value = 30;
+        match synod_3.submit(value) {
+            MultiSynodMessage::MForwardSubmit(forward_value) => {
+                assert_eq!(value, forward_value)
+            }
+            _ => panic!(
+                "submitting at a non-leader should create an mfoward message"
+            ),
+        };
     }
-
-    // #[test]
-    // fn synod_prepare_with_lower_ballot_fails() {
-    //     // n and f
-    //     let n = 3;
-    //     let f = 1;
-
-    //     // create all synods
-    //     let mut synod_1 = MultiSynod::new(1, n, f, proposal_gen, 0);
-    //     let mut synod_2 = MultiSynod::new(2, n, f, proposal_gen, 0);
-    //     let mut synod_3 = MultiSynod::new(3, n, f, proposal_gen, 0);
-
-    //     // synod 1 and 3: generate prepare
-    //     let prepare_a = synod_1.new_prepare();
-    //     let prepare_c = synod_3.new_prepare();
-
-    //     // handle the prepare_a at synod 1
-    //     synod_1
-    //         .handle(1, prepare_a.clone())
-    //         .expect("there should a promise from 1");
-
-    //     // handle the prepare_c at synod 3
-    //     synod_3
-    //         .handle(3, prepare_c.clone())
-    //         .expect("there should a promise from 3");
-
-    //     // handle the prepare_c at synod 2
-    //     synod_2
-    //         .handle(3, prepare_c.clone())
-    //         .expect("there should a promise from 2");
-
-    //     // handle the prepare_a at synod 2
-    //     let result = synod_2.handle(1, prepare_a.clone());
-    //     // there should be no promise from synod 2
-    //     assert!(result.is_none());
-    // }
 }
