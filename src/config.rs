@@ -116,6 +116,11 @@ impl Config {
         self.f + 1
     }
 
+    /// Computes `FPaxos` quorum size.
+    pub fn fpaxos_quorum_size(&self) -> usize {
+        self.f + 1
+    }
+
     /// Computes `Atlas` fast and write quorum sizes.
     pub fn atlas_quorum_sizes(&self) -> (usize, usize) {
         let n = self.n;

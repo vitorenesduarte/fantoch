@@ -51,6 +51,8 @@ impl Executor for SlotExecutor {
 
         // add received command to the commands to be executed and try to
         // execute commands
+        // TODO here we could optimize and only insert the command if it isn't
+        // the command that will be executed in the next slot
         let res = self.to_execute.insert(slot, cmd);
         assert!(res.is_none());
         self.try_next_slot()

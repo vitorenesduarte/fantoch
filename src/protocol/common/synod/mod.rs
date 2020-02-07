@@ -7,5 +7,5 @@ mod single;
 mod multi;
 
 // Re-exports.
-pub use multi::MultiSynod;
+pub use multi::{MultiSynodMessage, MultiSynod};
 pub use single::{Synod, SynodMessage};
