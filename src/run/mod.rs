@@ -498,7 +498,7 @@ mod tests {
     use super::*;
     use crate::protocol::{
         AtlasLocked, AtlasSequential, Basic, EPaxosLocked, EPaxosSequential,
-        NewtAtomic, NewtSequential,
+        FPaxos, NewtAtomic, NewtSequential,
     };
     use rand::Rng;
     use tokio::task;
@@ -579,6 +579,14 @@ mod tests {
         let workers = 3;
         let executors = 1;
         run_test::<EPaxosLocked>(workers, executors).await
+    }
+
+    #[tokio::test]
+    async fn run_fpaxos_sequential_test() {
+        // run fpaxos in sequential mode
+        let workers = 1;
+        let executors = 1;
+        run_test::<FPaxos>(workers, executors).await
     }
 
     async fn run_test<P>(workers: usize, executors: usize)
