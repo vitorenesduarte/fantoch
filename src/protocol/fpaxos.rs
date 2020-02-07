@@ -320,13 +320,6 @@ pub enum Message {
 }
 
 impl MessageDot for Message {}
-//     fn dot(&self) -> Option<&Dot> {
-//         todo!("implementation for MessageDot missing for MultiSynodMessage")
-//         // match self {
-//         //     // Self::MChosen { dot, .. } => Some(dot),
-//         // }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
