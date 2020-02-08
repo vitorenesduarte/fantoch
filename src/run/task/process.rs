@@ -280,8 +280,10 @@ where
 
     // create executor workers
     incoming
-        .map(|(from_readers, from_clients)| {
+        .enumerate()
+        .map(|(worker_index, (from_readers, from_clients))| {
             task::spawn(process_task::<P>(
+                worker_index,
                 process.clone(),
                 process_id,
                 from_readers,
@@ -296,6 +298,7 @@ where
 }
 
 async fn process_task<P>(
+    worker_index: usize,
     mut process: P,
     process_id: ProcessId,
     mut from_readers: ReaderReceiver<P>,
@@ -313,10 +316,10 @@ async fn process_task<P>(
             // prioritize messages about ongoing commands
             select_biased! {
                 msg = from_readers.recv().fuse() => {
-                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
+                    selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
                 }
                 cmd = from_clients.recv().fuse()  => {
-                    selected_from_client(process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
+                    selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
             }
         }
@@ -324,10 +327,10 @@ async fn process_task<P>(
         loop {
             tokio::select! {
                 msg = from_readers.recv() => {
-                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
+                    selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
                 }
                 cmd = from_clients.recv() => {
-                    selected_from_client(process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
+                    selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
             }
         }
@@ -335,6 +338,7 @@ async fn process_task<P>(
 }
 
 async fn selected_from_processes<P>(
+    worker_index: usize,
     process_id: ProcessId,
     msg: Option<(ProcessId, P::Message)>,
     process: &mut P,
@@ -348,6 +352,7 @@ async fn selected_from_processes<P>(
     log!("[server] reader message: {:?}", msg);
     if let Some((from, msg)) = msg {
         handle_from_processes(
+            worker_index,
             process_id,
             from,
             msg,
@@ -366,6 +371,7 @@ async fn selected_from_processes<P>(
 }
 
 async fn handle_from_processes<P>(
+    worker_index: usize,
     process_id: ProcessId,
     from: ProcessId,
     msg: P::Message,
@@ -380,6 +386,7 @@ async fn handle_from_processes<P>(
     // handle message in process
     if let Some(to_send) = process.handle(from, msg) {
         handle_to_send(
+            worker_index,
             process_id,
             to_send,
             process,
@@ -409,6 +416,7 @@ async fn handle_from_processes<P>(
 }
 
 async fn handle_to_send<P>(
+    worker_index: usize,
     process_id: ProcessId,
     to_send: ToSend<P::Message>,
     process: &mut P,
@@ -428,6 +436,7 @@ async fn handle_to_send<P>(
             if destination == process_id {
                 // handle msg locally if self in `to_send.target`
                 let new_to_send = handle_message_from_self::<P>(
+                    worker_index,
                     process_id,
                     msg.clone(),
                     process,
@@ -446,6 +455,7 @@ async fn handle_to_send<P>(
 }
 
 async fn handle_message_from_self<P>(
+    worker_index: usize,
     process_id: ProcessId,
     msg: P::Message,
     process: &mut P,
@@ -454,15 +464,15 @@ async fn handle_message_from_self<P>(
 where
     P: Protocol + 'static,
 {
-    // if the workers pool size is 1, then for sure this message is to this
-    // worker; if not, then we should use `reader_to_workers` so that this
-    // message to self is forwarded to the correct worker; this means that
-    // "messages to self are delivered immediately" is only true for self
-    // messages to the same process
-    if reader_to_workers.pool_size() == 1 {
-        process.handle(process_id, msg)
+    // create msg to be forwarded
+    let to_forward = (process_id, msg);
+    // only handle message from self in this worker if the destination worker is
+    // us; this means that "messages to self are delivered immediately" is only
+    // true for self messages to the same worker
+    if reader_to_workers.destination_index(&to_forward) == worker_index {
+        process.handle(process_id, to_forward.1)
     } else {
-        if let Err(e) = reader_to_workers.forward((process_id, msg)).await {
+        if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);
         }
         None
@@ -490,6 +500,7 @@ async fn send_to_writer<P>(
 }
 
 async fn selected_from_client<P>(
+    worker_index: usize,
     process_id: ProcessId,
     cmd: Option<(Option<Dot>, Command)>,
     process: &mut P,
@@ -501,6 +512,7 @@ async fn selected_from_client<P>(
     log!("[server] from clients: {:?}", cmd);
     if let Some((dot, cmd)) = cmd {
         handle_from_client(
+            worker_index,
             process_id,
             dot,
             cmd,
@@ -515,6 +527,7 @@ async fn selected_from_client<P>(
 }
 
 async fn handle_from_client<P>(
+    worker_index: usize,
     process_id: ProcessId,
     dot: Option<Dot>,
     cmd: Command,
@@ -526,6 +539,6 @@ async fn handle_from_client<P>(
 {
     // submit command in process
     let to_send = process.submit(dot, cmd);
-    handle_to_send(process_id, to_send, process, to_writers, reader_to_workers)
+    handle_to_send(worker_index, process_id, to_send, process, to_writers, reader_to_workers)
         .await;
 }

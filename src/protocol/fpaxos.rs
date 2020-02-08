@@ -321,9 +321,9 @@ pub enum Message {
     },
 }
 
-pub const LEADER_WORKER_INDEX: usize = 1;
-const ACCEPTOR_WORKER_INDEX: usize = 2;
-const LEARNER_WORKER_INDEX: usize = 3;
+pub const LEADER_WORKER_INDEX: usize = 0;
+const ACCEPTOR_WORKER_INDEX: usize = 1;
+const LEARNER_WORKER_INDEX: usize = 2;
 
 impl MessageIndex for Message {
     fn index(&self) -> MessageIndexes {
