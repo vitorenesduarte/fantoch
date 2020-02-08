@@ -337,7 +337,7 @@ impl MessageIndex for Message {
                 ACCEPTOR_WORKER_INDEX
             }
             Self::MChosen { .. } => {
-                // forward chosen messages to leader worker
+                // forward chosen messages to learner worker
                 LEARNER_WORKER_INDEX
             }
             // spawn commanders and accepted messages should be forwarded to

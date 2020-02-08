@@ -440,7 +440,8 @@ if [[ $1 == "stop" ]]; then
     stop_all
 else
     output_log=.run_log
-    for clients_per_machine in 2 4 8 16 32 64 128 256 512 1024; do
+    echo "${PROTOCOL} w=${WORKERS} e=${EXECUTORS} ${CONFLICT_RATE}%" >> ${output_log}
+    for clients_per_machine in 16 32 64 128 256 512; do
         echo "C=${clients_per_machine}" >>${output_log}
         stop_all
         sleep ${KILL_WAIT}
