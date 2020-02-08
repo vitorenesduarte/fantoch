@@ -258,6 +258,7 @@ pub fn start_processes<P>(
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: ReaderToWorkers<P>,
     worker_to_executors: WorkerToExecutors<P>,
     channel_buffer_size: usize,
     execution_log: Option<String>,
@@ -286,6 +287,7 @@ where
                 from_readers,
                 from_clients,
                 to_writers.clone(),
+                reader_to_workers.clone(),
                 worker_to_executors.clone(),
                 to_execution_logger.clone(),
             ))
@@ -299,6 +301,7 @@ async fn process_task<P>(
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
+    mut reader_to_workers: ReaderToWorkers<P>,
     mut worker_to_executors: WorkerToExecutors<P>,
     mut to_execution_logger: Option<ExecutionInfoSender<P>>,
 ) where
@@ -310,10 +313,10 @@ async fn process_task<P>(
             // prioritize messages about ongoing commands
             select_biased! {
                 msg = from_readers.recv().fuse() => {
-                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut worker_to_executors, &mut to_execution_logger).await
+                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
                 }
                 cmd = from_clients.recv().fuse()  => {
-                    selected_from_client(process_id, cmd, &mut process, &mut to_writers).await
+                    selected_from_client(process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
             }
         }
@@ -321,10 +324,10 @@ async fn process_task<P>(
         loop {
             tokio::select! {
                 msg = from_readers.recv() => {
-                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut worker_to_executors, &mut to_execution_logger).await
+                    selected_from_processes(process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
                 }
                 cmd = from_clients.recv() => {
-                    selected_from_client(process_id, cmd, &mut process, &mut to_writers).await
+                    selected_from_client(process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
             }
         }
@@ -336,6 +339,7 @@ async fn selected_from_processes<P>(
     msg: Option<(ProcessId, P::Message)>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
     worker_to_executors: &mut WorkerToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
 ) where
@@ -349,6 +353,7 @@ async fn selected_from_processes<P>(
             msg,
             process,
             to_writers,
+            reader_to_workers,
             worker_to_executors,
             to_execution_logger,
         )
@@ -366,6 +371,7 @@ async fn handle_from_processes<P>(
     msg: P::Message,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
     worker_to_executors: &mut WorkerToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
 ) where
@@ -373,7 +379,14 @@ async fn handle_from_processes<P>(
 {
     // handle message in process
     if let Some(to_send) = process.handle(from, msg) {
-        handle_to_send(process_id, to_send, process, to_writers).await;
+        handle_to_send(
+            process_id,
+            to_send,
+            process,
+            to_writers,
+            reader_to_workers,
+        )
+        .await;
     }
 
     // check if there's new execution info for the executor
@@ -400,38 +413,59 @@ async fn handle_to_send<P>(
     to_send: ToSend<P::Message>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
 {
-    // unpack to send
-    let ToSend { target, msg, .. } = to_send;
-    // TODO can we avoid cloning here?
-    for destination in target {
-        if destination == process_id {
-            // handle msg locally if self in `to_send.target`
-            handle_message_from_self::<P>(process_id, msg.clone(), process)
-        } else {
-            // send message to correct writer
-            send_to_writer::<P>(destination, msg.clone(), to_writers).await
+    // having a variable with all to sends allows sending messages to self
+    let mut to_sends = vec![to_send];
+
+    while let Some(to_send) = to_sends.pop() {
+        // unpack to send
+        let ToSend { target, msg, .. } = to_send;
+        // TODO can we avoid cloning here?
+        for destination in target {
+            if destination == process_id {
+                // handle msg locally if self in `to_send.target`
+                let new_to_send = handle_message_from_self::<P>(
+                    process_id,
+                    msg.clone(),
+                    process,
+                    reader_to_workers,
+                )
+                .await;
+                if let Some(new_to_send) = new_to_send {
+                    to_sends.push(new_to_send);
+                }
+            } else {
+                // send message to correct writer
+                send_to_writer::<P>(destination, msg.clone(), to_writers).await
+            }
         }
     }
 }
 
-fn handle_message_from_self<P>(
+async fn handle_message_from_self<P>(
     process_id: ProcessId,
     msg: P::Message,
     process: &mut P,
-) where
+    reader_to_workers: &mut ReaderToWorkers<P>,
+) -> Option<ToSend<P::Message>>
+where
     P: Protocol + 'static,
 {
-    // make sure that, if there's something to be sent, it is to self, i.e.
-    // messages from self to self shouldn't generate messages
-    if let Some(ToSend { target, msg, .. }) = process.handle(process_id, msg) {
-        assert!(target.len() == 1);
-        assert!(target.contains(&process_id));
-        // handling this message shouldn't generate a new message
-        let nothing = process.handle(process_id, msg);
-        assert!(nothing.is_none());
+    // if the workers pool size is 1, then for sure this message is to this
+    // worker; if not, then we should use `reader_to_workers` so that this
+    // message to self is forwarded to the correct worker; this means that
+    // "messages to self are delivered immediately" is only true for self
+    // messages to the same process
+    if reader_to_workers.pool_size() == 1 {
+        process.handle(process_id, msg)
+    } else {
+        if let Err(e) = reader_to_workers.forward((process_id, msg)).await {
+            println!("[server] error notifying process task with msg from self: {:?}", e);
+        }
+        None
     }
 }
 
@@ -460,12 +494,21 @@ async fn selected_from_client<P>(
     cmd: Option<(Dot, Command)>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
 {
     log!("[server] from clients: {:?}", cmd);
     if let Some((dot, cmd)) = cmd {
-        handle_from_client(process_id, dot, cmd, process, to_writers).await
+        handle_from_client(
+            process_id,
+            dot,
+            cmd,
+            process,
+            to_writers,
+            reader_to_workers,
+        )
+        .await
     } else {
         println!("[server] error while receiving new command from executor");
     }
@@ -477,10 +520,12 @@ async fn handle_from_client<P>(
     cmd: Command,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
 {
     // submit command in process
     let to_send = process.submit(Some(dot), cmd);
-    handle_to_send(process_id, to_send, process, to_writers).await;
+    handle_to_send(process_id, to_send, process, to_writers, reader_to_workers)
+        .await;
 }

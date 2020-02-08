@@ -6,7 +6,7 @@ type Ballot = u64;
 type Slot = u64;
 
 // The first component is the ballot in which the value (the second component)
-// was accepted. If the ballot is 0, the value has not been accepted yet.
+// was accepted.
 type Accepted<V> = (Ballot, V);
 type AcceptedSlots<V> = HashMap<Slot, Accepted<V>>;
 type Accepts = HashSet<ProcessId>;
@@ -66,7 +66,7 @@ where
         if let Some((ballot, slot)) = self.leader.try_submit() {
             // if we're the leader, create a spawn commander message:
             // - this message is to be handled locally, but it can be handled in
-            //   a different multi-synod process
+            //   a different local multi-synod process for parallelism
             MultiSynodMessage::MSpawnCommander(ballot, slot, value)
         } else {
             // if we're not the leader, then create an `MForwardSubmit` to be
@@ -99,31 +99,7 @@ where
             }
             // handle messages to comamnders
             MultiSynodMessage::MAccepted(b, slot) => {
-                // get the commander of this slot:
-                match self.commanders.entry(slot) {
-                    Entry::Occupied(mut entry) => {
-                        let commander = entry.get_mut();
-                        let chosen = commander.handle_accepted(from, b);
-                        // if the commander has gathered enough accepts, then
-                        // the value for this slot is chosen
-                        if chosen {
-                            // destroy commander and get the value that was
-                            // being watched
-                            let value = entry.remove().destroy();
-                            // create chosen message
-                            let chosen =
-                                MultiSynodMessage::MChosen(slot, value);
-                            Some(chosen)
-                        } else {
-                            None
-                        }
-                    }
-                    Entry::Vacant(_) => {
-                        // ignore message if commander does not exist
-                        println!("MultiSynodMesssage::MAccepted({}, {}) ignored as a commander for that slot {} does not exist", b, slot, slot);
-                        None
-                    }
-                }
+                self.handle_maccepted(from, b, slot)
             }
             MultiSynodMessage::MChosen(_, _) => panic!("MultiSynod::MChosen messages are to be handled outside of MultiSynod"),
             MultiSynodMessage::MForwardSubmit(_) => panic!("MultiSynod::MForwardSubmit messages are to be handled outside of MultiSynod")
@@ -145,6 +121,38 @@ where
         // create the accept message
         MultiSynodMessage::MAccept(ballot, slot, value)
     }
+
+    fn handle_maccepted(
+        &mut self,
+        from: ProcessId,
+        ballot: Ballot,
+        slot: Slot,
+    ) -> Option<MultiSynodMessage<V>> {
+        // get the commander of this slot:
+        match self.commanders.entry(slot) {
+            Entry::Occupied(mut entry) => {
+                let commander = entry.get_mut();
+                let chosen = commander.handle_accepted(from, ballot);
+                // if the commander has gathered enough accepts, then
+                // the value for this slot is chosen
+                if chosen {
+                    // destroy commander and get the value that was
+                    // being watched
+                    let value = entry.remove().destroy();
+                    // create chosen message
+                    let chosen = MultiSynodMessage::MChosen(slot, value);
+                    Some(chosen)
+                } else {
+                    None
+                }
+            }
+            Entry::Vacant(_) => {
+                // ignore message if commander does not exist
+                println!("MultiSynodMesssage::MAccepted({}, {}) ignored as a commander for that slot {} does not exist", ballot, slot, slot);
+                None
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -153,7 +161,7 @@ struct Leader {
     process_id: ProcessId,
     // flag indicating whether we're the leader
     is_leader: bool,
-    // ballot to be used in in accept messages
+    // ballot to be used in accept messages
     ballot: Ballot,
     // last slot used in accept messages
     last_slot: Slot,
@@ -177,7 +185,7 @@ impl Leader {
         }
     }
 
-    /// Tries to submit a command. Only if we're the leader, a the leader ballot
+    /// Tries to submit a command. If we're the leader, then the leader ballot
     /// and a new slot will be returned.
     fn try_submit(&mut self) -> Option<(Ballot, Slot)> {
         if self.is_leader {
@@ -199,7 +207,7 @@ struct Commander<V> {
     ballot: Ballot,
     // value sent in the accept
     value: V,
-    // set of processes that have accepted a proposal
+    // set of processes that have accepted the accept
     accepts: Accepts,
 }
 
@@ -263,8 +271,7 @@ where
 
     // The reply to this prepare request contains:
     // - a promise to never accept a proposal numbered less than `b`
-    // - the non-GCed proposals accepted with the highest number less than `b`,
-    //   if any
+    // - the non-GCed proposals accepted at ballots less than `b`, if any
     fn handle_prepare(&mut self, b: Ballot) -> Option<MultiSynodMessage<V>> {
         // since we need to promise that we won't accept any proposal numbered
         // less then `b`, there's no point in letting such proposal be
