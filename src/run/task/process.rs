@@ -426,30 +426,31 @@ async fn handle_to_send<P>(
     P: Protocol + 'static,
 {
     // having a variable with all to sends allows sending messages to self
-    let mut to_sends = vec![to_send];
+    let mut to_send = Some(to_send);
 
-    while let Some(to_send) = to_sends.pop() {
-        // unpack to send
-        let ToSend { target, msg, .. } = to_send;
-        // TODO can we avoid cloning here?
+    while let Some(ToSend { target, msg, .. }) = to_send.take() {
+        let mut msg_to_self = false;
+
+        // send to each process in target, expect to self
         for destination in target {
             if destination == process_id {
-                // handle msg locally if self in `to_send.target`
-                let new_to_send = handle_message_from_self::<P>(
-                    worker_index,
-                    process_id,
-                    msg.clone(),
-                    process,
-                    reader_to_workers,
-                )
-                .await;
-                if let Some(new_to_send) = new_to_send {
-                    to_sends.push(new_to_send);
-                }
+                msg_to_self = true;
             } else {
                 // send message to correct writer
                 send_to_writer::<P>(destination, msg.clone(), to_writers).await
             }
+        }
+
+        if msg_to_self {
+            // handle msg locally if self in `target`
+            to_send = handle_message_from_self::<P>(
+                worker_index,
+                process_id,
+                msg,
+                process,
+                reader_to_workers,
+            )
+            .await
         }
     }
 }
@@ -539,6 +540,13 @@ async fn handle_from_client<P>(
 {
     // submit command in process
     let to_send = process.submit(dot, cmd);
-    handle_to_send(worker_index, process_id, to_send, process, to_writers, reader_to_workers)
-        .await;
+    handle_to_send(
+        worker_index,
+        process_id,
+        to_send,
+        process,
+        to_writers,
+        reader_to_workers,
+    )
+    .await;
 }
