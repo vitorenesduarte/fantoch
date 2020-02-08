@@ -21,11 +21,15 @@ mod epaxos;
 // This module contains the definition of `Newt`.
 mod newt;
 
+// This module contains the definition of `FPaxos`.
+mod fpaxos;
+
 // Re-exports.
-pub use atlas::{LockedAtlas, SequentialAtlas};
+pub use atlas::{AtlasLocked, AtlasSequential};
 pub use basic::Basic;
-pub use epaxos::{LockedEPaxos, SequentialEPaxos};
-pub use newt::{AtomicNewt, SequentialNewt};
+pub use epaxos::{EPaxosLocked, EPaxosSequential};
+pub use fpaxos::{FPaxos, LEADER_WORKER_INDEX};
+pub use newt::{NewtAtomic, NewtSequential};
 
 pub use base::BaseProcess;
 
@@ -45,7 +49,7 @@ pub trait Protocol: Clone {
         + DeserializeOwned
         + Send
         + Sync
-        + MessageDot; // TODO why is Sync needed??
+        + MessageIndex; // TODO why is Sync needed??
     type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;
@@ -75,18 +79,33 @@ pub trait Protocol: Clone {
 
     fn parallel() -> bool;
 
+    fn leaderless() -> bool {
+        true
+    }
+
     fn show_metrics(&self) {
         // by default, nothing to show
     }
 }
 
-pub trait MessageDot {
-    /// If `None` is returned, then the message is sent to all protocol
-    /// processes. In particular, if the protocol is not parallel, the
-    /// message is sent to the single protocol process.
-    fn dot(&self) -> Option<&Dot> {
-        None
+pub trait MessageIndex {
+    /// This trait is used to decide to which worker some messages should be
+    /// forwarded to, ensuring that messages with the same index are forwarded
+    /// to the same process. If `None` is returned, then the message is sent to
+    /// all workers. In particular, if the protocol is not parallel, the
+    /// message is sent to the single protocol worker.
+    /// Two types of indexes are supported:
+    /// - Index: simple sequence number
+    /// - DotIndex: dot index in which the dot sequence will be used as index
+    fn index(&self) -> MessageIndexes {
+        MessageIndexes::None
     }
+}
+
+pub enum MessageIndexes<'a> {
+    Index(usize),
+    DotIndex(&'a Dot),
+    None,
 }
 
 #[derive(Clone, PartialEq, Debug)]

@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{Protocol, SequentialNewt};
+use planet_sim::protocol::{NewtSequential, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -19,7 +19,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         multiplexing,
         execution_log,
     ) = common::protocol::parse_args();
-    let process = SequentialNewt::new(process_id, config);
+
+    // create process
+    let process = NewtSequential::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
         process,

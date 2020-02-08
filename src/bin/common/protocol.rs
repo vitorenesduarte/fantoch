@@ -100,6 +100,13 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("leader")
+                .long("leader")
+                .value_name("LEADER")
+                .help("id of the starting leader process in leader-based protocols")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
@@ -172,6 +179,7 @@ pub fn parse_args() -> (
         matches.value_of("f"),
         matches.value_of("transitive_conflicts"),
     );
+    let leader = parse_leader(matches.value_of("leader"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let tcp_buffer_size =
         super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
@@ -187,7 +195,12 @@ pub fn parse_args() -> (
     let execution_log =
         super::parse_execution_log(matches.value_of("execution_log"));
 
-    // update config
+    // update config:
+    // - set leader if we have one
+    // - set the number of workers and executors
+    if let Some(leader) = leader {
+        config.set_leader(leader);
+    }
     config.set_workers(workers);
     config.set_executors(executors);
 
@@ -230,6 +243,10 @@ pub fn parse_args() -> (
 
 fn parse_process_id(id: Option<&str>) -> ProcessId {
     parse_id(id.expect("process id should be set"))
+}
+
+fn parse_leader(leader: Option<&str>) -> Option<ProcessId> {
+    leader.map(|leader| parse_id(leader))
 }
 
 fn parse_sorted_processes(ids: Option<&str>) -> Vec<ProcessId> {

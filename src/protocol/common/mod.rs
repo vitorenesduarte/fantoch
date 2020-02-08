@@ -11,5 +11,6 @@ pub mod graph;
 // This module contains definitions common to votes-table-based protocols.
 pub mod table;
 
-// This module contains the implementation of Paxos Synod Protocol.
+// This module contains the implementation of Paxos single and multi-decree
+// Synod Protocols.
 pub mod synod;

@@ -49,13 +49,21 @@ where
         self.pool.len()
     }
 
+    /// Checks the index of the destination worker.
+    pub fn destination_index(&self, msg: &M) -> usize
+    where
+        M: PoolIndex,
+    {
+        self.index(msg)
+    }
+
     /// Forwards message `msg` to the pool worker with id `msg.index() %
     /// pool_size`.
     pub async fn forward(&mut self, msg: M) -> RunResult<()>
     where
         M: PoolIndex,
     {
-        let index = msg.index();
+        let index = self.index(&msg);
         self.do_forward(index, msg).await
     }
 
@@ -66,7 +74,7 @@ where
         V: PoolIndex,
         F: FnOnce(V) -> M,
     {
-        let index = value.index();
+        let index = self.index(&value);
         self.do_forward(index, map(value)).await
     }
 
@@ -83,12 +91,11 @@ where
         Ok(())
     }
 
-    async fn do_forward(
-        &mut self,
-        index: Option<usize>,
-        msg: M,
-    ) -> RunResult<()> {
-        let index = match index {
+    fn index<T>(&self, msg: &T) -> usize
+    where
+        T: PoolIndex,
+    {
+        match msg.index() {
             Some(index) => {
                 // the actual index is computed based on the pool size
                 index % self.pool.len()
@@ -100,8 +107,10 @@ where
                 assert_eq!(self.pool.len(), 1);
                 0
             }
-        };
+        }
+    }
 
+    async fn do_forward(&mut self, index: usize, msg: M) -> RunResult<()> {
         log!("index: {} {} of {}", self.name, index, self.pool_size());
         self.pool[index].send(msg).await
     }

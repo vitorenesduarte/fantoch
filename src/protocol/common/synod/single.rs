@@ -268,6 +268,9 @@ where
                 let (mut promises, _) = self.reset_state();
 
                 // compute the proposal accepted at the highest ballot
+                // - if there's more than one proposal with the same highest
+                //   ballot, then they have the same value, and thus any can be
+                //   selected
                 let (highest_ballot, from) = promises
                     .iter()
                     // get highest proposal

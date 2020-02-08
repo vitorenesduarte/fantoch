@@ -11,7 +11,7 @@ use tokio::net::TcpListener;
 pub fn start_listener(
     process_id: ProcessId,
     listener: TcpListener,
-    atomic_dot_gen: AtomicDotGen,
+    atomic_dot_gen: Option<AtomicDotGen>,
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
@@ -33,7 +33,7 @@ pub fn start_listener(
 async fn client_listener_task(
     process_id: ProcessId,
     listener: TcpListener,
-    atomic_dot_gen: AtomicDotGen,
+    atomic_dot_gen: Option<AtomicDotGen>,
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
@@ -75,7 +75,7 @@ async fn client_listener_task(
 /// (new commands) and parent (new command results).
 async fn client_server_task(
     process_id: ProcessId,
-    atomic_dot_gen: AtomicDotGen,
+    atomic_dot_gen: Option<AtomicDotGen>,
     mut client_to_workers: ClientToWorkers,
     mut client_to_executors: ClientToExecutors,
     channel_buffer_size: usize,
@@ -164,7 +164,7 @@ async fn server_receive_hi(
 async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
     client_id: ClientId,
-    atomic_dot_gen: &AtomicDotGen,
+    atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
     rifl_acks: &mut RiflAckReceiver,
@@ -209,7 +209,9 @@ async fn client_server_task_handle_cmd(
         }
 
         // create dot for this command
-        let dot = atomic_dot_gen.next_id();
+        let dot = atomic_dot_gen
+            .as_ref()
+            .map(|atomic_dot_gen| atomic_dot_gen.next_id());
         // forward command to worker process
         if let Err(e) = client_to_workers.forward((dot, cmd)).await {
             println!(

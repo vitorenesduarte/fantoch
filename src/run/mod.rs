@@ -176,6 +176,16 @@ where
         )
     }
 
+    // panic if protocol is leaderless and there's a leader
+    if P::leaderless() && config.leader().is_some() {
+        panic!("running leaderless protocol with a leader");
+    }
+
+    // panic if leader-based and there's no leader
+    if !P::leaderless() && config.leader().is_none() {
+        panic!("running leader-based protocol without a leader");
+    }
+
     // discover processes
     process.discover(sorted_processes);
 
@@ -197,7 +207,7 @@ where
         process_id,
         listener,
         addresses,
-        reader_to_workers,
+        reader_to_workers.clone(),
         CONNECT_RETRIES,
         tcp_nodelay,
         tcp_buffer_size,
@@ -210,8 +220,18 @@ where
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
 
-    // create atomic dot generator to be used by clients
-    let atomic_dot_gen = AtomicDotGen::new(process_id);
+    // create atomic dot generator to be used by clients in case the protocol is
+    // leaderless:
+    // - leader-based protocols like paxos shouldn't use this and the fact that
+    //   there's no `Dot` will make new client commands always be forwarded to
+    //   the leader worker (in case there's more than one worker); see
+    //   `LEADER_WORKER_INDEX` in FPaxos implementation
+    let atomic_dot_gen = if P::leaderless() {
+        let atomic_dot_gen = AtomicDotGen::new(process_id);
+        Some(atomic_dot_gen)
+    } else {
+        None
+    };
 
     // create forward channels: client -> workers
     let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(
@@ -258,6 +278,7 @@ where
         reader_to_workers_rxs,
         client_to_workers_rxs,
         to_writers,
+        reader_to_workers,
         worker_to_executors,
         channel_buffer_size,
         execution_log,
@@ -497,8 +518,8 @@ fn handle_cmd_result(
 mod tests {
     use super::*;
     use crate::protocol::{
-        AtomicNewt, Basic, LockedAtlas, LockedEPaxos, SequentialAtlas,
-        SequentialEPaxos, SequentialNewt,
+        AtlasLocked, AtlasSequential, Basic, EPaxosLocked, EPaxosSequential,
+        FPaxos, NewtAtomic, NewtSequential,
     };
     use rand::Rng;
     use tokio::task;
@@ -527,61 +548,87 @@ mod tests {
         // basic is a parallel protocol with parallel execution
         let workers = 2;
         let executors = 3;
-        run_test::<Basic>(workers, executors).await
+        let with_leader = false;
+        run_test::<Basic>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
-    async fn run_sequential_newt_test() {
-        // sequential newt can only handle one worker but many executors
+    async fn run_newt_sequential_test() {
+        // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 2;
-        run_test::<SequentialNewt>(workers, executors).await
+        let with_leader = false;
+        run_test::<NewtSequential>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
-    async fn run_atomic_newt_test() {
-        // atomic newt can handle as many workers as we want but we may want to
+    async fn run_newt_atomic_test() {
+        // newt atomic can handle as many workers as we want but we may want to
         // only have one executor
         let workers = 3;
         let executors = 1;
-        run_test::<AtomicNewt>(workers, executors).await
+        let with_leader = false;
+        run_test::<NewtAtomic>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
-    async fn run_sequential_atlas_test() {
-        // sequential atlas can only handle one worker and one executor
+    async fn run_atlas_sequential_test() {
+        // atlas sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        run_test::<SequentialAtlas>(workers, executors).await
+        let with_leader = false;
+        run_test::<AtlasSequential>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
-    async fn run_locked_atlas_test() {
-        // locked atlas can handle as many workers as we want but only one
+    async fn run_atlas_locked_test() {
+        // atlas locked can handle as many workers as we want but only one
         // executor
         let workers = 3;
         let executors = 1;
-        run_test::<LockedAtlas>(workers, executors).await
+        let with_leader = false;
+        run_test::<AtlasLocked>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
-    async fn run_sequential_epaxos_test() {
-        // sequential epaxos can only handle one worker and one executor
+    async fn run_epaxos_sequential_test() {
+        // epaxos sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        run_test::<SequentialEPaxos>(workers, executors).await
+        let with_leader = false;
+        run_test::<EPaxosSequential>(workers, executors, with_leader).await
     }
 
     #[tokio::test]
-    async fn run_locked_epaxos_test() {
-        // locked epaxos can handle as many workers as we want but only one
+    async fn run_epaxos_locked_test() {
+        // epaxos locked can handle as many workers as we want but only one
         // executor
         let workers = 3;
         let executors = 1;
-        run_test::<LockedEPaxos>(workers, executors).await
+        let with_leader = false;
+        run_test::<EPaxosLocked>(workers, executors, with_leader).await
     }
 
-    async fn run_test<P>(workers: usize, executors: usize)
+    #[tokio::test]
+    async fn run_fpaxos_sequential_test() {
+        // run fpaxos in sequential mode
+        let workers = 1;
+        let executors = 1;
+        let with_leader = true;
+        run_test::<FPaxos>(workers, executors, with_leader).await
+    }
+
+    #[tokio::test]
+    async fn run_fpaxos_parallel_test() {
+        // run fpaxos in paralel mode (in terms of workers, since execution is
+        // never parallel)
+        let workers = 3;
+        let executors = 1;
+        let with_leader = true;
+        run_test::<FPaxos>(workers, executors, with_leader).await
+    }
+
+    async fn run_test<P>(workers: usize, executors: usize, with_leader: bool)
     where
         P: Protocol + Send + 'static,
     {
@@ -591,7 +638,7 @@ mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<P>(workers, executors).await {
+                match run::<P>(workers, executors, with_leader).await {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
@@ -599,7 +646,11 @@ mod tests {
             .await;
     }
 
-    async fn run<P>(workers: usize, executors: usize) -> RunResult<()>
+    async fn run<P>(
+        workers: usize,
+        executors: usize,
+        with_leader: bool,
+    ) -> RunResult<()>
     where
         P: Protocol + Send + 'static,
     {
@@ -607,6 +658,11 @@ mod tests {
         let n = 3;
         let f = 1;
         let mut config = Config::new(n, f);
+
+        // if we should set a leader, set process 1 as the leader
+        if with_leader {
+            config.set_leader(1);
+        }
 
         // create processes
         let process_1 = P::new(1, config);

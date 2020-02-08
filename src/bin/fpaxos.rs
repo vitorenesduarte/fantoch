@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{Basic, Protocol};
+use planet_sim::protocol::{FPaxos, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ) = common::protocol::parse_args();
 
     // create process
-    let process = Basic::new(process_id, config);
+    let process = FPaxos::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
         process,

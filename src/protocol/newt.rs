@@ -6,15 +6,17 @@ use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::table::{
     AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
 };
-use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
+use crate::protocol::{
+    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
+};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 use std::mem;
 
-pub type SequentialNewt = Newt<SequentialKeyClocks>;
-pub type AtomicNewt = Newt<AtomicKeyClocks>;
+pub type NewtSequential = Newt<SequentialKeyClocks>;
+pub type NewtAtomic = Newt<AtomicKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
@@ -479,14 +481,15 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {
-    fn dot(&self) -> Option<&Dot> {
-        match self {
-            Self::MCollect { dot, .. } => Some(dot),
-            Self::MCollectAck { dot, .. } => Some(dot),
-            Self::MCommit { dot, .. } => Some(dot),
-            Self::MPhantom { dot, .. } => Some(dot),
-        }
+impl MessageIndex for Message {
+    fn index(&self) -> MessageIndexes {
+        let dot = match self {
+            Self::MCollect { dot, .. } => dot,
+            Self::MCollectAck { dot, .. } => dot,
+            Self::MCommit { dot, .. } => dot,
+            Self::MPhantom { dot, .. } => dot,
+        };
+        MessageIndexes::DotIndex(dot)
     }
 }
 

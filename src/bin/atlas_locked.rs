@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{LockedAtlas, Protocol};
+use planet_sim::protocol::{AtlasLocked, Protocol};
 use std::error::Error;
 
 // TODO can we generate all the protocol binaries with a macro?
@@ -21,7 +21,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         multiplexing,
         execution_log,
     ) = common::protocol::parse_args();
-    let process = LockedAtlas::new(process_id, config);
+
+    // create process
+    let process = AtlasLocked::new(process_id, config);
 
     common::tokio_runtime().block_on(planet_sim::run::process(
         process,

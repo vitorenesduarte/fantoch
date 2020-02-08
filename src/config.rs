@@ -1,4 +1,5 @@
-use crate::protocol::SequentialEPaxos;
+use crate::id::ProcessId;
+use crate::protocol::EPaxosSequential;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
@@ -10,6 +11,8 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
+    // starting leader process
+    leader: Option<ProcessId>,
     /// defines the number of `Protocol` workers
     workers: usize,
     /// defines the number of `Executor` workers
@@ -29,6 +32,8 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
+        // by default, there's no leader
+        let leader = None;
         // by default there's one worker for `Protocol` and one worker for
         // `Executor`
         let workers = 1;
@@ -38,6 +43,7 @@ impl Config {
             f,
             newt_tiny_quorums,
             transitive_conflicts,
+            leader,
             workers,
             executors,
         }
@@ -73,6 +79,16 @@ impl Config {
         self.transitive_conflicts = transitive_conflicts;
     }
 
+    /// Checks whether a starting leader has been defined.
+    pub fn leader(&self) -> Option<ProcessId> {
+        self.leader
+    }
+
+    /// Sets the starting leader.
+    pub fn set_leader(&mut self, leader: ProcessId) {
+        self.leader = Some(leader);
+    }
+
     /// Checks the number of `Protocol` workers.
     pub fn workers(&self) -> usize {
         self.workers
@@ -100,6 +116,11 @@ impl Config {
         self.f + 1
     }
 
+    /// Computes `FPaxos` quorum size.
+    pub fn fpaxos_quorum_size(&self) -> usize {
+        self.f + 1
+    }
+
     /// Computes `Atlas` fast and write quorum sizes.
     pub fn atlas_quorum_sizes(&self) -> (usize, usize) {
         let n = self.n;
@@ -114,7 +135,7 @@ impl Config {
         let n = self.n;
         // ignore config.f() since EPaxos always tolerates a minority of
         // failures
-        let f = SequentialEPaxos::allowed_faults(n);
+        let f = EPaxosSequential::allowed_faults(n);
         let fast_quorum_size = f + ((f + 1) / 2 as usize);
         let write_quorum_size = f + 1;
         (fast_quorum_size, write_quorum_size)
@@ -187,6 +208,13 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+
+        // by default, there's no leader
+        assert!(config.leader().is_none());
+        // but that can change
+        let leader = 1;
+        config.set_leader(leader);
+        assert_eq!(config.leader(), Some(leader));
 
         // by default, there's one protocol worker and one executor worker
         assert_eq!(config.workers(), 1);

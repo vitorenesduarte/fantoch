@@ -4,7 +4,9 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{MessageDot, Protocol};
+use crate::protocol::{
+    MessageIndex, MessageIndexes, Protocol, LEADER_WORKER_INDEX,
+};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -41,17 +43,26 @@ pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
 pub type CommandResultSender = ChannelSender<CommandResult>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
 pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
-pub type SubmitReceiver = ChannelReceiver<(Dot, Command)>;
+pub type SubmitReceiver = ChannelReceiver<(Option<Dot>, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 
 // 1. workers receive messages from clients
-pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;
-impl pool::PoolIndex for (Dot, Command) {
+pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
+impl pool::PoolIndex for (Option<Dot>, Command) {
     fn index(&self) -> Option<usize> {
-        Some(dot_index(&self.0))
+        // if there's a `Dot`, then the protocol is leaderless; otherwise, it is
+        // leader-based and the command should always be forwarded to the leader
+        // worker
+        let index = self
+            .0
+            .as_ref()
+            .map(|dot| dot_index(dot))
+            .unwrap_or(LEADER_WORKER_INDEX);
+        // in this case, there's always an index
+        Some(index)
     }
 }
 
@@ -62,10 +73,14 @@ pub type ReaderToWorkers<P> =
 // `ToPool::forward`
 impl<A> pool::PoolIndex for (ProcessId, A)
 where
-    A: MessageDot,
+    A: MessageIndex,
 {
     fn index(&self) -> Option<usize> {
-        self.1.dot().map(|dot| dot_index(dot))
+        match self.1.index() {
+            MessageIndexes::Index(index) => Some(index),
+            MessageIndexes::DotIndex(ref dot) => Some(dot_index(dot)),
+            MessageIndexes::None => None,
+        }
     }
 }
 
