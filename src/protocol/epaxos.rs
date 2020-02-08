@@ -7,7 +7,9 @@ use crate::protocol::common::graph::{
 };
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{Synod, SynodMessage};
-use crate::protocol::{BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend};
+use crate::protocol::{
+    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
+};
 use crate::util;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};

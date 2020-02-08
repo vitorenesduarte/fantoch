@@ -6,7 +6,9 @@ use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::table::{
     AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
 };
-use crate::protocol::{BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend};
+use crate::protocol::{
+    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
+};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};

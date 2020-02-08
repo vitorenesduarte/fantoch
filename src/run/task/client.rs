@@ -209,7 +209,9 @@ async fn client_server_task_handle_cmd(
         }
 
         // create dot for this command
-        let dot = atomic_dot_gen.as_ref().map(|atomic_dot_gen| atomic_dot_gen.next_id());
+        let dot = atomic_dot_gen
+            .as_ref()
+            .map(|atomic_dot_gen| atomic_dot_gen.next_id());
         // forward command to worker process
         if let Err(e) = client_to_workers.forward((dot, cmd)).await {
             println!(

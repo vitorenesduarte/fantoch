@@ -425,7 +425,8 @@ async fn handle_to_send<P>(
 ) where
     P: Protocol + 'static,
 {
-    // having a variable with all to sends allows sending messages to self
+    // variable to keep track if there's another `ToSend` to be sent after
+    // handling the previous one
     let mut to_send = Some(to_send);
 
     while let Some(ToSend { target, msg, .. }) = to_send.take() {
