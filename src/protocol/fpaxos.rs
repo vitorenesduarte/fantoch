@@ -107,7 +107,7 @@ impl Protocol for FPaxos {
     }
 
     fn parallel() -> bool {
-        false
+        true
     }
 
     fn leaderless() -> bool {
