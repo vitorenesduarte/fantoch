@@ -20,11 +20,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         execution_log,
     ) = common::protocol::parse_args();
 
-    // check that no leader was defined
-    if config.leader().is_some() {
-        panic!("can't define a leader in a leaderless protocol");
-    }
-
     // create process
     let process = Basic::new(process_id, config);
 

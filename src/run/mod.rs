@@ -176,6 +176,16 @@ where
         )
     }
 
+    // panic if protocol is leaderless and there's a leader
+    if P::leaderless() && config.leader().is_some() {
+        panic!("running leaderless protocol with a leader");
+    }
+
+    // panic if leader-based and there's no leader
+    if !P::leaderless() && config.leader().is_none() {
+        panic!("running leader-based protocol without a leader");
+    }
+
     // discover processes
     process.discover(sorted_processes);
 
@@ -210,8 +220,15 @@ where
     // start client listener
     let listener = task::listen((ip, client_port)).await?;
 
-    // create atomic dot generator to be used by clients
-    let atomic_dot_gen = AtomicDotGen::new(process_id);
+    // create atomic dot generator to be used by clients in case the protocol is
+    // leaderless:
+    // - leader-based protocols like paxos shouldn't use this and the fact that there's no `Dot` will make new client commands always be forwarded to the leader worker (in case there's more than one worker); see `LEADER_WORKER_INDEX` in `prelude.rs`
+    let atomic_dot_gen = if P::leaderless() {
+        None
+    } else {
+        let atomic_dot_gen = AtomicDotGen::new(process_id);
+        Some(atomic_dot_gen)
+    };
 
     // create forward channels: client -> workers
     let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(

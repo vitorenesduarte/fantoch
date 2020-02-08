@@ -491,7 +491,7 @@ async fn send_to_writer<P>(
 
 async fn selected_from_client<P>(
     process_id: ProcessId,
-    cmd: Option<(Dot, Command)>,
+    cmd: Option<(Option<Dot>, Command)>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -516,7 +516,7 @@ async fn selected_from_client<P>(
 
 async fn handle_from_client<P>(
     process_id: ProcessId,
-    dot: Dot,
+    dot: Option<Dot>,
     cmd: Command,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
@@ -525,7 +525,7 @@ async fn handle_from_client<P>(
     P: Protocol + 'static,
 {
     // submit command in process
-    let to_send = process.submit(Some(dot), cmd);
+    let to_send = process.submit(dot, cmd);
     handle_to_send(process_id, to_send, process, to_writers, reader_to_workers)
         .await;
 }

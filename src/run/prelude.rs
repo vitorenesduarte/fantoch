@@ -41,17 +41,28 @@ pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
 pub type CommandResultSender = ChannelSender<CommandResult>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
 pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
-pub type SubmitReceiver = ChannelReceiver<(Dot, Command)>;
+pub type SubmitReceiver = ChannelReceiver<(Option<Dot>, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 
+pub const LEADER_WORKER_INDEX: usize = 1;
+
 // 1. workers receive messages from clients
-pub type ClientToWorkers = pool::ToPool<(Dot, Command)>;
-impl pool::PoolIndex for (Dot, Command) {
+pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
+impl pool::PoolIndex for (Option<Dot>, Command) {
     fn index(&self) -> Option<usize> {
-        Some(dot_index(&self.0))
+        // if there's a `Dot`, then the protocol is leaderless; otherwise, it is
+        // leader-based and the command should always be forwarded to the leader
+        // worker
+        let index = self
+            .0
+            .as_ref()
+            .map(|dot| dot_index(dot))
+            .unwrap_or(LEADER_WORKER_INDEX);
+        // in this case, there's always an index
+        Some(index)
     }
 }
 

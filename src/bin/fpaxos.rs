@@ -20,11 +20,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         execution_log,
     ) = common::protocol::parse_args();
 
-    // check that a leader was defined
-    if config.leader().is_none() {
-        panic!("must define a leader in a leader-based protocol");
-    }
-
     // create process
     let process = FPaxos::new(process_id, config);
 
