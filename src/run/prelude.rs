@@ -4,7 +4,9 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{MessageIndex, MessageIndexes, Protocol};
+use crate::protocol::{
+    MessageIndex, MessageIndexes, Protocol, LEADER_WORKER_INDEX,
+};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -46,8 +48,6 @@ pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
-
-pub const LEADER_WORKER_INDEX: usize = 1;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;

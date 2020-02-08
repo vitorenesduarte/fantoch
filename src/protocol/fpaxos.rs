@@ -3,7 +3,9 @@ use crate::config::Config;
 use crate::executor::{Executor, SlotExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::synod::{MultiSynod, MultiSynodMessage};
-use crate::protocol::{BaseProcess, MessageIndex, Protocol, ToSend};
+use crate::protocol::{
+    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
+};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -319,7 +321,35 @@ pub enum Message {
     },
 }
 
-impl MessageIndex for Message {}
+pub const LEADER_WORKER_INDEX: usize = 1;
+const ACCEPTOR_WORKER_INDEX: usize = 2;
+const LEARNER_WORKER_INDEX: usize = 3;
+
+impl MessageIndex for Message {
+    fn index(&self) -> MessageIndexes {
+        let index = match self {
+            Self::MForwardSubmit { .. } => {
+                // forward commands to the leader worker
+                LEADER_WORKER_INDEX
+            }
+            Self::MAccept { .. } => {
+                // forward accepts to the acceptor worker
+                ACCEPTOR_WORKER_INDEX
+            }
+            Self::MChosen { .. } => {
+                // forward chosen messages to leader worker
+                LEARNER_WORKER_INDEX
+            }
+            // spawn commanders and accepted messages should be forwarded to
+            // the commander process:
+            // - TODO here we should make sure that these commanders are never
+            //   spawned in the previous 3 workers
+            Self::MSpawnCommander { slot, .. } => *slot as usize,
+            Self::MAccepted { slot, .. } => *slot as usize,
+        };
+        MessageIndexes::Index(index)
+    }
+}
 
 #[cfg(test)]
 mod tests {

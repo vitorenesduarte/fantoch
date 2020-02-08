@@ -222,7 +222,10 @@ where
 
     // create atomic dot generator to be used by clients in case the protocol is
     // leaderless:
-    // - leader-based protocols like paxos shouldn't use this and the fact that there's no `Dot` will make new client commands always be forwarded to the leader worker (in case there's more than one worker); see `LEADER_WORKER_INDEX` in `prelude.rs`
+    // - leader-based protocols like paxos shouldn't use this and the fact that
+    //   there's no `Dot` will make new client commands always be forwarded to
+    //   the leader worker (in case there's more than one worker); see
+    //   `LEADER_WORKER_INDEX` in `prelude.rs`
     let atomic_dot_gen = if P::leaderless() {
         None
     } else {

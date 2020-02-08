@@ -28,7 +28,7 @@ mod fpaxos;
 pub use atlas::{AtlasLocked, AtlasSequential};
 pub use basic::Basic;
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
-pub use fpaxos::FPaxos;
+pub use fpaxos::{FPaxos, LEADER_WORKER_INDEX};
 pub use newt::{NewtAtomic, NewtSequential};
 
 pub use base::BaseProcess;
