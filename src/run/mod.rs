@@ -618,6 +618,16 @@ mod tests {
         run_test::<FPaxos>(workers, executors, with_leader).await
     }
 
+    #[tokio::test]
+    async fn run_fpaxos_parallel_test() {
+        // run fpaxos in paralel mode (in terms of workers, since execution is
+        // never parallel)
+        let workers = 3;
+        let executors = 1;
+        let with_leader = true;
+        run_test::<FPaxos>(workers, executors, with_leader).await
+    }
+
     async fn run_test<P>(workers: usize, executors: usize, with_leader: bool)
     where
         P: Protocol + Send + 'static,
