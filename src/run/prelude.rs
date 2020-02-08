@@ -4,7 +4,7 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{MessageDot, Protocol};
+use crate::protocol::{MessageIndex, MessageIndexes, Protocol};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -62,10 +62,14 @@ pub type ReaderToWorkers<P> =
 // `ToPool::forward`
 impl<A> pool::PoolIndex for (ProcessId, A)
 where
-    A: MessageDot,
+    A: MessageIndex,
 {
     fn index(&self) -> Option<usize> {
-        self.1.dot().map(|dot| dot_index(dot))
+        match self.1.index() {
+            MessageIndexes::Index(index) => Some(index),
+            MessageIndexes::DotIndex(ref dot) => Some(dot_index(dot)),
+            MessageIndexes::None => None,
+        }
     }
 }
 

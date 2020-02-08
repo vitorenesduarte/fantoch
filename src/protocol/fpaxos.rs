@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::{Executor, SlotExecutor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::synod::{MultiSynod, MultiSynodMessage};
-use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageIndex, Protocol, ToSend};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -319,7 +319,7 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {}
+impl MessageIndex for Message {}
 
 #[cfg(test)]
 mod tests {

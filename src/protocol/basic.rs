@@ -3,7 +3,9 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::common::info::{Commands, Info};
-use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
+use crate::protocol::{
+    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
+};
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -233,13 +235,14 @@ pub enum Message {
     MCommit { dot: Dot, cmd: Command },
 }
 
-impl MessageDot for Message {
-    fn dot(&self) -> Option<&Dot> {
-        match self {
-            Self::MStore { dot, .. } => Some(dot),
-            Self::MStoreAck { dot, .. } => Some(dot),
-            Self::MCommit { dot, .. } => Some(dot),
-        }
+impl MessageIndex for Message {
+    fn index(&self) -> MessageIndexes {
+        let dot = match self {
+            Self::MStore { dot, .. } => dot,
+            Self::MStoreAck { dot, .. } => dot,
+            Self::MCommit { dot, .. } => dot,
+        };
+        MessageIndexes::DotIndex(dot)
     }
 }
 

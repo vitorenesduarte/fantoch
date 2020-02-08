@@ -7,7 +7,7 @@ use crate::protocol::common::graph::{
 };
 use crate::protocol::common::info::{Commands, Info};
 use crate::protocol::common::synod::{Synod, SynodMessage};
-use crate::protocol::{BaseProcess, MessageDot, Protocol, ToSend};
+use crate::protocol::{BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend};
 use crate::util;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -520,15 +520,16 @@ pub enum Message {
     },
 }
 
-impl MessageDot for Message {
-    fn dot(&self) -> Option<&Dot> {
-        match self {
-            Self::MCollect { dot, .. } => Some(dot),
-            Self::MCollectAck { dot, .. } => Some(dot),
-            Self::MCommit { dot, .. } => Some(dot),
-            Self::MConsensus { dot, .. } => Some(dot),
-            Self::MConsensusAck { dot, .. } => Some(dot),
-        }
+impl MessageIndex for Message {
+    fn index(&self) -> MessageIndexes {
+        let dot = match self {
+            Self::MCollect { dot, .. } => dot,
+            Self::MCollectAck { dot, .. } => dot,
+            Self::MCommit { dot, .. } => dot,
+            Self::MConsensus { dot, .. } => dot,
+            Self::MConsensusAck { dot, .. } => dot,
+        };
+        MessageIndexes::DotIndex(dot)
     }
 }
 

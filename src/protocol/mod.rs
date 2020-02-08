@@ -49,7 +49,7 @@ pub trait Protocol: Clone {
         + DeserializeOwned
         + Send
         + Sync
-        + MessageDot; // TODO why is Sync needed??
+        + MessageIndex; // TODO why is Sync needed??
     type Executor: Executor + Send;
 
     fn new(process_id: ProcessId, config: Config) -> Self;
@@ -88,13 +88,24 @@ pub trait Protocol: Clone {
     }
 }
 
-pub trait MessageDot {
-    /// If `None` is returned, then the message is sent to all protocol
-    /// processes. In particular, if the protocol is not parallel, the
-    /// message is sent to the single protocol process.
-    fn dot(&self) -> Option<&Dot> {
-        None
+pub trait MessageIndex {
+    /// This trait is used to decide to which worker some messages should be
+    /// forwarded to, ensuring that messages with the same index are forwarded
+    /// to the same process. If `None` is returned, then the message is sent to
+    /// all workers. In particular, if the protocol is not parallel, the
+    /// message is sent to the single protocol worker.
+    /// Two types of indexes are supported:
+    /// - Index: simple sequence number
+    /// - DotIndex: dot index in which the dot sequence will be used as index
+    fn index(&self) -> MessageIndexes {
+        MessageIndexes::None
     }
+}
+
+pub enum MessageIndexes<'a> {
+    Index(usize),
+    DotIndex(&'a Dot),
+    None,
 }
 
 #[derive(Clone, PartialEq, Debug)]
