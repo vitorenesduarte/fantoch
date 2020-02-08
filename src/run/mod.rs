@@ -225,12 +225,12 @@ where
     // - leader-based protocols like paxos shouldn't use this and the fact that
     //   there's no `Dot` will make new client commands always be forwarded to
     //   the leader worker (in case there's more than one worker); see
-    //   `LEADER_WORKER_INDEX` in `prelude.rs`
+    //   `LEADER_WORKER_INDEX` in FPaxos implementation
     let atomic_dot_gen = if P::leaderless() {
-        None
-    } else {
         let atomic_dot_gen = AtomicDotGen::new(process_id);
         Some(atomic_dot_gen)
+    } else {
+        None
     };
 
     // create forward channels: client -> workers
