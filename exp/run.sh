@@ -15,16 +15,17 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="fpaxos"
+PROTOCOL="newt_atomic"
 PROCESSES=3
 FAULTS=1
 TRANSITIVE_CONFLICTS="true"
+EXECUTE_AT_COMMIT="false"
 EXECUTION_LOG=""
-LEADER="1"
+LEADER=""
 
 # parallelism config
 WORKERS=8
-EXECUTORS=1
+EXECUTORS=8
 MULTIPLEXING=2
 
 # clients config
@@ -271,6 +272,7 @@ start_process() {
         --processes ${PROCESSES} \
         --faults ${FAULTS} \
         --transitive_conflicts ${TRANSITIVE_CONFLICTS} \
+        --execute_at_commit ${EXECUTE_AT_COMMIT} \
         --tcp_nodelay ${PROCESS_TCP_NODELAY} \
         --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
         --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
@@ -440,7 +442,7 @@ if [[ $1 == "stop" ]]; then
     stop_all
 else
     output_log=.run_log
-    echo "${PROTOCOL} w=${WORKERS} e=${EXECUTORS} ${CONFLICT_RATE}%" >> ${output_log}
+    echo "${PROTOCOL} w=${WORKERS} e=${EXECUTORS} ${CONFLICT_RATE}% ${PAYLOAD_SIZE}B skip_exec=${EXECUTE_AT_COMMIT}" >> ${output_log}
     for clients_per_machine in 16 32 64 128 256 512; do
         echo "C=${clients_per_machine}" >>${output_log}
         stop_all
