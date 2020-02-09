@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use threshold::VClock;
 
 pub struct GraphExecutor {
+    execute_at_commit: bool,
     graph: DependencyGraph,
     store: KVStore,
     pending: HashSet<Rifl>,
@@ -22,6 +23,7 @@ impl Executor for GraphExecutor {
         let store = KVStore::new();
         let pending = HashSet::new();
         Self {
+            execute_at_commit: config.execute_at_commit(),
             graph,
             store,
             pending,
@@ -38,42 +40,43 @@ impl Executor for GraphExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
-        // handle each new info
-        self.graph.add(info.dot, info.cmd, info.clock);
-
-        // get more commands that are ready to be executed
-        let to_execute = self.graph.commands_to_execute();
+        let to_execute = if self.execute_at_commit {
+            vec![info.cmd]
+        } else {
+            // handle each new info
+            self.graph.add(info.dot, info.cmd, info.clock);
+            // get more commands that are ready to be executed
+            self.graph.commands_to_execute()
+        };
 
         // execute them all
         to_execute
             .into_iter()
-            .filter_map(|cmd| {
-                // get command rifl
-                let rifl = cmd.rifl();
-                // execute the command
-                let result = cmd.execute(&mut self.store);
-
-                // if it was pending locally, then it's from a client of this
-                // process
-                if self.pending.remove(&rifl) {
-                    Some(ExecutorResult::Ready(result))
-                } else {
-                    None
-                }
-            })
+            .filter_map(|cmd| self.execute(cmd))
             .collect()
     }
 
     fn parallel() -> bool {
         false
     }
-
-    fn show_metrics(&self) {
-        self.graph.show_metrics();
-    }
 }
 
 impl GraphExecutor {
+    fn execute(&mut self, cmd: Command) -> Option<ExecutorResult> {
+        // get command rifl
+        let rifl = cmd.rifl();
+        // execute the command
+        let result = cmd.execute(&mut self.store);
+
+        // if it was pending locally, then it's from a client of this
+        // process
+        if self.pending.remove(&rifl) {
+            Some(ExecutorResult::Ready(result))
+        } else {
+            None
+        }
+    }
+
     pub fn show_internal_status(&self) {
         self.graph.show_internal_status();
     }

@@ -17,11 +17,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
-use crate::metrics::Metrics;
+use crate::log;
 use crate::util;
-use crate::{elapsed, log};
 use std::collections::{BinaryHeap, HashSet};
-use std::fmt;
 use std::mem;
 use threshold::{AEClock, VClock};
 
@@ -31,7 +29,6 @@ pub struct DependencyGraph {
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     to_execute: Vec<Command>,
-    metrics: Metrics<MetricsKind, u128>,
 }
 
 enum FinderInfo {
@@ -50,20 +47,13 @@ impl DependencyGraph {
         let pending_index = PendingIndex::new();
         // create to execute
         let to_execute = Vec::new();
-        // create queue metrics
-        let metrics = Metrics::new();
         DependencyGraph {
             transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
             vertex_index,
             pending_index,
             to_execute,
-            metrics,
         }
-    }
-
-    pub fn show_metrics(&self) {
-        self.metrics.show();
     }
 
     /// Returns new commands ready to be executed.
@@ -82,11 +72,11 @@ impl DependencyGraph {
         self.index(vertex);
 
         // try to find a new SCC
-        let find_result = self.measure_find_scc(dot);
+        let find_result = self.find_scc(dot);
 
         if let FinderInfo::Found(keys) = find_result {
             // try pending to deliver other commands if new SCCs were found
-            self.measure_try_pending(keys);
+            self.try_pending(keys);
         }
     }
 
@@ -107,19 +97,12 @@ impl DependencyGraph {
         assert!(self.vertex_index.index(vertex));
     }
 
-    fn measure_find_scc(&mut self, dot: Dot) -> FinderInfo {
-        let (duration, find_result) = elapsed!(self.find_scc(dot));
-        self.metrics
-            .collect(MetricsKind::FindSCC, duration.as_micros() as u64);
-        find_result
-    }
-
     #[must_use]
     fn find_scc(&mut self, dot: Dot) -> FinderInfo {
         log!("Queue:find_scc {:?}", dot);
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
-        let finder_result = self.measure_strong_connect(&mut finder, dot);
+        let finder_result = self.strong_connect(&mut finder, dot);
 
         // get sccs
         let (sccs, visited) = finder.finalize(&self.vertex_index);
@@ -131,7 +114,6 @@ impl DependencyGraph {
 
             // save new SCCs
             sccs.into_iter().for_each(|scc| {
-                self.measure_chain_size(scc.len());
                 self.save_scc(scc, &mut keys);
             });
 
@@ -164,12 +146,6 @@ impl DependencyGraph {
             // add vertex to commands to be executed
             self.to_execute.push(vertex.into_command())
         })
-    }
-
-    fn measure_try_pending(&mut self, keys: BinaryHeap<Key>) {
-        let (duration, _) = elapsed!(self.try_pending(keys));
-        self.metrics
-            .collect(MetricsKind::TryPending, duration.as_micros() as u64);
     }
 
     fn try_pending(&mut self, mut keys: BinaryHeap<Key>) {
@@ -215,7 +191,7 @@ impl DependencyGraph {
         }
     }
 
-    fn measure_strong_connect(
+    fn strong_connect(
         &mut self,
         finder: &mut TarjanSCCFinder,
         dot: Dot,
@@ -226,38 +202,12 @@ impl DependencyGraph {
             .get_mut(&dot)
             .expect("root vertex must exist");
 
-        let (duration, finder_result) = elapsed!(finder.strong_connect(
+        finder.strong_connect(
             dot,
             vertex,
             &self.executed_clock,
-            &self.vertex_index
-        ));
-        self.metrics
-            .collect(MetricsKind::StrongConnect, duration.as_micros() as u64);
-        finder_result
-    }
-
-    fn measure_chain_size(&mut self, size: usize) {
-        self.metrics.collect(MetricsKind::ChainSize, size as u64);
-    }
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-enum MetricsKind {
-    ChainSize,
-    FindSCC,
-    TryPending,
-    StrongConnect,
-}
-
-impl fmt::Debug for MetricsKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            MetricsKind::ChainSize => write!(f, "chain_size"),
-            MetricsKind::FindSCC => write!(f, "find_scc"),
-            MetricsKind::TryPending => write!(f, "try_pending"),
-            MetricsKind::StrongConnect => write!(f, "strong_connect"),
-        }
+            &self.vertex_index,
+        )
     }
 }
 
