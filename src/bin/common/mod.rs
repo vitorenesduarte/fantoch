@@ -5,6 +5,7 @@ pub mod protocol;
 use planet_sim::config::Config;
 
 const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
+const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_FLUSH_INTERVAL: usize = 0; // microseconds
@@ -31,6 +32,7 @@ pub fn parse_config(
     n: Option<&str>,
     f: Option<&str>,
     transitive_conflicts: Option<&str>,
+    execute_at_commit: Option<&str>,
 ) -> Config {
     let n = n
         .expect("n should be set")
@@ -47,9 +49,18 @@ pub fn parse_config(
                 .expect("transitive conflicts should be a bool")
         })
         .unwrap_or(DEFAULT_TRANSITIVE_CONFLICTS);
-    // create config and set transitive conflicts
+    let execute_at_commit = execute_at_commit
+        .map(|execute_at_commit| {
+            execute_at_commit
+                .parse::<bool>()
+                .expect("execute_at_commit should be a bool")
+        })
+        .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT);
+    // create config
     let mut config = Config::new(n, f);
+    // set transitive conflicts and skip execution
     config.set_transitive_conflicts(transitive_conflicts);
+    config.set_execute_at_commit(execute_at_commit);
     config
 }
 

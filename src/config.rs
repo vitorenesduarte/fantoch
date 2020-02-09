@@ -11,6 +11,8 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
+    /// if enabled, then execution is skipped
+    execute_at_commit: bool,
     // starting leader process
     leader: Option<ProcessId>,
     /// defines the number of `Protocol` workers
@@ -32,6 +34,8 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
+        // by default, execution is not skipped
+        let execute_at_commit = false;
         // by default, there's no leader
         let leader = None;
         // by default there's one worker for `Protocol` and one worker for
@@ -43,6 +47,7 @@ impl Config {
             f,
             newt_tiny_quorums,
             transitive_conflicts,
+            execute_at_commit,
             leader,
             workers,
             executors,
@@ -77,6 +82,16 @@ impl Config {
     /// Changes the value of `transitive_conflicts`.
     pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
         self.transitive_conflicts = transitive_conflicts;
+    }
+
+    /// Checks whether execution is to be skipped.
+    pub fn execute_at_commit(&self) -> bool {
+        self.execute_at_commit
+    }
+
+    /// Changes the value of `execute_at_commit`.
+    pub fn set_execute_at_commit(&mut self, execute_at_commit: bool) {
+        self.execute_at_commit = execute_at_commit;
     }
 
     /// Checks whether a starting leader has been defined.
@@ -208,6 +223,12 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_transitive_conflicts(true);
         assert!(config.transitive_conflicts());
+
+        // by deafult, execute at commit is false
+        assert!(!config.execute_at_commit());
+        // but that can change
+        config.set_execute_at_commit(true);
+        assert!(config.execute_at_commit());
 
         // by default, there's no leader
         assert!(config.leader().is_none());

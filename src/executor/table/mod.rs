@@ -5,14 +5,11 @@ mod executor;
 // Re-exports.
 pub use executor::{TableExecutionInfo, TableExecutor};
 
-use crate::elapsed;
 use crate::id::{Dot, ProcessId, Rifl};
 use crate::kvs::{KVOp, Key};
-use crate::metrics::Metrics;
 use crate::protocol::common::table::VoteRange;
 use crate::util;
 use std::collections::{BTreeMap, HashMap};
-use std::fmt;
 use std::mem;
 use threshold::AEClock;
 
@@ -22,7 +19,6 @@ pub struct MultiVotesTable {
     n: usize,
     stability_threshold: usize,
     tables: HashMap<Key, VotesTable>,
-    metrics: Metrics<MetricsKind, u128>,
 }
 
 impl MultiVotesTable {
@@ -32,12 +28,7 @@ impl MultiVotesTable {
             n,
             stability_threshold,
             tables: HashMap::new(),
-            metrics: Metrics::new(),
         }
-    }
-
-    pub fn show_metrics(&self) {
-        self.metrics.show()
     }
 
     /// Add a new command, its clock and votes to the votes table.
@@ -51,13 +42,12 @@ impl MultiVotesTable {
         op: KVOp,
         votes: Vec<VoteRange>,
     ) -> impl Iterator<Item = (Rifl, KVOp)> {
-        // add ops and votes to the votes tables, and at the same time compute
-        // which ops are safe to be executed
-        let (duration, result) =
-            elapsed!(self.add_op_and_find(dot, clock, rifl, key, op, votes));
-        self.metrics
-            .collect(MetricsKind::AddVotes, duration.as_micros() as u64);
-        result
+        // add ops and votes to the votes tables, and at the same time
+        // compute which ops are safe to be executed
+        self.update_table(key, |table| {
+            table.add(dot, clock, rifl, op, votes);
+            table.stable_ops()
+        })
     }
 
     /// Adds phantom votes to the votes table.
@@ -67,37 +57,9 @@ impl MultiVotesTable {
         key: &Key,
         votes: Vec<VoteRange>,
     ) -> impl Iterator<Item = (Rifl, KVOp)> {
-        let (duration, result) = elapsed!(self.add_votes_and_find(key, votes));
-        self.metrics
-            .collect(MetricsKind::AddPhantomVotes, duration.as_micros() as u64);
-        result
-    }
-
-    #[must_use]
-    fn add_op_and_find(
-        &mut self,
-        dot: Dot,
-        clock: u64,
-        rifl: Rifl,
-        key: &Key,
-        op: KVOp,
-        votes: Vec<VoteRange>,
-    ) -> impl Iterator<Item = (Rifl, KVOp)> {
+        // add phantom votes to the votes tables, and at the same time compute
+        // which ops are safe to be executed
         self.update_table(key, |table| {
-            // add op and votes to the table
-            table.add(dot, clock, rifl, op, votes);
-            table.stable_ops()
-        })
-    }
-
-    #[must_use]
-    fn add_votes_and_find(
-        &mut self,
-        key: &Key,
-        votes: Vec<VoteRange>,
-    ) -> impl Iterator<Item = (Rifl, KVOp)> {
-        self.update_table(key, |table| {
-            // add ranges to table
             table.add_votes(votes);
             table.stable_ops()
         })
@@ -120,21 +82,6 @@ impl MultiVotesTable {
         };
         // update table
         update(table)
-    }
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-enum MetricsKind {
-    AddVotes,
-    AddPhantomVotes,
-}
-
-impl fmt::Debug for MetricsKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            MetricsKind::AddVotes => write!(f, "add_votes"),
-            MetricsKind::AddPhantomVotes => write!(f, "add_phantom_votes"),
-        }
     }
 }
 
@@ -204,7 +151,7 @@ impl VotesTable {
         //   also execute it without 11 being stable, because, once 11 is
         //   stable, it will be the first to be executed either way
         let stable_clock = self.stable_clock();
-        let first_dot = Dot::new(1, 0);
+        let first_dot = Dot::new(1, 1);
         let next_stable = (stable_clock + 1, first_dot);
 
         // in fact, in the above example, if `(11,0)` is executed, we can also

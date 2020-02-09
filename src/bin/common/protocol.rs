@@ -100,6 +100,13 @@ pub fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("execute_at_commit")
+                .long("execute_at_commit")
+                .value_name("EXECUTE_AT_COMMIT")
+                .help("bool indicating whether execution should be skipped; default: false")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("leader")
                 .long("leader")
                 .value_name("LEADER")
@@ -178,6 +185,7 @@ pub fn parse_args() -> (
         matches.value_of("n"),
         matches.value_of("f"),
         matches.value_of("transitive_conflicts"),
+        matches.value_of("execute_at_commit"),
     );
     let leader = parse_leader(matches.value_of("leader"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));

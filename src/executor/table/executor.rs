@@ -9,6 +9,7 @@ use crate::protocol::common::table::VoteRange;
 use serde::{Deserialize, Serialize};
 
 pub struct TableExecutor {
+    execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
@@ -27,6 +28,7 @@ impl Executor for TableExecutor {
         let pending = Pending::new(aggregate);
 
         Self {
+            execute_at_commit: config.execute_at_commit(),
             table,
             store,
             pending,
@@ -54,23 +56,27 @@ impl Executor for TableExecutor {
                 op,
                 votes,
             } => {
-                let to_execute =
-                    self.table.add_votes(dot, clock, rifl, &key, op, votes);
-                self.execute(key, to_execute)
+                if self.execute_at_commit {
+                    self.execute(key, std::iter::once((rifl, op)))
+                } else {
+                    let to_execute =
+                        self.table.add_votes(dot, clock, rifl, &key, op, votes);
+                    self.execute(key, to_execute)
+                }
             }
             TableExecutionInfo::PhantomVotes { key, votes } => {
-                let to_execute = self.table.add_phantom_votes(&key, votes);
-                self.execute(key, to_execute)
+                if self.execute_at_commit {
+                    Vec::new()
+                } else {
+                    let to_execute = self.table.add_phantom_votes(&key, votes);
+                    self.execute(key, to_execute)
+                }
             }
         }
     }
 
     fn parallel() -> bool {
         true
-    }
-
-    fn show_metrics(&self) {
-        self.table.show_metrics();
     }
 }
 

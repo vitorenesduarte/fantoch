@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 type Slot = u64;
 
 pub struct SlotExecutor {
+    execute_at_commit: bool,
     store: KVStore,
     pending: HashSet<Rifl>,
     next_slot: Slot,
@@ -18,7 +19,7 @@ pub struct SlotExecutor {
 impl Executor for SlotExecutor {
     type ExecutionInfo = SlotExecutionInfo;
 
-    fn new(_config: Config) -> Self {
+    fn new(config: Config) -> Self {
         let store = KVStore::new();
         let pending = HashSet::new();
         // the next slot to be executed is 1
@@ -26,6 +27,7 @@ impl Executor for SlotExecutor {
         // there's nothing to execute in the beginnin
         let to_execute = HashMap::new();
         Self {
+            execute_at_commit: config.execute_at_commit(),
             store,
             pending,
             next_slot,
@@ -49,13 +51,18 @@ impl Executor for SlotExecutor {
         // necessarily true
         assert!(slot >= self.next_slot);
 
-        // add received command to the commands to be executed and try to
-        // execute commands
-        // TODO here we could optimize and only insert the command if it isn't
-        // the command that will be executed in the next slot
-        let res = self.to_execute.insert(slot, cmd);
-        assert!(res.is_none());
-        self.try_next_slot()
+        if self.execute_at_commit {
+            self.execute(cmd)
+        } else {
+            // add received command to the commands to be executed and try to
+            // execute commands
+            // TODO here we could optimize and only insert the command if it
+            // isn't the command that will be executed in the next
+            // slot
+            let res = self.to_execute.insert(slot, cmd);
+            assert!(res.is_none());
+            self.try_next_slot()
+        }
     }
 
     fn parallel() -> bool {
@@ -66,22 +73,26 @@ impl Executor for SlotExecutor {
 impl SlotExecutor {
     fn try_next_slot(&mut self) -> Vec<ExecutorResult> {
         let mut results = Vec::new();
-
-        // execute commands while the command to be executed in the next slot
-        // exists
+        // gather commands while the next command to be executed exists
         while let Some(cmd) = self.to_execute.remove(&self.next_slot) {
-            // get command rifl
-            let rifl = cmd.rifl();
-            // execute the command
-            let result = cmd.execute(&mut self.store);
-            // update results if this rifl is pending
-            if self.pending.remove(&rifl) {
-                results.push(ExecutorResult::Ready(result));
-            }
+            results.extend(self.execute(cmd));
             // update the next slot to be executed
             self.next_slot += 1;
         }
         results
+    }
+
+    fn execute(&mut self, cmd: Command) -> Vec<ExecutorResult> {
+        // get command rifl
+        let rifl = cmd.rifl();
+        // execute the command
+        let result = cmd.execute(&mut self.store);
+        // update results if this rifl is pending
+        if self.pending.remove(&rifl) {
+            vec![ExecutorResult::Ready(result)]
+        } else {
+            vec![]
+        }
     }
 }
 
