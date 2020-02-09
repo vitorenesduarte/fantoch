@@ -66,7 +66,7 @@ impl Executor for TableExecutor {
             }
             TableExecutionInfo::PhantomVotes { key, votes } => {
                 if self.execute_at_commit {
-                    Vec::new()
+                    vec![]
                 } else {
                     let to_execute = self.table.add_phantom_votes(&key, votes);
                     self.execute(key, to_execute)
