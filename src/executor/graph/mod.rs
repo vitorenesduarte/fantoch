@@ -32,8 +32,10 @@ pub struct DependencyGraph {
 }
 
 enum FinderInfo {
-    Found(BinaryHeap<Key>), // set of keys touched by found SCCs
-    NotFound(HashSet<Dot>), // set of dots visited while searching for SCCs
+    // set of keys touched by found SCCs
+    Found(BinaryHeap<Key>),
+    // the missing dependency and set of dots visited while searching for SCCs
+    MissingDependency(Dot, HashSet<Dot>),
 }
 
 impl DependencyGraph {
@@ -71,12 +73,15 @@ impl DependencyGraph {
         // index vertex
         self.index(vertex);
 
-        // try to find a new SCC
-        let find_result = self.find_scc(dot);
-
-        if let FinderInfo::Found(keys) = find_result {
-            // try pending to deliver other commands if new SCCs were found
-            self.try_pending(keys);
+        // try to find new SCCs
+        match self.find_scc(dot) {
+            FinderInfo::Found(keys) => {
+                // try to execute other commands if new SCCs were found
+                self.try_pending(keys);
+            }
+            FinderInfo::MissingDependency(dep_dot, _visited) => {
+                // update the pending
+            }
         }
     }
 
@@ -108,18 +113,24 @@ impl DependencyGraph {
         let (sccs, visited) = finder.finalize(&self.vertex_index);
 
         // save new SCCs if any were found
-        if finder_result == FinderResult::Found {
-            // create set of keys in ready SCCs
-            let mut keys = BinaryHeap::new();
+        match finder_result {
+            FinderResult::Found => {
+                // create set of keys in ready SCCs
+                let mut keys = BinaryHeap::new();
 
-            // save new SCCs
-            sccs.into_iter().for_each(|scc| {
-                self.save_scc(scc, &mut keys);
-            });
+                // save new SCCs
+                sccs.into_iter().for_each(|scc| {
+                    self.save_scc(scc, &mut keys);
+                });
 
-            FinderInfo::Found(keys)
-        } else {
-            FinderInfo::NotFound(visited)
+                FinderInfo::Found(keys)
+            }
+            FinderResult::MissingDependency(dep_dot) => {
+                FinderInfo::MissingDependency(dep_dot, visited)
+            }
+            FinderResult::NotFound => panic!(
+                "either there's a missing dependency, or we should find an SCC"
+            ),
         }
     }
 
@@ -172,7 +183,11 @@ impl DependencyGraph {
                                     keys.extend(new_keys);
                                     return self.try_pending(keys);
                                 }
-                                FinderInfo::NotFound(new_visited) => {
+                                FinderInfo::MissingDependency(
+                                    dep_dot,
+                                    new_visited,
+                                ) => {
+                                    // update the pending
                                     // if no SCCs were found, try other pending
                                     // commands
                                     visited.extend(new_visited);
@@ -248,6 +263,77 @@ mod tests {
         queue.add(dot_1, cmd_1.clone(), clock_1);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
+    }
+
+    #[test]
+    /// We have 5 commands by the same process (process A) that all access the
+    /// same key. We have `n = 5` and `f = 1` and thus the fast quorum size of
+    /// 3. The fast quorum used by process A is `{A, B, C}`. We have the
+    /// following order of commands in the 3 processes:
+    /// - A: (1,1) (1,2) (1,3) (1,4) (1,5)
+    /// - B: (1,3) (1,4) (1,1) (1,2) (1,5)
+    /// - C: (1,1) (1,2) (1,4) (1,5) (1,3)
+    ///
+    /// The above results in the following dependencies:
+    /// - dep[(1,1)] = {(1,4)}
+    /// - dep[(1,2)] = {(1,4)}
+    /// - dep[(1,3)] = {(1,5)}
+    /// - dep[(1,4)] = {(1,3)}
+    /// - dep[(1,5)] = {(1,4)}
+    ///
+    /// The executor then receives the commits notifications of (1,3) (1,4)
+    /// and (1,5) and, if transitive conflicts are assumed, these 3 commands
+    /// form an SCC. This is because with this assumption we only check the
+    /// highest conflicting command per replica, and thus (1,3) (1,4) and
+    /// (1,5) have "all the dependencies".
+    ///
+    /// Then, the executor will execute whichever missing command, i.e. (1,1)
+    /// and (1,2), comes first, since they "depend on an SCC already formed".
+    /// This means that if two executors receive (1,3) (1,4) and (1,5) and then
+    /// one receives (1,1) and (1,2) while the other receives (1,2) and (1,1),
+    /// we have an inconsistency.
+    fn transitive_conflicts_assumption_regression_test() {
+        // config
+        let n = 5;
+        let transitive_conflicts = true;
+
+        // cmd 1
+        let dot_1 = Dot::new(1, 1);
+        let clock_1 = util::vclock(vec![4, 0, 0, 0, 0]);
+
+        // cmd 2
+        let dot_2 = Dot::new(1, 2);
+        let clock_2 = util::vclock(vec![4, 0, 0, 0, 0]);
+
+        // cmd 3
+        let dot_3 = Dot::new(1, 3);
+        let clock_3 = util::vclock(vec![5, 0, 0, 0, 0]);
+
+        // cmd 4
+        let dot_4 = Dot::new(1, 4);
+        let clock_4 = util::vclock(vec![3, 0, 0, 0, 0]);
+
+        // cmd 5
+        let dot_5 = Dot::new(1, 5);
+        let clock_5 = util::vclock(vec![4, 0, 0, 0, 0]);
+
+        let order_a = vec![
+            (dot_3, clock_2.clone()),
+            (dot_4, clock_3.clone()),
+            (dot_5, clock_4.clone()),
+            (dot_1, clock_1.clone()),
+            (dot_2, clock_1.clone()),
+        ];
+        let order_b = vec![
+            (dot_3, clock_3),
+            (dot_4, clock_4),
+            (dot_5, clock_5),
+            (dot_2, clock_2),
+            (dot_1, clock_1),
+        ];
+        let order_a = check_termination(n, order_a, transitive_conflicts);
+        let order_b = check_termination(n, order_b, transitive_conflicts);
+        assert_eq!(order_a, order_b);
     }
 
     #[test]
@@ -477,7 +563,7 @@ mod tests {
     fn test_add_4() {
         // {1, 5}, [5]
         let dot_a = Dot::new(1, 5);
-        let clock_a = util::vclock(vec![5]);
+        let clock_a = util::vclock(vec![4]);
 
         // {1, 4}, [6]
         let dot_b = Dot::new(1, 4);
@@ -497,7 +583,7 @@ mod tests {
 
         // {1, 6}, [6]
         let dot_f = Dot::new(1, 6);
-        let clock_f = util::vclock(vec![6]);
+        let clock_f = util::vclock(vec![5]);
 
         // create args
         let args = vec![
@@ -653,9 +739,13 @@ mod tests {
     }
 
     fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
-        let total_order = check_termination(n, args.clone());
+        let transitive_conflicts = true;
+        let total_order =
+            check_termination(n, args.clone(), transitive_conflicts);
         args.permutation().for_each(|permutation| {
-            let sorted = check_termination(n, permutation);
+            println!("permutation = {:?}", permutation);
+            let sorted =
+                check_termination(n, permutation, transitive_conflicts);
             assert_eq!(total_order, sorted);
         });
     }
@@ -663,10 +753,12 @@ mod tests {
     fn check_termination(
         n: usize,
         args: Vec<(Dot, VClock<ProcessId>)>,
+        transitive_conflicts: bool,
     ) -> Vec<Rifl> {
         // create queue
         let f = 1;
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
+        config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(&config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();

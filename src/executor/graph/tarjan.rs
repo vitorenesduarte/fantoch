@@ -13,7 +13,7 @@ pub type SCC = BTreeSet<Dot>;
 pub enum FinderResult {
     Found,
     NotFound,
-    MissingDependency,
+    MissingDependency(Dot),
 }
 
 pub struct TarjanSCCFinder {
@@ -127,7 +127,7 @@ impl TarjanSCCFinder {
                         // not conflict with `dot` but
                         // we can't be sure until we have it locally
                         log!("Finder::strong_connect missing {:?}", dep_dot);
-                        return FinderResult::MissingDependency;
+                        return FinderResult::MissingDependency(dep_dot);
                     }
                     Some(dep_vertex) => {
                         // ignore non-conflicting commands:
@@ -161,7 +161,13 @@ impl TarjanSCCFinder {
                             );
 
                             // if missing dependency, give up
-                            if result == FinderResult::MissingDependency {
+                            // match result {
+                            //     FinderResult::MissingDependency(_) => {
+                            //         return result;
+                            //     }
+                            //     _ => {}
+                            // }
+                            if let FinderResult::MissingDependency(_) = result {
                                 return result;
                             }
 
