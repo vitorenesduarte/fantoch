@@ -266,32 +266,32 @@ mod tests {
     }
 
     #[test]
-    /// We have 5 commands by the same process (process A) that all access the
-    /// same key. We have `n = 5` and `f = 1` and thus the fast quorum size of
-    /// 3. The fast quorum used by process A is `{A, B, C}`. We have the
+    /// We have 5 commands by the same process (process A) that access the same
+    /// key. We have `n = 5` and `f = 1` and thus the fast quorum size of 3.
+    /// The fast quorum used by process A is `{A, B, C}`. We have the
     /// following order of commands in the 3 processes:
     /// - A: (1,1) (1,2) (1,3) (1,4) (1,5)
     /// - B: (1,3) (1,4) (1,1) (1,2) (1,5)
     /// - C: (1,1) (1,2) (1,4) (1,5) (1,3)
     ///
-    /// The above results in the following dependencies:
+    /// The above results in the following final dependencies:
     /// - dep[(1,1)] = {(1,4)}
     /// - dep[(1,2)] = {(1,4)}
     /// - dep[(1,3)] = {(1,5)}
     /// - dep[(1,4)] = {(1,3)}
     /// - dep[(1,5)] = {(1,4)}
     ///
-    /// The executor then receives the commits notifications of (1,3) (1,4)
-    /// and (1,5) and, if transitive conflicts are assumed, these 3 commands
+    /// The executor then receives the commit notifications of (1,3) (1,4) and
+    /// (1,5) and, if transitive conflicts are assumed, these 3 commands
     /// form an SCC. This is because with this assumption we only check the
     /// highest conflicting command per replica, and thus (1,3) (1,4) and
     /// (1,5) have "all the dependencies".
     ///
-    /// Then, the executor will execute whichever missing command, i.e. (1,1)
-    /// and (1,2), comes first, since they "depend on an SCC already formed".
-    /// This means that if two executors receive (1,3) (1,4) and (1,5) and then
-    /// one receives (1,1) and (1,2) while the other receives (1,2) and (1,1),
-    /// we have an inconsistency.
+    /// Then, the executor executes whichever missing command comes first, since
+    /// (1,1) and (1,2) "only depend on an SCC already formed". This means that
+    /// if two executors receive (1,3) (1,4) (1,5), and then one receives (1,1)
+    /// and (1,2) while the other receives (1,2) and (1,1), they will execute
+    /// (1,1) and (1,2) in differents order, leading to an inconsistency.
     fn transitive_conflicts_assumption_regression_test() {
         // config
         let n = 5;
