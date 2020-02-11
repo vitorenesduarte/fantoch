@@ -13,8 +13,8 @@ pub type SCC = BTreeSet<Dot>;
 pub enum FinderResult {
     Found,
     MissingDependency(Dot),
-    NotFound,
     NotPending,
+    NotFound,
 }
 
 pub struct TarjanSCCFinder {

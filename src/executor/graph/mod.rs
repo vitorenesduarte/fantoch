@@ -123,10 +123,10 @@ impl DependencyGraph {
             FinderResult::MissingDependency(dep_dot) => {
                 FinderInfo::MissingDependency(dep_dot, visited)
             }
+            FinderResult::NotPending => FinderInfo::NotPending,
             FinderResult::NotFound => panic!(
                 "either there's a missing dependency, or we should find an SCC"
             ),
-            FinderResult::NotPending => FinderInfo::NotPending,
         }
     }
 
@@ -167,6 +167,8 @@ impl DependencyGraph {
                                 // if new SCCs were found, now there are more
                                 // dots to check
                                 dots.extend(new_dots);
+                                // reset visited
+                                visited.clear();
                             }
                             FinderInfo::NotPending => {
                                 // this happens if the pending dot is no longer
@@ -559,7 +561,7 @@ mod tests {
     fn test_add_4() {
         // {1, 5}, [5]
         let dot_a = Dot::new(1, 5);
-        let clock_a = util::vclock(vec![4]);
+        let clock_a = util::vclock(vec![5]);
 
         // {1, 4}, [6]
         let dot_b = Dot::new(1, 4);
@@ -579,7 +581,7 @@ mod tests {
 
         // {1, 6}, [6]
         let dot_f = Dot::new(1, 6);
-        let clock_f = util::vclock(vec![5]);
+        let clock_f = util::vclock(vec![6]);
 
         // create args
         let args = vec![
