@@ -4,15 +4,14 @@
 ### `planet_sim`: framework for evaluating (planet-scale) protocols
 
 #### Supported protocols
-- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/epaxos.rs)
-- [FPaxos](https://fpaxos.github.io/) (and thus Paxos as a special case): [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/fpaxos.rs)
+- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/epaxos.rs)
+- [FPaxos](https://fpaxos.github.io/), and thus Paxos as a special case [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/fpaxos.rs)
   - implemented following [Paxos Made Moderately Complex](http://paxos.systems/), which enables a certain degree of parallelism at the leader
-- Atlas: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/atlas.rs)
-- Newt: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/newt.rs)
+- Atlas [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/atlas.rs)
+- Newt [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/newt.rs)
 
 Next:
-- Mencius
-  - a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
+- Mencius: a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
 - Caesar
 
 #### What does it do?
