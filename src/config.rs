@@ -156,6 +156,14 @@ impl Config {
         (fast_quorum_size, write_quorum_size)
     }
 
+    /// Computes `Caesar` fast and write quorum sizes.
+    pub fn caesar_quorum_sizes(&self) -> (usize, usize) {
+        let n = self.n;
+        let fast_quorum_size = (3 * n) / 4;
+        let write_quorum_size = (n / 2) + 1;
+        (fast_quorum_size, write_quorum_size)
+    }
+
     /// Computes `Newt` fast quorum size, stability threshold and write quorum
     /// size.
     ///
@@ -295,6 +303,24 @@ mod tests {
                 let f = 0;
                 let config = Config::new(n, f);
                 config.epaxos_quorum_sizes()
+            })
+            .collect();
+        assert_eq!(fs, expected);
+    }
+
+    #[test]
+    fn caesar_parameters() {
+        let ns = vec![3, 5, 7, 9, 11];
+        // expected pairs of fast and write quorum sizes
+        let expected = vec![(2, 2), (3, 3), (5, 4), (6, 5), (8, 6)];
+
+        let fs: Vec<_> = ns
+            .into_iter()
+            .map(|n| {
+                // this f value won't be used
+                let f = 0;
+                let config = Config::new(n, f);
+                config.caesar_quorum_sizes()
             })
             .collect();
         assert_eq!(fs, expected);
