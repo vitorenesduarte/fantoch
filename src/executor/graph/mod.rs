@@ -16,10 +16,9 @@ use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId};
-use crate::kvs::Key;
 use crate::log;
 use crate::util;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::HashSet;
 use std::mem;
 use threshold::{AEClock, VClock};
 
@@ -32,14 +31,16 @@ pub struct DependencyGraph {
 }
 
 enum FinderInfo {
-    // set of keys touched by found SCCs
-    Found(BinaryHeap<Key>),
+    // set of dots in found SCCs
+    Found(Vec<Dot>),
     // the missing dependency and set of dots visited while searching for SCCs
     MissingDependency(Dot, HashSet<Dot>),
+    // in case we try to find SCCs on dots that are no longer pending
+    NotPending,
 }
 
 impl DependencyGraph {
-    /// Create a new `Queue`.
+    /// Create a new `Graph`.
     pub fn new(config: &Config) -> Self {
         // create bottom executed clock
         let ids = util::process_ids(config.n());
@@ -66,22 +67,24 @@ impl DependencyGraph {
 
     /// Add a new command with its clock to the queue.
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        log!("Queue::add {:?} {:?}", dot, clock);
+        log!("Graph::add {:?} {:?}", dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
-        // index vertex
-        self.index(vertex);
+        // index in vertex index and check if it hasn't been indexed before
+        assert!(self.vertex_index.index(vertex));
 
         // try to find new SCCs
         match self.find_scc(dot) {
-            FinderInfo::Found(keys) => {
+            FinderInfo::Found(dots) => {
                 // try to execute other commands if new SCCs were found
-                self.try_pending(keys);
+                self.try_pending(dots);
             }
             FinderInfo::MissingDependency(dep_dot, _visited) => {
                 // update the pending
+                self.pending_index.index(dep_dot, dot);
             }
+            FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
     }
 
@@ -94,17 +97,9 @@ impl DependencyGraph {
         println!("{:?}", self.executed_clock);
     }
 
-    fn index(&mut self, vertex: Vertex) {
-        // index in pending index
-        self.pending_index.index(&vertex);
-
-        // index in vertex index and check if it hasn't been indexed before
-        assert!(self.vertex_index.index(vertex));
-    }
-
     #[must_use]
     fn find_scc(&mut self, dot: Dot) -> FinderInfo {
-        log!("Queue:find_scc {:?}", dot);
+        log!("Graph:find_scc {:?}", dot);
         // execute tarjan's algorithm
         let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
         let finder_result = self.strong_connect(&mut finder, dot);
@@ -115,15 +110,15 @@ impl DependencyGraph {
         // save new SCCs if any were found
         match finder_result {
             FinderResult::Found => {
-                // create set of keys in ready SCCs
-                let mut keys = BinaryHeap::new();
+                // create set of dots in ready SCCs
+                let mut dots = Vec::new();
 
                 // save new SCCs
                 sccs.into_iter().for_each(|scc| {
-                    self.save_scc(scc, &mut keys);
+                    self.save_scc(scc, &mut dots);
                 });
 
-                FinderInfo::Found(keys)
+                FinderInfo::Found(dots)
             }
             FinderResult::MissingDependency(dep_dot) => {
                 FinderInfo::MissingDependency(dep_dot, visited)
@@ -131,12 +126,13 @@ impl DependencyGraph {
             FinderResult::NotFound => panic!(
                 "either there's a missing dependency, or we should find an SCC"
             ),
+            FinderResult::NotPending => FinderInfo::NotPending,
         }
     }
 
-    fn save_scc(&mut self, scc: SCC, keys: &mut BinaryHeap<Key>) {
+    fn save_scc(&mut self, scc: SCC, dots: &mut Vec<Dot>) {
         scc.into_iter().for_each(|dot| {
-            log!("Queue:save_scc removing {:?} from indexes", dot);
+            log!("Graph:save_scc removing {:?} from indexes", dot);
 
             // update executed clock
             assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
@@ -147,63 +143,53 @@ impl DependencyGraph {
                 .remove(&dot)
                 .expect("dots from an SCC should exist");
 
-            // remove from pending index
-            self.pending_index.remove(&vertex);
-
-            // update the set of keys
-            // TODO can we avoid cloning here?
-            keys.extend(vertex.command().keys().cloned());
+            // update the set of ready dots
+            dots.push(dot);
 
             // add vertex to commands to be executed
             self.to_execute.push(vertex.into_command())
         })
     }
 
-    fn try_pending(&mut self, mut keys: BinaryHeap<Key>) {
-        loop {
-            match keys.pop() {
-                Some(key) => {
-                    // get pending commands that access this key
-                    let pending = self
-                        .pending_index
-                        .pending(&key)
-                        .expect("key must exist in the pending index");
+    fn try_pending(&mut self, mut dots: Vec<Dot>) {
+        while let Some(dot) = dots.pop() {
+            // get pending commands that depend on this dot
+            if let Some(pending) = self.pending_index.remove(&dot) {
+                log!("Graph::try_pending {:?} depended on {:?}", pending, dot);
+                // try to find new SCCs for each of those commands
+                let mut visited = HashSet::new();
 
-                    // try to find new SCCs for each of those commands
-                    let mut visited = HashSet::new();
-
-                    for dot in pending {
-                        if !visited.contains(&dot) {
-                            // only try to find new SCCs from non-visited
-                            // commands
-                            match self.find_scc(dot) {
-                                FinderInfo::Found(new_keys) => {
-                                    // if new SCCs were found, restart the
-                                    // process with new keys
-                                    keys.extend(new_keys);
-                                    return self.try_pending(keys);
-                                }
-                                FinderInfo::MissingDependency(
-                                    dep_dot,
-                                    new_visited,
-                                ) => {
-                                    // update the pending
-                                    // if no SCCs were found, try other pending
-                                    // commands
-                                    visited.extend(new_visited);
-                                }
+                for dot in pending {
+                    // only try to find new SCCs from non-visited commands
+                    if !visited.contains(&dot) {
+                        match self.find_scc(dot) {
+                            FinderInfo::Found(new_dots) => {
+                                // if new SCCs were found, now there are more
+                                // dots to check
+                                dots.extend(new_dots);
+                            }
+                            FinderInfo::NotPending => {
+                                // this happens if the pending dot is no longer
+                                // pending
+                            }
+                            FinderInfo::MissingDependency(
+                                dep_dot,
+                                new_visited,
+                            ) => {
+                                // update pending
+                                self.pending_index.index(dep_dot, dot);
+                                // if no SCCs were found, try other pending
+                                // commands, but don't try those that were
+                                // visited in this search
+                                visited.extend(new_visited);
                             }
                         }
                     }
                 }
-                None => {
-                    // once there are no more keys to try, no command in pending
-                    // should be possible to be executed, so
-                    // we give up!
-                    return;
-                }
             }
         }
+        // once there are no more dots to try, no command in pending should be
+        // possible to be executed, so we give up!
     }
 
     fn strong_connect(
@@ -212,17 +198,18 @@ impl DependencyGraph {
         dot: Dot,
     ) -> FinderResult {
         // get the vertex
-        let vertex = self
-            .vertex_index
-            .get_mut(&dot)
-            .expect("root vertex must exist");
-
-        finder.strong_connect(
-            dot,
-            vertex,
-            &self.executed_clock,
-            &self.vertex_index,
-        )
+        match self.vertex_index.get_mut(&dot) {
+            Some(vertex) => finder.strong_connect(
+                dot,
+                vertex,
+                &self.executed_clock,
+                &self.vertex_index,
+            ),
+            None => {
+                // in this case this `dot` is no longer pending
+                FinderResult::NotPending
+            }
+        }
     }
 }
 
@@ -265,6 +252,7 @@ mod tests {
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
 
+    #[ignore]
     #[test]
     /// We have 5 commands by the same process (process A) that access the same
     /// key. We have `n = 5` and `f = 1` and thus the fast quorum size of 3.
@@ -351,15 +339,16 @@ mod tests {
     /// - (1,1) executed as it has no dependencies
     ///
     /// Now when (1,1) is executed, we would hope that (1,3) would also be.
-    /// However, since (1,1) accesses key A, when it is executed we don't try
-    /// the pending operation (1,3) because it accesses a different key (B).
-    /// This means that our mechanism to track pending commands does not work
-    /// when we don't assume the transitivity of conflicts.
+    /// However, since (1,1) accesses key A, when it is executed, the previous
+    /// pending mechanism doesn't try the pending operation (1,3) because it
+    /// accesses a different key (B). This means that such mechanism to
+    /// track pending commands per key does not work when we don't assume
+    /// the transitivity of conflicts.
     ///
-    /// Maybe this can be fixed by simply tracking one missing dependency per
-    /// pending command, when that dependency is executed, if we still can't be
-    /// executed it's because there's another missing dependency that, and now
-    /// we wait for that one to be executed.
+    /// This was fixed by simply tracking one missing dependency per pending
+    /// command. When that dependency is executed, if the command still can't be
+    /// executed it's because there's another missing dependency, and now it
+    /// will wait for that one.
     fn pending_on_different_key_regression_test() {
         // create config
         let n = 1;
@@ -410,14 +399,13 @@ mod tests {
             if transitive_conflicts {
                 assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
             } else {
-                // TODO the following fails because our mechanism to track
-                // pending commands does not work if we don't assume the
-                // transitivity of conflicts
-                //
-                // assert_eq!(
-                //     queue.commands_to_execute(),
-                //     vec![cmd_3.clone(), cmd_1.clone()]
-                // );
+                // the following used to fail because our previous mechanism to
+                // track pending commands didn't work without the assumption of
+                // transitive conflicts
+                let ready = queue.commands_to_execute();
+                assert_eq!(ready.len(), 2);
+                assert!(ready.contains(&cmd_3));
+                assert!(ready.contains(&cmd_1));
             }
         }
     }
@@ -739,7 +727,7 @@ mod tests {
     }
 
     fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
-        let transitive_conflicts = true;
+        let transitive_conflicts = false;
         let total_order =
             check_termination(n, args.clone(), transitive_conflicts);
         args.permutation().for_each(|permutation| {

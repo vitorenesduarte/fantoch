@@ -12,8 +12,9 @@ pub type SCC = BTreeSet<Dot>;
 #[derive(PartialEq)]
 pub enum FinderResult {
     Found,
-    NotFound,
     MissingDependency(Dot),
+    NotFound,
+    NotPending,
 }
 
 pub struct TarjanSCCFinder {
@@ -161,12 +162,6 @@ impl TarjanSCCFinder {
                             );
 
                             // if missing dependency, give up
-                            // match result {
-                            //     FinderResult::MissingDependency(_) => {
-                            //         return result;
-                            //     }
-                            //     _ => {}
-                            // }
                             if let FinderResult::MissingDependency(_) = result {
                                 return result;
                             }
@@ -259,11 +254,6 @@ impl Vertex {
     /// Retrieves vertex's dot.
     pub fn dot(&self) -> Dot {
         self.dot
-    }
-
-    /// Retrieves vertex's command.
-    pub fn command(&self) -> &Command {
-        &self.cmd
     }
 
     /// Retrieves vertex's clock.
