@@ -280,6 +280,14 @@ mod tests {
     /// if two executors receive (1,3) (1,4) (1,5), and then one receives (1,1)
     /// and (1,2) while the other receives (1,2) and (1,1), they will execute
     /// (1,1) and (1,2) in differents order, leading to an inconsistency.
+    ///
+    /// This example is impossible if commands from the same process are
+    /// processed (on the replicas computing dependencies) in their submission
+    /// order. With this, a command never depends on later commands from the
+    /// same process, which seems to be enough to prevent this issue. This means
+    /// that parallelizing the processing of messages needs to be on a
+    /// per-process basis, i.e. commands by the same process are always
+    /// processed by the same worker.
     fn transitive_conflicts_assumption_regression_test() {
         // config
         let n = 5;
