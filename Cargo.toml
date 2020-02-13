@@ -2,7 +2,7 @@
 
 members = [
   "fantoche",
-  "fantoche-protocols",
+  "fantoche_protocols",
 ]
 
 [profile.release]
