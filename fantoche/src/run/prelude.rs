@@ -4,12 +4,13 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{
-    MessageIndex, MessageIndexes, Protocol, LEADER_WORKER_INDEX,
-};
+use crate::protocol::{MessageIndex, MessageIndexes, Protocol};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+
+// the worker index that should be used by leader-based protocols
+pub const LEADER_WORKER_INDEX: usize = 0;
 
 // common error type
 pub type RunResult<V> = Result<V, Box<dyn Error>>;

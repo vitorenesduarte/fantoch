@@ -5,21 +5,9 @@ mod pending;
 // operations as soon as it receives them.
 mod basic;
 
-// This module contains the implementation of a dependency graph executor.
-mod graph;
-
-// This module contains the implementation of a votes table executor.
-mod table;
-
-// This module contains the implementation of an slot executor.
-mod slot;
-
 // Re-exports.
 pub use basic::{BasicExecutionInfo, BasicExecutor};
-pub use graph::{GraphExecutionInfo, GraphExecutor};
 pub use pending::Pending;
-pub use slot::{SlotExecutionInfo, SlotExecutor};
-pub use table::{TableExecutionInfo, TableExecutor};
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;

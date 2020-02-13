@@ -2,7 +2,7 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::common::info::{Commands, Info};
+use crate::protocol::info::{Commands, Info};
 use crate::protocol::{
     BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
 };

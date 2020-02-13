@@ -1,5 +1,5 @@
 [package]
-name = "fantoche-protocols"
+name = "fantoche_protocols"
 version = "0.1.0"
 edition = "2018"
 

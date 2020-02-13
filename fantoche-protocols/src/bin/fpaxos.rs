@@ -1,6 +1,7 @@
 mod common;
 
-use fantoche::protocol::{FPaxos, Protocol};
+use fantoche::protocol::Protocol;
+use fantoche_protocols::protocol::FPaxos;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

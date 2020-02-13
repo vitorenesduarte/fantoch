@@ -240,6 +240,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "fantoche_protocols"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "bincode",
+ "bytes",
+ "clap",
+ "dashmap",
+ "fantoche",
+ "futures",
+ "lazy_static",
+ "num_cpus",
+ "parking_lot",
+ "permutator",
+ "quickcheck",
+ "quickcheck_macros",
+ "rand",
+ "rayon",
+ "serde",
+ "threshold",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

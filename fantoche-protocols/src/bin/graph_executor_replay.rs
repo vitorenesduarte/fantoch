@@ -2,7 +2,8 @@ mod common;
 
 use clap::{App, Arg};
 use fantoche::config::Config;
-use fantoche::executor::{Executor, GraphExecutor};
+use fantoche_protocols::executor::{GraphExecutor};
+use fantoche::executor::{Executor};
 use fantoche::run::rw::Rw;
 use tokio::fs::File;
 

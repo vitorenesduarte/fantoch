@@ -1,8 +1,9 @@
+// This module contains the implementation of data structured used to hold info
+// about commands.
+mod info;
+
 // This module contains the definition of `BaseProcess`.
 mod base;
-
-// This module contains common data-structures between protocols.
-pub mod common;
 
 // This module contains the definition of a basic replication protocol that
 // waits for f + 1 acks before committing a command. It's for sure inconsistent
@@ -12,26 +13,10 @@ pub mod common;
 // protocol fault-tolerant (but still inconsistent).
 mod basic;
 
-// This module contains the definition of `Atlas`.
-mod atlas;
-
-// This module contains the definition of `EPaxos`.
-mod epaxos;
-
-// This module contains the definition of `Newt`.
-mod newt;
-
-// This module contains the definition of `FPaxos`.
-mod fpaxos;
-
 // Re-exports.
-pub use atlas::{AtlasLocked, AtlasSequential};
-pub use basic::Basic;
-pub use epaxos::{EPaxosLocked, EPaxosSequential};
-pub use fpaxos::{FPaxos, LEADER_WORKER_INDEX};
-pub use newt::{NewtAtomic, NewtSequential};
-
 pub use base::BaseProcess;
+pub use basic::Basic;
+pub use info::{Commands, Info};
 
 use crate::command::Command;
 use crate::config::Config;

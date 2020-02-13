@@ -1,6 +1,7 @@
 mod common;
 
-use fantoche::protocol::{NewtAtomic, Protocol};
+use fantoche::protocol::Protocol;
+use fantoche_protocols::protocol::NewtAtomic;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

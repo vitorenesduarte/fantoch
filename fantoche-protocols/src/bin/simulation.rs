@@ -3,9 +3,10 @@ use fantoche::client::Workload;
 use fantoche::config::Config;
 use fantoche::metrics::Histogram;
 use fantoche::planet::{Planet, Region};
-use fantoche::protocol::{
-    AtlasSequential, EPaxosSequential, NewtSequential, Protocol,
+use fantoche_protocols::protocol::{
+    AtlasSequential, EPaxosSequential, NewtSequential,
 };
+use fantoche::protocol::Protocol;
 use fantoche::sim::Runner;
 use std::thread;
 

@@ -1,6 +1,7 @@
 mod common;
 
-use fantoche::protocol::{AtlasLocked, Protocol};
+use fantoche_protocols::protocol::{AtlasLocked};
+use fantoche::protocol::{Protocol};
 use std::error::Error;
 
 // TODO can we generate all the protocol binaries with a macro?

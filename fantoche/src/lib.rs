@@ -1,5 +1,3 @@
-#![feature(no_more_cas)]
-
 // This module contains the definition of `Region` and `Planet`.
 pub mod planet;
 
@@ -45,4 +43,4 @@ pub mod run;
 pub mod bote;
 
 // This module contains some utilitary functions.
-mod util;
+pub mod util;
