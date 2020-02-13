@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Write};
 
 // directory that contains all dat files
-const LAT_DIR: &str = "../latency/";
+const LAT_DIR: &str = "../latency_data/";
 
 #[derive(Debug, Clone)]
 pub struct Planet {

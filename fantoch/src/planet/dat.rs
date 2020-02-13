@@ -7,8 +7,9 @@ use std::io::{BufRead, BufReader};
 // TODO
 // when we create Dat, we should compute region and latencies in that same
 // method; also, we should only assume a structure in the filename (region.dat)
-// and not in the folder structure (as we're doing now: latency/region.dat). the
-// current implementation of region e.g. only works for that structure
+// and not in the folder structure (as we're doing now:
+// latency_data/region.dat). the current implementation of region e.g. only
+// works for that structure
 
 #[derive(Debug)]
 pub struct Dat {
@@ -116,7 +117,7 @@ mod tests {
     #[test]
     fn region() {
         // create dat
-        let filename = "../latency/europe-west3.dat";
+        let filename = "../latency_data/europe-west3.dat";
         let dat = Dat::from(filename);
 
         assert_eq!(dat.region(), Region::new("europe-west3"));
@@ -125,7 +126,7 @@ mod tests {
     #[test]
     fn latencies() {
         // create dat
-        let filename = "../latency/europe-west3.dat";
+        let filename = "../latency_data/europe-west3.dat";
         let dat = Dat::from(filename);
 
         // create expected latencies
