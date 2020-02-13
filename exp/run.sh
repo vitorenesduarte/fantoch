@@ -61,7 +61,7 @@ bin_script() {
     case "${mode}" in
     "release")
         # for release runs
-        echo "${prefix} && sed -i 's/debug = true/debug = false/g' Cargo.toml && cargo build --release --bins && ./target/release/${binary}"
+        echo "${prefix} && ./target/release/${binary}"
         ;;
     "flamegraph")
         # for flamegraph runs
