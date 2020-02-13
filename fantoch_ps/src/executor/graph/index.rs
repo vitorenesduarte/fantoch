@@ -1,6 +1,5 @@
 use super::tarjan::Vertex;
 use fantoch::id::Dot;
-use fantoch::kvs::Key;
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 
@@ -35,7 +34,7 @@ impl VertexIndex {
 
 #[derive(Default, Debug)]
 pub struct PendingIndex {
-    index: HashMap<Key, HashSet<Dot>>,
+    index: HashMap<Dot, HashSet<Dot>>,
 }
 
 impl PendingIndex {
@@ -43,44 +42,21 @@ impl PendingIndex {
         Default::default()
     }
 
-    /// Indexes a new vertex.
-    pub fn index(&mut self, vertex: &Vertex) {
-        self.update_index(vertex, |pending| {
-            // add to pending and check it was not there
-            assert!(pending.insert(vertex.dot()));
-        });
+    /// Indexes a new `dot` as a child of `dep_dot`:
+    /// - when `dep_dot` is executed, we'll try to execute `dot` as `dep_dot`
+    ///   was a dependency and maybe now `dot` can be executed
+    pub fn index(&mut self, dep_dot: Dot, dot: Dot) {
+        // get current list of pending dots
+        let pending = match self.index.get_mut(&dep_dot) {
+            Some(pending) => pending,
+            None => self.index.entry(dep_dot).or_insert_with(HashSet::new),
+        };
+        // add new `dot` to pending
+        pending.insert(dot);
     }
 
-    /// Finds all pending dots for a given key.
-    #[allow(clippy::ptr_arg)]
-    pub fn pending(&self, key: &Key) -> Option<HashSet<Dot>> {
-        self.index.get(key).cloned()
-    }
-
-    /// Removes a vertex from the index.
-    pub fn remove(&mut self, vertex: &Vertex) {
-        self.update_index(vertex, |pending| {
-            // remove from pending and check it was there
-            assert!(pending.remove(&vertex.dot()));
-        });
-    }
-
-    /// Generic function to update a set of pending commands associated with
-    /// each color touched by a given command.
-    fn update_index<F>(&mut self, vertex: &Vertex, mut update: F)
-    where
-        F: FnMut(&mut HashSet<Dot>),
-    {
-        vertex.command().keys().for_each(|key| {
-            // get current set of pending commands for this key
-            let pending = match self.index.get_mut(key) {
-                Some(pending) => pending,
-                None => {
-                    self.index.entry(key.clone()).or_insert_with(HashSet::new)
-                }
-            };
-            // update pending
-            update(pending)
-        });
+    /// Finds all pending dots for a given dependency dot.
+    pub fn remove(&mut self, dep_dot: &Dot) -> Option<HashSet<Dot>> {
+        self.index.remove(dep_dot)
     }
 }

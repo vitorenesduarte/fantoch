@@ -3,22 +3,24 @@
 
 ### `planet_sim`: framework for evaluating (planet-scale) protocols
 
-Details coming soon.
-
 #### Supported protocols
-- EPaxos: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/epaxos.rs)
-- Atlas: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/atlas.rs)
-- Newt: [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/newt.rs)
+- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/epaxos.rs)
+- [FPaxos](https://fpaxos.github.io/), and thus Paxos as a special case [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/fpaxos.rs)
+  - implemented following [Paxos Made Moderately Complex](http://paxos.systems/), which enables a certain degree of parallelism at the leader
+- Atlas [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/atlas.rs)
+- Newt [(source)](https://github.com/vitorenesduarte/planet_sim/tree/master/src/protocol/newt.rs)
 
 Next:
-- FPaxos (and Paxos as a special case of FPaxos)
-- Mencius
+- Mencius: a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
+- Caesar
 
-#### Ideas / Goals
+#### What does it do?
 
-- the same protocol/system implementation should be used by the simulation and by an actual implementation
-- these simulations will only output latency (infinite CPU will be assumed)
-- even though infinite CPU is assumed, we can still use something like [flamegraph](https://github.com/jonhoo/inferno/) to detect CPU performance problems
+- all protocols implement the [`Protocol`](https://github.com/vitorenesduarte/planet_sim/blob/master/src/protocol/mod.rs) trait
+- this specification can then be used for both
+  - geo-distributed simulations that only output latency (infinite CPU is assumed)
+  - actually running the protocols (in any setting)
+- this is achieved by providing a "simulator" and a "runner" that are protocol-agnostic and are only aware of the `Protocol` trait
 
 ## License
 
