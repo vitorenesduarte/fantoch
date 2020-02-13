@@ -6,7 +6,7 @@ RUST_NIGHTLY="true"
 FLAMEGRAPH="true"
 # flag indicating whether we should just remove previous installations
 NUKE_RUST="false"
-NUKE_PLANET_SIM="false"
+NUKE_FANTOCH="false"
 
 # maximum number of open files
 MAX_OPEN_FILES=100000
@@ -26,8 +26,8 @@ branch=$1
 if [ "${NUKE_RUST}" == "true" ]; then
     rm -rf .cargo/ .rustup/
 fi
-if [ "${NUKE_PLANET_SIM}" == "true" ]; then
-    rm -rf planet_sim/
+if [ "${NUKE_FANTOCH}" == "true" ]; then
+    rm -rf fantoch/
 fi
 
 # install rust
@@ -89,13 +89,13 @@ sudo apt-get install -y htop dstat lsof
 sudo apt-get autoremove
 
 # clone the repository if dir does not exist
-if [[ ! -d planet_sim ]]; then
-    git clone https://github.com/vitorenesduarte/planet_sim -b "${branch}"
+if [[ ! -d fantoch ]]; then
+    git clone https://github.com/vitorenesduarte/fantoch -b "${branch}"
 fi
 
 # pull recent changes in ${branch}
-cd planet_sim/ || {
-    echo "planet_sim/ directory must exist after clone"
+cd fantoch/ || {
+    echo "fantoch/ directory must exist after clone"
     exit 1
 }
 # stash before checkout to make sure checkout will succeed

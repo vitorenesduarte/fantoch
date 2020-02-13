@@ -190,9 +190,9 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "3.4.3"
+version = "3.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f63d151ae6528220feaae38a4c22e517fd7de0b5abf3c7dd1b61b1dbe1f596b"
+checksum = "117f63186e3d45ad197788bfde634b7bba7c0298a1d3648ea5a735e62cb20c32"
 dependencies = [
  "ahash",
  "cfg-if",
@@ -213,6 +213,54 @@ checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 dependencies = [
  "log",
  "regex",
+]
+
+[[package]]
+name = "fantoch"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "bincode",
+ "bytes",
+ "futures",
+ "parking_lot",
+ "quickcheck",
+ "quickcheck_macros",
+ "rand",
+ "serde",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "fantoch_bote"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "fantoch",
+ "permutator",
+ "rayon",
+ "serde",
+]
+
+[[package]]
+name = "fantoch_ps"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "clap",
+ "dashmap",
+ "fantoch",
+ "futures",
+ "num_cpus",
+ "parking_lot",
+ "permutator",
+ "quickcheck",
+ "quickcheck_macros",
+ "rand",
+ "serde",
+ "threshold",
+ "tokio",
 ]
 
 [[package]]
@@ -618,30 +666,6 @@ name = "pin-utils"
 version = "0.1.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5894c618ce612a3fa23881b152b608bafb8c56cfc22f434a3ba3120b40f7b587"
-
-[[package]]
-name = "planet_sim"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "bincode",
- "bytes",
- "clap",
- "dashmap",
- "futures",
- "lazy_static",
- "num_cpus",
- "parking_lot",
- "permutator",
- "quickcheck",
- "quickcheck_macros",
- "rand",
- "rayon",
- "serde",
- "threshold",
- "tokio",
- "tokio-util",
-]
 
 [[package]]
 name = "ppv-lite86"

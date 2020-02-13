@@ -15,7 +15,7 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="newt_atomic"
+PROTOCOL="basic"
 PROCESSES=3
 FAULTS=1
 TRANSITIVE_CONFLICTS="true"
@@ -56,7 +56,7 @@ bin_script() {
     fi
     local mode=$1
     local binary=$2
-    local prefix="source \${HOME}/.cargo/env && cd planet_sim"
+    local prefix="source \${HOME}/.cargo/env && cd fantoch"
 
     case "${mode}" in
     "release")
@@ -149,9 +149,9 @@ fetch_client_log() {
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 }
 
-stop_planet_sim() {
+stop_fantoch() {
     if [ $# -ne 1 ]; then
-        echo "usage: stop_planet_sim machine"
+        echo "usage: stop_fantoch machine"
         exit 1
     fi
 
@@ -178,7 +178,7 @@ stop_all() {
     local machine
 
     while IFS= read -r machine; do
-        stop_planet_sim ${machine} &
+        stop_fantoch ${machine} &
     done <"${MACHINES_FILE}"
     wait_jobs
 }
@@ -196,7 +196,7 @@ stop_process() {
     # (only) kill process:
     # - don't kill perf
     # - don't kill flamegraph
-    cmd="ps -aux | grep planet_sim | grep -vE \"(grep|perf|flamegraph)\" | awk '{ print \"kill \"\$2 }' | bash"
+    cmd="ps -aux | grep fantoch | grep -vE \"(grep|perf|flamegraph)\" | awk '{ print \"kill \"\$2 }' | bash"
     # shellcheck disable=SC2029
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 }
@@ -208,7 +208,7 @@ pull_flamegraph() {
     fi
     local id=$1
     local machine=$2
-    local cmd="ps -aux | grep -E \"(cargo|planet_sim)\" | grep -cv grep"
+    local cmd="ps -aux | grep -E \"(cargo|fantoch)\" | grep -cv grep"
 
     local running=1
     while [[ ${running} != 0 ]]; do
@@ -217,7 +217,7 @@ pull_flamegraph() {
         sleep 1
     done
 
-    scp "${SSH_ARGS}" "${machine}:~/planet_sim/flamegraph.svg" "flamegraph_${id}.svg"
+    scp "${SSH_ARGS}" "${machine}:~/fantoch/flamegraph.svg" "flamegraph_${id}.svg"
 }
 
 stop_processes() {
