@@ -1,4 +1,3 @@
-use fantoch::bote::Bote;
 use fantoch::client::Workload;
 use fantoch::config::Config;
 use fantoch::metrics::Histogram;
@@ -6,7 +5,7 @@ use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
 use fantoch_ps::protocol::{
-    AtlasSequential, EPaxosSequential, NewtSequential,
+    AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
 };
 use std::thread;
 
@@ -34,7 +33,7 @@ fn main() {
 
     println!(">running fpaxos n = 5 | f = 1");
     let config = Config::new(5, 1);
-    increasing_load_fpaxos(config);
+    run_in_thread(move || increasing_load::<FPaxos>(config));
 }
 
 #[allow(dead_code)]
@@ -99,6 +98,9 @@ fn increasing_load<P: Protocol>(config: Config) {
     let payload_size = 0;
     let workload = Workload::new(conflict_rate, total_commands, payload_size);
 
+    // TODO check if the protocol is leader-based, and if yes, run for all
+    // possible leader configurations
+
     for &clients_per_region in &cs {
         println!("running clients={}", clients_per_region);
         println!();
@@ -118,42 +120,6 @@ fn increasing_load<P: Protocol>(config: Config) {
             planet.clone(),
         );
     }
-}
-
-#[allow(dead_code)]
-fn increasing_load_fpaxos(config: Config) {
-    let planet = Planet::new();
-    let bote = Bote::from(planet);
-
-    // servers and clients
-    let servers = vec![
-        Region::new("asia-south1"),
-        Region::new("europe-north1"),
-        Region::new("southamerica-east1"),
-        Region::new("australia-southeast1"),
-        Region::new("europe-west1"),
-    ];
-    let clients = servers.clone();
-
-    // compute quorum size
-    let quorum_size = config.f() + 1;
-
-    // for each possible leader
-    servers.iter().for_each(|leader| {
-        println!("leader: {:?}", leader);
-        let latencies = bote.leader(leader, &servers, &clients, quorum_size);
-        // show latency for each client
-        latencies.clone().into_iter().for_each(|(region, latency)| {
-            // create histogram
-            let histogram = Histogram::from(vec![latency]);
-            println!("region = {:?} |   {:?}", region, histogram);
-        });
-
-        // global histogram
-        let histogram =
-            Histogram::from(latencies.into_iter().map(|(_, latency)| latency));
-        println!("n = {} AND c = 1 |  {:?}", config.n(), histogram);
-    });
 }
 
 #[allow(dead_code)]

@@ -8,8 +8,8 @@ pub mod search;
 // Re-exports.
 pub use search::Search;
 
-use crate::metrics::{Histogram, Stats};
-use crate::planet::{Planet, Region};
+use fantoch::metrics::{Histogram, Stats};
+use fantoch::planet::{Planet, Region};
 
 #[derive(Debug)]
 pub struct Bote {

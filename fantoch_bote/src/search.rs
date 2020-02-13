@@ -1,9 +1,9 @@
-use crate::bote::protocol::Protocol::{Atlas, EPaxos, FPaxos};
-use crate::bote::protocol::{ClientPlacement, ProtocolStats};
-use crate::bote::Bote;
-use crate::elapsed;
-use crate::metrics::{Histogram, Stats, F64};
-use crate::planet::{Planet, Region};
+use crate::protocol::Protocol::{Atlas, EPaxos, FPaxos};
+use crate::protocol::{ClientPlacement, ProtocolStats};
+use crate::Bote;
+use fantoch::elapsed;
+use fantoch::metrics::{Histogram, Stats, F64};
+use fantoch::planet::{Planet, Region};
 use permutator::Combination;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

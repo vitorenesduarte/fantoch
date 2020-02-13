@@ -224,14 +224,23 @@ dependencies = [
  "bytes",
  "futures",
  "parking_lot",
- "permutator",
  "quickcheck",
  "quickcheck_macros",
  "rand",
- "rayon",
  "serde",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "fantoch_bote"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "fantoch",
+ "permutator",
+ "rayon",
+ "serde",
 ]
 
 [[package]]

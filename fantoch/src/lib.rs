@@ -39,8 +39,5 @@ pub mod sim;
 // `Process`)
 pub mod run;
 
-// This module contains back-of-the-envelop calculations.
-pub mod bote;
-
 // This module contains some utilitary functions.
 pub mod util;

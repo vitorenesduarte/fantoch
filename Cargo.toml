@@ -3,6 +3,7 @@
 members = [
   "fantoch",
   "fantoch_ps",
+  "fantoch_bote",
 ]
 
 [profile.release]
