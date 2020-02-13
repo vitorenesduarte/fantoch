@@ -12,8 +12,9 @@ pub type SCC = BTreeSet<Dot>;
 #[derive(PartialEq)]
 pub enum FinderResult {
     Found,
+    MissingDependency(Dot),
+    NotPending,
     NotFound,
-    MissingDependency,
 }
 
 pub struct TarjanSCCFinder {
@@ -127,7 +128,7 @@ impl TarjanSCCFinder {
                         // not conflict with `dot` but
                         // we can't be sure until we have it locally
                         log!("Finder::strong_connect missing {:?}", dep_dot);
-                        return FinderResult::MissingDependency;
+                        return FinderResult::MissingDependency(dep_dot);
                     }
                     Some(dep_vertex) => {
                         // ignore non-conflicting commands:
@@ -161,7 +162,7 @@ impl TarjanSCCFinder {
                             );
 
                             // if missing dependency, give up
-                            if result == FinderResult::MissingDependency {
+                            if let FinderResult::MissingDependency(_) = result {
                                 return result;
                             }
 
@@ -253,11 +254,6 @@ impl Vertex {
     /// Retrieves vertex's dot.
     pub fn dot(&self) -> Dot {
         self.dot
-    }
-
-    /// Retrieves vertex's command.
-    pub fn command(&self) -> &Command {
-        &self.cmd
     }
 
     /// Retrieves vertex's clock.
