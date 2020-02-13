@@ -2,9 +2,9 @@ mod common;
 
 use clap::{App, Arg};
 use fantoch::config::Config;
-use fantoch_ps::executor::{GraphExecutor};
-use fantoch::executor::{Executor};
+use fantoch::executor::Executor;
 use fantoch::run::rw::Rw;
+use fantoch_ps::executor::GraphExecutor;
 use tokio::fs::File;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8KB

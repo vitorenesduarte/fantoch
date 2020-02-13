@@ -517,7 +517,8 @@ fn handle_cmd_result(
     }
 }
 
-// TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the protocols implemented
+// TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the
+// protocols implemented
 pub mod tests {
     use super::*;
     use rand::Rng;
@@ -554,8 +555,11 @@ pub mod tests {
         run_test::<Basic>(workers, executors, with_leader).await
     }
 
-    pub async fn run_test<P>(workers: usize, executors: usize, with_leader: bool)
-    where
+    pub async fn run_test<P>(
+        workers: usize,
+        executors: usize,
+        with_leader: bool,
+    ) where
         P: Protocol + Send + 'static,
     {
         // create local task set

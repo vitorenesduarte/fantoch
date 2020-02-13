@@ -5,9 +5,9 @@ mod executor;
 // Re-exports.
 pub use executor::{TableExecutionInfo, TableExecutor};
 
+use crate::protocol::common::table::VoteRange;
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, Key};
-use crate::protocol::common::table::VoteRange;
 use fantoch::util;
 use std::collections::{BTreeMap, HashMap};
 use std::mem;

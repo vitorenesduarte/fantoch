@@ -153,9 +153,9 @@ impl fmt::Debug for VoteRange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::common::table::{KeyClocks, SequentialKeyClocks};
     use fantoch::command::Command;
     use fantoch::id::Rifl;
-    use crate::protocol::common::table::{KeyClocks, SequentialKeyClocks};
 
     #[test]
     fn vote_range_compress() {

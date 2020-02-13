@@ -8,9 +8,9 @@ mod atomic;
 pub use atomic::AtomicKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
+use crate::protocol::common::table::Votes;
 use fantoch::command::Command;
 use fantoch::id::ProcessId;
-use crate::protocol::common::table::Votes;
 
 pub trait KeyClocks: Clone {
     /// Create a new `KeyClocks` instance given the local process identifier.

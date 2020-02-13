@@ -8,7 +8,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol,
+    ToSend,
 };
 use fantoch::util;
 use fantoch::{log, singleton};
@@ -50,7 +51,8 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         );
         let keys_clocks = KC::new(config.n());
         let f = Self::allowed_faults(config.n());
-        let cmds = CommandsInfo::new(process_id, config.n(), f, fast_quorum_size);
+        let cmds =
+            CommandsInfo::new(process_id, config.n(), f, fast_quorum_size);
         let to_executor = Vec::new();
 
         // create `EPaxos`

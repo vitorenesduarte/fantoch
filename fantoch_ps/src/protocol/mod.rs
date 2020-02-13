@@ -19,11 +19,10 @@ pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
 pub use newt::{NewtAtomic, NewtSequential};
 
-
 #[cfg(test)]
 mod tests {
-    use fantoch::run::tests::run_test;
     use super::*;
+    use fantoch::run::tests::run_test;
 
     #[tokio::test]
     async fn run_newt_sequential_test() {

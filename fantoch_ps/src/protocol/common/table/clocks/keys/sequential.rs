@@ -1,8 +1,8 @@
 use super::KeyClocks;
+use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
 use fantoch::id::ProcessId;
 use fantoch::kvs::Key;
-use crate::protocol::common::table::{VoteRange, Votes};
 use std::cmp;
 use std::collections::HashMap;
 

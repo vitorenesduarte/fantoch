@@ -1,8 +1,8 @@
-use fantoch::kvs::Key;
 use ahash::RandomState;
 use dashmap::iter::Iter;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use fantoch::kvs::Key;
 
 type SharedClocksIter<'a, V> =
     Iter<'a, Key, V, RandomState, DashMap<Key, V, RandomState>>;

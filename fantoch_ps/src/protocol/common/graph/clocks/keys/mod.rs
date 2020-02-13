@@ -44,8 +44,8 @@ fn bottom_clock(n: usize) -> VClock<ProcessId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::id::{DotGen, Rifl};
     use crate::util;
+    use fantoch::id::{DotGen, Rifl};
 
     #[test]
     fn sequential_key_clocks() {

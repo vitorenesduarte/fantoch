@@ -1,12 +1,12 @@
 #![feature(no_more_cas)]
 
 use clap::{App, Arg};
-use futures::future::join_all;
-use parking_lot::Mutex;
 use fantoch::metrics::Histogram;
 use fantoch::run::task;
 use fantoch::run::task::chan::{ChannelReceiver, ChannelSender};
 use fantoch::time::{RunTime, SysTime};
+use futures::future::join_all;
+use parking_lot::Mutex;
 use rand::Rng;
 use std::cmp::max;
 use std::collections::{BTreeSet, HashMap};
