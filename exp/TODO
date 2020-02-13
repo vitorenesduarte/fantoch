@@ -1,6 +1,0 @@
-- make use of tokio's broadcast channel
-- process protocol's messages in parallel
-- then we should have some kind of tail -f REMOTE_FILE
-- clients should save their histograms to some file so that we can later fetch them
-- improve Event::add_event_range in threshold-rs
-- can `to_executor` in protocols not be a vec but an option
