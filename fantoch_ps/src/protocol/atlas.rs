@@ -9,7 +9,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, Commands, Info, MessageIndex, MessageIndexes, Protocol, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol,
+    ToSend,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,7 @@ type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 pub struct Atlas<KC> {
     bp: BaseProcess,
     keys_clocks: KC,
-    cmds: Commands<CommandInfo>,
+    cmds: CommandsInfo<AtlasInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
@@ -48,8 +49,12 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             write_quorum_size,
         );
         let keys_clocks = KC::new(config.n());
-        let cmds =
-            Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let cmds = CommandsInfo::new(
+            process_id,
+            config.n(),
+            config.f(),
+            fast_quorum_size,
+        );
         let to_executor = Vec::new();
 
         // create `Atlas`
@@ -444,10 +449,10 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
     todo!("recovery not implemented yet")
 }
 
-// `CommandInfo` contains all information required in the life-cyle of a
+// `AtlasInfo` contains all information required in the life-cyle of a
 // `Command`
 #[derive(Clone)]
-struct CommandInfo {
+struct AtlasInfo {
     status: Status,
     quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
                                   * works in recovery */
@@ -457,7 +462,7 @@ struct CommandInfo {
     quorum_clocks: QuorumClocks,
 }
 
-impl Info for CommandInfo {
+impl Info for AtlasInfo {
     fn new(
         process_id: ProcessId,
         n: usize,

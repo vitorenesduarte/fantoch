@@ -7,7 +7,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, Commands, Info, MessageIndex, MessageIndexes, Protocol, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol,
+    ToSend,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,7 @@ type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 pub struct Newt<KC> {
     bp: BaseProcess,
     key_clocks: KC,
-    cmds: Commands<CommandInfo>,
+    cmds: CommandsInfo<NewtInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
@@ -46,8 +47,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             write_quorum_size,
         );
         let key_clocks = KC::new(process_id);
-        let cmds =
-            Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let cmds = CommandsInfo::new(
+            process_id,
+            config.n(),
+            config.f(),
+            fast_quorum_size,
+        );
         let to_executor = Vec::new();
 
         // create `Newt`
@@ -425,10 +430,10 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 }
 
-// `CommandInfo` contains all information required in the life-cyle of a
+// `NewtInfo` contains all information required in the life-cyle of a
 // `Command`
 #[derive(Clone)]
-struct CommandInfo {
+struct NewtInfo {
     status: Status,
     quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
                                   * works in recovery */
@@ -442,7 +447,7 @@ struct CommandInfo {
     quorum_clocks: QuorumClocks,
 }
 
-impl Info for CommandInfo {
+impl Info for NewtInfo {
     fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,

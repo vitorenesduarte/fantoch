@@ -16,7 +16,7 @@ mod basic;
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;
-pub use info::{Commands, Info};
+pub use info::{CommandsInfo, Info};
 
 use crate::command::Command;
 use crate::config::Config;

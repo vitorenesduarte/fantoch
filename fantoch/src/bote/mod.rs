@@ -367,7 +367,6 @@ mod tests {
     fn leader_clients_subset() {
         // create bote
         let bote = Bote::new();
-        println!("bote {:?}", bote);
 
         // considered regions
         let w1 = Region::new("europe-west1");

@@ -2,7 +2,7 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::info::{Commands, Info};
+use crate::protocol::info::{CommandsInfo, Info};
 use crate::protocol::{
     BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
 };
@@ -16,7 +16,7 @@ type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 #[derive(Clone)]
 pub struct Basic {
     bp: BaseProcess,
-    cmds: Commands<CommandInfo>,
+    cmds: CommandsInfo<BasicInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
@@ -37,8 +37,12 @@ impl Protocol for Basic {
             fast_quorum_size,
             write_quorum_size,
         );
-        let cmds =
-            Commands::new(process_id, config.n(), config.f(), fast_quorum_size);
+        let cmds = CommandsInfo::new(
+            process_id,
+            config.n(),
+            config.f(),
+            fast_quorum_size,
+        );
         let to_executor = Vec::new();
 
         // create `Basic`
@@ -204,15 +208,15 @@ impl Basic {
     }
 }
 
-// `CommandInfo` contains all information required in the life-cyle of a
+// `BasicInfo` contains all information required in the life-cyle of a
 // `Command`
 #[derive(Clone)]
-struct CommandInfo {
+struct BasicInfo {
     cmd: Option<Command>,
     missing_acks: usize,
 }
 
-impl Info for CommandInfo {
+impl Info for BasicInfo {
     fn new(
         _process_id: ProcessId,
         _n: usize,

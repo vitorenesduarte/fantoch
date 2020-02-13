@@ -12,7 +12,7 @@ pub trait Info {
 
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 #[derive(Clone)]
-pub struct Commands<I> {
+pub struct CommandsInfo<I> {
     process_id: ProcessId,
     n: usize,
     f: usize,
@@ -20,7 +20,7 @@ pub struct Commands<I> {
     dot_to_info: HashMap<Dot, I>,
 }
 
-impl<I> Commands<I>
+impl<I> CommandsInfo<I>
 where
     I: Info,
 {

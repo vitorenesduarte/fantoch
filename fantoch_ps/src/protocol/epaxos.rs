@@ -8,7 +8,7 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, Commands, Info, MessageIndex, MessageIndexes, Protocol, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol, ToSend,
 };
 use fantoch::util;
 use fantoch::{log, singleton};
@@ -27,7 +27,7 @@ type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 pub struct EPaxos<KC> {
     bp: BaseProcess,
     keys_clocks: KC,
-    cmds: Commands<CommandInfo>,
+    cmds: CommandsInfo<EPaxosInfo>,
     to_executor: Vec<ExecutionInfo>,
 }
 
@@ -50,7 +50,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         );
         let keys_clocks = KC::new(config.n());
         let f = Self::allowed_faults(config.n());
-        let cmds = Commands::new(process_id, config.n(), f, fast_quorum_size);
+        let cmds = CommandsInfo::new(process_id, config.n(), f, fast_quorum_size);
         let to_executor = Vec::new();
 
         // create `EPaxos`
@@ -237,7 +237,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             from
         );
 
-        // ignore ack from self (see `CommandInfo::new` for the reason why)
+        // ignore ack from self (see `EPaxosInfo::new` for the reason why)
         if from == self.bp.process_id {
             return None;
         }
@@ -456,10 +456,10 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
     todo!("recovery not implemented yet")
 }
 
-// `CommandInfo` contains all information required in the life-cyle of a
+// `EPaxosInfo` contains all information required in the life-cyle of a
 // `Command`
 #[derive(Clone)]
-struct CommandInfo {
+struct EPaxosInfo {
     status: Status,
     quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
                                   * works in recovery */
@@ -469,7 +469,7 @@ struct CommandInfo {
     quorum_clocks: QuorumClocks,
 }
 
-impl Info for CommandInfo {
+impl Info for EPaxosInfo {
     fn new(
         process_id: ProcessId,
         n: usize,
