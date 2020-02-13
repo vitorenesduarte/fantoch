@@ -18,11 +18,11 @@ pub struct Dat {
 impl Dat {
     /// Computes this `Dat`'s region.
     pub fn region(&self) -> Region {
-        let region = self
-            .filename
-            .split(|c| c == '/' || c == '.')
-            .nth(1)
-            .unwrap();
+        let parts: Vec<_> =
+            self.filename.split(|c| c == '/' || c == '.').collect();
+        // at `parts[parts.len() - 1]` we have "dat", and thus the name of the
+        // region is in the previous position
+        let region = parts[parts.len() - 2];
         Region::new(region)
     }
 
@@ -89,6 +89,7 @@ impl Dat {
             .filter(|entry| entry.ends_with(".dat"))
             // map all entry to Dat
             .map(Dat::from)
+            .inspect(|dat| println!("dat {:?}", dat))
             .collect()
     }
 }
@@ -115,7 +116,7 @@ mod tests {
     #[test]
     fn region() {
         // create dat
-        let filename = "latency/europe-west3.dat";
+        let filename = "../latency/europe-west3.dat";
         let dat = Dat::from(filename);
 
         assert_eq!(dat.region(), Region::new("europe-west3"));
@@ -124,7 +125,7 @@ mod tests {
     #[test]
     fn latencies() {
         // create dat
-        let filename = "latency/europe-west3.dat";
+        let filename = "../latency/europe-west3.dat";
         let dat = Dat::from(filename);
 
         // create expected latencies

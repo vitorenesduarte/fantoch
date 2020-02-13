@@ -3,11 +3,11 @@ use fantoche::client::Workload;
 use fantoche::config::Config;
 use fantoche::metrics::Histogram;
 use fantoche::planet::{Planet, Region};
+use fantoche::protocol::Protocol;
+use fantoche::sim::Runner;
 use fantoche_protocols::protocol::{
     AtlasSequential, EPaxosSequential, NewtSequential,
 };
-use fantoche::protocol::Protocol;
-use fantoche::sim::Runner;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
@@ -81,7 +81,7 @@ fn equidistant<P: Protocol>() {
 
 #[allow(dead_code)]
 fn increasing_load<P: Protocol>(config: Config) {
-    let planet = Planet::new("latency/");
+    let planet = Planet::new();
     let regions5 = vec![
         Region::new("asia-south1"),
         Region::new("europe-north1"),
@@ -122,7 +122,7 @@ fn increasing_load<P: Protocol>(config: Config) {
 
 #[allow(dead_code)]
 fn increasing_load_fpaxos(config: Config) {
-    let planet = Planet::new("latency/");
+    let planet = Planet::new();
     let bote = Bote::from(planet);
 
     // servers and clients
@@ -158,7 +158,7 @@ fn increasing_load_fpaxos(config: Config) {
 
 #[allow(dead_code)]
 fn increasing_regions<P: Protocol>() {
-    let planet = Planet::new("latency/");
+    let planet = Planet::new();
     let regions13 = vec![
         Region::new("asia-southeast1"),
         Region::new("europe-west4"),

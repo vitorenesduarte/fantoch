@@ -49,7 +49,7 @@ impl Search {
         max_n: usize,
         search_input: SearchInput,
         save_search: bool,
-        lat_dir: &str,
+        lat_dir: Option<&str>,
     ) -> Self {
         // get filename
         let filename = Self::filename(min_n, max_n, &search_input);
@@ -57,7 +57,11 @@ impl Search {
         timed!("get saved search", Self::get_saved_search(&filename))
             .unwrap_or_else(|| {
                 // create planet
-                let planet = Planet::new(lat_dir);
+                let planet = if let Some(lat_dir) = lat_dir {
+                    Planet::from(lat_dir)
+                } else {
+                    Planet::new()
+                };
 
                 // get regions for servers and clients
                 let (servers, clients) =
@@ -664,9 +668,6 @@ impl FTMetric {
 mod tests {
     use super::*;
 
-    // directory that contains all dat files
-    const LAT_DIR: &str = "latency/";
-
     #[test]
     fn search() {
         // define some search params
@@ -677,8 +678,7 @@ mod tests {
         let save_search = false;
 
         // create search
-        let search =
-            Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
+        let search = Search::new(min_n, max_n, search_input, save_search, None);
 
         // define search params:
         // originally 30 was used for the `min_mean_improv`;
@@ -760,7 +760,7 @@ mod tests {
         // create search and save it
         let save_search = true;
         let expected =
-            Search::new(min_n, max_n, search_input, save_search, LAT_DIR);
+            Search::new(min_n, max_n, search_input, save_search, None);
 
         // get saved search and assert it is the same search
         let saved = Search::get_saved_search(&filename);

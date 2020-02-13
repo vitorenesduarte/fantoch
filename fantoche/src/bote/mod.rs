@@ -17,8 +17,8 @@ pub struct Bote {
 }
 
 impl Bote {
-    pub fn new(lat_dir: &str) -> Self {
-        let planet = Planet::new(lat_dir);
+    pub fn new() -> Self {
+        let planet = Planet::new();
         Self::from(planet)
     }
 
@@ -190,8 +190,7 @@ mod tests {
     #[test]
     fn quorum_latencies() {
         // create bote
-        let lat_dir = "latency/";
-        let bote = Bote::new(lat_dir);
+        let bote = Bote::new();
 
         // considered regions
         let w1 = Region::new("europe-west1");
@@ -222,8 +221,7 @@ mod tests {
     #[test]
     fn leaderless() {
         // create bote
-        let lat_dir = "latency/";
-        let bote = Bote::new(lat_dir);
+        let bote = Bote::new();
 
         // considered regions
         let w1 = Region::new("europe-west1");
@@ -260,8 +258,7 @@ mod tests {
     #[test]
     fn leaderless_clients_subset() {
         // create bote
-        let lat_dir = "latency/";
-        let bote = Bote::new(lat_dir);
+        let bote = Bote::new();
 
         // considered regions
         let w1 = Region::new("europe-west1");
@@ -326,8 +323,7 @@ mod tests {
     #[test]
     fn leader() {
         // create bote
-        let lat_dir = "latency/";
-        let bote = Bote::new(lat_dir);
+        let bote = Bote::new();
 
         // considered regions
         let w1 = Region::new("europe-west1");
@@ -370,8 +366,8 @@ mod tests {
     #[test]
     fn leader_clients_subset() {
         // create bote
-        let lat_dir = "latency/";
-        let bote = Bote::new(lat_dir);
+        let bote = Bote::new();
+        println!("bote {:?}", bote);
 
         // considered regions
         let w1 = Region::new("europe-west1");
@@ -445,8 +441,7 @@ mod tests {
     #[test]
     fn best_latency_leader() {
         // create bote
-        let lat_dir = "latency/";
-        let bote = Bote::new(lat_dir);
+        let bote = Bote::new();
 
         // considered regions
         let w1 = Region::new("europe-west1");

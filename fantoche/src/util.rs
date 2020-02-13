@@ -89,21 +89,6 @@ pub fn sort_processes_by_distance(
 }
 
 #[cfg(test)]
-use threshold::{Clock, EventSet, MaxSet, VClock};
-
-#[cfg(test)]
-/// Returns a new `VClock` setting its frontier with the sequences in the
-/// iterator.
-pub fn vclock<I: IntoIterator<Item = u64>>(iter: I) -> VClock<ProcessId> {
-    Clock::from(
-        iter.into_iter()
-            .enumerate()
-            .map(|(actor, seq)| ((actor + 1) as u64, seq)) // make ids 1..=n
-            .map(|(actor, seq)| (actor, MaxSet::from_event(seq))),
-    )
-}
-
-#[cfg(test)]
 pub mod tests {
     use super::*;
     use crate::command::Command;
@@ -171,7 +156,7 @@ pub mod tests {
 
         // sort processes
         let region = Region::new("europe-west3");
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
         let sorted = sort_processes_by_distance(&region, &planet, processes);
 
         assert_eq!(

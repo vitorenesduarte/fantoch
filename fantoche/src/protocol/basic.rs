@@ -278,7 +278,7 @@ mod tests {
         ];
 
         // planet
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
 
         // create system time
         let time = SimTime::new();

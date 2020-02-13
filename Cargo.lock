@@ -222,11 +222,7 @@ dependencies = [
  "ahash",
  "bincode",
  "bytes",
- "clap",
- "dashmap",
  "futures",
- "lazy_static",
- "num_cpus",
  "parking_lot",
  "permutator",
  "quickcheck",
@@ -234,7 +230,6 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
- "threshold",
  "tokio",
  "tokio-util",
 ]
@@ -244,24 +239,19 @@ name = "fantoche_protocols"
 version = "0.1.0"
 dependencies = [
  "ahash",
- "bincode",
- "bytes",
  "clap",
  "dashmap",
  "fantoche",
  "futures",
- "lazy_static",
  "num_cpus",
  "parking_lot",
  "permutator",
  "quickcheck",
  "quickcheck_macros",
  "rand",
- "rayon",
  "serde",
  "threshold",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]

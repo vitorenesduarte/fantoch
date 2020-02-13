@@ -350,7 +350,7 @@ mod tests {
 
     fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
         // planet
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
 
         // config
         let n = 3;

@@ -11,6 +11,9 @@ use crate::planet::dat::Dat;
 use std::collections::HashMap;
 use std::fmt::{self, Write};
 
+// directory that contains all dat files
+const LAT_DIR: &str = "../latency/";
+
 #[derive(Debug, Clone)]
 pub struct Planet {
     /// mapping from region A to a mapping from region B to the latency between
@@ -22,7 +25,12 @@ pub struct Planet {
 
 impl Planet {
     /// Creates a new `Planet` instance.
-    pub fn new(lat_dir: &str) -> Self {
+    pub fn new() -> Self {
+        Self::from(LAT_DIR)
+    }
+
+    /// Creates a new `Planet` instance.
+    pub fn from(lat_dir: &str) -> Self {
         // create latencies
         let latencies: HashMap<_, _> = Dat::all_dats(lat_dir)
             .iter()
@@ -161,14 +169,10 @@ impl Planet {
 mod tests {
     use super::*;
 
-    // directory that contains all dat files
-    const LAT_DIR: &str = "latency/";
-
     #[test]
     fn latency() {
         // planet
-        let lat_dir = "latency/";
-        let planet = Planet::new(lat_dir);
+        let planet = Planet::new();
 
         // regions
         let eu_w3 = Region::new("europe-west3");
@@ -185,8 +189,7 @@ mod tests {
     #[test]
     fn sorted() {
         // planet
-        let lat_dir = "latency/";
-        let planet = Planet::new(lat_dir);
+        let planet = Planet::new();
 
         // regions
         let eu_w3 = Region::new("europe-west3");
@@ -229,7 +232,7 @@ mod tests {
 
     #[test]
     fn distance_matrix() {
-        let planet = Planet::new(LAT_DIR);
+        let planet = Planet::new();
         let regions = vec![
             Region::new("asia-southeast1"),
             Region::new("europe-west4"),

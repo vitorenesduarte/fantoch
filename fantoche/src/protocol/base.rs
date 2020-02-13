@@ -182,7 +182,7 @@ mod tests {
         // bp
         let id = 8;
         let region = Region::new("europe-west3");
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
         let fast_quorum_size = 6;
         let write_quorum_size = 4;
         let mut bp =
@@ -237,7 +237,7 @@ mod tests {
         // bp
         let id = 2;
         let region = Region::new("europe-north1");
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
         let fast_quorum_size = 3;
         let write_quorum_size = 4;
         let mut bp =

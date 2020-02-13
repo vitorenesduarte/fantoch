@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn discover() {
         // create planet
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
 
         // processes
         let processes = vec![
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn client_flow() {
         // create planet
-        let planet = Planet::new("latency/");
+        let planet = Planet::new();
 
         // processes
         let processes = vec![
