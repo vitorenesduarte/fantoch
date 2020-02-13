@@ -3,3 +3,4 @@ target/
 .idea/
 *.data
 .log_*
+*/*.execution_log

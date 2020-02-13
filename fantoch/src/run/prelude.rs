@@ -114,6 +114,7 @@ fn dot_index(dot: &Dot) -> usize {
 }
 
 // The index of a key is its hash
+#[allow(clippy::ptr_arg)]
 fn key_index(key: &Key) -> usize {
     util::key_hash(key) as usize
 }

@@ -43,6 +43,7 @@ macro_rules! elapsed {
 type DefaultHasher = ahash::AHasher;
 
 /// Compute the hash of a key.
+#[allow(clippy::ptr_arg)]
 pub fn key_hash(key: &Key) -> u64 {
     let mut hasher = DefaultHasher::default();
     key.hash(&mut hasher);

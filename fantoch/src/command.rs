@@ -59,6 +59,7 @@ impl Command {
     }
 
     /// Checks if `key` is accessed by this command.
+    #[allow(clippy::ptr_arg)]
     pub fn contains_key(&self, key: &Key) -> bool {
         self.ops.contains_key(key)
     }

@@ -517,6 +517,7 @@ fn handle_cmd_result(
     }
 }
 
+// TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the protocols implemented
 pub mod tests {
     use super::*;
     use rand::Rng;
@@ -745,9 +746,6 @@ pub mod tests {
     }
 
     fn port_is_available(port: u16) -> bool {
-        match std::net::TcpListener::bind(("127.0.0.1", port)) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 }
