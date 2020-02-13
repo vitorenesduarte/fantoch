@@ -216,7 +216,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fantoche"
+name = "fantoch"
 version = "0.1.0"
 dependencies = [
  "ahash",
@@ -235,13 +235,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "fantoche_protocols"
+name = "fantoch_ps"
 version = "0.1.0"
 dependencies = [
  "ahash",
  "clap",
  "dashmap",
- "fantoche",
+ "fantoch",
  "futures",
  "num_cpus",
  "parking_lot",

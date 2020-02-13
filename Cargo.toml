@@ -1,8 +1,8 @@
 [workspace]
 
 members = [
-  "fantoche",
-  "fantoche_protocols",
+  "fantoch",
+  "fantoch_ps",
 ]
 
 [profile.release]
