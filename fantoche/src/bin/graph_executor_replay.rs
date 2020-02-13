@@ -1,9 +1,9 @@
 mod common;
 
 use clap::{App, Arg};
-use planet_sim::config::Config;
-use planet_sim::executor::{Executor, GraphExecutor};
-use planet_sim::run::rw::Rw;
+use fantoche::config::Config;
+use fantoche::executor::{Executor, GraphExecutor};
+use fantoche::run::rw::Rw;
 use tokio::fs::File;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8KB

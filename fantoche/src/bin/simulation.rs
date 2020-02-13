@@ -1,12 +1,12 @@
-use planet_sim::bote::Bote;
-use planet_sim::client::Workload;
-use planet_sim::config::Config;
-use planet_sim::metrics::Histogram;
-use planet_sim::planet::{Planet, Region};
-use planet_sim::protocol::{
+use fantoche::bote::Bote;
+use fantoche::client::Workload;
+use fantoche::config::Config;
+use fantoche::metrics::Histogram;
+use fantoche::planet::{Planet, Region};
+use fantoche::protocol::{
     AtlasSequential, EPaxosSequential, NewtSequential, Protocol,
 };
-use planet_sim::sim::Runner;
+use fantoche::sim::Runner;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb

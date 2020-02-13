@@ -1,6 +1,6 @@
 mod common;
 
-use planet_sim::protocol::{NewtAtomic, Protocol};
+use fantoche::protocol::{NewtAtomic, Protocol};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // create process
     let process = NewtAtomic::new(process_id, config);
 
-    common::tokio_runtime().block_on(planet_sim::run::process(
+    common::tokio_runtime().block_on(fantoche::run::process(
         process,
         process_id,
         sorted_processes,

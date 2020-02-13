@@ -2,7 +2,7 @@
 #[allow(dead_code)]
 pub mod protocol;
 
-use planet_sim::config::Config;
+use fantoche::config::Config;
 
 const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;

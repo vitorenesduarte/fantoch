@@ -1,6 +1,6 @@
 use clap::{App, Arg};
-use planet_sim::config::Config;
-use planet_sim::id::ProcessId;
+use fantoche::config::Config;
+use fantoche::id::ProcessId;
 use std::net::IpAddr;
 
 const LIST_SEP: &str = ",";

@@ -1,8 +1,8 @@
 mod common;
 
 use clap::{App, Arg};
-use planet_sim::client::Workload;
-use planet_sim::id::ClientId;
+use fantoche::client::Workload;
+use fantoche::id::ClientId;
 use std::error::Error;
 
 const RANGE_SEP: &str = "-";
@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) =
         parse_args();
 
-    common::tokio_runtime().block_on(planet_sim::run::client(
+    common::tokio_runtime().block_on(fantoche::run::client(
         ids,
         address,
         interval,

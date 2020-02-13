@@ -3,10 +3,10 @@
 use clap::{App, Arg};
 use futures::future::join_all;
 use parking_lot::Mutex;
-use planet_sim::metrics::Histogram;
-use planet_sim::run::task;
-use planet_sim::run::task::chan::{ChannelReceiver, ChannelSender};
-use planet_sim::time::{RunTime, SysTime};
+use fantoche::metrics::Histogram;
+use fantoche::run::task;
+use fantoche::run::task::chan::{ChannelReceiver, ChannelSender};
+use fantoche::time::{RunTime, SysTime};
 use rand::Rng;
 use std::cmp::max;
 use std::collections::{BTreeSet, HashMap};

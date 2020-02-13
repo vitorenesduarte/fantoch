@@ -216,6 +216,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "fantoche"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "bincode",
+ "bytes",
+ "clap",
+ "dashmap",
+ "futures",
+ "lazy_static",
+ "num_cpus",
+ "parking_lot",
+ "permutator",
+ "quickcheck",
+ "quickcheck_macros",
+ "rand",
+ "rayon",
+ "serde",
+ "threshold",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -618,30 +642,6 @@ name = "pin-utils"
 version = "0.1.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5894c618ce612a3fa23881b152b608bafb8c56cfc22f434a3ba3120b40f7b587"
-
-[[package]]
-name = "planet_sim"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "bincode",
- "bytes",
- "clap",
- "dashmap",
- "futures",
- "lazy_static",
- "num_cpus",
- "parking_lot",
- "permutator",
- "quickcheck",
- "quickcheck_macros",
- "rand",
- "rayon",
- "serde",
- "threshold",
- "tokio",
- "tokio-util",
-]
 
 [[package]]
 name = "ppv-lite86"
