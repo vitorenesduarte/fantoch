@@ -29,7 +29,31 @@ impl KeyClocks for SequentialKeyClocks {
         cmd: &Command,
         clock: u64,
     ) -> HashSet<Dot> {
-        todo!()
+        let mut pred = HashSet::new();
+        cmd.keys().for_each(|key| {
+            // get a mutable reference to current commands
+            let current = match self.clocks.get_mut(key) {
+                Some(current) => current,
+                None => {
+                    self.clocks.entry(key.clone()).or_insert_with(BTreeMap::new)
+                }
+            };
+
+            // collect all `Dot`'s with a timestamp smaller than `clock`
+            current.range(..clock).for_each(|(_, dot)| {
+                // we don't assert that doesn't exist already because the same
+                // `Dot` might be stored on different keys if we have multi-key
+                // commands
+                // TODO can we avoid cloning here?
+                pred.insert(dot.clone());
+            });
+
+            // add ourselves to the set of commands and assert there was no
+            // command with the same timestamp
+            let res = current.insert(clock, dot);
+            assert!(res.is_none());
+        });
+        pred
     }
 
     fn parallel() -> bool {
