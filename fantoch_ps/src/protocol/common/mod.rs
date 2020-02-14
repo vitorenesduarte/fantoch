@@ -1,5 +1,5 @@
-// This module contains the definition of `SharedClocks`.
-mod shared_clocks;
+// This module contains the definition of `Shared`.
+mod shared;
 
 // This module contains definitions common to dependency-graph-based protocols.
 pub mod graph;

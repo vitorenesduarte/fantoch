@@ -1,5 +1,5 @@
 use super::KeyClocks;
-use crate::protocol::common::shared_clocks::SharedClocks;
+use crate::protocol::common::shared::Shared;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use parking_lot::RwLock;
@@ -12,7 +12,7 @@ type Clock = RwLock<VClock<ProcessId>>;
 #[derive(Clone)]
 pub struct LockedKeyClocks {
     n: usize, // number of processes
-    clocks: Arc<SharedClocks<Clock>>,
+    clocks: Arc<Shared<Clock>>,
     noop_clock: Arc<Clock>,
 }
 
@@ -20,7 +20,7 @@ impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
     fn new(n: usize) -> Self {
         // create shared clocks
-        let clocks = SharedClocks::new();
+        let clocks = Shared::new();
         // wrap them in an arc
         let clocks = Arc::new(clocks);
 
