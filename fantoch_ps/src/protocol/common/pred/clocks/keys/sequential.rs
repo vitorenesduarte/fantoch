@@ -29,6 +29,9 @@ impl KeyClocks for SequentialKeyClocks {
         cmd: &Command,
         clock: u64,
     ) -> HashSet<Dot> {
+        // TODO is this data structure ever GCed? otherwise the set that we
+        // return here will grow unbounded as the more commands are processed in
+        // the system
         let mut pred = HashSet::new();
         cmd.keys().for_each(|key| {
             // get a mutable reference to current commands
@@ -39,7 +42,7 @@ impl KeyClocks for SequentialKeyClocks {
                 }
             };
 
-            // collect all `Dot`'s with a timestamp smaller than `clock`
+            // collect all `Dot`'s with a timestamp smaller than `clock`:
             current.range(..clock).for_each(|(_, dot)| {
                 // we don't assert that doesn't exist already because the same
                 // `Dot` might be stored on different keys if we have multi-key
