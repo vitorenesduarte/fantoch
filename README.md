@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.org/vitorenesduarte/fantoch.svg?branch=master)](https://travis-ci.org/vitorenesduarte/fantoch)
 [![Coverage Status](https://coveralls.io/repos/github/vitorenesduarte/fantoch/badge.svg)](https://coveralls.io/github/vitorenesduarte/fantoch)
 
-### `fantoch`: framework for evaluating (planet-scale) protocols
+### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
 #### Supported protocols
 - [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
