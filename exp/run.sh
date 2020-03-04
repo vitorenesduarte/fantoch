@@ -8,7 +8,7 @@ source "${DIR}/util.sh"
 # seconds
 KILL_WAIT=3
 
-# mode can be: release, flamegraph, leaks
+# mode can be: release, flamegraph
 PROCESS_RUN_MODE="release"
 CLIENT_RUN_MODE="release"
 
@@ -65,11 +65,7 @@ bin_script() {
         ;;
     "flamegraph")
         # for flamegraph runs
-        echo "${prefix} && sed -i 's/debug = false/debug = true/g' Cargo.toml && cargo flamegraph --bin=${binary} --"
-        ;;
-    "leaks")
-        # for memory-leak runs
-        echo "${prefix} && env RUSTFLAGS=\"-Z sanitizer=leak\" cargo +nightly run --release --bin ${binary} --"
+        echo "${prefix} && cargo flamegraph --bin=${binary} --"
         ;;
     *)
         echo "invalid run mode: ${mode}"
@@ -442,7 +438,7 @@ if [[ $1 == "stop" ]]; then
     stop_all
 else
     output_log=.run_log
-    echo "${PROTOCOL} w=${WORKERS} e=${EXECUTORS} ${CONFLICT_RATE}% ${PAYLOAD_SIZE}B skip_exec=${EXECUTE_AT_COMMIT}" >> ${output_log}
+    echo "${PROTOCOL} w=${WORKERS} e=${EXECUTORS} ${CONFLICT_RATE}% ${PAYLOAD_SIZE}B skip_exec=${EXECUTE_AT_COMMIT}" >>${output_log}
     for clients_per_machine in 16 32 64 128 256 512; do
         echo "C=${clients_per_machine}" >>${output_log}
         stop_all
