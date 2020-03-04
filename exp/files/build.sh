@@ -8,9 +8,6 @@ FLAMEGRAPH="true"
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
 
-# flag indicating whether we should build for maximum performance or not
-MAX_PERFORMANCE="true"
-
 # maximum number of open files
 MAX_OPEN_FILES=100000
 # maximum buffer sizes
@@ -109,10 +106,5 @@ git pull
 # use nightly
 rustup override set nightly
 
-# build all the binaries in release mode (maybe for maximum performance)
-compile_flags=""
-if [ "${MAX_PERFORMANCE}" == "true" ]; then
-    compile_flags="-C opt-level=3 -C target-cpu=native -C codegen-units=1"
-fi
-
-RUSTFLAGS="${compile_flags}" cargo build --release --bins
+# build all the binaries in release mode for maximum performance
+RUSTFLAGS="-C target-cpu=native" cargo build --release --bins

@@ -90,7 +90,6 @@ impl Dat {
             .filter(|entry| entry.ends_with(".dat"))
             // map all entry to Dat
             .map(Dat::from)
-            .inspect(|dat| println!("dat {:?}", dat))
             .collect()
     }
 }

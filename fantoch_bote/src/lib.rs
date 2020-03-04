@@ -6,7 +6,7 @@ pub mod protocol;
 pub mod search;
 
 // Re-exports.
-pub use search::Search;
+pub use search::{FTMetric, RankingParams, Search, SearchInput};
 
 use fantoch::metrics::{Histogram, Stats};
 use fantoch::planet::{Planet, Region};
