@@ -14,7 +14,7 @@ futures = "0.3.4"
 parking_lot = "0.10.0"
 rand = "0.7.3"
 serde = { version = "1.0.104", features = ["derive"] }
-tokio = { version = "0.2.11", features = ["full", "parking_lot"] }
+tokio = { version = "0.2.15", features = ["full", "parking_lot"] }
 tokio-util = { version = "0.2.0", features = ["codec"] }
 
 [dev-dependencies]
