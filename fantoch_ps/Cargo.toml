@@ -13,7 +13,7 @@ dashmap = "3.4.4"
 futures = "0.3.4"
 rand = "0.7.3"
 serde = { version = "1.0.104", features = ["derive"] }
-tokio = { version = "0.2.11", features = ["full", "parking_lot"] }
+tokio = { version = "0.2.16", features = ["full", "parking_lot"] }
 threshold = "0.6.8"
 parking_lot = "0.10.0"
 num_cpus = "1.12.0"
