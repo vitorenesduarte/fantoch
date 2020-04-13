@@ -11,7 +11,7 @@ ahash = "0.3.2"
 bincode = "1.2.1"
 bytes = "0.5.4"
 futures = "0.3.4"
-parking_lot = "0.10.0"
+parking_lot = "0.10.2"
 rand = "0.7.3"
 serde = { version = "1.0.104", features = ["derive"] }
 tokio = { version = "0.2.11", features = ["full", "parking_lot"] }
