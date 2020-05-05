@@ -35,19 +35,20 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 # shellcheck disable=SC1090
 source "${HOME}/.cargo/env"
 
+# check for rust updates (in case it was already installed)
 if [ "${RUST_NIGHTLY}" == "true" ]; then
     # install nightly
     rustup toolchain install nightly
 
     # use nightly
     rustup override set nightly
+    rustup update nightly
 else
     # use stable
     rustup override set stable
+    rustup update stable
 fi
 
-# check for rust updates (in case it was already installed)
-rustup update
 
 if [ "${FLAMEGRAPH}" == "true" ]; then
     # install perf:
@@ -92,7 +93,7 @@ sudo sysctl --system
 sudo apt-get install -y htop dstat lsof
 
 # clean up
-sudo apt-get autoremove
+sudo apt-get autoremove -y
 
 # clone the repository if dir does not exist
 if [[ ! -d fantoch ]]; then
