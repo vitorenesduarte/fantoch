@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# - needed for RUN_MODE="leak"
+# - needed for use of unstable functions
 RUST_NIGHTLY="true"
 # - needed for RUN_MODE="flamegraph"
-FLAMEGRAPH="true"
+FLAMEGRAPH="false"
 # flag indicating whether we should just remove previous installations
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
@@ -35,13 +35,19 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 # shellcheck disable=SC1090
 source "${HOME}/.cargo/env"
 
-# check for rust updates (in case it was already installed)
-rustup update
-
 if [ "${RUST_NIGHTLY}" == "true" ]; then
     # install nightly
     rustup toolchain install nightly
+
+    # use nightly
+    rustup override set nightly
+else
+    # use stable
+    rustup override set stable
 fi
+
+# check for rust updates (in case it was already installed)
+rustup update
 
 if [ "${FLAMEGRAPH}" == "true" ]; then
     # install perf:
@@ -102,9 +108,6 @@ cd fantoch/ || {
 git stash
 git checkout "${branch}"
 git pull
-
-# use nightly
-rustup override set nightly
 
 # build all the binaries in release mode for maximum performance
 RUSTFLAGS="-C target-cpu=native" cargo build --release --bins
