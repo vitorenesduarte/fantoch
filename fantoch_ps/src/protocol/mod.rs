@@ -13,11 +13,15 @@ mod newt;
 // This module contains the definition of `FPaxos`.
 mod fpaxos;
 
+// // This module contains the definition of `Caesar`.
+// mod caesar;
+
 // Re-exports.
 pub use atlas::{AtlasLocked, AtlasSequential};
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
 pub use newt::{NewtAtomic, NewtSequential};
+// pub use caesar::Caesar;
 
 #[cfg(test)]
 mod tests {

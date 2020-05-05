@@ -4,15 +4,15 @@ use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fantoch::kvs::Key;
 
-type SharedClocksIter<'a, V> =
+type SharedIter<'a, V> =
     Iter<'a, Key, V, RandomState, DashMap<Key, V, RandomState>>;
 
 #[derive(Clone)]
-pub struct SharedClocks<V> {
+pub struct Shared<V> {
     clocks: DashMap<Key, V>,
 }
 
-impl<V> SharedClocks<V>
+impl<V> Shared<V>
 where
     V: Default,
 {
@@ -35,7 +35,7 @@ where
         }
     }
 
-    pub fn iter(&self) -> SharedClocksIter<V> {
+    pub fn iter(&self) -> SharedIter<V> {
         self.clocks.iter()
     }
 

@@ -1,5 +1,5 @@
 [![Build Status](https://travis-ci.org/vitorenesduarte/fantoch.svg?branch=master)](https://travis-ci.org/vitorenesduarte/fantoch)
-[![Coverage Status](https://coveralls.io/repos/github/vitorenesduarte/fantoch/badge.svg)](https://coveralls.io/github/vitorenesduarte/fantoch)
+[![Coverage Status](https://coveralls.io/repos/github/vitorenesduarte/fantoch/badge.svg?branch=master)](https://coveralls.io/github/vitorenesduarte/fantoch?branch=master)
 
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
