@@ -2,9 +2,9 @@
 # It is not intended for manual editing.
 [[package]]
 name = "ahash"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35b909d1c126f78ace756fc337133356c499eebeefcce930fa5fb018823f2b2d"
+checksum = "9c251dce3391a07b43218ca070203ecb8f9f520d35ab71312296a59dbceab154"
 dependencies = [
  "const-random",
 ]
