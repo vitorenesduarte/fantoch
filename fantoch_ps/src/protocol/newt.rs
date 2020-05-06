@@ -12,8 +12,7 @@ use fantoch::protocol::{
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashSet};
-use std::iter::FromIterator;
+use std::collections::HashSet;
 use std::mem;
 
 pub type NewtSequential = Newt<SequentialKeyClocks>;
@@ -156,7 +155,7 @@ impl<KC: KeyClocks> Newt<KC> {
             clock,
             quorum: self.bp.fast_quorum(),
         };
-        let target = self.bp.fast_quorum();
+        let target = self.bp.all();
 
         // return `ToSend`
         ToSend {
@@ -191,42 +190,53 @@ impl<KC: KeyClocks> Newt<KC> {
             return None;
         }
 
-        // check if it's a message from self
-        let message_from_self = from == self.bp.process_id;
+        // check if we're part of the fast quorum or not
+        if quorum.contains(&self.bp.process_id) {
+            // if yes, check if it's a message from self
+            let message_from_self = from == self.bp.process_id;
 
-        let (clock, process_votes) = if message_from_self {
-            // if it is, do not recompute clock and votes
-            (remote_clock, Votes::new(None))
+            let (clock, process_votes) = if message_from_self {
+                // if it is, do not recompute clock and votes
+                (remote_clock, Votes::new(None))
+            } else {
+                // otherwise, compute clock considering the `remote_clock` as
+                // its minimum value
+                let (clock, process_votes) =
+                    self.key_clocks.bump_and_vote(&cmd, remote_clock);
+                // check that there's one vote per key
+                assert_eq!(process_votes.len(), cmd.key_count());
+                (clock, process_votes)
+            };
+
+            // update command info
+            info.status = Status::COLLECT;
+            info.cmd = Some(cmd);
+            info.quorum = quorum;
+            info.clock = clock;
+
+            // create `MCollectAck` and target
+            let mcollectack = Message::MCollectAck {
+                dot,
+                clock,
+                process_votes,
+            };
+            let target = singleton![from];
+
+            // return `ToSend`
+            Some(ToSend {
+                from: self.id(),
+                target,
+                msg: mcollectack,
+            })
         } else {
-            // otherwise, compute clock considering the `remote_clock` as its
-            // minimum value
-            let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, remote_clock);
-            // check that there's one vote per key
-            assert_eq!(process_votes.len(), cmd.key_count());
-            (clock, process_votes)
-        };
+            // we're not part of the fast quorum, so we should simply remember
+            // the payload
+            info.status = Status::PENDING;
+            info.cmd = Some(cmd);
 
-        // update command info
-        info.status = Status::COLLECT;
-        info.cmd = Some(cmd);
-        info.quorum = BTreeSet::from_iter(quorum);
-        info.clock = clock;
-
-        // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck {
-            dot,
-            clock,
-            process_votes,
-        };
-        let target = singleton![from];
-
-        // return `ToSend`
-        Some(ToSend {
-            from: self.id(),
-            target,
-            msg: mcollectack,
-        })
+            // nothing to send
+            None
+        }
     }
 
     fn handle_mcollectack(
@@ -435,8 +445,7 @@ impl<KC: KeyClocks> Newt<KC> {
 #[derive(Clone)]
 struct NewtInfo {
     status: Status,
-    quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
-                                  * works in recovery */
+    quorum: HashSet<ProcessId>,
     cmd: Option<Command>, // `None` if noOp
     clock: u64,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
@@ -451,7 +460,7 @@ impl Info for NewtInfo {
     fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
         Self {
             status: Status::START,
-            quorum: BTreeSet::new(),
+            quorum: HashSet::new(),
             cmd: None,
             clock: 0,
             votes: Votes::new(None),
@@ -502,6 +511,7 @@ impl MessageIndex for Message {
 #[derive(PartialEq, Clone)]
 enum Status {
     START,
+    PENDING,
     COLLECT,
     COMMIT,
 }
