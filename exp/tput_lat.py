@@ -2,6 +2,8 @@
 
 import sys
 
+N = 3
+
 with open(".run_log") as f:
     content = f.readlines()
 
@@ -14,8 +16,8 @@ with open(".run_log") as f:
             index += 1
 
             metrics = {}
-            # read the next 3 lines
-            for _ in range(3):
+            # read the next N lines
+            for _ in range(N):
                 line = content[index]
                 parts = line.split()
                 # skip the first part
@@ -40,7 +42,7 @@ with open(".run_log") as f:
 
                 if id == "avg":
                     value_millis = value_micros / 1000
-                    tput = 1000 / value_millis * clients * 3
+                    tput = 1000 / value_millis * clients * N
                     print("tput", int(tput), "ops/s")
         else:
             print()
