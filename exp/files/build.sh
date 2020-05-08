@@ -7,7 +7,7 @@ FLAMEGRAPH="false"
 # flag indicating whether we should just remove previous installations
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
-DEBUG=true
+DEBUG=false
 
 # set the debug flag accordingly
 if [[ ${DEBUG} == true ]]; then

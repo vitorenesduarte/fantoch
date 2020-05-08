@@ -15,7 +15,7 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="basic"
+PROTOCOL="newt_atomic"
 PROCESSES=3
 FAULTS=1
 TRANSITIVE_CONFLICTS="true"
