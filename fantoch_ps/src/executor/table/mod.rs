@@ -11,7 +11,7 @@ use fantoch::kvs::{KVOp, Key};
 use fantoch::util;
 use std::collections::{BTreeMap, HashMap};
 use std::mem;
-use threshold::ARClock;
+use threshold::AEClock;
 
 type SortId = (u64, Dot);
 
@@ -90,14 +90,14 @@ struct VotesTable {
     stability_threshold: usize,
     // `votes_clock` collects all votes seen until now so that we can compute
     // which timestamp is stable
-    votes_clock: ARClock<ProcessId>,
+    votes_clock: AEClock<ProcessId>,
     ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
 
 impl VotesTable {
     fn new(n: usize, stability_threshold: usize) -> Self {
         let ids = util::process_ids(n);
-        let votes_clock = ARClock::with(ids);
+        let votes_clock = AEClock::with(ids);
         Self {
             n,
             stability_threshold,
