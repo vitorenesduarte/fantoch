@@ -101,12 +101,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 clock,
                 process_votes,
             } => self.handle_mcollectack(from, dot, clock, process_votes),
-            Message::MCommit {
-                dot,
-                cmd,
-                clock,
-                votes,
-            } => self.handle_mcommit(dot, cmd, clock, votes),
+            Message::MCommit { dot, clock, votes } => {
+                self.handle_mcommit(dot, clock, votes)
+            }
             Message::MPhantom { dot, process_votes } => {
                 self.handle_mphantom(dot, process_votes)
             }
@@ -155,7 +152,7 @@ impl<KC: KeyClocks> Newt<KC> {
             clock,
             quorum: self.bp.fast_quorum(),
         };
-        let target = self.bp.fast_quorum();
+        let target = self.bp.all();
 
         // return `ToSend`
         ToSend {
@@ -191,8 +188,18 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // check if we're part of the fast quorum or not
-        if quorum.contains(&self.bp.process_id) {
-            // if yes, check if it's a message from self
+        let belong_to_fq = quorum.contains(&self.bp.process_id);
+        if !belong_to_fq {
+            // we're not part of the fast quorum, so we should simply remember
+            // the payload
+            info.status = Status::PENDING;
+            info.cmd = Some(cmd);
+
+            // nothing to send
+            None
+        } else {
+            // if we belong to the fast quorum, check if it's a message from
+            // self
             let message_from_self = from == self.bp.process_id;
 
             let (clock, process_votes) = if message_from_self {
@@ -228,14 +235,6 @@ impl<KC: KeyClocks> Newt<KC> {
                 target,
                 msg: mcollectack,
             })
-        } else {
-            // we're not part of the fast quorum, so we should simply remember
-            // the payload
-            info.status = Status::PENDING;
-            info.cmd = Some(cmd);
-
-            // nothing to send
-            None
         }
     }
 
@@ -296,12 +295,8 @@ impl<KC: KeyClocks> Newt<KC> {
                 let votes = Self::reset_votes(&mut info.votes);
 
                 // create `MCommit` and target
-                // TODO create a slim-MCommit that only sends the payload to the
-                // non-fast-quorum members, or send the payload
-                // to all in a slim-MConsensus
                 let mcommit = Message::MCommit {
                     dot,
-                    cmd: info.cmd.clone(),
                     clock: max_clock,
                     votes,
                 };
@@ -326,7 +321,6 @@ impl<KC: KeyClocks> Newt<KC> {
     fn handle_mcommit(
         &mut self,
         dot: Dot,
-        cmd: Option<Command>,
         clock: u64,
         mut votes: Votes,
     ) -> Option<ToSend<Message>> {
@@ -335,15 +329,21 @@ impl<KC: KeyClocks> Newt<KC> {
         // get cmd info
         let info = self.cmds.get(dot);
 
-        if info.status == Status::COMMIT {
-            // do nothing if we're already COMMIT
-            // TODO what about the executed status?
+        // check if we have the payload
+        let have_payload = info.status == Status::PENDING
+            || info.status == Status::COLLECT
+            || info.status == Status::RECOVER;
+
+        if !have_payload {
+            // do nothing: we don't have the payload, which means that we also
+            // can't recover it
+            // - TODO are we sure that if we should recover this command, then
+            //   it will be recovered by some process?
             return None;
         }
 
         // update command info:
         info.status = Status::COMMIT;
-        info.cmd = cmd;
         info.clock = clock;
 
         // get current votes (probably from phantom messages) merge them with
@@ -485,7 +485,6 @@ pub enum Message {
     },
     MCommit {
         dot: Dot,
-        cmd: Option<Command>,
         clock: u64,
         votes: Votes,
     },
@@ -514,6 +513,7 @@ enum Status {
     PENDING,
     COLLECT,
     COMMIT,
+    RECOVER,
 }
 
 #[cfg(test)]
@@ -642,11 +642,12 @@ mod tests {
         executor.wait_for(&cmd);
         let mcollect = process.submit(None, cmd);
 
-        // check that the mcollect is being sent to 2 processes
+        // check that the mcollect is being sent to ALL
         let ToSend { target, .. } = mcollect.clone();
-        assert_eq!(target.len(), 2 * f);
+        assert_eq!(target.len(), n);
         assert!(target.contains(&1));
         assert!(target.contains(&2));
+        assert!(target.contains(&3));
 
         // handle mcollects
         let mut mcollectacks = simulation.forward_to_processes(mcollect);
