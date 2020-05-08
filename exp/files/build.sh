@@ -7,6 +7,14 @@ FLAMEGRAPH="false"
 # flag indicating whether we should just remove previous installations
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
+DEBUG=true
+
+# set the debug flag accordingly
+if [[ ${DEBUG} == true ]]; then
+    DEBUG_FLAG="-C debug-assertions"
+else
+    DEBUG_FLAG=""
+fi
 
 # maximum number of open files
 MAX_OPEN_FILES=100000
@@ -48,7 +56,6 @@ else
     rustup override set stable
     rustup update stable
 fi
-
 
 if [ "${FLAMEGRAPH}" == "true" ]; then
     # install perf:
@@ -111,4 +118,4 @@ git checkout "${branch}"
 git pull
 
 # build all the binaries in release mode for maximum performance
-RUSTFLAGS="-C target-cpu=native" cargo build --release --bins
+RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins

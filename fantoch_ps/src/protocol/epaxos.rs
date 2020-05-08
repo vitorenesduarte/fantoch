@@ -14,8 +14,7 @@ use fantoch::protocol::{
 use fantoch::util;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::iter::FromIterator;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use threshold::VClock;
 
@@ -208,7 +207,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // update command info
         info.status = Status::COLLECT;
-        info.quorum = BTreeSet::from_iter(quorum);
+        info.quorum = quorum;
         // create and set consensus value
         let value = ConsensusValue::with(cmd, clock.clone());
         assert!(info.synod.maybe_set_value(|| value));
@@ -463,8 +462,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 #[derive(Clone)]
 struct EPaxosInfo {
     status: Status,
-    quorum: BTreeSet<ProcessId>, /* this should be a `BTreeSet` so that `==`
-                                  * works in recovery */
+    quorum: HashSet<ProcessId>,
     synod: Synod<ConsensusValue>,
     // `quorum_clocks` is used by the coordinator to compute the threshold
     // clock when deciding whether to take the fast path
@@ -489,7 +487,7 @@ impl Info for EPaxosInfo {
         // ignored, or not even created.
         Self {
             status: Status::START,
-            quorum: BTreeSet::new(),
+            quorum: HashSet::new(),
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
         }
