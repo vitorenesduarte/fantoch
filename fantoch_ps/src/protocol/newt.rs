@@ -155,7 +155,7 @@ impl<KC: KeyClocks> Newt<KC> {
             clock,
             quorum: self.bp.fast_quorum(),
         };
-        let target = self.bp.all();
+        let target = self.bp.fast_quorum();
 
         // return `ToSend`
         ToSend {
