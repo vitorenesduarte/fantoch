@@ -143,9 +143,9 @@ impl VoteRange {
 impl fmt::Debug for VoteRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.start == self.end {
-            write!(f, "<{}, {}>", self.by, self.start)
+            write!(f, "<{}: {}>", self.by, self.start)
         } else {
-            write!(f, "<{}, {}-{}>", self.by, self.start, self.end)
+            write!(f, "<{}: {}-{}>", self.by, self.start, self.end)
         }
     }
 }
