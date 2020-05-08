@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-protocol="atlas"
+protocol="newt_atomic"
 
 for id in 1 2 3; do
     proc ${protocol} ${id} >.log_process_${id} 2>&1 &
@@ -26,7 +26,7 @@ for id in 1 2 3; do
     ended=""
 
     while [[ ${ended} != "1" ]]; do
-        started=$(grep -c "client ${id} started" .log_client_${id} | xargs)
+        ended=$(grep -c "all clients ended" .log_client_${id} | xargs)
         sleep 1
     done
 done
