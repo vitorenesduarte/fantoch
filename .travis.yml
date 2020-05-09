@@ -4,60 +4,25 @@ rust:
   - nightly
 
 matrix:
-  allow_failures:
-    - rust: stable
   fast_finish: true
-
-notifications:
-  email: false
 
 cache:
   cargo: true
   apt: true
 
-addons:
-  apt:
-    packages:
-      # <tarpaulin>
-      # - libssl-dev
-      # </tarpaulin>
+before_install:
+  - cargo install grcov
 
-      # <travis>
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - binutils-dev
-      - libiberty-dev
-      - cmake
-    sources:
-      - kalakris-cmake
-      # </travis>
+script:
+  - export CARGO_INCREMENTAL=0
+  - export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+  - export RUSTDOCFLAGS="-Cpanic=abort"
+  - cargo build
+  - QUICKCHECK_TESTS=10000 cargo test
 
-before_script: |
-  export PATH=$HOME/.cargo/bin:$PATH
-
-  # <tarpaulin>
-  # cargo install cargo-tarpaulin || echo "cargo-tarpaulin already installed"
-  # </tarpaulin>
-
-  # <travis>
-  cargo install cargo-travis || echo "cargo-travis already installed"
-  # </travis>
-
-script: |
-  cargo build
-  QUICKCHECK_TESTS=10000 cargo test 
-
-after_success: |
+after_success:
   # measure code coverage and upload to coveralls.io
-
-  # <tarpaulin>
-  # cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
-  # </tarpaulin>
-
-  # <travis>
-  cargo coveralls --lib || echo "cargo coveralls has failed"
-  # </travis>
+  - ./submit-to-coveralls.sh
 
 notifications:
   email: false
