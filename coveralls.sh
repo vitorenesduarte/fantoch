@@ -36,4 +36,3 @@ curl \
     --form "json_file=@coveralls.json" \
     --include \
     https://coveralls.io/api/v1/jobs
-
