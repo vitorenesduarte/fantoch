@@ -34,36 +34,30 @@ addons:
       # </travis>
 
 before_script: |
-  if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
-    export PATH=$HOME/.cargo/bin:$PATH
+  export PATH=$HOME/.cargo/bin:$PATH
 
-    # <tarpaulin>
-    # cargo install cargo-tarpaulin || echo "cargo-tarpaulin already installed"
-    # </tarpaulin>
+  # <tarpaulin>
+  # cargo install cargo-tarpaulin || echo "cargo-tarpaulin already installed"
+  # </tarpaulin>
 
-    # <travis>
-    cargo install cargo-travis || echo "cargo-travis already installed"
-    # </travis>
-
-  fi
+  # <travis>
+  cargo install cargo-travis || echo "cargo-travis already installed"
+  # </travis>
 
 script: |
   cargo build
   QUICKCHECK_TESTS=10000 cargo test 
 
 after_success: |
-  if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
-    # measure code coverage and upload to coveralls.io
+  # measure code coverage and upload to coveralls.io
 
-    # <tarpaulin>
-    # cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
-    # </tarpaulin>
+  # <tarpaulin>
+  # cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+  # </tarpaulin>
 
-    # <travis>
-    cargo coveralls --lib || echo "cargo coveralls has failed"
-    # </travis>
-
-  fi
+  # <travis>
+  cargo coveralls --lib || echo "cargo coveralls has failed"
+  # </travis>
 
 notifications:
   email: false
