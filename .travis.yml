@@ -41,7 +41,9 @@ before_script: |
   # </tarpaulin>
 
   # <travis>
+  cargo install cargo-update || echo "cargo-update already installed"
   cargo install cargo-travis || echo "cargo-travis already installed"
+  cargo install-update -a # update outdated cached binaries
   # </travis>
 
 script: |
