@@ -13,6 +13,10 @@ mod base;
 // protocol fault-tolerant (but still inconsistent).
 mod basic;
 
+// This module contains common functionality from tracking when it's safe to
+// garbage-collect a command, i.e., when it's been committed at all processes.
+mod gc;
+
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;

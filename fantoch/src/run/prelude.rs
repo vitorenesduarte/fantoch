@@ -12,6 +12,9 @@ use std::error::Error;
 // the worker index that should be used by leader-based protocols
 pub const LEADER_WORKER_INDEX: usize = 0;
 
+// the worker index that should be for garbage collection
+pub const GC_WORKER_INDEX: usize = 0;
+
 // common error type
 pub type RunResult<V> = Result<V, Box<dyn Error>>;
 

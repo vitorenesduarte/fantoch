@@ -222,9 +222,8 @@ impl Basic {
             .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
         self.to_executor.extend(execution_info);
 
-        // TODO the following is incorrect: it should only be deleted once it
-        // has been committed at all processes
-        self.cmds.remove(dot);
+        // record that this command has been committed
+        self.cmds.commit(dot);
 
         // nothing to send
         None
@@ -273,13 +272,14 @@ pub enum Message {
 
 impl MessageIndex for Message {
     fn index(&self) -> MessageIndexes {
-        let dot = match self {
-            Self::MStore { dot, .. } => dot,
-            Self::MStoreAck { dot, .. } => dot,
-            Self::MCommit { dot, .. } => dot,
-            Self::MGarbageCollection { .. } => todo!(),
-        };
-        MessageIndexes::DotIndex(dot)
+        match self {
+            Self::MStore { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MStoreAck { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MCommit { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MGarbageCollection { .. } => {
+                MessageIndexes::Index(crate::run::GC_WORKER_INDEX)
+            }
+        }
     }
 }
 
