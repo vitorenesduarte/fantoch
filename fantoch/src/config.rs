@@ -18,6 +18,8 @@ pub struct Config {
     workers: usize,
     /// defines the number of `Executor` workers
     executors: usize,
+    /// defines the delay between garbage collections (milliseconds)
+    garbage_collection_delay: u64,
 }
 
 impl Config {
@@ -41,6 +43,8 @@ impl Config {
         // `Executor`
         let workers = 1;
         let executors = 1;
+        // by default, garbage collection runs every 500ms
+        let garbage_collection_delay = 500;
         Self {
             n,
             f,
@@ -50,6 +54,7 @@ impl Config {
             leader,
             workers,
             executors,
+            garbage_collection_delay,
         }
     }
 
@@ -121,6 +126,16 @@ impl Config {
     /// Changes the value of `Executor`'s.
     pub fn set_executors(&mut self, executors: usize) {
         self.executors = executors;
+    }
+
+    /// Checks the garbage collection delay.
+    pub fn garbage_collection_delay(&self) -> u64 {
+        self.garbage_collection_delay
+    }
+
+    /// Sets the garbage collection delay.
+    pub fn set_garbage_collection_delay(&mut self, delay: u64) {
+        self.garbage_collection_delay = delay;
     }
 }
 
@@ -253,6 +268,13 @@ mod tests {
         config.set_executors(20);
         assert_eq!(config.workers(), 10);
         assert_eq!(config.executors(), 20);
+
+        // by default, the garbage collection delay is 500
+        assert_eq!(config.garbage_collection_delay(), 500,);
+
+        // change its value and check it has changed
+        config.set_garbage_collection_delay(100);
+        assert_eq!(config.garbage_collection_delay(), 100);
     }
 
     #[test]

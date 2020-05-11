@@ -8,7 +8,7 @@ const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
-const DEFAULT_FLUSH_INTERVAL: usize = 0; // microseconds
+const DEFAULT_FLUSH_INTERVAL: usize = 0; // milliseconds
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 #[allow(dead_code)]

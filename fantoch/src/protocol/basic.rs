@@ -10,6 +10,7 @@ use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
+use threshold::VClock;
 
 type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 
@@ -22,10 +23,14 @@ pub struct Basic {
 
 impl Protocol for Basic {
     type Message = Message;
+    type PeriodicEvent = PeriodicEvent;
     type Executor = BasicExecutor;
 
     /// Creates a new `Basic` process.
-    fn new(process_id: ProcessId, config: Config) -> Self {
+    fn new(
+        process_id: ProcessId,
+        config: Config,
+    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = config.basic_quorum_size();
         let write_quorum_size = 0; // there's no write quorum as we have 100% fast paths
@@ -46,11 +51,18 @@ impl Protocol for Basic {
         let to_executor = Vec::new();
 
         // create `Basic`
-        Self {
+        let protocol = Self {
             bp,
             cmds,
             to_executor,
-        }
+        };
+
+        // create periodic events
+        let gc_delay = config.garbage_collection_delay();
+        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+
+        // return both
+        (protocol, events)
     }
 
     /// Returns the process identifier.
@@ -85,7 +97,18 @@ impl Protocol for Basic {
             Message::MCommit { dot, cmd } => {
                 self.handle_mcommit(from, dot, cmd)
             }
+            Message::MGarbageCollection { committed } => {
+                self.handle_mgc(from, committed)
+            }
         }
+    }
+
+    /// Handles periodic local events.
+    fn handle_event(
+        &mut self,
+        event: Self::PeriodicEvent,
+    ) -> Option<ToSend<Message>> {
+        todo!()
     }
 
     /// Returns new commands results to be sent to clients.
@@ -206,6 +229,14 @@ impl Basic {
         // nothing to send
         None
     }
+
+    fn handle_mgc(
+        &mut self,
+        from: ProcessId,
+        committed: VClock<ProcessId>,
+    ) -> Option<ToSend<Message>> {
+        None
+    }
 }
 
 // `BasicInfo` contains all information required in the life-cyle of a
@@ -237,6 +268,7 @@ pub enum Message {
     MStore { dot: Dot, cmd: Command },
     MStoreAck { dot: Dot },
     MCommit { dot: Dot, cmd: Command },
+    MGarbageCollection { committed: VClock<ProcessId> },
 }
 
 impl MessageIndex for Message {
@@ -245,9 +277,15 @@ impl MessageIndex for Message {
             Self::MStore { dot, .. } => dot,
             Self::MStoreAck { dot, .. } => dot,
             Self::MCommit { dot, .. } => dot,
+            Self::MGarbageCollection { .. } => todo!(),
         };
         MessageIndexes::DotIndex(dot)
     }
+}
+
+#[derive(Clone)]
+pub enum PeriodicEvent {
+    GarbageCollection,
 }
 
 #[cfg(test)]
@@ -298,9 +336,9 @@ mod tests {
         let executor_3 = BasicExecutor::new(config);
 
         // basic
-        let mut basic_1 = Basic::new(process_id_1, config);
-        let mut basic_2 = Basic::new(process_id_2, config);
-        let mut basic_3 = Basic::new(process_id_3, config);
+        let (mut basic_1, basic_1_events) = Basic::new(process_id_1, config);
+        let (mut basic_2, basic_2_events) = Basic::new(process_id_2, config);
+        let (mut basic_3, basic_3_events) = Basic::new(process_id_3, config);
 
         // discover processes in all basic
         let sorted = util::sort_processes_by_distance(

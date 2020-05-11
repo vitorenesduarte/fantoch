@@ -595,9 +595,9 @@ pub mod tests {
         }
 
         // create processes
-        let process_1 = P::new(1, config);
-        let process_2 = P::new(2, config);
-        let process_3 = P::new(3, config);
+        let (process_1, process_1_events) = P::new(1, config);
+        let (process_2, process_2_events) = P::new(2, config);
+        let (process_3, process_3_events) = P::new(3, config);
 
         // create semaphore so that processes can notify once they're connected
         let semaphore = Arc::new(Semaphore::new(0));

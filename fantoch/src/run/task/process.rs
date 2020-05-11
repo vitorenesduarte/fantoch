@@ -222,7 +222,7 @@ async fn writer_task<P>(
     if let Some(tcp_flush_interval) = tcp_flush_interval {
         // create interval
         let mut interval =
-            time::interval(Duration::from_micros(tcp_flush_interval as u64));
+            time::interval(Duration::from_millis(tcp_flush_interval as u64));
         loop {
             tokio::select! {
                 msg = parent.recv() => {

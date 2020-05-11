@@ -35,9 +35,15 @@ pub trait Protocol: Clone {
         + Send
         + Sync
         + MessageIndex; // TODO why is Sync needed??
+    type PeriodicEvent: Clone;
     type Executor: Executor + Send;
 
-    fn new(process_id: ProcessId, config: Config) -> Self;
+    /// Returns a new instance of the protocol and a list of periodic events
+    /// (intervals in milliseconds).
+    fn new(
+        process_id: ProcessId,
+        config: Config,
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>);
 
     fn id(&self) -> ProcessId;
 
@@ -55,6 +61,12 @@ pub trait Protocol: Clone {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+    ) -> Option<ToSend<Self::Message>>;
+
+    #[must_use]
+    fn handle_event(
+        &mut self,
+        event: Self::PeriodicEvent,
     ) -> Option<ToSend<Self::Message>>;
 
     #[must_use]

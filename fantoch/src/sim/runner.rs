@@ -15,6 +15,7 @@ enum ScheduleAction<P: Protocol> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
+    PeriodicEvent(ProcessId, P::PeriodicEvent, u128),
 }
 
 #[derive(Clone)]
@@ -56,6 +57,7 @@ where
         // create simulation
         let mut simulation = Simulation::new();
         let mut processes = Vec::with_capacity(config.n());
+        let mut periodic_actions = Vec::new();
 
         // create processes
         let to_discover: Vec<_> = process_regions
@@ -64,8 +66,17 @@ where
             .map(|(region, process_id)| {
                 let process_id = process_id as u64;
                 // create process and save it
-                let process = P::new(process_id, config);
+                let (process, process_events) = P::new(process_id, config);
                 processes.push((region.clone(), process));
+
+                // save periodic actions
+                // - map the delay from milliseconds from microseconds
+                periodic_actions.extend(process_events.into_iter().map(
+                    |(event, delay_milli)| {
+                        let delay_micro = (delay_milli * 1000) as u128;
+                        (process_id, event, delay_micro)
+                    },
+                ));
 
                 (process_id, region)
             })
@@ -113,14 +124,21 @@ where
         }
 
         // create runner
-        Self {
+        let mut runner = Self {
             planet,
             simulation,
             time: SimTime::new(),
             schedule: Schedule::new(),
             process_to_region,
             client_to_region,
+        };
+
+        // schedule periodic actions
+        for (process_id, event, delay) in periodic_actions {
+            runner.schedule_event(process_id, event, delay);
         }
+
+        runner
     }
 
     /// Run the simulation.
@@ -205,6 +223,21 @@ where
                             submit,
                         );
                     }
+                    ScheduleAction::PeriodicEvent(process_id, event, delay) => {
+                        // get process
+                        let (process, _) =
+                            self.simulation.get_process(process_id);
+
+                        // handle event
+                        let to_send = process.handle_event(event.clone());
+                        self.schedule_send(
+                            MessageRegion::Process(process_id),
+                            to_send,
+                        );
+
+                        // schedule the next periodic event
+                        self.schedule_event(process_id, event, delay);
+                    }
                 }
             })
         }
@@ -257,6 +290,18 @@ where
         let client_id = cmd_result.rifl().source();
         let action = ScheduleAction::SendToClient(client_id, cmd_result);
         self.schedule_it(from_region, MessageRegion::Client(client_id), action);
+    }
+
+    /// Schedules the next periodic event.
+    fn schedule_event(
+        &mut self,
+        process_id: ProcessId,
+        event: P::PeriodicEvent,
+        delay: u128,
+    ) {
+        // create action
+        let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
+        self.schedule.schedule(&self.time, delay, action);
     }
 
     fn schedule_it(
