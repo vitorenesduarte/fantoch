@@ -1,6 +1,6 @@
 mod common;
 
-use fantoch::protocol::{Basic, Protocol};
+use fantoch::protocol::Basic;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -21,10 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ) = common::protocol::parse_args();
 
     // create process
-    let process = Basic::new(process_id, config);
-
-    common::tokio_runtime().block_on(fantoch::run::process(
-        process,
+    let process = fantoch::run::process::<Basic, String>(
         process_id,
         sorted_processes,
         ip,
@@ -38,5 +35,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         channel_buffer_size,
         multiplexing,
         execution_log,
-    ))
+    );
+    common::tokio_runtime().block_on(process)
 }

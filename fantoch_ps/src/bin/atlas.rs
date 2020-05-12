@@ -1,6 +1,5 @@
 mod common;
 
-use fantoch::protocol::Protocol;
 use fantoch_ps::protocol::AtlasSequential;
 use std::error::Error;
 
@@ -24,10 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ) = common::protocol::parse_args();
 
     // create process
-    let process = AtlasSequential::new(process_id, config);
-
-    common::tokio_runtime().block_on(fantoch::run::process(
-        process,
+    let process = fantoch::run::process::<AtlasSequential, String>(
         process_id,
         sorted_processes,
         ip,
@@ -41,5 +37,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         channel_buffer_size,
         multiplexing,
         execution_log,
-    ))
+    );
+    common::tokio_runtime().block_on(process)
 }

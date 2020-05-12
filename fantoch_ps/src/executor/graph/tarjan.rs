@@ -85,11 +85,11 @@ impl TarjanSCCFinder {
         vertex.set_on_stack(true);
         self.stack.push(dot);
 
-        // compute executed clock frontier
-        let executed_clock_frontier = executed_clock.frontier();
-
+        // TODO can we avoid vertex.clock().clone()
+        // - if rust understood mutability of struct fields, the clone wouldn't
+        //   be necessary
         // compute non-executed deps for each process
-        for (process_id, to) in vertex.clock().iter() {
+        for (process_id, to) in vertex.clock().clone().iter() {
             // get min event from which we need to start checking for
             // dependencies
             let to = to.frontier();

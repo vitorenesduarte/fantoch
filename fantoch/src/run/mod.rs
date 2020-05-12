@@ -99,8 +99,7 @@ use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
 use tokio::time::{self, Duration};
 
-pub async fn process<A, P>(
-    process: P,
+pub async fn process<P, A>(
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
     ip: IpAddr,
@@ -116,14 +115,13 @@ pub async fn process<A, P>(
     execution_log: Option<String>,
 ) -> RunResult<()>
 where
-    A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
+    A: ToSocketAddrs + Debug + Clone,
 {
     // create semaphore for callers that don't care about the connected
     // notification
     let semaphore = Arc::new(Semaphore::new(0));
-    process_with_notify::<A, P>(
-        process,
+    process_with_notify::<P, A>(
         process_id,
         sorted_processes,
         ip,
@@ -143,8 +141,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn process_with_notify<A, P>(
-    mut process: P,
+async fn process_with_notify<P, A>(
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
     ip: IpAddr,
@@ -161,8 +158,8 @@ async fn process_with_notify<A, P>(
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
 where
-    A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
+    A: ToSocketAddrs + Debug + Clone,
 {
     // panic if protocol is not parallel and we have more than one worker
     if config.workers() > 1 && !P::parallel() {
@@ -189,6 +186,9 @@ where
     if !P::leaderless() && config.leader().is_none() {
         panic!("running leader-based protocol without a leader");
     }
+
+    // create process
+    let (mut process, process_events) = P::new(process_id, config);
 
     // discover processes
     process.discover(sorted_processes);
@@ -595,11 +595,6 @@ pub mod tests {
             config.set_leader(1);
         }
 
-        // create processes
-        let (process_1, process_1_events) = P::new(1, config);
-        let (process_2, process_2_events) = P::new(2, config);
-        let (process_3, process_3_events) = P::new(3, config);
-
         // create semaphore so that processes can notify once they're connected
         let semaphore = Arc::new(Semaphore::new(0));
 
@@ -630,8 +625,7 @@ pub mod tests {
         let p3_execution_log = Some(String::from("p3.execution_log"));
 
         // spawn processes
-        task::spawn_local(process_with_notify::<String, P>(
-            process_1,
+        task::spawn_local(process_with_notify::<P, String>(
             1,
             vec![1, 2, 3],
             localhost,
@@ -650,8 +644,7 @@ pub mod tests {
             p1_execution_log,
             semaphore.clone(),
         ));
-        task::spawn_local(process_with_notify::<String, P>(
-            process_2,
+        task::spawn_local(process_with_notify::<P, String>(
             2,
             vec![2, 3, 1],
             localhost,
@@ -670,8 +663,7 @@ pub mod tests {
             p2_execution_log,
             semaphore.clone(),
         ));
-        task::spawn_local(process_with_notify::<String, P>(
-            process_3,
+        task::spawn_local(process_with_notify::<P, String>(
             3,
             vec![3, 1, 2],
             localhost,
