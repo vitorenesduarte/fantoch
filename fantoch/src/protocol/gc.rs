@@ -73,7 +73,7 @@ impl GCTrack {
 
     // TODO we should design a fault-tolerant version of this
     fn stable_clock(&mut self) -> VClock<ProcessId> {
-        if self.all_but_me.len() != self.n + 1 {
+        if self.all_but_me.len() != self.n - 1 {
             // if we don't have info from all processes, then there are no
             // stable dots.
             return Self::bottom_vclock(self.n);
@@ -94,5 +94,81 @@ impl GCTrack {
 
     fn bottom_vclock(n: usize) -> VClock<ProcessId> {
         VClock::with(util::process_ids(n))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use threshold::MaxSet;
+
+    // create vector clock with two entries: process 1 and process 2
+    fn vclock(p1: u64, p2: u64) -> VClock<ProcessId> {
+        VClock::from(vec![(1, MaxSet::from(p1)), (2, MaxSet::from(p2))])
+    }
+
+    #[test]
+    fn gc_flow() {
+        let n = 2;
+        // create new gc track for the our process: 1
+        let mut gc = GCTrack::new(1, n);
+
+        // let's also create a gc track for process 2
+        let mut gc2 = GCTrack::new(2, n);
+
+        // there's nothing committed and nothing stable
+        assert_eq!(gc.committed(), vclock(0, 0));
+        assert_eq!(gc.stable_clock(), vclock(0, 0));
+        assert_eq!(gc.stable(), vec![]);
+
+        // let's create a bunch of dots
+        let dot11 = Dot::new(1, 1);
+        let dot12 = Dot::new(1, 2);
+        let dot13 = Dot::new(1, 3);
+
+        // and commit dot12 locally
+        gc.commit(dot12);
+
+        // this doesn't change anything
+        assert_eq!(gc.committed(), vclock(0, 0));
+        assert_eq!(gc.stable_clock(), vclock(0, 0));
+        assert_eq!(gc.stable(), vec![]);
+
+        // however, if we also commit dot11, the committed clock will change
+        gc.commit(dot11);
+        assert_eq!(gc.committed(), vclock(2, 0));
+        assert_eq!(gc.stable_clock(), vclock(0, 0));
+        assert_eq!(gc.stable(), vec![]);
+
+        // if we update with the committed clock from process 2 nothing changes
+        gc.committed_by(2, gc2.committed());
+        assert_eq!(gc.committed(), vclock(2, 0));
+        assert_eq!(gc.stable_clock(), vclock(0, 0));
+        assert_eq!(gc.stable(), vec![]);
+
+        // let's commit dot11 and dot13 at process 2
+        gc2.commit(dot11);
+        gc2.commit(dot13);
+
+        // now dot11 is stable at process 1
+        gc.committed_by(2, gc2.committed());
+        assert_eq!(gc.committed(), vclock(2, 0));
+        assert_eq!(gc.stable_clock(), vclock(1, 0));
+        assert_eq!(gc.stable(), vec![dot11]);
+
+        // if we call stable again, no new dot is returned
+        assert_eq!(gc.stable_clock(), vclock(1, 0));
+        assert_eq!(gc.stable(), vec![]);
+
+        // let's commit dot13 at process 1 and dot12 at process 2
+        gc.commit(dot13);
+        gc2.commit(dot12);
+
+        // now both dot12 and dot13 are stable at process 1
+        gc.committed_by(2, gc2.committed());
+        assert_eq!(gc.committed(), vclock(3, 0));
+        assert_eq!(gc.stable_clock(), vclock(3, 0));
+        assert_eq!(gc.stable(), vec![dot12, dot13]);
+        assert_eq!(gc.stable(), vec![]);
     }
 }
