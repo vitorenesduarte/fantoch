@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::{
-    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol,
-    ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes,
+    PeriodicEventIndex, Protocol, ToSend,
 };
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -318,9 +318,17 @@ impl MessageIndex for Message {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PeriodicEvent {
     GarbageCollection,
+}
+
+impl PeriodicEventIndex for PeriodicEvent {
+    fn index(&self) -> Option<usize> {
+        match self {
+            Self::GarbageCollection => Some(crate::run::GC_WORKER_INDEX),
+        }
+    }
 }
 
 #[cfg(test)]

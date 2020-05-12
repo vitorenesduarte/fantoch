@@ -187,12 +187,6 @@ where
         panic!("running leader-based protocol without a leader");
     }
 
-    // create process
-    let (mut process, process_events) = P::new(process_id, config);
-
-    // discover processes
-    process.discover(sorted_processes);
-
     // check ports are different
     assert!(port != client_port);
 
@@ -244,6 +238,13 @@ where
         config.workers(),
     );
 
+    // create forward channels: periodic task -> workers
+    let (periodic_to_workers, periodic_to_workers_rxs) = PeriodicToWorkers::new(
+        "periodic_to_workers",
+        channel_buffer_size,
+        config.workers(),
+    );
+
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
         "client_to_executors",
@@ -251,6 +252,7 @@ where
         config.executors(),
     );
 
+    // start listener
     task::client::start_listener(
         process_id,
         listener,
@@ -276,11 +278,15 @@ where
         client_to_executors_rxs,
     );
 
+    // start process workers
     let handles = task::process::start_processes::<P>(
-        process,
         process_id,
+        config,
+        sorted_processes,
         reader_to_workers_rxs,
         client_to_workers_rxs,
+        periodic_to_workers,
+        periodic_to_workers_rxs,
         to_writers,
         reader_to_workers,
         worker_to_executors,

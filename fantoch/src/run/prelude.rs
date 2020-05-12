@@ -4,15 +4,21 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{MessageIndex, MessageIndexes, Protocol};
+use crate::protocol::{
+    MessageIndex, MessageIndexes, PeriodicEventIndex, Protocol,
+};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::fmt;
 
 // the worker index that should be used by leader-based protocols
 pub const LEADER_WORKER_INDEX: usize = 0;
 
-// the worker index that should be for garbage collection
+// the worker index that should be for garbage collection:
+// - it's okay to be the same as the leader index because this value is not used
+//   by leader-based protocols
+// - e.g. in fpaxos, the gc only runs in the acceptor worker
 pub const GC_WORKER_INDEX: usize = 0;
 
 // common error type
@@ -40,6 +46,7 @@ pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
 pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
+pub type PeriodicEventReceiver<P> = ChannelReceiver<PeriodicEventMessage<P>>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
 pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
@@ -88,7 +95,34 @@ where
     }
 }
 
-// 3. executors receive messages from clients
+// 3. workers receive messages from the periodic-events task
+// - this wrapper is here only to be able to implement this trait
+// - otherwise the compiler can't figure out between
+//  > A: PeriodicEventIndex
+//  > A: MessageKey
+#[derive(Clone)]
+pub struct PeriodicEventMessage<P: Protocol>(pub P::PeriodicEvent);
+impl<P> fmt::Debug for PeriodicEventMessage<P>
+where
+    P: Protocol,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+pub type PeriodicToWorkers<P> = pool::ToPool<PeriodicEventMessage<P>>;
+// The following allows e.g. <P as Protocol>::Periodic to be `ToPool::forward`
+impl<P> pool::PoolIndex for PeriodicEventMessage<P>
+where
+    P: Protocol,
+{
+    fn index(&self) -> Option<usize> {
+        self.0.index()
+    }
+}
+
+// 4. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<FromClient>;
 // The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
 impl pool::PoolIndex for (&Key, Rifl) {
@@ -97,7 +131,7 @@ impl pool::PoolIndex for (&Key, Rifl) {
     }
 }
 
-// 4. executors receive messages from workers
+// 5. executors receive messages from workers
 pub type WorkerToExecutors<P> =
     pool::ToPool<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 // The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo

@@ -9,7 +9,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
     BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol,
-    ToSend,
+    ToSend, PeriodicEventIndex,
 };
 use fantoch::util;
 use fantoch::{log, singleton};
@@ -606,9 +606,17 @@ impl MessageIndex for Message {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PeriodicEvent {
     GarbageCollection,
+}
+
+impl PeriodicEventIndex for PeriodicEvent {
+    fn index(&self) -> Option<usize> {
+        match self {
+            Self::GarbageCollection => Some(fantoch::run::GC_WORKER_INDEX),
+        }
+    }
 }
 
 /// `Status` of commands.

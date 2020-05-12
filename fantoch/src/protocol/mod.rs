@@ -39,7 +39,7 @@ pub trait Protocol: Clone {
         + Send
         + Sync
         + MessageIndex; // TODO why is Sync needed??
-    type PeriodicEvent: Clone;
+    type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex;
     type Executor: Executor + Send;
 
     /// Returns a new instance of the protocol and a list of periodic events
@@ -109,6 +109,14 @@ pub enum MessageIndexes<'a> {
     Index(usize),
     DotIndex(&'a Dot),
     None,
+}
+
+pub trait PeriodicEventIndex {
+    /// Similar to `MessageIndex`, but there are only two types of events:
+    /// - Some(index): defines the index of the worker that should receive the
+    ///   event
+    /// - None: no indexing; event will be sent to all workers
+    fn index(&self) -> Option<usize>;
 }
 
 #[derive(Clone, PartialEq, Debug)]
