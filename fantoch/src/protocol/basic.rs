@@ -2,9 +2,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
-use crate::protocol::info::{CommandsInfo, Info};
 use crate::protocol::{
-    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes, Protocol,
+    ToSend,
 };
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -108,7 +108,26 @@ impl Protocol for Basic {
         &mut self,
         event: Self::PeriodicEvent,
     ) -> Option<ToSend<Message>> {
-        todo!()
+        match event {
+            PeriodicEvent::GarbageCollection => {
+                // run GC and retrieve the committed clock
+                let committed = self.cmds.gc();
+
+                // create mgc
+                let mgarbagecollection =
+                    Message::MGarbageCollection { committed };
+
+                // create target
+                let target = self.bp.all();
+
+                // return `ToSend`
+                Some(ToSend {
+                    from: self.id(),
+                    target,
+                    msg: mgarbagecollection,
+                })
+            }
+        }
     }
 
     /// Returns new commands results to be sent to clients.
@@ -234,6 +253,7 @@ impl Basic {
         from: ProcessId,
         committed: VClock<ProcessId>,
     ) -> Option<ToSend<Message>> {
+        self.cmds.committed_by(from, committed);
         None
     }
 }
@@ -336,9 +356,9 @@ mod tests {
         let executor_3 = BasicExecutor::new(config);
 
         // basic
-        let (mut basic_1, basic_1_events) = Basic::new(process_id_1, config);
-        let (mut basic_2, basic_2_events) = Basic::new(process_id_2, config);
-        let (mut basic_3, basic_3_events) = Basic::new(process_id_3, config);
+        let (mut basic_1, _) = Basic::new(process_id_1, config);
+        let (mut basic_2, _) = Basic::new(process_id_2, config);
+        let (mut basic_3, _) = Basic::new(process_id_3, config);
 
         // discover processes in all basic
         let sorted = util::sort_processes_by_distance(
