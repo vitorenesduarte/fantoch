@@ -32,7 +32,6 @@ impl MultiVotesTable {
     }
 
     /// Add a new command, its clock and votes to the votes table.
-    #[must_use]
     pub fn add_votes(
         &mut self,
         dot: Dot,
@@ -51,7 +50,6 @@ impl MultiVotesTable {
     }
 
     /// Adds phantom votes to the votes table.
-    #[must_use]
     pub fn add_phantom_votes(
         &mut self,
         key: &Key,

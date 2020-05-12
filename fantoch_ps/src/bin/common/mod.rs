@@ -108,5 +108,5 @@ fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
 }
 
 pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
-    execution_log.map(|execution_log| String::from(execution_log))
+    execution_log.map(String::from)
 }
