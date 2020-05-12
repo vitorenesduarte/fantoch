@@ -4,7 +4,7 @@ use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use std::cmp;
 use std::collections::{BTreeSet, HashSet};
-use threshold::{AEClock, VClock};
+use threshold::{AEClock, EventSet, VClock};
 
 /// commands are sorted inside an SCC given their dot
 pub type SCC = BTreeSet<Dot>;
@@ -89,18 +89,19 @@ impl TarjanSCCFinder {
         let executed_clock_frontier = executed_clock.frontier();
 
         // compute non-executed deps for each process
-        for (process_id, to) in vertex.clock().clone().frontier() {
+        for (process_id, to) in vertex.clock().iter() {
             // get min event from which we need to start checking for
             // dependencies
+            let to = to.frontier();
             let from = if self.transitive_conflicts {
                 // if we can assume that conflicts are transitive, it is enough
                 // to check for the highest dependency
                 to
             } else {
-                let executed = executed_clock_frontier
+                let executed = executed_clock
                     .get(process_id)
                     .expect("process should exist in the executed clock");
-                executed + 1
+                executed.frontier() + 1
             };
 
             // OPTIMIZATION: start from the highest dep to the lowest:

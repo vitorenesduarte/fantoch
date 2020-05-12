@@ -16,7 +16,7 @@ rand = "0.7.3"
 serde = { version = "1.0.110", features = ["derive"] }
 tokio = { version = "0.2.20", features = ["full", "parking_lot"] }
 tokio-util = { version = "0.3.1", features = ["codec"] }
-threshold = "0.7.1"
+threshold = "0.8.2"
 
 [dev-dependencies]
 quickcheck = "0.9.2"

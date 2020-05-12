@@ -1,8 +1,7 @@
 use crate::id::{Dot, ProcessId};
 use crate::protocol::gc::GCTrack;
-use crate::util;
 use std::collections::HashMap;
-use threshold::{AEClock, VClock};
+use threshold::VClock;
 
 pub trait Info {
     fn new(
@@ -64,7 +63,11 @@ where
     }
 
     /// Records that set of `committed` commands by process `from`.
-    pub fn committed_by(&mut self, from: ProcessId, committed: VClock<Dot>) {
+    pub fn committed_by(
+        &mut self,
+        from: ProcessId,
+        committed: VClock<ProcessId>,
+    ) {
         self.gc_track.committed_by(from, committed);
     }
 
