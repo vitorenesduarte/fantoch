@@ -48,14 +48,16 @@ where
     pub fn start_clients(
         &mut self,
         time: &dyn SysTime,
-    ) -> Vec<(ClientId, Option<(ProcessId, Command)>)> {
+    ) -> Vec<(ClientId, ProcessId, Command)> {
         self.clients
             .iter_mut()
             .map(|(_, client)| {
                 let client = client.get_mut();
                 // start client
-                let submit = client.next_cmd(time);
-                (client.id(), submit)
+                let (process_id, cmd) = client
+                    .next_cmd(time)
+                    .expect("clients should submit at least one command");
+                (client.id(), process_id, cmd)
             })
             .collect()
     }

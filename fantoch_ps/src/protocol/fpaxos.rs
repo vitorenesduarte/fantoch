@@ -5,8 +5,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, MessageIndex, MessageIndexes, Protocol, ToSend,
-    PeriodicEventIndex,
+    BaseProcess, MessageIndex, MessageIndexes, PeriodicEventIndex, Protocol,
+    ToSend,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};

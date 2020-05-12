@@ -33,6 +33,8 @@ pub struct Runner<P: Protocol> {
     process_to_region: HashMap<ProcessId, Region>,
     // mapping from client identifier to its region
     client_to_region: HashMap<ClientId, Region>,
+    // total number of clients
+    client_count: usize,
 }
 
 impl<P> Runner<P>
@@ -131,6 +133,9 @@ where
             schedule: Schedule::new(),
             process_to_region,
             client_to_region,
+            // since we start ids in 1, the last id is the same as the numbe of
+            // clients
+            client_count: client_id as usize,
         };
 
         // schedule periodic actions
@@ -147,9 +152,13 @@ where
         self.simulation
             .start_clients(&self.time)
             .into_iter()
-            .for_each(|(client_id, submit)| {
+            .for_each(|(client_id, process_id, cmd)| {
                 // schedule client commands
-                self.schedule_submit(MessageRegion::Client(client_id), submit)
+                self.schedule_submit(
+                    MessageRegion::Client(client_id),
+                    process_id,
+                    cmd,
+                )
             });
 
         // run simulation loop
@@ -163,8 +172,11 @@ where
     }
 
     fn simulation_loop(&mut self) {
+        let mut clients_done = 0;
+        // run the simulation while clients don't finish
         // run the simulation while there are things scheduled
-        while let Some(actions) = self.schedule.next_actions(&mut self.time) {
+        while clients_done != self.client_count {
+            let actions = self.schedule.next_actions(&mut self.time).expect("there should be more actions since clients have not finished yet");
             // for each scheduled action
             actions.into_iter().for_each(|action| {
                 match action {
@@ -218,10 +230,15 @@ where
                         let submit = self
                             .simulation
                             .forward_to_client(cmd_result, &self.time);
-                        self.schedule_submit(
-                            MessageRegion::Client(client_id),
-                            submit,
-                        );
+                        if let Some((process_id, cmd)) = submit {
+                            self.schedule_submit(
+                                MessageRegion::Client(client_id),
+                                process_id,
+                                cmd,
+                            );
+                        } else {
+                            clients_done += 1;
+                        }
                     }
                     ScheduleAction::PeriodicEvent(process_id, event, delay) => {
                         // get process
@@ -248,17 +265,16 @@ where
     fn schedule_submit(
         &mut self,
         from_region: MessageRegion,
-        submit: Option<(ProcessId, Command)>,
+        process_id: ProcessId,
+        cmd: Command,
     ) {
-        if let Some((process_id, cmd)) = submit {
-            // create action and schedule it
-            let action = ScheduleAction::SubmitToProc(process_id, cmd);
-            self.schedule_it(
-                from_region,
-                MessageRegion::Process(process_id),
-                action,
-            );
-        }
+        // create action and schedule it
+        let action = ScheduleAction::SubmitToProc(process_id, cmd);
+        self.schedule_it(
+            from_region,
+            MessageRegion::Process(process_id),
+            action,
+        );
     }
 
     /// (maybe) Schedules a new send from some process.
