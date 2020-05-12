@@ -10,7 +10,8 @@ use std::iter::FromIterator;
 pub struct BaseProcess {
     pub process_id: ProcessId,
     pub config: Config,
-    all_processes: Option<HashSet<ProcessId>>,
+    all: Option<HashSet<ProcessId>>,
+    all_but_me: Option<HashSet<ProcessId>>,
     fast_quorum: Option<HashSet<ProcessId>>,
     write_quorum: Option<HashSet<ProcessId>>,
     fast_quorum_size: usize,
@@ -35,7 +36,8 @@ impl BaseProcess {
         Self {
             process_id,
             config,
-            all_processes: None,
+            all: None,
+            all_but_me: None,
             fast_quorum: None,
             write_quorum: None,
             fast_quorum_size,
@@ -63,7 +65,13 @@ impl BaseProcess {
             .collect();
 
         // set all processes
-        self.all_processes = Some(HashSet::from_iter(processes));
+        let all = HashSet::from_iter(processes.clone());
+        let all_but_me = HashSet::from_iter(
+            processes.into_iter().filter(|&p| p != self.process_id),
+        );
+
+        self.all = Some(all);
+        self.all_but_me = Some(all_but_me);
 
         // set fast quorum if we have enough fast quorum processes
         self.fast_quorum = if fast_quorum.len() == self.fast_quorum_size {
@@ -90,9 +98,16 @@ impl BaseProcess {
 
     // Returns all processes.
     pub fn all(&self) -> HashSet<ProcessId> {
-        self.all_processes
+        self.all
             .clone()
             .expect("the set of all processes should be known")
+    }
+
+    // Returns all processes but self.
+    pub fn all_but_me(&self) -> HashSet<ProcessId> {
+        self.all_but_me
+            .clone()
+            .expect("the set of all processes (except self) should be known")
     }
 
     // Returns the fast quorum.
@@ -190,7 +205,7 @@ mod tests {
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
-        assert_eq!(bp.all_processes, None);
+        assert_eq!(bp.all, None);
 
         // discover processes and check we're connected
         let sorted =
@@ -202,6 +217,14 @@ mod tests {
             BTreeSet::from_iter(bp.all()),
             BTreeSet::from_iter(vec![
                 8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
+            ]),
+        );
+
+        // check set of all processes (but self)
+        assert_eq!(
+            BTreeSet::from_iter(bp.all_but_me()),
+            BTreeSet::from_iter(vec![
+                9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
             ]),
         );
 
@@ -252,6 +275,12 @@ mod tests {
         assert_eq!(
             BTreeSet::from_iter(bp.all()),
             BTreeSet::from_iter(vec![2, 3, 4, 0, 1])
+        );
+
+        // check set of all processes (but self)
+        assert_eq!(
+            BTreeSet::from_iter(bp.all_but_me()),
+            BTreeSet::from_iter(vec![3, 4, 0, 1])
         );
 
         // check fast quorum

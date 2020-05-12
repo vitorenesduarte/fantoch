@@ -71,7 +71,7 @@ pub trait Protocol: Clone {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-    ) -> Option<ToSend<Self::Message>>;
+    ) -> Vec<ToSend<Self::Message>>;
 
     #[must_use]
     fn to_executor(
@@ -95,9 +95,11 @@ pub trait MessageIndex {
     /// to the same process. If `None` is returned, then the message is sent to
     /// all workers. In particular, if the protocol is not parallel, the
     /// message is sent to the single protocol worker.
-    /// Two types of indexes are supported:
+    ///
+    /// There are three types of indexes are supported:
     /// - Index: simple sequence number
     /// - DotIndex: dot index in which the dot sequence will be used as index
+    /// - None: no indexing; message will be sent to all workers
     fn index(&self) -> MessageIndexes {
         MessageIndexes::None
     }

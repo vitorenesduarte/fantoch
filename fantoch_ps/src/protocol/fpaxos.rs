@@ -1,5 +1,5 @@
 use crate::executor::SlotExecutor;
-use crate::protocol::common::synod::{MultiSynod, MultiSynodMessage};
+use crate::protocol::common::synod::{GCTrack, MultiSynod, MultiSynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
@@ -19,15 +19,20 @@ pub struct FPaxos {
     bp: BaseProcess,
     leader: ProcessId,
     multi_synod: MultiSynod<Command>,
+    gc_track: GCTrack,
     to_executor: Vec<ExecutionInfo>,
 }
 
 impl Protocol for FPaxos {
     type Message = Message;
+    type PeriodicEvent = PeriodicEvent;
     type Executor = SlotExecutor;
 
     /// Creates a new `FPaxos` process.
-    fn new(process_id: ProcessId, config: Config) -> Self {
+    fn new(
+        process_id: ProcessId,
+        config: Config,
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = 0; // there's no fast quorum as we don't have fast paths
         let write_quorum_size = config.fpaxos_quorum_size();
@@ -50,12 +55,20 @@ impl Protocol for FPaxos {
         let to_executor = Vec::new();
 
         // create `FPaxos`
-        Self {
+        let protocol = Self {
             bp,
             leader: initial_leader,
             multi_synod,
+            gc_track: GCTrack::new(process_id, config.n()),
             to_executor,
-        }
+        };
+
+        // create periodic events
+        let gc_delay = config.garbage_collection_delay();
+        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+
+        // return both
+        (protocol, events)
     }
 
     /// Returns the process identifier.
@@ -99,6 +112,34 @@ impl Protocol for FPaxos {
                 self.handle_maccepted(from, ballot, slot)
             }
             Message::MChosen { slot, cmd } => self.handle_mchosen(slot, cmd),
+            Message::MGarbageCollection { committed } => {
+                self.handle_mgc(from, committed)
+            }
+        }
+    }
+
+    /// Handles periodic local events.
+    fn handle_event(
+        &mut self,
+        event: Self::PeriodicEvent,
+    ) -> Vec<ToSend<Message>> {
+        match event {
+            PeriodicEvent::GarbageCollection => {
+                // perform garbage collection of stable dots
+                let stable = self.gc_track.stable();
+                self.multi_synod.gc(stable);
+
+                // retrieve the committed slot
+                let committed = self.gc_track.committed();
+
+                // create `ToSend`
+                let tosend = ToSend {
+                    from: self.id(),
+                    target: self.bp.all_but_me(),
+                    msg: Message::MGarbageCollection { committed },
+                };
+                vec![tosend]
+            }
         }
     }
 
@@ -294,6 +335,15 @@ impl FPaxos {
         // nothing to send
         None
     }
+
+    fn handle_mgc(
+        &mut self,
+        from: ProcessId,
+        committed: u64,
+    ) -> Option<ToSend<Message>> {
+        self.gc_track.committed_by(from, committed);
+        None
+    }
 }
 
 // `FPaxos` protocol messages
@@ -319,6 +369,9 @@ pub enum Message {
     MChosen {
         slot: u64,
         cmd: Command,
+    },
+    MGarbageCollection {
+        committed: u64,
     },
 }
 
@@ -347,9 +400,21 @@ impl MessageIndex for Message {
             //   spawned in the previous 3 workers
             Self::MSpawnCommander { slot, .. } => *slot as usize,
             Self::MAccepted { slot, .. } => *slot as usize,
+            Self::MGarbageCollection { .. } => {
+                // since it's the acceptor that contains the slots to be gc-ed,
+                // we should simply run gc-tracking there as well:
+                // - this removes the need for Message::MStable seen in the
+                //   other implementations
+                ACCEPTOR_WORKER_INDEX
+            }
         };
         MessageIndexes::Index(index)
     }
+}
+
+#[derive(Clone)]
+pub enum PeriodicEvent {
+    GarbageCollection,
 }
 
 #[cfg(test)]
@@ -403,9 +468,9 @@ mod tests {
         let executor_3 = SlotExecutor::new(config);
 
         // fpaxos
-        let mut fpaxos_1 = FPaxos::new(process_id_1, config);
-        let mut fpaxos_2 = FPaxos::new(process_id_2, config);
-        let mut fpaxos_3 = FPaxos::new(process_id_3, config);
+        let (mut fpaxos_1, _) = FPaxos::new(process_id_1, config);
+        let (mut fpaxos_2, _) = FPaxos::new(process_id_2, config);
+        let (mut fpaxos_3, _) = FPaxos::new(process_id_3, config);
 
         // discover processes in all fpaxos
         let sorted = util::sort_processes_by_distance(

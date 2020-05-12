@@ -106,6 +106,11 @@ where
         }
     }
 
+    /// Performs garbage collection of stable slots.
+    pub fn gc(&mut self, stable: Vec<u64>) {
+        self.acceptor.gc(stable);
+    }
+
     fn handle_spawn_commander(
         &mut self,
         ballot: Ballot,
@@ -304,6 +309,13 @@ where
         } else {
             None
         }
+    }
+
+    /// Performs garbage collection of stable slots.
+    fn gc(&mut self, stable: Vec<u64>) {
+        stable.iter().for_each(|slot| {
+            self.accepted.remove(&slot);
+        })
     }
 }
 

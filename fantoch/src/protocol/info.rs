@@ -71,12 +71,15 @@ where
         self.gc_track.committed_by(from, committed);
     }
 
-    /// Performs garbage collection and returns a clock representing the set of
-    /// commands committed locally.
-    pub fn gc(&mut self) -> VClock<ProcessId> {
-        for dot in self.gc_track.stable() {
-            assert!(self.dot_to_info.remove(&dot).is_some())
-        }
-        self.gc_track.committed()
+    /// Returns committed clock and newly stable dots.
+    pub fn committed_and_stable(&mut self) -> (VClock<ProcessId>, Vec<Dot>) {
+        (self.gc_track.committed(), self.gc_track.stable())
+    }
+
+    /// Performs garbage collection of stable dots.
+    pub fn gc(&mut self, stable: Vec<Dot>) {
+        stable.iter().for_each(|dot| {
+            self.dot_to_info.remove(&dot);
+        })
     }
 }

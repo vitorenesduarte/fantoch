@@ -77,8 +77,8 @@ pub mod rw;
 pub mod task;
 
 // Re-exports.
-pub use prelude::LEADER_WORKER_INDEX;
 pub use prelude::GC_WORKER_INDEX;
+pub use prelude::LEADER_WORKER_INDEX;
 
 use crate::client::{Client, Workload};
 use crate::command::CommandResult;

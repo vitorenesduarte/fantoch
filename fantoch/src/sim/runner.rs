@@ -229,11 +229,12 @@ where
                             self.simulation.get_process(process_id);
 
                         // handle event
-                        let to_send = process.handle_event(event.clone());
-                        self.schedule_send(
-                            MessageRegion::Process(process_id),
-                            to_send,
-                        );
+                        for to_send in process.handle_event(event.clone()) {
+                            self.schedule_send(
+                                MessageRegion::Process(process_id),
+                                Some(to_send.clone()),
+                            );
+                        }
 
                         // schedule the next periodic event
                         self.schedule_event(process_id, event, delay);

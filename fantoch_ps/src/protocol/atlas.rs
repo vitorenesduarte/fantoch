@@ -33,10 +33,14 @@ pub struct Atlas<KC> {
 
 impl<KC: KeyClocks> Protocol for Atlas<KC> {
     type Message = Message;
+    type PeriodicEvent = PeriodicEvent;
     type Executor = GraphExecutor;
 
     /// Creates a new `Atlas` process.
-    fn new(process_id: ProcessId, config: Config) -> Self {
+    fn new(
+        process_id: ProcessId,
+        config: Config,
+    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = config.atlas_quorum_sizes();
 
@@ -57,12 +61,19 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         let to_executor = Vec::new();
 
         // create `Atlas`
-        Self {
+        let protocol = Self {
             bp,
             keys_clocks,
             cmds,
             to_executor,
-        }
+        };
+
+        // create periodic events
+        let gc_delay = config.garbage_collection_delay();
+        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+
+        // return both
+        (protocol, events)
     }
 
     /// Returns the process identifier.
@@ -109,6 +120,39 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             }
             Message::MConsensusAck { dot, ballot } => {
                 self.handle_mconsensusack(from, dot, ballot)
+            }
+            Message::MGarbageCollection { committed } => {
+                self.handle_mgc(from, committed)
+            }
+            Message::MStable { stable } => self.handle_mstable(from, stable),
+        }
+    }
+
+    /// Handles periodic local events.
+    fn handle_event(
+        &mut self,
+        event: Self::PeriodicEvent,
+    ) -> Vec<ToSend<Message>> {
+        match event {
+            PeriodicEvent::GarbageCollection => {
+                // retrieve the committed clock and stable dots
+                let (committed, stable) = self.cmds.committed_and_stable();
+
+                // create `ToSend`
+                let tosend = ToSend {
+                    from: self.id(),
+                    target: self.bp.all_but_me(),
+                    msg: Message::MGarbageCollection { committed },
+                };
+
+                // create `ToSend` to self
+                let toself = ToSend {
+                    from: self.id(),
+                    target: singleton![self.id()],
+                    msg: Message::MStable { stable },
+                };
+
+                vec![tosend, toself]
             }
         }
     }
@@ -324,9 +368,8 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.to_executor.push(execution_info);
         }
 
-        // TODO the following is incorrect: it should only be deleted once it
-        // has been committed at all processes
-        self.cmds.remove(dot);
+        // record that this command has been committed
+        self.cmds.commit(dot);
 
         // nothing to send
         None
@@ -421,6 +464,25 @@ impl<KC: KeyClocks> Atlas<KC> {
             ),
         }
     }
+
+    fn handle_mgc(
+        &mut self,
+        from: ProcessId,
+        committed: VClock<ProcessId>,
+    ) -> Option<ToSend<Message>> {
+        self.cmds.committed_by(from, committed);
+        None
+    }
+
+    fn handle_mstable(
+        &mut self,
+        from: ProcessId,
+        stable: Vec<Dot>,
+    ) -> Option<ToSend<Message>> {
+        assert_eq!(from, self.bp.process_id);
+        self.cmds.gc(stable);
+        None
+    }
 }
 
 // consensus value is a pair where the first component is the command (noop if
@@ -504,19 +566,33 @@ pub enum Message {
         dot: Dot,
         ballot: u64,
     },
+    MGarbageCollection {
+        committed: VClock<ProcessId>,
+    },
+    MStable {
+        stable: Vec<Dot>,
+    },
 }
 
 impl MessageIndex for Message {
     fn index(&self) -> MessageIndexes {
-        let dot = match self {
-            Self::MCollect { dot, .. } => dot,
-            Self::MCollectAck { dot, .. } => dot,
-            Self::MCommit { dot, .. } => dot,
-            Self::MConsensus { dot, .. } => dot,
-            Self::MConsensusAck { dot, .. } => dot,
-        };
-        MessageIndexes::DotIndex(dot)
+        match self {
+            Self::MCollect { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MCollectAck { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MCommit { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MConsensus { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MConsensusAck { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MGarbageCollection { .. } => {
+                MessageIndexes::Index(fantoch::run::GC_WORKER_INDEX)
+            }
+            Self::MStable { .. } => MessageIndexes::None,
+        }
     }
+}
+
+#[derive(Clone)]
+pub enum PeriodicEvent {
+    GarbageCollection,
 }
 
 /// `Status` of commands.
@@ -583,9 +659,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(config);
 
         // atlas
-        let mut atlas_1 = Atlas::<KC>::new(process_id_1, config);
-        let mut atlas_2 = Atlas::<KC>::new(process_id_2, config);
-        let mut atlas_3 = Atlas::<KC>::new(process_id_3, config);
+        let (mut atlas_1, _) = Atlas::<KC>::new(process_id_1, config);
+        let (mut atlas_2, _) = Atlas::<KC>::new(process_id_2, config);
+        let (mut atlas_3, _) = Atlas::<KC>::new(process_id_3, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(

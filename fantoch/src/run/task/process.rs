@@ -438,6 +438,7 @@ async fn handle_to_send<P>(
                 msg_to_self = true;
             } else {
                 // send message to correct writer
+                // TODO send this in parallel
                 send_to_writer::<P>(destination, msg.clone(), to_writers).await
             }
         }
@@ -471,7 +472,7 @@ where
     // only handle message from self in this worker if the destination worker is
     // us; this means that "messages to self are delivered immediately" is only
     // true for self messages to the same worker
-    if reader_to_workers.destination_index(&to_forward) == worker_index {
+    if reader_to_workers.only_to_self(&to_forward, worker_index) {
         process.handle(process_id, to_forward.1)
     } else {
         if let Err(e) = reader_to_workers.forward(to_forward).await {

@@ -16,7 +16,7 @@ pub struct ToPool<M> {
 
 impl<M> ToPool<M>
 where
-    M: Debug + 'static,
+    M: Clone + Debug + 'static,
 {
     /// Creates a pool with size `pool_size`.
     pub fn new<S: Into<String>>(
@@ -50,11 +50,14 @@ where
     }
 
     /// Checks the index of the destination worker.
-    pub fn destination_index(&self, msg: &M) -> usize
+    pub fn only_to_self(&self, msg: &M, worker_index: usize) -> bool
     where
         M: PoolIndex,
     {
-        self.index(msg)
+        match self.index(msg) {
+            Some(index) => index == worker_index,
+            None => false,
+        }
     }
 
     /// Forwards message `msg` to the pool worker with id `msg.index() %
@@ -91,27 +94,33 @@ where
         Ok(())
     }
 
-    fn index<T>(&self, msg: &T) -> usize
+    fn index<T>(&self, msg: &T) -> Option<usize>
     where
         T: PoolIndex,
     {
-        match msg.index() {
-            Some(index) => {
-                // the actual index is computed based on the pool size
-                index % self.pool.len()
-            }
-            None => {
-                // in this case, there's a single worker handling all messages:
-                // - check that the pool has size 1 and forward to the single
-                //   worker
-                assert_eq!(self.pool.len(), 1);
-                0
-            }
-        }
+        msg.index().map(|index| {
+            // the actual index is computed based on the pool size
+            index % self.pool.len()
+        })
     }
 
-    async fn do_forward(&mut self, index: usize, msg: M) -> RunResult<()> {
-        log!("index: {} {} of {}", self.name, index, self.pool_size());
-        self.pool[index].send(msg).await
+    async fn do_forward(
+        &mut self,
+        index: Option<usize>,
+        msg: M,
+    ) -> RunResult<()> {
+        log!("index: {} {:?} of {}", self.name, index, self.pool_size());
+        // send to the correct worker if an index was specified. otherwise, send
+        // to all workers.
+        match index {
+            Some(index) => self.pool[index].send(msg).await,
+            None => {
+                // TODO send this in parallel
+                for index in 0..self.pool.len() {
+                    self.pool[index].send(msg.clone()).await?
+                }
+                Ok(())
+            }
+        }
     }
 }

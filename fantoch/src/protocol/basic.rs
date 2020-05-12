@@ -100,6 +100,7 @@ impl Protocol for Basic {
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
+            Message::MStable { stable } => self.handle_mstable(from, stable),
         }
     }
 
@@ -107,25 +108,27 @@ impl Protocol for Basic {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-    ) -> Option<ToSend<Message>> {
+    ) -> Vec<ToSend<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
-                // run GC and retrieve the committed clock
-                let committed = self.cmds.gc();
+                // retrieve the committed clock and stable dots
+                let (committed, stable) = self.cmds.committed_and_stable();
 
-                // create mgc
-                let mgarbagecollection =
-                    Message::MGarbageCollection { committed };
-
-                // create target
-                let target = self.bp.all();
-
-                // return `ToSend`
-                Some(ToSend {
+                // create `ToSend`
+                let tosend = ToSend {
                     from: self.id(),
-                    target,
-                    msg: mgarbagecollection,
-                })
+                    target: self.bp.all_but_me(),
+                    msg: Message::MGarbageCollection { committed },
+                };
+
+                // create `ToSend` to self
+                let toself = ToSend {
+                    from: self.id(),
+                    target: singleton![self.id()],
+                    msg: Message::MStable { stable },
+                };
+
+                vec![tosend, toself]
             }
         }
     }
@@ -256,6 +259,16 @@ impl Basic {
         self.cmds.committed_by(from, committed);
         None
     }
+
+    fn handle_mstable(
+        &mut self,
+        from: ProcessId,
+        stable: Vec<Dot>,
+    ) -> Option<ToSend<Message>> {
+        assert_eq!(from, self.bp.process_id);
+        self.cmds.gc(stable);
+        None
+    }
 }
 
 // `BasicInfo` contains all information required in the life-cyle of a
@@ -288,6 +301,7 @@ pub enum Message {
     MStoreAck { dot: Dot },
     MCommit { dot: Dot, cmd: Command },
     MGarbageCollection { committed: VClock<ProcessId> },
+    MStable { stable: Vec<Dot> },
 }
 
 impl MessageIndex for Message {
@@ -299,6 +313,7 @@ impl MessageIndex for Message {
             Self::MGarbageCollection { .. } => {
                 MessageIndexes::Index(crate::run::GC_WORKER_INDEX)
             }
+            Self::MStable { .. } => MessageIndexes::None,
         }
     }
 }

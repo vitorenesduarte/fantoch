@@ -14,6 +14,7 @@ use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
+use threshold::VClock;
 
 pub type NewtSequential = Newt<SequentialKeyClocks>;
 pub type NewtAtomic = Newt<AtomicKeyClocks>;
@@ -30,10 +31,14 @@ pub struct Newt<KC> {
 
 impl<KC: KeyClocks> Protocol for Newt<KC> {
     type Message = Message;
+    type PeriodicEvent = PeriodicEvent;
     type Executor = TableExecutor;
 
     /// Creates a new `Newt` process.
-    fn new(process_id: ProcessId, config: Config) -> Self {
+    fn new(
+        process_id: ProcessId,
+        config: Config,
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size, _) =
             config.newt_quorum_sizes();
@@ -55,12 +60,19 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         let to_executor = Vec::new();
 
         // create `Newt`
-        Self {
+        let protocol = Self {
             bp,
             key_clocks,
             cmds,
             to_executor,
-        }
+        };
+
+        // create periodic events
+        let gc_delay = config.garbage_collection_delay();
+        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+
+        // return both
+        (protocol, events)
     }
 
     /// Returns the process identifier.
@@ -109,6 +121,39 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             } => self.handle_mcommit(dot, cmd, clock, votes),
             Message::MPhantom { dot, process_votes } => {
                 self.handle_mphantom(dot, process_votes)
+            }
+            Message::MGarbageCollection { committed } => {
+                self.handle_mgc(from, committed)
+            }
+            Message::MStable { stable } => self.handle_mstable(from, stable),
+        }
+    }
+
+    /// Handles periodic local events.
+    fn handle_event(
+        &mut self,
+        event: Self::PeriodicEvent,
+    ) -> Vec<ToSend<Message>> {
+        match event {
+            PeriodicEvent::GarbageCollection => {
+                // retrieve the committed clock and stable dots
+                let (committed, stable) = self.cmds.committed_and_stable();
+
+                // create `ToSend`
+                let tosend = ToSend {
+                    from: self.id(),
+                    target: self.bp.all_but_me(),
+                    msg: Message::MGarbageCollection { committed },
+                };
+
+                // create `ToSend` to self
+                let toself = ToSend {
+                    from: self.id(),
+                    target: singleton![self.id()],
+                    msg: Message::MStable { stable },
+                };
+
+                vec![tosend, toself]
             }
         }
     }
@@ -388,9 +433,8 @@ impl<KC: KeyClocks> Newt<KC> {
             panic!("noOp votes should be broadcast to all executors");
         }
 
-        // TODO the following is incorrect: it should only be deleted once it
-        // has been committed at all processes
-        self.cmds.remove(dot);
+        // record that this command has been committed
+        self.cmds.commit(dot);
 
         // return `ToSend`
         to_send
@@ -419,6 +463,25 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // nothing to send
+        None
+    }
+
+    fn handle_mgc(
+        &mut self,
+        from: ProcessId,
+        committed: VClock<ProcessId>,
+    ) -> Option<ToSend<Message>> {
+        self.cmds.committed_by(from, committed);
+        None
+    }
+
+    fn handle_mstable(
+        &mut self,
+        from: ProcessId,
+        stable: Vec<Dot>,
+    ) -> Option<ToSend<Message>> {
+        assert_eq!(from, self.bp.process_id);
+        self.cmds.gc(stable);
         None
     }
 
@@ -482,18 +545,32 @@ pub enum Message {
         dot: Dot,
         process_votes: Votes,
     },
+    MGarbageCollection {
+        committed: VClock<ProcessId>,
+    },
+    MStable {
+        stable: Vec<Dot>,
+    },
 }
 
 impl MessageIndex for Message {
     fn index(&self) -> MessageIndexes {
-        let dot = match self {
-            Self::MCollect { dot, .. } => dot,
-            Self::MCollectAck { dot, .. } => dot,
-            Self::MCommit { dot, .. } => dot,
-            Self::MPhantom { dot, .. } => dot,
-        };
-        MessageIndexes::DotIndex(dot)
+        match self {
+            Self::MCollect { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MCollectAck { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MCommit { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MPhantom { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MGarbageCollection { .. } => {
+                MessageIndexes::Index(fantoch::run::GC_WORKER_INDEX)
+            }
+            Self::MStable { .. } => MessageIndexes::None,
+        }
     }
+}
+
+#[derive(Clone)]
+pub enum PeriodicEvent {
+    GarbageCollection,
 }
 
 /// `Status` of commands.
@@ -565,9 +642,9 @@ mod tests {
         let executor_3 = TableExecutor::new(config);
 
         // newts
-        let mut newt_1 = Newt::<KC>::new(process_id_1, config);
-        let mut newt_2 = Newt::<KC>::new(process_id_2, config);
-        let mut newt_3 = Newt::<KC>::new(process_id_3, config);
+        let (mut newt_1, _) = Newt::<KC>::new(process_id_1, config);
+        let (mut newt_2, _) = Newt::<KC>::new(process_id_2, config);
+        let (mut newt_3, _) = Newt::<KC>::new(process_id_3, config);
 
         // discover processes in all newts
         let sorted = util::sort_processes_by_distance(
