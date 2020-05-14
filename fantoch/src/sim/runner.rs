@@ -7,7 +7,7 @@ use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Protocol, ProtocolMetrics, ToSend};
 use crate::sim::{Schedule, Simulation};
-use crate::time::SimTime;
+use crate::time::{SimTime, SysTime};
 use crate::util;
 use std::collections::HashMap;
 use std::fmt;
@@ -35,6 +35,13 @@ pub struct Runner<P: Protocol> {
     client_to_region: HashMap<ClientId, Region>,
     // total number of clients
     client_count: usize,
+}
+
+#[derive(PartialEq)]
+enum SimulationStatus {
+    ClientsRunning,
+    ExtraSimulationTime,
+    Done,
 }
 
 impl<P> Runner<P>
@@ -143,9 +150,11 @@ where
         runner
     }
 
-    /// Run the simulation.
+    /// Run the simulation. `extra_sim_time` indicates how much longer should
+    /// the simulation run after clients are finished.
     pub fn run(
         &mut self,
+        extra_sim_time: Option<u128>,
     ) -> (
         HashMap<ProcessId, ProtocolMetrics>,
         HashMap<Region, (usize, Histogram)>,
@@ -164,18 +173,22 @@ where
             });
 
         // run simulation loop
-        self.simulation_loop();
+        self.simulation_loop(extra_sim_time);
 
         // return processes metrics and client latencies
         (self.processes_metrics(), self.clients_latencies())
     }
 
-    fn simulation_loop(&mut self) {
+    fn simulation_loop(&mut self, extra_sim_time: Option<u128>) {
+        let mut simulation_status = SimulationStatus::ClientsRunning;
         let mut clients_done = 0;
-        // run the simulation while clients don't finish
-        // run the simulation while there are things scheduled
-        while clients_done != self.client_count {
-            let actions = self.schedule.next_actions(&mut self.time).expect("there should be more actions since clients have not finished yet");
+        let mut simulation_final_time = 0;
+
+        while simulation_status != SimulationStatus::Done {
+            let actions = self.schedule
+                .next_actions(&mut self.time)
+                .expect("there should be more actions since stability is always running");
+
             // for each scheduled action
             actions.into_iter().for_each(|action| {
                 match action {
@@ -237,6 +250,22 @@ where
                             );
                         } else {
                             clients_done += 1;
+                            // if all clients are done, enter the next phase
+                            if clients_done == self.client_count {
+                                simulation_status = match extra_sim_time {
+                                    Some(extra) => {
+                                        // if there's extra time, compute the
+                                        // final simulation time
+                                        simulation_final_time =
+                                            self.time.now() + extra;
+                                        SimulationStatus::ExtraSimulationTime
+                                    }
+                                    None => {
+                                        // otherwise, end the simulation
+                                        SimulationStatus::Done
+                                    }
+                                }
+                            }
                         }
                     }
                     ScheduleAction::PeriodicEvent(process_id, event, delay) => {
@@ -256,7 +285,16 @@ where
                         self.schedule_event(process_id, event, delay);
                     }
                 }
-            })
+            });
+
+            // check if we're in extra simulation time; if yes, finish the
+            // simulation if we're past the final simulation time
+            let should_end_sim = simulation_status
+                == SimulationStatus::ExtraSimulationTime
+                && self.time.now() > simulation_final_time;
+            if should_end_sim {
+                simulation_status = SimulationStatus::Done;
+            }
         }
     }
 
@@ -492,8 +530,8 @@ mod tests {
             client_regions,
         );
 
-        // run simulation
-        let (processes_metrics, mut clients_latencies) = runner.run();
+        // run simulation until the clients end + another second (1000ms)
+        let (processes_metrics, mut clients_latencies) = runner.run(Some(1000));
 
         // check client stats
         let (us_west1_issued, us_west1) = clients_latencies
