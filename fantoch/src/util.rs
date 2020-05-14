@@ -1,9 +1,10 @@
-use crate::id::ProcessId;
+use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
+/// create a singleton hash set
 #[macro_export]
 macro_rules! singleton {
     ( $x:expr ) => {{
@@ -55,6 +56,13 @@ pub fn key_hash(key: &Key) -> u64 {
 pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
     (1..=n).map(|id| id as u64)
+}
+
+/// Converts a reprentation of dots to the actual dots.
+pub fn dots(repr: Vec<(ProcessId, u64, u64)>) -> impl Iterator<Item = Dot> {
+    repr.into_iter().flat_map(|(process_id, start, end)| {
+        (start..=end).map(move |event| Dot::new(process_id, event))
+    })
 }
 
 /// Updates the processes known by this process.

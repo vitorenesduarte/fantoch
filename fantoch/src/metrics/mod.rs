@@ -49,6 +49,14 @@ where
         };
         update(current);
     }
+
+    pub fn get_collected(&self, kind: K) -> Option<&Histogram> {
+        self.collected.get(&kind)
+    }
+
+    pub fn get_aggregated(&self, kind: K) -> Option<&V> {
+        self.aggregated.get(&kind)
+    }
 }
 
 impl<K, V> fmt::Debug for Metrics<K, V>

@@ -1,4 +1,5 @@
 use crate::id::{Dot, ProcessId};
+use crate::log;
 use crate::util;
 use std::collections::HashMap;
 use threshold::{AEClock, EventSet, VClock};
@@ -48,26 +49,29 @@ impl GCTrack {
     }
 
     /// Computes the new set of stable dots.
-    pub fn stable(&mut self) -> Vec<Dot> {
+    pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
+        // compute new stable clock
         let new_stable = self.stable_clock();
+
+        // compute new stable dots
         let dots = self
             .previous_stable
             .iter()
-            .flat_map(|(actor, previous)| {
+            .map(|(process_id, previous)| {
                 let current = new_stable
-                    .get(actor)
+                    .get(process_id)
                     .expect("actor should exist in the newly stable clock");
-                // create a dot for each newly stable event from this actor
-                let start = previous.frontier() + 1;
-                let end = current.frontier();
-                (start..=end).map(move |stable_event| {
-                    Dot::new(actor.clone(), stable_event)
-                })
+                // compute representation of stable dots.
+                (
+                    process_id.clone(),
+                    previous.frontier() + 1,
+                    current.frontier(),
+                )
             })
             .collect();
-        // update the previous stable clock
+
+        // update the previous stable clock and return newly stable dots
         self.previous_stable = new_stable;
-        // and return newly stable dots
         dots
     }
 
@@ -85,6 +89,8 @@ impl GCTrack {
         self.all_but_me.values().for_each(|clock| {
             stable.meet(clock);
         });
+
+        log!("GCTrack::stable_clock {:?}", stable);
         stable
     }
 
@@ -107,6 +113,10 @@ mod tests {
         VClock::from(vec![(1, MaxSet::from(p1)), (2, MaxSet::from(p2))])
     }
 
+    fn stable_dots(repr: Vec<(ProcessId, u64, u64)>) -> Vec<Dot> {
+        crate::util::dots(repr).collect()
+    }
+
     #[test]
     fn gc_flow() {
         let n = 2;
@@ -119,7 +129,7 @@ mod tests {
         // there's nothing committed and nothing stable
         assert_eq!(gc.committed(), vclock(0, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's create a bunch of dots
         let dot11 = Dot::new(1, 1);
@@ -132,19 +142,19 @@ mod tests {
         // this doesn't change anything
         assert_eq!(gc.committed(), vclock(0, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // however, if we also commit dot11, the committed clock will change
         gc.commit(dot11);
         assert_eq!(gc.committed(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // if we update with the committed clock from process 2 nothing changes
         gc.committed_by(2, gc2.committed());
         assert_eq!(gc.committed(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's commit dot11 and dot13 at process 2
         gc2.commit(dot11);
@@ -154,11 +164,11 @@ mod tests {
         gc.committed_by(2, gc2.committed());
         assert_eq!(gc.committed(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(1, 0));
-        assert_eq!(gc.stable(), vec![dot11]);
+        assert_eq!(stable_dots(gc.stable()), vec![dot11]);
 
         // if we call stable again, no new dot is returned
         assert_eq!(gc.stable_clock(), vclock(1, 0));
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's commit dot13 at process 1 and dot12 at process 2
         gc.commit(dot13);
@@ -168,7 +178,7 @@ mod tests {
         gc.committed_by(2, gc2.committed());
         assert_eq!(gc.committed(), vclock(3, 0));
         assert_eq!(gc.stable_clock(), vclock(3, 0));
-        assert_eq!(gc.stable(), vec![dot12, dot13]);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(stable_dots(gc.stable()), vec![dot12, dot13]);
+        assert_eq!(stable_dots(gc.stable()), vec![]);
     }
 }

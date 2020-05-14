@@ -1,5 +1,6 @@
 use crate::id::{Dot, ProcessId};
 use crate::protocol::gc::GCTrack;
+use crate::util;
 use std::collections::HashMap;
 use threshold::VClock;
 
@@ -72,14 +73,19 @@ where
     }
 
     /// Returns committed clock and newly stable dots.
-    pub fn committed_and_stable(&mut self) -> (VClock<ProcessId>, Vec<Dot>) {
+    pub fn committed_and_stable(
+        &mut self,
+    ) -> (VClock<ProcessId>, Vec<(ProcessId, u64, u64)>) {
         (self.gc_track.committed(), self.gc_track.stable())
     }
 
     /// Performs garbage collection of stable dots.
-    pub fn gc(&mut self, stable: Vec<Dot>) {
-        stable.iter().for_each(|dot| {
+    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> u64 {
+        util::dots(stable).fold(0, |stable_count, dot| {
+            // remove dot
             self.dot_to_info.remove(&dot);
+            // update stable count
+            stable_count + 1
         })
     }
 }

@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(config.executors(), 20);
 
         // by default, the garbage collection delay is 500
-        assert_eq!(config.garbage_collection_delay(), 500,);
+        assert_eq!(config.garbage_collection_delay(), 500);
 
         // change its value and check it has changed
         config.set_garbage_collection_delay(100);

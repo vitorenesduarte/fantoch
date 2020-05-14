@@ -111,6 +111,8 @@ impl Protocol for Basic {
     ) -> Vec<ToSend<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
+                log!("p{}: PeriodicEvent::GarbageCollection", self.id());
+
                 // retrieve the committed clock and stable dots
                 let (committed, stable) = self.cmds.committed_and_stable();
 
@@ -256,6 +258,12 @@ impl Basic {
         from: ProcessId,
         committed: VClock<ProcessId>,
     ) -> Option<ToSend<Message>> {
+        log!(
+            "p{}: MGarbageCollection({:?}) from {}",
+            self.id(),
+            committed,
+            from
+        );
         self.cmds.committed_by(from, committed);
         None
     }
@@ -263,11 +271,12 @@ impl Basic {
     fn handle_mstable(
         &mut self,
         from: ProcessId,
-        stable: Vec<Dot>,
+        stable: Vec<(ProcessId, u64, u64)>,
     ) -> Option<ToSend<Message>> {
+        log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
-        self.bp.stable(stable.len());
-        self.cmds.gc(stable);
+        let stable_count = self.cmds.gc(stable);
+        self.bp.stable(stable_count);
         None
     }
 }
@@ -302,7 +311,7 @@ pub enum Message {
     MStoreAck { dot: Dot },
     MCommit { dot: Dot, cmd: Command },
     MGarbageCollection { committed: VClock<ProcessId> },
-    MStable { stable: Vec<Dot> },
+    MStable { stable: Vec<(ProcessId, u64, u64)> },
 }
 
 impl MessageIndex for Message {

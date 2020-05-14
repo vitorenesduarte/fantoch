@@ -10,6 +10,7 @@ use crate::sim::{Schedule, Simulation};
 use crate::time::SimTime;
 use crate::util;
 use std::collections::HashMap;
+use std::fmt;
 
 enum ScheduleAction<P: Protocol> {
     SubmitToProc(ProcessId, Command),
@@ -17,7 +18,6 @@ enum ScheduleAction<P: Protocol> {
     SendToClient(ClientId, CommandResult),
     PeriodicEvent(ProcessId, P::PeriodicEvent, u128),
 }
-
 #[derive(Clone)]
 enum MessageRegion {
     Process(ProcessId),
@@ -62,27 +62,24 @@ where
         let mut periodic_actions = Vec::new();
 
         // create processes
-        let to_discover: Vec<_> = process_regions
-            .into_iter()
-            .zip(1..=config.n())
-            .map(|(region, process_id)| {
-                let process_id = process_id as u64;
-                // create process and save it
-                let (process, process_events) = P::new(process_id, config);
-                processes.push((region.clone(), process));
+        let to_discover: Vec<_> =
+            process_regions
+                .into_iter()
+                .zip(1..=config.n())
+                .map(|(region, process_id)| {
+                    let process_id = process_id as u64;
+                    // create process and save it
+                    let (process, process_events) = P::new(process_id, config);
+                    processes.push((region.clone(), process));
 
-                // save periodic actions
-                // - map the delay from milliseconds from microseconds
-                periodic_actions.extend(process_events.into_iter().map(
-                    |(event, delay_milli)| {
-                        let delay_micro = (delay_milli * 1000) as u128;
-                        (process_id, event, delay_micro)
-                    },
-                ));
+                    // save periodic actions
+                    periodic_actions.extend(process_events.into_iter().map(
+                        |(event, delay)| (process_id, event, delay as u128),
+                    ));
 
-                (process_id, region)
-            })
-            .collect();
+                    (process_id, region)
+                })
+                .collect();
 
         // create processs to region mapping
         let process_to_region = to_discover.clone().into_iter().collect();
@@ -272,7 +269,7 @@ where
     ) {
         // create action and schedule it
         let action = ScheduleAction::SubmitToProc(process_id, cmd);
-        self.schedule_it(
+        self.schedule_message(
             from_region,
             MessageRegion::Process(process_id),
             action,
@@ -290,7 +287,7 @@ where
             target.into_iter().for_each(|to| {
                 // otherwise, create action and schedule it
                 let action = ScheduleAction::SendToProc(from, to, msg.clone());
-                self.schedule_it(
+                self.schedule_message(
                     from_region.clone(),
                     MessageRegion::Process(to),
                     action,
@@ -308,22 +305,15 @@ where
         // create action and schedule it
         let client_id = cmd_result.rifl().source();
         let action = ScheduleAction::SendToClient(client_id, cmd_result);
-        self.schedule_it(from_region, MessageRegion::Client(client_id), action);
+        self.schedule_message(
+            from_region,
+            MessageRegion::Client(client_id),
+            action,
+        );
     }
 
-    /// Schedules the next periodic event.
-    fn schedule_event(
-        &mut self,
-        process_id: ProcessId,
-        event: P::PeriodicEvent,
-        delay: u128,
-    ) {
-        // create action
-        let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
-        self.schedule.schedule(&self.time, delay, action);
-    }
-
-    fn schedule_it(
+    /// Schedules a message.
+    fn schedule_message(
         &mut self,
         from_region: MessageRegion,
         to_region: MessageRegion,
@@ -336,6 +326,18 @@ where
         let distance = self.distance(from, to);
         // schedule action
         self.schedule.schedule(&self.time, distance as u128, action);
+    }
+
+    /// Schedules the next periodic event.
+    fn schedule_event(
+        &mut self,
+        process_id: ProcessId,
+        event: P::PeriodicEvent,
+        delay: u128,
+    ) {
+        // create action
+        let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
+        self.schedule.schedule(&self.time, delay, action);
     }
 
     /// Retrieves the region of some process/client.
@@ -427,11 +429,32 @@ where
     }
 }
 
+impl<P: Protocol> fmt::Debug for ScheduleAction<P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ScheduleAction::SubmitToProc(process_id, cmd) => {
+                write!(f, "SubmitToProc({}, {:?})", process_id, cmd)
+            }
+            ScheduleAction::SendToProc(from, to, msg) => {
+                write!(f, "SendToProc({}, {}, {:?})", from, to, msg)
+            }
+            ScheduleAction::SendToClient(client_id, cmd_result) => {
+                write!(f, "SendToClient({}, {:?})", client_id, cmd_result)
+            }
+            ScheduleAction::PeriodicEvent(process_id, event, delay) => write!(
+                f,
+                "PeriodicEvent({}, {:?}, {})",
+                process_id, event, delay
+            ),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::metrics::F64;
-    use crate::protocol::Basic;
+    use crate::protocol::{Basic, ProtocolMetricsKind};
 
     fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
         // planet
@@ -443,7 +466,7 @@ mod tests {
 
         // clients workload
         let conflict_rate = 100;
-        let total_commands = 10;
+        let total_commands = 1000;
         let payload_size = 100;
         let workload =
             Workload::new(conflict_rate, total_commands, payload_size);
@@ -472,6 +495,7 @@ mod tests {
         // run simulation
         let (processes_metrics, mut clients_latencies) = runner.run();
 
+        // check client stats
         let (us_west1_issued, us_west1) = clients_latencies
             .remove(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
@@ -483,6 +507,20 @@ mod tests {
         let expected = total_commands * clients_per_region;
         assert_eq!(us_west1_issued, expected);
         assert_eq!(us_west2_issued, expected);
+
+        // check process stats
+        processes_metrics.values().into_iter().for_each(|metrics| {
+            // check stability has run
+            let stable_count = metrics
+                .get_aggregated(ProtocolMetricsKind::Stable)
+                .expect("stability should have happened");
+
+            // check that all commands were gc-ed:
+            // - since we have clients in two regions, the total number of
+            //   commands is two times the expected per region
+            let total_commands = (expected * 2) as u64;
+            assert!(*stable_count == total_commands)
+        });
 
         // return stats for both regions
         (us_west1, us_west2)
