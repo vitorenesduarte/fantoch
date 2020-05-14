@@ -1,4 +1,5 @@
 use fantoch::id::ProcessId;
+use fantoch::log;
 use std::collections::HashMap;
 use threshold::{AboveExSet, EventSet};
 
@@ -46,6 +47,8 @@ impl GCTrack {
     pub fn stable(&mut self) -> (u64, u64) {
         // compute new stable slot
         let new_stable = self.stable_slot();
+        log!("GCTrack::stable_clock {:?}", new_stable);
+
         // compute stable slot range
         let slot_range = (self.previous_stable + 1, new_stable);
         // update the previous stable slot

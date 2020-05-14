@@ -313,14 +313,12 @@ where
 
     /// Performs garbage collection of stable slots.
     fn gc(&mut self, (start, end): (u64, u64)) -> u64 {
-        (start..=end).for_each(|slot| {
+        (start..=end).fold(0, |stable_count, slot| {
+            // remove dot
             self.accepted.remove(&slot);
-        });
-        if end > start {
-            end - start
-        } else {
-            0
-        }
+            // update stable count
+            stable_count + 1
+        })
     }
 }
 
