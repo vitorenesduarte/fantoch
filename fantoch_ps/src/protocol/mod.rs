@@ -26,7 +26,32 @@ pub use newt::{NewtAtomic, NewtSequential};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fantoch::client::Workload;
+    use fantoch::config::Config;
+    use fantoch::planet::{Planet, Region};
+    use fantoch::protocol::{Protocol, ProtocolMetricsKind};
     use fantoch::run::tests::run_test;
+    use fantoch::sim::Runner;
+
+    #[test]
+    fn sim_newt_test() {
+        sim_gc_test::<NewtSequential>()
+    }
+
+    #[test]
+    fn sim_atlas_test() {
+        sim_gc_test::<AtlasSequential>()
+    }
+
+    #[test]
+    fn sim_epaxos_test() {
+        sim_gc_test::<EPaxosSequential>()
+    }
+
+    #[test]
+    fn sim_fpaxos_test() {
+        sim_gc_test::<FPaxos>()
+    }
 
     #[tokio::test]
     async fn run_newt_sequential_test() {
@@ -102,5 +127,63 @@ mod tests {
         let executors = 1;
         let with_leader = true;
         run_test::<FPaxos>(workers, executors, with_leader).await
+    }
+
+    fn sim_gc_test<P: Protocol>() {
+        // planet
+        let planet = Planet::new();
+
+        // config
+        let n = 3;
+        let f = 1;
+        let config = Config::new(n, f);
+
+        // clients workload
+        let conflict_rate = 100;
+        let total_commands = 1000;
+        let payload_size = 100;
+        let workload =
+            Workload::new(conflict_rate, total_commands, payload_size);
+        let clients_per_region = 3;
+
+        // process regions
+        let process_regions = vec![
+            Region::new("asia-east1"),
+            Region::new("us-central1"),
+            Region::new("us-west1"),
+        ];
+
+        // client regions
+        let client_regions = vec![
+            Region::new("us-west1"),
+            Region::new("us-west2"),
+            Region::new("europe-north1"),
+        ];
+
+        // create runner
+        let mut runner: Runner<P> = Runner::new(
+            planet,
+            config,
+            workload,
+            clients_per_region,
+            process_regions,
+            client_regions,
+        );
+
+        // run simulation until the clients end + another second (1000ms)
+        let (processes_metrics, _) = runner.run(Some(1000));
+
+        // check process stats
+        let all_gced = processes_metrics.values().into_iter().all(|metrics| {
+            // check stability has run
+            let stable_count = metrics
+                .get_aggregated(ProtocolMetricsKind::Stable)
+                .expect("stability should have happened");
+
+            // check that all commands were gc-ed:
+            let expected = (total_commands * clients_per_region * n) as u64;
+            *stable_count == expected
+        });
+        assert!(all_gced)
     }
 }
