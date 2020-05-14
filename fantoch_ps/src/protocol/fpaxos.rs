@@ -335,6 +335,9 @@ impl FPaxos {
         let execution_info = ExecutionInfo::new(slot, cmd);
         self.to_executor.push(execution_info);
 
+        // register that it has been committed
+        self.gc_track.commit(slot);
+
         // nothing to send
         None
     }
