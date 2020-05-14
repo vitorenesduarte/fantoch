@@ -107,8 +107,8 @@ where
     }
 
     /// Performs garbage collection of stable slots.
-    pub fn gc(&mut self, stable: Vec<u64>) {
-        self.acceptor.gc(stable);
+    pub fn gc(&mut self, stable: (u64, u64)) -> u64 {
+        self.acceptor.gc(stable)
     }
 
     fn handle_spawn_commander(
@@ -312,10 +312,11 @@ where
     }
 
     /// Performs garbage collection of stable slots.
-    fn gc(&mut self, stable: Vec<u64>) {
-        stable.iter().for_each(|slot| {
+    fn gc(&mut self, (start, end): (u64, u64)) -> u64 {
+        (start..=end).for_each(|slot| {
             self.accepted.remove(&slot);
-        })
+        });
+        end - start
     }
 }
 

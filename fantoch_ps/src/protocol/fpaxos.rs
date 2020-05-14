@@ -126,9 +126,11 @@ impl Protocol for FPaxos {
     ) -> Vec<ToSend<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
+                log!("p{}: PeriodicEvent::GarbageCollection", self.id());
                 // perform garbage collection of stable dots
                 let stable = self.gc_track.stable();
-                self.multi_synod.gc(stable);
+                let stable_count = self.multi_synod.gc(stable);
+                self.bp.stable(stable_count);
 
                 // retrieve the committed slot
                 let committed = self.gc_track.committed();
@@ -342,6 +344,12 @@ impl FPaxos {
         from: ProcessId,
         committed: u64,
     ) -> Option<ToSend<Message>> {
+        log!(
+            "p{}: MGarbageCollection({:?}) from {}",
+            self.id(),
+            committed,
+            from
+        );
         self.gc_track.committed_by(from, committed);
         None
     }

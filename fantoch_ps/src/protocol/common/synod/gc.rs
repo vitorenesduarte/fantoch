@@ -43,13 +43,15 @@ impl GCTrack {
     }
 
     /// Computes the new set of stable slots.
-    pub fn stable(&mut self) -> Vec<u64> {
+    pub fn stable(&mut self) -> (u64, u64) {
+        // compute new stable slot
         let new_stable = self.stable_slot();
-        let dots = ((self.previous_stable + 1)..=new_stable).collect();
+        // compute stable slot range
+        let slot_range = (self.previous_stable + 1, new_stable);
         // update the previous stable slot
         self.previous_stable = new_stable;
         // and return newly stable slots
-        dots
+        slot_range
     }
 
     // TODO we should design a fault-tolerant version of this
@@ -74,6 +76,10 @@ impl GCTrack {
 mod tests {
     use super::*;
 
+    fn slots((start, end): (u64, u64)) -> Vec<u64> {
+        (start..=end).collect()
+    }
+
     #[test]
     fn gc_flow() {
         let n = 2;
@@ -86,7 +92,7 @@ mod tests {
         // there's nothing committed and nothing stable
         assert_eq!(gc.committed(), 0);
         assert_eq!(gc.stable_slot(), 0);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(slots(gc.stable()), vec![]);
 
         // and commit slot 2 locally
         gc.commit(2);
@@ -94,19 +100,19 @@ mod tests {
         // this doesn't change anything
         assert_eq!(gc.committed(), 0);
         assert_eq!(gc.stable_slot(), 0);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(slots(gc.stable()), vec![]);
 
         // however, if we also commit slot 1, the committed clock will change
         gc.commit(1);
         assert_eq!(gc.committed(), 2);
         assert_eq!(gc.stable_slot(), 0);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(slots(gc.stable()), vec![]);
 
         // if we update with the committed clock from process 2 nothing changes
         gc.committed_by(2, gc2.committed());
         assert_eq!(gc.committed(), 2);
         assert_eq!(gc.stable_slot(), 0);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(slots(gc.stable()), vec![]);
 
         // let's commit slot 1 and slot 3 at process 2
         gc2.commit(1);
@@ -116,11 +122,11 @@ mod tests {
         gc.committed_by(2, gc2.committed());
         assert_eq!(gc.committed(), 2);
         assert_eq!(gc.stable_slot(), 1);
-        assert_eq!(gc.stable(), vec![1]);
+        assert_eq!(slots(gc.stable()), vec![1]);
 
         // if we call stable again, no new dot is returned
         assert_eq!(gc.stable_slot(), 1);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(slots(gc.stable()), vec![]);
 
         // let's commit slot 3 at process 1 and slot 2 at process 2
         gc.commit(3);
@@ -130,7 +136,7 @@ mod tests {
         gc.committed_by(2, gc2.committed());
         assert_eq!(gc.committed(), 3);
         assert_eq!(gc.stable_slot(), 3);
-        assert_eq!(gc.stable(), vec![2, 3]);
-        assert_eq!(gc.stable(), vec![]);
+        assert_eq!(slots(gc.stable()), vec![2, 3]);
+        assert_eq!(slots(gc.stable()), vec![]);
     }
 }

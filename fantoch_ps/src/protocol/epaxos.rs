@@ -133,6 +133,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     ) -> Vec<ToSend<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
+                log!("p{}: PeriodicEvent::GarbageCollection", self.id());
                 // retrieve the committed clock and stable dots
                 let (committed, stable) = self.cmds.committed_and_stable();
 
@@ -479,6 +480,12 @@ impl<KC: KeyClocks> EPaxos<KC> {
         from: ProcessId,
         committed: VClock<ProcessId>,
     ) -> Option<ToSend<Message>> {
+        log!(
+            "p{}: MGarbageCollection({:?}) from {}",
+            self.id(),
+            committed,
+            from
+        );
         self.cmds.committed_by(from, committed);
         None
     }
@@ -486,10 +493,12 @@ impl<KC: KeyClocks> EPaxos<KC> {
     fn handle_mstable(
         &mut self,
         from: ProcessId,
-        stable: Vec<Dot>,
+        stable: Vec<(ProcessId, u64, u64)>,
     ) -> Option<ToSend<Message>> {
+        log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
-        self.cmds.gc(stable);
+        let stable_count = self.cmds.gc(stable);
+        self.bp.stable(stable_count);
         None
     }
 }
@@ -586,7 +595,7 @@ pub enum Message {
         committed: VClock<ProcessId>,
     },
     MStable {
-        stable: Vec<Dot>,
+        stable: Vec<(ProcessId, u64, u64)>,
     },
 }
 

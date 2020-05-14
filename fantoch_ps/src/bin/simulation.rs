@@ -202,7 +202,7 @@ fn run<P: Protocol>(
         process_regions,
         client_regions,
     );
-    let (processes_metrics, clients_latencies) = runner.run();
+    let (processes_metrics, clients_latencies) = runner.run(None);
     println!("simulation ended...");
 
     // show processes stats
