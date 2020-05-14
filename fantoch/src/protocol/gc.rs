@@ -52,6 +52,7 @@ impl GCTrack {
     pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
         // compute new stable clock
         let new_stable = self.stable_clock();
+        log!("GCTrack::stable_clock {:?}", new_stable);
 
         // compute new stable dots
         let dots = self
@@ -89,8 +90,6 @@ impl GCTrack {
         self.all_but_me.values().for_each(|clock| {
             stable.meet(clock);
         });
-
-        log!("GCTrack::stable_clock {:?}", stable);
         stable
     }
 
