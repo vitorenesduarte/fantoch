@@ -35,22 +35,22 @@ mod tests {
 
     #[test]
     fn sim_newt_test() {
-        sim_gc_test::<NewtSequential>()
+        sim_gc_test::<NewtSequential>(false)
     }
 
     #[test]
     fn sim_atlas_test() {
-        sim_gc_test::<AtlasSequential>()
+        sim_gc_test::<AtlasSequential>(false)
     }
 
     #[test]
     fn sim_epaxos_test() {
-        sim_gc_test::<EPaxosSequential>()
+        sim_gc_test::<EPaxosSequential>(false)
     }
 
     #[test]
     fn sim_fpaxos_test() {
-        sim_gc_test::<FPaxos>()
+        sim_gc_test::<FPaxos>(true)
     }
 
     #[tokio::test]
@@ -129,14 +129,19 @@ mod tests {
         run_test::<FPaxos>(workers, executors, with_leader).await
     }
 
-    fn sim_gc_test<P: Protocol>() {
+    fn sim_gc_test<P: Protocol>(with_leader: bool) {
         // planet
         let planet = Planet::new();
 
         // config
         let n = 3;
         let f = 1;
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
+
+        // set process 0 as leader if we need one
+        if with_leader {
+            config.set_leader(1);
+        }
 
         // clients workload
         let conflict_rate = 100;
@@ -170,8 +175,8 @@ mod tests {
             client_regions,
         );
 
-        // run simulation until the clients end + another second (1000ms)
-        let (processes_metrics, _) = runner.run(Some(1000));
+        // run simulation until the clients end + another 2 seconds (2000ms)
+        let (processes_metrics, _) = runner.run(Some(2000));
 
         // check process stats
         let all_gced = processes_metrics.values().into_iter().all(|metrics| {
