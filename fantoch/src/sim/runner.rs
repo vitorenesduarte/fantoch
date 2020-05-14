@@ -374,9 +374,9 @@ where
         });
     }
 
-    fn check_clients<F, R>(&mut self, mut f: F) -> HashMap<Region, R>
+    fn check_clients<F, R>(&mut self, f: F) -> HashMap<Region, R>
     where
-        F: FnMut(&Client, &mut R),
+        F: Fn(&Client, &mut R),
         R: Default,
     {
         let simulation = &mut self.simulation;
@@ -402,13 +402,15 @@ where
     /// Get client's stats.
     /// TODO does this need to be mut?
     fn clients_latencies(&mut self) -> HashMap<Region, (usize, Histogram)> {
-        self.check_clients(|client, result: &mut (usize, Histogram)| {
-            // update issued commands with this client's issued commands
-            result.0 += client.issued_commands();
+        self.check_clients(
+            |client, (commands, histogram): &mut (usize, Histogram)| {
+                // update issued commands with this client's issued commands
+                *commands += client.issued_commands();
 
-            // update region's histogram with this client's histogram
-            result.1.merge(client.latency_histogram());
-        })
+                // update region's histogram with this client's histogram
+                histogram.merge(client.latency_histogram());
+            },
+        )
     }
 }
 
