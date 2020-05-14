@@ -6,7 +6,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
     BaseProcess, MessageIndex, MessageIndexes, PeriodicEventIndex, Protocol,
-    ToSend,
+    ProtocolMetrics, ToSend,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -157,8 +157,8 @@ impl Protocol for FPaxos {
         false
     }
 
-    fn show_metrics(&self) {
-        self.bp.show_metrics();
+    fn metrics(&self) -> &ProtocolMetrics {
+        self.bp.metrics()
     }
 }
 

@@ -26,10 +26,11 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
+use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 pub trait Protocol: Clone {
     type Message: Debug
@@ -84,8 +85,25 @@ pub trait Protocol: Clone {
         true
     }
 
-    fn show_metrics(&self) {
-        // by default, nothing to show
+    fn metrics(&self) -> &ProtocolMetrics;
+}
+
+pub type ProtocolMetrics = Metrics<ProtocolMetricsKind, u64>;
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ProtocolMetricsKind {
+    FastPath,
+    SlowPath,
+    Stable,
+}
+
+impl Debug for ProtocolMetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProtocolMetricsKind::FastPath => write!(f, "fast_path"),
+            ProtocolMetricsKind::SlowPath => write!(f, "slow_path"),
+            ProtocolMetricsKind::Stable => write!(f, "stable"),
+        }
     }
 }
 

@@ -10,7 +10,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
     BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes,
-    PeriodicEventIndex, Protocol, ToSend,
+    PeriodicEventIndex, Protocol, ProtocolMetrics, ToSend,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -166,8 +166,8 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         KC::parallel()
     }
 
-    fn show_metrics(&self) {
-        self.bp.show_metrics();
+    fn metrics(&self) -> &ProtocolMetrics {
+        self.bp.metrics()
     }
 }
 

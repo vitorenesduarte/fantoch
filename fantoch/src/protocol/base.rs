@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::metrics::Metrics;
+use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
 use std::collections::HashSet;
-use std::fmt;
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
@@ -17,7 +17,7 @@ pub struct BaseProcess {
     fast_quorum_size: usize,
     write_quorum_size: usize,
     dot_gen: DotGen,
-    metrics: Metrics<MetricsKind, u64>,
+    metrics: ProtocolMetrics,
 }
 
 impl BaseProcess {
@@ -124,37 +124,29 @@ impl BaseProcess {
             .expect("the slow quorum should be known")
     }
 
-    pub fn show_metrics(&self) {
-        self.metrics.show();
+    // Return metrics.
+    pub fn metrics(&self) -> &ProtocolMetrics {
+        &self.metrics
     }
 
     // Increment fast path count.
+    // TODO  rename
     pub fn fast_path(&mut self) {
-        self.inc_metric(MetricsKind::FastPath);
+        self.inc_by_metric(ProtocolMetricsKind::FastPath, 1);
     }
 
     // Increment slow path count.
     pub fn slow_path(&mut self) {
-        self.inc_metric(MetricsKind::SlowPath);
+        self.inc_by_metric(ProtocolMetricsKind::SlowPath, 1);
     }
 
-    fn inc_metric(&mut self, kind: MetricsKind) {
-        self.metrics.aggregate(kind, |v| *v += 1)
+    // Accumulate more stable commands.
+    pub fn stable(&mut self, len: usize) {
+        self.inc_by_metric(ProtocolMetricsKind::Stable, len as u64);
     }
-}
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-enum MetricsKind {
-    FastPath,
-    SlowPath,
-}
-
-impl fmt::Debug for MetricsKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            MetricsKind::FastPath => write!(f, "fast_path"),
-            MetricsKind::SlowPath => write!(f, "slow_path"),
-        }
+    fn inc_by_metric(&mut self, kind: ProtocolMetricsKind, by: u64) {
+        self.metrics.aggregate(kind, |v| *v += by)
     }
 }
 

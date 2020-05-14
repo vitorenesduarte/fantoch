@@ -364,14 +364,44 @@ where
     /// Show processes' stats.
     /// TODO does this need to be mut?
     fn processes_metrics(&mut self) {
+        self.check_processes(|process| format!("{:?}", process.metrics()))
+            .into_iter()
+            .for_each(|(process_id, stats)| {
+                println!("process {:?} stats:", process_id);
+                println!("{:?}", stats);
+            });
+    }
+
+    /// Get client's stats.
+    /// TODO does this need to be mut?
+    fn clients_latencies(&mut self) -> HashMap<Region, (usize, Histogram)> {
+        self.check_clients(
+            |client, (commands, histogram): &mut (usize, Histogram)| {
+                // update issued commands with this client's issued commands
+                *commands += client.issued_commands();
+
+                // update region's histogram with this client's histogram
+                histogram.merge(client.latency_histogram());
+            },
+        )
+    }
+
+    fn check_processes<F, R>(&mut self, f: F) -> HashMap<ProcessId, R>
+    where
+        F: Fn(&P) -> R,
+    {
         let simulation = &mut self.simulation;
-        self.process_to_region.keys().for_each(|process_id| {
-            // get process from simulation
-            let (process, executor) = simulation.get_process(*process_id);
-            println!("process {:?} stats:", process_id);
-            process.show_metrics();
-            executor.show_metrics();
-        });
+
+        self.process_to_region
+            .keys()
+            .map(|&process_id| {
+                // get process from simulation
+                let (process, _executor) = simulation.get_process(process_id);
+
+                // compute process result
+                (process_id, f(&process))
+            })
+            .collect()
     }
 
     fn check_clients<F, R>(&mut self, f: F) -> HashMap<Region, R>
@@ -397,20 +427,6 @@ where
         }
 
         region_to_results
-    }
-
-    /// Get client's stats.
-    /// TODO does this need to be mut?
-    fn clients_latencies(&mut self) -> HashMap<Region, (usize, Histogram)> {
-        self.check_clients(
-            |client, (commands, histogram): &mut (usize, Histogram)| {
-                // update issued commands with this client's issued commands
-                *commands += client.issued_commands();
-
-                // update region's histogram with this client's histogram
-                histogram.merge(client.latency_histogram());
-            },
-        )
     }
 }
 
@@ -456,8 +472,10 @@ mod tests {
             client_regions,
         );
 
-        // run simulation and return stats
+        // run simulation
         runner.run();
+
+        // check client stats
         let mut latencies = runner.clients_latencies();
         let (us_west1_issued, us_west1) = latencies
             .remove(&Region::new("us-west1"))

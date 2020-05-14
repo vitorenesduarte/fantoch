@@ -4,7 +4,7 @@ use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::{
     BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes,
-    PeriodicEventIndex, Protocol, ToSend,
+    PeriodicEventIndex, Protocol, ProtocolMetrics, ToSend,
 };
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -142,8 +142,8 @@ impl Protocol for Basic {
         true
     }
 
-    fn show_metrics(&self) {
-        self.bp.show_metrics();
+    fn metrics(&self) -> &ProtocolMetrics {
+        self.bp.metrics()
     }
 }
 
@@ -266,6 +266,7 @@ impl Basic {
         stable: Vec<Dot>,
     ) -> Option<ToSend<Message>> {
         assert_eq!(from, self.bp.process_id);
+        self.bp.stable(stable.len());
         self.cmds.gc(stable);
         None
     }
