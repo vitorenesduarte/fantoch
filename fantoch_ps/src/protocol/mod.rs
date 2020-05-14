@@ -158,7 +158,7 @@ mod tests {
         let payload_size = 100;
         let workload =
             Workload::new(conflict_rate, total_commands, payload_size);
-        let clients_per_region = 500;
+        let clients_per_region = 100;
 
         // process and client regions
         let mut regions = planet.regions();
