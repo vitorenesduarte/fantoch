@@ -4,11 +4,11 @@
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
 #### Supported protocols
-- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
-- [FPaxos](https://fpaxos.github.io/), and thus Paxos as a special case [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)
+- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
+- [FPaxos](https://fpaxos.github.io/), and thus Paxos as a special case: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)
   - implemented following [Paxos Made Moderately Complex](http://paxos.systems/), which enables a certain degree of parallelism at the leader
-- [Atlas](https://vitorenes.org/publication/enes-atlas/) [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
-- Newt [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
+- [Atlas](https://vitorenes.org/publication/enes-atlas/): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
+- Newt:[(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
 
 Next:
 - Mencius: a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
