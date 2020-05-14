@@ -34,34 +34,61 @@ mod tests {
     use fantoch::sim::Runner;
 
     #[test]
-    fn sim_newt_test() {
-        let slow_paths = sim_gc_test::<NewtSequential>(3, 1, false);
+    fn sim_newt_3_1_test() {
+        let slow_paths = sim_test::<NewtSequential>(3, 1, false);
         assert_eq!(slow_paths, 0);
-        let slow_paths = sim_gc_test::<NewtSequential>(5, 1, false);
-        assert_eq!(slow_paths, 0);
-        sim_gc_test::<NewtSequential>(5, 2, false);
     }
 
     #[test]
-    fn sim_atlas_test() {
-        let slow_paths = sim_gc_test::<AtlasSequential>(3, 1, false);
+    fn sim_newt_5_1_test() {
+        let slow_paths = sim_test::<NewtSequential>(5, 1, false);
         assert_eq!(slow_paths, 0);
-        let slow_paths = sim_gc_test::<AtlasSequential>(5, 1, false);
-        assert_eq!(slow_paths, 0);
-        sim_gc_test::<AtlasSequential>(5, 2, false);
     }
 
     #[test]
-    fn sim_epaxos_test() {
-        let slow_paths = sim_gc_test::<EPaxosSequential>(3, 1, false);
-        assert_eq!(slow_paths, 0);
-        sim_gc_test::<EPaxosSequential>(5, 2, false);
+    fn sim_newt_5_2_test() {
+        let slow_paths = sim_test::<NewtSequential>(5, 2, false);
+        assert!(slow_paths > 0);
     }
 
     #[test]
-    fn sim_fpaxos_test() {
-        sim_gc_test::<FPaxos>(3, 1, true);
-        sim_gc_test::<FPaxos>(5, 2, true);
+    fn sim_atlas_3_1_test() {
+        let slow_paths = sim_test::<AtlasSequential>(3, 1, false);
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn sim_atlas_5_1_test() {
+        let slow_paths = sim_test::<AtlasSequential>(3, 1, false);
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn sim_atlas_5_2_test() {
+        let slow_paths = sim_test::<AtlasSequential>(5, 2, false);
+        assert!(slow_paths > 0);
+    }
+
+    #[test]
+    fn sim_epaxos_3_1_test() {
+        let slow_paths = sim_test::<EPaxosSequential>(3, 1, false);
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn sim_epaxos_5_2_test() {
+        let slow_paths = sim_test::<EPaxosSequential>(5, 2, false);
+        assert!(slow_paths > 0);
+    }
+
+    #[test]
+    fn sim_fpaxos_3_1_test() {
+        sim_test::<FPaxos>(3, 1, true);
+    }
+
+    #[test]
+    fn sim_fpaxos_5_2_test() {
+        sim_test::<FPaxos>(5, 2, true);
     }
 
     #[tokio::test]
@@ -140,7 +167,7 @@ mod tests {
         run_test::<FPaxos>(workers, executors, with_leader).await
     }
 
-    fn sim_gc_test<P: Protocol>(n: usize, f: usize, with_leader: bool) -> u64 {
+    fn sim_test<P: Protocol>(n: usize, f: usize, with_leader: bool) -> u64 {
         // planet
         let planet = Planet::new();
 
@@ -158,7 +185,7 @@ mod tests {
         let payload_size = 100;
         let workload =
             Workload::new(conflict_rate, total_commands, payload_size);
-        let clients_per_region = 100;
+        let clients_per_region = 10;
 
         // process and client regions
         let mut regions = planet.regions();
