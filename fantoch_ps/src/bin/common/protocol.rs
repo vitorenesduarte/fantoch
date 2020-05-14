@@ -1,6 +1,8 @@
 use clap::{App, Arg};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
+use fantoch::protocol::Protocol;
+use std::error::Error;
 use std::net::IpAddr;
 
 const LIST_SEP: &str = ",";
@@ -12,7 +14,46 @@ const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
 
-pub fn parse_args() -> (
+#[allow(dead_code)]
+pub fn run<P>() -> Result<(), Box<dyn Error>>
+where
+    P: Protocol + Send + 'static,
+{
+    let (
+        process_id,
+        sorted_processes,
+        ip,
+        port,
+        client_port,
+        addresses,
+        config,
+        tcp_nodelay,
+        tcp_buffer_size,
+        tcp_flush_interval,
+        channel_buffer_size,
+        multiplexing,
+        execution_log,
+    ) = parse_args();
+
+    let process = fantoch::run::process::<P, String>(
+        process_id,
+        sorted_processes,
+        ip,
+        port,
+        client_port,
+        addresses,
+        config,
+        tcp_nodelay,
+        tcp_buffer_size,
+        tcp_flush_interval,
+        channel_buffer_size,
+        multiplexing,
+        execution_log,
+    );
+    super::tokio_runtime().block_on(process)
+}
+
+fn parse_args() -> (
     ProcessId,
     Vec<ProcessId>,
     IpAddr,
