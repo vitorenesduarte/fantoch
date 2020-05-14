@@ -28,29 +28,40 @@ mod tests {
     use super::*;
     use fantoch::client::Workload;
     use fantoch::config::Config;
-    use fantoch::planet::{Planet, Region};
+    use fantoch::planet::Planet;
     use fantoch::protocol::{Protocol, ProtocolMetricsKind};
     use fantoch::run::tests::run_test;
     use fantoch::sim::Runner;
 
     #[test]
     fn sim_newt_test() {
-        sim_gc_test::<NewtSequential>(false)
+        let slow_paths = sim_gc_test::<NewtSequential>(3, 1, false);
+        assert_eq!(slow_paths, 0);
+        let slow_paths = sim_gc_test::<NewtSequential>(5, 1, false);
+        assert_eq!(slow_paths, 0);
+        sim_gc_test::<NewtSequential>(5, 2, false);
     }
 
     #[test]
     fn sim_atlas_test() {
-        sim_gc_test::<AtlasSequential>(false)
+        let slow_paths = sim_gc_test::<AtlasSequential>(3, 1, false);
+        assert_eq!(slow_paths, 0);
+        let slow_paths = sim_gc_test::<AtlasSequential>(5, 1, false);
+        assert_eq!(slow_paths, 0);
+        sim_gc_test::<AtlasSequential>(5, 2, false);
     }
 
     #[test]
     fn sim_epaxos_test() {
-        sim_gc_test::<EPaxosSequential>(false)
+        let slow_paths = sim_gc_test::<EPaxosSequential>(3, 1, false);
+        assert_eq!(slow_paths, 0);
+        sim_gc_test::<EPaxosSequential>(5, 2, false);
     }
 
     #[test]
     fn sim_fpaxos_test() {
-        sim_gc_test::<FPaxos>(true)
+        sim_gc_test::<FPaxos>(3, 1, true);
+        sim_gc_test::<FPaxos>(5, 2, true);
     }
 
     #[tokio::test]
@@ -129,13 +140,11 @@ mod tests {
         run_test::<FPaxos>(workers, executors, with_leader).await
     }
 
-    fn sim_gc_test<P: Protocol>(with_leader: bool) {
+    fn sim_gc_test<P: Protocol>(n: usize, f: usize, with_leader: bool) -> u64 {
         // planet
         let planet = Planet::new();
 
         // config
-        let n = 3;
-        let f = 1;
         let mut config = Config::new(n, f);
 
         // set process 0 as leader if we need one
@@ -149,21 +158,13 @@ mod tests {
         let payload_size = 100;
         let workload =
             Workload::new(conflict_rate, total_commands, payload_size);
-        let clients_per_region = 3;
+        let clients_per_region = 500;
 
-        // process regions
-        let process_regions = vec![
-            Region::new("asia-east1"),
-            Region::new("us-central1"),
-            Region::new("us-west1"),
-        ];
-
-        // client regions
-        let client_regions = vec![
-            Region::new("us-west1"),
-            Region::new("us-west2"),
-            Region::new("europe-north1"),
-        ];
+        // process and client regions
+        let mut regions = planet.regions();
+        regions.truncate(n);
+        let process_regions = regions.clone();
+        let client_regions = regions.clone();
 
         // create runner
         let mut runner: Runner<P> = Runner::new(
@@ -178,8 +179,18 @@ mod tests {
         // run simulation until the clients end + another 2 seconds (2000ms)
         let (processes_metrics, _) = runner.run(Some(2000));
 
+        // slow path count
+        let mut total_slow_paths = 0;
+
         // check process stats
         let all_gced = processes_metrics.values().into_iter().all(|metrics| {
+            // get slow paths
+            let slow_paths = metrics
+                .get_aggregated(ProtocolMetricsKind::SlowPath)
+                .cloned()
+                .unwrap_or_default();
+            total_slow_paths += slow_paths;
+
             // check stability has run
             let stable_count = metrics
                 .get_aggregated(ProtocolMetricsKind::Stable)
@@ -189,6 +200,9 @@ mod tests {
             let expected = (total_commands * clients_per_region * n) as u64;
             *stable_count == expected
         });
-        assert!(all_gced)
+        assert!(all_gced);
+
+        // return number of slow paths
+        total_slow_paths
     }
 }
