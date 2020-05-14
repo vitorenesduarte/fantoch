@@ -5,7 +5,7 @@ use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
-use crate::protocol::{Protocol, ToSend};
+use crate::protocol::{Protocol, ProtocolMetrics, ToSend};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SimTime;
 use crate::util;
@@ -147,7 +147,12 @@ where
     }
 
     /// Run the simulation.
-    pub fn run(&mut self) -> HashMap<Region, (usize, Histogram)> {
+    pub fn run(
+        &mut self,
+    ) -> (
+        HashMap<ProcessId, ProtocolMetrics>,
+        HashMap<Region, (usize, Histogram)>,
+    ) {
         // start clients
         self.simulation
             .start_clients(&self.time)
@@ -164,11 +169,8 @@ where
         // run simulation loop
         self.simulation_loop();
 
-        // show processes metrics
-        self.processes_metrics();
-
-        // return clients latencies
-        self.clients_latencies()
+        // return processes metrics and client latencies
+        (self.processes_metrics(), self.clients_latencies())
     }
 
     fn simulation_loop(&mut self) {
@@ -361,15 +363,10 @@ where
         ping_latency / 2
     }
 
-    /// Show processes' stats.
+    /// Get processes' metrics.
     /// TODO does this need to be mut?
-    fn processes_metrics(&mut self) {
-        self.check_processes(|process| format!("{:?}", process.metrics()))
-            .into_iter()
-            .for_each(|(process_id, stats)| {
-                println!("process {:?} stats:", process_id);
-                println!("{:?}", stats);
-            });
+    fn processes_metrics(&mut self) -> HashMap<ProcessId, ProtocolMetrics> {
+        self.check_processes(|process| process.metrics().clone())
     }
 
     /// Get client's stats.
@@ -473,14 +470,12 @@ mod tests {
         );
 
         // run simulation
-        runner.run();
+        let (processes_metrics, mut clients_latencies) = runner.run();
 
-        // check client stats
-        let mut latencies = runner.clients_latencies();
-        let (us_west1_issued, us_west1) = latencies
+        let (us_west1_issued, us_west1) = clients_latencies
             .remove(&Region::new("us-west1"))
             .expect("there should stats from us-west1 region");
-        let (us_west2_issued, us_west2) = latencies
+        let (us_west2_issued, us_west2) = clients_latencies
             .remove(&Region::new("us-west2"))
             .expect("there should stats from us-west2 region");
 

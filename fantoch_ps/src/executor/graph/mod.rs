@@ -19,6 +19,7 @@ use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use fantoch::util;
 use std::collections::HashSet;
+use std::fmt;
 use std::mem;
 use threshold::{AEClock, VClock};
 
@@ -86,15 +87,6 @@ impl DependencyGraph {
             }
             FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
-    }
-
-    pub fn show_internal_status(&self) {
-        println!("vertex index:");
-        println!("{:#?}", self.vertex_index);
-        println!("pending index:");
-        println!("{:#?}", self.pending_index);
-        println!("executed:");
-        println!("{:?}", self.executed_clock);
     }
 
     #[must_use]
@@ -212,6 +204,17 @@ impl DependencyGraph {
                 FinderResult::NotPending
             }
         }
+    }
+}
+
+impl fmt::Debug for DependencyGraph {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "vertex index:")?;
+        write!(f, "{:#?}", self.vertex_index)?;
+        write!(f, "pending index:")?;
+        write!(f, "{:#?}", self.pending_index)?;
+        write!(f, "executed:")?;
+        write!(f, "{:?}", self.executed_clock)
     }
 }
 
