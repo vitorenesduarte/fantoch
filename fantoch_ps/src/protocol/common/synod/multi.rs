@@ -316,7 +316,11 @@ where
         (start..=end).for_each(|slot| {
             self.accepted.remove(&slot);
         });
-        end - start
+        if end > start {
+            end - start
+        } else {
+            0
+        }
     }
 }
 
