@@ -172,10 +172,15 @@ where
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
-        let tx = task::spawn_consumer(channel_buffer_size, |rx| {
+        let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
             writer_task::<P>(tcp_flush_interval, connection, rx)
         });
-        writers.entry(process_id).or_insert_with(Vec::new).push(tx);
+        // get list set of writers to this process
+        let txs = writers.entry(process_id).or_insert_with(Vec::new);
+        // name the channel accordingly
+        tx.set_name(format!("to_writer_{}_process_{}", txs.len(), process_id));
+        // and add a new writer channel
+        txs.push(tx);
     }
 
     // check `writers` size
@@ -281,9 +286,11 @@ where
 
     let to_execution_logger = execution_log.map(|execution_log| {
         // if the execution log was set, then start the execution logger
-        task::spawn_consumer(channel_buffer_size, |rx| {
+        let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
             execution_logger::execution_logger_task::<P>(execution_log, rx)
-        })
+        });
+        tx.set_name("to_execution_logger");
+        tx
     });
 
     // zip rxs'
@@ -549,7 +556,10 @@ async fn send_to_writer<P>(
     let writer_index = rand::thread_rng().gen_range(0, writers.len());
 
     if let Err(e) = writers[writer_index].send(msg).await {
-        println!("[server] error while sending to writer: {:?}", e);
+        println!(
+            "[server] error while sending to writer {}: {:?}",
+            writer_index, e
+        );
     }
 }
 

@@ -28,8 +28,8 @@ impl<M> ChannelSender<M>
 where
     M: Debug + 'static,
 {
-    pub fn set_name(&mut self, name: String) {
-        self.name = Some(name);
+    pub fn set_name<S: Into<String>>(&mut self, name: S) {
+        self.name = Some(name.into());
     }
 
     pub async fn send(&mut self, value: M) -> RunResult<()> {

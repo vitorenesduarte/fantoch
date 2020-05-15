@@ -483,8 +483,9 @@ where
     client.discover(vec![process_id]);
 
     // start client read-write task
-    let (read, write) =
+    let (read, mut write) =
         task::client::start_client_rw_task(channel_buffer_size, connection);
+    write.set_name(format!("command_result_sender_client_{}", client_id));
 
     // return client its connection
     (client, read, write)
