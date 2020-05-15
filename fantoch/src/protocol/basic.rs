@@ -97,6 +97,7 @@ impl Protocol for Basic {
             Message::MCommit { dot, cmd } => {
                 self.handle_mcommit(from, dot, cmd)
             }
+            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
@@ -252,10 +253,22 @@ impl Basic {
             .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
         self.to_executor.extend(execution_info);
 
-        // record that this command has been committed
-        self.cmds.commit(dot);
+        // notify self with the committed dot
+        Some(ToSend {
+            from: self.id(),
+            target: singleton![self.id()],
+            msg: Message::MCommitDot { dot },
+        })
+    }
 
-        // nothing to send
+    fn handle_mcommit_dot(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+    ) -> Option<ToSend<Message>> {
+        log!("p{}: MCommitDot({:?})", self.id(), dot);
+        assert_eq!(from, self.bp.process_id);
+        self.cmds.commit(dot);
         None
     }
 
@@ -316,6 +329,7 @@ pub enum Message {
     MStore { dot: Dot, cmd: Command },
     MStoreAck { dot: Dot },
     MCommit { dot: Dot, cmd: Command },
+    MCommitDot { dot: Dot },
     MGarbageCollection { committed: VClock<ProcessId> },
     MStable { stable: Vec<(ProcessId, u64, u64)> },
 }
@@ -323,9 +337,14 @@ pub enum Message {
 impl MessageIndex for Message {
     fn index(&self) -> MessageIndexes {
         match self {
+            // Protocol messages
             Self::MStore { dot, .. } => MessageIndexes::DotIndex(dot),
             Self::MStoreAck { dot, .. } => MessageIndexes::DotIndex(dot),
             Self::MCommit { dot, .. } => MessageIndexes::DotIndex(dot),
+            // GC messages
+            Self::MCommitDot { .. } => {
+                MessageIndexes::Index(crate::run::GC_WORKER_INDEX)
+            }
             Self::MGarbageCollection { .. } => {
                 MessageIndexes::Index(crate::run::GC_WORKER_INDEX)
             }
