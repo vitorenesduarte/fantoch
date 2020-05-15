@@ -1,14 +1,18 @@
 use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::util;
+use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::sync::Arc;
 use threshold::{AEClock, EventSet, VClock};
 
 #[derive(Clone)]
 pub struct GCTrack {
     process_id: ProcessId,
     n: usize,
-    committed: AEClock<ProcessId>,
+    // this will be shared by all workers
+    committed: Arc<RwLock<AEClock<ProcessId>>>,
+    // while the next two variables will only be updated the by GC worker
     all_but_me: HashMap<ProcessId, VClock<ProcessId>>,
     previous_stable: VClock<ProcessId>,
 }
@@ -18,10 +22,13 @@ impl GCTrack {
         // committed clocks from all processes but self
         let all_but_me = HashMap::with_capacity(n - 1);
 
+        // create committed
+        let committed = Arc::new(RwLock::new(Self::bottom_aeclock(n)));
+
         Self {
             process_id,
             n,
-            committed: Self::bottom_aeclock(n),
+            committed,
             all_but_me,
             previous_stable: Self::bottom_vclock(n),
         }
@@ -29,14 +36,14 @@ impl GCTrack {
 
     /// Records that a command has been committed.
     pub fn commit(&mut self, dot: Dot) {
-        self.committed.add(&dot.source(), dot.sequence());
+        self.committed.write().add(&dot.source(), dot.sequence());
     }
 
     /// Returns a clock representing the set of commands committed locally.
     /// Note that there might be more commands committed than the ones being
     /// represented by the returned clock.
     pub fn committed(&self) -> VClock<ProcessId> {
-        self.committed.frontier()
+        self.committed.read().frontier()
     }
 
     /// Records that set of `committed` commands by process `from`.
@@ -85,7 +92,7 @@ impl GCTrack {
         }
 
         // start from our own frontier
-        let mut stable = self.committed.frontier();
+        let mut stable = self.committed.read().frontier();
         // and intersect with all the other clocks
         self.all_but_me.values().for_each(|clock| {
             stable.meet(clock);
