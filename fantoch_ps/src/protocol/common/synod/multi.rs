@@ -107,7 +107,7 @@ where
     }
 
     /// Performs garbage collection of stable slots.
-    pub fn gc(&mut self, stable: (u64, u64)) -> u64 {
+    pub fn gc(&mut self, stable: (u64, u64)) -> usize {
         self.acceptor.gc(stable)
     }
 
@@ -312,13 +312,14 @@ where
     }
 
     /// Performs garbage collection of stable slots.
-    fn gc(&mut self, (start, end): (u64, u64)) -> u64 {
-        (start..=end).fold(0, |stable_count, slot| {
-            // remove dot
-            self.accepted.remove(&slot);
-            // update stable count
-            stable_count + 1
-        })
+    /// Returns how many stable does were removed.
+    fn gc(&mut self, (start, end): (u64, u64)) -> usize {
+        (start..=end)
+            .inspect(|slot| {
+                // remove dot
+                assert!(self.accepted.remove(&slot).is_some());
+            })
+            .count()
     }
 }
 

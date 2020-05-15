@@ -141,8 +141,8 @@ impl BaseProcess {
     }
 
     // Accumulate more stable commands.
-    pub fn stable(&mut self, len: u64) {
-        self.inc_by_metric(ProtocolMetricsKind::Stable, len);
+    pub fn stable(&mut self, len: usize) {
+        self.inc_by_metric(ProtocolMetricsKind::Stable, len as u64);
     }
 
     fn inc_by_metric(&mut self, kind: ProtocolMetricsKind, by: u64) {

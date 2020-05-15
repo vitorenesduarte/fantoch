@@ -80,12 +80,13 @@ where
     }
 
     /// Performs garbage collection of stable dots.
-    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> u64 {
-        util::dots(stable).fold(0, |stable_count, dot| {
-            // remove dot
-            self.dot_to_info.remove(&dot);
-            // update stable count
-            stable_count + 1
-        })
+    /// Returns how many stable does were removed.
+    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
+        util::dots(stable)
+            .filter(|dot| {
+                // remove dot
+                self.dot_to_info.remove(&dot).is_some()
+            })
+            .count()
     }
 }

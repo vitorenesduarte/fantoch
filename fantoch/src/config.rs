@@ -283,7 +283,6 @@ mod tests {
         assert_eq!(config.basic_quorum_size(), 2);
 
         let config = Config::new(7, 2);
-        assert_eq!(config.atlas_quorum_sizes(), (5, 3));
         assert_eq!(config.basic_quorum_size(), 3);
 
         let config = Config::new(7, 3);
