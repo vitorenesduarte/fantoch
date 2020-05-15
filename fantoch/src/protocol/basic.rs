@@ -58,7 +58,7 @@ impl Protocol for Basic {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_delay();
+        let gc_delay = config.garbage_collection_delay() * 10000;
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
