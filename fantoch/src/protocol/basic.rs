@@ -239,10 +239,10 @@ impl Basic {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // get cmd info and its rifl
-        let info = self.cmds.get(dot);
+        // let info = self.cmds.get(dot);
 
         // update command info
-        info.cmd = Some(cmd.clone());
+        // info.cmd = Some(cmd.clone());
 
         // create execution info:
         // - one entry per key being accessed will be created, which allows the
@@ -254,11 +254,12 @@ impl Basic {
         self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
-        Some(ToSend {
-            from: self.id(),
-            target: singleton![self.id()],
-            msg: Message::MCommitDot { dot },
-        })
+        // Some(ToSend {
+        //     from: self.id(),
+        //     target: singleton![self.id()],
+        //     msg: Message::MCommitDot { dot },
+        // })
+        None
     }
 
     fn handle_mcommit_dot(
