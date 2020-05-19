@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::{
-    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes,
-    PeriodicEventIndex, Protocol, ProtocolMetrics, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
+    Protocol, ProtocolMetrics, ToSend,
 };
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -145,6 +145,10 @@ impl Protocol for Basic {
         true
     }
 
+    fn leaderless() -> bool {
+        true
+    }
+
     fn metrics(&self) -> &ProtocolMetrics {
         self.bp.metrics()
     }
@@ -243,7 +247,6 @@ impl Basic {
 
         // update command info
         // info.cmd = Some(cmd.clone());
-
         self.cmds.remove(dot);
 
         // create execution info:
@@ -337,20 +340,21 @@ pub enum Message {
 }
 
 impl MessageIndex for Message {
-    fn index(&self) -> MessageIndexes {
+    fn index(&self) -> Option<(usize, usize)> {
+        use crate::run::{
+            dot_worker_index_reserve, no_worker_index_reserve, GC_WORKER_INDEX,
+        };
         match self {
             // Protocol messages
-            Self::MStore { dot, .. } => MessageIndexes::DotIndex(dot),
-            Self::MStoreAck { dot, .. } => MessageIndexes::DotIndex(dot),
-            Self::MCommit { dot, .. } => MessageIndexes::DotIndex(dot),
+            Self::MStore { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MStoreAck { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MCommit { dot, .. } => dot_worker_index_reserve(&dot),
             // GC messages
-            Self::MCommitDot { .. } => {
-                MessageIndexes::Index(crate::run::GC_WORKER_INDEX)
-            }
+            Self::MCommitDot { .. } => no_worker_index_reserve(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
-                MessageIndexes::Index(crate::run::GC_WORKER_INDEX)
+                no_worker_index_reserve(GC_WORKER_INDEX)
             }
-            Self::MStable { .. } => MessageIndexes::None,
+            Self::MStable { .. } => None,
         }
     }
 }
@@ -361,9 +365,10 @@ pub enum PeriodicEvent {
 }
 
 impl PeriodicEventIndex for PeriodicEvent {
-    fn index(&self) -> Option<usize> {
+    fn index(&self) -> Option<(usize, usize)> {
+        use crate::run::{no_worker_index_reserve, GC_WORKER_INDEX};
         match self {
-            Self::GarbageCollection => Some(crate::run::GC_WORKER_INDEX),
+            Self::GarbageCollection => no_worker_index_reserve(GC_WORKER_INDEX),
         }
     }
 }

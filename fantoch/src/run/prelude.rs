@@ -4,9 +4,7 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{
-    MessageIndex, MessageIndexes, PeriodicEventIndex, Protocol,
-};
+use crate::protocol::{MessageIndex, PeriodicEventIndex, Protocol};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -20,6 +18,23 @@ pub const LEADER_WORKER_INDEX: usize = 0;
 //   by leader-based protocols
 // - e.g. in fpaxos, the gc only runs in the acceptor worker
 pub const GC_WORKER_INDEX: usize = 0;
+
+// protocols that use dots have a GC worker; this reserves the first worker for
+// that
+pub fn dot_worker_index_reserve(dot: &Dot) -> Option<(usize, usize)> {
+    worker_index_reserve(1, dot.sequence() as usize)
+}
+
+pub fn no_worker_index_reserve(index: usize) -> Option<(usize, usize)> {
+    worker_index_reserve(0, index)
+}
+
+pub fn worker_index_reserve(
+    reserve: usize,
+    index: usize,
+) -> Option<(usize, usize)> {
+    Some((reserve, index))
+}
 
 // common error type
 pub type RunResult<V> = Result<V, Box<dyn Error>>;
@@ -63,17 +78,15 @@ pub type ExecutionInfoSender<P> =
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
 impl pool::PoolIndex for (Option<Dot>, Command) {
-    fn index(&self) -> Option<usize> {
+    fn index(&self) -> Option<(usize, usize)> {
         // if there's a `Dot`, then the protocol is leaderless; otherwise, it is
         // leader-based and the command should always be forwarded to the leader
         // worker
-        let index = self
-            .0
+        self.0
             .as_ref()
-            .map(|dot| dot_index(dot))
-            .unwrap_or(LEADER_WORKER_INDEX);
-        // in this case, there's always an index
-        Some(index)
+            .map(dot_worker_index_reserve)
+            // no necessary reserve if there's a leader
+            .unwrap_or(no_worker_index_reserve(LEADER_WORKER_INDEX))
     }
 }
 
@@ -86,12 +99,8 @@ impl<A> pool::PoolIndex for (ProcessId, A)
 where
     A: MessageIndex,
 {
-    fn index(&self) -> Option<usize> {
-        match self.1.index() {
-            MessageIndexes::Index(index) => Some(index),
-            MessageIndexes::DotIndex(ref dot) => Some(dot_index(dot)),
-            MessageIndexes::None => None,
-        }
+    fn index(&self) -> Option<(usize, usize)> {
+        self.1.index()
     }
 }
 
@@ -117,7 +126,7 @@ impl<P> pool::PoolIndex for PeriodicEventMessage<P>
 where
     P: Protocol,
 {
-    fn index(&self) -> Option<usize> {
+    fn index(&self) -> Option<(usize, usize)> {
         self.0.index()
     }
 }
@@ -126,8 +135,8 @@ where
 pub type ClientToExecutors = pool::ToPool<FromClient>;
 // The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
 impl pool::PoolIndex for (&Key, Rifl) {
-    fn index(&self) -> Option<usize> {
-        Some(key_index(&self.0))
+    fn index(&self) -> Option<(usize, usize)> {
+        no_worker_index_reserve(key_index(&self.0))
     }
 }
 
@@ -140,14 +149,12 @@ impl<A> pool::PoolIndex for A
 where
     A: MessageKey,
 {
-    fn index(&self) -> Option<usize> {
-        self.key().map(|key| key_index(key))
+    fn index(&self) -> Option<(usize, usize)> {
+        match self.key() {
+            Some(key) => no_worker_index_reserve(key_index(key)),
+            None => None,
+        }
     }
-}
-
-// The index of a dot is its sequence
-fn dot_index(dot: &Dot) -> usize {
-    dot.sequence() as usize
 }
 
 // The index of a key is its hash

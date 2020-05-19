@@ -5,7 +5,7 @@ use crate::run::task::chan::{ChannelReceiver, ChannelSender};
 use std::fmt::Debug;
 
 pub trait PoolIndex {
-    fn index(&self) -> Option<usize>;
+    fn index(&self) -> Option<(usize, usize)>;
 }
 
 #[derive(Clone)]
@@ -102,9 +102,15 @@ where
     where
         T: PoolIndex,
     {
-        msg.index().map(|index| {
-            // the actual index is computed based on the pool size
-            index % self.pool.len()
+        msg.index().map(|(reserved, index)| {
+            if let Some(remaining) = self.pool_size().checked_sub(reserved) {
+                // compute the actual index only in the remaining indexes
+                index % remaining
+            } else {
+                // if there's as many reserved (or more) than workers in the
+                // pool, then ignore reservation
+                index % self.pool_size()
+            }
         })
     }
 

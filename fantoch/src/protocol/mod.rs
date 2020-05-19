@@ -81,9 +81,7 @@ pub trait Protocol: Clone {
 
     fn parallel() -> bool;
 
-    fn leaderless() -> bool {
-        true
-    }
+    fn leaderless() -> bool;
 
     fn metrics(&self) -> &ProtocolMetrics;
 }
@@ -114,27 +112,16 @@ pub trait MessageIndex {
     /// all workers. In particular, if the protocol is not parallel, the
     /// message is sent to the single protocol worker.
     ///
-    /// There are three types of indexes are supported:
-    /// - Index: simple sequence number
-    /// - DotIndex: dot index in which the dot sequence will be used as index
+    /// There only 2 types of indexes are supported:
+    /// - Some((shift, index)): `index` will be used to compute working index
+    ///   making sure that index is higher than `shift`
     /// - None: no indexing; message will be sent to all workers
-    fn index(&self) -> MessageIndexes {
-        MessageIndexes::None
-    }
-}
-
-pub enum MessageIndexes<'a> {
-    Index(usize),
-    DotIndex(&'a Dot),
-    None,
+    fn index(&self) -> Option<(usize, usize)>;
 }
 
 pub trait PeriodicEventIndex {
-    /// Similar to `MessageIndex`, but there are only two types of events:
-    /// - Some(index): defines the index of the worker that should receive the
-    ///   event
-    /// - None: no indexing; event will be sent to all workers
-    fn index(&self) -> Option<usize>;
+    /// Similar to `MessageIndex`.
+    fn index(&self) -> Option<(usize, usize)>;
 }
 
 #[derive(Clone, PartialEq, Debug)]

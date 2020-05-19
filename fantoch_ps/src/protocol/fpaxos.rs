@@ -5,8 +5,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, MessageIndex, MessageIndexes, PeriodicEventIndex, Protocol,
-    ProtocolMetrics, ToSend,
+    BaseProcess, MessageIndex, PeriodicEventIndex, Protocol, ProtocolMetrics,
+    ToSend,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -392,35 +392,36 @@ const ACCEPTOR_WORKER_INDEX: usize = 1;
 const LEARNER_WORKER_INDEX: usize = 2;
 
 impl MessageIndex for Message {
-    fn index(&self) -> MessageIndexes {
-        let index = match self {
+    fn index(&self) -> Option<(usize, usize)> {
+        use fantoch::run::{no_worker_index_reserve, worker_index_reserve};
+        match self {
             Self::MForwardSubmit { .. } => {
                 // forward commands to the leader worker
-                LEADER_WORKER_INDEX
+                no_worker_index_reserve(LEADER_WORKER_INDEX)
             }
             Self::MAccept { .. } => {
                 // forward accepts to the acceptor worker
-                ACCEPTOR_WORKER_INDEX
+                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
             }
             Self::MChosen { .. } => {
                 // forward chosen messages to learner worker
-                LEARNER_WORKER_INDEX
+                no_worker_index_reserve(LEARNER_WORKER_INDEX)
             }
             // spawn commanders and accepted messages should be forwarded to
             // the commander process:
-            // - TODO here we should make sure that these commanders are never
-            //   spawned in the previous 3 workers
-            Self::MSpawnCommander { slot, .. } => *slot as usize,
-            Self::MAccepted { slot, .. } => *slot as usize,
+            // - make sure that these commanders are never spawned in the previous 3 workers
+            Self::MSpawnCommander { slot, .. } => worker_index_reserve(3, *slot as usize),
+            Self::MAccepted { slot, .. } => {
+                worker_index_reserve(3, *slot as usize)
+            }
             Self::MGarbageCollection { .. } => {
                 // since it's the acceptor that contains the slots to be gc-ed,
                 // we should simply run gc-tracking there as well:
                 // - this removes the need for Message::MStable seen in the
                 //   other implementations
-                ACCEPTOR_WORKER_INDEX
+                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
             }
-        };
-        MessageIndexes::Index(index)
+        }
     }
 }
 
@@ -430,9 +431,12 @@ pub enum PeriodicEvent {
 }
 
 impl PeriodicEventIndex for PeriodicEvent {
-    fn index(&self) -> Option<usize> {
+    fn index(&self) -> Option<(usize, usize)> {
+        use fantoch::run::no_worker_index_reserve;
         match self {
-            Self::GarbageCollection => Some(ACCEPTOR_WORKER_INDEX),
+            Self::GarbageCollection => {
+                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+            }
         }
     }
 }

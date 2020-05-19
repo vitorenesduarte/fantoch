@@ -8,8 +8,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, CommandsInfo, Info, MessageIndex, MessageIndexes,
-    PeriodicEventIndex, Protocol, ProtocolMetrics, ToSend,
+    BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
+    Protocol, ProtocolMetrics, ToSend,
 };
 use fantoch::util;
 use fantoch::{log, singleton};
@@ -119,6 +119,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
             Message::MConsensusAck { dot, ballot } => {
                 self.handle_mconsensusack(from, dot, ballot)
             }
+            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
@@ -163,6 +164,10 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
 
     fn parallel() -> bool {
         KC::parallel()
+    }
+
+    fn leaderless() -> bool {
+        true
     }
 
     fn metrics(&self) -> &ProtocolMetrics {
@@ -475,6 +480,17 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }
     }
 
+    fn handle_mcommit_dot(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+    ) -> Option<ToSend<Message>> {
+        log!("p{}: MCommitDot({:?})", self.id(), dot);
+        assert_eq!(from, self.bp.process_id);
+        self.cmds.commit(dot);
+        None
+    }
+
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -591,6 +607,9 @@ pub enum Message {
         dot: Dot,
         ballot: u64,
     },
+    MCommitDot {
+        dot: Dot,
+    },
     MGarbageCollection {
         committed: VClock<ProcessId>,
     },
@@ -600,17 +619,23 @@ pub enum Message {
 }
 
 impl MessageIndex for Message {
-    fn index(&self) -> MessageIndexes {
+    fn index(&self) -> Option<(usize, usize)> {
+        use fantoch::run::{
+            dot_worker_index_reserve, no_worker_index_reserve, GC_WORKER_INDEX,
+        };
         match self {
-            Self::MCollect { dot, .. } => MessageIndexes::DotIndex(dot),
-            Self::MCollectAck { dot, .. } => MessageIndexes::DotIndex(dot),
-            Self::MCommit { dot, .. } => MessageIndexes::DotIndex(dot),
-            Self::MConsensus { dot, .. } => MessageIndexes::DotIndex(dot),
-            Self::MConsensusAck { dot, .. } => MessageIndexes::DotIndex(dot),
+            // Protocol messages
+            Self::MCollect { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MCollectAck { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MCommit { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MConsensus { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MConsensusAck { dot, .. } => dot_worker_index_reserve(&dot),
+            // GC messages
+            Self::MCommitDot { .. } => no_worker_index_reserve(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
-                MessageIndexes::Index(fantoch::run::GC_WORKER_INDEX)
+                no_worker_index_reserve(GC_WORKER_INDEX)
             }
-            Self::MStable { .. } => MessageIndexes::None,
+            Self::MStable { .. } => None,
         }
     }
 }
@@ -621,12 +646,14 @@ pub enum PeriodicEvent {
 }
 
 impl PeriodicEventIndex for PeriodicEvent {
-    fn index(&self) -> Option<usize> {
+    fn index(&self) -> Option<(usize, usize)> {
+        use fantoch::run::{no_worker_index_reserve, GC_WORKER_INDEX};
         match self {
-            Self::GarbageCollection => Some(fantoch::run::GC_WORKER_INDEX),
+            Self::GarbageCollection => no_worker_index_reserve(GC_WORKER_INDEX),
         }
     }
 }
+
 
 /// `Status` of commands.
 #[derive(PartialEq, Clone)]
