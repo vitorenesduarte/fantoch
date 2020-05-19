@@ -183,10 +183,10 @@ mod tests {
 
         // clients workload
         let conflict_rate = 100;
-        let total_commands = 100;
+        let commands_per_client = 100;
         let payload_size = 100;
         let workload =
-            Workload::new(conflict_rate, total_commands, payload_size);
+            Workload::new(conflict_rate, commands_per_client, payload_size);
         let clients_per_region = 10;
 
         // process and client regions
@@ -212,24 +212,34 @@ mod tests {
         let mut total_slow_paths = 0;
 
         // check process stats
-        let all_gced = processes_metrics.values().into_iter().all(|metrics| {
-            // get slow paths
-            let slow_paths = metrics
-                .get_aggregated(ProtocolMetricsKind::SlowPath)
-                .cloned()
-                .unwrap_or_default();
-            total_slow_paths += slow_paths;
+        let gced = processes_metrics
+            .values()
+            .into_iter()
+            .filter(|metrics| {
+                // get slow paths
+                let slow_paths = metrics
+                    .get_aggregated(ProtocolMetricsKind::SlowPath)
+                    .cloned()
+                    .unwrap_or_default();
+                total_slow_paths += slow_paths;
 
-            // check stability has run
-            let stable_count = metrics
-                .get_aggregated(ProtocolMetricsKind::Stable)
-                .expect("stability should have happened");
+                // check stability has run
+                let stable_count = metrics
+                    .get_aggregated(ProtocolMetricsKind::Stable)
+                    .expect("stability should have happened");
 
-            // check that all commands were gc-ed:
-            let expected = (total_commands * clients_per_region * n) as u64;
-            *stable_count == expected
-        });
-        assert!(all_gced);
+                // check if this process gc-ed all commands
+                *stable_count
+                    == (commands_per_client * clients_per_region * n) as u64
+            })
+            .count();
+
+        // check if the correct number of processed gc-ed:
+        // - if there's a leader (i.e. FPaxos), GC will only prune commands at
+        //   f+1 acceptors
+        // - otherwise, GC will prune comands at all processes
+        let expected = if with_leader { f + 1 } else { n };
+        assert_eq!(gced, expected);
 
         // return number of slow paths
         total_slow_paths
