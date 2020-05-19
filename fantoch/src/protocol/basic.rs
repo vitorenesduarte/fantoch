@@ -58,7 +58,7 @@ impl Protocol for Basic {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_delay() * 10000;
+        let gc_delay = config.garbage_collection_delay();
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
@@ -244,6 +244,8 @@ impl Basic {
         // update command info
         // info.cmd = Some(cmd.clone());
 
+        self.cmds.remove(dot);
+
         // create execution info:
         // - one entry per key being accessed will be created, which allows the
         //   basic executor to run in parallel
@@ -254,13 +256,11 @@ impl Basic {
         self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
-        // Some(ToSend {
-        //     from: self.id(),
-        //     target: singleton![self.id()],
-        //     msg: Message::MCommitDot { dot },
-        // })
-        self.cmds.remove(dot);
-        None
+        Some(ToSend {
+            from: self.id(),
+            target: singleton![self.id()],
+            msg: Message::MCommitDot { dot },
+        })
     }
 
     fn handle_mcommit_dot(
