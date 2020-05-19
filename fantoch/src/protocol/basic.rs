@@ -259,6 +259,7 @@ impl Basic {
         //     target: singleton![self.id()],
         //     msg: Message::MCommitDot { dot },
         // })
+        self.cmds.remove(dot);
         None
     }
 

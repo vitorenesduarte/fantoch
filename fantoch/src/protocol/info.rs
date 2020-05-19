@@ -63,6 +63,10 @@ where
         self.gc_track.commit(dot);
     }
 
+    pub fn remove(&mut self, dot: Dot) {
+        self.dot_to_info.remove(&dot);
+    }
+
     /// Records that set of `committed` commands by process `from`.
     pub fn committed_by(
         &mut self,
