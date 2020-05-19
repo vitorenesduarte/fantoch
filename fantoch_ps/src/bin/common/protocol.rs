@@ -172,7 +172,14 @@ fn parse_args() -> (
             Arg::with_name("tcp_flush_interval")
                 .long("tcp_flush_interval")
                 .value_name("TCP_FLUSH_INTERVAL")
-                .help("TCP flush interval (in microseconds); if 0, then flush occurs on every send; default: 0")
+                .help("TCP flush interval (in milliseconds); if 0, then flush occurs on every send; default: 0")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("gc_interval")
+                .long("gc_interval")
+                .value_name("GC_INTERVAL")
+                .help("garbage collection interval (in milliseconds); default: 500")
                 .takes_value(true),
         )
         .arg(
@@ -227,6 +234,7 @@ fn parse_args() -> (
         matches.value_of("f"),
         matches.value_of("transitive_conflicts"),
         matches.value_of("execute_at_commit"),
+        matches.value_of("gc_interval"),
     );
     let leader = parse_leader(matches.value_of("leader"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));

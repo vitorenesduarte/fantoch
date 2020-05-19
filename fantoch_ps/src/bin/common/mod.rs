@@ -9,6 +9,7 @@ const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_FLUSH_INTERVAL: usize = 0; // milliseconds
+const DEFAULT_GC_INTERVAL: usize = 500; // milliseconds
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 #[allow(dead_code)]
@@ -33,6 +34,7 @@ pub fn parse_config(
     f: Option<&str>,
     transitive_conflicts: Option<&str>,
     execute_at_commit: Option<&str>,
+    gc_interval: Option<&str>,
 ) -> Config {
     let n = n
         .expect("n should be set")
@@ -56,11 +58,19 @@ pub fn parse_config(
                 .expect("execute_at_commit should be a bool")
         })
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT);
+    let gc_interval = gc_interval
+        .map(|gc_interval| {
+            gc_interval
+                .parse::<usize>()
+                .expect("gc_interval should be a number")
+        })
+        .unwrap_or(DEFAULT_GC_INTERVAL);
     // create config
     let mut config = Config::new(n, f);
     // set transitive conflicts and skip execution
     config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
+    config.set_garbage_collection_interval(gc_interval);
     config
 }
 

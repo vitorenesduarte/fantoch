@@ -65,7 +65,7 @@ impl Protocol for FPaxos {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_delay();
+        let gc_delay = config.garbage_collection_interval();
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
@@ -409,8 +409,11 @@ impl MessageIndex for Message {
             }
             // spawn commanders and accepted messages should be forwarded to
             // the commander process:
-            // - make sure that these commanders are never spawned in the previous 3 workers
-            Self::MSpawnCommander { slot, .. } => worker_index_reserve(3, *slot as usize),
+            // - make sure that these commanders are never spawned in the
+            //   previous 3 workers
+            Self::MSpawnCommander { slot, .. } => {
+                worker_index_reserve(3, *slot as usize)
+            }
             Self::MAccepted { slot, .. } => {
                 worker_index_reserve(3, *slot as usize)
             }

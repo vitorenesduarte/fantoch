@@ -78,7 +78,8 @@ pub mod task;
 
 // Re-exports.
 pub use prelude::{
-    dot_worker_index_reserve, no_worker_index_reserve, worker_index_reserve, GC_WORKER_INDEX, LEADER_WORKER_INDEX,
+    dot_worker_index_reserve, no_worker_index_reserve, worker_index_reserve,
+    GC_WORKER_INDEX, LEADER_WORKER_INDEX,
 };
 
 use crate::client::{Client, Workload};
@@ -133,6 +134,7 @@ where
         tcp_nodelay,
         tcp_buffer_size,
         tcp_flush_interval,
+        gc_interval,
         channel_buffer_size,
         multiplexing,
         execution_log,

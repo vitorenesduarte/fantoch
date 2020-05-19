@@ -18,8 +18,8 @@ pub struct Config {
     workers: usize,
     /// defines the number of `Executor` workers
     executors: usize,
-    /// defines the delay between garbage collections (milliseconds)
-    garbage_collection_delay: u64,
+    /// defines the interval between garbage collections (milliseconds)
+    garbage_collection_interval: u64,
 }
 
 impl Config {
@@ -44,7 +44,7 @@ impl Config {
         let workers = 1;
         let executors = 1;
         // by default, garbage collection runs every 500ms
-        let garbage_collection_delay = 500;
+        let garbage_collection_interval = 500;
         Self {
             n,
             f,
@@ -54,7 +54,7 @@ impl Config {
             leader,
             workers,
             executors,
-            garbage_collection_delay,
+            garbage_collection_interval,
         }
     }
 
@@ -128,14 +128,14 @@ impl Config {
         self.executors = executors;
     }
 
-    /// Checks the garbage collection delay.
-    pub fn garbage_collection_delay(&self) -> u64 {
-        self.garbage_collection_delay
+    /// Checks the garbage collection interval.
+    pub fn garbage_collection_interval(&self) -> u64 {
+        self.garbage_collection_interval
     }
 
-    /// Sets the garbage collection delay.
-    pub fn set_garbage_collection_delay(&mut self, delay: u64) {
-        self.garbage_collection_delay = delay;
+    /// Sets the garbage collection interval.
+    pub fn set_garbage_collection_interval(&mut self, interval: u64) {
+        self.garbage_collection_interval = interval;
     }
 }
 
@@ -269,12 +269,12 @@ mod tests {
         assert_eq!(config.workers(), 10);
         assert_eq!(config.executors(), 20);
 
-        // by default, the garbage collection delay is 500
-        assert_eq!(config.garbage_collection_delay(), 500);
+        // by default, the garbage collection interval is 500
+        assert_eq!(config.garbage_collection_interval(), 500);
 
         // change its value and check it has changed
-        config.set_garbage_collection_delay(100);
-        assert_eq!(config.garbage_collection_delay(), 100);
+        config.set_garbage_collection_interval(100);
+        assert_eq!(config.garbage_collection_interval(), 100);
     }
 
     #[test]

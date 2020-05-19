@@ -68,7 +68,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_delay();
+        let gc_delay = config.garbage_collection_interval();
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
