@@ -30,7 +30,7 @@ impl Protocol for Basic {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(PeriodicEvent, usize)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = config.basic_quorum_size();
         let write_quorum_size = 0; // there's no write quorum as we have 100% fast paths

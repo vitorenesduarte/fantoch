@@ -48,7 +48,7 @@ pub trait Protocol: Clone {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>);
+    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>);
 
     fn id(&self) -> ProcessId;
 

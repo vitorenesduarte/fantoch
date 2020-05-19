@@ -322,7 +322,7 @@ where
 }
 
 async fn periodic_task<P>(
-    events: Vec<(P::PeriodicEvent, u64)>,
+    events: Vec<(P::PeriodicEvent, usize)>,
     mut periodic_to_workers: PeriodicToWorkers<P>,
 ) where
     P: Protocol + 'static,
@@ -331,7 +331,7 @@ async fn periodic_task<P>(
     assert_eq!(events.len(), 1);
     let (event, delay) = events[0].clone();
 
-    let mut interval = time::interval(Duration::from_millis(delay));
+    let mut interval = time::interval(Duration::from_millis(delay as u64));
     loop {
         tokio::select! {
             _ = interval.tick() => {

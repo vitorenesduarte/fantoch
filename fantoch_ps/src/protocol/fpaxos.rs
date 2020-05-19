@@ -33,7 +33,7 @@ impl Protocol for FPaxos {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = 0; // there's no fast quorum as we don't have fast paths
         let write_quorum_size = config.fpaxos_quorum_size();

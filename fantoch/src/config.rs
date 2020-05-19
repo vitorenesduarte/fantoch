@@ -19,7 +19,7 @@ pub struct Config {
     /// defines the number of `Executor` workers
     executors: usize,
     /// defines the interval between garbage collections (milliseconds)
-    garbage_collection_interval: u64,
+    garbage_collection_interval: usize,
 }
 
 impl Config {
@@ -129,12 +129,12 @@ impl Config {
     }
 
     /// Checks the garbage collection interval.
-    pub fn garbage_collection_interval(&self) -> u64 {
+    pub fn garbage_collection_interval(&self) -> usize {
         self.garbage_collection_interval
     }
 
     /// Sets the garbage collection interval.
-    pub fn set_garbage_collection_interval(&mut self, interval: u64) {
+    pub fn set_garbage_collection_interval(&mut self, interval: usize) {
         self.garbage_collection_interval = interval;
     }
 }

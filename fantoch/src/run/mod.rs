@@ -134,7 +134,6 @@ where
         tcp_nodelay,
         tcp_buffer_size,
         tcp_flush_interval,
-        gc_interval,
         channel_buffer_size,
         multiplexing,
         execution_log,

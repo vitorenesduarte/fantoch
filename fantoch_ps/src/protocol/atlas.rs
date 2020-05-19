@@ -40,7 +40,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(PeriodicEvent, usize)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = config.atlas_quorum_sizes();
 

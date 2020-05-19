@@ -38,7 +38,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size, _) =
             config.newt_quorum_sizes();
