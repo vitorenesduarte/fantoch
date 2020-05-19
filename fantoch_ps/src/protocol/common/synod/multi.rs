@@ -315,9 +315,12 @@ where
     /// Returns how many stable does were removed.
     fn gc(&mut self, (start, end): (u64, u64)) -> usize {
         (start..=end)
-            .inspect(|slot| {
-                // remove dot
-                assert!(self.accepted.remove(&slot).is_some());
+            .filter(|slot| {
+                // remove slot:
+                // - if this acceptor is not part of the quorum used by the
+                //   leader, then the slot does not exist locally (assuming
+                //   there was no recovery)
+                self.accepted.remove(&slot).is_some()
             })
             .count()
     }
