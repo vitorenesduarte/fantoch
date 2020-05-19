@@ -103,15 +103,19 @@ where
         T: PoolIndex,
     {
         msg.index().map(|(reserved, index)| {
-            if let Some(remaining) = self.pool_size().checked_sub(reserved) {
-                // compute the actual index only in the remaining indexes
-                index % remaining
-            } else {
-                // if there's as many reserved (or more) than workers in the
-                // pool, then ignore reservation
-                index % self.pool_size()
-            }
+            Self::do_index(reserved, index, self.pool_size())
         })
+    }
+
+    fn do_index(reserved: usize, index: usize, pool_size: usize) -> usize {
+        if reserved < pool_size {
+            // compute the actual index only in the remaining indexes
+            reserved + (index % (pool_size - reserved))
+        } else {
+            // if there's as many reserved (or more) than workers in the
+            // pool, then ignore reservation
+            index % pool_size
+        }
     }
 
     async fn do_forward(
@@ -132,5 +136,83 @@ where
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn do_index(reserved: usize, index: usize, pool_size: usize) -> usize {
+        ToPool::<()>::do_index(reserved, index, pool_size)
+    }
+
+    #[test]
+    fn index() {
+        let pool_size = 1;
+        // if the pool size is 1, the remaining arguments are irrelevant
+        assert_eq!(do_index(0, 0, pool_size), 0);
+        assert_eq!(do_index(0, 1, pool_size), 0);
+        assert_eq!(do_index(0, 2, pool_size), 0);
+        assert_eq!(do_index(0, 3, pool_size), 0);
+        assert_eq!(do_index(1, 0, pool_size), 0);
+        assert_eq!(do_index(1, 1, pool_size), 0);
+        assert_eq!(do_index(1, 2, pool_size), 0);
+        assert_eq!(do_index(1, 3, pool_size), 0);
+        assert_eq!(do_index(2, 0, pool_size), 0);
+        assert_eq!(do_index(2, 1, pool_size), 0);
+        assert_eq!(do_index(2, 2, pool_size), 0);
+        assert_eq!(do_index(2, 3, pool_size), 0);
+        assert_eq!(do_index(3, 0, pool_size), 0);
+        assert_eq!(do_index(3, 1, pool_size), 0);
+        assert_eq!(do_index(3, 2, pool_size), 0);
+        assert_eq!(do_index(3, 3, pool_size), 0);
+
+        let pool_size = 2;
+        // if the pool size is 2, with reserved = 0, we simply %
+        assert_eq!(do_index(0, 0, pool_size), 0);
+        assert_eq!(do_index(0, 1, pool_size), 1);
+        assert_eq!(do_index(0, 2, pool_size), 0);
+        assert_eq!(do_index(0, 3, pool_size), 1);
+        // if the pool size is 2, with reserved = 1, all requests go to 1
+        assert_eq!(do_index(1, 0, pool_size), 1);
+        assert_eq!(do_index(1, 1, pool_size), 1);
+        assert_eq!(do_index(1, 2, pool_size), 1);
+        assert_eq!(do_index(1, 3, pool_size), 1);
+        // if the pool size is 2, with reserved >= 2, we simply %
+        assert_eq!(do_index(2, 0, pool_size), 0);
+        assert_eq!(do_index(2, 1, pool_size), 1);
+        assert_eq!(do_index(2, 2, pool_size), 0);
+        assert_eq!(do_index(2, 3, pool_size), 1);
+        assert_eq!(do_index(3, 0, pool_size), 0);
+        assert_eq!(do_index(3, 1, pool_size), 1);
+        assert_eq!(do_index(3, 2, pool_size), 0);
+        assert_eq!(do_index(3, 3, pool_size), 1);
+
+        let pool_size = 3;
+        // if the pool size is 3, with reserved = 0, we simply %
+        assert_eq!(do_index(0, 0, pool_size), 0);
+        assert_eq!(do_index(0, 1, pool_size), 1);
+        assert_eq!(do_index(0, 2, pool_size), 2);
+        assert_eq!(do_index(0, 3, pool_size), 0);
+        // if the pool size is 3, with reserved = 1, we % between 1 and 2
+        assert_eq!(do_index(1, 0, pool_size), 1);
+        assert_eq!(do_index(1, 1, pool_size), 2);
+        assert_eq!(do_index(1, 2, pool_size), 1);
+        assert_eq!(do_index(1, 3, pool_size), 2);
+        // if the pool size is 3, with reserved = 2, all requests go to 2
+        assert_eq!(do_index(2, 0, pool_size), 2);
+        assert_eq!(do_index(2, 1, pool_size), 2);
+        assert_eq!(do_index(2, 2, pool_size), 2);
+        assert_eq!(do_index(2, 3, pool_size), 2);
+        // if the pool size is 3, with reserved >= 3, we simply %
+        assert_eq!(do_index(3, 0, pool_size), 0);
+        assert_eq!(do_index(3, 1, pool_size), 1);
+        assert_eq!(do_index(3, 2, pool_size), 2);
+        assert_eq!(do_index(3, 3, pool_size), 0);
+        assert_eq!(do_index(4, 0, pool_size), 0);
+        assert_eq!(do_index(4, 1, pool_size), 1);
+        assert_eq!(do_index(4, 2, pool_size), 2);
+        assert_eq!(do_index(4, 3, pool_size), 0);
     }
 }
