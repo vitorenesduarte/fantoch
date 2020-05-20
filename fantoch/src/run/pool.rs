@@ -120,7 +120,7 @@ where
             // compute the actual index only in the remaining indexes
             reserved + (index % (pool_size - reserved))
         } else {
-            // if there's as many reserved (or more) than workers in the
+            // if there's as many reserved (or more) as workers in the
             // pool, then ignore reservation
             index % pool_size
         }

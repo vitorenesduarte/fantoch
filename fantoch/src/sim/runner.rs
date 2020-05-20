@@ -137,7 +137,7 @@ where
             schedule: Schedule::new(),
             process_to_region,
             client_to_region,
-            // since we start ids in 1, the last id is the same as the numbe of
+            // since we start ids in 1, the last id is the same as the number of
             // clients
             client_count: client_id as usize,
         };

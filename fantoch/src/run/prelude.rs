@@ -147,7 +147,7 @@ pub type WorkerToExecutors<P> =
 // to be forwarded
 impl<A> pool::PoolIndex for A
 where
-    A: MessageKey + std::fmt::Debug,
+    A: MessageKey,
 {
     fn index(&self) -> Option<(usize, usize)> {
         match self.key() {
