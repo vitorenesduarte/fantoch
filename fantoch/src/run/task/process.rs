@@ -1,19 +1,21 @@
 use super::execution_logger;
 use crate::command::Command;
+use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::log;
-use crate::protocol::{Protocol, ToSend};
+use crate::protocol::{Action, Protocol};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
 use futures::future::FutureExt;
 use futures::select_biased;
+use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, Instant};
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
@@ -171,10 +173,15 @@ where
     // start on writer task per connection
     for (process_id, connection) in connections {
         // create channel where parent should write to
-        let tx = task::spawn_consumer(channel_buffer_size, |rx| {
+        let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
             writer_task::<P>(tcp_flush_interval, connection, rx)
         });
-        writers.entry(process_id).or_insert_with(Vec::new).push(tx);
+        // get list set of writers to this process
+        let txs = writers.entry(process_id).or_insert_with(Vec::new);
+        // name the channel accordingly
+        tx.set_name(format!("to_writer_{}_process_{}", txs.len(), process_id));
+        // and add a new writer channel
+        txs.push(tx);
     }
 
     // check `writers` size
@@ -222,7 +229,7 @@ async fn writer_task<P>(
     if let Some(tcp_flush_interval) = tcp_flush_interval {
         // create interval
         let mut interval =
-            time::interval(Duration::from_micros(tcp_flush_interval as u64));
+            time::interval(Duration::from_millis(tcp_flush_interval as u64));
         loop {
             tokio::select! {
                 msg = parent.recv() => {
@@ -253,10 +260,13 @@ async fn writer_task<P>(
 
 /// Starts process workers.
 pub fn start_processes<P>(
-    process: P,
     process_id: ProcessId,
+    config: Config,
+    sorted_processes: Vec<ProcessId>,
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
+    periodic_to_workers: PeriodicToWorkers<P>,
+    periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P>>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     worker_to_executors: WorkerToExecutors<P>,
@@ -266,35 +276,81 @@ pub fn start_processes<P>(
 where
     P: Protocol + Send + 'static,
 {
+    // create process
+    let (mut process, process_events) = P::new(process_id, config);
+
+    // discover processes
+    process.discover(sorted_processes);
+
+    // spawn periodic task
+    task::spawn(periodic_task::<P>(process_events, periodic_to_workers));
+
     let to_execution_logger = execution_log.map(|execution_log| {
         // if the execution log was set, then start the execution logger
-        task::spawn_consumer(channel_buffer_size, |rx| {
+        let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
             execution_logger::execution_logger_task::<P>(execution_log, rx)
-        })
+        });
+        tx.set_name("to_execution_logger");
+        tx
     });
 
     // zip rxs'
     let incoming = reader_to_workers_rxs
         .into_iter()
-        .zip(client_to_workers_rxs.into_iter());
+        .zip(client_to_workers_rxs.into_iter())
+        .zip(periodic_to_workers_rxs.into_iter());
 
     // create executor workers
     incoming
         .enumerate()
-        .map(|(worker_index, (from_readers, from_clients))| {
-            task::spawn(process_task::<P>(
-                worker_index,
-                process.clone(),
-                process_id,
-                from_readers,
-                from_clients,
-                to_writers.clone(),
-                reader_to_workers.clone(),
-                worker_to_executors.clone(),
-                to_execution_logger.clone(),
-            ))
-        })
+        .map(
+            |(worker_index, ((from_readers, from_clients), from_periodic))| {
+                task::spawn(process_task::<P>(
+                    worker_index,
+                    process.clone(),
+                    process_id,
+                    from_readers,
+                    from_clients,
+                    from_periodic,
+                    to_writers.clone(),
+                    reader_to_workers.clone(),
+                    worker_to_executors.clone(),
+                    to_execution_logger.clone(),
+                ))
+            },
+        )
         .collect()
+}
+
+async fn periodic_task<P>(
+    events: Vec<(P::PeriodicEvent, usize)>,
+    mut periodic_to_workers: PeriodicToWorkers<P>,
+) where
+    P: Protocol + 'static,
+{
+    // TODO we only support one periodic event for now
+    assert_eq!(events.len(), 1);
+    let (event, millis) = events[0].clone();
+    let millis = Duration::from_millis(millis as u64);
+
+    log!("[periodic_task] event: {:?} | interval {:?}", event, millis);
+
+    // compute first tick
+    let first_tick = Instant::now()
+        .checked_add(millis)
+        .expect("first tick in periodic task should exist");
+
+    let mut interval = time::interval_at(first_tick, millis);
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                // flush socket
+                if let Err(e) = periodic_to_workers.forward(PeriodicEventMessage(event.clone())).await {
+                    println!( "[periodic] error sending periodic event to workers: {:?}", e);
+                }
+            }
+        }
+    }
 }
 
 async fn process_task<P>(
@@ -303,6 +359,7 @@ async fn process_task<P>(
     process_id: ProcessId,
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
+    mut from_periodic: PeriodicEventReceiver<P>,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut reader_to_workers: ReaderToWorkers<P>,
     mut worker_to_executors: WorkerToExecutors<P>,
@@ -318,6 +375,9 @@ async fn process_task<P>(
                 msg = from_readers.recv().fuse() => {
                     selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
                 }
+                event = from_periodic.recv().fuse() => {
+                    selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
+                }
                 cmd = from_clients.recv().fuse()  => {
                     selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
@@ -328,6 +388,9 @@ async fn process_task<P>(
             tokio::select! {
                 msg = from_readers.recv() => {
                     selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
+                }
+                event = from_periodic.recv() => {
+                    selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
                 cmd = from_clients.recv() => {
                     selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
@@ -384,28 +447,33 @@ async fn handle_from_processes<P>(
     P: Protocol + 'static,
 {
     // handle message in process
-    if let Some(to_send) = process.handle(from, msg) {
-        handle_to_send(
-            worker_index,
-            process_id,
-            to_send,
-            process,
-            to_writers,
-            reader_to_workers,
-        )
-        .await;
-    }
+    let action = process.handle(from, msg);
 
-    // check if there's new execution info for the executor
-    for execution_info in process.to_executor() {
-        // if there's an execution logger, then also send execution info to it
-        if let Some(to_execution_logger) = to_execution_logger {
-            if let Err(e) =
-                to_execution_logger.send(execution_info.clone()).await
-            {
+    // handle (potentially) new action
+    handle_action(
+        worker_index,
+        process_id,
+        action,
+        process,
+        to_writers,
+        reader_to_workers,
+    )
+    .await;
+
+    // get new execution info for the executor
+    let to_executor = process.to_executor();
+
+    // if there's an execution logger, then also send execution info to it
+    if let Some(to_execution_logger) = to_execution_logger {
+        for execution_info in to_executor.clone() {
+            if let Err(e) = to_execution_logger.send(execution_info).await {
                 println!("[server] error while sending new execution info to execution logger: {:?}", e);
             }
         }
+    }
+
+    // notify executors
+    for execution_info in to_executor {
         if let Err(e) = worker_to_executors.forward(execution_info).await {
             println!(
                 "[server] error while sending new execution info to executor: {:?}",
@@ -415,43 +483,61 @@ async fn handle_from_processes<P>(
     }
 }
 
-async fn handle_to_send<P>(
+async fn handle_action<P>(
     worker_index: usize,
     process_id: ProcessId,
-    to_send: ToSend<P::Message>,
+    mut action: Action<P::Message>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
 {
-    // variable to keep track if there's another `ToSend` to be sent after
-    // handling the previous one
-    let mut to_send = Some(to_send);
+    loop {
+        match action {
+            Action::ToSend { target, msg } => {
+                // send to writers in parallel
+                let mut sends = to_writers
+                    .iter_mut()
+                    .filter_map(|(to, channels)| {
+                        if target.contains(to) {
+                            Some(send_to_one_writer::<P>(msg.clone(), channels))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<FuturesUnordered<_>>();
+                while let Some(_) = sends.next().await {}
 
-    while let Some(ToSend { target, msg, .. }) = to_send.take() {
-        let mut msg_to_self = false;
-
-        // send to each process in target, expect to self
-        for destination in target {
-            if destination == process_id {
-                msg_to_self = true;
-            } else {
-                // send message to correct writer
-                send_to_writer::<P>(destination, msg.clone(), to_writers).await
+                // check if should handle message locally
+                if target.contains(&process_id) {
+                    // handle msg locally if self in `target`
+                    action = handle_message_from_self::<P>(
+                        worker_index,
+                        process_id,
+                        msg,
+                        process,
+                        reader_to_workers,
+                    )
+                    .await
+                } else {
+                    break;
+                }
             }
-        }
-
-        if msg_to_self {
-            // handle msg locally if self in `target`
-            to_send = handle_message_from_self::<P>(
-                worker_index,
-                process_id,
-                msg,
-                process,
-                reader_to_workers,
-            )
-            .await
+            Action::ToForward { msg } => {
+                // handle msg locally if self in `target`
+                action = handle_message_from_self(
+                    worker_index,
+                    process_id,
+                    msg,
+                    process,
+                    reader_to_workers,
+                )
+                .await;
+            }
+            Action::Nothing => {
+                break;
+            }
         }
     }
 }
@@ -462,7 +548,7 @@ async fn handle_message_from_self<P>(
     msg: P::Message,
     process: &mut P,
     reader_to_workers: &mut ReaderToWorkers<P>,
-) -> Option<ToSend<P::Message>>
+) -> Action<P::Message>
 where
     P: Protocol + 'static,
 {
@@ -471,33 +557,30 @@ where
     // only handle message from self in this worker if the destination worker is
     // us; this means that "messages to self are delivered immediately" is only
     // true for self messages to the same worker
-    if reader_to_workers.destination_index(&to_forward) == worker_index {
+    if reader_to_workers.only_to_self(&to_forward, worker_index) {
         process.handle(process_id, to_forward.1)
     } else {
         if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);
         }
-        None
+        Action::Nothing
     }
 }
 
-async fn send_to_writer<P>(
-    to: ProcessId,
+async fn send_to_one_writer<P>(
     msg: P::Message,
-    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    writers: &mut Vec<WriterSender<P>>,
 ) where
     P: Protocol + 'static,
 {
-    // find all writers
-    let writers = to_writers
-        .get_mut(&to)
-        .expect("[server] identifier in target should have a writer");
-
     // pick a random one
     let writer_index = rand::thread_rng().gen_range(0, writers.len());
 
     if let Err(e) = writers[writer_index].send(msg).await {
-        println!("[server] error while sending to writer: {:?}", e);
+        println!(
+            "[server] error while sending to writer {}: {:?}",
+            writer_index, e
+        );
     }
 }
 
@@ -541,7 +624,7 @@ async fn handle_from_client<P>(
 {
     // submit command in process
     let to_send = process.submit(dot, cmd);
-    handle_to_send(
+    handle_action(
         worker_index,
         process_id,
         to_send,
@@ -550,4 +633,58 @@ async fn handle_from_client<P>(
         reader_to_workers,
     )
     .await;
+}
+
+async fn selected_from_periodic_task<P>(
+    worker_index: usize,
+    process_id: ProcessId,
+    event: Option<PeriodicEventMessage<P>>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
+) where
+    P: Protocol + 'static,
+{
+    log!("[server] from periodic task: {:?}", event);
+    if let Some(event) = event {
+        handle_from_periodic_task(
+            worker_index,
+            process_id,
+            event,
+            process,
+            to_writers,
+            reader_to_workers,
+        )
+        .await
+    } else {
+        println!("[server] error while receiving new event from periodic task");
+    }
+}
+
+async fn handle_from_periodic_task<P>(
+    worker_index: usize,
+    process_id: ProcessId,
+    event: PeriodicEventMessage<P>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
+) where
+    P: Protocol + 'static,
+{
+    // unwrap event
+    let event = event.0;
+
+    // handle event in process
+    for to_send in process.handle_event(event) {
+        // TODO maybe run in parallel
+        handle_action(
+            worker_index,
+            process_id,
+            to_send,
+            process,
+            to_writers,
+            reader_to_workers,
+        )
+        .await;
+    }
 }

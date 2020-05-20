@@ -13,9 +13,10 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::id::{ClientId, Rifl};
 use crate::kvs::{KVOpResult, Key};
+use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 pub trait Executor {
     // TODO why is Send needed?
@@ -39,8 +40,22 @@ pub trait Executor {
 
     fn parallel() -> bool;
 
-    fn show_metrics(&self) {
-        // by default, nothing to show
+    fn metrics(&self) -> &ExecutorMetrics {
+        todo!()
+    }
+}
+
+pub type ExecutorMetrics = Metrics<ExecutorMetricsKind, u64>;
+
+pub enum ExecutorMetricsKind {
+    ExecutionDelay,
+}
+
+impl Debug for ExecutorMetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExecutorMetricsKind::ExecutionDelay => write!(f, "execution_delay"),
+        }
     }
 }
 

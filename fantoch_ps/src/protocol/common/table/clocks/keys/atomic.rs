@@ -157,7 +157,7 @@ mod tests {
         let ops_number = 1000;
         let max_keys_per_command = 4;
         let keys_number = 16;
-        for _ in 0..200 {
+        for _ in 0..100 {
             let nthreads =
                 rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
             test(nthreads, ops_number, max_keys_per_command, keys_number);

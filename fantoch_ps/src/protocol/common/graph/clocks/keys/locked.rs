@@ -180,7 +180,7 @@ mod tests {
         let max_keys_per_command = 4;
         let keys_number = 16;
         let noop_probability = 50;
-        for _ in 0..20 {
+        for _ in 0..10 {
             let nthreads =
                 rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
             test(

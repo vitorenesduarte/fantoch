@@ -8,7 +8,8 @@ const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
-const DEFAULT_FLUSH_INTERVAL: usize = 0; // microseconds
+const DEFAULT_TCP_FLUSH_INTERVAL: usize = 0; // milliseconds
+const DEFAULT_GC_INTERVAL: usize = 500; // milliseconds
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 #[allow(dead_code)]
@@ -33,6 +34,7 @@ pub fn parse_config(
     f: Option<&str>,
     transitive_conflicts: Option<&str>,
     execute_at_commit: Option<&str>,
+    gc_interval: Option<&str>,
 ) -> Config {
     let n = n
         .expect("n should be set")
@@ -56,11 +58,19 @@ pub fn parse_config(
                 .expect("execute_at_commit should be a bool")
         })
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT);
+    let gc_interval = gc_interval
+        .map(|gc_interval| {
+            gc_interval
+                .parse::<usize>()
+                .expect("gc_interval should be a number")
+        })
+        .unwrap_or(DEFAULT_GC_INTERVAL);
     // create config
     let mut config = Config::new(n, f);
     // set transitive conflicts and skip execution
     config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
+    config.set_garbage_collection_interval(gc_interval);
     config
 }
 
@@ -85,7 +95,7 @@ pub fn parse_tcp_flush_interval(flush_interval: Option<&str>) -> Option<usize> {
                 .parse::<usize>()
                 .expect("flush interval should be a number")
         })
-        .unwrap_or(DEFAULT_FLUSH_INTERVAL);
+        .unwrap_or(DEFAULT_TCP_FLUSH_INTERVAL);
     if flush_interval == 0 {
         None
     } else {
@@ -108,5 +118,5 @@ fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
 }
 
 pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
-    execution_log.map(|execution_log| String::from(execution_log))
+    execution_log.map(String::from)
 }

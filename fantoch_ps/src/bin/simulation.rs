@@ -202,11 +202,19 @@ fn run<P: Protocol>(
         process_regions,
         client_regions,
     );
-    let latencies = runner.run();
+    let (processes_metrics, clients_latencies) = runner.run(None);
     println!("simulation ended...");
 
-    // compute stats
-    let (issued_commands, histogram) = latencies.into_iter().fold(
+    // show processes stats
+    processes_metrics
+        .into_iter()
+        .for_each(|(process_id, metrics)| {
+            println!("process {} metrics:", process_id);
+            println!("{:?}", metrics);
+        });
+
+    // compute clients stats
+    let (issued_commands, histogram) = clients_latencies.into_iter().fold(
         (0, Histogram::new()),
         |(issued_commands_acc, mut histogram_acc),
          (region, (issued_commands, histogram))| {

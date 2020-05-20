@@ -27,21 +27,12 @@ impl<A> Schedule<A> {
 
     /// Retrieve the next list of schedule actions.
     pub fn next_actions(&mut self, time: &mut SimTime) -> Option<Vec<A>> {
-        // get min time
-        // TODO this can be improved once BTreeMap's `first` API stabilizes; or
-        // better, what we need here is a `remove_first` API
-        let min_time =
-            self.schedule.iter().map(|(min_time, _)| *min_time).next();
-
-        // return next actions
-        min_time.map(|min_time| {
+        // get the next actions
+        self.schedule.pop_first().map(|(min_time, actions)| {
             // advance simulation time
             time.set_time(min_time);
-
-            // get actions scheduled for `min_time`
-            self.schedule
-                .remove(&min_time)
-                .expect("this time must exist in the schedule")
+            // return only the actions
+            actions
         })
     }
 }

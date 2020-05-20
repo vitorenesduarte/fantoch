@@ -9,7 +9,7 @@ pub use float::F64;
 pub use histogram::{Histogram, Stats};
 
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt;
 use std::hash::Hash;
 
 #[derive(Clone)]
@@ -49,19 +49,28 @@ where
         };
         update(current);
     }
+
+    pub fn get_collected(&self, kind: K) -> Option<&Histogram> {
+        self.collected.get(&kind)
+    }
+
+    pub fn get_aggregated(&self, kind: K) -> Option<&V> {
+        self.aggregated.get(&kind)
+    }
 }
 
-impl<K, V> Metrics<K, V>
+impl<K, V> fmt::Debug for Metrics<K, V>
 where
-    K: Debug,
-    V: Debug,
+    K: fmt::Debug,
+    V: fmt::Debug,
 {
-    pub fn show(&self) {
-        self.collected.iter().for_each(|(kind, histogram)| {
-            println!("{:?}: {:?}", kind, histogram);
-        });
-        self.aggregated.iter().for_each(|(kind, value)| {
-            println!("{:?}: {:?}", kind, value);
-        });
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (kind, histogram) in self.collected.iter() {
+            write!(f, "{:?}: {:?}", kind, histogram)?;
+        }
+        for (kind, value) in self.aggregated.iter() {
+            write!(f, "{:?}: {:?}", kind, value)?;
+        }
+        Ok(())
     }
 }

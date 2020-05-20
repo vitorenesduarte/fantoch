@@ -71,12 +71,12 @@ fn parse_args() -> (Config, String) {
         .get_matches();
 
     // parse arguments
-    let execute_at_commit = None;
     let config = common::parse_config(
         matches.value_of("n"),
         matches.value_of("f"),
         matches.value_of("transitive_conflicts"),
-        execute_at_commit,
+        None,
+        None,
     );
     let execution_log =
         common::parse_execution_log(matches.value_of("execution_log"))

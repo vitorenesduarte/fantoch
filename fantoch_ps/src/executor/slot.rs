@@ -13,6 +13,7 @@ pub struct SlotExecutor {
     store: KVStore,
     pending: HashSet<Rifl>,
     next_slot: Slot,
+    // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
 }
 

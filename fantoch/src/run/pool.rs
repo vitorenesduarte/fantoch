@@ -2,10 +2,11 @@ use crate::log;
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
+use futures::stream::{FuturesUnordered, StreamExt};
 use std::fmt::Debug;
 
 pub trait PoolIndex {
-    fn index(&self) -> Option<usize>;
+    fn index(&self) -> Option<(usize, usize)>;
 }
 
 #[derive(Clone)]
@@ -16,22 +17,26 @@ pub struct ToPool<M> {
 
 impl<M> ToPool<M>
 where
-    M: Debug + 'static,
+    M: Clone + Debug + 'static,
 {
     /// Creates a pool with size `pool_size`.
-    pub fn new<S: Into<String>>(
+    pub fn new<S>(
         name: S,
         channel_buffer_size: usize,
         pool_size: usize,
-    ) -> (Self, Vec<ChannelReceiver<M>>) {
+    ) -> (Self, Vec<ChannelReceiver<M>>)
+    where
+        S: Into<String> + Debug,
+    {
         let mut pool = Vec::with_capacity(pool_size);
         // create a channel per pool worker:
         // - save the sender-side so it can be used by to forward messages to
         //   the pool
         // - return the receiver-side so it can be used by the pool workers
         let rxs = (0..pool_size)
-            .map(|_| {
-                let (tx, rx) = task::chan::channel(channel_buffer_size);
+            .map(|index| {
+                let (mut tx, rx) = task::chan::channel(channel_buffer_size);
+                tx.set_name(format!("{:?}_{}", name, index));
                 pool.push(tx);
                 rx
             })
@@ -50,11 +55,14 @@ where
     }
 
     /// Checks the index of the destination worker.
-    pub fn destination_index(&self, msg: &M) -> usize
+    pub fn only_to_self(&self, msg: &M, worker_index: usize) -> bool
     where
         M: PoolIndex,
     {
-        self.index(msg)
+        match self.index(msg) {
+            Some(index) => index == worker_index,
+            None => false,
+        }
     }
 
     /// Forwards message `msg` to the pool worker with id `msg.index() %
@@ -78,40 +86,135 @@ where
         self.do_forward(index, map(value)).await
     }
 
-    /// Forwards a message to the pool. Note that this implementation is not as
-    /// efficient as it could be, as it's only meant to be used for
-    /// setup/periodic messages.
+    /// Forwards a message to the pool.
     pub async fn broadcast(&mut self, msg: M) -> RunResult<()>
     where
         M: Clone,
     {
-        for tx in self.pool.iter_mut() {
-            tx.send(msg.clone()).await?;
+        let mut broadcast = self
+            .pool
+            .iter_mut()
+            .map(|tx| tx.send(msg.clone()))
+            .collect::<FuturesUnordered<_>>();
+
+        // if there was an error, return one of them
+        while let Some(res) = broadcast.next().await {
+            if res.is_err() {
+                return res;
+            }
         }
         Ok(())
     }
 
-    fn index<T>(&self, msg: &T) -> usize
+    fn index<T>(&self, msg: &T) -> Option<usize>
     where
         T: PoolIndex,
     {
-        match msg.index() {
-            Some(index) => {
-                // the actual index is computed based on the pool size
-                index % self.pool.len()
-            }
-            None => {
-                // in this case, there's a single pool handling all messages:
-                // - check that the pool has size 1 and forward to the single
-                //   worker
-                assert_eq!(self.pool.len(), 1);
-                0
-            }
+        msg.index().map(|(reserved, index)| {
+            Self::do_index(reserved, index, self.pool_size())
+        })
+    }
+
+    fn do_index(reserved: usize, index: usize, pool_size: usize) -> usize {
+        if reserved < pool_size {
+            // compute the actual index only in the remaining indexes
+            reserved + (index % (pool_size - reserved))
+        } else {
+            // if there's as many reserved (or more) than workers in the
+            // pool, then ignore reservation
+            index % pool_size
         }
     }
 
-    async fn do_forward(&mut self, index: usize, msg: M) -> RunResult<()> {
-        log!("index: {} {} of {}", self.name, index, self.pool_size());
-        self.pool[index].send(msg).await
+    async fn do_forward(
+        &mut self,
+        index: Option<usize>,
+        msg: M,
+    ) -> RunResult<()> {
+        log!("index: {} {:?} of {}", self.name, index, self.pool_size());
+        // send to the correct worker if an index was specified. otherwise, send
+        // to all workers.
+        match index {
+            Some(index) => self.pool[index].send(msg).await,
+            None => self.broadcast(msg).await,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn do_index(reserved: usize, index: usize, pool_size: usize) -> usize {
+        ToPool::<()>::do_index(reserved, index, pool_size)
+    }
+
+    #[test]
+    fn index() {
+        let pool_size = 1;
+        // if the pool size is 1, the remaining arguments are irrelevant
+        assert_eq!(do_index(0, 0, pool_size), 0);
+        assert_eq!(do_index(0, 1, pool_size), 0);
+        assert_eq!(do_index(0, 2, pool_size), 0);
+        assert_eq!(do_index(0, 3, pool_size), 0);
+        assert_eq!(do_index(1, 0, pool_size), 0);
+        assert_eq!(do_index(1, 1, pool_size), 0);
+        assert_eq!(do_index(1, 2, pool_size), 0);
+        assert_eq!(do_index(1, 3, pool_size), 0);
+        assert_eq!(do_index(2, 0, pool_size), 0);
+        assert_eq!(do_index(2, 1, pool_size), 0);
+        assert_eq!(do_index(2, 2, pool_size), 0);
+        assert_eq!(do_index(2, 3, pool_size), 0);
+        assert_eq!(do_index(3, 0, pool_size), 0);
+        assert_eq!(do_index(3, 1, pool_size), 0);
+        assert_eq!(do_index(3, 2, pool_size), 0);
+        assert_eq!(do_index(3, 3, pool_size), 0);
+
+        let pool_size = 2;
+        // if the pool size is 2, with reserved = 0, we simply %
+        assert_eq!(do_index(0, 0, pool_size), 0);
+        assert_eq!(do_index(0, 1, pool_size), 1);
+        assert_eq!(do_index(0, 2, pool_size), 0);
+        assert_eq!(do_index(0, 3, pool_size), 1);
+        // if the pool size is 2, with reserved = 1, all requests go to 1
+        assert_eq!(do_index(1, 0, pool_size), 1);
+        assert_eq!(do_index(1, 1, pool_size), 1);
+        assert_eq!(do_index(1, 2, pool_size), 1);
+        assert_eq!(do_index(1, 3, pool_size), 1);
+        // if the pool size is 2, with reserved >= 2, we simply %
+        assert_eq!(do_index(2, 0, pool_size), 0);
+        assert_eq!(do_index(2, 1, pool_size), 1);
+        assert_eq!(do_index(2, 2, pool_size), 0);
+        assert_eq!(do_index(2, 3, pool_size), 1);
+        assert_eq!(do_index(3, 0, pool_size), 0);
+        assert_eq!(do_index(3, 1, pool_size), 1);
+        assert_eq!(do_index(3, 2, pool_size), 0);
+        assert_eq!(do_index(3, 3, pool_size), 1);
+
+        let pool_size = 3;
+        // if the pool size is 3, with reserved = 0, we simply %
+        assert_eq!(do_index(0, 0, pool_size), 0);
+        assert_eq!(do_index(0, 1, pool_size), 1);
+        assert_eq!(do_index(0, 2, pool_size), 2);
+        assert_eq!(do_index(0, 3, pool_size), 0);
+        // if the pool size is 3, with reserved = 1, we % between 1 and 2
+        assert_eq!(do_index(1, 0, pool_size), 1);
+        assert_eq!(do_index(1, 1, pool_size), 2);
+        assert_eq!(do_index(1, 2, pool_size), 1);
+        assert_eq!(do_index(1, 3, pool_size), 2);
+        // if the pool size is 3, with reserved = 2, all requests go to 2
+        assert_eq!(do_index(2, 0, pool_size), 2);
+        assert_eq!(do_index(2, 1, pool_size), 2);
+        assert_eq!(do_index(2, 2, pool_size), 2);
+        assert_eq!(do_index(2, 3, pool_size), 2);
+        // if the pool size is 3, with reserved >= 3, we simply %
+        assert_eq!(do_index(3, 0, pool_size), 0);
+        assert_eq!(do_index(3, 1, pool_size), 1);
+        assert_eq!(do_index(3, 2, pool_size), 2);
+        assert_eq!(do_index(3, 3, pool_size), 0);
+        assert_eq!(do_index(4, 0, pool_size), 0);
+        assert_eq!(do_index(4, 1, pool_size), 1);
+        assert_eq!(do_index(4, 2, pool_size), 2);
+        assert_eq!(do_index(4, 3, pool_size), 0);
     }
 }

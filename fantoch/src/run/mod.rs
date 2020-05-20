@@ -77,7 +77,10 @@ pub mod rw;
 pub mod task;
 
 // Re-exports.
-pub use prelude::LEADER_WORKER_INDEX;
+pub use prelude::{
+    dot_worker_index_reserve, no_worker_index_reserve, worker_index_reserve,
+    GC_WORKER_INDEX, LEADER_WORKER_INDEX,
+};
 
 use crate::client::{Client, Workload};
 use crate::command::CommandResult;
@@ -87,9 +90,9 @@ use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
-use futures::future::join_all;
 use futures::future::FutureExt;
 use futures::select_biased;
+use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
 use std::fmt::Debug;
 use std::net::IpAddr;
@@ -98,8 +101,7 @@ use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
 use tokio::time::{self, Duration};
 
-pub async fn process<A, P>(
-    process: P,
+pub async fn process<P, A>(
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
     ip: IpAddr,
@@ -115,14 +117,13 @@ pub async fn process<A, P>(
     execution_log: Option<String>,
 ) -> RunResult<()>
 where
-    A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
+    A: ToSocketAddrs + Debug + Clone,
 {
     // create semaphore for callers that don't care about the connected
     // notification
     let semaphore = Arc::new(Semaphore::new(0));
-    process_with_notify::<A, P>(
-        process,
+    process_with_notify::<P, A>(
         process_id,
         sorted_processes,
         ip,
@@ -142,8 +143,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn process_with_notify<A, P>(
-    mut process: P,
+async fn process_with_notify<P, A>(
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
     ip: IpAddr,
@@ -160,8 +160,8 @@ async fn process_with_notify<A, P>(
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
 where
-    A: ToSocketAddrs + Debug + Clone,
     P: Protocol + Send + 'static, // TODO what does this 'static do?
+    A: ToSocketAddrs + Debug + Clone,
 {
     // panic if protocol is not parallel and we have more than one worker
     if config.workers() > 1 && !P::parallel() {
@@ -188,9 +188,6 @@ where
     if !P::leaderless() && config.leader().is_none() {
         panic!("running leader-based protocol without a leader");
     }
-
-    // discover processes
-    process.discover(sorted_processes);
 
     // check ports are different
     assert!(port != client_port);
@@ -243,6 +240,13 @@ where
         config.workers(),
     );
 
+    // create forward channels: periodic task -> workers
+    let (periodic_to_workers, periodic_to_workers_rxs) = PeriodicToWorkers::new(
+        "periodic_to_workers",
+        channel_buffer_size,
+        config.workers(),
+    );
+
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
         "client_to_executors",
@@ -250,6 +254,7 @@ where
         config.executors(),
     );
 
+    // start listener
     task::client::start_listener(
         process_id,
         listener,
@@ -275,11 +280,15 @@ where
         client_to_executors_rxs,
     );
 
+    // start process workers
     let handles = task::process::start_processes::<P>(
-        process,
         process_id,
+        config,
+        sorted_processes,
         reader_to_workers_rxs,
         client_to_workers_rxs,
+        periodic_to_workers,
+        periodic_to_workers_rxs,
         to_writers,
         reader_to_workers,
         worker_to_executors,
@@ -291,10 +300,10 @@ where
     // notify parent that we're connected
     connected.add_permits(1);
 
-    for join_result in join_all(handles).await {
+    let mut handles = handles.into_iter().collect::<FuturesUnordered<_>>();
+    while let Some(join_result) = handles.next().await {
         println!("process ended {:?}", join_result?);
     }
-
     Ok(())
 }
 
@@ -336,7 +345,8 @@ where
     let mut latency = Histogram::new();
     // let mut throughput = Histogram::new();
 
-    for join_result in join_all(handles).await {
+    let mut handles = handles.into_iter().collect::<FuturesUnordered<_>>();
+    while let Some(join_result) = handles.next().await {
         let client = join_result?;
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
@@ -476,8 +486,9 @@ where
     client.discover(vec![process_id]);
 
     // start client read-write task
-    let (read, write) =
+    let (read, mut write) =
         task::client::start_client_rw_task(channel_buffer_size, connection);
+    write.set_name(format!("command_result_sender_client_{}", client_id));
 
     // return client its connection
     (client, read, write)
@@ -594,11 +605,6 @@ pub mod tests {
             config.set_leader(1);
         }
 
-        // create processes
-        let process_1 = P::new(1, config);
-        let process_2 = P::new(2, config);
-        let process_3 = P::new(3, config);
-
         // create semaphore so that processes can notify once they're connected
         let semaphore = Arc::new(Semaphore::new(0));
 
@@ -629,8 +635,7 @@ pub mod tests {
         let p3_execution_log = Some(String::from("p3.execution_log"));
 
         // spawn processes
-        task::spawn_local(process_with_notify::<String, P>(
-            process_1,
+        task::spawn_local(process_with_notify::<P, String>(
             1,
             vec![1, 2, 3],
             localhost,
@@ -649,8 +654,7 @@ pub mod tests {
             p1_execution_log,
             semaphore.clone(),
         ));
-        task::spawn_local(process_with_notify::<String, P>(
-            process_2,
+        task::spawn_local(process_with_notify::<P, String>(
             2,
             vec![2, 3, 1],
             localhost,
@@ -669,8 +673,7 @@ pub mod tests {
             p2_execution_log,
             semaphore.clone(),
         ));
-        task::spawn_local(process_with_notify::<String, P>(
-            process_3,
+        task::spawn_local(process_with_notify::<P, String>(
             3,
             vec![3, 1, 2],
             localhost,

@@ -48,7 +48,7 @@ impl KeyClocks for SequentialKeyClocks {
                 // `Dot` might be stored on different keys if we have multi-key
                 // commands
                 // TODO can we avoid cloning here?
-                pred.insert(dot.clone());
+                pred.insert(*dot);
             });
 
             // add ourselves to the set of commands and assert there was no

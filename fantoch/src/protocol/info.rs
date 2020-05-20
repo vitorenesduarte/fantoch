@@ -1,5 +1,8 @@
 use crate::id::{Dot, ProcessId};
+use crate::protocol::gc::GCTrack;
+use crate::util;
 use std::collections::HashMap;
+use threshold::VClock;
 
 pub trait Info {
     fn new(
@@ -18,6 +21,7 @@ pub struct CommandsInfo<I> {
     f: usize,
     fast_quorum_size: usize,
     dot_to_info: HashMap<Dot, I>,
+    gc_track: GCTrack,
 }
 
 impl<I> CommandsInfo<I>
@@ -36,11 +40,12 @@ where
             f,
             fast_quorum_size,
             dot_to_info: HashMap::new(),
+            gc_track: GCTrack::new(process_id, n),
         }
     }
 
-    // Returns the `Info` associated with `Dot`.
-    // If no `Info` is associated, an empty `Info` is returned.
+    /// Returns the `Info` associated with `Dot`.
+    /// If no `Info` is associated, an empty `Info` is returned.
     pub fn get(&mut self, dot: Dot) -> &mut I {
         // TODO borrow everything we need so that the borrow checker does not
         // complain
@@ -53,8 +58,37 @@ where
             .or_insert_with(|| I::new(process_id, n, f, fast_quorum_size))
     }
 
-    // Remove `Info` associated with `Dot`.
-    pub fn remove(&mut self, dot: Dot) {
-        self.dot_to_info.remove(&dot);
+    /// Records that a command has been committed.
+    pub fn commit(&mut self, dot: Dot) {
+        self.gc_track.commit(dot);
+    }
+
+    /// Records that set of `committed` commands by process `from`.
+    pub fn committed_by(
+        &mut self,
+        from: ProcessId,
+        committed: VClock<ProcessId>,
+    ) {
+        self.gc_track.committed_by(from, committed);
+    }
+
+    /// Returns committed clock and newly stable dots.
+    pub fn committed_and_stable(
+        &mut self,
+    ) -> (VClock<ProcessId>, Vec<(ProcessId, u64, u64)>) {
+        (self.gc_track.committed(), self.gc_track.stable())
+    }
+
+    /// Performs garbage collection of stable dots.
+    /// Returns how many stable does were removed.
+    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
+        util::dots(stable)
+            .filter(|dot| {
+                // remove dot:
+                // - the dot may not exist locally if there are multiple workers
+                //   and this worker is not responsible for such dot
+                self.dot_to_info.remove(&dot).is_some()
+            })
+            .count()
     }
 }

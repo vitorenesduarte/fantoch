@@ -1,9 +1,10 @@
-use crate::id::ProcessId;
+use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
+/// create a singleton hash set
 #[macro_export]
 macro_rules! singleton {
     ( $x:expr ) => {{
@@ -57,6 +58,13 @@ pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
     (1..=n).map(|id| id as u64)
 }
 
+/// Converts a reprentation of dots to the actual dots.
+pub fn dots(repr: Vec<(ProcessId, u64, u64)>) -> impl Iterator<Item = Dot> {
+    repr.into_iter().flat_map(|(process_id, start, end)| {
+        (start..=end).map(move |event| Dot::new(process_id, event))
+    })
+}
+
 /// Updates the processes known by this process.
 pub fn sort_processes_by_distance(
     region: &Region,
@@ -92,36 +100,6 @@ pub fn sort_processes_by_distance(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::command::Command;
-    use crate::id::Rifl;
-    use rand::Rng;
-
-    // Generates a random `Command` with at most `max_keys_per_command` where
-    // the number of keys is `keys_number`.
-    pub fn gen_cmd(
-        max_keys_per_command: usize,
-        keys_number: usize,
-        noop_probability: usize,
-    ) -> Option<Command> {
-        assert!(noop_probability <= 100);
-        // get random
-        let mut rng = rand::thread_rng();
-        // select keys per command
-        let key_number = rng.gen_range(1, max_keys_per_command + 1);
-        // generate command data
-        let cmd_data: Vec<_> = (0..key_number)
-            .map(|_| {
-                // select random key
-                let key = format!("{}", rng.gen_range(0, keys_number));
-                let value = String::from("");
-                (key, value)
-            })
-            .collect();
-        // create fake rifl
-        let rifl = Rifl::new(0, 0);
-        // create multi put command
-        Some(Command::multi_put(rifl, cmd_data))
-    }
 
     #[test]
     fn process_ids_test() {

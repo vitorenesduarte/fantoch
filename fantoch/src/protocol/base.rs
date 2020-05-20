@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::metrics::Metrics;
+use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
 use std::collections::HashSet;
-use std::fmt;
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
@@ -10,13 +10,14 @@ use std::iter::FromIterator;
 pub struct BaseProcess {
     pub process_id: ProcessId,
     pub config: Config,
-    all_processes: Option<HashSet<ProcessId>>,
+    all: Option<HashSet<ProcessId>>,
+    all_but_me: Option<HashSet<ProcessId>>,
     fast_quorum: Option<HashSet<ProcessId>>,
     write_quorum: Option<HashSet<ProcessId>>,
     fast_quorum_size: usize,
     write_quorum_size: usize,
     dot_gen: DotGen,
-    metrics: Metrics<MetricsKind, u64>,
+    metrics: ProtocolMetrics,
 }
 
 impl BaseProcess {
@@ -35,7 +36,8 @@ impl BaseProcess {
         Self {
             process_id,
             config,
-            all_processes: None,
+            all: None,
+            all_but_me: None,
             fast_quorum: None,
             write_quorum: None,
             fast_quorum_size,
@@ -63,7 +65,13 @@ impl BaseProcess {
             .collect();
 
         // set all processes
-        self.all_processes = Some(HashSet::from_iter(processes));
+        let all = HashSet::from_iter(processes.clone());
+        let all_but_me = HashSet::from_iter(
+            processes.into_iter().filter(|&p| p != self.process_id),
+        );
+
+        self.all = Some(all);
+        self.all_but_me = Some(all_but_me);
 
         // set fast quorum if we have enough fast quorum processes
         self.fast_quorum = if fast_quorum.len() == self.fast_quorum_size {
@@ -90,9 +98,16 @@ impl BaseProcess {
 
     // Returns all processes.
     pub fn all(&self) -> HashSet<ProcessId> {
-        self.all_processes
+        self.all
             .clone()
             .expect("the set of all processes should be known")
+    }
+
+    // Returns all processes but self.
+    pub fn all_but_me(&self) -> HashSet<ProcessId> {
+        self.all_but_me
+            .clone()
+            .expect("the set of all processes (except self) should be known")
     }
 
     // Returns the fast quorum.
@@ -109,37 +124,29 @@ impl BaseProcess {
             .expect("the slow quorum should be known")
     }
 
-    pub fn show_metrics(&self) {
-        self.metrics.show();
+    // Return metrics.
+    pub fn metrics(&self) -> &ProtocolMetrics {
+        &self.metrics
     }
 
     // Increment fast path count.
+    // TODO  rename
     pub fn fast_path(&mut self) {
-        self.inc_metric(MetricsKind::FastPath);
+        self.inc_by_metric(ProtocolMetricsKind::FastPath, 1);
     }
 
     // Increment slow path count.
     pub fn slow_path(&mut self) {
-        self.inc_metric(MetricsKind::SlowPath);
+        self.inc_by_metric(ProtocolMetricsKind::SlowPath, 1);
     }
 
-    fn inc_metric(&mut self, kind: MetricsKind) {
-        self.metrics.aggregate(kind, |v| *v += 1)
+    // Accumulate more stable commands.
+    pub fn stable(&mut self, len: usize) {
+        self.inc_by_metric(ProtocolMetricsKind::Stable, len as u64);
     }
-}
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-enum MetricsKind {
-    FastPath,
-    SlowPath,
-}
-
-impl fmt::Debug for MetricsKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            MetricsKind::FastPath => write!(f, "fast_path"),
-            MetricsKind::SlowPath => write!(f, "slow_path"),
-        }
+    fn inc_by_metric(&mut self, kind: ProtocolMetricsKind, by: u64) {
+        self.metrics.aggregate(kind, |v| *v += by)
     }
 }
 
@@ -190,7 +197,7 @@ mod tests {
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
-        assert_eq!(bp.all_processes, None);
+        assert_eq!(bp.all, None);
 
         // discover processes and check we're connected
         let sorted =
@@ -202,6 +209,14 @@ mod tests {
             BTreeSet::from_iter(bp.all()),
             BTreeSet::from_iter(vec![
                 8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
+            ]),
+        );
+
+        // check set of all processes (but self)
+        assert_eq!(
+            BTreeSet::from_iter(bp.all_but_me()),
+            BTreeSet::from_iter(vec![
+                9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2
             ]),
         );
 
@@ -252,6 +267,12 @@ mod tests {
         assert_eq!(
             BTreeSet::from_iter(bp.all()),
             BTreeSet::from_iter(vec![2, 3, 4, 0, 1])
+        );
+
+        // check set of all processes (but self)
+        assert_eq!(
+            BTreeSet::from_iter(bp.all_but_me()),
+            BTreeSet::from_iter(vec![3, 4, 0, 1])
         );
 
         // check fast quorum

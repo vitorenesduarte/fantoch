@@ -106,6 +106,11 @@ where
         }
     }
 
+    /// Performs garbage collection of stable slots.
+    pub fn gc(&mut self, stable: (u64, u64)) -> usize {
+        self.acceptor.gc(stable)
+    }
+
     fn handle_spawn_commander(
         &mut self,
         ballot: Ballot,
@@ -304,6 +309,20 @@ where
         } else {
             None
         }
+    }
+
+    /// Performs garbage collection of stable slots.
+    /// Returns how many stable does were removed.
+    fn gc(&mut self, (start, end): (u64, u64)) -> usize {
+        (start..=end)
+            .filter(|slot| {
+                // remove slot:
+                // - if this acceptor is not part of the quorum used by the
+                //   leader, then the slot does not exist locally (assuming
+                //   there was no recovery)
+                self.accepted.remove(&slot).is_some()
+            })
+            .count()
     }
 }
 

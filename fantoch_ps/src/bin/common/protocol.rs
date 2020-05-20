@@ -1,6 +1,8 @@
 use clap::{App, Arg};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
+use fantoch::protocol::Protocol;
+use std::error::Error;
 use std::net::IpAddr;
 
 const LIST_SEP: &str = ",";
@@ -12,7 +14,46 @@ const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
 
-pub fn parse_args() -> (
+#[allow(dead_code)]
+pub fn run<P>() -> Result<(), Box<dyn Error>>
+where
+    P: Protocol + Send + 'static,
+{
+    let (
+        process_id,
+        sorted_processes,
+        ip,
+        port,
+        client_port,
+        addresses,
+        config,
+        tcp_nodelay,
+        tcp_buffer_size,
+        tcp_flush_interval,
+        channel_buffer_size,
+        multiplexing,
+        execution_log,
+    ) = parse_args();
+
+    let process = fantoch::run::process::<P, String>(
+        process_id,
+        sorted_processes,
+        ip,
+        port,
+        client_port,
+        addresses,
+        config,
+        tcp_nodelay,
+        tcp_buffer_size,
+        tcp_flush_interval,
+        channel_buffer_size,
+        multiplexing,
+        execution_log,
+    );
+    super::tokio_runtime().block_on(process)
+}
+
+fn parse_args() -> (
     ProcessId,
     Vec<ProcessId>,
     IpAddr,
@@ -131,7 +172,14 @@ pub fn parse_args() -> (
             Arg::with_name("tcp_flush_interval")
                 .long("tcp_flush_interval")
                 .value_name("TCP_FLUSH_INTERVAL")
-                .help("TCP flush interval (in microseconds); if 0, then flush occurs on every send; default: 0")
+                .help("TCP flush interval (in milliseconds); if 0, then flush occurs on every send; default: 0")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("gc_interval")
+                .long("gc_interval")
+                .value_name("GC_INTERVAL")
+                .help("garbage collection interval (in milliseconds); default: 500")
                 .takes_value(true),
         )
         .arg(
@@ -186,6 +234,7 @@ pub fn parse_args() -> (
         matches.value_of("f"),
         matches.value_of("transitive_conflicts"),
         matches.value_of("execute_at_commit"),
+        matches.value_of("gc_interval"),
     );
     let leader = parse_leader(matches.value_of("leader"));
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));

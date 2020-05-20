@@ -7,8 +7,11 @@ matrix:
   fast_finish: true
 
 cache:
-  cargo: true
-  apt: true
+  directories:
+    - $HOME/.cargo/registry
+
+before_cache:
+  - rm -rf $HOME/.cargo/registry/index
 
 before_install:
   - cargo install grcov

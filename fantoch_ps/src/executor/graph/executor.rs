@@ -78,7 +78,7 @@ impl GraphExecutor {
     }
 
     pub fn show_internal_status(&self) {
-        self.graph.show_internal_status();
+        println!("{:?}", self.graph);
     }
 }
 

@@ -13,6 +13,10 @@ mod base;
 // protocol fault-tolerant (but still inconsistent).
 mod basic;
 
+// This module contains common functionality from tracking when it's safe to
+// garbage-collect a command, i.e., when it's been committed at all processes.
+mod gc;
+
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;
@@ -22,22 +26,30 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
+use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 pub trait Protocol: Clone {
     type Message: Debug
         + Clone
+        + PartialEq
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
         + MessageIndex; // TODO why is Sync needed??
+    type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex;
     type Executor: Executor + Send;
 
-    fn new(process_id: ProcessId, config: Config) -> Self;
+    /// Returns a new instance of the protocol and a list of periodic events
+    /// (intervals in milliseconds).
+    fn new(
+        process_id: ProcessId,
+        config: Config,
+    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>);
 
     fn id(&self) -> ProcessId;
 
@@ -48,14 +60,20 @@ pub trait Protocol: Clone {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> ToSend<Self::Message>;
+    ) -> Action<Self::Message>;
 
     #[must_use]
     fn handle(
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-    ) -> Option<ToSend<Self::Message>>;
+    ) -> Action<Self::Message>;
+
+    #[must_use]
+    fn handle_event(
+        &mut self,
+        event: Self::PeriodicEvent,
+    ) -> Vec<Action<Self::Message>>;
 
     #[must_use]
     fn to_executor(
@@ -64,12 +82,27 @@ pub trait Protocol: Clone {
 
     fn parallel() -> bool;
 
-    fn leaderless() -> bool {
-        true
-    }
+    fn leaderless() -> bool;
 
-    fn show_metrics(&self) {
-        // by default, nothing to show
+    fn metrics(&self) -> &ProtocolMetrics;
+}
+
+pub type ProtocolMetrics = Metrics<ProtocolMetricsKind, u64>;
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ProtocolMetricsKind {
+    FastPath,
+    SlowPath,
+    Stable,
+}
+
+impl Debug for ProtocolMetricsKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProtocolMetricsKind::FastPath => write!(f, "fast_path"),
+            ProtocolMetricsKind::SlowPath => write!(f, "slow_path"),
+            ProtocolMetricsKind::Stable => write!(f, "stable"),
+        }
     }
 }
 
@@ -79,23 +112,22 @@ pub trait MessageIndex {
     /// to the same process. If `None` is returned, then the message is sent to
     /// all workers. In particular, if the protocol is not parallel, the
     /// message is sent to the single protocol worker.
-    /// Two types of indexes are supported:
-    /// - Index: simple sequence number
-    /// - DotIndex: dot index in which the dot sequence will be used as index
-    fn index(&self) -> MessageIndexes {
-        MessageIndexes::None
-    }
+    ///
+    /// There only 2 types of indexes are supported:
+    /// - Some((reserved, index)): `index` will be used to compute working index
+    ///   making sure that index is higher than `reserved`
+    /// - None: no indexing; message will be sent to all workers
+    fn index(&self) -> Option<(usize, usize)>;
 }
 
-pub enum MessageIndexes<'a> {
-    Index(usize),
-    DotIndex(&'a Dot),
-    None,
+pub trait PeriodicEventIndex {
+    /// Same as `MessageIndex`.
+    fn index(&self) -> Option<(usize, usize)>;
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct ToSend<M> {
-    pub from: ProcessId,
-    pub target: HashSet<ProcessId>,
-    pub msg: M,
+pub enum Action<M> {
+    ToSend { target: HashSet<ProcessId>, msg: M },
+    ToForward { msg: M },
+    Nothing,
 }

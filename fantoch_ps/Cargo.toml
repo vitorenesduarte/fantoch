@@ -10,11 +10,11 @@ license = "MIT/Apache-2.0"
 ahash = "0.3.4"
 clap = "2.33.0"
 dashmap = "3.11.1"
-futures = "0.3.4"
+futures = "0.3.5"
 rand = "0.7.3"
-serde = { version = "1.0.106", features = ["derive"] }
+serde = { version = "1.0.110", features = ["derive"] }
 tokio = { version = "0.2.20", features = ["full", "parking_lot"] }
-threshold = "0.7.1"
+threshold = "0.8.3"
 parking_lot = "0.10.2"
 num_cpus = "1.13.0"
 

@@ -18,6 +18,8 @@ pub struct Config {
     workers: usize,
     /// defines the number of `Executor` workers
     executors: usize,
+    /// defines the interval between garbage collections (milliseconds)
+    garbage_collection_interval: usize,
 }
 
 impl Config {
@@ -41,6 +43,8 @@ impl Config {
         // `Executor`
         let workers = 1;
         let executors = 1;
+        // by default, garbage collection runs every 500ms
+        let garbage_collection_interval = 500;
         Self {
             n,
             f,
@@ -50,6 +54,7 @@ impl Config {
             leader,
             workers,
             executors,
+            garbage_collection_interval,
         }
     }
 
@@ -121,6 +126,16 @@ impl Config {
     /// Changes the value of `Executor`'s.
     pub fn set_executors(&mut self, executors: usize) {
         self.executors = executors;
+    }
+
+    /// Checks the garbage collection interval.
+    pub fn garbage_collection_interval(&self) -> usize {
+        self.garbage_collection_interval
+    }
+
+    /// Sets the garbage collection interval.
+    pub fn set_garbage_collection_interval(&mut self, interval: usize) {
+        self.garbage_collection_interval = interval;
     }
 }
 
@@ -253,6 +268,13 @@ mod tests {
         config.set_executors(20);
         assert_eq!(config.workers(), 10);
         assert_eq!(config.executors(), 20);
+
+        // by default, the garbage collection interval is 500
+        assert_eq!(config.garbage_collection_interval(), 500);
+
+        // change its value and check it has changed
+        config.set_garbage_collection_interval(100);
+        assert_eq!(config.garbage_collection_interval(), 100);
     }
 
     #[test]
@@ -261,7 +283,6 @@ mod tests {
         assert_eq!(config.basic_quorum_size(), 2);
 
         let config = Config::new(7, 2);
-        assert_eq!(config.atlas_quorum_sizes(), (5, 3));
         assert_eq!(config.basic_quorum_size(), 3);
 
         let config = Config::new(7, 3);
