@@ -147,12 +147,12 @@ pub type WorkerToExecutors<P> =
 // to be forwarded
 impl<A> pool::PoolIndex for A
 where
-    A: MessageKey,
+    A: MessageKey + std::fmt::Debug,
 {
     fn index(&self) -> Option<(usize, usize)> {
         match self.key() {
             Some(key) => no_worker_index_reserve(key_index(key)),
-            None => None,
+            None => panic!("non indexed message key: {:?}", self),
         }
     }
 }
