@@ -612,6 +612,6 @@ mod tests {
         let (process, _) = simulation.get_process(target);
         let action = process.submit(None, cmd);
         let check_msg = |msg: &Message| matches!(msg, Message::MSpawnCommander{slot, ..} if slot == &2);
-        assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
+        assert!(matches!(action, Action::ToForward {msg} if check_msg(&msg)));
     }
 }
