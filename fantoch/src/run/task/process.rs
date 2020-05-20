@@ -9,6 +9,7 @@ use crate::run::rw::Connection;
 use crate::run::task;
 use futures::future::FutureExt;
 use futures::select_biased;
+use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -495,25 +496,21 @@ async fn handle_action<P>(
     loop {
         match action {
             Action::ToSend { target, msg } => {
-                let mut msg_to_self = false;
+                // send to writers in parallel
+                let mut sends = to_writers
+                    .iter_mut()
+                    .filter_map(|(to, channels)| {
+                        if target.contains(to) {
+                            Some(send_to_one_writer::<P>(msg.clone(), channels))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<FuturesUnordered<_>>();
+                while let Some(_) = sends.next().await {}
 
-                // send to each process in target, expect to self
-                for destination in target {
-                    if destination == process_id {
-                        msg_to_self = true;
-                    } else {
-                        // send message to correct writer
-                        // TODO send this in parallel
-                        send_to_writer::<P>(
-                            destination,
-                            msg.clone(),
-                            to_writers,
-                        )
-                        .await
-                    }
-                }
-
-                if msg_to_self {
+                // check if should handle message locally
+                if target.contains(&process_id) {
                     // handle msg locally if self in `target`
                     action = handle_message_from_self::<P>(
                         worker_index,
@@ -570,18 +567,12 @@ where
     }
 }
 
-async fn send_to_writer<P>(
-    to: ProcessId,
+async fn send_to_one_writer<P>(
     msg: P::Message,
-    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    writers: &mut Vec<WriterSender<P>>,
 ) where
     P: Protocol + 'static,
 {
-    // find all writers
-    let writers = to_writers
-        .get_mut(&to)
-        .expect("[server] identifier in target should have a writer");
-
     // pick a random one
     let writer_index = rand::thread_rng().gen_range(0, writers.len());
 

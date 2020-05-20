@@ -90,9 +90,9 @@ use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
-use futures::future::join_all;
 use futures::future::FutureExt;
 use futures::select_biased;
+use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
 use std::fmt::Debug;
 use std::net::IpAddr;
@@ -300,10 +300,10 @@ where
     // notify parent that we're connected
     connected.add_permits(1);
 
-    for join_result in join_all(handles).await {
+    let mut handles = handles.into_iter().collect::<FuturesUnordered<_>>();
+    while let Some(join_result) = handles.next().await {
         println!("process ended {:?}", join_result?);
     }
-
     Ok(())
 }
 
@@ -345,7 +345,8 @@ where
     let mut latency = Histogram::new();
     // let mut throughput = Histogram::new();
 
-    for join_result in join_all(handles).await {
+    let mut handles = handles.into_iter().collect::<FuturesUnordered<_>>();
+    while let Some(join_result) = handles.next().await {
         let client = join_result?;
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());

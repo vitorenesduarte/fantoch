@@ -2,6 +2,7 @@ use crate::log;
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
+use futures::stream::{FuturesUnordered, StreamExt};
 use std::fmt::Debug;
 
 pub trait PoolIndex {
@@ -92,8 +93,17 @@ where
     where
         M: Clone,
     {
-        for tx in self.pool.iter_mut() {
-            tx.send(msg.clone()).await?;
+        let mut broadcast = self
+            .pool
+            .iter_mut()
+            .map(|tx| tx.send(msg.clone()))
+            .collect::<FuturesUnordered<_>>();
+
+        // if there was an error, return one of them
+        while let Some(res) = broadcast.next().await {
+            if res.is_err() {
+                return res;
+            }
         }
         Ok(())
     }
@@ -128,13 +138,7 @@ where
         // to all workers.
         match index {
             Some(index) => self.pool[index].send(msg).await,
-            None => {
-                // // TODO send this in parallel
-                for index in 0..self.pool.len() {
-                    self.pool[index].send(msg.clone()).await?
-                }
-                Ok(())
-            }
+            None => self.broadcast(msg).await,
         }
     }
 }
