@@ -259,12 +259,11 @@ impl Basic {
         self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
-        // Some(ToSend {
-        //     from: self.id(),
-        //     target: singleton![self.id()],
-        //     msg: Message::MCommitDot { dot },
-        // })
-        None
+        Some(ToSend {
+            from: self.id(),
+            target: singleton![self.id()],
+            msg: Message::MCommitDot { dot },
+        })
     }
 
     fn handle_mcommit_dot(
