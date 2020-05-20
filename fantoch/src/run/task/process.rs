@@ -329,13 +329,15 @@ async fn periodic_task<P>(
 {
     // TODO we only support one periodic event for now
     assert_eq!(events.len(), 1);
-    let (event, delay) = events[0].clone();
+    let (event, interval) = events[0].clone();
+    log!("[periodic_task] event: {:?} | interval {}", event, interval);
 
-    let mut interval = time::interval(Duration::from_millis(delay as u64));
+    let mut interval = time::interval(Duration::from_millis(interval as u64));
     loop {
         tokio::select! {
             _ = interval.tick() => {
                 // flush socket
+                log!("[periodic_task] next tick");
                 if let Err(e) = periodic_to_workers.forward(PeriodicEventMessage(event.clone())).await {
                     println!( "[periodic] error sending periodic event to workers: {:?}", e);
                 }

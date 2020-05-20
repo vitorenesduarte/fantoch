@@ -8,7 +8,7 @@ const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
-const DEFAULT_FLUSH_INTERVAL: usize = 0; // milliseconds
+const DEFAULT_TCP_FLUSH_INTERVAL: usize = 0; // milliseconds
 const DEFAULT_GC_INTERVAL: usize = 500; // milliseconds
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
@@ -95,7 +95,7 @@ pub fn parse_tcp_flush_interval(flush_interval: Option<&str>) -> Option<usize> {
                 .parse::<usize>()
                 .expect("flush interval should be a number")
         })
-        .unwrap_or(DEFAULT_FLUSH_INTERVAL);
+        .unwrap_or(DEFAULT_TCP_FLUSH_INTERVAL);
     if flush_interval == 0 {
         None
     } else {
