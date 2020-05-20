@@ -253,9 +253,10 @@ impl Basic {
         self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
-        Action::ToForward {
-            msg: Message::MCommitDot { dot },
-        }
+        // Action::ToForward {
+        //     msg: Message::MCommitDot { dot },
+        // }
+        None
     }
 
     fn handle_mcommit_dot(
