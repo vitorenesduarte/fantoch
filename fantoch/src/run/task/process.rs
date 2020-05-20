@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, Instant};
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
@@ -329,15 +329,21 @@ async fn periodic_task<P>(
 {
     // TODO we only support one periodic event for now
     assert_eq!(events.len(), 1);
-    let (event, interval) = events[0].clone();
-    log!("[periodic_task] event: {:?} | interval {}", event, interval);
+    let (event, millis) = events[0].clone();
+    let millis = Duration::from_millis(millis as u64);
 
-    let mut interval = time::interval(Duration::from_millis(interval as u64));
+    log!("[periodic_task] event: {:?} | interval {:?}", event, millis);
+
+    // compute first tick
+    let first_tick = Instant::now()
+        .checked_add(millis)
+        .expect("first tick in periodic task should exist");
+
+    let mut interval = time::interval_at(first_tick, millis);
     loop {
         tokio::select! {
             _ = interval.tick() => {
                 // flush socket
-                log!("[periodic_task] next tick");
                 if let Err(e) = periodic_to_workers.forward(PeriodicEventMessage(event.clone())).await {
                     println!( "[periodic] error sending periodic event to workers: {:?}", e);
                 }
