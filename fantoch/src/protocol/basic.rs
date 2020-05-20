@@ -243,11 +243,11 @@ impl Basic {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // get cmd info and its rifl
-        // let info = self.cmds.get(dot);
+        let info = self.cmds.get(dot);
 
         // update command info
-        // info.cmd = Some(cmd.clone());
-        self.cmds.remove(dot);
+        info.cmd = Some(cmd.clone());
+        // self.cmds.remove(dot);
 
         // create execution info:
         // - one entry per key being accessed will be created, which allows the
