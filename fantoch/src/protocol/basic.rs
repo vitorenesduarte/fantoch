@@ -256,7 +256,7 @@ impl Basic {
         // Action::ToForward {
         //     msg: Message::MCommitDot { dot },
         // }
-        None
+        Action::Nothing
     }
 
     fn handle_mcommit_dot(
