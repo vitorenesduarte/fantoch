@@ -97,13 +97,11 @@ impl Protocol for Basic {
             Message::MCommit { dot, cmd } => {
                 self.handle_mcommit(from, dot, cmd)
             }
-            m => panic!("message {:?} shouldn't happen", m),
-            /* Message::MCommitDot { dot } => self.handle_mcommit_dot(from,
-             * dot), Message::MGarbageCollection { committed } =>
-             * {     self.handle_mgc(from, committed)
-             * }
-             * Message::MStable { stable } => self.handle_mstable(from,
-             * stable), */
+            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
+            Message::MGarbageCollection { committed } => {
+                self.handle_mgc(from, committed)
+            }
+            Message::MStable { stable } => self.handle_mstable(from, stable),
         }
     }
 
