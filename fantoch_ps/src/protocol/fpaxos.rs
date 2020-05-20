@@ -540,12 +540,10 @@ mod tests {
 
         // check that the register created a spawn commander to self and handle
         // it locally
-        let maccept = if let Action::ToSend { target, msg } = spawn.clone() {
-            assert_eq!(target.len(), 1);
-            assert!(target.contains(&1));
+        let maccept = if let Action::ToForward { msg } = spawn {
             process.handle(process_id_1, msg)
         } else {
-            panic!("Action::ToSend not found!");
+            panic!("Action::ToForward not found!");
         };
 
         // check that the maccept is being sent to 2 processes

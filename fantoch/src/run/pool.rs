@@ -86,9 +86,7 @@ where
         self.do_forward(index, map(value)).await
     }
 
-    /// Forwards a message to the pool. Note that this implementation is not as
-    /// efficient as it could be, as it's only meant to be used for
-    /// setup/periodic messages.
+    /// Forwards a message to the pool.
     pub async fn broadcast(&mut self, msg: M) -> RunResult<()>
     where
         M: Clone,
