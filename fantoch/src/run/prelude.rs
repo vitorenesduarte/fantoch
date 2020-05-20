@@ -152,7 +152,7 @@ where
     fn index(&self) -> Option<(usize, usize)> {
         match self.key() {
             Some(key) => no_worker_index_reserve(key_index(key)),
-            None => panic!("non indexed message key: {:?}", self),
+            None => None,
         }
     }
 }

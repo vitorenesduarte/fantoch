@@ -129,7 +129,7 @@ where
         match index {
             Some(index) => self.pool[index].send(msg).await,
             None => {
-                panic!("all messages should be indexed");
+                panic!("all messages should be indexed: {:?}", msg);
                 // // TODO send this in parallel
                 // for index in 0..self.pool.len() {
                 //     self.pool[index].send(msg.clone()).await?
