@@ -363,7 +363,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // handle commit in synod
         let msg = SynodMessage::MChosen(value.clone());
-        info.synod.handle(from, msg);
+        assert!(info.synod.handle(from, msg).is_none());
 
         // create execution info if not a noop
         if let Some(cmd) = value.cmd {

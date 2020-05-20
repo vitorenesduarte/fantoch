@@ -169,13 +169,9 @@ impl FPaxos {
                 // - send a spawn commander to self (that can run in a different
                 //   process for parallelism)
                 let mspawn = Message::MSpawnCommander { ballot, slot, cmd };
-                let target = singleton![self.id()];
 
                 // return `ToSend`
-                Action::ToSend {
-                    target,
-                    msg: mspawn,
-                }
+                Action::ToForward { msg: mspawn }
             }
             MultiSynodMessage::MForwardSubmit(cmd) => {
                 // in this case, we're not the leader and should forward the
