@@ -15,13 +15,14 @@ CLIENT_RUN_MODE="release"
 # processes config
 PORT=3000
 CLIENT_PORT=4000
-PROTOCOL="newt_atomic"
+PROTOCOL="basic"
 PROCESSES=3
 FAULTS=1
 TRANSITIVE_CONFLICTS="true"
 EXECUTE_AT_COMMIT="false"
 EXECUTION_LOG=""
 LEADER=""
+GC_INTERVAL=1000
 
 # parallelism config
 WORKERS=8
@@ -272,6 +273,7 @@ start_process() {
         --tcp_nodelay ${PROCESS_TCP_NODELAY} \
         --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
         --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
+        --gc_interval ${GC_INTERVAL} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
         --workers ${WORKERS} \
         --executors ${EXECUTORS} \
