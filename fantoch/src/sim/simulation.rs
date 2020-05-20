@@ -1,7 +1,7 @@
 use crate::client::Client;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
-use crate::protocol::{Protocol, ToSend};
+use crate::protocol::{Action, Protocol};
 use crate::time::SysTime;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -65,33 +65,38 @@ where
     /// Forward a `ToSend`.
     pub fn forward_to_processes(
         &mut self,
-        to_send: ToSend<P::Message>,
-    ) -> Vec<ToSend<P::Message>> {
-        // extract `ToSend` arguments
-        let ToSend { from, target, msg } = to_send;
+        (process_id, action): (ProcessId, Action<P::Message>),
+    ) -> Vec<(ProcessId, Action<P::Message>)> {
+        match action {
+            Action::ToSend { target, msg } => {
+                // handle first in self if self in target
+                let local_action = if target.contains(&process_id) {
+                    let (process, _) = self.get_process(process_id);
+                    process.handle(process_id, msg.clone())
+                } else {
+                    Action::Nothing
+                };
 
-        // handle first in self if self in target
-        let to_send = if target.contains(&from) {
-            let (process, _) = self.get_process(from);
-            process.handle(from, msg.clone())
-        } else {
-            None
-        };
+                let actions = target
+                    .into_iter()
+                    // make sure we don't handle again in self
+                    .filter(|to| to != &process_id)
+                    .map(|to| {
+                        let (process, _) = self.get_process(to);
+                        let action = process.handle(process_id, msg.clone());
+                        (to, action)
+                    });
 
-        let to_sends = target
-            .into_iter()
-            // make sure we don't handle again in self
-            .filter(|process_id| *process_id != from)
-            .map(|process_id| {
-                let (process, _) = self.get_process(process_id);
-                process.handle(from, msg.clone())
-            });
-
-        // make sure that the first to_send is the one from self
-        std::iter::once(to_send)
-            .chain(to_sends)
-            .filter_map(|to_send| to_send)
-            .collect()
+                // make sure that the first to_send is the one from self
+                std::iter::once((process_id, local_action))
+                    .chain(actions)
+                    .filter(|(_, action)| action != &Action::Nothing)
+                    .collect()
+            }
+            action => {
+                panic!("non supported action: {:?}", action);
+            }
+        }
     }
 
     /// Forward a `CommandResult`.

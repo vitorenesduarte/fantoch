@@ -5,8 +5,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, MessageIndex, PeriodicEventIndex, Protocol, ProtocolMetrics,
-    ToSend,
+    Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
+    ProtocolMetrics,
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -84,11 +84,7 @@ impl Protocol for FPaxos {
     }
 
     /// Submits a command issued by some client.
-    fn submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-    ) -> ToSend<Self::Message> {
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> Action<Message> {
         self.handle_submit(dot, cmd)
     }
 
@@ -97,12 +93,9 @@ impl Protocol for FPaxos {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         match msg {
-            Message::MForwardSubmit { cmd } => {
-                let msg = self.handle_submit(None, cmd);
-                Some(msg)
-            }
+            Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
             Message::MSpawnCommander { ballot, slot, cmd } => {
                 self.handle_mspawn_commander(from, ballot, slot, cmd)
             }
@@ -123,7 +116,7 @@ impl Protocol for FPaxos {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-    ) -> Vec<ToSend<Message>> {
+    ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 log!("p{}: PeriodicEvent::GarbageCollection", self.id());
@@ -136,8 +129,7 @@ impl Protocol for FPaxos {
                 let committed = self.gc_track.committed();
 
                 // create `ToSend`
-                let tosend = ToSend {
-                    from: self.id(),
+                let tosend = Action::ToSend {
                     target: self.bp.all_but_me(),
                     msg: Message::MGarbageCollection { committed },
                 };
@@ -170,7 +162,7 @@ impl FPaxos {
         &mut self,
         _dot: Option<Dot>,
         cmd: Command,
-    ) -> ToSend<Message> {
+    ) -> Action<Message> {
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
                 // in this case, we're the leader:
@@ -180,8 +172,7 @@ impl FPaxos {
                 let target = singleton![self.id()];
 
                 // return `ToSend`
-                ToSend {
-                    from: self.id(),
+                Action::ToSend {
                     target,
                     msg: mspawn,
                 }
@@ -193,8 +184,7 @@ impl FPaxos {
                 let target = singleton![self.leader];
 
                 // return `ToSend`
-                ToSend {
-                    from: self.id(),
+                Action::ToSend {
                     target,
                     msg: mforward,
                 }
@@ -209,7 +199,7 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         cmd: Command,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -233,11 +223,10 @@ impl FPaxos {
                 let target = self.bp.write_quorum();
 
                 // return `ToSend`
-                Some(ToSend {
-                    from: self.id(),
+                Action::ToSend {
                     target,
                     msg: maccept,
-                })
+                }
             }
             msg => panic!("can't handle {:?} in handle_mspawn_commander", msg),
         }
@@ -249,7 +238,7 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         cmd: Command,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MAccept({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -270,17 +259,16 @@ impl FPaxos {
                     let target = singleton![from];
 
                     // return `ToSend`
-                    Some(ToSend {
-                        from: self.id(),
+                    Action::ToSend {
                         target,
                         msg: maccepted,
-                    })
+                    }
                 }
                 msg => panic!("can't handle {:?} in handle_maccept", msg),
             }
         } else {
             // TODO maybe warn the leader that it is not longer a leader?
-            None
+            Action::Nothing
         }
     }
 
@@ -289,7 +277,7 @@ impl FPaxos {
         from: ProcessId,
         ballot: u64,
         slot: u64,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MAccepted({:?}, {:?}) from {}",
             self.id(),
@@ -309,26 +297,20 @@ impl FPaxos {
                     let target = self.bp.all();
 
                     // return `ToSend`
-                    let to_send = ToSend {
-                        from: self.id(),
+                    return Action::ToSend {
                         target,
                         msg: mcommit,
                     };
-                    return Some(to_send);
                 }
                 msg => panic!("can't handle {:?} in handle_maccepted", msg),
             }
         }
 
         // nothing to send
-        None
+        Action::Nothing
     }
 
-    fn handle_mchosen(
-        &mut self,
-        slot: u64,
-        cmd: Command,
-    ) -> Option<ToSend<Message>> {
+    fn handle_mchosen(&mut self, slot: u64, cmd: Command) -> Action<Message> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
 
         // create execution info
@@ -339,14 +321,14 @@ impl FPaxos {
         self.gc_track.commit(slot);
 
         // nothing to send
-        None
+        Action::Nothing
     }
 
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: u64,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -354,7 +336,7 @@ impl FPaxos {
             from
         );
         self.gc_track.committed_by(from, committed);
-        None
+        Action::Nothing
     }
 }
 
@@ -562,21 +544,25 @@ mod tests {
 
         // check that the register created a spawn commander to self and handle
         // it locally
-        let ToSend { target, from, msg } = spawn.clone();
-        assert_eq!(target.len(), 1);
-        assert!(target.contains(&1));
-        let maccept = process
-            .handle(from, msg)
-            .expect("handling spawn should create an maccept message");
+        let maccept = if let Action::ToSend { target, msg } = spawn.clone() {
+            assert_eq!(target.len(), 1);
+            assert!(target.contains(&1));
+            process.handle(process_id_1, msg)
+        } else {
+            panic!("Action::ToSend not found!");
+        };
 
         // check that the maccept is being sent to 2 processes
-        let ToSend { target, .. } = maccept.clone();
-        assert_eq!(target.len(), 2 * f);
-        assert!(target.contains(&1));
-        assert!(target.contains(&2));
+        let check_target = |target: &HashSet<u64>| {
+            target.len() == f + 1 && target.contains(&1) && target.contains(&2)
+        };
+        assert!(
+            matches!(maccept.clone(), Action::ToSend{target, ..} if check_target(&target))
+        );
 
         // handle maccepts
-        let mut maccepted = simulation.forward_to_processes(maccept);
+        let mut maccepted =
+            simulation.forward_to_processes((process_id_1, maccept));
 
         // check that there are 2 maccepted
         assert_eq!(maccepted.len(), 2 * f);
@@ -597,8 +583,10 @@ mod tests {
 
         // check that the mchosen is sent to everyone
         let mchosen = mchosen.pop().expect("there should be an mcommit");
-        let ToSend { target, .. } = mchosen.clone();
-        assert_eq!(target.len(), n);
+        let check_target = |target: &HashSet<u64>| target.len() == n;
+        assert!(
+            matches!(mchosen.clone(), (_, Action::ToSend {target, ..}) if check_target(&target))
+        );
 
         // all processes handle it
         let to_sends = simulation.forward_to_processes(mchosen);
@@ -628,11 +616,8 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(None, cmd);
-        if let Message::MSpawnCommander { slot, .. } = msg {
-            assert_eq!(slot, 2);
-        } else {
-            panic!("Message::MSpawnCommander not found!");
-        }
+        let action = process.submit(None, cmd);
+        let check_msg = |msg: &Message| matches!(msg, Message::MSpawnCommander{slot, ..} if slot == &2);
+        assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
     }
 }

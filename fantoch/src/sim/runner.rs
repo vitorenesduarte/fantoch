@@ -5,7 +5,7 @@ use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
-use crate::protocol::{Protocol, ProtocolMetrics, ToSend};
+use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
 use crate::time::{SimTime, SysTime};
 use crate::util;
@@ -201,10 +201,11 @@ where
                         executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
-                        let to_send = process.submit(None, cmd);
-                        self.schedule_send(
+                        let protocol_action = process.submit(None, cmd);
+                        self.schedule_protocol_action(
+                            process_id,
                             MessageRegion::Process(process_id),
-                            Some(to_send),
+                            protocol_action,
                         );
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
@@ -224,7 +225,8 @@ where
                             .collect();
 
                         // schedule new messages
-                        self.schedule_send(
+                        self.schedule_protocol_action(
+                            process_id,
                             MessageRegion::Process(process_id),
                             to_send,
                         );
@@ -274,10 +276,13 @@ where
                             self.simulation.get_process(process_id);
 
                         // handle event
-                        for to_send in process.handle_event(event.clone()) {
-                            self.schedule_send(
+                        for protocol_action in
+                            process.handle_event(event.clone())
+                        {
+                            self.schedule_protocol_action(
+                                process_id,
                                 MessageRegion::Process(process_id),
-                                Some(to_send.clone()),
+                                protocol_action.clone(),
                             );
                         }
 
@@ -315,22 +320,32 @@ where
     }
 
     /// (maybe) Schedules a new send from some process.
-    fn schedule_send(
+    fn schedule_protocol_action(
         &mut self,
+        process_id: ProcessId,
         from_region: MessageRegion,
-        to_send: Option<ToSend<P::Message>>,
+        protocol_action: Action<P::Message>,
     ) {
-        if let Some(ToSend { from, target, msg }) = to_send {
-            // for each process in target, schedule message delivery
-            target.into_iter().for_each(|to| {
-                // otherwise, create action and schedule it
-                let action = ScheduleAction::SendToProc(from, to, msg.clone());
-                self.schedule_message(
-                    from_region.clone(),
-                    MessageRegion::Process(to),
-                    action,
-                );
-            });
+        match protocol_action {
+            Action::ToSend { target, msg } => {
+                // for each process in target, schedule message delivery
+                target.into_iter().for_each(|to| {
+                    // otherwise, create action and schedule it
+                    let action =
+                        ScheduleAction::SendToProc(process_id, to, msg.clone());
+                    self.schedule_message(
+                        from_region.clone(),
+                        MessageRegion::Process(to),
+                        action,
+                    );
+                });
+            }
+            Action::ToForward { msg } => {
+                let action =
+                    ScheduleAction::SendToProc(process_id, process_id, msg);
+                self.schedule_message(from_region.clone(), from_region, action);
+            }
+            Action::Nothing => {}
         }
     }
 

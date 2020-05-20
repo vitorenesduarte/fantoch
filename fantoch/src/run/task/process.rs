@@ -3,7 +3,7 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId};
 use crate::log;
-use crate::protocol::{Protocol, ToSend};
+use crate::protocol::{Action, Protocol};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
@@ -446,17 +446,18 @@ async fn handle_from_processes<P>(
     P: Protocol + 'static,
 {
     // handle message in process
-    if let Some(to_send) = process.handle(from, msg) {
-        handle_to_send(
-            worker_index,
-            process_id,
-            to_send,
-            process,
-            to_writers,
-            reader_to_workers,
-        )
-        .await;
-    }
+    let action = process.handle(from, msg);
+
+    // handle (potentially) new action
+    handle_action(
+        worker_index,
+        process_id,
+        action,
+        process,
+        to_writers,
+        reader_to_workers,
+    )
+    .await;
 
     // get new execution info for the executor
     let to_executor = process.to_executor();
@@ -481,44 +482,65 @@ async fn handle_from_processes<P>(
     }
 }
 
-async fn handle_to_send<P>(
+async fn handle_action<P>(
     worker_index: usize,
     process_id: ProcessId,
-    to_send: ToSend<P::Message>,
+    mut action: Action<P::Message>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
 {
-    // variable to keep track if there's another `ToSend` to be sent after
-    // handling the previous one
-    let mut to_send = Some(to_send);
+    loop {
+        match action {
+            Action::ToSend { target, msg } => {
+                let mut msg_to_self = false;
 
-    while let Some(ToSend { target, msg, .. }) = to_send.take() {
-        let mut msg_to_self = false;
+                // send to each process in target, expect to self
+                for destination in target {
+                    if destination == process_id {
+                        msg_to_self = true;
+                    } else {
+                        // send message to correct writer
+                        // TODO send this in parallel
+                        send_to_writer::<P>(
+                            destination,
+                            msg.clone(),
+                            to_writers,
+                        )
+                        .await
+                    }
+                }
 
-        // send to each process in target, expect to self
-        for destination in target {
-            if destination == process_id {
-                msg_to_self = true;
-            } else {
-                // send message to correct writer
-                // TODO send this in parallel
-                send_to_writer::<P>(destination, msg.clone(), to_writers).await
+                if msg_to_self {
+                    // handle msg locally if self in `target`
+                    action = handle_message_from_self::<P>(
+                        worker_index,
+                        process_id,
+                        msg,
+                        process,
+                        reader_to_workers,
+                    )
+                    .await
+                } else {
+                    break;
+                }
             }
-        }
-
-        if msg_to_self {
-            // handle msg locally if self in `target`
-            to_send = handle_message_from_self::<P>(
-                worker_index,
-                process_id,
-                msg,
-                process,
-                reader_to_workers,
-            )
-            .await
+            Action::ToForward { msg } => {
+                // handle msg locally if self in `target`
+                action = handle_message_from_self(
+                    worker_index,
+                    process_id,
+                    msg,
+                    process,
+                    reader_to_workers,
+                )
+                .await;
+            }
+            Action::Nothing => {
+                break;
+            }
         }
     }
 }
@@ -529,7 +551,7 @@ async fn handle_message_from_self<P>(
     msg: P::Message,
     process: &mut P,
     reader_to_workers: &mut ReaderToWorkers<P>,
-) -> Option<ToSend<P::Message>>
+) -> Action<P::Message>
 where
     P: Protocol + 'static,
 {
@@ -544,7 +566,7 @@ where
         if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);
         }
-        None
+        Action::Nothing
     }
 }
 
@@ -611,7 +633,7 @@ async fn handle_from_client<P>(
 {
     // submit command in process
     let to_send = process.submit(dot, cmd);
-    handle_to_send(
+    handle_action(
         worker_index,
         process_id,
         to_send,
@@ -664,7 +686,7 @@ async fn handle_from_periodic_task<P>(
     // handle event in process
     for to_send in process.handle_event(event) {
         // TODO maybe run in parallel
-        handle_to_send(
+        handle_action(
             worker_index,
             process_id,
             to_send,

@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId};
 use crate::protocol::{
-    BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics, ToSend,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
+    Protocol, ProtocolMetrics,
 };
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
@@ -81,7 +81,7 @@ impl Protocol for Basic {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> ToSend<Self::Message> {
+    ) -> Action<Self::Message> {
         self.handle_submit(dot, cmd)
     }
 
@@ -90,7 +90,7 @@ impl Protocol for Basic {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         match msg {
             Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
             Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
@@ -109,7 +109,7 @@ impl Protocol for Basic {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-    ) -> Vec<ToSend<Message>> {
+    ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 log!("p{}: PeriodicEvent::GarbageCollection", self.id());
@@ -118,20 +118,17 @@ impl Protocol for Basic {
                 let (committed, stable) = self.cmds.committed_and_stable();
 
                 // create `ToSend`
-                let tosend = ToSend {
-                    from: self.id(),
+                let tosend = Action::ToSend {
                     target: self.bp.all_but_me(),
                     msg: Message::MGarbageCollection { committed },
                 };
 
-                // create `ToSend` to self
-                let toself = ToSend {
-                    from: self.id(),
-                    target: singleton![self.id()],
+                // create `ToForward` to self
+                let toforward = Action::ToForward {
                     msg: Message::MStable { stable },
                 };
 
-                vec![tosend, toself]
+                vec![tosend, toforward]
             }
         }
     }
@@ -160,7 +157,7 @@ impl Basic {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> ToSend<Message> {
+    ) -> Action<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -169,8 +166,7 @@ impl Basic {
         let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        ToSend {
-            from: self.id(),
+        Action::ToSend {
             target,
             msg: mstore,
         }
@@ -181,7 +177,7 @@ impl Basic {
         from: ProcessId,
         dot: Dot,
         cmd: Command,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MStore({:?}, {:?}) from {}", self.id(), dot, cmd, from);
 
         // get cmd info
@@ -195,18 +191,17 @@ impl Basic {
         let target = singleton![from];
 
         // return `ToSend`
-        Some(ToSend {
-            from: self.id(),
+        Action::ToSend {
             target,
             msg: mstoreack,
-        })
+        }
     }
 
     fn handle_mstoreack(
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
         // get cmd info
@@ -224,13 +219,12 @@ impl Basic {
             let target = self.bp.all();
 
             // return `ToSend`
-            Some(ToSend {
-                from: self.id(),
+            Action::ToSend {
                 target,
                 msg: mcommit,
-            })
+            }
         } else {
-            None
+            Action::Nothing
         }
     }
 
@@ -239,7 +233,7 @@ impl Basic {
         _from: ProcessId,
         dot: Dot,
         cmd: Command,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // get cmd info and its rifl
@@ -259,29 +253,27 @@ impl Basic {
         self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
-        Some(ToSend {
-            from: self.id(),
-            target: singleton![self.id()],
+        Action::ToForward {
             msg: Message::MCommitDot { dot },
-        })
+        }
     }
 
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-        None
+        Action::Nothing
     }
 
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -289,19 +281,19 @@ impl Basic {
             from
         );
         self.cmds.committed_by(from, committed);
-        None
+        Action::Nothing
     }
 
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
-        None
+        Action::Nothing
     }
 }
 
@@ -482,18 +474,21 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in basic 1
-        let (process, executor) = simulation.get_process(target);
+        let (process, executor) = simulation.get_process(process_id_1);
         executor.wait_for(&cmd);
         let mstore = process.submit(None, cmd);
 
         // check that the mstore is being sent to 2 processes
-        let ToSend { target, .. } = mstore.clone();
-        assert_eq!(target.len(), 2 * f);
-        assert!(target.contains(&1));
-        assert!(target.contains(&2));
+        let check_target = |target: &HashSet<u64>| {
+            target.len() == 2 * f && target.contains(&1) && target.contains(&2)
+        };
+        assert!(
+            matches!(mstore.clone(), Action::ToSend {target, ..} if check_target(&target))
+        );
 
         // handle mstores
-        let mut mstoreacks = simulation.forward_to_processes(mstore);
+        let mut mstoreacks =
+            simulation.forward_to_processes((process_id_1, mstore));
 
         // check that there are 2 mstoreacks
         assert_eq!(mstoreacks.len(), 2 * f);
@@ -514,14 +509,19 @@ mod tests {
 
         // check that the mcommit is sent to everyone
         let mcommit = mcommits.pop().expect("there should be an mcommit");
-        let ToSend { target, .. } = mcommit.clone();
-        assert_eq!(target.len(), n);
+        let check_target = |target: &HashSet<u64>| target.len() == n;
+        assert!(
+            matches!(mcommit.clone(), (_, Action::ToSend {target, ..}) if check_target(&target))
+        );
 
         // all processes handle it
-        let to_sends = simulation.forward_to_processes(mcommit);
+        let tosends = simulation.forward_to_processes(mcommit);
 
-        // check there's nothing to send
-        assert!(to_sends.is_empty());
+        // check the MCommitDot
+        let check_msg = |msg: &Message| matches!(msg, Message::MCommitDot {..});
+        assert!(tosends.into_iter().all(|(_, action)| {
+            matches!(action, Action::ToForward { msg } if check_msg(&msg))
+        }));
 
         // process 1 should have something to the executor
         let (process, executor) = simulation.get_process(process_id_1);
@@ -545,11 +545,8 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(None, cmd);
-        if let Message::MStore { dot, .. } = msg {
-            assert_eq!(dot, Dot::new(process_id_1, 2));
-        } else {
-            panic!("Message::MStore not found!");
-        }
+        let action = process.submit(None, cmd);
+        let check_msg = |msg: &Message| matches!(msg, Message::MStore {dot, ..} if dot == &Dot::new(process_id_1, 2));
+        assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
     }
 }

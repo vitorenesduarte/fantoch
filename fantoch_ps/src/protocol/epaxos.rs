@@ -8,8 +8,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{
-    BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics, ToSend,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
+    Protocol, ProtocolMetrics,
 };
 use fantoch::util;
 use fantoch::{log, singleton};
@@ -86,11 +86,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     }
 
     /// Submits a command issued by some client.
-    fn submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-    ) -> ToSend<Self::Message> {
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> Action<Message> {
         self.handle_submit(dot, cmd)
     }
 
@@ -99,7 +95,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         match msg {
             Message::MCollect {
                 dot,
@@ -131,7 +127,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-    ) -> Vec<ToSend<Message>> {
+    ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 log!("p{}: PeriodicEvent::GarbageCollection", self.id());
@@ -139,20 +135,17 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
                 let (committed, stable) = self.cmds.committed_and_stable();
 
                 // create `ToSend`
-                let tosend = ToSend {
-                    from: self.id(),
+                let tosend = Action::ToSend {
                     target: self.bp.all_but_me(),
                     msg: Message::MGarbageCollection { committed },
                 };
 
-                // create `ToSend` to self
-                let toself = ToSend {
-                    from: self.id(),
-                    target: singleton![self.id()],
+                // create `ToForward` to self
+                let toforward = Action::ToForward {
                     msg: Message::MStable { stable },
                 };
 
-                vec![tosend, toself]
+                vec![tosend, toforward]
             }
         }
     }
@@ -186,7 +179,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> ToSend<Message> {
+    ) -> Action<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -212,8 +205,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        ToSend {
-            from: self.id(),
+        Action::ToSend {
             target,
             msg: mcollect,
         }
@@ -226,7 +218,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         cmd: Option<Command>,
         quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -241,7 +233,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // discard message if no longer in START
         if info.status != Status::START {
-            return None;
+            return Action::Nothing;
         }
 
         // check if it's a message from self
@@ -267,11 +259,10 @@ impl<KC: KeyClocks> EPaxos<KC> {
         let target = singleton![from];
 
         // return `ToSend`
-        Some(ToSend {
-            from: self.id(),
+        Action::ToSend {
             target,
             msg: mcollectack,
-        })
+        }
     }
 
     fn handle_mcollectack(
@@ -279,7 +270,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         from: ProcessId,
         dot: Dot,
         clock: VClock<ProcessId>,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {}",
             self.id(),
@@ -290,7 +281,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // ignore ack from self (see `EPaxosInfo::new` for the reason why)
         if from == self.bp.process_id {
-            return None;
+            return Action::Nothing;
         }
 
         // get cmd info
@@ -298,7 +289,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // do nothing if we're no longer COLLECT
         if info.status != Status::COLLECT {
-            return None;
+            return Action::Nothing;
         }
 
         // update quorum clocks
@@ -329,11 +320,10 @@ impl<KC: KeyClocks> EPaxos<KC> {
                 let target = self.bp.all();
 
                 // return `ToSend`
-                Some(ToSend {
-                    from: self.id(),
+                Action::ToSend {
                     target,
                     msg: mcommit,
-                })
+                }
             } else {
                 self.bp.slow_path();
                 // slow path: create `MConsensus`
@@ -341,14 +331,13 @@ impl<KC: KeyClocks> EPaxos<KC> {
                 let mconsensus = Message::MConsensus { dot, ballot, value };
                 let target = self.bp.write_quorum();
                 // return `ToSend`
-                Some(ToSend {
-                    from: self.id(),
+                Action::ToSend {
                     target,
                     msg: mconsensus,
-                })
+                }
             }
         } else {
-            None
+            Action::Nothing
         }
     }
 
@@ -357,7 +346,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         from: ProcessId,
         dot: Dot,
         value: ConsensusValue,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, value.clock);
 
         // get cmd info
@@ -366,7 +355,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             // TODO what about the executed status?
-            return None;
+            return Action::Nothing;
         }
 
         // update command info:
@@ -387,7 +376,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         self.cmds.commit(dot);
 
         // nothing to send
-        None
+        Action::Nothing
     }
 
     fn handle_mconsensus(
@@ -396,7 +385,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         dot: Dot,
         ballot: u64,
         value: ConsensusValue,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MConsensus({:?}, {}, {:?})",
             self.id(),
@@ -425,7 +414,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             }
             None => {
                 // ballot too low to be accepted
-                return None;
+                return Action::Nothing;
             }
             _ => panic!(
                 "no other type of message should be output by Synod in the MConsensus handler"
@@ -436,11 +425,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         let target = singleton![from];
 
         // return `ToSend`
-        Some(ToSend {
-            from: self.id(),
-            target,
-            msg,
-        })
+        Action::ToSend { target, msg }
     }
 
     fn handle_mconsensusack(
@@ -448,7 +433,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         from: ProcessId,
         dot: Dot,
         ballot: u64,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
 
         // get cmd info
@@ -464,15 +449,14 @@ impl<KC: KeyClocks> EPaxos<KC> {
                 let mcommit = Message::MCommit { dot, value };
 
                 // return `ToSend`
-                Some(ToSend {
-                    from: self.id(),
+                Action::ToSend {
                     target,
                     msg: mcommit,
-                })
+                }
             }
             None => {
                 // not enough accepts yet
-                None
+        Action::Nothing
             }
             _ => panic!(
                 "no other type of message should be output by Synod in the MConsensusAck handler"
@@ -484,18 +468,18 @@ impl<KC: KeyClocks> EPaxos<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-        None
+        Action::Nothing
     }
 
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -503,19 +487,19 @@ impl<KC: KeyClocks> EPaxos<KC> {
             from
         );
         self.cmds.committed_by(from, committed);
-        None
+        Action::Nothing
     }
 
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Option<ToSend<Message>> {
+    ) -> Action<Message> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
-        None
+        Action::Nothing
     }
 }
 
@@ -784,13 +768,16 @@ mod tests {
         let mcollect = process.submit(None, cmd);
 
         // check that the mcollect is being sent to 2 processes
-        let ToSend { target, .. } = mcollect.clone();
-        assert_eq!(target.len(), 2 * f);
-        assert!(target.contains(&1));
-        assert!(target.contains(&2));
+        let check_target = |target: &HashSet<u64>| {
+            target.len() == 2 && target.contains(&1) && target.contains(&2)
+        };
+        assert!(
+            matches!(mcollect.clone(), Action::ToSend{target, ..} if check_target(&target))
+        );
 
         // handle mcollects
-        let mut mcollectacks = simulation.forward_to_processes(mcollect);
+        let mut mcollectacks =
+            simulation.forward_to_processes((process_id_1, mcollect));
 
         // check that there are 2 mcollectacks
         assert_eq!(mcollectacks.len(), 2 * f);
@@ -806,8 +793,10 @@ mod tests {
 
         // check that the mcommit is sent to everyone
         let mcommit = mcommits.pop().expect("there should be an mcommit");
-        let ToSend { target, .. } = mcommit.clone();
-        assert_eq!(target.len(), n);
+        let check_target = |target: &HashSet<u64>| target.len() == n;
+        assert!(
+            matches!(mcommit.clone(), (_, Action::ToSend {target, ..}) if check_target(&target))
+        );
 
         // all processes handle it
         let to_sends = simulation.forward_to_processes(mcommit);
@@ -837,11 +826,8 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _) = simulation.get_process(target);
-        let ToSend { msg, .. } = process.submit(None, cmd);
-        if let Message::MCollect { dot, .. } = msg {
-            assert_eq!(dot, Dot::new(process_id_1, 2));
-        } else {
-            panic!("Message::MCollect not found!");
-        }
+        let action = process.submit(None, cmd);
+        let check_msg = |msg: &Message| matches!(msg, Message::MCollect {dot, ..} if dot == &Dot::new(process_id_1, 2));
+        assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
     }
 }

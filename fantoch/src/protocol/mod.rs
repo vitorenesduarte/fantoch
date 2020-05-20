@@ -35,6 +35,7 @@ use std::fmt::{self, Debug};
 pub trait Protocol: Clone {
     type Message: Debug
         + Clone
+        + PartialEq
         + Serialize
         + DeserializeOwned
         + Send
@@ -59,20 +60,20 @@ pub trait Protocol: Clone {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> ToSend<Self::Message>;
+    ) -> Action<Self::Message>;
 
     #[must_use]
     fn handle(
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-    ) -> Option<ToSend<Self::Message>>;
+    ) -> Action<Self::Message>;
 
     #[must_use]
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-    ) -> Vec<ToSend<Self::Message>>;
+    ) -> Vec<Action<Self::Message>>;
 
     #[must_use]
     fn to_executor(
@@ -125,8 +126,8 @@ pub trait PeriodicEventIndex {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct ToSend<M> {
-    pub from: ProcessId,
-    pub target: HashSet<ProcessId>,
-    pub msg: M,
+pub enum Action<M> {
+    ToSend { target: HashSet<ProcessId>, msg: M },
+    ToForward { msg: M },
+    Nothing,
 }
