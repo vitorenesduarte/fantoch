@@ -129,11 +129,12 @@ where
         match index {
             Some(index) => self.pool[index].send(msg).await,
             None => {
-                // TODO send this in parallel
-                for index in 0..self.pool.len() {
-                    self.pool[index].send(msg.clone()).await?
-                }
-                Ok(())
+                panic!("all messages should be indexed");
+                // // TODO send this in parallel
+                // for index in 0..self.pool.len() {
+                //     self.pool[index].send(msg.clone()).await?
+                // }
+                // Ok(())
             }
         }
     }

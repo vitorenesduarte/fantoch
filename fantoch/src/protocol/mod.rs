@@ -113,14 +113,14 @@ pub trait MessageIndex {
     /// message is sent to the single protocol worker.
     ///
     /// There only 2 types of indexes are supported:
-    /// - Some((shift, index)): `index` will be used to compute working index
-    ///   making sure that index is higher than `shift`
+    /// - Some((reserved, index)): `index` will be used to compute working index
+    ///   making sure that index is higher than `reserved`
     /// - None: no indexing; message will be sent to all workers
     fn index(&self) -> Option<(usize, usize)>;
 }
 
 pub trait PeriodicEventIndex {
-    /// Similar to `MessageIndex`.
+    /// Same as `MessageIndex`.
     fn index(&self) -> Option<(usize, usize)>;
 }
 

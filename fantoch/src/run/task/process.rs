@@ -369,9 +369,9 @@ async fn process_task<P>(
                 cmd = from_clients.recv().fuse()  => {
                     selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
-                event = from_periodic.recv().fuse() => {
-                    selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
-                }
+                // event = from_periodic.recv().fuse() => {
+                //     selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
+                // }
             }
         }
     } else {
@@ -383,9 +383,9 @@ async fn process_task<P>(
                 cmd = from_clients.recv() => {
                     selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
                 }
-                event = from_periodic.recv() => {
-                    selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
-                }
+                // event = from_periodic.recv() => {
+                //     selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
+                // }
             }
         }
     }
