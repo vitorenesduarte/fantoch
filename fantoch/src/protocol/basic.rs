@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
 use threshold::VClock;
+use tracing::instrument;
 
 type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 
@@ -137,6 +138,7 @@ impl Protocol for Basic {
 
 impl Basic {
     /// Handles a submit operation by a client.
+    #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
@@ -156,6 +158,7 @@ impl Basic {
         }
     }
 
+    #[instrument(skip(self, from, dot, cmd))]
     fn handle_mstore(
         &mut self,
         from: ProcessId,
@@ -181,6 +184,7 @@ impl Basic {
         }
     }
 
+    #[instrument(skip(self, from, dot))]
     fn handle_mstoreack(
         &mut self,
         from: ProcessId,
@@ -212,6 +216,7 @@ impl Basic {
         }
     }
 
+    #[instrument(skip(self, _from, dot, cmd))]
     fn handle_mcommit(
         &mut self,
         _from: ProcessId,
@@ -241,6 +246,7 @@ impl Basic {
         }
     }
 
+    #[instrument(skip(self, from, dot))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
@@ -252,6 +258,7 @@ impl Basic {
         Action::Nothing
     }
 
+    #[instrument(skip(self, from, committed))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -267,6 +274,7 @@ impl Basic {
         Action::Nothing
     }
 
+    #[instrument(skip(self, from, stable))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
@@ -279,6 +287,7 @@ impl Basic {
         Action::Nothing
     }
 
+    #[instrument(skip(self))]
     fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
