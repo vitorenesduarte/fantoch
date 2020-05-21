@@ -45,17 +45,17 @@ fn end(id: u64) -> u64 {
 pub struct TimingSubscriber {
     next_id: Arc<AtomicU64>,
     // mapping from function name to id used for that function
-    functions: DashMap<&'static str, u64>,
+    functions: Arc<DashMap<&'static str, u64>>,
     // mapping from function name to its histogram
-    histograms: DashMap<u64, Histogram<u64>>,
+    histograms: Arc<DashMap<u64, Histogram<u64>>>,
 }
 
 impl TimingSubscriber {
     pub fn new() -> Self {
         Self {
             next_id: Arc::new(AtomicU64::new(1)), // span ids must be > 0
-            functions: DashMap::new(),
-            histograms: DashMap::new(),
+            functions: Arc::new(DashMap::new()),
+            histograms: Arc::new(DashMap::new()),
         }
     }
 }
@@ -66,28 +66,9 @@ impl Subscriber for TimingSubscriber {
     }
 
     fn new_span(&self, span: &Attributes) -> Id {
-        // compute function name
+        // getfunction name
         let function_name = span.metadata().name();
-        println!("function name: {}", function_name);
-
-        // get function id
-        let id = match self.functions.get(function_name) {
-            Some(id) => {
-                // if the `function_name` already has an id associated, use it
-                *id.value()
-            }
-            None => {
-                // if here, it means that when `self.functions.get` was
-                // executed, `function_name` had no id associated; let's try to
-                // create one (making sure that no two threads create different
-                // ids for the same function name)
-                *self.functions.entry(function_name).or_insert_with(|| {
-                    self.next_id.fetch_add(1, Ordering::SeqCst)
-                })
-            }
-        };
-        println!("function id: {}", id);
-        Id::from_u64(id)
+        self.new_span_from_function_name(function_name)
     }
 
     fn record(&self, _span: &Id, _values: &Record) {}
@@ -105,7 +86,6 @@ impl Subscriber for TimingSubscriber {
 
     fn exit(&self, span: &Id) {
         let id = span.into_u64();
-        println!("span exited: {}", id);
         println!("span exited: {}", id);
         let end_time = now();
         let start_time = end(id);
@@ -134,6 +114,28 @@ impl Subscriber for TimingSubscriber {
     }
 }
 
+impl TimingSubscriber {
+    fn new_span_from_function_name(&self, function_name: &'static str) -> Id {
+        // get function id
+        let id = match self.functions.get(function_name) {
+            Some(id) => {
+                // if the `function_name` already has an id associated, use it
+                *id.value()
+            }
+            None => {
+                // if here, it means that when `self.functions.get` was
+                // executed, `function_name` had no id associated; let's try to
+                // create one (making sure that no two threads create different
+                // ids for the same function name)
+                *self.functions.entry(function_name).or_insert_with(|| {
+                    self.next_id.fetch_add(1, Ordering::SeqCst)
+                })
+            }
+        };
+        Id::from_u64(id)
+    }
+}
+
 impl fmt::Debug for TimingSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name_to_id: Vec<(&'static str, u64)> = self
@@ -141,12 +143,6 @@ impl fmt::Debug for TimingSubscriber {
             .iter()
             .map(|entry| (*entry.key(), *entry.value()))
             .collect();
-        write!(
-            f,
-            "functions found: {} or {}",
-            self.functions.len(),
-            name_to_id.len()
-        )?;
 
         for (function_name, id) in name_to_id {
             // find function's histogram
@@ -170,5 +166,37 @@ impl fmt::Debug for TimingSubscriber {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn clone_test() {
+        let s_1 = TimingSubscriber::new();
+        let s_2 = s_1.clone();
+
+        // no functions or histograms in the beginning
+        assert_eq!(s_2.functions.len(), 0);
+        assert_eq!(s_2.histograms.len(), 0);
+
+        // create span
+        let span = s_1.new_span_from_function_name("my_fun");
+
+        // now there's one function
+        assert_eq!(s_2.functions.len(), 1);
+        assert_eq!(s_2.histograms.len(), 0);
+
+        s_1.enter(&span);
+        thread::sleep(Duration::from_millis(1));
+        s_1.exit(&span);
+
+        // now there's one function and one histogram
+        assert_eq!(s_2.functions.len(), 1);
+        assert_eq!(s_2.histograms.len(), 1);
     }
 }
