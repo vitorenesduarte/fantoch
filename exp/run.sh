@@ -22,7 +22,8 @@ TRANSITIVE_CONFLICTS="true"
 EXECUTE_AT_COMMIT="false"
 EXECUTION_LOG=""
 LEADER=""
-GC_INTERVAL=1000
+GC_INTERVAL=1000 # every second
+TRACER_SHOW_INTERVAL=1000 # every second
 
 # parallelism config
 WORKERS=8
@@ -274,6 +275,7 @@ start_process() {
         --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
         --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
         --gc_interval ${GC_INTERVAL} \
+        --tracer_show_interval ${TRACER_SHOW_INTERVAL} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
         --workers ${WORKERS} \
         --executors ${EXECUTORS} \
