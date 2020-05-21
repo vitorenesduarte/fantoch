@@ -149,15 +149,15 @@ impl fmt::Debug for TimingSubscriber {
                     let histogram = histogram.value();
                     writeln!(
                         f,
-                        "{} | count={}   min={}   max={}   avg={}   std={}   p99={}   p99.99={}",
+                        "{:>35} | count={:<8} min={:<8} max={:<8} avg={:<8} std={:<8} p99={:<8} p99.99={:<8}",
                         function_name,
                         histogram.len(),
                         histogram.min(),
                         histogram.max(),
-                        histogram.mean(),
-                        histogram.stdev(),
+                        histogram.mean().round(),
+                        histogram.stdev().round(),
                         histogram.value_at_percentile(0.99),
-                        histogram.value_at_percentile(0.9999)
+                        histogram.value_at_percentile(0.9999),
                     )?;
                 }
                 None => {}
