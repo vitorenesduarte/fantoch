@@ -105,21 +105,28 @@ impl Subscriber for TimingSubscriber {
         let end_time = now();
         let start_time = end(id);
         // function execution time in nanos
-        let time = end_time - start_time;
-        println!(
-            "id {:?} start {} end {} time {}",
-            id, start_time, end_time, time
-        );
-        // retrieve histogram
-        let mut histogram = self.histograms.entry(id).or_insert_with(|| {
-            Histogram::<u64>::new_with_bounds(1, MAX_FUNCTION_EXECUTION_TIME, 3)
-                .expect("creating histogram should work")
-        });
-        println!("low {} high {}", histogram.low(), histogram.high());
-        // and update it
-        histogram
-            .record(time)
-            .expect("adding to histogram should work");
+        if end_time > start_time {
+            // retrieve histogram
+            let mut histogram =
+                self.histograms.entry(id).or_insert_with(|| {
+                    Histogram::<u64>::new_with_bounds(
+                        1,
+                        MAX_FUNCTION_EXECUTION_TIME,
+                        3,
+                    )
+                    .expect("creating histogram should work")
+                });
+            // let time = end_time - start_time;
+            // println!(
+            //     "id {:?} start {} end {} time {}",
+            //     id, start_time, end_time, time
+            // );
+            // println!("low {} high {}", histogram.low(), histogram.high());
+            // and update it
+            histogram
+                .record(end_time - start_time)
+                .expect("adding to histogram should work");
+        }
     }
 }
 
