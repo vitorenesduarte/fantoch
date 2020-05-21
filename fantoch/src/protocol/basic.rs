@@ -231,6 +231,8 @@ impl Basic {
         // // update command info
         info.cmd = Some(cmd.clone());
 
+        // self.cmds.remove(&dot);
+
         // create execution info:
         // - one entry per key being accessed will be created, which allows the
         //   basic executor to run in parallel
@@ -271,7 +273,12 @@ impl Basic {
             from
         );
         self.cmds.committed_by(from, committed);
-        Action::Nothing
+        // compute newly stable dots
+        let stable = self.cmds.stable();
+        // create `ToForward` to self
+        Action::ToForward {
+            msg: Message::MStable { stable },
+        }
     }
 
     #[instrument(skip(self, from, stable))]
@@ -291,8 +298,8 @@ impl Basic {
     fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
-        // retrieve the committed clock and stable dots
-        let (committed, stable) = self.cmds.committed_and_stable();
+        // retrieve the committed clock
+        let committed = self.cmds.committed();
 
         // create `ToSend`
         let tosend = Action::ToSend {
@@ -300,12 +307,7 @@ impl Basic {
             msg: Message::MGarbageCollection { committed },
         };
 
-        // create `ToForward` to self
-        let toforward = Action::ToForward {
-            msg: Message::MStable { stable },
-        };
-
-        vec![tosend, toforward]
+        vec![tosend]
     }
 }
 
