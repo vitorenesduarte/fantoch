@@ -119,21 +119,7 @@ impl Protocol for FPaxos {
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
-                log!("p{}: PeriodicEvent::GarbageCollection", self.id());
-                // perform garbage collection of stable dots
-                let stable = self.gc_track.stable();
-                let stable_count = self.multi_synod.gc(stable);
-                self.bp.stable(stable_count);
-
-                // retrieve the committed slot
-                let committed = self.gc_track.committed();
-
-                // create `ToSend`
-                let tosend = Action::ToSend {
-                    target: self.bp.all_but_me(),
-                    msg: Message::MGarbageCollection { committed },
-                };
-                vec![tosend]
+                self.handle_event_garbage_collection()
             }
         }
     }
@@ -333,6 +319,24 @@ impl FPaxos {
         );
         self.gc_track.committed_by(from, committed);
         Action::Nothing
+    }
+
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
+        // perform garbage collection of stable dots
+        let stable = self.gc_track.stable();
+        let stable_count = self.multi_synod.gc(stable);
+        self.bp.stable(stable_count);
+
+        // retrieve the committed slot
+        let committed = self.gc_track.committed();
+
+        // create `ToSend`
+        let tosend = Action::ToSend {
+            target: self.bp.all_but_me(),
+            msg: Message::MGarbageCollection { committed },
+        };
+        vec![tosend]
     }
 }
 

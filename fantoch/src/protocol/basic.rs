@@ -112,23 +112,7 @@ impl Protocol for Basic {
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
-                log!("p{}: PeriodicEvent::GarbageCollection", self.id());
-
-                // retrieve the committed clock and stable dots
-                let (committed, stable) = self.cmds.committed_and_stable();
-
-                // create `ToSend`
-                let tosend = Action::ToSend {
-                    target: self.bp.all_but_me(),
-                    msg: Message::MGarbageCollection { committed },
-                };
-
-                // create `ToForward` to self
-                let toforward = Action::ToForward {
-                    msg: Message::MStable { stable },
-                };
-
-                vec![tosend, toforward]
+                self.handle_event_garbage_collection()
             }
         }
     }
@@ -293,6 +277,26 @@ impl Basic {
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
         Action::Nothing
+    }
+
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
+
+        // retrieve the committed clock and stable dots
+        let (committed, stable) = self.cmds.committed_and_stable();
+
+        // create `ToSend`
+        let tosend = Action::ToSend {
+            target: self.bp.all_but_me(),
+            msg: Message::MGarbageCollection { committed },
+        };
+
+        // create `ToForward` to self
+        let toforward = Action::ToForward {
+            msg: Message::MStable { stable },
+        };
+
+        vec![tosend, toforward]
     }
 }
 
