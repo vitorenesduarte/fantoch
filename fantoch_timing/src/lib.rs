@@ -147,7 +147,7 @@ impl fmt::Debug for TimingSubscriber {
             match self.histograms.get(&id) {
                 Some(histogram) => {
                     let histogram = histogram.value();
-                    write!(
+                    writeln!(
                         f,
                         "{} | count={}   min={}   max={}   avg={}   std={}   p99={}   p99.99={}",
                         function_name,
