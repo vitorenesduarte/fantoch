@@ -156,8 +156,8 @@ impl fmt::Debug for TimingSubscriber {
                         histogram.max(),
                         histogram.mean().round(),
                         histogram.stdev().round(),
-                        histogram.value_at_percentile(0.99),
-                        histogram.value_at_percentile(0.9999),
+                        histogram.value_at_quantile(0.99),
+                        histogram.value_at_quantile(0.9999),
                     )?;
                 }
                 None => {}
