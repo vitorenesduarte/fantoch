@@ -4,7 +4,7 @@ members = [
   "fantoch",
   "fantoch_ps",
   "fantoch_bote",
-  "timing",
+  "fantoch_timing",
 ]
 
 [profile.release]
