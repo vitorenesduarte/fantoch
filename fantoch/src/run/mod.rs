@@ -115,6 +115,7 @@ pub async fn process<P, A>(
     channel_buffer_size: usize,
     multiplexing: usize,
     execution_log: Option<String>,
+    tracer_show_interval: Option<usize>,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
@@ -137,6 +138,7 @@ where
         channel_buffer_size,
         multiplexing,
         execution_log,
+        tracer_show_interval,
         semaphore,
     )
     .await
@@ -157,6 +159,7 @@ async fn process_with_notify<P, A>(
     channel_buffer_size: usize,
     multiplexing: usize,
     execution_log: Option<String>,
+    tracer_show_interval: Option<usize>,
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
 where
@@ -188,6 +191,9 @@ where
     if !P::leaderless() && config.leader().is_none() {
         panic!("running leader-based protocol without a leader");
     }
+
+    // (maybe) start tracer
+    task::spawn(task::tracer::tracer_task(tracer_show_interval));
 
     // check ports are different
     assert!(port != client_port);
@@ -613,9 +619,10 @@ pub mod tests {
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
-        let tcp_flush_interval = Some(100); // micros
+        let tcp_flush_interval = Some(100); // millis
         let channel_buffer_size = 10000;
         let multiplexing = 2;
+        let tracer_show_interval = Some(100); // millis
 
         // set parallel protocol and executors in config
         config.set_workers(workers);
@@ -652,6 +659,7 @@ pub mod tests {
             channel_buffer_size,
             multiplexing,
             p1_execution_log,
+            tracer_show_interval,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<P, String>(
@@ -671,6 +679,7 @@ pub mod tests {
             channel_buffer_size,
             multiplexing,
             p2_execution_log,
+            tracer_show_interval,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<P, String>(
@@ -690,6 +699,7 @@ pub mod tests {
             channel_buffer_size,
             multiplexing,
             p3_execution_log,
+            tracer_show_interval,
             semaphore.clone(),
         ));
 

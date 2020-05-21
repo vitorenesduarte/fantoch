@@ -33,6 +33,7 @@ where
         channel_buffer_size,
         multiplexing,
         execution_log,
+        tracer_show_interval,
     ) = parse_args();
 
     let process = fantoch::run::process::<P, String>(
@@ -49,6 +50,7 @@ where
         channel_buffer_size,
         multiplexing,
         execution_log,
+        tracer_show_interval,
     );
     super::tokio_runtime().block_on(process)
 }
@@ -67,6 +69,7 @@ fn parse_args() -> (
     usize,
     usize,
     Option<String>,
+    Option<usize>,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -219,6 +222,13 @@ fn parse_args() -> (
                 .help("log file in which execution info should be written to; by default this information is not logged")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("tracer_show_interval")
+                .long("tracer_show_interval")
+                .value_name("TRACER_SHOW_INTERVAL")
+                .help("number indicating the interval between tracing information being show; by default there's no tracing; if set, this value should be > 0")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -251,6 +261,8 @@ fn parse_args() -> (
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
     let execution_log =
         super::parse_execution_log(matches.value_of("execution_log"));
+    let tracer_show_interval =
+        parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
 
     // update config:
     // - set leader if we have one
@@ -274,6 +286,7 @@ fn parse_args() -> (
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("multiplexing: {:?}", multiplexing);
     println!("execution log: {:?}", execution_log);
+    println!("trace_timing: {:?}", tracer_show_interval);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -295,6 +308,7 @@ fn parse_args() -> (
         channel_buffer_size,
         multiplexing,
         execution_log,
+        tracer_show_interval,
     )
 }
 
@@ -372,4 +386,15 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
                 .expect("multiplexing should be a number")
         })
         .unwrap_or(DEFAULT_MULTIPLEXING)
+}
+
+fn parse_tracer_show_interval(
+    tracer_show_interval: Option<&str>,
+) -> Option<usize> {
+    tracer_show_interval
+        .map(|tracer_show_interval| {
+            tracer_show_interval
+                .parse::<usize>()
+                .expect("tracer_show_interval should be a number")
+        })
 }

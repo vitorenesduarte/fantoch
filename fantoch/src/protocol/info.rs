@@ -73,10 +73,13 @@ where
     }
 
     /// Returns committed clock and newly stable dots.
-    pub fn committed_and_stable(
-        &mut self,
-    ) -> (VClock<ProcessId>, Vec<(ProcessId, u64, u64)>) {
-        (self.gc_track.committed(), self.gc_track.stable())
+    pub fn committed(&mut self) -> VClock<ProcessId> {
+        self.gc_track.committed()
+    }
+
+    /// Returns newly stable dots.
+    pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
+        self.gc_track.stable()
     }
 
     /// Performs garbage collection of stable dots.

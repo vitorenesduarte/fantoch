@@ -486,7 +486,8 @@ impl<KC: KeyClocks> Atlas<KC> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock and stable dots
-        let (committed, stable) = self.cmds.committed_and_stable();
+        let committed = self.cmds.committed();
+        let stable = self.cmds.stable();
 
         // create `ToSend`
         let tosend = Action::ToSend {
