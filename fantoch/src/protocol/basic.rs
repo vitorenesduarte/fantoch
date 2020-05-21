@@ -231,8 +231,6 @@ impl Basic {
         // // update command info
         info.cmd = Some(cmd.clone());
 
-        // self.cmds.remove(&dot);
-
         // create execution info:
         // - one entry per key being accessed will be created, which allows the
         //   basic executor to run in parallel
