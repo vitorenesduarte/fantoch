@@ -43,7 +43,7 @@ fn end(id: u64) -> u64 {
 
 #[derive(Clone)]
 pub struct TimingSubscriber {
-    last_id: Arc<AtomicU64>,
+    next_id: Arc<AtomicU64>,
     // mapping from function name to id used for that function
     functions: DashMap<&'static str, u64>,
     // mapping from function name to its histogram
@@ -53,7 +53,7 @@ pub struct TimingSubscriber {
 impl TimingSubscriber {
     pub fn new() -> Self {
         Self {
-            last_id: Arc::new(AtomicU64::new(0)),
+            next_id: Arc::new(AtomicU64::new(1)), // span ids must be > 0
             functions: DashMap::new(),
             histograms: DashMap::new(),
         }
@@ -81,7 +81,7 @@ impl Subscriber for TimingSubscriber {
                 // create one (making sure that no two threads create different
                 // ids for the same function name)
                 *self.functions.entry(function_name).or_insert_with(|| {
-                    self.last_id.fetch_add(1, Ordering::SeqCst)
+                    self.next_id.fetch_add(1, Ordering::SeqCst)
                 })
             }
         };
