@@ -68,6 +68,7 @@ impl Subscriber for TimingSubscriber {
     fn new_span(&self, span: &Attributes) -> Id {
         // compute function name
         let function_name = span.metadata().name();
+        println!("function name: {}", function_name);
 
         // get function id
         let id = match self.functions.get(function_name) {
@@ -85,6 +86,7 @@ impl Subscriber for TimingSubscriber {
                 })
             }
         };
+        println!("function id: {}", id);
         Id::from_u64(id)
     }
 
@@ -96,12 +98,15 @@ impl Subscriber for TimingSubscriber {
 
     fn enter(&self, span: &Id) {
         let id = span.into_u64();
+        println!("span entered: {}", id);
         let start_time = now();
         start(id, start_time);
     }
 
     fn exit(&self, span: &Id) {
         let id = span.into_u64();
+        println!("span exited: {}", id);
+        println!("span exited: {}", id);
         let end_time = now();
         let start_time = end(id);
         // function execution time in nanos
