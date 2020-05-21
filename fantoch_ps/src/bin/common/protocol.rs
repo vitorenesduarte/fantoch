@@ -13,6 +13,7 @@ const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
+const DEFAULT_TRACE_TIMING: bool = false;
 
 #[allow(dead_code)]
 pub fn run<P>() -> Result<(), Box<dyn Error>>
@@ -33,6 +34,7 @@ where
         channel_buffer_size,
         multiplexing,
         execution_log,
+        trace_timing,
     ) = parse_args();
 
     let process = fantoch::run::process::<P, String>(
@@ -49,6 +51,7 @@ where
         channel_buffer_size,
         multiplexing,
         execution_log,
+        trace_timing,
     );
     super::tokio_runtime().block_on(process)
 }
@@ -67,6 +70,7 @@ fn parse_args() -> (
     usize,
     usize,
     Option<String>,
+    bool,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -219,6 +223,13 @@ fn parse_args() -> (
                 .help("log file in which execution info should be written to; by default this information is not logged")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("trace_timing")
+                .long("trace_timing")
+                .value_name("TRACE_TIMING")
+                .help("bool indicating we should time protocol function calls; default: false")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -251,6 +262,7 @@ fn parse_args() -> (
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
     let execution_log =
         super::parse_execution_log(matches.value_of("execution_log"));
+    let trace_timing = parse_trace_timing(matches.value_of("trace_timing"));
 
     // update config:
     // - set leader if we have one
@@ -274,6 +286,7 @@ fn parse_args() -> (
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("multiplexing: {:?}", multiplexing);
     println!("execution log: {:?}", execution_log);
+    println!("trace_timing: {:?}", trace_timing);
 
     // check that the number of sorted processes equals `n`
     assert_eq!(sorted_processes.len(), config.n());
@@ -295,6 +308,7 @@ fn parse_args() -> (
         channel_buffer_size,
         multiplexing,
         execution_log,
+        trace_timing,
     )
 }
 
@@ -372,4 +386,14 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
                 .expect("multiplexing should be a number")
         })
         .unwrap_or(DEFAULT_MULTIPLEXING)
+}
+
+fn parse_trace_timing(trace_timing: Option<&str>) -> bool {
+    trace_timing
+        .map(|trace_timing| {
+            trace_timing
+                .parse::<bool>()
+                .expect("trace_timing should be a bool")
+        })
+        .unwrap_or(DEFAULT_TRACE_TIMING)
 }

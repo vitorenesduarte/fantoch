@@ -115,6 +115,7 @@ pub async fn process<P, A>(
     channel_buffer_size: usize,
     multiplexing: usize,
     execution_log: Option<String>,
+    trace_timing: bool,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
@@ -137,6 +138,7 @@ where
         channel_buffer_size,
         multiplexing,
         execution_log,
+        trace_timing,
         semaphore,
     )
     .await
@@ -157,6 +159,7 @@ async fn process_with_notify<P, A>(
     channel_buffer_size: usize,
     multiplexing: usize,
     execution_log: Option<String>,
+    trace_timing: bool,
     connected: Arc<Semaphore>,
 ) -> RunResult<()>
 where
@@ -616,6 +619,7 @@ pub mod tests {
         let tcp_flush_interval = Some(100); // micros
         let channel_buffer_size = 10000;
         let multiplexing = 2;
+        let trace_timing = true;
 
         // set parallel protocol and executors in config
         config.set_workers(workers);
@@ -652,6 +656,7 @@ pub mod tests {
             channel_buffer_size,
             multiplexing,
             p1_execution_log,
+            trace_timing,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<P, String>(
@@ -671,6 +676,7 @@ pub mod tests {
             channel_buffer_size,
             multiplexing,
             p2_execution_log,
+            trace_timing,
             semaphore.clone(),
         ));
         task::spawn_local(process_with_notify::<P, String>(
@@ -690,6 +696,7 @@ pub mod tests {
             channel_buffer_size,
             multiplexing,
             p3_execution_log,
+            trace_timing,
             semaphore.clone(),
         ));
 
