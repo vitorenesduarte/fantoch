@@ -3,6 +3,7 @@ use hdrhistogram::Histogram;
 use quanta::Clock;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::event::Event;
 use tracing::span::{Attributes, Id, Record};
@@ -112,5 +113,37 @@ impl Subscriber for TimingSubscriber {
         histogram
             .record(time)
             .expect("adding to histogram should work");
+    }
+}
+
+impl fmt::Debug for TimingSubscriber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name_to_id: Vec<(&'static str, u64)> = self
+            .functions
+            .iter()
+            .map(|entry| (*entry.key(), *entry.value()))
+            .collect();
+
+        for (function_name, id) in name_to_id {
+            // find function's histogram
+            match self.histograms.get(&id) {
+                Some(histogram) => {
+                    let histogram = histogram.value();
+                    write!(
+                        f,
+                        "{} | min={}   max={}   avg={}   std={}   p99={}   p99.99={}",
+                        function_name,
+                        histogram.min(),
+                        histogram.max(),
+                        histogram.mean(),
+                        histogram.stdev(),
+                        histogram.value_at_percentile(0.99),
+                        histogram.value_at_percentile(0.9999)
+                    )?;
+                }
+                None => {}
+            }
+        }
+        Ok(())
     }
 }
