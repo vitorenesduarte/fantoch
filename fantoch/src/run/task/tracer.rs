@@ -11,8 +11,9 @@ pub async fn tracer_task(tracer_show_interval: Option<usize>) {
 
     // set tracing subscriber
     let subscriber = TimingSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber.clone())
-        .expect("setting tracing default should work");
+    tracing::subscriber::set_global_default(subscriber.clone()).unwrap_or_else(
+        |e| println!("tracing global default subscriber already set: {:?}", e),
+    );
 
     // create tokio interval
     let millis = Duration::from_millis(tracer_show_interval as u64);
