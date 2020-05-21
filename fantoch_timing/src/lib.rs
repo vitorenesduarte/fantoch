@@ -15,8 +15,8 @@ thread_local! {
     static START_TIMES: RefCell<HashMap<u64, u64>> = RefCell::new(HashMap::new());
 }
 
-// assume 10ms as the highest execution time
-const MAX_FUNCTION_EXECUTION_TIME: u64 = 10_000_000;
+// assume 100ms as the highest execution time
+const MAX_FUNCTION_EXECUTION_TIME: u64 = 100_000_000;
 
 /// Compute current time.
 fn now() -> u64 {
