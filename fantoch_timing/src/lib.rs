@@ -15,8 +15,8 @@ thread_local! {
     static START_TIMES: RefCell<HashMap<u64, u64>> = RefCell::new(HashMap::new());
 }
 
-// assume 1 second as the highest execution time
-const MAX_FUNCTION_EXECUTION_TIME: u64 = 1_000_0000;
+// assume 10ms as the highest execution time
+const MAX_FUNCTION_EXECUTION_TIME: u64 = 10_000_000;
 
 /// Compute current time.
 fn now() -> u64 {
@@ -91,7 +91,7 @@ impl Subscriber for TimingSubscriber {
         if end_time > start_time {
             let time = end_time - start_time;
             if time > MAX_FUNCTION_EXECUTION_TIME {
-                println!("some function took {}ns", time);
+                println!("some function took {}ms", time / 1_000_000);
                 return;
             }
 
