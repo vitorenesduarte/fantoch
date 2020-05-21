@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tracing::event::Event;
 use tracing::span::{Attributes, Id, Record};
 use tracing::{Metadata, Subscriber};
@@ -40,8 +41,9 @@ fn end(id: u64) -> u64 {
     })
 }
 
+#[derive(Clone)]
 pub struct TimingSubscriber {
-    last_id: AtomicU64,
+    last_id: Arc<AtomicU64>,
     // mapping from function name to id used for that function
     functions: DashMap<&'static str, u64>,
     // mapping from function name to its histogram
@@ -51,7 +53,7 @@ pub struct TimingSubscriber {
 impl TimingSubscriber {
     pub fn new() -> Self {
         Self {
-            last_id: AtomicU64::new(0),
+            last_id: Arc::new(AtomicU64::new(0)),
             functions: DashMap::new(),
             histograms: DashMap::new(),
         }
