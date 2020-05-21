@@ -23,7 +23,7 @@ pub async fn tracer_task(tracer_show_interval: Option<usize>) {
         tokio::select! {
             _ = interval.tick() => {
                 // show metrics
-                todo!()
+                println!("{:?}", subscriber);
             }
         }
     }
