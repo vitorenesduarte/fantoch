@@ -22,8 +22,8 @@ TRANSITIVE_CONFLICTS="true"
 EXECUTE_AT_COMMIT="false"
 EXECUTION_LOG=""
 LEADER=""
-GC_INTERVAL=1000 # every second
-TRACER_SHOW_INTERVAL=1000 # every second
+GC_INTERVAL=5 # every 5ms
+# TRACER_SHOW_INTERVAL=5000 # every 5s
 
 # parallelism config
 WORKERS=8
@@ -275,15 +275,20 @@ start_process() {
         --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
         --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
         --gc_interval ${GC_INTERVAL} \
-        --tracer_show_interval ${TRACER_SHOW_INTERVAL} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
         --workers ${WORKERS} \
         --executors ${EXECUTORS} \
         --multiplexing ${MULTIPLEXING}"
 
+
     # if there's a ${EXECUTION_LOG} append it the ${command_args}
     if [[ -n ${EXECUTION_LOG} ]]; then
         command_args="${command_args} --execution_log=${EXECUTION_LOG}"
+    fi
+
+    # if there's a ${TRACER_SHOW_INTERVAL} append it the ${command_args}
+    if [[ -n ${TRACER_SHOW_INTERVAL} ]]; then
+        command_args="${command_args} --tracer_show_interval ${TRACER_SHOW_INTERVAL}"
     fi
 
     # if there's a ${LEADER} append it the ${command_args}
@@ -443,7 +448,7 @@ if [[ $1 == "stop" ]]; then
 else
     output_log=.run_log
     echo "${PROTOCOL} w=${WORKERS} e=${EXECUTORS} ${CONFLICT_RATE}% ${PAYLOAD_SIZE}B skip_exec=${EXECUTE_AT_COMMIT}" >>${output_log}
-    for clients_per_machine in 16 32 64 128 256 512; do
+    for clients_per_machine in 16 16 16; do
         echo "C=${clients_per_machine}" >>${output_log}
         stop_all
         sleep ${KILL_WAIT}
