@@ -106,6 +106,12 @@ impl Subscriber for TimingSubscriber {
         let start_time = end(id);
         // function execution time in nanos
         if end_time > start_time {
+            let time = end_time - start_time;
+            if time > MAX_FUNCTION_EXECUTION_TIME {
+                println!("some function took {}ns", time);
+                return;
+            }
+
             // retrieve histogram
             let mut histogram =
                 self.histograms.entry(id).or_insert_with(|| {
@@ -116,15 +122,8 @@ impl Subscriber for TimingSubscriber {
                     )
                     .expect("creating histogram should work")
                 });
-            // let time = end_time - start_time;
-            // println!(
-            //     "id {:?} start {} end {} time {}",
-            //     id, start_time, end_time, time
-            // );
-            // println!("low {} high {}", histogram.low(), histogram.high());
-            // and update it
             histogram
-                .record(end_time - start_time)
+                .record(time)
                 .expect("adding to histogram should work");
         }
     }
