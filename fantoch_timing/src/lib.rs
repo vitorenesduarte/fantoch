@@ -136,6 +136,12 @@ impl fmt::Debug for TimingSubscriber {
             .iter()
             .map(|entry| (*entry.key(), *entry.value()))
             .collect();
+        write!(
+            f,
+            "functions found: {} or {}",
+            self.functions.len(),
+            name_to_id.len()
+        )?;
 
         for (function_name, id) in name_to_id {
             // find function's histogram
