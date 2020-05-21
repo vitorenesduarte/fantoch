@@ -79,14 +79,12 @@ impl Subscriber for TimingSubscriber {
 
     fn enter(&self, span: &Id) {
         let id = span.into_u64();
-        println!("span entered: {}", id);
         let start_time = now();
         start(id, start_time);
     }
 
     fn exit(&self, span: &Id) {
         let id = span.into_u64();
-        println!("span exited: {}", id);
         let end_time = now();
         let start_time = end(id);
         // function execution time in nanos
