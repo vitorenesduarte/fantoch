@@ -4,6 +4,7 @@ members = [
   "fantoch",
   "fantoch_ps",
   "fantoch_bote",
+  "timing",
 ]
 
 [profile.release]
@@ -13,7 +14,6 @@ lto = true
 
 # codegen-units of 1 gives best optimization, but disables parallel building.
 codegen-units = 1
-
 
 # Includes debug information in release builds necessary for profiling.
 # This does not slow down the executable.

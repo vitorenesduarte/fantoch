@@ -1,0 +1,13 @@
+[package]
+name = "timing"
+version = "0.1.0"
+edition = "2018"
+
+authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
+license = "MIT/Apache-2.0"
+
+[dependencies]
+dashmap = "3.11.1"
+quanta = "0.5.2"
+hdrhistogram = "7.0.0"
+tracing = "0.1.14"
