@@ -133,8 +133,9 @@ impl fmt::Debug for TimingSubscriber {
                     let histogram = histogram.value();
                     write!(
                         f,
-                        "{} | min={}   max={}   avg={}   std={}   p99={}   p99.99={}",
+                        "{} | count={}   min={}   max={}   avg={}   std={}   p99={}   p99.99={}",
                         function_name,
+                        histogram.len(),
                         histogram.min(),
                         histogram.max(),
                         histogram.mean(),
