@@ -342,8 +342,10 @@ async fn periodic_task<P>(
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                // flush socket
-                if let Err(e) = periodic_to_workers.forward(PeriodicEventMessage(event.clone())).await {
+                // create event msg
+                let msg = FromPeriodicMessage::Event(event.clone());
+                // and send it
+                if let Err(e) = periodic_to_workers.forward(msg).await {
                     println!( "[periodic] error sending periodic event to workers: {:?}", e);
                 }
             }
@@ -618,7 +620,7 @@ async fn handle_from_client<P>(
 async fn selected_from_periodic_task<P>(
     worker_index: usize,
     process_id: ProcessId,
-    event: Option<PeriodicEventMessage<P>>,
+    event: Option<FromPeriodicMessage<P>>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -644,27 +646,34 @@ async fn selected_from_periodic_task<P>(
 async fn handle_from_periodic_task<P>(
     worker_index: usize,
     process_id: ProcessId,
-    event: PeriodicEventMessage<P>,
+    msg: FromPeriodicMessage<P>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
 {
-    // unwrap event
-    let event = event.0;
-
-    // handle event in process
-    for to_send in process.handle_event(event) {
-        // TODO maybe run in parallel
-        handle_action(
-            worker_index,
-            process_id,
-            to_send,
-            process,
-            to_writers,
-            reader_to_workers,
-        )
-        .await;
+    match msg {
+        FromPeriodicMessage::Event(event) => {
+            // handle event in process
+            for to_send in process.handle_event(event) {
+                // TODO maybe run in parallel
+                handle_action(
+                    worker_index,
+                    process_id,
+                    to_send,
+                    process,
+                    to_writers,
+                    reader_to_workers,
+                )
+                .await;
+            }
+        }
+        FromPeriodicMessage::Inspect(f, mut tx) => {
+            let outcome = f(&process);
+            if let Err(e) = tx.send(outcome).await {
+                println!("[server] error while sending inspect result: {:?}", e);
+            }
+        }
     }
 }
