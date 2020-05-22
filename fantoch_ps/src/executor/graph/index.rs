@@ -20,9 +20,13 @@ impl VertexIndex {
         res.is_none()
     }
 
+    pub fn get(&self, dot: &Dot) -> Option<&Vertex> {
+        self.index.get(dot).map(|cell| unsafe { &*cell.get() })
+    }
+
     /// Returns a mutable reference to an indexed vertex (if previously
     /// indexed).
-    pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
+    pub fn get_mut(&mut self, dot: &Dot) -> Option<&mut Vertex> {
         self.index.get(dot).map(|cell| unsafe { &mut *cell.get() })
     }
 

@@ -40,7 +40,7 @@ impl TarjanSCCFinder {
     #[must_use]
     pub fn finalize(
         self,
-        vertex_index: &VertexIndex,
+        vertex_index: &mut VertexIndex,
     ) -> (Vec<SCC>, HashSet<Dot>) {
         // reset the id of each dot in the stack, while computing the set of
         // visited dots
@@ -68,10 +68,18 @@ impl TarjanSCCFinder {
     pub fn strong_connect(
         &mut self,
         dot: Dot,
-        vertex: &mut Vertex,
         executed_clock: &AEClock<ProcessId>,
-        vertex_index: &VertexIndex,
+        vertex_index: &mut VertexIndex,
     ) -> FinderResult {
+        // get the vertex
+        let vertex = match vertex_index.get_mut(&dot) {
+            Some(vertex) => vertex,
+            None => {
+                // in this case this `dot` is no longer pending
+                return FinderResult::NotPending;
+            }
+        };
+
         // update id
         self.id += 1;
 
@@ -123,7 +131,7 @@ impl TarjanSCCFinder {
                 let dep_dot = Dot::new(*process_id, dep);
                 log!("Finder::strong_connect non-executed {:?}", dep_dot);
 
-                match vertex_index.get_mut(&dep_dot) {
+                match vertex_index.get(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
@@ -157,7 +165,6 @@ impl TarjanSCCFinder {
                             // is also essential to avoid double look-up
                             let result = self.strong_connect(
                                 dep_dot,
-                                dep_vertex,
                                 executed_clock,
                                 vertex_index,
                             );
