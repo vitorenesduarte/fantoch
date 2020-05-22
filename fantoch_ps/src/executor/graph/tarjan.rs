@@ -40,7 +40,7 @@ impl TarjanSCCFinder {
     #[must_use]
     pub fn finalize(
         self,
-        vertex_index: &mut VertexIndex,
+        vertex_index: &VertexIndex,
     ) -> (Vec<SCC>, HashSet<Dot>) {
         // reset the id of each dot in the stack, while computing the set of
         // visited dots
@@ -51,7 +51,7 @@ impl TarjanSCCFinder {
                 log!("Finder::finalize removing {:?} from stack", dot);
 
                 // find vertex and reset its id
-                let vertex = vertex_index
+                let mut vertex = vertex_index
                     .get_mut(&dot)
                     .expect("stack member should exist");
                 vertex.set_id(0);
@@ -69,10 +69,10 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         executed_clock: &AEClock<ProcessId>,
-        vertex_index: &mut VertexIndex,
+        vertex_index: &VertexIndex,
     ) -> FinderResult {
         // get the vertex
-        let vertex = match vertex_index.get_mut(&dot) {
+        let mut vertex = match vertex_index.get_mut(&dot) {
             Some(vertex) => vertex,
             None => {
                 // in this case this `dot` is no longer pending
@@ -209,7 +209,7 @@ impl TarjanSCCFinder {
                 log!("Finder::strong_connect new SCC member {:?}", member_dot);
 
                 // get its vertex and change its `on_stack` value
-                let member_vertex = vertex_index
+                let mut member_vertex = vertex_index
                     .get_mut(&member_dot)
                     .expect("stack member should exist");
                 member_vertex.set_on_stack(false);

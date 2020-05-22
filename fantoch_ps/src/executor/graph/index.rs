@@ -1,11 +1,11 @@
 use super::tarjan::Vertex;
 use fantoch::id::Dot;
-use std::cell::UnsafeCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default, Debug)]
 pub struct VertexIndex {
-    index: HashMap<Dot, UnsafeCell<Vertex>>,
+    index: HashMap<Dot, RefCell<Vertex>>,
 }
 
 impl VertexIndex {
@@ -16,18 +16,18 @@ impl VertexIndex {
     /// Indexes a new vertex, returning whether a vertex with this dot was
     /// already indexed or not.
     pub fn index(&mut self, vertex: Vertex) -> bool {
-        let res = self.index.insert(vertex.dot(), UnsafeCell::new(vertex));
+        let res = self.index.insert(vertex.dot(), RefCell::new(vertex));
         res.is_none()
     }
 
-    pub fn get(&self, dot: &Dot) -> Option<&Vertex> {
-        self.index.get(dot).map(|cell| unsafe { &*cell.get() })
+    pub fn get(&self, dot: &Dot) -> Option<Ref<Vertex>> {
+        self.index.get(dot).map(|cell| cell.borrow())
     }
 
     /// Returns a mutable reference to an indexed vertex (if previously
     /// indexed).
-    pub fn get_mut(&mut self, dot: &Dot) -> Option<&mut Vertex> {
-        self.index.get(dot).map(|cell| unsafe { &mut *cell.get() })
+    pub fn get_mut(&self, dot: &Dot) -> Option<RefMut<Vertex>> {
+        self.index.get(dot).map(|cell| cell.borrow_mut())
     }
 
     /// Removes a vertex from the index.
