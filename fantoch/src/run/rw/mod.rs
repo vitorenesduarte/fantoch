@@ -5,7 +5,8 @@ mod connection;
 pub use connection::Connection;
 
 use bytes::{Bytes, BytesMut};
-use futures::prelude::*;
+use futures::sink::{Sink, SinkExt};
+use futures::stream::StreamExt;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::pin::Pin;
