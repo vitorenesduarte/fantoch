@@ -367,34 +367,16 @@ async fn process_task<P>(
 ) where
     P: Protocol + 'static,
 {
-    // start a biased loop if protocol leaderless, and unbiased otherwise
-    if P::leaderless() {
-        loop {
-            // prioritize messages about ongoing commands
-            select_biased! {
-                msg = from_readers.recv().fuse() => {
-                    selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
-                }
-                event = from_periodic.recv().fuse() => {
-                    selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
-                }
-                cmd = from_clients.recv().fuse()  => {
-                    selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
-                }
+    loop {
+        tokio::select! {
+            msg = from_readers.recv() => {
+                selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
             }
-        }
-    } else {
-        loop {
-            tokio::select! {
-                msg = from_readers.recv() => {
-                    selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
-                }
-                event = from_periodic.recv() => {
-                    selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
-                }
-                cmd = from_clients.recv() => {
-                    selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
-                }
+            event = from_periodic.recv() => {
+                selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
+            }
+            cmd = from_clients.recv() => {
+                selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
             }
         }
     }
