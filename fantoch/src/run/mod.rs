@@ -580,11 +580,11 @@ pub mod tests {
         // config
         let n = 3;
         let f = 1;
-        let with_leader = true;
+        let with_leader = false;
         let workers = 2;
         let executors = 3;
         let conflict_rate = 100;
-        let commands_per_client = 1000;
+        let commands_per_client = 100;
         let clients_per_region = 3;
         let extra_run_time = Some(5000);
 
