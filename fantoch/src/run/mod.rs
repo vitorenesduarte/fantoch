@@ -122,7 +122,7 @@ where
     // create semaphore for callers that don't care about the connected
     // notification
     let semaphore = Arc::new(Semaphore::new(0));
-    process_with_notify_and_inspect::<P, A>(
+    process_with_notify_and_inspect::<P, A, ()>(
         process_id,
         sorted_processes,
         ip,
@@ -144,7 +144,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn process_with_notify_and_inspect<P, A>(
+async fn process_with_notify_and_inspect<P, A, R>(
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
     ip: IpAddr,
@@ -160,11 +160,12 @@ async fn process_with_notify_and_inspect<P, A>(
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
     connected: Arc<Semaphore>,
-    inspect_chan: Option<InspectReceiver<P>>,
+    inspect_chan: Option<InspectReceiver<P, R>>,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
     A: ToSocketAddrs + Debug + Clone,
+    R: Clone + Debug + Send + 'static,
 {
     // panic if protocol is not parallel and we have more than one worker
     if config.workers() > 1 && !P::parallel() {
@@ -287,7 +288,7 @@ where
     );
 
     // start process workers
-    let handles = task::process::start_processes::<P>(
+    let handles = task::process::start_processes::<P, R>(
         process_id,
         config,
         sorted_processes,
@@ -539,8 +540,8 @@ fn handle_cmd_result(
 // protocols implemented
 pub mod tests {
     use super::*;
+    use crate::protocol::{Basic, ProtocolMetricsKind};
     use rand::Rng;
-    use tokio::task;
 
     #[tokio::test]
     async fn test_semaphore() {
@@ -562,32 +563,46 @@ pub mod tests {
         println!("[main] semaphore acquired!");
     }
 
+    #[allow(dead_code)]
+    fn inspect_basic_worker(worker: &Basic) -> u64 {
+        worker
+            .metrics()
+            .get_aggregated(ProtocolMetricsKind::Stable)
+            .cloned()
+            .unwrap_or_default()
+    }
+
     #[tokio::test]
     async fn run_basic_test() {
-        use crate::protocol::Basic;
-
         // basic is a parallel protocol with parallel execution
         let workers = 2;
         let executors = 3;
         let with_leader = false;
-        run_test::<Basic>(workers, executors, with_leader, None).await
+        run_test::<Basic, u64>(
+            workers,
+            executors,
+            with_leader,
+            Some(inspect_basic_worker),
+        )
+        .await
     }
 
-    pub async fn run_test<P>(
+    pub async fn run_test<P, R>(
         workers: usize,
         executors: usize,
         with_leader: bool,
-        inspect_fun: Option<fn(&P) -> bool>,
+        inspect_fun: Option<fn(&P) -> R>,
     ) where
         P: Protocol + Send + 'static,
+        R: Clone + Debug + Send + 'static,
     {
         // create local task set
-        let local = task::LocalSet::new();
+        let local = tokio::task::LocalSet::new();
 
         // run test in local task set
         local
             .run_until(async {
-                match run::<P>(workers, executors, with_leader, inspect_fun)
+                match run::<P, R>(workers, executors, with_leader, inspect_fun)
                     .await
                 {
                     Ok(()) => {}
@@ -597,14 +612,15 @@ pub mod tests {
             .await;
     }
 
-    async fn run<P>(
+    async fn run<P, R>(
         workers: usize,
         executors: usize,
         with_leader: bool,
-        inspect_fun: Option<fn(&P) -> bool>,
+        inspect_fun: Option<fn(&P) -> R>,
     ) -> RunResult<()>
     where
         P: Protocol + Send + 'static,
+        R: Clone + Debug + Send + 'static,
     {
         // create config
         let n = 3;
@@ -647,69 +663,75 @@ pub mod tests {
         let p3_execution_log = Some(String::from("p3.execution_log"));
 
         // spawn processes
-        task::spawn_local(process_with_notify_and_inspect::<P, String>(
-            1,
-            vec![1, 2, 3],
-            localhost,
-            p1_port,
-            p1_client_port,
-            vec![
-                format!("localhost:{}", p2_port),
-                format!("localhost:{}", p3_port),
-            ],
-            config,
-            tcp_nodelay,
-            tcp_buffer_size,
-            tcp_flush_interval,
-            channel_buffer_size,
-            multiplexing,
-            p1_execution_log,
-            tracer_show_interval,
-            semaphore.clone(),
-            None,
-        ));
-        task::spawn_local(process_with_notify_and_inspect::<P, String>(
-            2,
-            vec![2, 3, 1],
-            localhost,
-            p2_port,
-            p2_client_port,
-            vec![
-                format!("localhost:{}", p1_port),
-                format!("localhost:{}", p3_port),
-            ],
-            config,
-            tcp_nodelay,
-            tcp_buffer_size,
-            tcp_flush_interval,
-            channel_buffer_size,
-            multiplexing,
-            p2_execution_log,
-            tracer_show_interval,
-            semaphore.clone(),
-            None,
-        ));
-        task::spawn_local(process_with_notify_and_inspect::<P, String>(
-            3,
-            vec![3, 1, 2],
-            localhost,
-            p3_port,
-            p3_client_port,
-            vec![
-                format!("localhost:{}", p1_port),
-                format!("localhost:{}", p2_port),
-            ],
-            config,
-            tcp_nodelay,
-            tcp_buffer_size,
-            tcp_flush_interval,
-            channel_buffer_size,
-            multiplexing,
-            p3_execution_log,
-            tracer_show_interval,
-            semaphore.clone(),
-            None,
-        ));
+        tokio::task::spawn_local(
+            process_with_notify_and_inspect::<P, String, R>(
+                1,
+                vec![1, 2, 3],
+                localhost,
+                p1_port,
+                p1_client_port,
+                vec![
+                    format!("localhost:{}", p2_port),
+                    format!("localhost:{}", p3_port),
+                ],
+                config,
+                tcp_nodelay,
+                tcp_buffer_size,
+                tcp_flush_interval,
+                channel_buffer_size,
+                multiplexing,
+                p1_execution_log,
+                tracer_show_interval,
+                semaphore.clone(),
+                None,
+            ),
+        );
+        tokio::task::spawn_local(
+            process_with_notify_and_inspect::<P, String, R>(
+                2,
+                vec![2, 3, 1],
+                localhost,
+                p2_port,
+                p2_client_port,
+                vec![
+                    format!("localhost:{}", p1_port),
+                    format!("localhost:{}", p3_port),
+                ],
+                config,
+                tcp_nodelay,
+                tcp_buffer_size,
+                tcp_flush_interval,
+                channel_buffer_size,
+                multiplexing,
+                p2_execution_log,
+                tracer_show_interval,
+                semaphore.clone(),
+                None,
+            ),
+        );
+        tokio::task::spawn_local(
+            process_with_notify_and_inspect::<P, String, R>(
+                3,
+                vec![3, 1, 2],
+                localhost,
+                p3_port,
+                p3_client_port,
+                vec![
+                    format!("localhost:{}", p1_port),
+                    format!("localhost:{}", p2_port),
+                ],
+                config,
+                tcp_nodelay,
+                tcp_buffer_size,
+                tcp_flush_interval,
+                channel_buffer_size,
+                multiplexing,
+                p3_execution_log,
+                tracer_show_interval,
+                semaphore.clone(),
+                None,
+            ),
+        );
 
         // wait that all processes are connected
         println!("[main] waiting that processes are connected");
@@ -729,14 +751,14 @@ pub mod tests {
         // - the first spawns 1 closed-loop client (1)
         // - the second spawns 3 closed-loop clients (2, 22, 222)
         // - the third spawns 1 open-loop client (3)
-        let client_1_handle = task::spawn_local(closed_loop_client(
+        let client_1_handle = tokio::task::spawn_local(closed_loop_client(
             1,
             format!("localhost:{}", p1_client_port),
             workload,
             tcp_nodelay,
             channel_buffer_size,
         ));
-        let client_2_handle = task::spawn_local(client(
+        let client_2_handle = tokio::task::spawn_local(client(
             vec![2, 22, 222],
             format!("localhost:{}", p2_client_port),
             None,
@@ -744,7 +766,7 @@ pub mod tests {
             tcp_nodelay,
             channel_buffer_size,
         ));
-        let client_3_handle = task::spawn_local(open_loop_client(
+        let client_3_handle = tokio::task::spawn_local(open_loop_client(
             3,
             format!("localhost:{}", p3_client_port),
             100, // 100ms interval between ops
