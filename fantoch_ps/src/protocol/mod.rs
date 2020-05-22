@@ -99,7 +99,7 @@ mod tests {
         let workers = 1;
         let executors = 2;
         let with_leader = false;
-        run_test::<NewtSequential>(workers, executors, with_leader).await
+        run_test::<NewtSequential>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -109,7 +109,7 @@ mod tests {
         let workers = 3;
         let executors = 1;
         let with_leader = false;
-        run_test::<NewtAtomic>(workers, executors, with_leader).await
+        run_test::<NewtAtomic>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -118,7 +118,7 @@ mod tests {
         let workers = 1;
         let executors = 1;
         let with_leader = false;
-        run_test::<AtlasSequential>(workers, executors, with_leader).await
+        run_test::<AtlasSequential>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -128,7 +128,7 @@ mod tests {
         let workers = 3;
         let executors = 1;
         let with_leader = false;
-        run_test::<AtlasLocked>(workers, executors, with_leader).await
+        run_test::<AtlasLocked>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -137,7 +137,7 @@ mod tests {
         let workers = 1;
         let executors = 1;
         let with_leader = false;
-        run_test::<EPaxosSequential>(workers, executors, with_leader).await
+        run_test::<EPaxosSequential>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -147,7 +147,7 @@ mod tests {
         let workers = 3;
         let executors = 1;
         let with_leader = false;
-        run_test::<EPaxosLocked>(workers, executors, with_leader).await
+        run_test::<EPaxosLocked>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -156,7 +156,7 @@ mod tests {
         let workers = 1;
         let executors = 1;
         let with_leader = true;
-        run_test::<FPaxos>(workers, executors, with_leader).await
+        run_test::<FPaxos>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]
@@ -166,7 +166,7 @@ mod tests {
         let workers = 3;
         let executors = 1;
         let with_leader = true;
-        run_test::<FPaxos>(workers, executors, with_leader).await
+        run_test::<FPaxos>(workers, executors, with_leader, None).await
     }
 
     fn sim_test<P: Protocol>(n: usize, f: usize, with_leader: bool) -> u64 {
