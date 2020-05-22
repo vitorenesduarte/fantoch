@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
-use tokio::time::{self, Duration, Instant};
+use tokio::time::{self, Duration};
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
@@ -265,6 +265,7 @@ pub fn start_processes<P>(
     client_to_workers_rxs: Vec<SubmitReceiver>,
     periodic_to_workers: PeriodicToWorkers<P>,
     periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P>>,
+    to_periodic_inspect: Option<InspectReceiver<P>>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     worker_to_executors: WorkerToExecutors<P>,
@@ -281,7 +282,11 @@ where
     process.discover(sorted_processes);
 
     // spawn periodic task
-    task::spawn(periodic_task::<P>(process_events, periodic_to_workers));
+    task::spawn(task::periodic::periodic_task::<P>(
+        process_events,
+        periodic_to_workers,
+        to_periodic_inspect,
+    ));
 
     let to_execution_logger = execution_log.map(|execution_log| {
         // if the execution log was set, then start the execution logger
@@ -318,39 +323,6 @@ where
             },
         )
         .collect()
-}
-
-async fn periodic_task<P>(
-    events: Vec<(P::PeriodicEvent, usize)>,
-    mut periodic_to_workers: PeriodicToWorkers<P>,
-) where
-    P: Protocol + 'static,
-{
-    // TODO we only support one periodic event for now
-    assert_eq!(events.len(), 1);
-    let (event, millis) = events[0].clone();
-    let millis = Duration::from_millis(millis as u64);
-
-    log!("[periodic_task] event: {:?} | interval {:?}", event, millis);
-
-    // compute first tick
-    let first_tick = Instant::now()
-        .checked_add(millis)
-        .expect("first tick in periodic task should exist");
-
-    let mut interval = time::interval_at(first_tick, millis);
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                // create event msg
-                let msg = FromPeriodicMessage::Event(event.clone());
-                // and send it
-                if let Err(e) = periodic_to_workers.forward(msg).await {
-                    println!( "[periodic] error sending periodic event to workers: {:?}", e);
-                }
-            }
-        }
-    }
 }
 
 async fn process_task<P>(
@@ -672,7 +644,10 @@ async fn handle_from_periodic_task<P>(
         FromPeriodicMessage::Inspect(f, mut tx) => {
             let outcome = f(&process);
             if let Err(e) = tx.send(outcome).await {
-                println!("[server] error while sending inspect result: {:?}", e);
+                println!(
+                    "[server] error while sending inspect result: {:?}",
+                    e
+                );
             }
         }
     }

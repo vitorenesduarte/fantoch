@@ -122,7 +122,7 @@ where
     // create semaphore for callers that don't care about the connected
     // notification
     let semaphore = Arc::new(Semaphore::new(0));
-    process_with_notify::<P, A>(
+    process_with_notify_and_inspect::<P, A>(
         process_id,
         sorted_processes,
         ip,
@@ -138,12 +138,13 @@ where
         execution_log,
         tracer_show_interval,
         semaphore,
+        None,
     )
     .await
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn process_with_notify<P, A>(
+async fn process_with_notify_and_inspect<P, A>(
     process_id: ProcessId,
     sorted_processes: Vec<ProcessId>,
     ip: IpAddr,
@@ -159,6 +160,7 @@ async fn process_with_notify<P, A>(
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
     connected: Arc<Semaphore>,
+    inspect_chan: Option<InspectReceiver<P>>,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
@@ -293,6 +295,7 @@ where
         client_to_workers_rxs,
         periodic_to_workers,
         periodic_to_workers_rxs,
+        inspect_chan,
         to_writers,
         reader_to_workers,
         worker_to_executors,
@@ -567,13 +570,14 @@ pub mod tests {
         let workers = 2;
         let executors = 3;
         let with_leader = false;
-        run_test::<Basic>(workers, executors, with_leader).await
+        run_test::<Basic>(workers, executors, with_leader, None).await
     }
 
     pub async fn run_test<P>(
         workers: usize,
         executors: usize,
         with_leader: bool,
+        inspect_fun: Option<fn(&P) -> bool>,
     ) where
         P: Protocol + Send + 'static,
     {
@@ -583,7 +587,9 @@ pub mod tests {
         // run test in local task set
         local
             .run_until(async {
-                match run::<P>(workers, executors, with_leader).await {
+                match run::<P>(workers, executors, with_leader, inspect_fun)
+                    .await
+                {
                     Ok(()) => {}
                     Err(e) => panic!("run failed: {:?}", e),
                 }
@@ -595,6 +601,7 @@ pub mod tests {
         workers: usize,
         executors: usize,
         with_leader: bool,
+        inspect_fun: Option<fn(&P) -> bool>,
     ) -> RunResult<()>
     where
         P: Protocol + Send + 'static,
@@ -640,7 +647,7 @@ pub mod tests {
         let p3_execution_log = Some(String::from("p3.execution_log"));
 
         // spawn processes
-        task::spawn_local(process_with_notify::<P, String>(
+        task::spawn_local(process_with_notify_and_inspect::<P, String>(
             1,
             vec![1, 2, 3],
             localhost,
@@ -659,8 +666,9 @@ pub mod tests {
             p1_execution_log,
             tracer_show_interval,
             semaphore.clone(),
+            None,
         ));
-        task::spawn_local(process_with_notify::<P, String>(
+        task::spawn_local(process_with_notify_and_inspect::<P, String>(
             2,
             vec![2, 3, 1],
             localhost,
@@ -679,8 +687,9 @@ pub mod tests {
             p2_execution_log,
             tracer_show_interval,
             semaphore.clone(),
+            None,
         ));
-        task::spawn_local(process_with_notify::<P, String>(
+        task::spawn_local(process_with_notify_and_inspect::<P, String>(
             3,
             vec![3, 1, 2],
             localhost,
@@ -699,6 +708,7 @@ pub mod tests {
             p3_execution_log,
             tracer_show_interval,
             semaphore.clone(),
+            None,
         ));
 
         // wait that all processes are connected
