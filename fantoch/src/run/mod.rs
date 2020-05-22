@@ -540,13 +540,13 @@ fn handle_cmd_result(
 // protocols implemented
 pub mod tests {
     use super::*;
-    use crate::protocol::{Basic, ProtocolMetricsKind};
+    use crate::protocol::ProtocolMetricsKind;
+    use crate::util;
     use rand::Rng;
+    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_semaphore() {
-        use tokio::time::Duration;
-
         // create semaphore
         let semaphore = Arc::new(Semaphore::new(0));
 
@@ -564,67 +564,112 @@ pub mod tests {
     }
 
     #[allow(dead_code)]
-    fn inspect_basic_worker(worker: &Basic) -> u64 {
+    fn inspect_stable_commands<P>(worker: &P) -> usize
+    where
+        P: Protocol,
+    {
         worker
             .metrics()
             .get_aggregated(ProtocolMetricsKind::Stable)
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_default() as usize
     }
 
     #[tokio::test]
     async fn run_basic_test() {
-        // basic is a parallel protocol with parallel execution
+        // config
+        let n = 3;
+        let f = 1;
+        let with_leader = true;
         let workers = 2;
         let executors = 3;
-        let with_leader = false;
-        run_test::<Basic, u64>(
-            workers,
-            executors,
-            with_leader,
-            Some(inspect_basic_worker),
-        )
-        .await
+        let conflict_rate = 100;
+        let commands_per_client = 1000;
+        let clients_per_region = 3;
+        let extra_run_time = Some(5000);
+
+        // run test and get total stable commands
+        let total_stable_count =
+            run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
+                n,
+                f,
+                with_leader,
+                workers,
+                executors,
+                conflict_rate,
+                commands_per_client,
+                clients_per_region,
+                extra_run_time,
+                Some(inspect_stable_commands),
+            )
+            .await
+            .expect("run should complete successfully")
+            .into_iter()
+            .map(|(_, stable_counts)| stable_counts.into_iter().sum::<usize>())
+            .sum::<usize>();
+
+        // get that all commands stablized at all processes
+        let total_commands = n * clients_per_region * commands_per_client;
+        assert!(total_stable_count == total_commands * n);
     }
 
-    pub async fn run_test<P, R>(
+    pub async fn run_test_with_inspect_fun<P, R>(
+        n: usize,
+        f: usize,
+        with_leader: bool,
         workers: usize,
         executors: usize,
-        with_leader: bool,
+        conflict_rate: usize,
+        commands_per_client: usize,
+        clients_per_region: usize,
+        extra_run_time: Option<u64>,
         inspect_fun: Option<fn(&P) -> R>,
-    ) where
+    ) -> RunResult<HashMap<ProcessId, Vec<R>>>
+    where
         P: Protocol + Send + 'static,
         R: Clone + Debug + Send + 'static,
     {
+        // TODO remove task local set?
         // create local task set
         let local = tokio::task::LocalSet::new();
 
         // run test in local task set
         local
             .run_until(async {
-                match run::<P, R>(workers, executors, with_leader, inspect_fun)
-                    .await
-                {
-                    Ok(()) => {}
-                    Err(e) => panic!("run failed: {:?}", e),
-                }
+                run::<P, R>(
+                    n,
+                    f,
+                    with_leader,
+                    workers,
+                    executors,
+                    conflict_rate,
+                    commands_per_client,
+                    clients_per_region,
+                    extra_run_time,
+                    inspect_fun,
+                )
+                .await
             })
-            .await;
+            .await
     }
 
     async fn run<P, R>(
+        n: usize,
+        f: usize,
+        with_leader: bool,
         workers: usize,
         executors: usize,
-        with_leader: bool,
+        conflict_rate: usize,
+        commands_per_client: usize,
+        clients_per_region: usize,
+        extra_run_time: Option<u64>,
         inspect_fun: Option<fn(&P) -> R>,
-    ) -> RunResult<()>
+    ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
         P: Protocol + Send + 'static,
         R: Clone + Debug + Send + 'static,
     {
         // create config
-        let n = 3;
-        let f = 1;
         let mut config = Config::new(n, f);
 
         // if we should set a leader, set process 1 as the leader
@@ -649,137 +694,169 @@ pub mod tests {
         config.set_workers(workers);
         config.set_executors(executors);
 
-        // get ports and client ports
-        let p1_port = get_available_port();
-        let p2_port = get_available_port();
-        let p3_port = get_available_port();
-        let p1_client_port = get_available_port();
-        let p2_client_port = get_available_port();
-        let p3_client_port = get_available_port();
+        // create processes ports and client ports
+        let ports: HashMap<_, _> = util::process_ids(n)
+            .map(|id| (id, get_available_port()))
+            .collect();
+        let client_ports: HashMap<_, _> = util::process_ids(n)
+            .map(|id| (id, get_available_port()))
+            .collect();
 
-        // execution logs
-        let p1_execution_log = Some(String::from("p1.execution_log"));
-        let p2_execution_log = Some(String::from("p2.execution_log"));
-        let p3_execution_log = Some(String::from("p3.execution_log"));
+        // create connect addresses
+        let all_addresses: HashMap<_, _> = ports
+            .clone()
+            .into_iter()
+            .map(|(process_id, port)| {
+                let address = format!("localhost:{}", port);
+                (process_id, address)
+            })
+            .collect();
 
-        // spawn processes
-        tokio::task::spawn_local(
-            process_with_notify_and_inspect::<P, String, R>(
-                1,
-                vec![1, 2, 3],
+        let mut inspect_channels = HashMap::new();
+
+        for process_id in util::process_ids(n) {
+            // if n = 3, this gives the following:
+            // - id = 1:  [1, 2, 3]
+            // - id = 2:  [2, 3, 1]
+            // - id = 3:  [3, 1, 2]
+            let sorted_processes =
+                (process_id..=(n as u64)).chain(1..process_id).collect();
+
+            // get ports
+            let port = *ports.get(&process_id).unwrap();
+            let client_port = *client_ports.get(&process_id).unwrap();
+
+            // addresses: all but self
+            let mut addresses = all_addresses.clone();
+            addresses.remove(&process_id);
+            let addresses =
+                addresses.into_iter().map(|(_, address)| address).collect();
+
+            // execution log
+            let execution_log = Some(format!("p{}.execution_log", process_id));
+
+            // create inspect channel and save sender side
+            let (inspect_tx, inspect) = task::channel(channel_buffer_size);
+            inspect_channels.insert(process_id, inspect_tx);
+
+            // spawn processes
+            tokio::task::spawn_local(process_with_notify_and_inspect::<
+                P,
+                String,
+                R,
+            >(
+                process_id,
+                sorted_processes,
                 localhost,
-                p1_port,
-                p1_client_port,
-                vec![
-                    format!("localhost:{}", p2_port),
-                    format!("localhost:{}", p3_port),
-                ],
+                port,
+                client_port,
+                addresses,
                 config,
                 tcp_nodelay,
                 tcp_buffer_size,
                 tcp_flush_interval,
                 channel_buffer_size,
                 multiplexing,
-                p1_execution_log,
+                execution_log,
                 tracer_show_interval,
                 semaphore.clone(),
-                None,
-            ),
-        );
-        tokio::task::spawn_local(
-            process_with_notify_and_inspect::<P, String, R>(
-                2,
-                vec![2, 3, 1],
-                localhost,
-                p2_port,
-                p2_client_port,
-                vec![
-                    format!("localhost:{}", p1_port),
-                    format!("localhost:{}", p3_port),
-                ],
-                config,
-                tcp_nodelay,
-                tcp_buffer_size,
-                tcp_flush_interval,
-                channel_buffer_size,
-                multiplexing,
-                p2_execution_log,
-                tracer_show_interval,
-                semaphore.clone(),
-                None,
-            ),
-        );
-        tokio::task::spawn_local(
-            process_with_notify_and_inspect::<P, String, R>(
-                3,
-                vec![3, 1, 2],
-                localhost,
-                p3_port,
-                p3_client_port,
-                vec![
-                    format!("localhost:{}", p1_port),
-                    format!("localhost:{}", p2_port),
-                ],
-                config,
-                tcp_nodelay,
-                tcp_buffer_size,
-                tcp_flush_interval,
-                channel_buffer_size,
-                multiplexing,
-                p3_execution_log,
-                tracer_show_interval,
-                semaphore.clone(),
-                None,
-            ),
-        );
+                Some(inspect),
+            ));
+        }
 
         // wait that all processes are connected
         println!("[main] waiting that processes are connected");
-        let _ = semaphore.acquire().await;
-        let _ = semaphore.acquire().await;
-        let _ = semaphore.acquire().await;
+        for _ in util::process_ids(n) {
+            let _ = semaphore.acquire().await;
+        }
         println!("[main] processes are connected");
 
         // create workload
-        let conflict_rate = 100;
-        let total_commands = 100;
         let payload_size = 100;
         let workload =
-            Workload::new(conflict_rate, total_commands, payload_size);
+            Workload::new(conflict_rate, commands_per_client, payload_size);
 
-        // clients:
-        // - the first spawns 1 closed-loop client (1)
-        // - the second spawns 3 closed-loop clients (2, 22, 222)
-        // - the third spawns 1 open-loop client (3)
-        let client_1_handle = tokio::task::spawn_local(closed_loop_client(
-            1,
-            format!("localhost:{}", p1_client_port),
-            workload,
-            tcp_nodelay,
-            channel_buffer_size,
-        ));
-        let client_2_handle = tokio::task::spawn_local(client(
-            vec![2, 22, 222],
-            format!("localhost:{}", p2_client_port),
-            None,
-            workload,
-            tcp_nodelay,
-            channel_buffer_size,
-        ));
-        let client_3_handle = tokio::task::spawn_local(open_loop_client(
-            3,
-            format!("localhost:{}", p3_client_port),
-            100, // 100ms interval between ops
-            workload,
-            tcp_nodelay,
-            channel_buffer_size,
-        ));
+        let clients_per_region = clients_per_region as u64;
+        let client_handles: Vec<_> = util::process_ids(n)
+            .map(|process_id| {
+                // if n = 3, this gives the following:
+                // id = 1: [1, 2, 3, 4]
+                // id = 2: [5, 6, 7, 8]
+                // id = 3: [9, 10, 11, 12]
+                let id_start = ((process_id - 1) * clients_per_region) + 1;
+                let id_end = process_id * clients_per_region;
+                let ids = (id_start..=id_end).collect();
 
-        // wait for the 3 clients
-        let _ = client_1_handle.await.expect("client 1 should finish");
-        let _ = client_2_handle.await.expect("client 2 should finish");
-        let _ = client_3_handle.await.expect("client 3 should finish");
-        Ok(())
+                // get port
+                let client_port = *client_ports.get(&process_id).unwrap();
+                let address = format!("localhost:{}", client_port);
+
+                // compute interval:
+                // - if the process id is even, then issue a command every 2ms
+                // - otherwise, it's a closed-loop client
+                let interval_ms = match process_id % 2 {
+                    0 => Some(2),
+                    1 => None,
+                    _ => panic!("n mod 2 should be in [0,1]"),
+                };
+
+                // spawn client
+                tokio::task::spawn_local(client(
+                    ids,
+                    address,
+                    interval_ms,
+                    workload,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                ))
+            })
+            .collect();
+
+        // wait for all clients
+        for client_handle in client_handles {
+            let _ = client_handle.await.expect("client should finish");
+        }
+
+        // wait for the extra run time (if any)
+        if let Some(extra_run_time) = extra_run_time {
+            tokio::time::delay_for(Duration::from_millis(extra_run_time)).await;
+        }
+
+        // inspect all processes (if there's an inspect function)
+        let mut result = HashMap::new();
+
+        if let Some(inspect_fun) = inspect_fun {
+            // create reply channel
+            let (reply_chan_tx, mut reply_chan) =
+                task::channel(channel_buffer_size);
+
+            // contact all processes
+            for (process_id, mut inspect_tx) in inspect_channels {
+                inspect_tx
+                    .blind_send((inspect_fun, reply_chan_tx.clone()))
+                    .await;
+                let replies =
+                    gather_workers_replies(workers, &mut reply_chan).await;
+                result.insert(process_id, replies);
+            }
+        }
+
+        Ok(result)
+    }
+
+    async fn gather_workers_replies<R>(
+        workers: usize,
+        reply_chan: &mut task::chan::ChannelReceiver<R>,
+    ) -> Vec<R> {
+        let mut replies = Vec::with_capacity(workers);
+        for _ in 0..workers {
+            let reply = reply_chan
+                .recv()
+                .await
+                .expect("reply from process 1 should work");
+            replies.push(reply);
+        }
+        replies
     }
 
     // adapted from: https://github.com/rust-lang-nursery/rust-cookbook/issues/500
