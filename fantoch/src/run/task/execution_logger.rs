@@ -2,8 +2,6 @@ use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::rw::Rw;
-use futures::future::FutureExt;
-use futures::select_biased;
 use tokio::fs::File;
 use tokio::time::{self, Duration};
 
@@ -35,8 +33,8 @@ pub async fn execution_logger_task<P>(
         time::interval(Duration::from_millis(EXECUTION_LOGGER_FLUSH_INTERVAL));
 
     loop {
-        select_biased! {
-            execution_info = from_workers.recv().fuse() => {
+        tokio::select! {
+            execution_info = from_workers.recv() => {
                 log!("[executor_logger] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     // write execution info to file
@@ -45,7 +43,7 @@ pub async fn execution_logger_task<P>(
                     println!("[executor_logger] error while receiving execution info from parent");
                 }
             }
-            _ = interval.tick().fuse()  => {
+            _ = interval.tick()  => {
                 // flush
                 logger.flush().await
             }

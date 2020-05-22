@@ -4,8 +4,6 @@ use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::log;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
-use futures::future::FutureExt;
-use futures::select_biased;
 use tokio::net::TcpListener;
 
 pub fn start_listener(
@@ -94,13 +92,12 @@ async fn client_server_task(
     let mut pending = Pending::new(aggregate);
 
     loop {
-        // prioritize completion of ongoing commands
-        select_biased! {
-            executor_result = executor_results.recv().fuse() => {
+        tokio::select! {
+            executor_result = executor_results.recv() => {
                 log!("[client_server] new executor result: {:?}", executor_result);
                 client_server_task_handle_executor_result(executor_result, &mut connection, &mut pending).await;
             }
-            cmd = connection.recv().fuse() => {
+            cmd = connection.recv() => {
                 log!("[client_server] new command: {:?}", cmd);
                 if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
                     return;
@@ -295,9 +292,8 @@ async fn client_rw_task(
     mut from_parent: CommandReceiver,
 ) {
     loop {
-        // prioritize completion of ongoing commands
-        select_biased! {
-            cmd_result = connection.recv().fuse() => {
+        tokio::select! {
+            cmd_result = connection.recv() => {
                 log!("[client_rw] from connection: {:?}", cmd_result);
                 if let Some(cmd_result) = cmd_result {
                     if let Err(e) = to_parent.send(cmd_result).await {
@@ -307,7 +303,7 @@ async fn client_rw_task(
                     println!("[client_rw] error while receiving new command result from connection");
                 }
             }
-            cmd = from_parent.recv().fuse() => {
+            cmd = from_parent.recv() => {
                 log!("[client_rw] from parent: {:?}", cmd);
                 if let Some(cmd) = cmd {
                     connection.send(cmd).await;
