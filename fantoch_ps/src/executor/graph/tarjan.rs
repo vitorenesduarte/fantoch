@@ -160,6 +160,9 @@ impl TarjanSCCFinder {
                                 dep_dot
                             );
 
+                            drop(vertex);
+                            drop(dep_vertex);
+
                             // OPTIMIZATION: passing the vertex as an argument
                             // to `strong_connect`
                             // is also essential to avoid double look-up
@@ -167,6 +170,14 @@ impl TarjanSCCFinder {
                                 dep_dot,
                                 executed_clock,
                                 vertex_index,
+                            );
+
+                            vertex = vertex_index.get_mut(&dot).expect(
+                                "self should exist after strong_connect",
+                            );
+
+                            let dep_vertex = vertex_index.get(&dep_dot).expect(
+                                "dependency should exist after strong_connect",
                             );
 
                             // if missing dependency, give up
@@ -178,6 +189,7 @@ impl TarjanSCCFinder {
                             vertex.update_low(|low| {
                                 cmp::min(low, dep_vertex.low())
                             });
+                            drop(dep_vertex);
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack() {
@@ -187,6 +199,7 @@ impl TarjanSCCFinder {
                                     cmp::min(low, dep_vertex.id())
                                 });
                             }
+                            drop(dep_vertex);
                         }
                     }
                 }
@@ -198,6 +211,8 @@ impl TarjanSCCFinder {
         // - good news: the SCC members are on the stack
         if vertex.id() == vertex.low() {
             let mut scc = SCC::new();
+
+            drop(vertex);
 
             loop {
                 // pop an element from the stack
