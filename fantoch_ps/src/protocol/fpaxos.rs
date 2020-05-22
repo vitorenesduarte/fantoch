@@ -12,6 +12,7 @@ use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
+use tracing::instrument;
 
 type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
 
@@ -144,6 +145,7 @@ impl Protocol for FPaxos {
 
 impl FPaxos {
     /// Handles a submit operation by a client.
+    #[instrument(skip(self, _dot, cmd))]
     fn handle_submit(
         &mut self,
         _dot: Option<Dot>,
@@ -175,6 +177,7 @@ impl FPaxos {
         }
     }
 
+    #[instrument(skip(self, ballot, slot, cmd))]
     fn handle_mspawn_commander(
         &mut self,
         from: ProcessId,
@@ -214,6 +217,7 @@ impl FPaxos {
         }
     }
 
+    #[instrument(skip(self, ballot, slot, cmd))]
     fn handle_maccept(
         &mut self,
         from: ProcessId,
@@ -254,6 +258,7 @@ impl FPaxos {
         }
     }
 
+    #[instrument(skip(self, ballot, slot))]
     fn handle_maccepted(
         &mut self,
         from: ProcessId,
@@ -292,6 +297,7 @@ impl FPaxos {
         Action::Nothing
     }
 
+    #[instrument(skip(self, slot, cmd))]
     fn handle_mchosen(&mut self, slot: u64, cmd: Command) -> Action<Message> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
 
@@ -306,6 +312,7 @@ impl FPaxos {
         Action::Nothing
     }
 
+    #[instrument(skip(self, from, committed))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -318,15 +325,16 @@ impl FPaxos {
             from
         );
         self.gc_track.committed_by(from, committed);
-        Action::Nothing
-    }
-
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
-        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
-        // perform garbage collection of stable dots
+        // perform garbage collection of stable slots
         let stable = self.gc_track.stable();
         let stable_count = self.multi_synod.gc(stable);
         self.bp.stable(stable_count);
+        Action::Nothing
+    }
+
+    #[instrument(skip(self))]
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed slot
         let committed = self.gc_track.committed();
@@ -336,6 +344,7 @@ impl FPaxos {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
         };
+
         vec![tosend]
     }
 }
@@ -371,7 +380,6 @@ pub enum Message {
 
 const LEADER_WORKER_INDEX: usize = fantoch::run::LEADER_WORKER_INDEX;
 const ACCEPTOR_WORKER_INDEX: usize = 1;
-const LEARNER_WORKER_INDEX: usize = 2;
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
@@ -386,18 +394,21 @@ impl MessageIndex for Message {
                 no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
             }
             Self::MChosen { .. } => {
-                // forward chosen messages to learner worker
-                no_worker_index_reserve(LEARNER_WORKER_INDEX)
+                // forward chosen messages also to acceptor worker:
+                // - at point we had a learner worker, but since the acceptor
+                //   needs to know about committed slows to perform GC, we
+                //   wouldn't gain much (if anything) in separating these roles
+                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
             }
             // spawn commanders and accepted messages should be forwarded to
             // the commander process:
             // - make sure that these commanders are never spawned in the
-            //   previous 3 workers
+            //   previous 2 workers
             Self::MSpawnCommander { slot, .. } => {
-                worker_index_reserve(3, *slot as usize)
+                worker_index_reserve(2, *slot as usize)
             }
             Self::MAccepted { slot, .. } => {
-                worker_index_reserve(3, *slot as usize)
+                worker_index_reserve(2, *slot as usize)
             }
             Self::MGarbageCollection { .. } => {
                 // since it's the acceptor that contains the slots to be gc-ed,
