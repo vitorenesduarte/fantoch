@@ -357,11 +357,10 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.to_executor.push(execution_info);
         }
 
-        // record that this command has been committed
-        self.cmds.commit(dot);
-
-        // nothing to send
-        Action::Nothing
+        // notify self with the committed dot
+        Action::ToForward {
+            msg: Message::MCommitDot { dot },
+        }
     }
 
     fn handle_mconsensus(
