@@ -137,8 +137,7 @@ mod tests {
         let workers = 1;
         let executors = 1;
         let with_leader = false;
-        run_test::<EPaxosSequential>(workers, executors, with_leader, None)
-            .await
+        run_test::<EPaxosSequential>(workers, executors, with_leader, None).await
     }
 
     #[tokio::test]

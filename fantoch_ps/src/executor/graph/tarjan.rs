@@ -114,7 +114,7 @@ impl TarjanSCCFinder {
             //   conflicts are transitive
             // - when we can, the following loop has a single iteration
             for dep in (from..=to).rev() {
-                // ignore dependency if already executed
+                // ignore dependency if already executed:
                 // - we need this check because the clock may not be contiguous,
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed

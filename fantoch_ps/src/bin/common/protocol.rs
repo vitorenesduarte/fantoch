@@ -391,9 +391,10 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
 fn parse_tracer_show_interval(
     tracer_show_interval: Option<&str>,
 ) -> Option<usize> {
-    tracer_show_interval.map(|tracer_show_interval| {
-        tracer_show_interval
-            .parse::<usize>()
-            .expect("tracer_show_interval should be a number")
-    })
+    tracer_show_interval
+        .map(|tracer_show_interval| {
+            tracer_show_interval
+                .parse::<usize>()
+                .expect("tracer_show_interval should be a number")
+        })
 }
