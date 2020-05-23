@@ -214,6 +214,7 @@ mod tests {
     {
         // run until the clients end + another 10 seconds (10000ms)
         let extra_run_time = Some(10_000);
+        let tracer_show_interval = None;
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             n,
             f,
@@ -224,6 +225,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
             extra_run_time,
+            tracer_show_interval,
             Some(metrics_inspect),
         )
         .await

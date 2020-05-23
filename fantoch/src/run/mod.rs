@@ -586,6 +586,7 @@ pub mod tests {
         let conflict_rate = 100;
         let commands_per_client = 100;
         let clients_per_region = 3;
+        let tracer_show_interval = Some(3000);
         let extra_run_time = Some(5000);
 
         // run test and get total stable commands
@@ -600,6 +601,7 @@ pub mod tests {
                 commands_per_client,
                 clients_per_region,
                 extra_run_time,
+                tracer_show_interval,
                 Some(inspect_stable_commands),
             )
             .await
@@ -623,6 +625,7 @@ pub mod tests {
         commands_per_client: usize,
         clients_per_region: usize,
         extra_run_time: Option<u64>,
+        tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
     ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
@@ -646,6 +649,7 @@ pub mod tests {
                     commands_per_client,
                     clients_per_region,
                     extra_run_time,
+                    tracer_show_interval,
                     inspect_fun,
                 )
                 .await
@@ -663,6 +667,7 @@ pub mod tests {
         commands_per_client: usize,
         clients_per_region: usize,
         extra_run_time: Option<u64>,
+        tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
     ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
@@ -688,7 +693,6 @@ pub mod tests {
         let tcp_flush_interval = Some(100); // millis
         let channel_buffer_size = 10000;
         let multiplexing = 2;
-        let tracer_show_interval = Some(100); // millis
 
         // set parallel protocol and executors in config
         config.set_workers(workers);
