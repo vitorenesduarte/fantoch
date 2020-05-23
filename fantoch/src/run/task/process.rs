@@ -257,15 +257,15 @@ async fn writer_task<P>(
 }
 
 /// Starts process workers.
-pub fn start_processes<P>(
+pub fn start_processes<P, R>(
     process_id: ProcessId,
     config: Config,
     sorted_processes: Vec<ProcessId>,
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
-    periodic_to_workers: PeriodicToWorkers<P>,
-    periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P>>,
-    to_periodic_inspect: Option<InspectReceiver<P>>,
+    periodic_to_workers: PeriodicToWorkers<P, R>,
+    periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P, R>>,
+    to_periodic_inspect: Option<InspectReceiver<P, R>>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     worker_to_executors: WorkerToExecutors<P>,
@@ -274,6 +274,7 @@ pub fn start_processes<P>(
 ) -> Vec<JoinHandle<()>>
 where
     P: Protocol + Send + 'static,
+    R: Debug + Clone + Send + 'static,
 {
     // create process
     let (mut process, process_events) = P::new(process_id, config);
@@ -282,7 +283,7 @@ where
     process.discover(sorted_processes);
 
     // spawn periodic task
-    task::spawn(task::periodic::periodic_task::<P>(
+    task::spawn(task::periodic::periodic_task(
         process_events,
         periodic_to_workers,
         to_periodic_inspect,
@@ -308,7 +309,7 @@ where
         .enumerate()
         .map(
             |(worker_index, ((from_readers, from_clients), from_periodic))| {
-                task::spawn(process_task::<P>(
+                task::spawn(process_task::<P, R>(
                     worker_index,
                     process.clone(),
                     process_id,
@@ -325,19 +326,20 @@ where
         .collect()
 }
 
-async fn process_task<P>(
+async fn process_task<P, R>(
     worker_index: usize,
     mut process: P,
     process_id: ProcessId,
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
-    mut from_periodic: PeriodicEventReceiver<P>,
+    mut from_periodic: PeriodicEventReceiver<P, R>,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut reader_to_workers: ReaderToWorkers<P>,
     mut worker_to_executors: WorkerToExecutors<P>,
     mut to_execution_logger: Option<ExecutionInfoSender<P>>,
 ) where
     P: Protocol + 'static,
+    R: Debug + 'static,
 {
     loop {
         tokio::select! {
@@ -589,15 +591,16 @@ async fn handle_from_client<P>(
     .await;
 }
 
-async fn selected_from_periodic_task<P>(
+async fn selected_from_periodic_task<P, R>(
     worker_index: usize,
     process_id: ProcessId,
-    event: Option<FromPeriodicMessage<P>>,
+    event: Option<FromPeriodicMessage<P, R>>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
+    R: Debug + 'static,
 {
     log!("[server] from periodic task: {:?}", event);
     if let Some(event) = event {
@@ -615,15 +618,16 @@ async fn selected_from_periodic_task<P>(
     }
 }
 
-async fn handle_from_periodic_task<P>(
+async fn handle_from_periodic_task<P, R>(
     worker_index: usize,
     process_id: ProcessId,
-    msg: FromPeriodicMessage<P>,
+    msg: FromPeriodicMessage<P, R>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
+    R: Debug + 'static,
 {
     match msg {
         FromPeriodicMessage::Event(event) => {

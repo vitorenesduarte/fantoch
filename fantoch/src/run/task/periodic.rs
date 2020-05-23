@@ -3,12 +3,13 @@ use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use tokio::time::{self, Duration, Instant};
 
-pub async fn periodic_task<P>(
+pub async fn periodic_task<P, R>(
     events: Vec<(P::PeriodicEvent, usize)>,
-    mut periodic_to_workers: PeriodicToWorkers<P>,
-    to_periodic_inspect: Option<InspectReceiver<P>>,
+    mut periodic_to_workers: PeriodicToWorkers<P, R>,
+    to_periodic_inspect: Option<InspectReceiver<P, R>>,
 ) where
     P: Protocol + 'static,
+    R: Clone + 'static,
 {
     // TODO we only support one periodic event for now
     assert_eq!(events.len(), 1);
@@ -55,11 +56,12 @@ pub async fn periodic_task<P>(
     }
 }
 
-async fn periodic_task_send_msg<P>(
-    periodic_to_workers: &mut PeriodicToWorkers<P>,
-    msg: FromPeriodicMessage<P>,
+async fn periodic_task_send_msg<P, R>(
+    periodic_to_workers: &mut PeriodicToWorkers<P, R>,
+    msg: FromPeriodicMessage<P, R>,
 ) where
     P: Protocol + 'static,
+    R: Clone + 'static,
 {
     if let Err(e) = periodic_to_workers.forward(msg).await {
         println!("[periodic] error sending message to workers: {:?}", e);

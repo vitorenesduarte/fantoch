@@ -61,7 +61,6 @@ pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
 pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
-pub type PeriodicEventReceiver<P> = ChannelReceiver<FromPeriodicMessage<P>>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
 pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
@@ -74,8 +73,9 @@ pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
-pub type InspectReceiver<P> =
-    ChannelReceiver<(fn(&P) -> bool, ChannelSender<bool>)>;
+pub type PeriodicEventReceiver<P, R> = ChannelReceiver<FromPeriodicMessage<P, R>>;
+pub type InspectReceiver<P, R> =
+    ChannelReceiver<(fn(&P) -> R, ChannelSender<R>)>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
@@ -112,12 +112,12 @@ where
 //   returns a boolean; this boolean is then sent through the `ChannelSender`
 //   (this is useful for e.g. testing)
 #[derive(Clone)]
-pub enum FromPeriodicMessage<P: Protocol> {
+pub enum FromPeriodicMessage<P: Protocol, R> {
     Event(P::PeriodicEvent),
-    Inspect(fn(&P) -> bool, ChannelSender<bool>),
+    Inspect(fn(&P) -> R, ChannelSender<R>),
 }
 
-impl<P> fmt::Debug for FromPeriodicMessage<P>
+impl<P, R> fmt::Debug for FromPeriodicMessage<P, R>
 where
     P: Protocol,
 {
@@ -129,9 +129,9 @@ where
     }
 }
 
-pub type PeriodicToWorkers<P> = pool::ToPool<FromPeriodicMessage<P>>;
+pub type PeriodicToWorkers<P, R> = pool::ToPool<FromPeriodicMessage<P, R>>;
 // The following allows e.g. <P as Protocol>::Periodic to be `ToPool::forward`
-impl<P> pool::PoolIndex for FromPeriodicMessage<P>
+impl<P, R> pool::PoolIndex for FromPeriodicMessage<P, R>
 where
     P: Protocol,
 {

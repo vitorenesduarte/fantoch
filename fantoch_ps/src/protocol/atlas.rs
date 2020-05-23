@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use threshold::VClock;
+use tracing::instrument;
 
 pub type AtlasSequential = Atlas<SequentialKeyClocks>;
 pub type AtlasLocked = Atlas<LockedKeyClocks>;
@@ -161,6 +162,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
 
 impl<KC: KeyClocks> Atlas<KC> {
     /// Handles a submit operation by a client.
+    #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
@@ -196,6 +198,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -250,6 +253,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
+    #[instrument(skip(self, from, dot, clock))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
@@ -321,6 +325,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
+    #[instrument(skip(self, from, dot, value))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
@@ -352,13 +357,13 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.to_executor.push(execution_info);
         }
 
-        // record that this command has been committed
-        self.cmds.commit(dot);
-
-        // nothing to send
-        Action::Nothing
+        // notify self with the committed dot
+        Action::ToForward {
+            msg: Message::MCommitDot { dot },
+        }
     }
 
+    #[instrument(skip(self, from, dot, ballot, value))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
@@ -408,6 +413,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         Action::ToSend { target, msg }
     }
 
+    #[instrument(skip(self, from, dot, ballot))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
@@ -444,6 +450,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
+    #[instrument(skip(self, from, dot))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
@@ -455,6 +462,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         Action::Nothing
     }
 
+    #[instrument(skip(self, from, committed))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -467,9 +475,15 @@ impl<KC: KeyClocks> Atlas<KC> {
             from
         );
         self.cmds.committed_by(from, committed);
-        Action::Nothing
+        // compute newly stable dots
+        let stable = self.cmds.stable();
+        // create `ToForward` to self
+        Action::ToForward {
+            msg: Message::MStable { stable },
+        }
     }
 
+    #[instrument(skip(self, from, stable))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
@@ -482,12 +496,12 @@ impl<KC: KeyClocks> Atlas<KC> {
         Action::Nothing
     }
 
+    #[instrument(skip(self))]
     fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
-        // retrieve the committed clock and stable dots
+        // retrieve the committed clock
         let committed = self.cmds.committed();
-        let stable = self.cmds.stable();
 
         // create `ToSend`
         let tosend = Action::ToSend {
@@ -495,12 +509,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             msg: Message::MGarbageCollection { committed },
         };
 
-        // create `ToForward` to self
-        let toforward = Action::ToForward {
-            msg: Message::MStable { stable },
-        };
-
-        vec![tosend, toforward]
+        vec![tosend]
     }
 }
 
@@ -800,8 +809,11 @@ mod tests {
         // all processes handle it
         let to_sends = simulation.forward_to_processes(mcommit);
 
-        // check there's nothing to send
-        assert!(to_sends.is_empty());
+        // check the MCommitDot
+        let check_msg = |msg: &Message| matches!(msg, Message::MCommitDot {..});
+        assert!(to_sends.into_iter().all(|(_, action)| {
+            matches!(action, Action::ToForward { msg } if check_msg(&msg))
+        }));
 
         // process 1 should have something to the executor
         let (process, executor) = simulation.get_process(process_id_1);
