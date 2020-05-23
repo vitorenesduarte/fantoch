@@ -51,10 +51,9 @@ impl TarjanSCCFinder {
                 log!("Finder::finalize removing {:?} from stack", dot);
 
                 // find vertex and reset its id
-                let mut vertex = vertex_index
-                    .get_mut(&dot)
-                    .expect("stack member should exist");
-                vertex.set_id(0);
+                let vertex_cell =
+                    vertex_index.find(&dot).expect("stack member should exist");
+                vertex_cell.borrow_mut().set_id(0);
 
                 // add dot to set of visited
                 dot
@@ -72,13 +71,14 @@ impl TarjanSCCFinder {
         vertex_index: &VertexIndex,
     ) -> FinderResult {
         // get the vertex
-        let mut vertex = match vertex_index.get_mut(&dot) {
-            Some(vertex) => vertex,
+        let vertex_cell = match vertex_index.find(&dot) {
+            Some(cell) => cell,
             None => {
                 // in this case this `dot` is no longer pending
                 return FinderResult::NotPending;
             }
         };
+        let mut vertex = vertex_cell.borrow_mut();
 
         // update id
         self.id += 1;
@@ -131,7 +131,7 @@ impl TarjanSCCFinder {
                 let dep_dot = Dot::new(*process_id, dep);
                 log!("Finder::strong_connect non-executed {:?}", dep_dot);
 
-                match vertex_index.get(&dep_dot) {
+                match vertex_index.find(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
@@ -139,10 +139,11 @@ impl TarjanSCCFinder {
                         log!("Finder::strong_connect missing {:?}", dep_dot);
                         return FinderResult::MissingDependency(dep_dot);
                     }
-                    Some(dep_vertex) => {
+                    Some(dep_vertex_cell) => {
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
                         //   that conflicts are trnasitive
+                        let mut dep_vertex = dep_vertex_cell.borrow();
                         if !self.transitive_conflicts
                             && !vertex.conflicts(&dep_vertex)
                         {
@@ -160,6 +161,7 @@ impl TarjanSCCFinder {
                                 dep_dot
                             );
 
+                            // drop borrow guards
                             drop(vertex);
                             drop(dep_vertex);
 
@@ -172,13 +174,9 @@ impl TarjanSCCFinder {
                                 vertex_index,
                             );
 
-                            vertex = vertex_index.get_mut(&dot).expect(
-                                "self should exist after strong_connect",
-                            );
-
-                            let dep_vertex = vertex_index.get(&dep_dot).expect(
-                                "dependency should exist after strong_connect",
-                            );
+                            // borrow again
+                            vertex = vertex_cell.borrow_mut();
+                            dep_vertex = dep_vertex_cell.borrow();
 
                             // if missing dependency, give up
                             if let FinderResult::MissingDependency(_) = result {
@@ -189,6 +187,8 @@ impl TarjanSCCFinder {
                             vertex.update_low(|low| {
                                 cmp::min(low, dep_vertex.low())
                             });
+
+                            // drop dep borrow
                             drop(dep_vertex);
                         } else {
                             // if visited and on the stack
@@ -199,6 +199,8 @@ impl TarjanSCCFinder {
                                     cmp::min(low, dep_vertex.id())
                                 });
                             }
+
+                            // drop dep borrow
                             drop(dep_vertex);
                         }
                     }
@@ -212,6 +214,7 @@ impl TarjanSCCFinder {
         if vertex.id() == vertex.low() {
             let mut scc = SCC::new();
 
+            // drop borrow
             drop(vertex);
 
             loop {
@@ -225,8 +228,9 @@ impl TarjanSCCFinder {
 
                 // get its vertex and change its `on_stack` value
                 let mut member_vertex = vertex_index
-                    .get_mut(&member_dot)
-                    .expect("stack member should exist");
+                    .find(&member_dot)
+                    .expect("stack member should exist")
+                    .borrow_mut();
                 member_vertex.set_on_stack(false);
 
                 // add it to the SCC and check it wasn't there before

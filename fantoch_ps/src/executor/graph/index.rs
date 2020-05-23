@@ -1,6 +1,6 @@
 use super::tarjan::Vertex;
 use fantoch::id::Dot;
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default, Debug)]
@@ -20,14 +20,8 @@ impl VertexIndex {
         res.is_none()
     }
 
-    pub fn get(&self, dot: &Dot) -> Option<Ref<Vertex>> {
-        self.index.get(dot).map(|cell| cell.borrow())
-    }
-
-    /// Returns a mutable reference to an indexed vertex (if previously
-    /// indexed).
-    pub fn get_mut(&self, dot: &Dot) -> Option<RefMut<Vertex>> {
-        self.index.get(dot).map(|cell| cell.borrow_mut())
+    pub fn find(&self, dot: &Dot) -> Option<&RefCell<Vertex>> {
+        self.index.get(dot).map(|cell| cell)
     }
 
     /// Removes a vertex from the index.
