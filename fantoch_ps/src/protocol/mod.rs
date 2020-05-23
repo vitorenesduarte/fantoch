@@ -212,8 +212,8 @@ mod tests {
     where
         P: Protocol + Send + 'static,
     {
-        // run until the clients end + another 2 seconds (2000ms)
-        let extra_run_time = Some(2000);
+        // run until the clients end + another 10 seconds (10000ms)
+        let extra_run_time = Some(10_000);
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             n,
             f,
