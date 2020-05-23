@@ -61,7 +61,6 @@ pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
 pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
-pub type PeriodicEventReceiver<P> = ChannelReceiver<PeriodicEventMessage<P>>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
 pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
@@ -74,6 +73,9 @@ pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
+pub type PeriodicEventReceiver<P, R> = ChannelReceiver<FromPeriodicMessage<P, R>>;
+pub type InspectReceiver<P, R> =
+    ChannelReceiver<(fn(&P) -> R, ChannelSender<R>)>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
@@ -105,29 +107,39 @@ where
 }
 
 // 3. workers receive messages from the periodic-events task
-// - this wrapper is here only to be able to implement this trait
-// - otherwise the compiler can't figure out between
-//  > A: PeriodicEventIndex
-//  > A: MessageKey
+// - this message can either be a periodic event or
+// - an inspect function that takes a reference to the protocol state and
+//   returns a boolean; this boolean is then sent through the `ChannelSender`
+//   (this is useful for e.g. testing)
 #[derive(Clone)]
-pub struct PeriodicEventMessage<P: Protocol>(pub P::PeriodicEvent);
-impl<P> fmt::Debug for PeriodicEventMessage<P>
+pub enum FromPeriodicMessage<P: Protocol, R> {
+    Event(P::PeriodicEvent),
+    Inspect(fn(&P) -> R, ChannelSender<R>),
+}
+
+impl<P, R> fmt::Debug for FromPeriodicMessage<P, R>
 where
     P: Protocol,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
+        match self {
+            Self::Event(e) => write!(f, "FromPeriodicMessage::Event({:?})", e),
+            Self::Inspect(_, _) => write!(f, "FromPeriodicMessage::Inspect"),
+        }
     }
 }
 
-pub type PeriodicToWorkers<P> = pool::ToPool<PeriodicEventMessage<P>>;
+pub type PeriodicToWorkers<P, R> = pool::ToPool<FromPeriodicMessage<P, R>>;
 // The following allows e.g. <P as Protocol>::Periodic to be `ToPool::forward`
-impl<P> pool::PoolIndex for PeriodicEventMessage<P>
+impl<P, R> pool::PoolIndex for FromPeriodicMessage<P, R>
 where
     P: Protocol,
 {
     fn index(&self) -> Option<(usize, usize)> {
-        self.0.index()
+        match self {
+            Self::Event(e) => e.index(),
+            Self::Inspect(_, _) => None, // send to all
+        }
     }
 }
 

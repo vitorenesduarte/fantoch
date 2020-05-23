@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
-use tokio::time::{self, Duration, Instant};
+use tokio::time::{self, Duration};
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
@@ -257,14 +257,15 @@ async fn writer_task<P>(
 }
 
 /// Starts process workers.
-pub fn start_processes<P>(
+pub fn start_processes<P, R>(
     process_id: ProcessId,
     config: Config,
     sorted_processes: Vec<ProcessId>,
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
-    periodic_to_workers: PeriodicToWorkers<P>,
-    periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P>>,
+    periodic_to_workers: PeriodicToWorkers<P, R>,
+    periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P, R>>,
+    to_periodic_inspect: Option<InspectReceiver<P, R>>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     worker_to_executors: WorkerToExecutors<P>,
@@ -273,6 +274,7 @@ pub fn start_processes<P>(
 ) -> Vec<JoinHandle<()>>
 where
     P: Protocol + Send + 'static,
+    R: Debug + Clone + Send + 'static,
 {
     // create process
     let (mut process, process_events) = P::new(process_id, config);
@@ -281,7 +283,11 @@ where
     process.discover(sorted_processes);
 
     // spawn periodic task
-    task::spawn(periodic_task::<P>(process_events, periodic_to_workers));
+    task::spawn(task::periodic::periodic_task(
+        process_events,
+        periodic_to_workers,
+        to_periodic_inspect,
+    ));
 
     let to_execution_logger = execution_log.map(|execution_log| {
         // if the execution log was set, then start the execution logger
@@ -303,7 +309,7 @@ where
         .enumerate()
         .map(
             |(worker_index, ((from_readers, from_clients), from_periodic))| {
-                task::spawn(process_task::<P>(
+                task::spawn(process_task::<P, R>(
                     worker_index,
                     process.clone(),
                     process_id,
@@ -320,50 +326,20 @@ where
         .collect()
 }
 
-async fn periodic_task<P>(
-    events: Vec<(P::PeriodicEvent, usize)>,
-    mut periodic_to_workers: PeriodicToWorkers<P>,
-) where
-    P: Protocol + 'static,
-{
-    // TODO we only support one periodic event for now
-    assert_eq!(events.len(), 1);
-    let (event, millis) = events[0].clone();
-    let millis = Duration::from_millis(millis as u64);
-
-    log!("[periodic_task] event: {:?} | interval {:?}", event, millis);
-
-    // compute first tick
-    let first_tick = Instant::now()
-        .checked_add(millis)
-        .expect("first tick in periodic task should exist");
-
-    let mut interval = time::interval_at(first_tick, millis);
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                // flush socket
-                if let Err(e) = periodic_to_workers.forward(PeriodicEventMessage(event.clone())).await {
-                    println!( "[periodic] error sending periodic event to workers: {:?}", e);
-                }
-            }
-        }
-    }
-}
-
-async fn process_task<P>(
+async fn process_task<P, R>(
     worker_index: usize,
     mut process: P,
     process_id: ProcessId,
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
-    mut from_periodic: PeriodicEventReceiver<P>,
+    mut from_periodic: PeriodicEventReceiver<P, R>,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut reader_to_workers: ReaderToWorkers<P>,
     mut worker_to_executors: WorkerToExecutors<P>,
     mut to_execution_logger: Option<ExecutionInfoSender<P>>,
 ) where
     P: Protocol + 'static,
+    R: Debug + 'static,
 {
     loop {
         tokio::select! {
@@ -615,15 +591,16 @@ async fn handle_from_client<P>(
     .await;
 }
 
-async fn selected_from_periodic_task<P>(
+async fn selected_from_periodic_task<P, R>(
     worker_index: usize,
     process_id: ProcessId,
-    event: Option<PeriodicEventMessage<P>>,
+    event: Option<FromPeriodicMessage<P, R>>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
+    R: Debug + 'static,
 {
     log!("[server] from periodic task: {:?}", event);
     if let Some(event) = event {
@@ -641,30 +618,41 @@ async fn selected_from_periodic_task<P>(
     }
 }
 
-async fn handle_from_periodic_task<P>(
+async fn handle_from_periodic_task<P, R>(
     worker_index: usize,
     process_id: ProcessId,
-    event: PeriodicEventMessage<P>,
+    msg: FromPeriodicMessage<P, R>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
 ) where
     P: Protocol + 'static,
+    R: Debug + 'static,
 {
-    // unwrap event
-    let event = event.0;
-
-    // handle event in process
-    for to_send in process.handle_event(event) {
-        // TODO maybe run in parallel
-        handle_action(
-            worker_index,
-            process_id,
-            to_send,
-            process,
-            to_writers,
-            reader_to_workers,
-        )
-        .await;
+    match msg {
+        FromPeriodicMessage::Event(event) => {
+            // handle event in process
+            for to_send in process.handle_event(event) {
+                // TODO maybe run in parallel
+                handle_action(
+                    worker_index,
+                    process_id,
+                    to_send,
+                    process,
+                    to_writers,
+                    reader_to_workers,
+                )
+                .await;
+            }
+        }
+        FromPeriodicMessage::Inspect(f, mut tx) => {
+            let outcome = f(&process);
+            if let Err(e) = tx.send(outcome).await {
+                println!(
+                    "[server] error while sending inspect result: {:?}",
+                    e
+                );
+            }
+        }
     }
 }

@@ -28,10 +28,12 @@ mod tests {
     use super::*;
     use fantoch::client::Workload;
     use fantoch::config::Config;
+    use fantoch::id::ProcessId;
     use fantoch::planet::Planet;
     use fantoch::protocol::{Protocol, ProtocolMetricsKind};
-    use fantoch::run::tests::run_test;
+    use fantoch::run::tests::run_test_with_inspect_fun;
     use fantoch::sim::Runner;
+    use std::collections::HashMap;
 
     #[test]
     fn sim_newt_3_1_test() {
@@ -42,6 +44,31 @@ mod tests {
     #[test]
     fn sim_newt_5_1_test() {
         let slow_paths = sim_test::<NewtSequential>(5, 1, false);
+        assert_eq!(slow_paths, 0);
+    }
+
+    // TODO ignore newt tests for now (since GC is not implemented)
+    #[ignore]
+    #[tokio::test]
+    async fn run_newt_3_1_sequential_test() {
+        // newt sequential can only handle one worker but many executors
+        let workers = 1;
+        let executors = 4;
+        let slow_paths =
+            run_test::<NewtSequential>(3, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    // TODO ignore newt tests for now (since GC is not implemented)
+    #[ignore]
+    #[tokio::test]
+    async fn run_newt_3_1_atomic_test() {
+        // newt atomic can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths =
+            run_test::<NewtSequential>(3, 1, false, workers, executors).await;
         assert_eq!(slow_paths, 0);
     }
 
@@ -71,6 +98,27 @@ mod tests {
         assert!(slow_paths > 0);
     }
 
+    #[tokio::test]
+    async fn run_atlas_3_1_sequential_test() {
+        // atlas sequential can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        let slow_paths =
+            run_test::<AtlasSequential>(3, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_atlas_3_1_locked_test() {
+        // atlas locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths =
+            run_test::<AtlasLocked>(3, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
+    }
+
     #[test]
     fn sim_epaxos_3_1_test() {
         let slow_paths = sim_test::<EPaxosSequential>(3, 1, false);
@@ -81,6 +129,27 @@ mod tests {
     fn sim_epaxos_5_2_test() {
         let slow_paths = sim_test::<EPaxosSequential>(5, 2, false);
         assert!(slow_paths > 0);
+    }
+
+    #[tokio::test]
+    async fn run_epaxos_3_1_sequential_test() {
+        // epaxos sequential can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        let slow_paths =
+            run_test::<EPaxosSequential>(3, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_epaxos_locked_test() {
+        // epaxos locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths =
+            run_test::<EPaxosLocked>(3, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
     }
 
     #[test]
@@ -94,79 +163,90 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_newt_sequential_test() {
-        // newt sequential can only handle one worker but many executors
-        let workers = 1;
-        let executors = 2;
-        let with_leader = false;
-        run_test::<NewtSequential>(workers, executors, with_leader).await
-    }
-
-    #[tokio::test]
-    async fn run_newt_atomic_test() {
-        // newt atomic can handle as many workers as we want but we may want to
-        // only have one executor
-        let workers = 3;
-        let executors = 1;
-        let with_leader = false;
-        run_test::<NewtAtomic>(workers, executors, with_leader).await
-    }
-
-    #[tokio::test]
-    async fn run_atlas_sequential_test() {
-        // atlas sequential can only handle one worker and one executor
-        let workers = 1;
-        let executors = 1;
-        let with_leader = false;
-        run_test::<AtlasSequential>(workers, executors, with_leader).await
-    }
-
-    #[tokio::test]
-    async fn run_atlas_locked_test() {
-        // atlas locked can handle as many workers as we want but only one
-        // executor
-        let workers = 3;
-        let executors = 1;
-        let with_leader = false;
-        run_test::<AtlasLocked>(workers, executors, with_leader).await
-    }
-
-    #[tokio::test]
-    async fn run_epaxos_sequential_test() {
-        // epaxos sequential can only handle one worker and one executor
-        let workers = 1;
-        let executors = 1;
-        let with_leader = false;
-        run_test::<EPaxosSequential>(workers, executors, with_leader).await
-    }
-
-    #[tokio::test]
-    async fn run_epaxos_locked_test() {
-        // epaxos locked can handle as many workers as we want but only one
-        // executor
-        let workers = 3;
-        let executors = 1;
-        let with_leader = false;
-        run_test::<EPaxosLocked>(workers, executors, with_leader).await
-    }
-
-    #[tokio::test]
-    async fn run_fpaxos_sequential_test() {
+    async fn run_fpaxos_3_1_sequential_test() {
         // run fpaxos in sequential mode
         let workers = 1;
         let executors = 1;
-        let with_leader = true;
-        run_test::<FPaxos>(workers, executors, with_leader).await
+        run_test::<FPaxos>(3, 1, true, workers, executors).await;
     }
 
     #[tokio::test]
-    async fn run_fpaxos_parallel_test() {
+    async fn run_fpaxos_3_1_parallel_test() {
         // run fpaxos in paralel mode (in terms of workers, since execution is
         // never parallel)
         let workers = 3;
         let executors = 1;
-        let with_leader = true;
-        run_test::<FPaxos>(workers, executors, with_leader).await
+        run_test::<FPaxos>(3, 1, true, workers, executors).await;
+    }
+
+    // global test config
+    const COMMANDS_PER_CLIENT: usize = 100;
+    const CLIENTS_PER_REGION: usize = 10;
+    const CONFLICT_RATE: usize = 100;
+
+    #[allow(dead_code)]
+    fn metrics_inspect<P>(worker: &P) -> (usize, usize)
+    where
+        P: Protocol,
+    {
+        let slow_paths = worker
+            .metrics()
+            .get_aggregated(ProtocolMetricsKind::SlowPath)
+            .cloned()
+            .unwrap_or_default() as usize;
+        let stable_count = worker
+            .metrics()
+            .get_aggregated(ProtocolMetricsKind::Stable)
+            .cloned()
+            .unwrap_or_default() as usize;
+        (slow_paths, stable_count)
+    }
+
+    async fn run_test<P>(
+        n: usize,
+        f: usize,
+        with_leader: bool,
+        workers: usize,
+        executors: usize,
+    ) -> u64
+    where
+        P: Protocol + Send + 'static,
+    {
+        // run until the clients end + another 10 seconds (10000ms)
+        let extra_run_time = Some(10_000);
+        let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
+            n,
+            f,
+            with_leader,
+            workers,
+            executors,
+            CONFLICT_RATE,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_REGION,
+            extra_run_time,
+            Some(metrics_inspect),
+        )
+        .await
+        .expect("run should complete successfully")
+        .into_iter()
+        .map(|(process_id, process_metrics)| {
+            // aggregate worker metrics
+            let mut total_slow_paths = 0;
+            let mut total_stable_count = 0;
+            process_metrics.into_iter().for_each(
+                |(slow_paths, stable_count)| {
+                    total_slow_paths += slow_paths;
+                    total_stable_count += stable_count;
+                },
+            );
+            (
+                process_id,
+                (total_slow_paths as u64, total_stable_count as u64),
+            )
+        })
+        .collect();
+
+        check_metrics(n, f, with_leader, metrics)
     }
 
     fn sim_test<P: Protocol>(n: usize, f: usize, with_leader: bool) -> u64 {
@@ -182,12 +262,9 @@ mod tests {
         }
 
         // clients workload
-        let conflict_rate = 100;
-        let commands_per_client = 100;
-        let payload_size = 100;
+        let payload_size = 1;
         let workload =
-            Workload::new(conflict_rate, commands_per_client, payload_size);
-        let clients_per_region = 10;
+            Workload::new(CONFLICT_RATE, COMMANDS_PER_CLIENT, payload_size);
 
         // process and client regions
         let mut regions = planet.regions();
@@ -200,37 +277,55 @@ mod tests {
             planet,
             config,
             workload,
-            clients_per_region,
+            CLIENTS_PER_REGION,
             process_regions,
             client_regions,
         );
 
         // run simulation until the clients end + another 2 seconds (2000ms)
-        let (processes_metrics, _) = runner.run(Some(2000));
+        let extra_sim_time = Some(2000);
+        let (metrics, _) = runner.run(extra_sim_time);
 
-        // slow path count
-        let mut total_slow_paths = 0;
-
-        // check process stats
-        let gced = processes_metrics
-            .values()
+        // fetch slow paths and stable count from metrics
+        let metrics = metrics
             .into_iter()
-            .filter(|metrics| {
+            .map(|(process_id, process_metrics)| {
                 // get slow paths
-                let slow_paths = metrics
+                let slow_paths = process_metrics
                     .get_aggregated(ProtocolMetricsKind::SlowPath)
                     .cloned()
                     .unwrap_or_default();
-                total_slow_paths += slow_paths;
 
-                // check stability has run
-                let stable_count = metrics
+                // get stable count
+                let stable_count = process_metrics
                     .get_aggregated(ProtocolMetricsKind::Stable)
-                    .expect("stability should have happened");
+                    .cloned()
+                    .unwrap_or_default();
 
+                (process_id, (slow_paths, stable_count))
+            })
+            .collect();
+
+        check_metrics(n, f, with_leader, metrics)
+    }
+
+    fn check_metrics(
+        n: usize,
+        f: usize,
+        with_leader: bool,
+        metrics: HashMap<ProcessId, (u64, u64)>,
+    ) -> u64 {
+        // total slow path count
+        let mut total_slow_paths = 0;
+
+        // check process stats
+        let gced = metrics
+            .into_iter()
+            .filter(|(_, (slow_paths, stable_count))| {
+                total_slow_paths += slow_paths;
                 // check if this process gc-ed all commands
                 *stable_count
-                    == (commands_per_client * clients_per_region * n) as u64
+                    == (COMMANDS_PER_CLIENT * CLIENTS_PER_REGION * n) as u64
             })
             .count();
 

@@ -54,6 +54,13 @@ where
     }
 }
 
+impl<M> ChannelSender<M> {
+    pub async fn blind_send(&mut self, value: M) {
+        let res = self.sender.send(value).await;
+        assert!(res.is_ok(), "blind_send should succeeed");
+    }
+}
+
 impl<M> ChannelReceiver<M> {
     pub async fn recv(&mut self) -> Option<M> {
         self.receiver.recv().await
