@@ -29,6 +29,7 @@ grcov . \
     --vcs-branch "${branch}" \
     --ignore-not-existing \
     --ignore='/*' \
+    --ignore='fantoch_ps/src/bin' \
     -t coveralls \
     -o coveralls.json
 
