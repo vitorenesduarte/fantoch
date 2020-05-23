@@ -191,19 +191,19 @@ impl DependencyGraph {
         finder: &mut TarjanSCCFinder,
         dot: Dot,
     ) -> FinderResult {
-                // get the vertex
-                match self.vertex_index.find(&dot) {
-                    Some(vertex) => finder.strong_connect(
-                        dot,
-                        vertex,
-                        &self.executed_clock,
-                        &self.vertex_index,
-                    ),
-                    None => {
-                        // in this case this `dot` is no longer pending
-                        FinderResult::NotPending
-                    }
-                }
+        // get the vertex
+        match self.vertex_index.find(&dot) {
+            Some(vertex) => finder.strong_connect(
+                dot,
+                vertex,
+                &self.executed_clock,
+                &self.vertex_index,
+            ),
+            None => {
+                // in this case this `dot` is no longer pending
+                FinderResult::NotPending
+            }
+        }
     }
 }
 
