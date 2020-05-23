@@ -426,33 +426,33 @@ mod tests {
         // {2, 3}, [6, 3]
         // in the simple version, {1, 5} and {1, 6} are removed
 
-        // {1, 2}, [1, 2]
+        // {1, 2}, [2, 2]
         let dot_a = Dot::new(1, 2);
-        let clock_a = util::vclock(vec![1, 2]);
+        let clock_a = util::vclock(vec![2, 2]);
 
-        // {1, 1}, [0, 2]
+        // {1, 1}, [3, 2]
         let dot_b = Dot::new(1, 1);
-        let clock_b = util::vclock(vec![0, 2]);
+        let clock_b = util::vclock(vec![3, 2]);
 
-        // {1, 3}, [2, 3]
+        // {1, 3}, [3, 3]
         let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![2, 3]);
+        let clock_c = util::vclock(vec![3, 3]);
 
-        // {2, 2}, [0, 1]
+        // {2, 2}, [0, 2]
         let dot_d = Dot::new(2, 2);
-        let clock_d = util::vclock(vec![0, 1]);
+        let clock_d = util::vclock(vec![0, 2]);
 
-        // {2, 1}, [4, 0]
+        // {2, 1}, [4, 3]
         let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![4, 0]);
+        let clock_e = util::vclock(vec![4, 3]);
 
-        // {1, 4}, [3, 2]
+        // {1, 4}, [4, 2]
         let dot_f = Dot::new(1, 4);
-        let clock_f = util::vclock(vec![3, 2]);
+        let clock_f = util::vclock(vec![4, 2]);
 
-        // {2, 3}, [4, 2]
+        // {2, 3}, [4, 3]
         let dot_g = Dot::new(2, 3);
-        let clock_g = util::vclock(vec![4, 2]);
+        let clock_g = util::vclock(vec![4, 3]);
 
         // create args
         let args = vec![

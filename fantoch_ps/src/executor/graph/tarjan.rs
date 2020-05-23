@@ -119,7 +119,7 @@ impl TarjanSCCFinder {
             //   conflicts are transitive
             // - when we can, the following loop has a single iteration
             for dep in (from..=to).rev() {
-                // ignore dependency if already executed:
+                // ignore dependency if already executed
                 // - we need this check because the clock may not be contiguous,
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed
@@ -130,6 +130,11 @@ impl TarjanSCCFinder {
                 // create dot and find vertex
                 let dep_dot = Dot::new(*process_id, dep);
                 log!("Finder::strong_connect non-executed {:?}", dep_dot);
+
+                // ignore dependency if self
+                if dep_dot == dot {
+                    continue;
+                }
 
                 match vertex_index.find(&dep_dot) {
                     None => {
