@@ -30,6 +30,7 @@ grcov . \
     --ignore-not-existing \
     --ignore='/*' \
     --ignore='fantoch_ps/src/bin/*' \
+    --ignore='fantoch_bote/src/main.rs' \
     -t coveralls \
     -o coveralls.json
 
