@@ -45,7 +45,7 @@ impl Dat {
             .map(Dat::latency)
             .map(|(region, latency)| {
                 if region == this_region {
-                    (region, 0)
+                    (region, super::INTRA_REGION_LATENCY)
                 } else {
                     (region, latency)
                 }

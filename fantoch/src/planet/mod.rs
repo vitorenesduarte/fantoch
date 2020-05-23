@@ -14,6 +14,9 @@ use std::fmt::{self, Write};
 // directory that contains all dat files
 const LAT_DIR: &str = "../latency_data/";
 
+// assume that intra region latency is 0
+const INTRA_REGION_LATENCY: u64 = 0;
+
 #[derive(Debug, Clone)]
 pub struct Planet {
     /// mapping from region A to a mapping from region B to the latency between
@@ -68,8 +71,11 @@ impl Planet {
                     .clone()
                     .into_iter()
                     .map(|to| {
-                        let distance =
-                            if from == to { 0 } else { planet_distance };
+                        let distance = if from == to {
+                            INTRA_REGION_LATENCY
+                        } else {
+                            planet_distance
+                        };
                         (to, distance)
                     })
                     .collect();
@@ -228,6 +234,31 @@ mod tests {
             .cloned()
             .collect();
         assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn equidistant() {
+        let planet_distance = 10;
+        let region_number = 3;
+        let (regions, planet) =
+            Planet::equidistant(planet_distance, region_number);
+
+        // check correct number of regions
+        assert_eq!(regions.len(), region_number);
+
+        // check distances between regions
+        for a in regions.iter() {
+            for b in regions.iter() {
+                let a_to_b =
+                    planet.ping_latency(a, b).expect("regions must exist");
+                let expected = if a == b {
+                    INTRA_REGION_LATENCY
+                } else {
+                    planet_distance
+                };
+                assert_eq!(a_to_b, expected);
+            }
+        }
     }
 
     #[test]
