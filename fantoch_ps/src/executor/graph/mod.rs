@@ -97,7 +97,7 @@ impl DependencyGraph {
         let finder_result = self.strong_connect(&mut finder, dot);
 
         // get sccs
-        let (sccs, visited) = finder.finalize(&self.vertex_index);
+        let (sccs, visited) = finder.finalize(&mut self.vertex_index);
 
         // save new SCCs if any were found
         match finder_result {
@@ -192,7 +192,7 @@ impl DependencyGraph {
         dot: Dot,
     ) -> FinderResult {
         // get the vertex
-        match self.vertex_index.get_mut(&dot) {
+        match self.vertex_index.find(&dot) {
             Some(vertex) => finder.strong_connect(
                 dot,
                 vertex,

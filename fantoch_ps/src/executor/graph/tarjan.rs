@@ -2,6 +2,7 @@ use super::index::VertexIndex;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
+use std::cell::RefCell;
 use std::cmp;
 use std::collections::{BTreeSet, HashSet};
 use threshold::{AEClock, EventSet, VClock};
@@ -51,10 +52,9 @@ impl TarjanSCCFinder {
                 log!("Finder::finalize removing {:?} from stack", dot);
 
                 // find vertex and reset its id
-                let vertex = vertex_index
-                    .get_mut(&dot)
-                    .expect("stack member should exist");
-                vertex.set_id(0);
+                let vertex_cell =
+                    vertex_index.find(&dot).expect("stack member should exist");
+                vertex_cell.borrow_mut().set_id(0);
 
                 // add dot to set of visited
                 dot
@@ -68,10 +68,13 @@ impl TarjanSCCFinder {
     pub fn strong_connect(
         &mut self,
         dot: Dot,
-        vertex: &mut Vertex,
+        vertex_cell: &RefCell<Vertex>,
         executed_clock: &AEClock<ProcessId>,
         vertex_index: &VertexIndex,
     ) -> FinderResult {
+        // borrow the vertex mutably
+        let mut vertex = vertex_cell.borrow_mut();
+
         // update id
         self.id += 1;
 
@@ -123,7 +126,12 @@ impl TarjanSCCFinder {
                 let dep_dot = Dot::new(*process_id, dep);
                 log!("Finder::strong_connect non-executed {:?}", dep_dot);
 
-                match vertex_index.get_mut(&dep_dot) {
+                // ignore dependency if self
+                if dep_dot == dot {
+                    continue;
+                }
+
+                match vertex_index.find(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
@@ -131,10 +139,11 @@ impl TarjanSCCFinder {
                         log!("Finder::strong_connect missing {:?}", dep_dot);
                         return FinderResult::MissingDependency(dep_dot);
                     }
-                    Some(dep_vertex) => {
+                    Some(dep_vertex_cell) => {
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
                         //   that conflicts are trnasitive
+                        let mut dep_vertex = dep_vertex_cell.borrow();
                         if !self.transitive_conflicts
                             && !vertex.conflicts(&dep_vertex)
                         {
@@ -152,15 +161,23 @@ impl TarjanSCCFinder {
                                 dep_dot
                             );
 
+                            // drop borrow guards
+                            drop(vertex);
+                            drop(dep_vertex);
+
                             // OPTIMIZATION: passing the vertex as an argument
                             // to `strong_connect`
                             // is also essential to avoid double look-up
                             let result = self.strong_connect(
                                 dep_dot,
-                                dep_vertex,
+                                &dep_vertex_cell,
                                 executed_clock,
                                 vertex_index,
                             );
+
+                            // borrow again
+                            vertex = vertex_cell.borrow_mut();
+                            dep_vertex = dep_vertex_cell.borrow();
 
                             // if missing dependency, give up
                             if let FinderResult::MissingDependency(_) = result {
@@ -171,6 +188,9 @@ impl TarjanSCCFinder {
                             vertex.update_low(|low| {
                                 cmp::min(low, dep_vertex.low())
                             });
+
+                            // drop dep borrow
+                            drop(dep_vertex);
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack() {
@@ -180,6 +200,9 @@ impl TarjanSCCFinder {
                                     cmp::min(low, dep_vertex.id())
                                 });
                             }
+
+                            // drop dep borrow
+                            drop(dep_vertex);
                         }
                     }
                 }
@@ -192,6 +215,9 @@ impl TarjanSCCFinder {
         if vertex.id() == vertex.low() {
             let mut scc = SCC::new();
 
+            // drop borrow
+            drop(vertex);
+
             loop {
                 // pop an element from the stack
                 let member_dot = self
@@ -202,9 +228,10 @@ impl TarjanSCCFinder {
                 log!("Finder::strong_connect new SCC member {:?}", member_dot);
 
                 // get its vertex and change its `on_stack` value
-                let member_vertex = vertex_index
-                    .get_mut(&member_dot)
-                    .expect("stack member should exist");
+                let mut member_vertex = vertex_index
+                    .find(&member_dot)
+                    .expect("stack member should exist")
+                    .borrow_mut();
                 member_vertex.set_on_stack(false);
 
                 // add it to the SCC and check it wasn't there before
