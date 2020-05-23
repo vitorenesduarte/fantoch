@@ -2,6 +2,7 @@ use super::index::VertexIndex;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
+use std::cell::RefCell;
 use std::cmp;
 use std::collections::{BTreeSet, HashSet};
 use threshold::{AEClock, EventSet, VClock};
@@ -67,17 +68,11 @@ impl TarjanSCCFinder {
     pub fn strong_connect(
         &mut self,
         dot: Dot,
+        vertex_cell: &RefCell<Vertex>,
         executed_clock: &AEClock<ProcessId>,
         vertex_index: &VertexIndex,
     ) -> FinderResult {
-        // get the vertex
-        let vertex_cell = match vertex_index.find(&dot) {
-            Some(cell) => cell,
-            None => {
-                // in this case this `dot` is no longer pending
-                return FinderResult::NotPending;
-            }
-        };
+        // borrow the vertex mutably
         let mut vertex = vertex_cell.borrow_mut();
 
         // update id
@@ -175,6 +170,7 @@ impl TarjanSCCFinder {
                             // is also essential to avoid double look-up
                             let result = self.strong_connect(
                                 dep_dot,
+                                &dep_vertex_cell,
                                 executed_clock,
                                 vertex_index,
                             );
