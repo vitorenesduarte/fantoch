@@ -158,8 +158,12 @@ mod tests {
         let mut workload =
             Workload::new(conflict_rate, total_commands, payload_size);
 
+        // check total and issued commands
+        assert_eq!(workload.total_commands(), total_commands);
+        assert_eq!(workload.issued_commands(), 0);
+
         // the first `total_commands` commands are `Some`
-        for _ in 1..=total_commands {
+        for i in 1..=total_commands {
             if let Some(cmd) = workload.next_cmd(&mut rifl_gen) {
                 let (key, value) = cmd.into_iter().next().unwrap();
                 // since the conflict is 100, the key should be BLACK
@@ -170,6 +174,10 @@ mod tests {
                 } else {
                     panic!("workload should generate PUT commands");
                 }
+
+                // check total and issued commands
+                assert_eq!(workload.total_commands(), total_commands);
+                assert_eq!(workload.issued_commands(), i);
             } else {
                 panic!("there should be a next command in this workload");
             }
