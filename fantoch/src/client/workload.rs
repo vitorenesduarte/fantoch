@@ -94,8 +94,9 @@ impl Workload {
         let should_conflict = match self.conflict_rate {
             0 => false,
             100 => true,
-            c => c < rand::thread_rng().gen_range(0, 100),
+            c => rand::thread_rng().gen_range(0, 100) < c,
         };
+
         if should_conflict {
             // black color to generate a conflict
             BLACK_COLOR.to_owned()
@@ -109,7 +110,7 @@ impl Workload {
     fn gen_cmd_value(&self) -> Value {
         let mut rng = rand::thread_rng();
         iter::repeat(())
-            .map(|()| rng.sample(Alphanumeric))
+            .map(|_| rng.sample(Alphanumeric))
             .take(self.payload_size)
             .collect()
     }
@@ -193,5 +194,37 @@ mod tests {
 
         // check the workload is still finished
         assert!(workload.finished());
+    }
+
+    #[test]
+    fn conflict_rate() {
+        for conflict_rate in vec![1, 2, 10, 50] {
+            // create rilf gen
+            let client_id = 1;
+            let mut rifl_gen = RiflGen::new(client_id);
+
+            // total commands
+            let total_commands = 100000;
+            let payload_size = 0;
+
+            // create workload
+            let mut workload =
+                Workload::new(conflict_rate, total_commands, payload_size);
+
+            // count black commands
+            let mut black_count = 0;
+
+            while let Some(cmd) = workload.next_cmd(&mut rifl_gen) {
+                // get command key and check if it's black
+                let (key, _) = cmd.into_iter().next().unwrap();
+                if key == BLACK_COLOR {
+                    black_count += 1;
+                }
+            }
+
+            // compute percentage of black commands
+            let percentage = (black_count * 100) as f64 / total_commands as f64;
+            assert_eq!(percentage.round() as usize, conflict_rate);
+        }
     }
 }
