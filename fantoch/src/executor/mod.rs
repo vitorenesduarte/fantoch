@@ -104,3 +104,24 @@ impl ExecutorResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn unwrap_ready_on_partial() {
+        let _ =
+            ExecutorResult::Partial(Rifl::new(1, 1), String::from("key"), None)
+                .unwrap_ready();
+    }
+
+    #[test]
+    #[should_panic]
+    fn unwrap_partial_on_ready() {
+        let _ =
+            ExecutorResult::Ready(CommandResult::new(Rifl::new(1, 1), 0))
+                .unwrap_partial();
+    }
+}
