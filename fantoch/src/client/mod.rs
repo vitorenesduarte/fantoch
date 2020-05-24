@@ -29,7 +29,8 @@ pub struct Client {
     latency_histogram: Histogram,
     /// an histogram with all the times in which commands were returned to this
     /// client; this is useful for throughput/time plots or in general to
-    /// compute throughput
+    /// compute throughput (this makes little sense for a single client, but
+    /// it's useful since we can aggregate the `Histogram`s of several clients)
     throughput_histogram: Histogram,
 }
 
@@ -217,5 +218,8 @@ mod tests {
 
         // check latencies
         assert_eq!(client.latency_histogram(), &Histogram::from(vec![10, 5]));
+
+        // check latencies
+        assert_eq!(client.throughput_histogram(), &Histogram::from(vec![10, 15]));
     }
 }
