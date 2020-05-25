@@ -139,7 +139,7 @@ impl DependencyGraph {
             log!(
                 "p{}: Graph:save_scc executed clock {:?}",
                 self.process_id,
-                self.executed_clock,
+                self.executed_clock
             );
 
             // remove from vertex index
