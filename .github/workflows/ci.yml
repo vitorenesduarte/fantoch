@@ -41,7 +41,7 @@ jobs:
 
       - name: Slack (success)
         uses: rtCamp/action-slack-notify@v2.0.2
-        if: job.status == 'success'
+        if: ${{ success() }}
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_CHANNEL: dev-ci
@@ -52,7 +52,7 @@ jobs:
 
       - name: Slack (failure)
         uses: rtCamp/action-slack-notify@v2.0.2
-        if: job.status == 'failure'
+        if: ${{ failure() }}
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_CHANNEL: dev-ci
