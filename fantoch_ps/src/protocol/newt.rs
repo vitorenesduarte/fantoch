@@ -704,9 +704,9 @@ mod tests {
         config.set_newt_tiny_quorums(true);
 
         // executors
-        let executor_1 = TableExecutor::new(config);
-        let executor_2 = TableExecutor::new(config);
-        let executor_3 = TableExecutor::new(config);
+        let executor_1 = TableExecutor::new(process_id_1, config);
+        let executor_2 = TableExecutor::new(process_id_2, config);
+        let executor_3 = TableExecutor::new(process_id_3, config);
 
         // newts
         let (mut newt_1, _) = Newt::<KC>::new(process_id_1, config);

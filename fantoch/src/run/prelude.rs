@@ -73,7 +73,8 @@ pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
-pub type PeriodicEventReceiver<P, R> = ChannelReceiver<FromPeriodicMessage<P, R>>;
+pub type PeriodicEventReceiver<P, R> =
+    ChannelReceiver<FromPeriodicMessage<P, R>>;
 pub type InspectReceiver<P, R> =
     ChannelReceiver<(fn(&P) -> R, ChannelSender<R>)>;
 

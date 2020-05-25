@@ -282,6 +282,7 @@ where
 
     // start executors
     task::executor::start_executors::<P>(
+        process_id,
         config,
         worker_to_executors_rxs,
         client_to_executors_rxs,

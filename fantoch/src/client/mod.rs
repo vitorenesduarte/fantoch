@@ -220,6 +220,9 @@ mod tests {
         assert_eq!(client.latency_histogram(), &Histogram::from(vec![10, 5]));
 
         // check latencies
-        assert_eq!(client.throughput_histogram(), &Histogram::from(vec![10, 15]));
+        assert_eq!(
+            client.throughput_histogram(),
+            &Histogram::from(vec![10, 15])
+        );
     }
 }

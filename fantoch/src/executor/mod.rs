@@ -11,7 +11,7 @@ pub use pending::Pending;
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::id::{ClientId, Rifl};
+use crate::id::{ClientId, ProcessId, Rifl};
 use crate::kvs::{KVOpResult, Key};
 use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
@@ -28,7 +28,7 @@ pub trait Executor {
         + Sync
         + MessageKey; // TODO why is Sync needed??
 
-    fn new(config: Config) -> Self;
+    fn new(process_id: ProcessId, config: Config) -> Self;
 
     fn wait_for(&mut self, cmd: &Command);
 
@@ -120,8 +120,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn unwrap_partial_on_ready() {
-        let _ =
-            ExecutorResult::Ready(CommandResult::new(Rifl::new(1, 1), 0))
-                .unwrap_partial();
+        let _ = ExecutorResult::Ready(CommandResult::new(Rifl::new(1, 1), 0))
+            .unwrap_partial();
     }
 }

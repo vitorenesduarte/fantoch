@@ -711,9 +711,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(config);
-        let executor_2 = GraphExecutor::new(config);
-        let executor_3 = GraphExecutor::new(config);
+        let executor_1 = GraphExecutor::new(process_id_1, config);
+        let executor_2 = GraphExecutor::new(process_id_2, config);
+        let executor_3 = GraphExecutor::new(process_id_3, config);
 
         // epaxos
         let (mut epaxos_1, _) = EPaxos::<KC>::new(process_id_1, config);

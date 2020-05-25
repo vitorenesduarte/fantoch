@@ -420,9 +420,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = BasicExecutor::new(config);
-        let executor_2 = BasicExecutor::new(config);
-        let executor_3 = BasicExecutor::new(config);
+        let executor_1 = BasicExecutor::new(process_id_1, config);
+        let executor_2 = BasicExecutor::new(process_id_2, config);
+        let executor_3 = BasicExecutor::new(process_id_3, config);
 
         // basic
         let (mut basic_1, _) = Basic::new(process_id_1, config);

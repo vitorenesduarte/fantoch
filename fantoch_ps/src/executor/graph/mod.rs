@@ -24,6 +24,7 @@ use std::mem;
 use threshold::{AEClock, VClock};
 
 pub struct DependencyGraph {
+    process_id: ProcessId,
     transitive_conflicts: bool,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
@@ -42,7 +43,7 @@ enum FinderInfo {
 
 impl DependencyGraph {
     /// Create a new `Graph`.
-    pub fn new(config: &Config) -> Self {
+    pub fn new(process_id: ProcessId, config: &Config) -> Self {
         // create bottom executed clock
         let ids = util::process_ids(config.n());
         let executed_clock = AEClock::with(ids);
@@ -52,6 +53,7 @@ impl DependencyGraph {
         // create to execute
         let to_execute = Vec::new();
         DependencyGraph {
+            process_id,
             transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
             vertex_index,
@@ -68,7 +70,7 @@ impl DependencyGraph {
 
     /// Add a new command with its clock to the queue.
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        log!("Graph::add {:?} {:?}", dot, clock);
+        log!("p{}: Graph::add {:?} {:?}", self.process_id, dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
@@ -91,9 +93,10 @@ impl DependencyGraph {
 
     #[must_use]
     fn find_scc(&mut self, dot: Dot) -> FinderInfo {
-        log!("Graph:find_scc {:?}", dot);
+        log!("p{}: Graph:find_scc {:?}", self.process_id, dot);
         // execute tarjan's algorithm
-        let mut finder = TarjanSCCFinder::new(self.transitive_conflicts);
+        let mut finder =
+            TarjanSCCFinder::new(self.process_id, self.transitive_conflicts);
         let finder_result = self.strong_connect(&mut finder, dot);
 
         // get sccs
@@ -124,10 +127,20 @@ impl DependencyGraph {
 
     fn save_scc(&mut self, scc: SCC, dots: &mut Vec<Dot>) {
         scc.into_iter().for_each(|dot| {
-            log!("Graph:save_scc removing {:?} from indexes", dot);
+            log!(
+                "p{}: Graph:save_scc removing {:?} from indexes",
+                self.process_id,
+                dot
+            );
 
             // update executed clock
             assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
+
+            log!(
+                "p{}: Graph:save_scc executed clock {:?}",
+                self.process_id,
+                self.executed_clock,
+            );
 
             // remove from vertex index
             let vertex = self
@@ -147,7 +160,12 @@ impl DependencyGraph {
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
-                log!("Graph::try_pending {:?} depended on {:?}", pending, dot);
+                log!(
+                    "p{}: Graph::try_pending {:?} depended on {:?}",
+                    self.process_id,
+                    pending,
+                    dot
+                );
                 // try to find new SCCs for each of those commands
                 let mut visited = HashSet::new();
 
@@ -230,10 +248,11 @@ mod tests {
     #[test]
     fn simple() {
         // create queue
+        let process_id = 1;
         let n = 2;
         let f = 1;
         let config = Config::new(n, f);
-        let mut queue = DependencyGraph::new(&config);
+        let mut queue = DependencyGraph::new(process_id, &config);
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -391,7 +410,8 @@ mod tests {
             config.set_transitive_conflicts(transitive_conflicts);
 
             // create queue
-            let mut queue = DependencyGraph::new(&config);
+            let process_id = 1;
+            let mut queue = DependencyGraph::new(process_id, &config);
 
             // add cmd 2
             queue.add(dot_2, cmd_2.clone(), clock_2.clone());
@@ -758,10 +778,11 @@ mod tests {
         transitive_conflicts: bool,
     ) -> Vec<Rifl> {
         // create queue
+        let process_id = 1;
         let f = 1;
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(&config);
+        let mut queue = DependencyGraph::new(process_id, &config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 

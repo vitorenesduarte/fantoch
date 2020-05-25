@@ -53,6 +53,7 @@ impl Workload {
             // generate new command
             Some(self.gen_cmd(rifl_gen))
         } else {
+            println!("client {:?} is done!", rifl_gen.source());
             None
         }
     }
