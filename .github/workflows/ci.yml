@@ -28,7 +28,7 @@ jobs:
 
       - name: Coverage
         uses: actions-rs/grcov@v0.1
-        config: ./github/workflows/grcov.yml
+        config: ./github/grcov.yml
 
       - name: Coveralls
         uses: coverallsapp/github-action@master
