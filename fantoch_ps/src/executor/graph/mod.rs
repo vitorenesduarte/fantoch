@@ -35,8 +35,10 @@ pub struct DependencyGraph {
 enum FinderInfo {
     // set of dots in found SCCs
     Found(Vec<Dot>),
-    // the missing dependency and set of dots visited while searching for SCCs
-    MissingDependency(Dot, HashSet<Dot>),
+    // set of dots in found SCCs (it's possible to find SCCs even though the
+    // search for another dot failed), the missing dependency and set of dots
+    // visited while searching for SCCs
+    MissingDependency(Vec<Dot>, Dot, HashSet<Dot>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -83,9 +85,11 @@ impl DependencyGraph {
                 // try to execute other commands if new SCCs were found
                 self.try_pending(dots);
             }
-            FinderInfo::MissingDependency(dep_dot, _visited) => {
+            FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
                 // update the pending
                 self.pending_index.index(dep_dot, dot);
+                // try to execute other commands if new SCCs were found
+                self.try_pending(dots);
             }
             FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
@@ -102,21 +106,23 @@ impl DependencyGraph {
         // get sccs
         let (sccs, visited) = finder.finalize(&mut self.vertex_index);
 
+        // NOTE: what follows must be done even if
+        // `FinderResult::MissingDependency` was returned - it's possible that
+        // while running the finder for some dot `X` we actually found SCCs with
+        // another dots, even though the find for this dot `X` failed
+        // create set of dots in ready SCCs
+        let mut dots = Vec::new();
+
+        // save new SCCs
+        sccs.into_iter().for_each(|scc| {
+            self.save_scc(scc, &mut dots);
+        });
+
         // save new SCCs if any were found
         match finder_result {
-            FinderResult::Found => {
-                // create set of dots in ready SCCs
-                let mut dots = Vec::new();
-
-                // save new SCCs
-                sccs.into_iter().for_each(|scc| {
-                    self.save_scc(scc, &mut dots);
-                });
-
-                FinderInfo::Found(dots)
-            }
+            FinderResult::Found => FinderInfo::Found(dots),
             FinderResult::MissingDependency(dep_dot) => {
-                FinderInfo::MissingDependency(dep_dot, visited)
+                FinderInfo::MissingDependency(dots, dep_dot, visited)
             }
             FinderResult::NotPending => FinderInfo::NotPending,
             FinderResult::NotFound => panic!(
@@ -131,15 +137,6 @@ impl DependencyGraph {
                 "p{}: Graph:save_scc removing {:?} from indexes",
                 self.process_id,
                 dot
-            );
-
-            // update executed clock
-            assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
-
-            log!(
-                "p{}: Graph:save_scc executed clock {:?}",
-                self.process_id,
-                self.executed_clock
             );
 
             // remove from vertex index
@@ -174,26 +171,38 @@ impl DependencyGraph {
                     if !visited.contains(&dot) {
                         match self.find_scc(dot) {
                             FinderInfo::Found(new_dots) => {
-                                // if new SCCs were found, now there are more
-                                // dots to check
-                                dots.extend(new_dots);
                                 // reset visited
                                 visited.clear();
+
+                                // if new SCCs were found, now there are more
+                                // child dots to check
+                                dots.extend(new_dots);
+                            }
+                            FinderInfo::MissingDependency(
+                                new_dots,
+                                dep_dot,
+                                new_visited,
+                            ) => {
+                                if !new_dots.is_empty() {
+                                    // if we found a new SCC, reset visited;
+                                    visited.clear();
+                                } else {
+                                    // otherwise, try other pending commands,
+                                    // but don't try those that were visited in
+                                    // this search
+                                    visited.extend(new_visited);
+                                }
+
+                                // if new SCCs were found, now there are more
+                                // child dots to check
+                                dots.extend(new_dots);
+
+                                // update pending
+                                self.pending_index.index(dep_dot, dot);
                             }
                             FinderInfo::NotPending => {
                                 // this happens if the pending dot is no longer
                                 // pending
-                            }
-                            FinderInfo::MissingDependency(
-                                dep_dot,
-                                new_visited,
-                            ) => {
-                                // update pending
-                                self.pending_index.index(dep_dot, dot);
-                                // if no SCCs were found, try other pending
-                                // commands, but don't try those that were
-                                // visited in this search
-                                visited.extend(new_visited);
                             }
                         }
                     }
@@ -214,7 +223,7 @@ impl DependencyGraph {
             Some(vertex) => finder.strong_connect(
                 dot,
                 vertex,
-                &self.executed_clock,
+                &mut self.executed_clock,
                 &self.vertex_index,
             ),
             None => {

@@ -76,7 +76,7 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         vertex_cell: &RefCell<Vertex>,
-        executed_clock: &AEClock<ProcessId>,
+        executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
     ) -> FinderResult {
         // borrow the vertex mutably
@@ -262,6 +262,20 @@ impl TarjanSCCFinder {
 
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
+
+                // update executed clock:
+                // - this is a nice optimization (that I think we missed in
+                //   Atlas); instead of waiting for the root-level recursion to
+                //   finish in order to update `executed_clock` (which is
+                //   consulted to decide what are the dependencies of a
+                //   command), we can update it right here, possibly reducing a
+                //   few iterations
+                assert!(executed_clock.add(&dot.source(), dot.sequence()));
+                log!(
+                    "p{}: Finder:strong_connect executed clock {:?}",
+                    self.process_id,
+                    executed_clock
+                );
 
                 // quit if root is found
                 if member_dot == dot {
