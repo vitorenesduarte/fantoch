@@ -1,4 +1,5 @@
 use crate::executor::TableExecutor;
+use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::common::table::{
     AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
 };
@@ -12,6 +13,7 @@ use fantoch::protocol::{
 };
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::mem;
 use threshold::VClock;
@@ -110,12 +112,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 clock,
                 process_votes,
             } => self.handle_mcollectack(from, dot, clock, process_votes),
-            Message::MCommit {
-                dot,
-                cmd,
-                clock,
-                votes,
-            } => self.handle_mcommit(dot, cmd, clock, votes),
+            Message::MCommit { dot, clock, votes } => {
+                self.handle_mcommit(from, dot, clock, votes)
+            }
             Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
             Message::MPhantom { dot, process_votes } => {
                 self.handle_mphantom(dot, process_votes)
@@ -180,13 +179,14 @@ impl<KC: KeyClocks> Newt<KC> {
         info.votes = process_votes;
 
         // create `MCollect` and target
+        // TODO maybe just don't send to self with `self.bp.all_but_me()`
         let mcollect = Message::MCollect {
             dot,
             cmd,
             clock,
             quorum: self.bp.fast_quorum(),
         };
-        let target = self.bp.fast_quorum();
+        let target = self.bp.all();
 
         // return `ToSend`
         Action::ToSend {
@@ -221,6 +221,14 @@ impl<KC: KeyClocks> Newt<KC> {
             return Action::Nothing;
         }
 
+        // check if part of fast quorum
+        if !quorum.contains(&self.bp.process_id) {
+            // if not, simply save the payload and set status to `PENDING`
+            info.status = Status::PENDING;
+            info.cmd = Some(cmd);
+            return Action::Nothing;
+        }
+
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
 
@@ -241,7 +249,8 @@ impl<KC: KeyClocks> Newt<KC> {
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
         info.quorum = quorum;
-        info.clock = clock;
+        // set consensus value
+        assert!(info.synod.set_if_not_accepted(|| clock));
 
         // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck {
@@ -316,12 +325,8 @@ impl<KC: KeyClocks> Newt<KC> {
                 let votes = Self::reset_votes(&mut info.votes);
 
                 // create `MCommit` and target
-                // TODO create a slim-MCommit that only sends the payload to the
-                // non-fast-quorum members, or send the payload
-                // to all in a slim-MConsensus
                 let mcommit = Message::MCommit {
                     dot,
-                    cmd: info.cmd.clone(),
                     clock: max_clock,
                     votes,
                 };
@@ -342,11 +347,11 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, dot, cmd, clock))]
+    #[instrument(skip(self, from, dot, clock))]
     fn handle_mcommit(
         &mut self,
+        from: ProcessId,
         dot: Dot,
-        cmd: Option<Command>,
         clock: u64,
         mut votes: Votes,
     ) -> Action<Message> {
@@ -355,16 +360,22 @@ impl<KC: KeyClocks> Newt<KC> {
         // get cmd info
         let info = self.cmds.get(dot);
 
+        if info.status == Status::START {
+            // TODO we missed the `MCollect` message and should try to recover
+            return Action::Nothing;
+        }
+
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
-            // TODO what about the executed status?
             return Action::Nothing;
         }
 
         // update command info:
         info.status = Status::COMMIT;
-        info.cmd = cmd;
-        info.clock = clock;
+
+        // handle commit in synod
+        let msg = SynodMessage::MChosen(clock);
+        assert!(info.synod.handle(from, msg).is_none());
 
         // get current votes (probably from phantom messages) merge them with
         // received votes so that all together can be added to a votes
@@ -404,21 +415,17 @@ impl<KC: KeyClocks> Newt<KC> {
         // }
 
         // create execution info if not a noop
-        if let Some(cmd) = info.cmd.clone() {
-            // create execution info
-            let rifl = cmd.rifl();
-            let execution_info = cmd.into_iter().map(|(key, op)| {
-                // find votes on this key
-                let key_votes = votes
-                    .remove(&key)
-                    .expect("there should be votes on all command keys");
-                ExecutionInfo::votes(dot, info.clock, rifl, key, op, key_votes)
-            });
-            self.to_executor.extend(execution_info);
-        } else {
-            // TODO if noOp, we should add `Votes` to all tables
-            panic!("noOp votes should be broadcast to all executors");
-        }
+        let cmd = info.cmd.clone().expect("there should be a command payload");
+        // create execution info
+        let rifl = cmd.rifl();
+        let execution_info = cmd.into_iter().map(|(key, op)| {
+            // find votes on this key
+            let key_votes = votes
+                .remove(&key)
+                .expect("there should be votes on all command keys");
+            ExecutionInfo::votes(dot, clock, rifl, key, op, key_votes)
+        });
+        self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
         Action::ToForward {
@@ -518,14 +525,24 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 }
 
+// consensus value is simply the final clock for the command; this differs from
+// `Atlas` where the command payload must also be part of consensus.
+type ConsensusValue = u64;
+
+fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
+    todo!("recovery not implemented yet")
+}
+
 // `NewtInfo` contains all information required in the life-cyle of a
 // `Command`
 #[derive(Clone)]
 struct NewtInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
-    cmd: Option<Command>, // `None` if noOp
-    clock: u64,
+    synod: Synod<u64>,
+    // `None` if no set yet (not like in `Atlas` where this `None` would be a
+    // `noOp` - there are no `noOp` in `Newt`)
+    cmd: Option<Command>,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
     votes: Votes,
@@ -535,12 +552,18 @@ struct NewtInfo {
 }
 
 impl Info for NewtInfo {
-    fn new(_: ProcessId, _: usize, _: usize, fast_quorum_size: usize) -> Self {
+    fn new(
+        process_id: ProcessId,
+        n: usize,
+        f: usize,
+        fast_quorum_size: usize,
+    ) -> Self {
+        let initial_value = 0;
         Self {
             status: Status::START,
             quorum: HashSet::new(),
             cmd: None,
-            clock: 0,
+            synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             votes: Votes::new(None),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
@@ -563,7 +586,6 @@ pub enum Message {
     },
     MCommit {
         dot: Dot,
-        cmd: Option<Command>,
         clock: u64,
         votes: Votes,
     },
@@ -621,6 +643,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 #[derive(PartialEq, Clone)]
 enum Status {
     START,
+    PENDING,
     COLLECT,
     COMMIT,
 }

@@ -240,7 +240,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         info.quorum = quorum;
         // create and set consensus value
         let value = ConsensusValue::with(cmd, clock.clone());
-        assert!(info.synod.maybe_set_value(|| value));
+        assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck { dot, clock };
