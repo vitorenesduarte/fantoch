@@ -1,11 +1,12 @@
-on: [push, pull_request]
-
 name: Continuous Integration
 
+on: [push, pull_request]
+
 jobs:
-  check:
+  test:
     name: Test Suite
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
