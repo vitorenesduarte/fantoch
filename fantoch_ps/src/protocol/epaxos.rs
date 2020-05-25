@@ -293,7 +293,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             // create consensus value
             // TODO can the following be more performant or at least more
             // ergonomic?
-            let cmd = info.synod.value().clone().cmd;
+            let cmd = info.synod.value().cmd.clone();
             let value = ConsensusValue::with(cmd, final_clock);
 
             // fast path condition:
@@ -344,7 +344,6 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
-            // TODO what about the executed status?
             return Action::Nothing;
         }
 

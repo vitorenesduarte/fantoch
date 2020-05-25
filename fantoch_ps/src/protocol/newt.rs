@@ -296,7 +296,7 @@ impl<KC: KeyClocks> Newt<KC> {
         info.votes.merge(remote_votes);
 
         // update quorum clocks while computing max clock and its number of
-        // occurences
+        // occurrences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
@@ -774,10 +774,8 @@ mod tests {
         executor.wait_for(&cmd);
         let mcollect = process.submit(None, cmd);
 
-        // check that the mcollect is being sent to 2 processes
-        let check_target = |target: &HashSet<u64>| {
-            target.len() == 2 * f && target.contains(&1) && target.contains(&2)
-        };
+        // check that the mcollect is being sent to *all* processes
+        let check_target = |target: &HashSet<u64>| target.len() == n;
         assert!(
             matches!(mcollect.clone(), Action::ToSend{target, ..} if check_target(&target))
         );
