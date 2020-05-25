@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
 use threshold::VClock;
+use tracing::instrument;
 
 pub type NewtSequential = Newt<SequentialKeyClocks>;
 pub type NewtAtomic = Newt<AtomicKeyClocks>;
@@ -158,6 +159,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
 impl<KC: KeyClocks> Newt<KC> {
     /// Handles a submit operation by a client.
+    #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
@@ -193,6 +195,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -255,6 +258,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
+    #[instrument(skip(self, from, dot, clock, remote_votes))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
@@ -338,6 +342,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
+    #[instrument(skip(self, dot, cmd, clock))]
     fn handle_mcommit(
         &mut self,
         dot: Dot,
@@ -375,26 +380,28 @@ impl<KC: KeyClocks> Newt<KC> {
         //   it was, `info.quorum` is not empty) generate phantoms
         // - n = 3 is a special case  where phantom votes are not generated as
         //   they are not needed
-        let mut to_send = Action::Nothing;
-        if self.bp.config.n() > 3
-            && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
-        {
-            if let Some(cmd) = info.cmd.as_ref() {
-                // if not a no op, check if we can generate more votes that can
-                // speed-up execution
-                let process_votes = self.key_clocks.vote(cmd, info.clock);
 
-                // create `MPhantom` if there are new votes
-                if !process_votes.is_empty() {
-                    let mphantom = Message::MPhantom { dot, process_votes };
-                    let target = self.bp.all();
-                    to_send = Action::ToSend {
-                        target,
-                        msg: mphantom,
-                    };
-                }
-            }
-        }
+        // TODO
+        // let mut to_send = Action::Nothing;
+        // if self.bp.config.n() > 3
+        //     && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
+        // {
+        //     if let Some(cmd) = info.cmd.as_ref() {
+        //         // if not a no op, check if we can generate more votes that can
+        //         // speed-up execution
+        //         let process_votes = self.key_clocks.vote(cmd, info.clock);
+
+        //         // create `MPhantom` if there are new votes
+        //         if !process_votes.is_empty() {
+        //             let mphantom = Message::MPhantom { dot, process_votes };
+        //             let target = self.bp.all();
+        //             to_send = Action::ToSend {
+        //                 target,
+        //                 msg: mphantom,
+        //             };
+        //         }
+        //     }
+        // }
 
         // create execution info if not a noop
         if let Some(cmd) = info.cmd.clone() {
@@ -413,13 +420,13 @@ impl<KC: KeyClocks> Newt<KC> {
             panic!("noOp votes should be broadcast to all executors");
         }
 
-        // record that this command has been committed
-        self.cmds.commit(dot);
-
-        // return `ToSend`
-        to_send
+        // notify self with the committed dot
+        Action::ToForward {
+            msg: Message::MCommitDot { dot },
+        }
     }
 
+    #[instrument(skip(self, dot, votes))]
     fn handle_mphantom(&mut self, dot: Dot, votes: Votes) -> Action<Message> {
         log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, votes);
 
@@ -442,6 +449,7 @@ impl<KC: KeyClocks> Newt<KC> {
         Action::Nothing
     }
 
+    #[instrument(skip(self, from, dot))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
@@ -453,6 +461,7 @@ impl<KC: KeyClocks> Newt<KC> {
         Action::Nothing
     }
 
+    #[instrument(skip(self, from, committed))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -465,9 +474,15 @@ impl<KC: KeyClocks> Newt<KC> {
             from
         );
         self.cmds.committed_by(from, committed);
-        Action::Nothing
+        // compute newly stable dots
+        let stable = self.cmds.stable();
+        // create `ToForward` to self
+        Action::ToForward {
+            msg: Message::MStable { stable },
+        }
     }
 
+    #[instrument(skip(self, from, stable))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
@@ -480,12 +495,12 @@ impl<KC: KeyClocks> Newt<KC> {
         Action::Nothing
     }
 
+    #[instrument(skip(self))]
     fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
-        // retrieve the committed clock and stable dots
+        // retrieve the committed clock
         let committed = self.cmds.committed();
-        let stable = self.cmds.stable();
 
         // create `ToSend`
         let tosend = Action::ToSend {
@@ -493,12 +508,7 @@ impl<KC: KeyClocks> Newt<KC> {
             msg: Message::MGarbageCollection { committed },
         };
 
-        // create `ToForward` to self
-        let toforward = Action::ToForward {
-            msg: Message::MStable { stable },
-        };
-
-        vec![tosend, toforward]
+        vec![tosend]
     }
 
     // Replaces the value `local_votes` with empty votes, returning the previous
