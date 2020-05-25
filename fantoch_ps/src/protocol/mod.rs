@@ -64,7 +64,7 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<NewtSequential>(3, 1, false, workers, executors).await;
+            run_test::<NewtAtomic>(3, 1, false, workers, executors).await;
         assert_eq!(slow_paths, 0);
     }
 
