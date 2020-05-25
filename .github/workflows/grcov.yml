@@ -1,0 +1,7 @@
+ignore-not-existing: true
+output-type: lcov
+output-path: ./lcov.info
+ignore:
+  - "/*"
+  - "fantoch_ps/src/bin/*"
+  - "fantoch_bote/src/main.rs"
