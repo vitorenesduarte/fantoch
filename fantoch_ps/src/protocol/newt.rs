@@ -384,11 +384,11 @@ impl<KC: KeyClocks> Newt<KC> {
         // TODO
         // let mut to_send = Action::Nothing;
         // if self.bp.config.n() > 3
-        //     && (self.bp.config.newt_tiny_quorums() || !info.quorum.is_empty())
-        // {
+        //     && (self.bp.config.newt_tiny_quorums() ||
+        // !info.quorum.is_empty()) {
         //     if let Some(cmd) = info.cmd.as_ref() {
-        //         // if not a no op, check if we can generate more votes that can
-        //         // speed-up execution
+        //         // if not a no op, check if we can generate more votes that
+        // can         // speed-up execution
         //         let process_votes = self.key_clocks.vote(cmd, info.clock);
 
         //         // create `MPhantom` if there are new votes
@@ -789,8 +789,12 @@ mod tests {
 
         // all processes handle it
         let to_sends = simulation.forward_to_processes(mcommit);
-        // there should be nothing to send
-        assert!(to_sends.is_empty());
+
+        // check the MCommitDot
+        let check_msg = |msg: &Message| matches!(msg, Message::MCommitDot {..});
+        assert!(to_sends.into_iter().all(|(_, action)| {
+            matches!(action, Action::ToForward { msg } if check_msg(&msg))
+        }));
 
         // process 1 should have something to the executor
         let (process, executor) = simulation.get_process(process_id_1);
