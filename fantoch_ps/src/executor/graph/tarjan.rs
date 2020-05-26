@@ -19,6 +19,7 @@ pub enum FinderResult {
 }
 
 pub struct TarjanSCCFinder {
+    process_id: ProcessId,
     transitive_conflicts: bool,
     id: usize,
     stack: Vec<Dot>,
@@ -27,8 +28,9 @@ pub struct TarjanSCCFinder {
 
 impl TarjanSCCFinder {
     /// Creates a new SCC finder that employs Tarjan's algorithm.
-    pub fn new(transitive_conflicts: bool) -> Self {
+    pub fn new(process_id: ProcessId, transitive_conflicts: bool) -> Self {
         Self {
+            process_id,
             transitive_conflicts,
             id: 0,
             stack: Vec::new(),
@@ -43,13 +45,18 @@ impl TarjanSCCFinder {
         self,
         vertex_index: &VertexIndex,
     ) -> (Vec<SCC>, HashSet<Dot>) {
+        let process_id = self.process_id;
         // reset the id of each dot in the stack, while computing the set of
         // visited dots
         let visited = self
             .stack
             .into_iter()
             .map(|dot| {
-                log!("Finder::finalize removing {:?} from stack", dot);
+                log!(
+                    "p{}: Finder::finalize removing {:?} from stack",
+                    process_id,
+                    dot
+                );
 
                 // find vertex and reset its id
                 let vertex_cell =
@@ -69,8 +76,9 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         vertex_cell: &RefCell<Vertex>,
-        executed_clock: &AEClock<ProcessId>,
+        executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
+        ready_commands: &mut usize,
     ) -> FinderResult {
         // borrow the vertex mutably
         let mut vertex = vertex_cell.borrow_mut();
@@ -78,7 +86,12 @@ impl TarjanSCCFinder {
         // update id
         self.id += 1;
 
-        log!("Finder::strong_connect {:?} with id {}", dot, self.id);
+        log!(
+            "p{}: Finder::strong_connect {:?} with id {}",
+            self.process_id,
+            dot,
+            self.id
+        );
 
         // set id and low for vertex
         vertex.set_id(self.id);
@@ -124,7 +137,11 @@ impl TarjanSCCFinder {
 
                 // create dot and find vertex
                 let dep_dot = Dot::new(*process_id, dep);
-                log!("Finder::strong_connect non-executed {:?}", dep_dot);
+                log!(
+                    "p{}: Finder::strong_connect non-executed {:?}",
+                    self.process_id,
+                    dep_dot
+                );
 
                 // ignore dependency if self
                 if dep_dot == dot {
@@ -136,7 +153,11 @@ impl TarjanSCCFinder {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
                         // we can't be sure until we have it locally
-                        log!("Finder::strong_connect missing {:?}", dep_dot);
+                        log!(
+                            "p{}: Finder::strong_connect missing {:?}",
+                            self.process_id,
+                            dep_dot
+                        );
                         return FinderResult::MissingDependency(dep_dot);
                     }
                     Some(dep_vertex_cell) => {
@@ -148,7 +169,8 @@ impl TarjanSCCFinder {
                             && !vertex.conflicts(&dep_vertex)
                         {
                             log!(
-                                "Finder::strong_connect non-conflicting {:?}",
+                                "p{}: Finder::strong_connect non-conflicting {:?}",
+                                self.process_id,
                                 dep_dot
                             );
                             continue;
@@ -157,7 +179,8 @@ impl TarjanSCCFinder {
                         // if not visited, visit
                         if dep_vertex.id() == 0 {
                             log!(
-                                "Finder::strong_connect non-visited {:?}",
+                                "p{}: Finder::strong_connect non-visited {:?}",
+                                self.process_id,
                                 dep_dot
                             );
 
@@ -173,6 +196,7 @@ impl TarjanSCCFinder {
                                 &dep_vertex_cell,
                                 executed_clock,
                                 vertex_index,
+                                ready_commands,
                             );
 
                             // borrow again
@@ -194,7 +218,7 @@ impl TarjanSCCFinder {
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack() {
-                                log!("Finder::strong_connect dependency on stack {:?}", dep_dot);
+                                log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
                                 // min low with dep id
                                 vertex.update_low(|low| {
                                     cmp::min(low, dep_vertex.id())
@@ -225,7 +249,14 @@ impl TarjanSCCFinder {
                     .pop()
                     .expect("there should be an SCC member on the stack");
 
-                log!("Finder::strong_connect new SCC member {:?}", member_dot);
+                log!(
+                    "p{}: Finder::strong_connect new SCC member {:?}",
+                    self.process_id,
+                    member_dot
+                );
+
+                // increment ready count
+                *ready_commands += 1;
 
                 // get its vertex and change its `on_stack` value
                 let mut member_vertex = vertex_index
@@ -236,6 +267,21 @@ impl TarjanSCCFinder {
 
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
+
+                // update executed clock:
+                // - this is a nice optimization (that I think we missed in
+                //   Atlas); instead of waiting for the root-level recursion to
+                //   finish in order to update `executed_clock` (which is
+                //   consulted to decide what are the dependencies of a
+                //   command), we can update it right here, possibly reducing a
+                //   few iterations
+                assert!(executed_clock
+                    .add(&member_dot.source(), member_dot.sequence()));
+                log!(
+                    "p{}: Finder:strong_connect executed clock {:?}",
+                    self.process_id,
+                    executed_clock
+                );
 
                 // quit if root is found
                 if member_dot == dot {

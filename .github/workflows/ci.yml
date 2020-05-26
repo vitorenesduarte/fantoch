@@ -26,6 +26,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        timeout-minutes: 20
 
       - name: Coverage
         uses: actions-rs/grcov@v0.1
@@ -37,3 +38,25 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: ./lcov.info
+
+      - name: Slack (success)
+        uses: rtCamp/action-slack-notify@v2.0.2
+        if: ${{ success() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: dev-ci
+          SLACK_COLOR: '#5F9744'
+          SLACK_ICON: https://avatars1.githubusercontent.com/u/44036562?s=48
+          SLACK_TITLE: CI success
+          SLACK_USERNAME: CI
+
+      - name: Slack (failure)
+        uses: rtCamp/action-slack-notify@v2.0.2
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: dev-ci
+          SLACK_COLOR: '#B94947'
+          SLACK_ICON: https://avatars1.githubusercontent.com/u/44036562?s=48
+          SLACK_TITLE: CI failure
+          SLACK_USERNAME: CI

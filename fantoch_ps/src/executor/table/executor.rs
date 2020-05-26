@@ -3,7 +3,7 @@ use crate::protocol::common::table::VoteRange;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{Executor, ExecutorResult, MessageKey, Pending};
-use fantoch::id::{Dot, Rifl};
+use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +17,7 @@ pub struct TableExecutor {
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
-    fn new(config: Config) -> Self {
+    fn new(_process_id: ProcessId, config: Config) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
         let table = MultiVotesTable::new(config.n(), stability_threshold);

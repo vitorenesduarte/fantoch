@@ -240,7 +240,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         info.quorum = quorum;
         // create and set consensus value
         let value = ConsensusValue::with(cmd, clock.clone());
-        assert!(info.synod.maybe_set_value(|| value));
+        assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
         let mcollectack = Message::MCollectAck { dot, clock };
@@ -293,7 +293,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             // create consensus value
             // TODO can the following be more performant or at least more
             // ergonomic?
-            let cmd = info.synod.value().clone().cmd;
+            let cmd = info.synod.value().cmd.clone();
             let value = ConsensusValue::with(cmd, final_clock);
 
             // fast path condition:
@@ -344,7 +344,6 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
-            // TODO what about the executed status?
             return Action::Nothing;
         }
 
@@ -712,9 +711,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(config);
-        let executor_2 = GraphExecutor::new(config);
-        let executor_3 = GraphExecutor::new(config);
+        let executor_1 = GraphExecutor::new(process_id_1, config);
+        let executor_2 = GraphExecutor::new(process_id_2, config);
+        let executor_3 = GraphExecutor::new(process_id_3, config);
 
         // epaxos
         let (mut epaxos_1, _) = EPaxos::<KC>::new(process_id_1, config);

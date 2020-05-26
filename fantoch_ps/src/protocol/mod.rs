@@ -41,13 +41,13 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    #[ignore]
     #[test]
     fn sim_newt_5_1_test() {
         let slow_paths = sim_test::<NewtSequential>(5, 1, false);
         assert_eq!(slow_paths, 0);
     }
 
-    // TODO ignore newt tests for now (since GC is not implemented)
     #[ignore]
     #[tokio::test]
     async fn run_newt_3_1_sequential_test() {
@@ -59,7 +59,6 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    // TODO ignore newt tests for now (since GC is not implemented)
     #[ignore]
     #[tokio::test]
     async fn run_newt_3_1_atomic_test() {
@@ -68,7 +67,7 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<NewtSequential>(3, 1, false, workers, executors).await;
+            run_test::<NewtAtomic>(3, 1, false, workers, executors).await;
         assert_eq!(slow_paths, 0);
     }
 

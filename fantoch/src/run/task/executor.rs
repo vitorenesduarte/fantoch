@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::ClientId;
+use crate::id::{ClientId, ProcessId};
 use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 /// Starts executors.
 pub fn start_executors<P>(
+    process_id: ProcessId,
     config: Config,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientReceiver>,
@@ -22,11 +23,17 @@ pub fn start_executors<P>(
 
     // create executor workers
     for (from_workers, from_clients) in incoming {
-        task::spawn(executor_task::<P>(config, from_workers, from_clients));
+        task::spawn(executor_task::<P>(
+            process_id,
+            config,
+            from_workers,
+            from_clients,
+        ));
     }
 }
 
 async fn executor_task<P>(
+    process_id: ProcessId,
     config: Config,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientReceiver,
@@ -34,7 +41,7 @@ async fn executor_task<P>(
     P: Protocol,
 {
     // create executor
-    let mut executor = P::Executor::new(config);
+    let mut executor = P::Executor::new(process_id, config);
 
     // mapping from client id to its rifl acks channel
     let mut client_rifl_acks = HashMap::new();

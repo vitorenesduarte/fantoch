@@ -55,11 +55,11 @@ where
     /// is still 0). If the value was successfully changed, `true` is
     /// returned and `false` otherwise.
     #[must_use]
-    pub fn maybe_set_value<F>(&mut self, value_gen: F) -> bool
+    pub fn set_if_not_accepted<F>(&mut self, value_gen: F) -> bool
     where
         F: FnOnce() -> V,
     {
-        self.acceptor.maybe_set_value(value_gen)
+        self.acceptor.set_if_not_accepted(value_gen)
     }
 
     /// Returns the current consensus value (not necessarily accepted).
@@ -380,7 +380,7 @@ where
     }
 
     // Set the consensus value if no value has been accepted yet.
-    fn maybe_set_value<F>(&mut self, value_gen: F) -> bool
+    fn set_if_not_accepted<F>(&mut self, value_gen: F) -> bool
     where
         F: FnOnce() -> V,
     {
@@ -478,7 +478,7 @@ mod tests {
 
         // check it's possible to set values (as ballots are still 0), and check
         // value
-        assert!(synod_1.maybe_set_value(|| 13));
+        assert!(synod_1.set_if_not_accepted(|| 13));
         assert_eq!(synod_1.value(), &13);
 
         // synod 1: generate prepare
@@ -486,7 +486,7 @@ mod tests {
 
         // it's still possible to set the value as the prepare has not been
         // handled
-        assert!(synod_1.maybe_set_value(|| 2));
+        assert!(synod_1.set_if_not_accepted(|| 2));
         assert_eq!(synod_1.value(), &2);
 
         // handle the prepare at n - f processes, including synod 1
@@ -504,7 +504,7 @@ mod tests {
             .expect("there should a promise from 4");
 
         // check it's no longer possible to set the value
-        assert!(!synod_1.maybe_set_value(|| 13));
+        assert!(!synod_1.set_if_not_accepted(|| 13));
         assert_eq!(synod_1.value(), &2);
 
         // synod 1: handle promises

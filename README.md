@@ -20,7 +20,7 @@ Next:
 - this specification can then be used for both
   - geo-distributed simulations that only output latency (infinite CPU is assumed)
   - actually running the protocols (in any setting)
-- this is achieved by providing a "simulator" and a "runner" that are protocol-agnostic and are only aware of the `Protocol` trait
+- this is achieved by providing a "simulator" and a "runner" that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
 
 ## License
 
