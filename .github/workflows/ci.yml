@@ -22,7 +22,6 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
