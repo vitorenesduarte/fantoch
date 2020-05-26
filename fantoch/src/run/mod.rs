@@ -448,6 +448,9 @@ where
             }
         }
     }
+
+    println!("open loop client {} exited loop", client_id);
+
     // return client
     client
 }

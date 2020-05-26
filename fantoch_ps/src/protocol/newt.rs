@@ -30,6 +30,9 @@ pub struct Newt<KC> {
     key_clocks: KC,
     cmds: CommandsInfo<NewtInfo>,
     to_executor: Vec<ExecutionInfo>,
+    // commit notifications that arrived before the initial `MCollect` message
+    // (this may be possible even without network failures due to multiplexing)
+    buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
 }
 
 impl<KC: KeyClocks> Protocol for Newt<KC> {
@@ -61,6 +64,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             fast_quorum_size,
         );
         let to_executor = Vec::new();
+        let buffered_commits = HashMap::new();
 
         // create `Newt`
         let protocol = Self {
@@ -68,6 +72,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             key_clocks,
             cmds,
             to_executor,
+            buffered_commits,
         };
 
         // create periodic events
@@ -226,7 +231,16 @@ impl<KC: KeyClocks> Newt<KC> {
             // if not, simply save the payload and set status to `PENDING`
             info.status = Status::PENDING;
             info.cmd = Some(cmd);
-            return Action::Nothing;
+
+            // check if there's a buffered commit notification; if yes, handle
+            // the commit again (since now we have the payload)
+            if let Some((from, clock, votes)) =
+                self.buffered_commits.remove(&dot)
+            {
+                return self.handle_mcommit(from, dot, clock, votes);
+            } else {
+                return Action::Nothing;
+            }
         }
 
         // check if it's a message from self
@@ -362,6 +376,11 @@ impl<KC: KeyClocks> Newt<KC> {
 
         if info.status == Status::START {
             // TODO we missed the `MCollect` message and should try to recover
+            // the payload:
+            // - save this notification just in case we've received the
+            //   `MCollect` and `MCommit` in opposite orders (due to
+            //   multiplexing)
+            self.buffered_commits.insert(dot, (from, clock, votes));
             return Action::Nothing;
         }
 

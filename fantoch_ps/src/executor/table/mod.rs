@@ -8,6 +8,7 @@ pub use executor::{TableExecutionInfo, TableExecutor};
 use crate::protocol::common::table::VoteRange;
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, Key};
+use fantoch::log;
 use fantoch::util;
 use std::collections::{BTreeMap, HashMap};
 use std::mem;
@@ -16,6 +17,7 @@ use threshold::ARClock;
 type SortId = (u64, Dot);
 
 pub struct MultiVotesTable {
+    process_id: ProcessId,
     n: usize,
     stability_threshold: usize,
     tables: HashMap<Key, VotesTable>,
@@ -23,8 +25,13 @@ pub struct MultiVotesTable {
 
 impl MultiVotesTable {
     /// Create a new `MultiVotesTable` instance given the stability threshold.
-    pub fn new(n: usize, stability_threshold: usize) -> Self {
+    pub fn new(
+        process_id: ProcessId,
+        n: usize,
+        stability_threshold: usize,
+    ) -> Self {
         Self {
+            process_id,
             n,
             stability_threshold,
             tables: HashMap::new(),
@@ -74,7 +81,11 @@ impl MultiVotesTable {
             Some(table) => table,
             None => {
                 // table does not exist, let's create a new one and insert it
-                let table = VotesTable::new(self.n, self.stability_threshold);
+                let table = VotesTable::new(
+                    self.process_id,
+                    self.n,
+                    self.stability_threshold,
+                );
                 self.tables.entry(key.clone()).or_insert(table)
             }
         };
@@ -84,6 +95,7 @@ impl MultiVotesTable {
 }
 
 struct VotesTable {
+    process_id: ProcessId,
     n: usize,
     stability_threshold: usize,
     // `votes_clock` collects all votes seen until now so that we can compute
@@ -93,10 +105,15 @@ struct VotesTable {
 }
 
 impl VotesTable {
-    fn new(n: usize, stability_threshold: usize) -> Self {
+    fn new(
+        process_id: ProcessId,
+        n: usize,
+        stability_threshold: usize,
+    ) -> Self {
         let ids = util::process_ids(n);
         let votes_clock = ARClock::with(ids);
         Self {
+            process_id,
             n,
             stability_threshold,
             votes_clock,
@@ -117,6 +134,14 @@ impl VotesTable {
         //   their dot
         let sort_id = (clock, dot);
 
+        log!(
+            "p{}: Table::add {:?} {:?} | sort id {:?}",
+            self.process_id,
+            dot,
+            clock,
+            sort_id
+        );
+
         // add op to the sorted list of ops to be executed
         let res = self.ops.insert(sort_id, (rifl, op));
         // and check there was nothing there for this exact same position
@@ -127,6 +152,7 @@ impl VotesTable {
     }
 
     fn add_votes(&mut self, votes: Vec<VoteRange>) {
+        log!("p{}: Table::add_votes votes: {:?}", self.process_id, votes);
         votes.into_iter().for_each(|vote_range| {
             // assert there's at least one new vote
             assert!(self.votes_clock.add_range(
@@ -137,6 +163,11 @@ impl VotesTable {
             // assert that the clock size didn't change
             assert_eq!(self.votes_clock.len(), self.n);
         });
+        log!(
+            "p{}: Table::add_votes votes_clock: {:?}",
+            self.process_id,
+            self.votes_clock
+        );
     }
 
     fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
@@ -147,6 +178,12 @@ impl VotesTable {
         //   also execute it without 11 being stable, because, once 11 is
         //   stable, it will be the first to be executed either way
         let stable_clock = self.stable_clock();
+        log!(
+            "p{}: Table::stable_ops stable_clock: {:?}",
+            self.process_id,
+            stable_clock
+        );
+
         let first_dot = Dot::new(1, 1);
         let next_stable = (stable_clock + 1, first_dot);
 
@@ -166,6 +203,12 @@ impl VotesTable {
             // now remaingin contains what's the stable
             remaining
         };
+
+        log!(
+            "p{}: Table::stable_ops stable dots: {:?}",
+            self.process_id,
+            stable.iter().map(|((_, dot), _)| dot.clone()).collect::<Vec<_>>()
+        );
 
         // return stable ops
         stable.into_iter().map(|(_, id_and_action)| id_and_action)
@@ -195,9 +238,10 @@ mod tests {
 
         // let's consider that n = 5 and q = 3
         // so the threshold should be n - q + 1 = 3
+        let process_id = 1;
         let n = 5;
         let stability_threshold = 3;
-        let mut table = VotesTable::new(n, stability_threshold);
+        let mut table = VotesTable::new(process_id, n, stability_threshold);
 
         // in this example we'll use the dot as rifl
 
@@ -316,7 +360,8 @@ mod tests {
         ];
 
         all_ops.permutation().for_each(|p| {
-            let mut table = VotesTable::new(n, stability_threshold);
+            let mut table =
+                VotesTable::new(process_id_1, n, stability_threshold);
             let permutation_total_order: Vec<_> = p
                 .clone()
                 .into_iter()
@@ -343,7 +388,7 @@ mod tests {
         let n = 5;
         let f = 1;
         let stability_threshold = n - f;
-        let mut table = VotesTable::new(n, stability_threshold);
+        let mut table = VotesTable::new(process_id_1, n, stability_threshold);
 
         // in this example we'll use the dot as rifl
 
@@ -451,9 +496,11 @@ mod tests {
     #[test]
     fn phantom_votes() {
         // create table
+        let process_id = 1;
         let n = 5;
         let stability_threshold = 3;
-        let mut table = MultiVotesTable::new(n, stability_threshold);
+        let mut table =
+            MultiVotesTable::new(process_id, n, stability_threshold);
 
         // create keys
         let key_a = String::from("A");

@@ -17,10 +17,10 @@ pub struct TableExecutor {
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
-    fn new(_process_id: ProcessId, config: Config) -> Self {
+    fn new(process_id: ProcessId, config: Config) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
-        let table = MultiVotesTable::new(config.n(), stability_threshold);
+        let table = MultiVotesTable::new(process_id, config.n(), stability_threshold);
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = config.executors() == 1;
