@@ -4,36 +4,31 @@ use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
-use fantoch_ps::protocol::{
-    AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
-};
+use fantoch_ps::protocol::{AtlasSequential, NewtSequential};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running newt n = 5 | f = 1...");
-    let config = Config::new(5, 1);
+    println!(">running newt n = 3 | f = 1 | real_time = false");
+    let mut config = Config::new(3, 1);
+    config.set_newt_real_time(false);
     run_in_thread(move || increasing_load::<NewtSequential>(config));
 
-    println!(">running atlas n = 5 | f = 1...");
-    let mut config = Config::new(5, 1);
+    println!(">running newt n = 3 | f = 1 | real_time = true");
+    let mut config = Config::new(3, 1);
+    config.set_newt_real_time(false);
+    run_in_thread(move || increasing_load::<NewtSequential>(config));
+
+    println!(">running atlas n = 3 | f = 1 | transitive_conflicts = true");
+    let mut config = Config::new(3, 1);
     config.set_transitive_conflicts(true);
     run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
-    println!(">running atlas n = 5 | f = 2...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
+    println!(">running atlas n = 3 | f = 1 | transitive_conflicts = false");
+    let mut config = Config::new(3, 1);
+    config.set_transitive_conflicts(false);
     run_in_thread(move || increasing_load::<AtlasSequential>(config));
-
-    println!(">running epaxos n = 5...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<EPaxosSequential>(config));
-
-    println!(">running fpaxos n = 5 | f = 1");
-    let config = Config::new(5, 1);
-    run_in_thread(move || increasing_load::<FPaxos>(config));
 }
 
 #[allow(dead_code)]
@@ -81,13 +76,18 @@ fn equidistant<P: Protocol>() {
 #[allow(dead_code)]
 fn increasing_load<P: Protocol>(config: Config) {
     let planet = Planet::new();
-    let regions5 = vec![
+    let regions = vec![
         Region::new("asia-south1"),
         Region::new("europe-north1"),
         Region::new("southamerica-east1"),
-        Region::new("australia-southeast1"),
-        Region::new("europe-west1"),
+        /* Region::new("australia-southeast1"),
+         * Region::new("europe-west1"), */
     ];
+    assert_eq!(
+        regions.len(),
+        config.n(),
+        "the number of regions should be equals to n"
+    );
 
     // number of clients
     let cs = vec![8, 16, 32, 64, 128, 256, 512];
@@ -106,10 +106,10 @@ fn increasing_load<P: Protocol>(config: Config) {
         println!();
 
         // process regions
-        let process_regions = regions5.clone();
+        let process_regions = regions.clone();
 
         // client regions
-        let client_regions = regions5.clone();
+        let client_regions = regions.clone();
 
         run::<P>(
             config,
@@ -250,6 +250,8 @@ where
         .spawn(run)
         .unwrap();
 
-    // Wait for thread to join
-    child.join().unwrap();
+    // wait for thread to end
+    if let Err(e) = child.join() {
+        println!("error in thread: {:?}", e);
+    }
 }
