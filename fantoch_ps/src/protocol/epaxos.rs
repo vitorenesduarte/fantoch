@@ -42,7 +42,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) =
             config.epaxos_quorum_sizes();
@@ -69,7 +69,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval();
+        let gc_delay = config.garbage_collection_interval() as u64;
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both

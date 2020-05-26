@@ -45,7 +45,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size, _) =
             config.newt_quorum_sizes();
@@ -77,7 +77,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval();
+        let gc_delay = config.garbage_collection_interval() as u64;
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
@@ -100,9 +100,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) -> Action<Message> {
-        self.handle_submit(dot, cmd)
+        self.handle_submit(dot, cmd, time)
     }
 
     /// Handles protocol messages.
@@ -110,7 +110,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) -> Action<Message> {
         match msg {
             Message::MCollect {
@@ -118,12 +118,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 cmd,
                 quorum,
                 clock,
-            } => self.handle_mcollect(from, dot, cmd, quorum, clock),
+            } => self.handle_mcollect(from, dot, cmd, quorum, clock, time),
             Message::MCollectAck {
                 dot,
                 clock,
                 process_votes,
-            } => self.handle_mcollectack(from, dot, clock, process_votes),
+            } => self.handle_mcollectack(from, dot, clock, process_votes, time),
             Message::MCommit { dot, clock, votes } => {
                 self.handle_mcommit(from, dot, clock, votes)
             }
@@ -171,11 +171,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
 impl<KC: KeyClocks> Newt<KC> {
     /// Handles a submit operation by a client.
-    #[instrument(skip(self, dot, cmd))]
+    #[instrument(skip(self, dot, cmd, time))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        time: &dyn SysTime,
     ) -> Action<Message> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
@@ -184,7 +185,9 @@ impl<KC: KeyClocks> Newt<KC> {
         // - this may also consume votes since we're bumping the clocks here
         // - for that reason, we'll store these votes locally and not recompute
         //   them once we receive the `MCollect` from self
-        let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
+        let min_clock = self.bp.min_clock(0, time);
+        let (clock, process_votes) =
+            self.key_clocks.bump_and_vote(&cmd, min_clock);
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -208,7 +211,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock))]
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -216,6 +219,7 @@ impl<KC: KeyClocks> Newt<KC> {
         cmd: Command,
         quorum: HashSet<ProcessId>,
         remote_clock: u64,
+        time: &dyn SysTime,
     ) -> Action<Message> {
         log!(
             "p{}: MCollect({:?}, {:?}, {}) from {}",
@@ -259,9 +263,11 @@ impl<KC: KeyClocks> Newt<KC> {
             (remote_clock, Votes::new(None))
         } else {
             // otherwise, compute clock considering the `remote_clock` as its
-            // minimum value
+            // minimum value (if real time, the min clock is the max between
+            // current time and `remote_clock`)
+            let min_clock = self.bp.min_clock(remote_clock, time);
             let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, remote_clock);
+                self.key_clocks.bump_and_vote(&cmd, min_clock);
             // check that there's one vote per key
             assert_eq!(process_votes.len(), cmd.key_count());
             (clock, process_votes)
@@ -289,13 +295,14 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, clock, remote_votes))]
+    #[instrument(skip(self, from, dot, clock, remote_votes, time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         clock: u64,
         remote_votes: Votes,
+        time: &dyn SysTime,
     ) -> Action<Message> {
         log!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {}",
@@ -327,7 +334,8 @@ impl<KC: KeyClocks> Newt<KC> {
         //   that could potentially delay the execution of this command
         match info.cmd.as_ref() {
             Some(cmd) => {
-                let local_votes = self.key_clocks.vote(cmd, max_clock);
+                let min_clock = self.bp.min_clock(max_clock, time);
+                let local_votes = self.key_clocks.vote(cmd, min_clock);
                 // update votes with local votes
                 info.votes.merge(local_votes);
             }
