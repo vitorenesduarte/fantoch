@@ -183,7 +183,7 @@ where
 
         while simulation_status != SimulationStatus::Done {
             let actions = self.schedule
-                .next_actions(&mut self.simulation.time)
+                .next_actions(self.simulation.time())
                 .expect("there should be more actions since stability is always running");
 
             // for each scheduled action
@@ -255,7 +255,8 @@ where
                                         // if there's extra time, compute the
                                         // final simulation time
                                         simulation_final_time =
-                                            self.simulation.time.now() + extra;
+                                            self.simulation.time().now()
+                                                + extra;
                                         SimulationStatus::ExtraSimulationTime
                                     }
                                     None => {
@@ -292,7 +293,7 @@ where
             // simulation if we're past the final simulation time
             let should_end_sim = simulation_status
                 == SimulationStatus::ExtraSimulationTime
-                && self.simulation.time.now() > simulation_final_time;
+                && self.simulation.time().now() > simulation_final_time;
             if should_end_sim {
                 simulation_status = SimulationStatus::Done;
             }
@@ -375,7 +376,7 @@ where
         let distance = self.distance(from, to);
         // schedule action
         self.schedule.schedule(
-            &mut self.simulation.time,
+            self.simulation.time(),
             distance as u128,
             action,
         );
@@ -391,7 +392,7 @@ where
         // create action
         let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
         self.schedule
-            .schedule(&mut self.simulation.time, delay, action);
+            .schedule(self.simulation.time(), delay, action);
     }
 
     /// Retrieves the region of some process/client.

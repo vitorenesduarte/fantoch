@@ -7,7 +7,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 
 pub struct Simulation<P: Protocol> {
-    pub time: SimTime,
+    time: SimTime,
     processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
@@ -24,6 +24,11 @@ where
             processes: HashMap::new(),
             clients: HashMap::new(),
         }
+    }
+
+    // Return a mutable reference to the simulation time.
+    pub fn time(&mut self) -> &mut SimTime {
+        &mut self.time
     }
 
     /// Registers a `Process` in the `Simulation` by storing it in a `Cell`.
