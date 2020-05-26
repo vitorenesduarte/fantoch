@@ -83,6 +83,7 @@ impl Protocol for Basic {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        _time: &dyn SysTime,
     ) -> Action<Self::Message> {
         self.handle_submit(dot, cmd)
     }
@@ -489,9 +490,9 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in basic 1
-        let (process, executor, _) = simulation.get_process(process_id_1);
+        let (process, executor, time) = simulation.get_process(process_id_1);
         executor.wait_for(&cmd);
-        let mstore = process.submit(None, cmd);
+        let mstore = process.submit(None, cmd, time);
 
         // check that the mstore is being sent to 2 processes
         let check_target = |target: &HashSet<u64>| {
@@ -559,8 +560,8 @@ mod tests {
             .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _, _) = simulation.get_process(target);
-        let action = process.submit(None, cmd);
+        let (process, _, time) = simulation.get_process(target);
+        let action = process.submit(None, cmd, time);
         let check_msg = |msg: &Message| matches!(msg, Message::MStore {dot, ..} if dot == &Dot::new(process_id_1, 2));
         assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
     }

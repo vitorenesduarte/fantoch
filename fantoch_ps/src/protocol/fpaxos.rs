@@ -86,7 +86,7 @@ impl Protocol for FPaxos {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> Action<Message> {
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command, _time: &dyn SysTime) -> Action<Message> {
         self.handle_submit(dot, cmd)
     }
 
@@ -554,7 +554,7 @@ mod tests {
         // register command in executor and submit it in fpaxos 1
         let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let spawn = process.submit(None, cmd);
+        let spawn = process.submit(None, cmd, time);
 
         // check that the register created a spawn commander to self and handle
         // it locally
@@ -627,8 +627,8 @@ mod tests {
             .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _, _) = simulation.get_process(target);
-        let action = process.submit(None, cmd);
+        let (process, _, time) = simulation.get_process(target);
+        let action = process.submit(None, cmd, time);
         let check_msg = |msg: &Message| matches!(msg, Message::MSpawnCommander{slot, ..} if slot == &2);
         assert!(matches!(action, Action::ToForward {msg} if check_msg(&msg)));
     }

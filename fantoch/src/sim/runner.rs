@@ -191,14 +191,14 @@ where
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
                         // get process and executor
-                        let (process, executor, _) =
+                        let (process, executor, time) =
                             self.simulation.get_process(process_id);
 
                         // register command in the executor
                         executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
-                        let protocol_action = process.submit(None, cmd);
+                        let protocol_action = process.submit(None, cmd, time);
                         self.schedule_protocol_action(
                             process_id,
                             MessageRegion::Process(process_id),

@@ -593,7 +593,7 @@ async fn handle_from_client<P>(
     P: Protocol + 'static,
 {
     // submit command in process
-    let to_send = process.submit(dot, cmd);
+    let to_send = process.submit(dot, cmd, time);
     handle_action(
         worker_index,
         process_id,

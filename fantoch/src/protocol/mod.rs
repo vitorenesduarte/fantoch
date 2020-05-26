@@ -61,6 +61,7 @@ pub trait Protocol: Clone {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        time: &dyn SysTime,
     ) -> Action<Self::Message>;
 
     #[must_use]
