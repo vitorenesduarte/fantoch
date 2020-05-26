@@ -8,12 +8,20 @@ pub trait SysTime: Send + 'static + Sync /* TODO why is Sync needed here */ {
 // TODO find a better name
 pub struct RunTime;
 
+const MAX_U64: u128 = u64::max_value() as u128;
+
 impl SysTime for RunTime {
     fn now(&self) -> u64 {
         let now = SystemTime::now();
-        now.duration_since(UNIX_EPOCH)
+        let micros = now
+            .duration_since(UNIX_EPOCH)
             .expect("we're way past UNIX EPOCH")
-            .as_micros() as u64
+            .as_micros();
+        // make sure we don't truncate
+        if micros > MAX_U64 {
+            panic!("current time (micros) doesn't fit in 64bits");
+        }
+        micros as u64
     }
 }
 
