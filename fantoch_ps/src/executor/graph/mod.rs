@@ -79,29 +79,41 @@ impl DependencyGraph {
         // index in vertex index and check if it hasn't been indexed before
         assert!(self.vertex_index.index(vertex));
 
+        // get current command ready count and count newly ready commands
+        let initial_ready = self.to_execute.len();
+        let mut newly_ready_commands = 0;
+
         // try to find new SCCs
-        match self.find_scc(dot) {
+        match self.find_scc(dot, &mut newly_ready_commands) {
             FinderInfo::Found(dots) => {
                 // try to execute other commands if new SCCs were found
-                self.try_pending(dots);
+                self.try_pending(dots, &mut newly_ready_commands);
             }
             FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
                 // update the pending
                 self.pending_index.index(dep_dot, dot);
                 // try to execute other commands if new SCCs were found
-                self.try_pending(dots);
+                self.try_pending(dots, &mut newly_ready_commands);
             }
             FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
+
+        // check that all newly ready commands have been incorporated
+        assert_eq!(self.to_execute.len(), initial_ready + newly_ready_commands);
     }
 
     #[must_use]
-    fn find_scc(&mut self, dot: Dot) -> FinderInfo {
+    fn find_scc(
+        &mut self,
+        dot: Dot,
+        newly_ready_commands: &mut usize,
+    ) -> FinderInfo {
         log!("p{}: Graph:find_scc {:?}", self.process_id, dot);
         // execute tarjan's algorithm
         let mut finder =
             TarjanSCCFinder::new(self.process_id, self.transitive_conflicts);
-        let finder_result = self.strong_connect(&mut finder, dot);
+        let finder_result =
+            self.strong_connect(&mut finder, dot, newly_ready_commands);
 
         // get sccs
         let (sccs, visited) = finder.finalize(&mut self.vertex_index);
@@ -109,11 +121,10 @@ impl DependencyGraph {
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that
         // while running the finder for some dot `X` we actually found SCCs with
-        // another dots, even though the find for this dot `X` failed
-        // create set of dots in ready SCCs
-        let mut dots = Vec::new();
+        // another dots, even though the find for this dot `X` failed!
 
         // save new SCCs
+        let mut dots = Vec::new();
         sccs.into_iter().for_each(|scc| {
             self.save_scc(scc, &mut dots);
         });
@@ -153,7 +164,11 @@ impl DependencyGraph {
         })
     }
 
-    fn try_pending(&mut self, mut dots: Vec<Dot>) {
+    fn try_pending(
+        &mut self,
+        mut dots: Vec<Dot>,
+        newly_ready_commands: &mut usize,
+    ) {
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
@@ -169,7 +184,7 @@ impl DependencyGraph {
                 for dot in pending {
                     // only try to find new SCCs from non-visited commands
                     if !visited.contains(&dot) {
-                        match self.find_scc(dot) {
+                        match self.find_scc(dot, newly_ready_commands) {
                             FinderInfo::Found(new_dots) => {
                                 // reset visited
                                 visited.clear();
@@ -217,6 +232,7 @@ impl DependencyGraph {
         &mut self,
         finder: &mut TarjanSCCFinder,
         dot: Dot,
+        newly_ready_commands: &mut usize,
     ) -> FinderResult {
         // get the vertex
         match self.vertex_index.find(&dot) {
@@ -225,6 +241,7 @@ impl DependencyGraph {
                 vertex,
                 &mut self.executed_clock,
                 &self.vertex_index,
+                newly_ready_commands,
             ),
             None => {
                 // in this case this `dot` is no longer pending
@@ -253,6 +270,7 @@ mod tests {
     use permutator::{Combination, Permutation};
     use std::cell::RefCell;
     use std::collections::{HashMap, HashSet};
+    use threshold::{AboveExSet, EventSet};
 
     #[test]
     fn simple() {
@@ -833,5 +851,150 @@ mod tests {
 
         // return sorted commands
         sorted
+    }
+
+    #[test]
+    fn sccs_found_and_missing_dep() {
+        /*
+        MCommit((4, 31), Clock { clock: {60, 50, 50, 30, 60} })
+        MCommit((4, 32), Clock { clock: {60, 50, 50, 31, 60} })
+        MCommit((4, 33), Clock { clock: {60, 50, 50, 32, 60} })
+        MCommit((4, 34), Clock { clock: {60, 50, 50, 33, 60} })
+        MCommit((4, 35), Clock { clock: {60, 50, 50, 34, 60} })
+        MCommit((4, 36), Clock { clock: {60, 50, 50, 35, 60} })
+        MCommit((4, 37), Clock { clock: {60, 50, 50, 36, 60} })
+        MCommit((4, 38), Clock { clock: {60, 50, 50, 37, 60} })
+        MCommit((4, 39), Clock { clock: {60, 50, 50, 38, 60} })
+        MCommit((4, 40), Clock { clock: {60, 50, 50, 39, 60} })
+        MCommit((5, 70), Clock { clock: {60, 50, 50, 40, 61} })
+        ...
+        stuff happens and at some point (5, 70) is tried because one of its dependencies, (2, 50), is delivered
+        ...
+        Graph:save_scc removing (2, 50) from indexes
+        Graph:save_scc executed clock Clock { clock: {60, 50, 50, 30, 60} }
+        Graph::try_pending {(5, 70), ...} depended on (2, 50)
+        Graph:find_scc (5, 70)
+        */
+        // in order for this test to pass, sccs must be found by the finder; the
+        // following loop stops once that happens
+        std::iter::repeat(()).any(|_| check_sccs_found_with_missing_dep());
+    }
+
+    fn check_sccs_found_with_missing_dep() -> bool {
+        let black_command = || {
+            let rifl = Rifl::new(1, 1);
+            Command::put(rifl, String::from("black"), String::new())
+        };
+
+        // create queue
+        let process_id = 4;
+        let n = 5;
+        let f = 1;
+        let mut config = Config::new(n, f);
+        let transitive_conflicts = false;
+        config.set_transitive_conflicts(transitive_conflicts);
+        let mut queue = DependencyGraph::new(process_id, &config);
+
+        // // create vertex index and index all dots
+        // let mut vertex_index = VertexIndex::new();
+
+        // (5, 70): only (5, 61) is missing
+        let missing_dot = Dot::new(5, 61);
+
+        let root_dot = Dot::new(5, 70);
+        queue.vertex_index.index(Vertex::new(
+            root_dot,
+            black_command(),
+            util::vclock(vec![60, 50, 50, 40, 61]),
+        ));
+
+        // (4, 31)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 31),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 30, 60]),
+        ));
+        // (4, 32)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 32),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 31, 60]),
+        ));
+        // (4, 33)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 33),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 32, 60]),
+        ));
+        // (4, 34)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 34),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 33, 60]),
+        ));
+        // (4, 35)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 35),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 34, 60]),
+        ));
+        // (4, 36)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 36),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 35, 60]),
+        ));
+        // (4, 37)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 37),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 36, 60]),
+        ));
+        // (4, 38)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 38),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 37, 60]),
+        ));
+        // (4, 39)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 39),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 38, 60]),
+        ));
+        // (4, 40)
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 40),
+            black_command(),
+            util::vclock(vec![60, 50, 50, 39, 60]),
+        ));
+
+        // create executed clock
+        queue.executed_clock = AEClock::from(
+            util::vclock(vec![60, 50, 50, 30, 60]).into_iter().map(
+                |(process_id, max_set)| {
+                    (process_id, AboveExSet::from_events(max_set.event_iter()))
+                },
+            ),
+        );
+
+        // create ready commands counter and try to find an SCC
+        let mut ready_commands = 0;
+        let finder_info = queue.find_scc(root_dot, &mut ready_commands);
+
+        if let FinderInfo::MissingDependency(to_be_executed, missing, _) =
+            finder_info
+        {
+            // check the missing dot
+            assert_eq!(missing, missing_dot);
+
+            // check that ready commands are actually delivered
+            assert_eq!(ready_commands, to_be_executed.len());
+
+            // return whether sccs have been found
+            !to_be_executed.is_empty()
+        } else {
+            panic!("FinderInfo::MissingDependency not found");
+        }
     }
 }

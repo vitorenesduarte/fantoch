@@ -78,6 +78,7 @@ impl TarjanSCCFinder {
         vertex_cell: &RefCell<Vertex>,
         executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
+        ready_commands: &mut usize,
     ) -> FinderResult {
         // borrow the vertex mutably
         let mut vertex = vertex_cell.borrow_mut();
@@ -195,6 +196,7 @@ impl TarjanSCCFinder {
                                 &dep_vertex_cell,
                                 executed_clock,
                                 vertex_index,
+                                ready_commands,
                             );
 
                             // borrow again
@@ -252,6 +254,9 @@ impl TarjanSCCFinder {
                     self.process_id,
                     member_dot
                 );
+
+                // increment ready count
+                *ready_commands += 1;
 
                 // get its vertex and change its `on_stack` value
                 let mut member_vertex = vertex_index
