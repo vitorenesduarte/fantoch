@@ -8,6 +8,8 @@ pub struct Config {
     f: usize,
     /// defines whether newt should employ tiny quorums or not
     newt_tiny_quorums: bool,
+    /// defines whether newt should bump clocks based on real time or not
+    newt_real_time: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
@@ -33,6 +35,8 @@ impl Config {
         }
         // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;
+        // by default, `newt_real_time = false`
+        let newt_real_time = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
         // by default, execution is not skipped
@@ -49,6 +53,7 @@ impl Config {
             n,
             f,
             newt_tiny_quorums,
+            newt_real_time,
             transitive_conflicts,
             execute_at_commit,
             leader,
@@ -76,6 +81,16 @@ impl Config {
     /// Changes the value of `newt_tiny_quorums`.
     pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
         self.newt_tiny_quorums = newt_tiny_quorums;
+    }
+
+    /// Checks whether newt real time is enabled or not.
+    pub fn newt_real_time(&self) -> bool {
+        self.newt_real_time
+    }
+
+    /// Changes the value of `new_real_time`.
+    pub fn set_newt_real_time(&mut self, newt_real_time: bool) {
+        self.newt_real_time = newt_real_time;
     }
 
     /// Checks whether we can assume that conflicts are transitive.
@@ -234,6 +249,17 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_newt_tiny_quorums(true);
         assert!(config.newt_tiny_quorums());
+
+        // by default, newt real time is false
+        assert!(!config.newt_real_time());
+
+        // if we change it to false, remains false
+        config.set_newt_real_time(false);
+        assert!(!config.newt_real_time());
+
+        // if we change it to true, it becomes true
+        config.set_newt_real_time(true);
+        assert!(config.newt_real_time());
 
         // by default, transitive conflicts is false
         assert!(!config.transitive_conflicts());

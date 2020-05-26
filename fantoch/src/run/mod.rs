@@ -636,7 +636,6 @@ pub mod tests {
         P: Protocol + Send + 'static,
         R: Clone + Debug + Send + 'static,
     {
-        // TODO remove task local set?
         // create local task set
         let local = tokio::task::LocalSet::new();
 

@@ -32,7 +32,7 @@ impl Protocol for Basic {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(PeriodicEvent, usize)>) {
+    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = config.basic_quorum_size();
         let write_quorum_size = 0; // there's no write quorum as we have 100% fast paths
@@ -60,7 +60,7 @@ impl Protocol for Basic {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval();
+        let gc_delay = config.garbage_collection_interval() as u64;
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both

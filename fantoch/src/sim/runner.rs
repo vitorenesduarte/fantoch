@@ -16,7 +16,7 @@ enum ScheduleAction<P: Protocol> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
-    PeriodicEvent(ProcessId, P::PeriodicEvent, u128),
+    PeriodicEvent(ProcessId, P::PeriodicEvent, u64),
 }
 #[derive(Clone)]
 enum MessageRegion {
@@ -68,24 +68,25 @@ where
         let mut periodic_actions = Vec::new();
 
         // create processes
-        let to_discover: Vec<_> =
-            process_regions
-                .into_iter()
-                .zip(1..=config.n())
-                .map(|(region, process_id)| {
-                    let process_id = process_id as u64;
-                    // create process and save it
-                    let (process, process_events) = P::new(process_id, config);
-                    processes.push((region.clone(), process));
+        let to_discover: Vec<_> = process_regions
+            .into_iter()
+            .zip(1..=config.n())
+            .map(|(region, process_id)| {
+                let process_id = process_id as u64;
+                // create process and save it
+                let (process, process_events) = P::new(process_id, config);
+                processes.push((region.clone(), process));
 
-                    // save periodic actions
-                    periodic_actions.extend(process_events.into_iter().map(
-                        |(event, delay)| (process_id, event, delay as u128),
-                    ));
+                // save periodic actions
+                periodic_actions.extend(
+                    process_events
+                        .into_iter()
+                        .map(|(event, delay)| (process_id, event, delay)),
+                );
 
-                    (process_id, region)
-                })
-                .collect();
+                (process_id, region)
+            })
+            .collect();
 
         // create processs to region mapping
         let process_to_region = to_discover.clone().into_iter().collect();
@@ -152,7 +153,7 @@ where
     /// the simulation run after clients are finished.
     pub fn run(
         &mut self,
-        extra_sim_time: Option<u128>,
+        extra_sim_time: Option<u64>,
     ) -> (
         HashMap<ProcessId, ProtocolMetrics>,
         HashMap<Region, (usize, Histogram)>,
@@ -176,7 +177,7 @@ where
         (self.processes_metrics(), self.clients_latencies())
     }
 
-    fn simulation_loop(&mut self, extra_sim_time: Option<u128>) {
+    fn simulation_loop(&mut self, extra_sim_time: Option<u64>) {
         let mut simulation_status = SimulationStatus::ClientsRunning;
         let mut clients_done = 0;
         let mut simulation_final_time = 0;
@@ -375,11 +376,8 @@ where
         // compute distance between regions
         let distance = self.distance(from, to);
         // schedule action
-        self.schedule.schedule(
-            self.simulation.time(),
-            distance as u128,
-            action,
-        );
+        self.schedule
+            .schedule(self.simulation.time(), distance, action);
     }
 
     /// Schedules the next periodic event.
@@ -387,7 +385,7 @@ where
         &mut self,
         process_id: ProcessId,
         event: P::PeriodicEvent,
-        delay: u128,
+        delay: u64,
     ) {
         // create action
         let action = ScheduleAction::PeriodicEvent(process_id, event, delay);

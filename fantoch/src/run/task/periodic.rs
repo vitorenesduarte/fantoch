@@ -4,7 +4,7 @@ use crate::run::prelude::*;
 use tokio::time::{self, Duration, Instant};
 
 pub async fn periodic_task<P, R>(
-    events: Vec<(P::PeriodicEvent, usize)>,
+    events: Vec<(P::PeriodicEvent, u64)>,
     mut periodic_to_workers: PeriodicToWorkers<P, R>,
     to_periodic_inspect: Option<InspectReceiver<P, R>>,
 ) where

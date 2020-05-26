@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 pub struct Schedule<A> {
     // mapping from scheduled time to list of scheduled actions
-    schedule: BTreeMap<u128, Vec<A>>,
+    schedule: BTreeMap<u64, Vec<A>>,
 }
 
 impl<A> Schedule<A> {
@@ -15,7 +15,7 @@ impl<A> Schedule<A> {
     }
 
     /// Schedule a new `ScheduleAction` at a certain `time`.
-    pub fn schedule(&mut self, time: &SimTime, delay: u128, action: A) {
+    pub fn schedule(&mut self, time: &SimTime, delay: u64, action: A) {
         // compute schedule time
         let schedule_time = time.now() + delay;
 
