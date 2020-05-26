@@ -48,6 +48,7 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    #[ignore]
     #[tokio::test]
     async fn run_newt_3_1_sequential_test() {
         // newt sequential can only handle one worker but many executors
@@ -58,6 +59,7 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    #[ignore]
     #[tokio::test]
     async fn run_newt_3_1_atomic_test() {
         // newt atomic can handle as many workers as we want but we may want to
