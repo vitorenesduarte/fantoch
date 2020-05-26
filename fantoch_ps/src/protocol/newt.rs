@@ -540,8 +540,8 @@ struct NewtInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
     synod: Synod<u64>,
-    // `None` if no set yet (not like in `Atlas` where this `None` would be a
-    // `noOp` - there are no `noOp` in `Newt`)
+    // `None` if not set yet (not like in `Atlas` where this `None` would be a
+    // `noOp` - there are no `noOp`'s in `Newt`)
     cmd: Option<Command>,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
