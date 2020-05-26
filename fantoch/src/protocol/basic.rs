@@ -6,6 +6,7 @@ use crate::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
     Protocol, ProtocolMetrics,
 };
+use crate::time::SysTime;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -91,6 +92,7 @@ impl Protocol for Basic {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+        _time: &dyn SysTime,
     ) -> Action<Message> {
         match msg {
             Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
@@ -110,6 +112,7 @@ impl Protocol for Basic {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
@@ -486,7 +489,7 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in basic 1
-        let (process, executor) = simulation.get_process(process_id_1);
+        let (process, executor, _) = simulation.get_process(process_id_1);
         executor.wait_for(&cmd);
         let mstore = process.submit(None, cmd);
 
@@ -536,7 +539,7 @@ mod tests {
         }));
 
         // process 1 should have something to the executor
-        let (process, executor) = simulation.get_process(process_id_1);
+        let (process, executor, _) = simulation.get_process(process_id_1);
         let to_executor = process.to_executor();
         assert_eq!(to_executor.len(), 1);
 
@@ -553,10 +556,10 @@ mod tests {
 
         // handle the previous command result
         let (target, cmd) = simulation
-            .forward_to_client(cmd_result, &time)
+            .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _) = simulation.get_process(target);
+        let (process, _, _) = simulation.get_process(target);
         let action = process.submit(None, cmd);
         let check_msg = |msg: &Message| matches!(msg, Message::MStore {dot, ..} if dot == &Dot::new(process_id_1, 2));
         assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));

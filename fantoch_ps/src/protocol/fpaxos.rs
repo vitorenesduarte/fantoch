@@ -8,6 +8,7 @@ use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
     ProtocolMetrics,
 };
+use fantoch::time::SysTime;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -94,6 +95,7 @@ impl Protocol for FPaxos {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+        _time: &dyn SysTime,
     ) -> Action<Message> {
         match msg {
             Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
@@ -117,6 +119,7 @@ impl Protocol for FPaxos {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
@@ -549,14 +552,14 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in fpaxos 1
-        let (process, executor) = simulation.get_process(target);
+        let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
         let spawn = process.submit(None, cmd);
 
         // check that the register created a spawn commander to self and handle
         // it locally
         let maccept = if let Action::ToForward { msg } = spawn {
-            process.handle(process_id_1, msg)
+            process.handle(process_id_1, msg, time)
         } else {
             panic!("Action::ToForward not found!");
         };
@@ -604,7 +607,7 @@ mod tests {
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
-        let (process, executor) = simulation.get_process(process_id_1);
+        let (process, executor, _) = simulation.get_process(process_id_1);
         let to_executor = process.to_executor();
         assert_eq!(to_executor.len(), 1);
 
@@ -621,10 +624,10 @@ mod tests {
 
         // handle the previous command result
         let (target, cmd) = simulation
-            .forward_to_client(cmd_result, &time)
+            .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _) = simulation.get_process(target);
+        let (process, _, _) = simulation.get_process(target);
         let action = process.submit(None, cmd);
         let check_msg = |msg: &Message| matches!(msg, Message::MSpawnCommander{slot, ..} if slot == &2);
         assert!(matches!(action, Action::ToForward {msg} if check_msg(&msg)));

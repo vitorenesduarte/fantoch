@@ -24,6 +24,7 @@ pub use info::{CommandsInfo, Info};
 
 use crate::command::Command;
 use crate::config::Config;
+use crate::time::SysTime;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
 use crate::metrics::Metrics;
@@ -67,12 +68,14 @@ pub trait Protocol: Clone {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+        time: &dyn SysTime,
     ) -> Action<Self::Message>;
 
     #[must_use]
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self::Message>>;
 
     #[must_use]
