@@ -41,6 +41,7 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    #[ignore]
     #[test]
     fn sim_newt_5_1_test() {
         let slow_paths = sim_test::<NewtSequential>(5, 1, false);
