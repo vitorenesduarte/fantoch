@@ -86,7 +86,12 @@ impl Protocol for FPaxos {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command, _time: &dyn SysTime) -> Action<Message> {
+    fn submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+        _time: &dyn SysTime,
+    ) -> Action<Message> {
         self.handle_submit(dot, cmd)
     }
 

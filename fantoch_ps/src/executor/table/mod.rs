@@ -207,7 +207,10 @@ impl VotesTable {
         log!(
             "p{}: Table::stable_ops stable dots: {:?}",
             self.process_id,
-            stable.iter().map(|((_, dot), _)| dot.clone()).collect::<Vec<_>>()
+            stable
+                .iter()
+                .map(|((_, dot), _)| dot.clone())
+                .collect::<Vec<_>>()
         );
 
         // return stable ops

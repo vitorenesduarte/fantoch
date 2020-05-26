@@ -24,10 +24,10 @@ pub use info::{CommandsInfo, Info};
 
 use crate::command::Command;
 use crate::config::Config;
-use crate::time::SysTime;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
 use crate::metrics::Metrics;
+use crate::time::SysTime;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
