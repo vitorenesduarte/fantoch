@@ -4,3 +4,4 @@ output-path: ./lcov.info
 ignore:
   - "fantoch_ps/src/bin/*"
   - "fantoch_bote/src/main.rs"
+  - "/usr/share/rust/.cargo/*"
