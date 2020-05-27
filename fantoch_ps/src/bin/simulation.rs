@@ -18,10 +18,10 @@ fn main() {
         run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
         for hybrid in vec![false, true] {
-            for interval in vec![100, 50, 10, 5, 1] {
+            for interval in vec![100, 50, 10, 5] {
                 println!(
                     ">running newt n = {} | f = {} | clock_bump_interval = {}ms | hybrid_clocks = {}",
-                    f, n, interval, hybrid
+                    n, f, interval, hybrid
                 );
                 let mut config = Config::new(n, f);
                 config.set_newt_tiny_quorums(true);

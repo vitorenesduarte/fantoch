@@ -136,8 +136,10 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             Message::MCommit { dot, clock, votes } => {
                 self.handle_mcommit(from, dot, clock, votes)
             }
-            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
-            Message::MDetached { votes } => self.handle_mdetached(votes),
+            Message::MCommitDot { dot, detached } => {
+                self.handle_mcommit_dot(from, dot, detached)
+            }
+            Message::MDetached { detached } => self.handle_mdetached(detached),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
@@ -431,37 +433,6 @@ impl<KC: KeyClocks> Newt<KC> {
         let current_votes = Self::reset_votes(&mut info.votes);
         votes.merge(current_votes);
 
-        // generate phantom votes if committed clock is higher than the local
-        // key's clock:
-        // - not all processes are needed for stability specially when newt is
-        //   *not* configured with tiny quorums
-        // - so in case it's not, only the processes part of the fast quorum (if
-        //   it was, `info.quorum` is not empty) generate phantoms
-        // - n = 3 is a special case  where phantom votes are not generated as
-        //   they are not needed
-
-        // TODO
-        // let mut to_send = Action::Nothing;
-        // if self.bp.config.n() > 3
-        //     && (self.bp.config.newt_tiny_quorums() ||
-        // !info.quorum.is_empty()) {
-        //     if let Some(cmd) = info.cmd.as_ref() {
-        //         // if not a no op, check if we can generate more votes that
-        // can         // speed-up execution
-        //         let process_votes = self.key_clocks.vote(cmd, info.clock);
-
-        //         // create `MPhantom` if there are new votes
-        //         if !process_votes.is_empty() {
-        //             let mphantom = Message::MPhantom { dot, process_votes };
-        //             let target = self.bp.all();
-        //             to_send = Action::ToSend {
-        //                 target,
-        //                 msg: mphantom,
-        //             };
-        //         }
-        //     }
-        // }
-
         // create execution info if not a noop
         let cmd = info.cmd.clone().expect("there should be a command payload");
         // create execution info
@@ -475,18 +446,30 @@ impl<KC: KeyClocks> Newt<KC> {
         });
         self.to_executor.extend(execution_info);
 
+        // generate detached votes if committed clock is higher than the local
+        // key's clock if not configured with real time
+        let detached = if self.bp.config.newt_real_time() {
+            // nothing to do here, since the clocks will be bumped periodically
+            Votes::new()
+        } else {
+            let cmd = info.cmd.as_ref().unwrap();
+            self.key_clocks.vote(cmd, clock)
+        };
+
         // notify self with the committed dot
+        // - TODO: do not forward detached votes and send them right away (this
+        //   is a hack since we don't support several actions)
         Action::ToForward {
-            msg: Message::MCommitDot { dot },
+            msg: Message::MCommitDot { dot, detached },
         }
     }
 
-    #[instrument(skip(self, votes))]
-    fn handle_mdetached(&mut self, votes: Votes) -> Action<Message> {
-        log!("p{}: MDetached({:?})", self.id(), votes);
+    #[instrument(skip(self, detached))]
+    fn handle_mdetached(&mut self, detached: Votes) -> Action<Message> {
+        log!("p{}: MDetached({:?})", self.id(), detached);
 
         // create execution info
-        let execution_info = votes.into_iter().map(|(key, key_votes)| {
+        let execution_info = detached.into_iter().map(|(key, key_votes)| {
             ExecutionInfo::detached_votes(key, key_votes)
         });
         self.to_executor.extend(execution_info);
@@ -500,11 +483,21 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
+        detached: Votes,
     ) -> Action<Message> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-        Action::Nothing
+
+        // create `MDetached` if there are new votes
+        if detached.is_empty() {
+            Action::Nothing
+        } else {
+            Action::ToSend {
+                target: self.bp.all(),
+                msg: Message::MDetached { detached },
+            }
+        }
     }
 
     #[instrument(skip(self, from, committed))]
@@ -567,12 +560,12 @@ impl<KC: KeyClocks> Newt<KC> {
         // iterate all clocks and bump them to the current time:
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
-        let votes = self.key_clocks.vote_all(time.now());
+        let detached = self.key_clocks.vote_all(time.now());
 
         // create `ToSend`
         let tosend = Action::ToSend {
             target: self.bp.all(),
-            msg: Message::MDetached { votes },
+            msg: Message::MDetached { detached },
         };
 
         vec![tosend]
@@ -650,10 +643,11 @@ pub enum Message {
         votes: Votes,
     },
     MDetached {
-        votes: Votes,
+        detached: Votes,
     },
     MCommitDot {
         dot: Dot,
+        detached: Votes,
     },
     MGarbageCollection {
         committed: VClock<ProcessId>,

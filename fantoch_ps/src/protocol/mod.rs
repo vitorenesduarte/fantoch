@@ -41,7 +41,6 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
     #[test]
     fn sim_newt_5_1_test() {
         let slow_paths = sim_test::<NewtSequential>(5, 1, false);
@@ -66,6 +65,27 @@ mod tests {
         let executors = 1;
         let slow_paths =
             run_test::<NewtAtomic>(3, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_newt_5_1_sequential_test() {
+        // newt sequential can only handle one worker but many executors
+        let workers = 1;
+        let executors = 4;
+        let slow_paths =
+            run_test::<NewtSequential>(5, 1, false, workers, executors).await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_newt_5_1_atomic_test() {
+        // newt atomic can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths =
+            run_test::<NewtAtomic>(5, 1, false, workers, executors).await;
         assert_eq!(slow_paths, 0);
     }
 
