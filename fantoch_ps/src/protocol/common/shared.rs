@@ -39,6 +39,10 @@ where
         self.clocks.iter()
     }
 
+    pub fn len(&self) -> usize {
+        self.clocks.len()
+    }
+
     fn maybe_insert(&self, key: &Key) {
         // insert entry only if it doesn't yet exist:
         // - maybe another thread tried to `maybe_insert` and was able to insert

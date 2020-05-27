@@ -49,7 +49,7 @@ impl KeyClocks for AtomicKeyClocks {
             .expect("there should be a maximum sequence");
 
         // create votes
-        let mut votes = Votes::new(Some(cmd));
+        let mut votes = Votes::with_capacity(cmd.key_count());
 
         // second round of votes:
         // - vote on the keys that have a clock lower than the computed
@@ -86,22 +86,15 @@ impl KeyClocks for AtomicKeyClocks {
     }
 
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
-        // create votes
-        let mut votes = Votes::new(Some(cmd));
+        let key_count = cmd.key_count();
+        let keys = cmd.keys().cloned();
+        self.maybe_bump_keys(keys, key_count, clock)
+    }
 
-        cmd.keys().for_each(|key| {
-            if let Some(previous_value) = self.maybe_bump(key, clock) {
-                // compute vote start and vote end
-                let vote_start = previous_value + 1;
-                let vote_end = clock;
-
-                // create second vote range and save it
-                let vr = VoteRange::new(self.id, vote_start, vote_end);
-                votes.set(key.clone(), vec![vr]);
-            }
-        });
-
-        votes
+    fn vote_all(&mut self, clock: u64) -> Votes {
+        let key_count = self.clocks.len();
+        let keys = self.clocks.iter().map(|entry| entry.key().clone());
+        self.maybe_bump_keys(keys, key_count, clock)
     }
 
     fn parallel() -> bool {
@@ -138,6 +131,28 @@ impl AtomicKeyClocks {
                 Ordering::Relaxed,
             )
             .ok()
+    }
+
+    fn maybe_bump_keys<I>(&self, keys: I, key_count: usize, up_to: u64) -> Votes
+    where
+        I: Iterator<Item = Key>,
+    {
+        // create votes
+        let mut votes = Votes::with_capacity(key_count);
+
+        keys.for_each(|key| {
+            if let Some(previous_value) = self.maybe_bump(&key, up_to) {
+                // compute vote start and vote end
+                let vote_start = previous_value + 1;
+                let vote_end = up_to;
+
+                // create second vote range and save it
+                let vr = VoteRange::new(self.id, vote_start, vote_end);
+                votes.set(key, vec![vr]);
+            }
+        });
+
+        votes
     }
 }
 
@@ -190,7 +205,7 @@ mod tests {
             .collect();
 
         // wait for all workers and aggregate their votes
-        let mut all_votes = Votes::new(None);
+        let mut all_votes = Votes::new();
         for handle in handles {
             let votes = handle.join().expect("worker should finish");
             all_votes.merge(votes);
@@ -225,7 +240,7 @@ mod tests {
         keys_number: usize,
     ) -> Votes {
         // all votes worker has generated
-        let mut all_votes = Votes::new(None);
+        let mut all_votes = Votes::new();
 
         // highest clock seen
         let mut highest = 0;

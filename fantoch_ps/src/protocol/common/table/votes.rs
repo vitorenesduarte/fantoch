@@ -1,4 +1,3 @@
-use fantoch::command::Command;
 use fantoch::id::ProcessId;
 use fantoch::kvs::Key;
 use serde::{Deserialize, Serialize};
@@ -13,10 +12,14 @@ pub struct Votes {
 
 impl Votes {
     /// Creates an empty `Votes` instance.
-    pub fn new(cmd: Option<&Command>) -> Self {
-        // create votes map with the correct size if we know the command,
-        // otherwise size 0
-        let capacity = cmd.map(|cmd| cmd.key_count()).unwrap_or(0);
+    pub fn new() -> Self {
+        Self {
+            votes: HashMap::new(),
+        }
+    }
+
+    /// Creates an empty `Votes` instance.
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
             votes: HashMap::with_capacity(capacity),
         }
@@ -196,13 +199,13 @@ mod tests {
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
         let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
-        let mut votes_a = Votes::new(Some(&cmd_a));
+        let mut votes_a = Votes::with_capacity(cmd_a.key_count());
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab =
             Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
-        let mut votes_ab = Votes::new(Some(&cmd_ab));
+        let mut votes_ab = Votes::with_capacity(cmd_ab.key_count());
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)

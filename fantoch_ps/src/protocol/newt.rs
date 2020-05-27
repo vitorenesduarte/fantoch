@@ -270,7 +270,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         let (clock, process_votes) = if message_from_self {
             // if it is, do not recompute clock and votes
-            (remote_clock, Votes::new(None))
+            (remote_clock, Votes::new())
         } else {
             // otherwise, compute clock considering the `remote_clock` as its
             // minimum value (if real time, the min clock is the max between
@@ -573,6 +573,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // iterate all clocks and bump them to the current time:
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
+        let votes = self.key_clocks.vote_all(time.now());
         todo!()
     }
 
@@ -622,7 +623,7 @@ impl Info for NewtInfo {
             quorum: HashSet::new(),
             cmd: None,
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
-            votes: Votes::new(None),
+            votes: Votes::new(),
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
         }
     }
