@@ -17,19 +17,36 @@ fn main() {
         config.set_transitive_conflicts(true);
         run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
-        for hybrid in vec![false, true] {
-            for interval in vec![100, 50, 10, 5] {
-                println!(
-                    ">running newt n = {} | f = {} | clock_bump_interval = {}ms | hybrid_clocks = {}",
-                    n, f, interval, hybrid
-                );
-                let mut config = Config::new(n, f);
-                config.set_newt_tiny_quorums(true);
-                config.set_newt_real_time(true);
-                config.set_newt_clock_bump_interval(interval);
-                run_in_thread(move || {
-                    increasing_load::<NewtSequential>(config)
-                });
+        let tiny_quorums_config = if n > 3 {
+            vec![false, true]
+        } else {
+            // true same as false
+            vec![false]
+        };
+
+        for tiny_quorums in tiny_quorums_config {
+            println!(
+                ">running newt n = {} | f = {} | tiny = {} | real_time = false",
+                n, f, tiny_quorums
+            );
+            let mut config = Config::new(n, f);
+            config.set_newt_tiny_quorums(tiny_quorums);
+            config.set_newt_real_time(false);
+            run_in_thread(move || increasing_load::<NewtSequential>(config));
+
+            if false {
+                for hybrid in vec![false, true] {
+                    for interval in vec![100, 50, 10, 5] {
+                        println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | hybrid_clocks = {}", n, f, tiny_quorums, interval, hybrid);
+                        let mut config = Config::new(n, f);
+                        config.set_newt_tiny_quorums(tiny_quorums);
+                        config.set_newt_real_time(true);
+                        config.set_newt_clock_bump_interval(interval);
+                        run_in_thread(move || {
+                            increasing_load::<NewtSequential>(config)
+                        });
+                    }
+                }
             }
         }
     }
