@@ -137,9 +137,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 self.handle_mcommit(from, dot, clock, votes)
             }
             Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
-            Message::MPhantom { dot, process_votes } => {
-                self.handle_mphantom(dot, process_votes)
-            }
+            Message::MDetached { votes } => self.handle_mdetached(votes),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
@@ -478,24 +476,15 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, dot, votes))]
-    fn handle_mphantom(&mut self, dot: Dot, votes: Votes) -> Action<Message> {
-        log!("p{}: MPhantom({:?}, {:?})", self.id(), dot, votes);
+    #[instrument(skip(self, votes))]
+    fn handle_mdetached(&mut self, votes: Votes) -> Action<Message> {
+        log!("p{}: MDetached({:?})", self.id(), votes);
 
-        // get cmd info
-        let info = self.cmds.get(dot);
-
-        // TODO if there's ever a Status::EXECUTE, this check might be incorrect
-        if info.status == Status::COMMIT {
-            // create execution info
-            let execution_info = votes.into_iter().map(|(key, key_votes)| {
-                ExecutionInfo::phantom_votes(key, key_votes)
-            });
-            self.to_executor.extend(execution_info);
-        } else {
-            // if not committed yet, update votes with remote votes
-            info.votes.merge(votes);
-        }
+        // create execution info
+        let execution_info = votes.into_iter().map(|(key, key_votes)| {
+            ExecutionInfo::detached_votes(key, key_votes)
+        });
+        self.to_executor.extend(execution_info);
 
         // nothing to send
         Action::Nothing
@@ -574,7 +563,14 @@ impl<KC: KeyClocks> Newt<KC> {
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
         let votes = self.key_clocks.vote_all(time.now());
-        todo!()
+
+        // create `ToSend`
+        let tosend = Action::ToSend {
+            target: self.bp.all(),
+            msg: Message::MDetached { votes },
+        };
+
+        vec![tosend]
     }
 
     // Replaces the value `local_votes` with empty votes, returning the previous
@@ -648,9 +644,8 @@ pub enum Message {
         clock: u64,
         votes: Votes,
     },
-    MPhantom {
-        dot: Dot,
-        process_votes: Votes,
+    MDetached {
+        votes: Votes,
     },
     MCommitDot {
         dot: Dot,
@@ -675,7 +670,9 @@ impl MessageIndex for Message {
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
-            Self::MPhantom { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MDetached { .. } => {
+                worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
+            }
             // GC messages
             Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {

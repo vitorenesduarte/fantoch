@@ -56,13 +56,13 @@ impl MultiVotesTable {
         })
     }
 
-    /// Adds phantom votes to the votes table.
-    pub fn add_phantom_votes(
+    /// Adds detached votes to the votes table.
+    pub fn add_detached_votes(
         &mut self,
         key: &Key,
         votes: Vec<VoteRange>,
     ) -> impl Iterator<Item = (Rifl, KVOp)> {
-        // add phantom votes to the votes tables, and at the same time compute
+        // add detached votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
         self.update_table(key, |table| {
             table.add_votes(votes);
@@ -497,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    fn phantom_votes() {
+    fn detached_votes() {
         // create table
         let process_id = 1;
         let n = 5;
@@ -521,7 +521,7 @@ mod tests {
         // p1 votes on key A
         let process_id = 1;
         let stable = table
-            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
+            .add_detached_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
@@ -529,7 +529,7 @@ mod tests {
 
         // p1 votes on key b
         let stable = table
-            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
+            .add_detached_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
@@ -539,7 +539,7 @@ mod tests {
         // p2 votes on key A
         let process_id = 2;
         let stable = table
-            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
+            .add_detached_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
@@ -549,7 +549,7 @@ mod tests {
         // p3 votes on key A
         let process_id = 3;
         let stable = table
-            .add_phantom_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
+            .add_detached_votes(&key_a, vec![VoteRange::new(process_id, 1, 1)])
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
@@ -558,7 +558,7 @@ mod tests {
 
         // p3 votes on key B
         let stable = table
-            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
+            .add_detached_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
@@ -568,7 +568,7 @@ mod tests {
         // p4 votes on key B
         let process_id = 4;
         let stable = table
-            .add_phantom_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
+            .add_detached_votes(&key_b, vec![VoteRange::new(process_id, 1, 1)])
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
