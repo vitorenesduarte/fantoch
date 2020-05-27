@@ -17,7 +17,7 @@ pub trait KeyClocks: Clone {
     fn new(id: ProcessId) -> Self;
 
     /// Makes sure there's a clock for each key in the command.
-    fn init(&mut self, cmd: &Command);
+    fn init_clocks(&mut self, cmd: &Command);
 
     /// Bump clocks to at least `min_clock` and return the new clock (that might
     /// be `min_clock` in case it was higher than any of the local clocks). Also

@@ -25,7 +25,7 @@ impl KeyClocks for AtomicKeyClocks {
         Self { id, clocks }
     }
 
-    fn init(&mut self, cmd: &Command) {
+    fn init_clocks(&mut self, cmd: &Command) {
         cmd.keys().for_each(|key| {
             // get initializes the key to the default value, and that's exactly
             // what we want

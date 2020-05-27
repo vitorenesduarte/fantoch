@@ -19,7 +19,7 @@ impl KeyClocks for SequentialKeyClocks {
         Self { id, clocks }
     }
 
-    fn init(&mut self, cmd: &Command) {
+    fn init_clocks(&mut self, cmd: &Command) {
         cmd.keys().for_each(|key| {
             // create entry if key not present yet
             if !self.clocks.contains_key(key) {
