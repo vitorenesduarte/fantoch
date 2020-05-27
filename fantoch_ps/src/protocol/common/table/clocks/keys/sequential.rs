@@ -19,6 +19,15 @@ impl KeyClocks for SequentialKeyClocks {
         Self { id, clocks }
     }
 
+    fn init(&mut self, cmd: &Command) {
+        cmd.keys().for_each(|key| {
+            // create entry if key not present yet
+            if !self.clocks.contains_key(key) {
+                self.clocks.insert(key.clone(), 0);
+            }
+        });
+    }
+
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // bump to at least `min_clock`
         let clock = cmp::max(min_clock, self.clock(cmd) + 1);

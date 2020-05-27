@@ -25,6 +25,14 @@ impl KeyClocks for AtomicKeyClocks {
         Self { id, clocks }
     }
 
+    fn init(&mut self, cmd: &Command) {
+        cmd.keys().for_each(|key| {
+            // get initializes the key to the default value, and that's exactly
+            // what we want
+            let _ = self.clocks.get(key);
+        });
+    }
+
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // first round of votes:
         // - vote on each key and compute the highest clock seen

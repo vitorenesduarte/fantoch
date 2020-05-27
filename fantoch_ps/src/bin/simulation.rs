@@ -10,21 +10,21 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    // println!(">running newt n = 5 | f = 1 | real_time = false");
+    // println!(">running atlas n = 5 | f = 1 | transitive_conflicts = true");
     // let mut config = Config::new(5, 1);
-    // config.set_newt_tiny_quorums(true);
-    // config.set_newt_real_time(false);
-    // run_in_thread(move || increasing_load::<NewtSequential>(config));
-
-    println!(">running atlas n = 5 | f = 1 | transitive_conflicts = true");
-    let mut config = Config::new(5, 1);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<AtlasSequential>(config));
+    // config.set_transitive_conflicts(true);
+    // run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
     // println!(">running atlas n = 5 | f = 1 | transitive_conflicts = false");
     // let mut config = Config::new(5, 1);
     // config.set_transitive_conflicts(false);
     // run_in_thread(move || increasing_load::<AtlasSequential>(config));
+
+    // println!(">running newt n = 5 | f = 1 | real_time = false");
+    // let mut config = Config::new(5, 1);
+    // config.set_newt_tiny_quorums(true);
+    // config.set_newt_real_time(false);
+    // run_in_thread(move || increasing_load::<NewtSequential>(config));
 
     for interval in vec![100, 50, 10, 5, 1] {
         println!(
