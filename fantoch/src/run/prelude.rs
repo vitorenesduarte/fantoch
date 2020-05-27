@@ -21,14 +21,14 @@ pub const GC_WORKER_INDEX: usize = 0;
 
 pub const INDEXES_RESERVED: usize = 2;
 
-pub fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
-    // when there's no shift, the index must be either 0 or 1
-    assert!(index < INDEXES_RESERVED);
+pub const fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
     Some((0, index))
 }
 
 // note: reserved indexing always reserve the first two workers
-pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
+pub fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
+    // when there's no shift, the index must be either 0 or 1
+    assert!(index < INDEXES_RESERVED);
     Some((INDEXES_RESERVED, index))
 }
 
