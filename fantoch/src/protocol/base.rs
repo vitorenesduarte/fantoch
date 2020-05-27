@@ -156,7 +156,7 @@ impl BaseProcess {
     // - otherwise, the suggested min clock is used
     pub fn min_clock(&self, current_min: u64, time: &dyn SysTime) -> u64 {
         // use real time as min clock if we should
-        if self.config.newt_real_time() {
+        if self.config.newt_hybrid_clocks() && self.config.newt_real_time() {
             std::cmp::max(current_min, time.now())
         } else {
             current_min

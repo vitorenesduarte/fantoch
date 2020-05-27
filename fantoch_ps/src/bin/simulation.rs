@@ -10,32 +10,28 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    // println!(">running atlas n = 5 | f = 1 | transitive_conflicts = true");
-    // let mut config = Config::new(5, 1);
-    // config.set_transitive_conflicts(true);
-    // run_in_thread(move || increasing_load::<AtlasSequential>(config));
+    let f = 1;
+    for n in vec![3, 5] {
+        println!(">running atlas n = {} | f = {}", n, f);
+        let mut config = Config::new(n, f);
+        config.set_transitive_conflicts(true);
+        run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
-    // println!(">running atlas n = 5 | f = 1 | transitive_conflicts = false");
-    // let mut config = Config::new(5, 1);
-    // config.set_transitive_conflicts(false);
-    // run_in_thread(move || increasing_load::<AtlasSequential>(config));
-
-    // println!(">running newt n = 5 | f = 1 | real_time = false");
-    // let mut config = Config::new(5, 1);
-    // config.set_newt_tiny_quorums(true);
-    // config.set_newt_real_time(false);
-    // run_in_thread(move || increasing_load::<NewtSequential>(config));
-
-    for interval in vec![100, 50, 10, 5, 1] {
-        println!(
-            ">running newt n = 5 | f = 1 | clock_bump_interval = {}ms",
-            interval
-        );
-        let mut config = Config::new(5, 1);
-        config.set_newt_tiny_quorums(true);
-        config.set_newt_real_time(true);
-        config.set_newt_clock_bump_interval(interval);
-        run_in_thread(move || increasing_load::<NewtSequential>(config));
+        for hybrid in vec![false, true] {
+            for interval in vec![100, 50, 10, 5, 1] {
+                println!(
+                    ">running newt n = {} | f = {} | clock_bump_interval = {}ms | hybrid_clocks = {}",
+                    f, n, interval, hybrid
+                );
+                let mut config = Config::new(n, f);
+                config.set_newt_tiny_quorums(true);
+                config.set_newt_real_time(true);
+                config.set_newt_clock_bump_interval(interval);
+                run_in_thread(move || {
+                    increasing_load::<NewtSequential>(config)
+                });
+            }
+        }
     }
 }
 
@@ -91,11 +87,7 @@ fn increasing_load<P: Protocol>(config: Config) {
         Region::new("australia-southeast1"),
         Region::new("europe-west1"),
     ];
-    assert_eq!(
-        regions.len(),
-        config.n(),
-        "the number of regions should be equals to n"
-    );
+    let regions: Vec<_> = regions.into_iter().take(config.n()).collect();
 
     // number of clients
     let cs = vec![8, 16, 32, 64, 128, 256];
