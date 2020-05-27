@@ -24,6 +24,9 @@ fn main() {
             vec![false]
         };
 
+        let hybrid_config = vec![false, true];
+        let interval_config = vec![100, 50, 10, 5];
+
         for tiny_quorums in tiny_quorums_config {
             println!(
                 ">running newt n = {} | f = {} | tiny = {} | real_time = false",
@@ -34,18 +37,16 @@ fn main() {
             config.set_newt_real_time(false);
             run_in_thread(move || increasing_load::<NewtSequential>(config));
 
-            if false {
-                for hybrid in vec![false, true] {
-                    for interval in vec![100, 50, 10, 5] {
-                        println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | hybrid_clocks = {}", n, f, tiny_quorums, interval, hybrid);
-                        let mut config = Config::new(n, f);
-                        config.set_newt_tiny_quorums(tiny_quorums);
-                        config.set_newt_real_time(true);
-                        config.set_newt_clock_bump_interval(interval);
-                        run_in_thread(move || {
-                            increasing_load::<NewtSequential>(config)
-                        });
-                    }
+            for hybrid in hybrid_config.clone() {
+                for interval in interval_config.clone() {
+                    println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | hybrid_clocks = {}", n, f, tiny_quorums, interval, hybrid);
+                    let mut config = Config::new(n, f);
+                    config.set_newt_tiny_quorums(tiny_quorums);
+                    config.set_newt_real_time(true);
+                    config.set_newt_clock_bump_interval(interval);
+                    run_in_thread(move || {
+                        increasing_load::<NewtSequential>(config)
+                    });
                 }
             }
         }
