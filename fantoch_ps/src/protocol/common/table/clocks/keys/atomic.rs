@@ -168,21 +168,17 @@ impl AtomicKeyClocks {
 mod tests {
     use super::*;
     use crate::util;
-    use rand::Rng;
     use std::collections::BTreeSet;
     use std::iter::FromIterator;
     use std::thread;
 
     #[test]
     fn atomic_clocks_test() {
-        let min_nthreads = 2;
-        let max_nthreads = 8;
-        let ops_number = 1000;
-        let max_keys_per_command = 4;
-        let keys_number = 16;
+        let nthreads = 2;
+        let ops_number = 10000;
+        let max_keys_per_command = 2;
+        let keys_number = 4;
         for _ in 0..100 {
-            let nthreads =
-                rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
             test(nthreads, ops_number, max_keys_per_command, keys_number);
         }
     }
@@ -254,7 +250,7 @@ mod tests {
         let mut highest = 0;
 
         for _ in 0..ops_number {
-            // TODO increase noop probability
+            // there are no noop's
             let noop_probability = 0;
             let cmd = util::gen_cmd(
                 max_keys_per_command,
