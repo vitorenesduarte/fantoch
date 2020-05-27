@@ -143,8 +143,6 @@ mod tests {
 
     #[tokio::test]
     async fn run_best_newt_3_1_test() {
-        // newt atomic can handle as many workers as we want but we may want to
-        // only have one executor
         let workers = 2;
         let executors = 2;
         let clock_bump_interval = 1;
