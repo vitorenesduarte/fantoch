@@ -147,7 +147,7 @@ mod tests {
     async fn run_best_newt_3_1_test() {
         let workers = 2;
         let executors = 2;
-        let clock_bump_interval = 1;
+        let clock_bump_interval = 50;
         let slow_paths = run_test::<NewtAtomic>(config!(
             3,
             1,
@@ -188,7 +188,7 @@ mod tests {
     async fn run_best_newt_5_1_test() {
         let workers = 2;
         let executors = 2;
-        let clock_bump_interval = 1;
+        let clock_bump_interval = 50;
         let slow_paths = run_test::<NewtAtomic>(config!(
             5,
             1,
