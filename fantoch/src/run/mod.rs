@@ -584,9 +584,12 @@ pub mod tests {
         // config
         let n = 3;
         let f = 1;
-        let with_leader = false;
         let workers = 2;
         let executors = 3;
+        let mut config = Config::new(n, f);
+        config.set_workers(workers);
+        config.set_executors(executors);
+
         let conflict_rate = 100;
         let commands_per_client = 100;
         let clients_per_region = 3;
@@ -596,11 +599,7 @@ pub mod tests {
         // run test and get total stable commands
         let total_stable_count =
             run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
-                n,
-                f,
-                with_leader,
-                workers,
-                executors,
+                config,
                 conflict_rate,
                 commands_per_client,
                 clients_per_region,
@@ -620,11 +619,7 @@ pub mod tests {
     }
 
     pub async fn run_test_with_inspect_fun<P, R>(
-        n: usize,
-        f: usize,
-        with_leader: bool,
-        workers: usize,
-        executors: usize,
+        config: Config,
         conflict_rate: usize,
         commands_per_client: usize,
         clients_per_region: usize,
@@ -643,11 +638,7 @@ pub mod tests {
         local
             .run_until(async {
                 run::<P, R>(
-                    n,
-                    f,
-                    with_leader,
-                    workers,
-                    executors,
+                    config,
                     conflict_rate,
                     commands_per_client,
                     clients_per_region,
@@ -661,11 +652,7 @@ pub mod tests {
     }
 
     async fn run<P, R>(
-        n: usize,
-        f: usize,
-        with_leader: bool,
-        workers: usize,
-        executors: usize,
+        config: Config,
         conflict_rate: usize,
         commands_per_client: usize,
         clients_per_region: usize,
@@ -677,14 +664,6 @@ pub mod tests {
         P: Protocol + Send + 'static,
         R: Clone + Debug + Send + 'static,
     {
-        // create config
-        let mut config = Config::new(n, f);
-
-        // if we should set a leader, set process 1 as the leader
-        if with_leader {
-            config.set_leader(1);
-        }
-
         // create semaphore so that processes can notify once they're connected
         let semaphore = Arc::new(Semaphore::new(0));
 
@@ -697,11 +676,8 @@ pub mod tests {
         let channel_buffer_size = 10000;
         let multiplexing = 2;
 
-        // set parallel protocol and executors in config
-        config.set_workers(workers);
-        config.set_executors(executors);
-
         // create processes ports and client ports
+        let n = config.n();
         let ports: HashMap<_, _> = util::process_ids(n)
             .map(|id| (id, get_available_port()))
             .collect();
@@ -843,7 +819,8 @@ pub mod tests {
                     .blind_send((inspect_fun, reply_chan_tx.clone()))
                     .await;
                 let replies =
-                    gather_workers_replies(workers, &mut reply_chan).await;
+                    gather_workers_replies(config.workers(), &mut reply_chan)
+                        .await;
                 result.insert(process_id, replies);
             }
         }
