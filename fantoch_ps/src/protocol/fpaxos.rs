@@ -415,9 +415,7 @@ impl MessageIndex for Message {
             Self::MSpawnCommander { slot, .. } => {
                 worker_index_shift(*slot as usize)
             }
-            Self::MAccepted { slot, .. } => {
-                worker_index_shift(*slot as usize)
-            }
+            Self::MAccepted { slot, .. } => worker_index_shift(*slot as usize),
             Self::MGarbageCollection { .. } => {
                 // since it's the acceptor that contains the slots to be gc-ed,
                 // we should simply run gc-tracking there as well:
