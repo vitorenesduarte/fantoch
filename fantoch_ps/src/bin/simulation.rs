@@ -10,25 +10,33 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running newt n = 3 | f = 1 | real_time = false");
-    let mut config = Config::new(3, 1);
-    config.set_newt_real_time(false);
-    run_in_thread(move || increasing_load::<NewtSequential>(config));
+    // println!(">running newt n = 5 | f = 1 | real_time = false");
+    // let mut config = Config::new(5, 1);
+    // config.set_newt_tiny_quorums(true);
+    // config.set_newt_real_time(false);
+    // run_in_thread(move || increasing_load::<NewtSequential>(config));
 
-    println!(">running newt n = 3 | f = 1 | real_time = true");
-    let mut config = Config::new(3, 1);
-    config.set_newt_real_time(false);
-    run_in_thread(move || increasing_load::<NewtSequential>(config));
-
-    println!(">running atlas n = 3 | f = 1 | transitive_conflicts = true");
-    let mut config = Config::new(3, 1);
+    println!(">running atlas n = 5 | f = 1 | transitive_conflicts = true");
+    let mut config = Config::new(5, 1);
     config.set_transitive_conflicts(true);
     run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
-    println!(">running atlas n = 3 | f = 1 | transitive_conflicts = false");
-    let mut config = Config::new(3, 1);
-    config.set_transitive_conflicts(false);
-    run_in_thread(move || increasing_load::<AtlasSequential>(config));
+    // println!(">running atlas n = 5 | f = 1 | transitive_conflicts = false");
+    // let mut config = Config::new(5, 1);
+    // config.set_transitive_conflicts(false);
+    // run_in_thread(move || increasing_load::<AtlasSequential>(config));
+
+    for interval in vec![100, 50, 10, 5, 1] {
+        println!(
+            ">running newt n = 5 | f = 1 | clock_bump_interval = {}ms",
+            interval
+        );
+        let mut config = Config::new(5, 1);
+        config.set_newt_tiny_quorums(true);
+        config.set_newt_real_time(true);
+        config.set_newt_clock_bump_interval(interval);
+        run_in_thread(move || increasing_load::<NewtSequential>(config));
+    }
 }
 
 #[allow(dead_code)]
@@ -80,8 +88,8 @@ fn increasing_load<P: Protocol>(config: Config) {
         Region::new("asia-south1"),
         Region::new("europe-north1"),
         Region::new("southamerica-east1"),
-        /* Region::new("australia-southeast1"),
-         * Region::new("europe-west1"), */
+        Region::new("australia-southeast1"),
+        Region::new("europe-west1"),
     ];
     assert_eq!(
         regions.len(),
@@ -90,7 +98,7 @@ fn increasing_load<P: Protocol>(config: Config) {
     );
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256, 512];
+    let cs = vec![8, 16, 32, 64, 128, 256];
 
     // clients workload
     let conflict_rate = 10;
