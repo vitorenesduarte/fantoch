@@ -46,6 +46,16 @@ mod tests {
             }
             config
         }};
+        ($n:expr, $f:expr, $with_leader:expr, $clock_bump_interval:expr) => {{
+            let mut config = Config::new($n, $f);
+            if $with_leader {
+                config.set_leader(1);
+            }
+            config.set_newt_real_time(true);
+            config.set_newt_hybrid_clocks(true);
+            config.set_newt_clock_bump_interval($clock_bump_interval);
+            config
+        }};
         ($n:expr, $f:expr, $with_leader:expr, $workers:expr, $executors:expr) => {{
             let mut config = Config::new($n, $f);
             if $with_leader {
@@ -53,6 +63,18 @@ mod tests {
             }
             config.set_workers($workers);
             config.set_executors($executors);
+            config
+        }};
+        ($n:expr, $f:expr, $with_leader:expr, $workers:expr, $executors:expr, $clock_bump_interval:expr) => {{
+            let mut config = Config::new($n, $f);
+            if $with_leader {
+                config.set_leader(1);
+            }
+            config.set_workers($workers);
+            config.set_executors($executors);
+            config.set_newt_real_time(true);
+            config.set_newt_hybrid_clocks(true);
+            config.set_newt_clock_bump_interval($clock_bump_interval);
             config
         }};
     }
@@ -64,8 +86,34 @@ mod tests {
     }
 
     #[test]
+    fn sim_best_newt_3_1_test() {
+        // NOTE: with n = 3 we don't really need real time clocks to get the
+        // best results
+        let clock_bump_interval = 50;
+        let slow_paths = sim_test::<NewtSequential>(config!(
+            3,
+            1,
+            false,
+            clock_bump_interval
+        ));
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
     fn sim_newt_5_1_test() {
         let slow_paths = sim_test::<NewtSequential>(config!(5, 1, false));
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn sim_best_newt_5_1_test() {
+        let clock_bump_interval = 50;
+        let slow_paths = sim_test::<NewtSequential>(config!(
+            5,
+            1,
+            false,
+            clock_bump_interval
+        ));
         assert_eq!(slow_paths, 0);
     }
 
@@ -94,6 +142,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_best_newt_3_1_test() {
+        // newt atomic can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 2;
+        let executors = 2;
+        let clock_bump_interval = 1;
+        let slow_paths = run_test::<NewtAtomic>(config!(
+            3,
+            1,
+            false,
+            workers,
+            executors,
+            clock_bump_interval
+        ))
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
     async fn run_newt_5_1_sequential_test() {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
@@ -114,6 +181,23 @@ mod tests {
         let slow_paths =
             run_test::<NewtAtomic>(config!(5, 1, false, workers, executors))
                 .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_best_newt_5_1_test() {
+        let workers = 2;
+        let executors = 2;
+        let clock_bump_interval = 1;
+        let slow_paths = run_test::<NewtAtomic>(config!(
+            5,
+            1,
+            false,
+            workers,
+            executors,
+            clock_bump_interval
+        ))
+        .await;
         assert_eq!(slow_paths, 0);
     }
 
