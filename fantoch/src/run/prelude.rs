@@ -21,14 +21,14 @@ pub const GC_WORKER_INDEX: usize = 0;
 
 pub const INDEXES_RESERVED: usize = 2;
 
-pub const fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
+pub fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
+    // when there's no shift, the index must be either 0 or 1
+    assert!(index < INDEXES_RESERVED);
     Some((0, index))
 }
 
 // note: reserved indexing always reserve the first two workers
-pub fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
-    // when there's no shift, the index must be either 0 or 1
-    assert!(index < INDEXES_RESERVED);
+pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
     Some((INDEXES_RESERVED, index))
 }
 
@@ -149,7 +149,7 @@ pub type ClientToExecutors = pool::ToPool<FromClient>;
 // The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
 impl pool::PoolIndex for (&Key, Rifl) {
     fn index(&self) -> Option<(usize, usize)> {
-        worker_index_no_shift(key_index(&self.0))
+        Some(key_index(&self.0))
     }
 }
 
@@ -163,15 +163,13 @@ where
     A: MessageKey,
 {
     fn index(&self) -> Option<(usize, usize)> {
-        match self.key() {
-            Some(key) => worker_index_no_shift(key_index(key)),
-            None => None,
-        }
+        self.key().map(key_index)
     }
 }
 
 // The index of a key is its hash
 #[allow(clippy::ptr_arg)]
-fn key_index(key: &Key) -> usize {
-    util::key_hash(key) as usize
+fn key_index(key: &Key) -> (usize, usize) {
+    let index = util::key_hash(key) as usize;
+    (0, index)
 }

@@ -4,6 +4,9 @@ use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use tokio::time::{self, Duration, Instant, Interval};
 
+// TODO: check async-timer for <1ms intervals
+// https://github.com/DoumanAsh/async-timer/
+
 pub async fn periodic_task<P, R>(
     events: Vec<(P::PeriodicEvent, u64)>,
     periodic_to_workers: PeriodicToWorkers<P, R>,
