@@ -78,7 +78,7 @@ pub mod task;
 
 // Re-exports.
 pub use prelude::{
-    dot_worker_index_reserve, no_worker_index_reserve, worker_index_reserve,
+    worker_dot_index_shift, worker_index_no_shift, worker_index_shift,
     GC_WORKER_INDEX, LEADER_WORKER_INDEX,
 };
 

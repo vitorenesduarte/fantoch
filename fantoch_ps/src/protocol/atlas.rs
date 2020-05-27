@@ -611,19 +611,19 @@ pub enum Message {
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{
-            dot_worker_index_reserve, no_worker_index_reserve, GC_WORKER_INDEX,
+            worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
         match self {
             // Protocol messages
-            Self::MCollect { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MCollectAck { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MCommit { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MConsensus { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MConsensusAck { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MConsensus { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
             // GC messages
-            Self::MCommitDot { .. } => no_worker_index_reserve(GC_WORKER_INDEX),
+            Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
-                no_worker_index_reserve(GC_WORKER_INDEX)
+                worker_index_no_shift(GC_WORKER_INDEX)
             }
             Self::MStable { .. } => None,
         }
@@ -637,9 +637,9 @@ pub enum PeriodicEvent {
 
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{no_worker_index_reserve, GC_WORKER_INDEX};
+        use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
-            Self::GarbageCollection => no_worker_index_reserve(GC_WORKER_INDEX),
+            Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
         }
     }
 }

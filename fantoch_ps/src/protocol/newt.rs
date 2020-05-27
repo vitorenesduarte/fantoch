@@ -77,8 +77,17 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval() as u64;
-        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+        let gc_interval = config.garbage_collection_interval() as u64;
+        let clock_bump_interval = config.newt_clock_bump_interval() as u64;
+        // only create the clock bump periodic event if `config.newt_real_time`
+        let events = if config.newt_real_time() {
+            vec![
+                (PeriodicEvent::GarbageCollection, gc_interval),
+                (PeriodicEvent::ClockBump, clock_bump_interval),
+            ]
+        } else {
+            vec![(PeriodicEvent::GarbageCollection, gc_interval)]
+        };
 
         // return both
         (protocol, events)
@@ -142,12 +151,13 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection()
             }
+            PeriodicEvent::ClockBump => self.handle_event_clock_bump(time),
         }
     }
 
@@ -553,6 +563,19 @@ impl<KC: KeyClocks> Newt<KC> {
         vec![tosend]
     }
 
+    #[instrument(skip(self, time))]
+    fn handle_event_clock_bump(
+        &mut self,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Message>> {
+        log!("p{}: PeriodicEvent::ClockBump", self.id());
+
+        // iterate all clocks and bump them to the current time:
+        // - TODO: only bump the clocks of active keys (i.e. keys with an
+        //   `MCollect` without the  corresponding `MCommit`)
+        todo!()
+    }
+
     // Replaces the value `local_votes` with empty votes, returning the previous
     // votes.
     fn reset_votes(local_votes: &mut Votes) -> Votes {
@@ -639,21 +662,23 @@ pub enum Message {
     },
 }
 
+const CLOCK_BUMP_WORKER_INDEX: usize = 1;
+
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{
-            dot_worker_index_reserve, no_worker_index_reserve, GC_WORKER_INDEX,
+            worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
         match self {
             // Protocol messages
-            Self::MCollect { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MCollectAck { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MCommit { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MPhantom { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MPhantom { dot, .. } => worker_dot_index_shift(&dot),
             // GC messages
-            Self::MCommitDot { .. } => no_worker_index_reserve(GC_WORKER_INDEX),
+            Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
-                no_worker_index_reserve(GC_WORKER_INDEX)
+                worker_index_no_shift(GC_WORKER_INDEX)
             }
             Self::MStable { .. } => None,
         }
@@ -663,13 +688,15 @@ impl MessageIndex for Message {
 #[derive(Debug, Clone)]
 pub enum PeriodicEvent {
     GarbageCollection,
+    ClockBump,
 }
 
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{no_worker_index_reserve, GC_WORKER_INDEX};
+        use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
-            Self::GarbageCollection => no_worker_index_reserve(GC_WORKER_INDEX),
+            Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
+            Self::ClockBump => worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX),
         }
     }
 }

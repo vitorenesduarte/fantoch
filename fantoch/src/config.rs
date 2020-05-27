@@ -22,6 +22,8 @@ pub struct Config {
     executors: usize,
     /// defines the interval between garbage collections (milliseconds)
     garbage_collection_interval: usize,
+    /// defines the interval between clock bumps (milliseconds)
+    newt_clock_bump_interval: usize,
 }
 
 impl Config {
@@ -49,6 +51,8 @@ impl Config {
         let executors = 1;
         // by default, garbage collection runs every 500ms
         let garbage_collection_interval = 500;
+        // by default, garbage collection runs every 5ms
+        let newt_clock_bump_interval = 5;
         Self {
             n,
             f,
@@ -60,6 +64,7 @@ impl Config {
             workers,
             executors,
             garbage_collection_interval,
+            newt_clock_bump_interval,
         }
     }
 
@@ -151,6 +156,16 @@ impl Config {
     /// Sets the garbage collection interval.
     pub fn set_garbage_collection_interval(&mut self, interval: usize) {
         self.garbage_collection_interval = interval;
+    }
+
+    /// Checks Newt clock bumpp interval.
+    pub fn newt_clock_bump_interval(&self) -> usize {
+        self.newt_clock_bump_interval
+    }
+
+    /// Sets newt clock bump interval.
+    pub fn set_newt_clock_bump_interval(&mut self, interval: usize) {
+        self.newt_clock_bump_interval = interval;
     }
 }
 
@@ -301,6 +316,13 @@ mod tests {
         // change its value and check it has changed
         config.set_garbage_collection_interval(100);
         assert_eq!(config.garbage_collection_interval(), 100);
+
+        // by default, newt clock bump interval is 5
+        assert_eq!(config.newt_clock_bump_interval(), 5);
+
+        // change its value and check it has changed
+        config.set_newt_clock_bump_interval(10);
+        assert_eq!(config.newt_clock_bump_interval(), 10);
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use crate::config::Config;
-use crate::time::SysTime;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::metrics::Metrics;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
+use crate::time::SysTime;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 

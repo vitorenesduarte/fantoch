@@ -391,39 +391,39 @@ const ACCEPTOR_WORKER_INDEX: usize = 1;
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{no_worker_index_reserve, worker_index_reserve};
+        use fantoch::run::{worker_index_no_shift, worker_index_shift};
         match self {
             Self::MForwardSubmit { .. } => {
                 // forward commands to the leader worker
-                no_worker_index_reserve(LEADER_WORKER_INDEX)
+                worker_index_no_shift(LEADER_WORKER_INDEX)
             }
             Self::MAccept { .. } => {
                 // forward accepts to the acceptor worker
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
             Self::MChosen { .. } => {
                 // forward chosen messages also to acceptor worker:
                 // - at point we had a learner worker, but since the acceptor
                 //   needs to know about committed slows to perform GC, we
                 //   wouldn't gain much (if anything) in separating these roles
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
             // spawn commanders and accepted messages should be forwarded to
             // the commander process:
             // - make sure that these commanders are never spawned in the
             //   previous 2 workers
             Self::MSpawnCommander { slot, .. } => {
-                worker_index_reserve(2, *slot as usize)
+                worker_index_shift(*slot as usize)
             }
             Self::MAccepted { slot, .. } => {
-                worker_index_reserve(2, *slot as usize)
+                worker_index_shift(*slot as usize)
             }
             Self::MGarbageCollection { .. } => {
                 // since it's the acceptor that contains the slots to be gc-ed,
                 // we should simply run gc-tracking there as well:
                 // - this removes the need for Message::MStable seen in the
                 //   other implementations
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
         }
     }
@@ -436,10 +436,10 @@ pub enum PeriodicEvent {
 
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::no_worker_index_reserve;
+        use fantoch::run::worker_index_no_shift;
         match self {
             Self::GarbageCollection => {
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
         }
     }
