@@ -19,13 +19,17 @@ pub const LEADER_WORKER_INDEX: usize = 0;
 // - e.g. in fpaxos, the gc only runs in the acceptor worker
 pub const GC_WORKER_INDEX: usize = 0;
 
-pub const fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
+pub const INDEXES_RESERVED: usize = 2;
+
+pub fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
+    // when there's no shift, the index must be either 0 or 1
+    assert!(index < INDEXES_RESERVED);
     Some((0, index))
 }
 
 // note: reserved indexing always reserve the first two workers
 pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
-    Some((2, index))
+    Some((INDEXES_RESERVED, index))
 }
 
 pub fn worker_dot_index_shift(dot: &Dot) -> Option<(usize, usize)> {

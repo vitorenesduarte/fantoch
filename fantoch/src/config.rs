@@ -51,8 +51,8 @@ impl Config {
         let executors = 1;
         // by default, garbage collection runs every 500ms
         let garbage_collection_interval = 500;
-        // by default, garbage collection runs every 5ms
-        let newt_clock_bump_interval = 5;
+        // by default, garbage collection runs every 1ms
+        let newt_clock_bump_interval = 1;
         Self {
             n,
             f,
@@ -317,8 +317,8 @@ mod tests {
         config.set_garbage_collection_interval(100);
         assert_eq!(config.garbage_collection_interval(), 100);
 
-        // by default, newt clock bump interval is 5
-        assert_eq!(config.newt_clock_bump_interval(), 5);
+        // by default, newt clock bump interval is 1
+        assert_eq!(config.newt_clock_bump_interval(), 1);
 
         // change its value and check it has changed
         config.set_newt_clock_bump_interval(10);
