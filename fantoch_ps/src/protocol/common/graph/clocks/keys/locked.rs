@@ -168,21 +168,17 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::DotGen;
-    use rand::Rng;
     use std::collections::HashSet;
     use std::thread;
 
     #[test]
     fn locked_clocks_test() {
-        let min_nthreads = 2;
-        let max_nthreads = 8;
-        let ops_number = 1000;
-        let max_keys_per_command = 4;
-        let keys_number = 16;
+        let nthreads = 2;
+        let ops_number = 3000;
+        let max_keys_per_command = 2;
+        let keys_number = 4;
         let noop_probability = 50;
         for _ in 0..10 {
-            let nthreads =
-                rand::thread_rng().gen_range(min_nthreads, max_nthreads + 1);
             test(
                 nthreads,
                 ops_number,

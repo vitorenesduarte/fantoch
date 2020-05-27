@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct Pending {
     /// mapping from Rifl to command start time
-    pending: HashMap<Rifl, u128>,
+    pending: HashMap<Rifl, u64>,
 }
 
 impl Pending {

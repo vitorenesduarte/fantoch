@@ -1,6 +1,7 @@
 use crate::command::Command;
 use crate::id::RiflGen;
 use crate::kvs::{Key, Value};
+use crate::log;
 use rand::{distributions::Alphanumeric, Rng};
 use std::iter;
 
@@ -40,7 +41,7 @@ impl Workload {
         // check if we should generate more commands
         if self.command_count < self.total_commands {
             if self.command_count % 1000 == 0 {
-                println!(
+                log!(
                     "client {:?}: {} of {}",
                     rifl_gen.source(),
                     self.command_count,
@@ -53,7 +54,7 @@ impl Workload {
             // generate new command
             Some(self.gen_cmd(rifl_gen))
         } else {
-            println!("client {:?} is done!", rifl_gen.source());
+            log!("client {:?} is done!", rifl_gen.source());
             None
         }
     }

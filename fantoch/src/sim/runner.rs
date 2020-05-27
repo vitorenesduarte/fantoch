@@ -7,7 +7,7 @@ use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
-use crate::time::{SimTime, SysTime};
+use crate::time::SysTime;
 use crate::util;
 use std::collections::HashMap;
 use std::fmt;
@@ -16,7 +16,7 @@ enum ScheduleAction<P: Protocol> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
-    PeriodicEvent(ProcessId, P::PeriodicEvent, u128),
+    PeriodicEvent(ProcessId, P::PeriodicEvent, u64),
 }
 #[derive(Clone)]
 enum MessageRegion {
@@ -27,7 +27,6 @@ enum MessageRegion {
 pub struct Runner<P: Protocol> {
     planet: Planet,
     simulation: Simulation<P>,
-    time: SimTime,
     schedule: Schedule<ScheduleAction<P>>,
     // mapping from process identifier to its region
     process_to_region: HashMap<ProcessId, Region>,
@@ -69,24 +68,25 @@ where
         let mut periodic_actions = Vec::new();
 
         // create processes
-        let to_discover: Vec<_> =
-            process_regions
-                .into_iter()
-                .zip(1..=config.n())
-                .map(|(region, process_id)| {
-                    let process_id = process_id as u64;
-                    // create process and save it
-                    let (process, process_events) = P::new(process_id, config);
-                    processes.push((region.clone(), process));
+        let to_discover: Vec<_> = process_regions
+            .into_iter()
+            .zip(1..=config.n())
+            .map(|(region, process_id)| {
+                let process_id = process_id as u64;
+                // create process and save it
+                let (process, process_events) = P::new(process_id, config);
+                processes.push((region.clone(), process));
 
-                    // save periodic actions
-                    periodic_actions.extend(process_events.into_iter().map(
-                        |(event, delay)| (process_id, event, delay as u128),
-                    ));
+                // save periodic actions
+                periodic_actions.extend(
+                    process_events
+                        .into_iter()
+                        .map(|(event, delay)| (process_id, event, delay)),
+                );
 
-                    (process_id, region)
-                })
-                .collect();
+                (process_id, region)
+            })
+            .collect();
 
         // create processs to region mapping
         let process_to_region = to_discover.clone().into_iter().collect();
@@ -133,7 +133,6 @@ where
         let mut runner = Self {
             planet,
             simulation,
-            time: SimTime::new(),
             schedule: Schedule::new(),
             process_to_region,
             client_to_region,
@@ -154,23 +153,22 @@ where
     /// the simulation run after clients are finished.
     pub fn run(
         &mut self,
-        extra_sim_time: Option<u128>,
+        extra_sim_time: Option<u64>,
     ) -> (
         HashMap<ProcessId, ProtocolMetrics>,
         HashMap<Region, (usize, Histogram)>,
     ) {
         // start clients
-        self.simulation
-            .start_clients(&self.time)
-            .into_iter()
-            .for_each(|(client_id, process_id, cmd)| {
+        self.simulation.start_clients().into_iter().for_each(
+            |(client_id, process_id, cmd)| {
                 // schedule client commands
                 self.schedule_submit(
                     MessageRegion::Client(client_id),
                     process_id,
                     cmd,
                 )
-            });
+            },
+        );
 
         // run simulation loop
         self.simulation_loop(extra_sim_time);
@@ -179,14 +177,14 @@ where
         (self.processes_metrics(), self.clients_latencies())
     }
 
-    fn simulation_loop(&mut self, extra_sim_time: Option<u128>) {
+    fn simulation_loop(&mut self, extra_sim_time: Option<u64>) {
         let mut simulation_status = SimulationStatus::ClientsRunning;
         let mut clients_done = 0;
         let mut simulation_final_time = 0;
 
         while simulation_status != SimulationStatus::Done {
             let actions = self.schedule
-                .next_actions(&mut self.time)
+                .next_actions(self.simulation.time())
                 .expect("there should be more actions since stability is always running");
 
             // for each scheduled action
@@ -194,14 +192,14 @@ where
                 match action {
                     ScheduleAction::SubmitToProc(process_id, cmd) => {
                         // get process and executor
-                        let (process, executor) =
+                        let (process, executor, time) =
                             self.simulation.get_process(process_id);
 
                         // register command in the executor
                         executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
-                        let protocol_action = process.submit(None, cmd);
+                        let protocol_action = process.submit(None, cmd, time);
                         self.schedule_protocol_action(
                             process_id,
                             MessageRegion::Process(process_id),
@@ -210,11 +208,11 @@ where
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
                         // get process and executor
-                        let (process, executor) =
+                        let (process, executor, time) =
                             self.simulation.get_process(process_id);
 
                         // handle message and get ready commands
-                        let to_send = process.handle(from, msg);
+                        let to_send = process.handle(from, msg, time);
 
                         // handle new execution info in the executor
                         let to_executor = process.to_executor();
@@ -241,9 +239,8 @@ where
                     }
                     ScheduleAction::SendToClient(client_id, cmd_result) => {
                         // handle new command result in client
-                        let submit = self
-                            .simulation
-                            .forward_to_client(cmd_result, &self.time);
+                        let submit =
+                            self.simulation.forward_to_client(cmd_result);
                         if let Some((process_id, cmd)) = submit {
                             self.schedule_submit(
                                 MessageRegion::Client(client_id),
@@ -259,7 +256,8 @@ where
                                         // if there's extra time, compute the
                                         // final simulation time
                                         simulation_final_time =
-                                            self.time.now() + extra;
+                                            self.simulation.time().now()
+                                                + extra;
                                         SimulationStatus::ExtraSimulationTime
                                     }
                                     None => {
@@ -272,12 +270,12 @@ where
                     }
                     ScheduleAction::PeriodicEvent(process_id, event, delay) => {
                         // get process
-                        let (process, _) =
+                        let (process, _, time) =
                             self.simulation.get_process(process_id);
 
                         // handle event
                         for protocol_action in
-                            process.handle_event(event.clone())
+                            process.handle_event(event.clone(), time)
                         {
                             self.schedule_protocol_action(
                                 process_id,
@@ -296,7 +294,7 @@ where
             // simulation if we're past the final simulation time
             let should_end_sim = simulation_status
                 == SimulationStatus::ExtraSimulationTime
-                && self.time.now() > simulation_final_time;
+                && self.simulation.time().now() > simulation_final_time;
             if should_end_sim {
                 simulation_status = SimulationStatus::Done;
             }
@@ -378,7 +376,8 @@ where
         // compute distance between regions
         let distance = self.distance(from, to);
         // schedule action
-        self.schedule.schedule(&self.time, distance as u128, action);
+        self.schedule
+            .schedule(self.simulation.time(), distance, action);
     }
 
     /// Schedules the next periodic event.
@@ -386,11 +385,12 @@ where
         &mut self,
         process_id: ProcessId,
         event: P::PeriodicEvent,
-        delay: u128,
+        delay: u64,
     ) {
         // create action
         let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
-        self.schedule.schedule(&self.time, delay, action);
+        self.schedule
+            .schedule(self.simulation.time(), delay, action);
     }
 
     /// Retrieves the region of some process/client.
@@ -448,7 +448,8 @@ where
             .keys()
             .map(|&process_id| {
                 // get process from simulation
-                let (process, _executor) = simulation.get_process(process_id);
+                let (process, _executor, _) =
+                    simulation.get_process(process_id);
 
                 // compute process result
                 (process_id, f(&process))
@@ -472,7 +473,7 @@ where
             };
 
             // get client from simulation
-            let client = simulation.get_client(client_id);
+            let (client, _) = simulation.get_client(client_id);
 
             // update region result
             f(&client, &mut result);

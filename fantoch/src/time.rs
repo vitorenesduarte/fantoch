@@ -1,25 +1,32 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub trait SysTime: Send + 'static + Sync /* TODO why is Sync needed here */ {
-    /// Returns the current time in microseconds.
-    fn now(&self) -> u128;
+    /// Returns the current time in milliseconds.
+    fn now(&self) -> u64;
 }
 
 // TODO find a better name
 pub struct RunTime;
 
 impl SysTime for RunTime {
-    fn now(&self) -> u128 {
+    fn now(&self) -> u64 {
         let now = SystemTime::now();
-        now.duration_since(UNIX_EPOCH)
+        let micros = now
+            .duration_since(UNIX_EPOCH)
             .expect("we're way past UNIX EPOCH")
-            .as_micros()
+            .as_millis();
+        // TODO check following is not needed to make we don't truncate
+        // const MAX_U64: u128 = u64::max_value() as u128;
+        // if micros > MAX_U64 {
+        //     panic!("current time (millis) doesn't fit in 64bits");
+        // }
+        micros as u64
     }
 }
 
 #[derive(Default)]
 pub struct SimTime {
-    time: u128,
+    time: u64,
 }
 
 impl SimTime {
@@ -29,12 +36,12 @@ impl SimTime {
     }
 
     /// Increases simulation time by `tick`.
-    pub fn tick(&mut self, tick: u128) {
+    pub fn tick(&mut self, tick: u64) {
         self.time += tick;
     }
 
     /// Sets simulation time to `new_time`.
-    pub fn set_time(&mut self, new_time: u128) {
+    pub fn set_time(&mut self, new_time: u64) {
         // make sure time is monotonic
         assert!(self.time <= new_time);
         self.time = new_time;
@@ -42,7 +49,7 @@ impl SimTime {
 }
 
 impl SysTime for SimTime {
-    fn now(&self) -> u128 {
+    fn now(&self) -> u64 {
         self.time
     }
 }

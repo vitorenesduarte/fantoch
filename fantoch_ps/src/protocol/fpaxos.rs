@@ -8,6 +8,7 @@ use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
     ProtocolMetrics,
 };
+use fantoch::time::SysTime;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -34,7 +35,7 @@ impl Protocol for FPaxos {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = 0; // there's no fast quorum as we don't have fast paths
         let write_quorum_size = config.fpaxos_quorum_size();
@@ -66,7 +67,7 @@ impl Protocol for FPaxos {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval();
+        let gc_delay = config.garbage_collection_interval() as u64;
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
@@ -85,7 +86,12 @@ impl Protocol for FPaxos {
     }
 
     /// Submits a command issued by some client.
-    fn submit(&mut self, dot: Option<Dot>, cmd: Command) -> Action<Message> {
+    fn submit(
+        &mut self,
+        dot: Option<Dot>,
+        cmd: Command,
+        _time: &dyn SysTime,
+    ) -> Action<Message> {
         self.handle_submit(dot, cmd)
     }
 
@@ -94,6 +100,7 @@ impl Protocol for FPaxos {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+        _time: &dyn SysTime,
     ) -> Action<Message> {
         match msg {
             Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
@@ -117,6 +124,7 @@ impl Protocol for FPaxos {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
@@ -383,39 +391,37 @@ const ACCEPTOR_WORKER_INDEX: usize = 1;
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{no_worker_index_reserve, worker_index_reserve};
+        use fantoch::run::{worker_index_no_shift, worker_index_shift};
         match self {
             Self::MForwardSubmit { .. } => {
                 // forward commands to the leader worker
-                no_worker_index_reserve(LEADER_WORKER_INDEX)
+                worker_index_no_shift(LEADER_WORKER_INDEX)
             }
             Self::MAccept { .. } => {
                 // forward accepts to the acceptor worker
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
             Self::MChosen { .. } => {
                 // forward chosen messages also to acceptor worker:
                 // - at point we had a learner worker, but since the acceptor
                 //   needs to know about committed slows to perform GC, we
                 //   wouldn't gain much (if anything) in separating these roles
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
             // spawn commanders and accepted messages should be forwarded to
             // the commander process:
             // - make sure that these commanders are never spawned in the
             //   previous 2 workers
             Self::MSpawnCommander { slot, .. } => {
-                worker_index_reserve(2, *slot as usize)
+                worker_index_shift(*slot as usize)
             }
-            Self::MAccepted { slot, .. } => {
-                worker_index_reserve(2, *slot as usize)
-            }
+            Self::MAccepted { slot, .. } => worker_index_shift(*slot as usize),
             Self::MGarbageCollection { .. } => {
                 // since it's the acceptor that contains the slots to be gc-ed,
                 // we should simply run gc-tracking there as well:
                 // - this removes the need for Message::MStable seen in the
                 //   other implementations
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
         }
     }
@@ -428,10 +434,10 @@ pub enum PeriodicEvent {
 
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::no_worker_index_reserve;
+        use fantoch::run::worker_index_no_shift;
         match self {
             Self::GarbageCollection => {
-                no_worker_index_reserve(ACCEPTOR_WORKER_INDEX)
+                worker_index_no_shift(ACCEPTOR_WORKER_INDEX)
             }
         }
     }
@@ -549,14 +555,14 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in fpaxos 1
-        let (process, executor) = simulation.get_process(target);
+        let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let spawn = process.submit(None, cmd);
+        let spawn = process.submit(None, cmd, time);
 
         // check that the register created a spawn commander to self and handle
         // it locally
         let maccept = if let Action::ToForward { msg } = spawn {
-            process.handle(process_id_1, msg)
+            process.handle(process_id_1, msg, time)
         } else {
             panic!("Action::ToForward not found!");
         };
@@ -604,7 +610,7 @@ mod tests {
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
-        let (process, executor) = simulation.get_process(process_id_1);
+        let (process, executor, _) = simulation.get_process(process_id_1);
         let to_executor = process.to_executor();
         assert_eq!(to_executor.len(), 1);
 
@@ -621,11 +627,11 @@ mod tests {
 
         // handle the previous command result
         let (target, cmd) = simulation
-            .forward_to_client(cmd_result, &time)
+            .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _) = simulation.get_process(target);
-        let action = process.submit(None, cmd);
+        let (process, _, time) = simulation.get_process(target);
+        let action = process.submit(None, cmd, time);
         let check_msg = |msg: &Message| matches!(msg, Message::MSpawnCommander{slot, ..} if slot == &2);
         assert!(matches!(action, Action::ToForward {msg} if check_msg(&msg)));
     }

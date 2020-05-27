@@ -66,10 +66,10 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (kind, histogram) in self.collected.iter() {
-            write!(f, "{:?}: {:?}", kind, histogram)?;
+            writeln!(f, "{:?}: {:?}", kind, histogram)?;
         }
         for (kind, value) in self.aggregated.iter() {
-            write!(f, "{:?}: {:?}", kind, value)?;
+            writeln!(f, "{:?}: {:?}", kind, value)?;
         }
         Ok(())
     }

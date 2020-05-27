@@ -17,10 +17,11 @@ pub struct TableExecutor {
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
-    fn new(_process_id: ProcessId, config: Config) -> Self {
+    fn new(process_id: ProcessId, config: Config) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
-        let table = MultiVotesTable::new(config.n(), stability_threshold);
+        let table =
+            MultiVotesTable::new(process_id, config.n(), stability_threshold);
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = config.executors() == 1;
@@ -63,11 +64,11 @@ impl Executor for TableExecutor {
                     self.execute(key, to_execute)
                 }
             }
-            TableExecutionInfo::PhantomVotes { key, votes } => {
+            TableExecutionInfo::DetachedVotes { key, votes } => {
                 if self.execute_at_commit {
                     vec![]
                 } else {
-                    let to_execute = self.table.add_phantom_votes(&key, votes);
+                    let to_execute = self.table.add_detached_votes(&key, votes);
                     self.execute(key, to_execute)
                 }
             }
@@ -105,7 +106,7 @@ pub enum TableExecutionInfo {
         op: KVOp,
         votes: Vec<VoteRange>,
     },
-    PhantomVotes {
+    DetachedVotes {
         key: Key,
         votes: Vec<VoteRange>,
     },
@@ -130,8 +131,8 @@ impl TableExecutionInfo {
         }
     }
 
-    pub fn phantom_votes(key: Key, votes: Vec<VoteRange>) -> Self {
-        TableExecutionInfo::PhantomVotes { key, votes }
+    pub fn detached_votes(key: Key, votes: Vec<VoteRange>) -> Self {
+        TableExecutionInfo::DetachedVotes { key, votes }
     }
 }
 
@@ -139,7 +140,7 @@ impl MessageKey for TableExecutionInfo {
     fn key(&self) -> Option<&Key> {
         let key = match self {
             TableExecutionInfo::Votes { key, .. } => key,
-            TableExecutionInfo::PhantomVotes { key, .. } => key,
+            TableExecutionInfo::DetachedVotes { key, .. } => key,
         };
         Some(&key)
     }

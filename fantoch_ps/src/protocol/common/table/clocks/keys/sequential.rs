@@ -19,6 +19,15 @@ impl KeyClocks for SequentialKeyClocks {
         Self { id, clocks }
     }
 
+    fn init_clocks(&mut self, cmd: &Command) {
+        cmd.keys().for_each(|key| {
+            // create entry if key not present yet
+            if !self.clocks.contains_key(key) {
+                self.clocks.insert(key.clone(), 0);
+            }
+        });
+    }
+
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // bump to at least `min_clock`
         let clock = cmp::max(min_clock, self.clock(cmd) + 1);
@@ -32,7 +41,7 @@ impl KeyClocks for SequentialKeyClocks {
 
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
         // create votes
-        let mut votes = Votes::new(Some(cmd));
+        let mut votes = Votes::with_capacity(cmd.key_count());
 
         // vote on each key
         cmd.keys().for_each(|key| {
@@ -42,14 +51,21 @@ impl KeyClocks for SequentialKeyClocks {
                 None => self.clocks.entry(key.clone()).or_insert(0),
             };
 
-            // if we should vote
-            if *current < clock {
-                // vote from the current clock value + 1 until `clock`
-                let vr = VoteRange::new(self.id, *current + 1, clock);
-                // update current clock to be `clock`
-                *current = clock;
-                votes.add(key, vr);
-            }
+            Self::maybe_bump(self.id, key, current, clock, &mut votes);
+        });
+
+        // return votes
+        votes
+    }
+
+    fn vote_all(&mut self, clock: u64) -> Votes {
+        // create votes
+        let mut votes = Votes::with_capacity(self.clocks.len());
+
+        // vote on each key
+        let id = self.id;
+        self.clocks.iter_mut().for_each(|(key, current)| {
+            Self::maybe_bump(id, key, current, clock, &mut votes);
         });
 
         // return votes
@@ -73,5 +89,22 @@ impl SequentialKeyClocks {
             // if keys don't exist yet, we may have no maximum; in that case we
             // should return 0
             .unwrap_or(0)
+    }
+
+    fn maybe_bump(
+        id: ProcessId,
+        key: &Key,
+        current: &mut u64,
+        up_to: u64,
+        votes: &mut Votes,
+    ) {
+        // if we should vote
+        if *current < up_to {
+            // vote from the current clock value + 1 until `clock`
+            let vr = VoteRange::new(id, *current + 1, up_to);
+            // update current clock to be `clock`
+            *current = up_to;
+            votes.set(key.clone(), vec![vr]);
+        }
     }
 }

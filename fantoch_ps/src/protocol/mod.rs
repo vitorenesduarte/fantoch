@@ -35,31 +35,102 @@ mod tests {
     use fantoch::sim::Runner;
     use std::collections::HashMap;
 
+    macro_rules! config {
+        ($n:expr, $f:expr) => {
+            Config::new($n, $f)
+        };
+        ($n:expr, $f:expr, $with_leader:expr) => {{
+            let mut config = Config::new($n, $f);
+            if $with_leader {
+                config.set_leader(1);
+            }
+            config
+        }};
+        ($n:expr, $f:expr, $with_leader:expr, $clock_bump_interval:expr) => {{
+            let mut config = Config::new($n, $f);
+            if $with_leader {
+                config.set_leader(1);
+            }
+            config.set_newt_tiny_quorums(true);
+            config.set_newt_real_time(true);
+            config.set_newt_hybrid_clocks(true);
+            config.set_newt_clock_bump_interval($clock_bump_interval);
+            config
+        }};
+        ($n:expr, $f:expr, $with_leader:expr, $workers:expr, $executors:expr) => {{
+            let mut config = Config::new($n, $f);
+            if $with_leader {
+                config.set_leader(1);
+            }
+            config.set_workers($workers);
+            config.set_executors($executors);
+            config
+        }};
+        ($n:expr, $f:expr, $with_leader:expr, $workers:expr, $executors:expr, $clock_bump_interval:expr) => {{
+            let mut config = Config::new($n, $f);
+            if $with_leader {
+                config.set_leader(1);
+            }
+            config.set_workers($workers);
+            config.set_executors($executors);
+            config.set_newt_tiny_quorums(true);
+            config.set_newt_real_time(true);
+            config.set_newt_hybrid_clocks(true);
+            config.set_newt_clock_bump_interval($clock_bump_interval);
+            config
+        }};
+    }
+
     #[test]
     fn sim_newt_3_1_test() {
-        let slow_paths = sim_test::<NewtSequential>(3, 1, false);
+        let slow_paths = sim_test::<NewtSequential>(config!(3, 1, false));
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
+    #[test]
+    fn sim_best_newt_3_1_test() {
+        // NOTE: with n = 3 we don't really need real time clocks to get the
+        // best results
+        let clock_bump_interval = 50;
+        let slow_paths = sim_test::<NewtSequential>(config!(
+            3,
+            1,
+            false,
+            clock_bump_interval
+        ));
+        assert_eq!(slow_paths, 0);
+    }
+
     #[test]
     fn sim_newt_5_1_test() {
-        let slow_paths = sim_test::<NewtSequential>(5, 1, false);
+        let slow_paths = sim_test::<NewtSequential>(config!(5, 1, false));
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
+    #[test]
+    fn sim_best_newt_5_1_test() {
+        let clock_bump_interval = 50;
+        let slow_paths = sim_test::<NewtSequential>(config!(
+            5,
+            1,
+            false,
+            clock_bump_interval
+        ));
+        assert_eq!(slow_paths, 0);
+    }
+
     #[tokio::test]
     async fn run_newt_3_1_sequential_test() {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 4;
-        let slow_paths =
-            run_test::<NewtSequential>(3, 1, false, workers, executors).await;
+        let slow_paths = run_test::<NewtSequential>(config!(
+            3, 1, false, workers, executors
+        ))
+        .await;
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
     #[tokio::test]
     async fn run_newt_3_1_atomic_test() {
         // newt atomic can handle as many workers as we want but we may want to
@@ -67,7 +138,66 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<NewtAtomic>(3, 1, false, workers, executors).await;
+            run_test::<NewtAtomic>(config!(3, 1, false, workers, executors))
+                .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_best_newt_3_1_test() {
+        let workers = 2;
+        let executors = 2;
+        let clock_bump_interval = 50;
+        let slow_paths = run_test::<NewtAtomic>(config!(
+            3,
+            1,
+            false,
+            workers,
+            executors,
+            clock_bump_interval
+        ))
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_newt_5_1_sequential_test() {
+        // newt sequential can only handle one worker but many executors
+        let workers = 1;
+        let executors = 4;
+        let slow_paths = run_test::<NewtSequential>(config!(
+            5, 1, false, workers, executors
+        ))
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_newt_5_1_atomic_test() {
+        // newt atomic can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths =
+            run_test::<NewtAtomic>(config!(5, 1, false, workers, executors))
+                .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_best_newt_5_1_test() {
+        let workers = 2;
+        let executors = 2;
+        let clock_bump_interval = 50;
+        let slow_paths = run_test::<NewtAtomic>(config!(
+            5,
+            1,
+            false,
+            workers,
+            executors,
+            clock_bump_interval
+        ))
+        .await;
         assert_eq!(slow_paths, 0);
     }
 
@@ -75,25 +205,25 @@ mod tests {
     #[ignore]
     #[test]
     fn sim_newt_5_2_test() {
-        let slow_paths = sim_test::<NewtSequential>(5, 2, false);
+        let slow_paths = sim_test::<NewtSequential>(config!(5, 2, false));
         assert!(slow_paths > 0);
     }
 
     #[test]
     fn sim_atlas_3_1_test() {
-        let slow_paths = sim_test::<AtlasSequential>(3, 1, false);
+        let slow_paths = sim_test::<AtlasSequential>(config!(3, 1, false));
         assert_eq!(slow_paths, 0);
     }
 
     #[test]
     fn sim_atlas_5_1_test() {
-        let slow_paths = sim_test::<AtlasSequential>(3, 1, false);
+        let slow_paths = sim_test::<AtlasSequential>(config!(3, 1, false));
         assert_eq!(slow_paths, 0);
     }
 
     #[test]
     fn sim_atlas_5_2_test() {
-        let slow_paths = sim_test::<AtlasSequential>(5, 2, false);
+        let slow_paths = sim_test::<AtlasSequential>(config!(5, 2, false));
         assert!(slow_paths > 0);
     }
 
@@ -102,8 +232,10 @@ mod tests {
         // atlas sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        let slow_paths =
-            run_test::<AtlasSequential>(3, 1, false, workers, executors).await;
+        let slow_paths = run_test::<AtlasSequential>(config!(
+            3, 1, false, workers, executors
+        ))
+        .await;
         assert_eq!(slow_paths, 0);
     }
 
@@ -114,19 +246,20 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<AtlasLocked>(3, 1, false, workers, executors).await;
+            run_test::<AtlasLocked>(config!(3, 1, false, workers, executors))
+                .await;
         assert_eq!(slow_paths, 0);
     }
 
     #[test]
     fn sim_epaxos_3_1_test() {
-        let slow_paths = sim_test::<EPaxosSequential>(3, 1, false);
+        let slow_paths = sim_test::<EPaxosSequential>(config!(3, 1, false));
         assert_eq!(slow_paths, 0);
     }
 
     #[test]
     fn sim_epaxos_5_2_test() {
-        let slow_paths = sim_test::<EPaxosSequential>(5, 2, false);
+        let slow_paths = sim_test::<EPaxosSequential>(config!(5, 2, false));
         assert!(slow_paths > 0);
     }
 
@@ -135,8 +268,10 @@ mod tests {
         // epaxos sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        let slow_paths =
-            run_test::<EPaxosSequential>(3, 1, false, workers, executors).await;
+        let slow_paths = run_test::<EPaxosSequential>(config!(
+            3, 1, false, workers, executors
+        ))
+        .await;
         assert_eq!(slow_paths, 0);
     }
 
@@ -147,18 +282,19 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<EPaxosLocked>(3, 1, false, workers, executors).await;
+            run_test::<EPaxosLocked>(config!(3, 1, false, workers, executors))
+                .await;
         assert_eq!(slow_paths, 0);
     }
 
     #[test]
     fn sim_fpaxos_3_1_test() {
-        sim_test::<FPaxos>(3, 1, true);
+        sim_test::<FPaxos>(config!(3, 1, true));
     }
 
     #[test]
     fn sim_fpaxos_5_2_test() {
-        sim_test::<FPaxos>(5, 2, true);
+        sim_test::<FPaxos>(config!(5, 2, true));
     }
 
     #[tokio::test]
@@ -166,7 +302,7 @@ mod tests {
         // run fpaxos in sequential mode
         let workers = 1;
         let executors = 1;
-        run_test::<FPaxos>(3, 1, true, workers, executors).await;
+        run_test::<FPaxos>(config!(3, 1, true, workers, executors)).await;
     }
 
     #[tokio::test]
@@ -175,7 +311,7 @@ mod tests {
         // never parallel)
         let workers = 3;
         let executors = 1;
-        run_test::<FPaxos>(3, 1, true, workers, executors).await;
+        run_test::<FPaxos>(config!(3, 1, true, workers, executors)).await;
     }
 
     // global test config
@@ -201,13 +337,7 @@ mod tests {
         (slow_paths, stable_count)
     }
 
-    async fn run_test<P>(
-        n: usize,
-        f: usize,
-        with_leader: bool,
-        workers: usize,
-        executors: usize,
-    ) -> u64
+    async fn run_test<P>(config: Config) -> u64
     where
         P: Protocol + Send + 'static,
     {
@@ -215,11 +345,7 @@ mod tests {
         let extra_run_time = Some(10_000);
         let tracer_show_interval = None;
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
-            n,
-            f,
-            with_leader,
-            workers,
-            executors,
+            config,
             CONFLICT_RATE,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
@@ -247,20 +373,12 @@ mod tests {
         })
         .collect();
 
-        check_metrics(n, f, with_leader, metrics)
+        check_metrics(config, metrics)
     }
 
-    fn sim_test<P: Protocol>(n: usize, f: usize, with_leader: bool) -> u64 {
+    fn sim_test<P: Protocol>(config: Config) -> u64 {
         // planet
         let planet = Planet::new();
-
-        // config
-        let mut config = Config::new(n, f);
-
-        // set process 0 as leader if we need one
-        if with_leader {
-            config.set_leader(1);
-        }
 
         // clients workload
         let payload_size = 1;
@@ -269,7 +387,7 @@ mod tests {
 
         // process and client regions
         let mut regions = planet.regions();
-        regions.truncate(n);
+        regions.truncate(config.n());
         let process_regions = regions.clone();
         let client_regions = regions.clone();
 
@@ -307,13 +425,11 @@ mod tests {
             })
             .collect();
 
-        check_metrics(n, f, with_leader, metrics)
+        check_metrics(config, metrics)
     }
 
     fn check_metrics(
-        n: usize,
-        f: usize,
-        with_leader: bool,
+        config: Config,
         metrics: HashMap<ProcessId, (u64, u64)>,
     ) -> u64 {
         // total slow path count
@@ -326,7 +442,8 @@ mod tests {
                 total_slow_paths += slow_paths;
                 // check if this process gc-ed all commands
                 *stable_count
-                    == (COMMANDS_PER_CLIENT * CLIENTS_PER_REGION * n) as u64
+                    == (COMMANDS_PER_CLIENT * CLIENTS_PER_REGION * config.n())
+                        as u64
             })
             .count();
 
@@ -334,7 +451,11 @@ mod tests {
         // - if there's a leader (i.e. FPaxos), GC will only prune commands at
         //   f+1 acceptors
         // - otherwise, GC will prune comands at all processes
-        let expected = if with_leader { f + 1 } else { n };
+        let expected = if config.leader().is_some() {
+            config.f() + 1
+        } else {
+            config.n()
+        };
         assert_eq!(gced, expected);
 
         // return number of slow paths

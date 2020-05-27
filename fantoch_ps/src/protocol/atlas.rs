@@ -12,6 +12,7 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
     Protocol, ProtocolMetrics,
 };
+use fantoch::time::SysTime;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -41,7 +42,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(PeriodicEvent, usize)>) {
+    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = config.atlas_quorum_sizes();
 
@@ -70,7 +71,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval();
+        let gc_delay = config.garbage_collection_interval() as u64;
         let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
 
         // return both
@@ -93,6 +94,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        _time: &dyn SysTime,
     ) -> Action<Self::Message> {
         self.handle_submit(dot, cmd)
     }
@@ -102,6 +104,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+        _time: &dyn SysTime,
     ) -> Action<Self::Message> {
         match msg {
             Message::MCollect {
@@ -134,6 +137,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Message>> {
         match event {
             PeriodicEvent::GarbageCollection => {
@@ -607,19 +611,19 @@ pub enum Message {
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{
-            dot_worker_index_reserve, no_worker_index_reserve, GC_WORKER_INDEX,
+            worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
         match self {
             // Protocol messages
-            Self::MCollect { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MCollectAck { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MCommit { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MConsensus { dot, .. } => dot_worker_index_reserve(&dot),
-            Self::MConsensusAck { dot, .. } => dot_worker_index_reserve(&dot),
+            Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MConsensus { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
             // GC messages
-            Self::MCommitDot { .. } => no_worker_index_reserve(GC_WORKER_INDEX),
+            Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
-                no_worker_index_reserve(GC_WORKER_INDEX)
+                worker_index_no_shift(GC_WORKER_INDEX)
             }
             Self::MStable { .. } => None,
         }
@@ -633,9 +637,9 @@ pub enum PeriodicEvent {
 
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{no_worker_index_reserve, GC_WORKER_INDEX};
+        use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
-            Self::GarbageCollection => no_worker_index_reserve(GC_WORKER_INDEX),
+            Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
         }
     }
 }
@@ -765,9 +769,9 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in atlas 1
-        let (process, executor) = simulation.get_process(target);
+        let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let mcollect = process.submit(None, cmd);
+        let mcollect = process.submit(None, cmd, time);
 
         // check that the mcollect is being sent to 2 processes
         let check_target = |target: &HashSet<u64>| {
@@ -815,7 +819,7 @@ mod tests {
         }));
 
         // process 1 should have something to the executor
-        let (process, executor) = simulation.get_process(process_id_1);
+        let (process, executor, _) = simulation.get_process(process_id_1);
         let to_executor = process.to_executor();
         assert_eq!(to_executor.len(), 1);
 
@@ -832,11 +836,11 @@ mod tests {
 
         // handle the previous command result
         let (target, cmd) = simulation
-            .forward_to_client(cmd_result, &time)
+            .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _) = simulation.get_process(target);
-        let action = process.submit(None, cmd);
+        let (process, _, time) = simulation.get_process(target);
+        let action = process.submit(None, cmd, time);
         let check_msg = |msg: &Message| matches!(msg, Message::MCollect {dot, ..} if dot == &Dot::new(process_id_1, 2));
         assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
     }

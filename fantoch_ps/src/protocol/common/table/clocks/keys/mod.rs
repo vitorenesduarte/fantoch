@@ -16,6 +16,9 @@ pub trait KeyClocks: Clone {
     /// Create a new `KeyClocks` instance given the local process identifier.
     fn new(id: ProcessId) -> Self;
 
+    /// Makes sure there's a clock for each key in the command.
+    fn init_clocks(&mut self, cmd: &Command);
+
     /// Bump clocks to at least `min_clock` and return the new clock (that might
     /// be `min_clock` in case it was higher than any of the local clocks). Also
     /// returns the consumed votes.
@@ -23,6 +26,9 @@ pub trait KeyClocks: Clone {
 
     /// Votes up to `clock` and returns the consumed votes.
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes;
+
+    /// Votes up to `clock` on all keys and returns the consumed votes.
+    fn vote_all(&mut self, clock: u64) -> Votes;
 
     fn parallel() -> bool;
 }

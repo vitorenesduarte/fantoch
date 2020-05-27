@@ -2,11 +2,12 @@ use crate::client::Client;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Action, Protocol};
-use crate::time::SysTime;
+use crate::time::SimTime;
 use std::cell::Cell;
 use std::collections::HashMap;
 
 pub struct Simulation<P: Protocol> {
+    time: SimTime,
     processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
@@ -19,9 +20,15 @@ where
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Simulation {
+            time: SimTime::new(),
             processes: HashMap::new(),
             clients: HashMap::new(),
         }
+    }
+
+    // Return a mutable reference to the simulation time.
+    pub fn time(&mut self) -> &mut SimTime {
+        &mut self.time
     }
 
     /// Registers a `Process` in the `Simulation` by storing it in a `Cell`.
@@ -45,10 +52,8 @@ where
     }
 
     /// Starts all clients registered in the router.
-    pub fn start_clients(
-        &mut self,
-        time: &dyn SysTime,
-    ) -> Vec<(ClientId, ProcessId, Command)> {
+    pub fn start_clients(&mut self) -> Vec<(ClientId, ProcessId, Command)> {
+        let time = &self.time;
         self.clients
             .iter_mut()
             .map(|(_, client)| {
@@ -71,8 +76,8 @@ where
             Action::ToSend { target, msg } => {
                 // handle first in self if self in target
                 let local_action = if target.contains(&process_id) {
-                    let (process, _) = self.get_process(process_id);
-                    process.handle(process_id, msg.clone())
+                    let (process, _, time) = self.get_process(process_id);
+                    process.handle(process_id, msg.clone(), time)
                 } else {
                     Action::Nothing
                 };
@@ -82,8 +87,9 @@ where
                     // make sure we don't handle again in self
                     .filter(|to| to != &process_id)
                     .map(|to| {
-                        let (process, _) = self.get_process(to);
-                        let action = process.handle(process_id, msg.clone());
+                        let (process, _, time) = self.get_process(to);
+                        let action =
+                            process.handle(process_id, msg.clone(), time);
                         (to, action)
                     });
 
@@ -103,12 +109,11 @@ where
     pub fn forward_to_client(
         &mut self,
         cmd_result: CommandResult,
-        time: &dyn SysTime,
     ) -> Option<(ProcessId, Command)> {
         // get client id
         let client_id = cmd_result.rifl().source();
         // find client
-        let client = self.get_client(client_id);
+        let (client, time) = self.get_client(client_id);
         // handle command result
         client.handle(cmd_result, time);
         // and generate the next command
@@ -120,8 +125,9 @@ where
     pub fn get_process(
         &mut self,
         process_id: ProcessId,
-    ) -> &mut (P, P::Executor) {
-        self.processes
+    ) -> (&mut P, &mut P::Executor, &SimTime) {
+        let (process, executor) = self
+            .processes
             .get_mut(&process_id)
             .unwrap_or_else(|| {
                 panic!(
@@ -129,13 +135,18 @@ where
                     process_id
                 );
             })
-            .get_mut()
+            .get_mut();
+        (process, executor, &self.time)
     }
 
     /// Returns the client registered with this identifier.
     /// It panics if the client is not registered.
-    pub fn get_client(&mut self, client_id: ClientId) -> &mut Client {
-        self.clients
+    pub fn get_client(
+        &mut self,
+        client_id: ClientId,
+    ) -> (&mut Client, &SimTime) {
+        let client = self
+            .clients
             .get_mut(&client_id)
             .unwrap_or_else(|| {
                 panic!(
@@ -143,6 +154,7 @@ where
                     client_id
                 );
             })
-            .get_mut()
+            .get_mut();
+        (client, &self.time)
     }
 }

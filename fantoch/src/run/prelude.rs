@@ -19,21 +19,21 @@ pub const LEADER_WORKER_INDEX: usize = 0;
 // - e.g. in fpaxos, the gc only runs in the acceptor worker
 pub const GC_WORKER_INDEX: usize = 0;
 
-// protocols that use dots have a GC worker; this reserves the first worker for
-// that
-pub fn dot_worker_index_reserve(dot: &Dot) -> Option<(usize, usize)> {
-    worker_index_reserve(1, dot.sequence() as usize)
+pub const INDEXES_RESERVED: usize = 2;
+
+pub fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
+    // when there's no shift, the index must be either 0 or 1
+    assert!(index < INDEXES_RESERVED);
+    Some((0, index))
 }
 
-pub fn no_worker_index_reserve(index: usize) -> Option<(usize, usize)> {
-    worker_index_reserve(0, index)
+// note: reserved indexing always reserve the first two workers
+pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
+    Some((INDEXES_RESERVED, index))
 }
 
-pub fn worker_index_reserve(
-    reserve: usize,
-    index: usize,
-) -> Option<(usize, usize)> {
-    Some((reserve, index))
+pub fn worker_dot_index_shift(dot: &Dot) -> Option<(usize, usize)> {
+    worker_index_shift(dot.sequence() as usize)
 }
 
 // common error type
@@ -87,9 +87,9 @@ impl pool::PoolIndex for (Option<Dot>, Command) {
         // worker
         self.0
             .as_ref()
-            .map(dot_worker_index_reserve)
+            .map(worker_dot_index_shift)
             // no necessary reserve if there's a leader
-            .unwrap_or(no_worker_index_reserve(LEADER_WORKER_INDEX))
+            .unwrap_or(worker_index_no_shift(LEADER_WORKER_INDEX))
     }
 }
 
@@ -149,7 +149,7 @@ pub type ClientToExecutors = pool::ToPool<FromClient>;
 // The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
 impl pool::PoolIndex for (&Key, Rifl) {
     fn index(&self) -> Option<(usize, usize)> {
-        no_worker_index_reserve(key_index(&self.0))
+        Some(key_index(&self.0))
     }
 }
 
@@ -163,15 +163,13 @@ where
     A: MessageKey,
 {
     fn index(&self) -> Option<(usize, usize)> {
-        match self.key() {
-            Some(key) => no_worker_index_reserve(key_index(key)),
-            None => None,
-        }
+        self.key().map(key_index)
     }
 }
 
 // The index of a key is its hash
 #[allow(clippy::ptr_arg)]
-fn key_index(key: &Key) -> usize {
-    util::key_hash(key) as usize
+fn key_index(key: &Key) -> (usize, usize) {
+    let index = util::key_hash(key) as usize;
+    (0, index)
 }

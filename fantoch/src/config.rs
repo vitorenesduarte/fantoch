@@ -8,6 +8,10 @@ pub struct Config {
     f: usize,
     /// defines whether newt should employ tiny quorums or not
     newt_tiny_quorums: bool,
+    /// defines whether newt should bump clocks based on real time or not
+    newt_real_time: bool,
+    /// defines whether newt should use hybrid clocks based on real time or not
+    newt_hybrid_clocks: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
@@ -20,6 +24,8 @@ pub struct Config {
     executors: usize,
     /// defines the interval between garbage collections (milliseconds)
     garbage_collection_interval: usize,
+    /// defines the interval between clock bumps (milliseconds)
+    newt_clock_bump_interval: usize,
 }
 
 impl Config {
@@ -33,6 +39,10 @@ impl Config {
         }
         // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;
+        // by default, `newt_real_time = false`
+        let newt_real_time = false;
+        // by default, `newt_hybrid_clocks = false`
+        let newt_hybrid_clocks = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
         // by default, execution is not skipped
@@ -45,16 +55,21 @@ impl Config {
         let executors = 1;
         // by default, garbage collection runs every 500ms
         let garbage_collection_interval = 500;
+        // by default, garbage collection runs every 1ms
+        let newt_clock_bump_interval = 1;
         Self {
             n,
             f,
             newt_tiny_quorums,
+            newt_real_time,
+            newt_hybrid_clocks,
             transitive_conflicts,
             execute_at_commit,
             leader,
             workers,
             executors,
             garbage_collection_interval,
+            newt_clock_bump_interval,
         }
     }
 
@@ -76,6 +91,26 @@ impl Config {
     /// Changes the value of `newt_tiny_quorums`.
     pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
         self.newt_tiny_quorums = newt_tiny_quorums;
+    }
+
+    /// Checks whether newt real time is enabled or not.
+    pub fn newt_real_time(&self) -> bool {
+        self.newt_real_time
+    }
+
+    /// Changes the value of `new_real_time`.
+    pub fn set_newt_real_time(&mut self, newt_real_time: bool) {
+        self.newt_real_time = newt_real_time;
+    }
+
+    /// Checks whether newt hybrid clocks is enabled or not.
+    pub fn newt_hybrid_clocks(&self) -> bool {
+        self.newt_hybrid_clocks
+    }
+
+    /// Changes the value of `new_real_time`.
+    pub fn set_newt_hybrid_clocks(&mut self, newt_hybrid_clocks: bool) {
+        self.newt_hybrid_clocks = newt_hybrid_clocks;
     }
 
     /// Checks whether we can assume that conflicts are transitive.
@@ -136,6 +171,16 @@ impl Config {
     /// Sets the garbage collection interval.
     pub fn set_garbage_collection_interval(&mut self, interval: usize) {
         self.garbage_collection_interval = interval;
+    }
+
+    /// Checks Newt clock bumpp interval.
+    pub fn newt_clock_bump_interval(&self) -> usize {
+        self.newt_clock_bump_interval
+    }
+
+    /// Sets newt clock bump interval.
+    pub fn set_newt_clock_bump_interval(&mut self, interval: usize) {
+        self.newt_clock_bump_interval = interval;
     }
 }
 
@@ -235,6 +280,28 @@ mod tests {
         config.set_newt_tiny_quorums(true);
         assert!(config.newt_tiny_quorums());
 
+        // by default, newt real time is false
+        assert!(!config.newt_real_time());
+
+        // if we change it to false, remains false
+        config.set_newt_real_time(false);
+        assert!(!config.newt_real_time());
+
+        // if we change it to true, it becomes true
+        config.set_newt_real_time(true);
+        assert!(config.newt_real_time());
+
+        // by default, newt hybrid clocks is false
+        assert!(!config.newt_hybrid_clocks());
+
+        // if we change it to false, remains false
+        config.set_newt_hybrid_clocks(false);
+        assert!(!config.newt_hybrid_clocks());
+
+        // if we change it to true, it becomes true
+        config.set_newt_hybrid_clocks(true);
+        assert!(config.newt_hybrid_clocks());
+
         // by default, transitive conflicts is false
         assert!(!config.transitive_conflicts());
 
@@ -275,6 +342,13 @@ mod tests {
         // change its value and check it has changed
         config.set_garbage_collection_interval(100);
         assert_eq!(config.garbage_collection_interval(), 100);
+
+        // by default, newt clock bump interval is 1
+        assert_eq!(config.newt_clock_bump_interval(), 1);
+
+        // change its value and check it has changed
+        config.set_newt_clock_bump_interval(10);
+        assert_eq!(config.newt_clock_bump_interval(), 10);
     }
 
     #[test]

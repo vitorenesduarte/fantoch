@@ -27,6 +27,7 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
 use crate::metrics::Metrics;
+use crate::time::SysTime;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -49,7 +50,7 @@ pub trait Protocol: Clone {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, usize)>);
+    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>);
 
     fn id(&self) -> ProcessId;
 
@@ -60,6 +61,7 @@ pub trait Protocol: Clone {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        time: &dyn SysTime,
     ) -> Action<Self::Message>;
 
     #[must_use]
@@ -67,12 +69,14 @@ pub trait Protocol: Clone {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
+        time: &dyn SysTime,
     ) -> Action<Self::Message>;
 
     #[must_use]
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self::Message>>;
 
     #[must_use]

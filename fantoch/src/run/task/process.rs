@@ -7,6 +7,7 @@ use crate::protocol::{Action, Protocol};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
+use crate::time::RunTime;
 use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::collections::HashMap;
@@ -341,16 +342,18 @@ async fn process_task<P, R>(
     P: Protocol + 'static,
     R: Debug + 'static,
 {
+    // create time
+    let time = RunTime;
     loop {
         tokio::select! {
             msg = from_readers.recv() => {
-                selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger).await
+                selected_from_processes(worker_index, process_id, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
             }
             event = from_periodic.recv() => {
-                selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers).await
+                selected_from_periodic_task(worker_index, process_id, event, &mut process, &mut to_writers, &mut reader_to_workers, &time).await
             }
             cmd = from_clients.recv() => {
-                selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers).await
+                selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &time).await
             }
         }
     }
@@ -365,6 +368,7 @@ async fn selected_from_processes<P>(
     reader_to_workers: &mut ReaderToWorkers<P>,
     worker_to_executors: &mut WorkerToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
 {
@@ -380,6 +384,7 @@ async fn selected_from_processes<P>(
             reader_to_workers,
             worker_to_executors,
             to_execution_logger,
+            time,
         )
         .await
     } else {
@@ -399,11 +404,12 @@ async fn handle_from_processes<P>(
     reader_to_workers: &mut ReaderToWorkers<P>,
     worker_to_executors: &mut WorkerToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
 {
     // handle message in process
-    let action = process.handle(from, msg);
+    let action = process.handle(from, msg, time);
 
     // handle (potentially) new action
     handle_action(
@@ -413,6 +419,7 @@ async fn handle_from_processes<P>(
         process,
         to_writers,
         reader_to_workers,
+        time,
     )
     .await;
 
@@ -446,6 +453,7 @@ async fn handle_action<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
 {
@@ -474,6 +482,7 @@ async fn handle_action<P>(
                         msg,
                         process,
                         reader_to_workers,
+                        time,
                     )
                     .await
                 } else {
@@ -488,6 +497,7 @@ async fn handle_action<P>(
                     msg,
                     process,
                     reader_to_workers,
+                    time,
                 )
                 .await;
             }
@@ -504,6 +514,7 @@ async fn handle_message_from_self<P>(
     msg: P::Message,
     process: &mut P,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    time: &RunTime,
 ) -> Action<P::Message>
 where
     P: Protocol + 'static,
@@ -514,7 +525,7 @@ where
     // us; this means that "messages to self are delivered immediately" is only
     // true for self messages to the same worker
     if reader_to_workers.only_to_self(&to_forward, worker_index) {
-        process.handle(process_id, to_forward.1)
+        process.handle(process_id, to_forward.1, time)
     } else {
         if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);
@@ -547,6 +558,7 @@ async fn selected_from_client<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
 {
@@ -560,6 +572,7 @@ async fn selected_from_client<P>(
             process,
             to_writers,
             reader_to_workers,
+            time,
         )
         .await
     } else {
@@ -575,11 +588,12 @@ async fn handle_from_client<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
 {
     // submit command in process
-    let to_send = process.submit(dot, cmd);
+    let to_send = process.submit(dot, cmd, time);
     handle_action(
         worker_index,
         process_id,
@@ -587,6 +601,7 @@ async fn handle_from_client<P>(
         process,
         to_writers,
         reader_to_workers,
+        time,
     )
     .await;
 }
@@ -598,6 +613,7 @@ async fn selected_from_periodic_task<P, R>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
     R: Debug + 'static,
@@ -611,6 +627,7 @@ async fn selected_from_periodic_task<P, R>(
             process,
             to_writers,
             reader_to_workers,
+            time,
         )
         .await
     } else {
@@ -625,6 +642,7 @@ async fn handle_from_periodic_task<P, R>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    time: &RunTime,
 ) where
     P: Protocol + 'static,
     R: Debug + 'static,
@@ -632,7 +650,7 @@ async fn handle_from_periodic_task<P, R>(
     match msg {
         FromPeriodicMessage::Event(event) => {
             // handle event in process
-            for to_send in process.handle_event(event) {
+            for to_send in process.handle_event(event, time) {
                 // TODO maybe run in parallel
                 handle_action(
                     worker_index,
@@ -641,6 +659,7 @@ async fn handle_from_periodic_task<P, R>(
                     process,
                     to_writers,
                     reader_to_workers,
+                    time,
                 )
                 .await;
             }

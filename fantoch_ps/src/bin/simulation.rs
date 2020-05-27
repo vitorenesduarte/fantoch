@@ -4,36 +4,53 @@ use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
-use fantoch_ps::protocol::{
-    AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
-};
+use fantoch_ps::protocol::{AtlasSequential, NewtSequential};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
-    println!(">running newt n = 5 | f = 1...");
-    let config = Config::new(5, 1);
-    run_in_thread(move || increasing_load::<NewtSequential>(config));
+    let f = 1;
+    for n in vec![3, 5] {
+        println!(">running atlas n = {} | f = {}", n, f);
+        let mut config = Config::new(n, f);
+        config.set_transitive_conflicts(true);
+        run_in_thread(move || increasing_load::<AtlasSequential>(config));
 
-    println!(">running atlas n = 5 | f = 1...");
-    let mut config = Config::new(5, 1);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<AtlasSequential>(config));
+        let tiny_quorums_config = if n > 3 {
+            vec![false, true]
+        } else {
+            // true same as false
+            vec![false]
+        };
 
-    println!(">running atlas n = 5 | f = 2...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<AtlasSequential>(config));
+        let hybrid_config = vec![false, true];
+        let interval_config = vec![100, 50, 10, 5];
 
-    println!(">running epaxos n = 5...");
-    let mut config = Config::new(5, 2);
-    config.set_transitive_conflicts(true);
-    run_in_thread(move || increasing_load::<EPaxosSequential>(config));
+        for tiny_quorums in tiny_quorums_config {
+            println!(
+                ">running newt n = {} | f = {} | tiny = {} | real_time = false",
+                n, f, tiny_quorums
+            );
+            let mut config = Config::new(n, f);
+            config.set_newt_tiny_quorums(tiny_quorums);
+            config.set_newt_real_time(false);
+            run_in_thread(move || increasing_load::<NewtSequential>(config));
 
-    println!(">running fpaxos n = 5 | f = 1");
-    let config = Config::new(5, 1);
-    run_in_thread(move || increasing_load::<FPaxos>(config));
+            for hybrid in hybrid_config.clone() {
+                for interval in interval_config.clone() {
+                    println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | hybrid_clocks = {}", n, f, tiny_quorums, interval, hybrid);
+                    let mut config = Config::new(n, f);
+                    config.set_newt_tiny_quorums(tiny_quorums);
+                    config.set_newt_real_time(true);
+                    config.set_newt_clock_bump_interval(interval);
+                    run_in_thread(move || {
+                        increasing_load::<NewtSequential>(config)
+                    });
+                }
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -81,16 +98,17 @@ fn equidistant<P: Protocol>() {
 #[allow(dead_code)]
 fn increasing_load<P: Protocol>(config: Config) {
     let planet = Planet::new();
-    let regions5 = vec![
+    let regions = vec![
         Region::new("asia-south1"),
         Region::new("europe-north1"),
         Region::new("southamerica-east1"),
         Region::new("australia-southeast1"),
         Region::new("europe-west1"),
     ];
+    let regions: Vec<_> = regions.into_iter().take(config.n()).collect();
 
     // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256, 512];
+    let cs = vec![8, 16, 32, 64, 128, 256];
 
     // clients workload
     let conflict_rate = 10;
@@ -106,10 +124,10 @@ fn increasing_load<P: Protocol>(config: Config) {
         println!();
 
         // process regions
-        let process_regions = regions5.clone();
+        let process_regions = regions.clone();
 
         // client regions
-        let client_regions = regions5.clone();
+        let client_regions = regions.clone();
 
         run::<P>(
             config,
@@ -250,6 +268,8 @@ where
         .spawn(run)
         .unwrap();
 
-    // Wait for thread to join
-    child.join().unwrap();
+    // wait for thread to end
+    if let Err(e) = child.join() {
+        println!("error in thread: {:?}", e);
+    }
 }

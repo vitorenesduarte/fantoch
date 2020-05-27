@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::metrics::Metrics;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
+use crate::time::SysTime;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
@@ -147,6 +148,19 @@ impl BaseProcess {
 
     fn inc_by_metric(&mut self, kind: ProtocolMetricsKind, by: u64) {
         self.metrics.aggregate(kind, |v| *v += by)
+    }
+
+    // Compute the min clock use for clock bumping in ewnt:
+    // - if we should use real time, then that min clock is the maximum between
+    //   real time and the suggested min clock;
+    // - otherwise, the suggested min clock is used
+    pub fn min_clock(&self, current_min: u64, time: &dyn SysTime) -> u64 {
+        // use real time as min clock if we should
+        if self.config.newt_hybrid_clocks() && self.config.newt_real_time() {
+            std::cmp::max(current_min, time.now())
+        } else {
+            current_min
+        }
     }
 }
 
