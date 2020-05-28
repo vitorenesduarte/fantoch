@@ -560,9 +560,12 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute message: that can either be nothing or an mcommit
         match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
             Some(SynodMessage::MChosen(clock)) => {
-                // enough accepts were gathered and the value has been chosen: fetch votes, create `MCommit` and target
+                // reset local votes as we're going to receive them right away;
+                // this also prevents a `info.votes.clone()`
                 // TODO: check if in recovery we will have enough votes to make the command stable
-                let votes = info.votes.clone();
+                let votes = Self::reset_votes(&mut info.votes);
+
+                // enough accepts were gathered and the value has been chosen: create `MCommit` and target
                 let target = self.bp.all();
                 let mcommit = Message::MCommit { dot, clock, votes };
 
