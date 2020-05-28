@@ -23,6 +23,7 @@ use std::fmt;
 use std::mem;
 use threshold::{AEClock, VClock};
 
+#[derive(Clone)]
 pub struct DependencyGraph {
     process_id: ProcessId,
     transitive_conflicts: bool,

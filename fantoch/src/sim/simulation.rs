@@ -70,8 +70,8 @@ where
     /// Forward a `ToSend`.
     pub fn forward_to_processes(
         &mut self,
-        (process_id, action): (ProcessId, Action<P::Message>),
-    ) -> Vec<(ProcessId, Action<P::Message>)> {
+        (process_id, action): (ProcessId, Action<P>),
+    ) -> Vec<(ProcessId, Action<P>)> {
         match action {
             Action::ToSend { target, msg } => {
                 // handle first in self if self in target

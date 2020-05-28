@@ -7,6 +7,7 @@ use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone)]
 pub struct TableExecutor {
     execute_at_commit: bool,
     table: MultiVotesTable,

@@ -9,7 +9,7 @@ use threshold::VClock;
 // all VClock's are protected by a rw-lock
 type Clock = RwLock<VClock<ProcessId>>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
     n: usize, // number of processes
     clocks: Arc<Shared<Clock>>,

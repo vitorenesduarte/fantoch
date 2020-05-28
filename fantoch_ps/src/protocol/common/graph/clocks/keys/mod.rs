@@ -12,8 +12,9 @@ use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::util;
 use threshold::VClock;
+use std::fmt::Debug;
 
-pub trait KeyClocks: Clone {
+pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance given the number of processes.
     fn new(n: usize) -> Self;
 

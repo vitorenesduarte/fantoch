@@ -52,7 +52,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IdGen<S> {
     source: S,
     last_sequence: u64,

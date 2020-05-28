@@ -3,7 +3,7 @@ use fantoch::id::Dot;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct VertexIndex {
     index: HashMap<Dot, RefCell<Vertex>>,
 }
@@ -30,7 +30,7 @@ impl VertexIndex {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct PendingIndex {
     index: HashMap<Dot, HashSet<Dot>>,
 }

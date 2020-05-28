@@ -19,7 +19,7 @@ pub enum SynodMessage<V> {
     MAccepted(Ballot),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Synod<V> {
     // paxos agents
     proposer: Proposer<V>,
@@ -139,7 +139,7 @@ type Promises<V> = HashMap<ProcessId, Accepted<V>>;
 type Accepts = HashSet<ProcessId>;
 type Proposal<V> = Option<V>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Proposer<V> {
     // process identifier
     process_id: ProcessId,
@@ -362,7 +362,7 @@ where
 // was accepted. If the ballot is 0, the value has not been accepted yet.
 type Accepted<Value> = (Ballot, Value);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Acceptor<Value> {
     ballot: Ballot,
     accepted: Accepted<Value>,

@@ -17,7 +17,7 @@ use tracing::instrument;
 
 type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FPaxos {
     bp: BaseProcess,
     leader: ProcessId,
@@ -91,7 +91,7 @@ impl Protocol for FPaxos {
         dot: Option<Dot>,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         self.handle_submit(dot, cmd)
     }
 
@@ -101,7 +101,7 @@ impl Protocol for FPaxos {
         from: ProcessId,
         msg: Self::Message,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         match msg {
             Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
             Message::MSpawnCommander { ballot, slot, cmd } => {
@@ -125,7 +125,7 @@ impl Protocol for FPaxos {
         &mut self,
         event: Self::PeriodicEvent,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection()
@@ -158,7 +158,7 @@ impl FPaxos {
         &mut self,
         _dot: Option<Dot>,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
                 // in this case, we're the leader:
@@ -192,7 +192,7 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -232,7 +232,7 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MAccept({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -272,7 +272,7 @@ impl FPaxos {
         from: ProcessId,
         ballot: u64,
         slot: u64,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MAccepted({:?}, {:?}) from {}",
             self.id(),
@@ -310,7 +310,7 @@ impl FPaxos {
         &mut self,
         slot: u64,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
 
         // create execution info
@@ -329,7 +329,7 @@ impl FPaxos {
         &mut self,
         from: ProcessId,
         committed: u64,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -345,7 +345,7 @@ impl FPaxos {
     }
 
     #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed slot

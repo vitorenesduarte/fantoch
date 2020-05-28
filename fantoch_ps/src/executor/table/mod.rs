@@ -16,6 +16,7 @@ use threshold::ARClock;
 
 type SortId = (u64, Dot);
 
+#[derive(Clone)]
 pub struct MultiVotesTable {
     process_id: ProcessId,
     n: usize,
@@ -94,6 +95,7 @@ impl MultiVotesTable {
     }
 }
 
+#[derive(Clone)]
 struct VotesTable {
     process_id: ProcessId,
     n: usize,

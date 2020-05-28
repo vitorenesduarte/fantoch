@@ -16,7 +16,7 @@ use tracing::instrument;
 
 type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Basic {
     bp: BaseProcess,
     cmds: CommandsInfo<BasicInfo>,
@@ -84,7 +84,7 @@ impl Protocol for Basic {
         dot: Option<Dot>,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         self.handle_submit(dot, cmd)
     }
 
@@ -94,7 +94,7 @@ impl Protocol for Basic {
         from: ProcessId,
         msg: Self::Message,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         match msg {
             Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
             Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
@@ -114,7 +114,7 @@ impl Protocol for Basic {
         &mut self,
         event: Self::PeriodicEvent,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection()
@@ -147,7 +147,7 @@ impl Basic {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -168,7 +168,7 @@ impl Basic {
         from: ProcessId,
         dot: Dot,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MStore({:?}, {:?}) from {}", self.id(), dot, cmd, from);
 
         // get cmd info
@@ -193,7 +193,7 @@ impl Basic {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
         // get cmd info
@@ -226,7 +226,7 @@ impl Basic {
         _from: ProcessId,
         dot: Dot,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // // get cmd info and its rifl
@@ -255,7 +255,7 @@ impl Basic {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -267,7 +267,7 @@ impl Basic {
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -288,7 +288,7 @@ impl Basic {
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -297,7 +297,7 @@ impl Basic {
     }
 
     #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
@@ -313,7 +313,7 @@ impl Basic {
 
 // `BasicInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct BasicInfo {
     cmd: Option<Command>,
     missing_acks: usize,

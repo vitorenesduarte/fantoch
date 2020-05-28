@@ -7,7 +7,7 @@ use fantoch::kvs::Key;
 type SharedIter<'a, V> =
     Iter<'a, Key, V, RandomState, DashMap<Key, V, RandomState>>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Shared<V> {
     clocks: DashMap<Key, V>,
 }

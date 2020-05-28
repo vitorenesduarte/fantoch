@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 type Slot = u64;
 
+#[derive(Clone)]
 pub struct SlotExecutor {
     execute_at_commit: bool,
     store: KVStore,

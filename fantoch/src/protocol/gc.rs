@@ -4,7 +4,7 @@ use crate::util;
 use std::collections::HashMap;
 use threshold::{AEClock, EventSet, VClock};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GCTrack {
     process_id: ProcessId,
     n: usize,

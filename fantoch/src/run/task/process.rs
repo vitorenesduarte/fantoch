@@ -448,7 +448,7 @@ async fn handle_from_processes<P>(
 async fn handle_actions<P>(
     worker_index: usize,
     process_id: ProcessId,
-    mut actions: Vec<Action<P::Message>>,
+    mut actions: Vec<Action<P>>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -513,7 +513,7 @@ async fn handle_message_from_self<P>(
     process: &mut P,
     reader_to_workers: &mut ReaderToWorkers<P>,
     time: &RunTime,
-) -> Vec<Action<P::Message>>
+) -> Vec<Action<P>>
 where
     P: Protocol + 'static,
 {
