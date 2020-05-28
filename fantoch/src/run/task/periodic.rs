@@ -1,4 +1,3 @@
-use super::chan::ChannelSender;
 use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
@@ -161,7 +160,7 @@ async fn periodic_task_send_msg<P, R>(
 
 async fn periodic_task_inspect<P, R>(
     periodic_to_workers: &mut PeriodicToWorkers<P, R>,
-    inspect: Option<(fn(&P) -> R, ChannelSender<R>)>,
+    inspect: Option<InspectFun<P, R>>,
 ) where
     P: Protocol + 'static,
     R: Clone + 'static,

@@ -75,8 +75,8 @@ pub type ExecutionInfoSender<P> =
     ChannelSender<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 pub type PeriodicEventReceiver<P, R> =
     ChannelReceiver<FromPeriodicMessage<P, R>>;
-pub type InspectReceiver<P, R> =
-    ChannelReceiver<(fn(&P) -> R, ChannelSender<R>)>;
+pub type InspectFun<P, R> = (fn(&P) -> R, ChannelSender<R>);
+pub type InspectReceiver<P, R> = ChannelReceiver<InspectFun<P, R>>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
