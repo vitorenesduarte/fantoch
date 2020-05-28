@@ -5,6 +5,7 @@ use fantoch::id::ProcessId;
 use fantoch::protocol::{Action, Protocol};
 use fantoch::time::RunTime;
 use stateright::actor::{Actor, Event, Id, InitIn, NextIn, Out};
+use std::collections::HashSet;
 use std::marker::PhantomData;
 
 struct ProtocolActor<P: Protocol> {
@@ -30,14 +31,18 @@ struct ProtocolActorState<P: Protocol> {
     executor: <P as Protocol>::Executor,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum KV<M> {
     Access(Command),
     Internal(M),
 }
 
-fn process_id(id: Id) -> ProcessId {
+fn to_process_id(id: Id) -> ProcessId {
     usize::from(id) as ProcessId
+}
+
+fn from_process_id(id: ProcessId) -> Id {
+    Id::from(id as usize)
 }
 
 impl<P> Actor for ProtocolActor<P>
@@ -76,12 +81,22 @@ where
 
         // get msg received
         let Event::Receive(from, msg) = i.event;
-        let from = process_id(from);
+        let from = to_process_id(from);
 
         // handle msg
-        match msg {
+        let to_sends = match msg {
             KV::Access(cmd) => Self::handle_submit(cmd, &mut state),
             KV::Internal(msg) => Self::handle_msg(from, msg, &mut state),
+        };
+
+        // send new messages
+        for (recipients, msg) in to_sends {
+            let recipients: Vec<_> = recipients
+                .into_iter()
+                .map(|id| from_process_id(id))
+                .collect();
+            let msg = KV::Internal(msg);
+            o.broadcast(&recipients, &msg);
         }
 
         // set new protocol state
@@ -93,38 +108,60 @@ impl<P> ProtocolActor<P>
 where
     P: Protocol,
 {
-    fn handle_submit(cmd: Command, state: &mut ProtocolActorState<P>) {
+    #[must_use]
+    fn handle_submit(
+        cmd: Command,
+        state: &mut ProtocolActorState<P>,
+    ) -> Vec<(HashSet<ProcessId>, P::Message)> {
         let actions = state.protocol.submit(None, cmd, &RunTime);
-        Self::handle_actions(actions, state);
+        Self::handle_actions(actions, state)
     }
 
+    #[must_use]
     fn handle_msg(
         from: ProcessId,
         msg: P::Message,
         state: &mut ProtocolActorState<P>,
-    ) {
+    ) -> Vec<(HashSet<ProcessId>, P::Message)> {
         let actions = state.protocol.handle(from, msg, &RunTime);
-        Self::handle_actions(actions, state);
+        Self::handle_actions(actions, state)
     }
 
+    #[must_use]
     fn handle_actions(
         actions: Vec<Action<P>>,
         state: &mut ProtocolActorState<P>,
-    ) {
+    ) -> Vec<(HashSet<ProcessId>, P::Message)> {
         // get the id of this process
         let process_id = state.protocol.id();
 
-        for action in actions {
-            match action {
-                Action::ToSend { msg, target } => {
-                    todo!("send to peers");
+        // handle all new actions
+        actions
+            .into_iter()
+            .flat_map(|action| {
+                match action {
+                    Action::ToSend { msg, mut target } => {
+                        if target.remove(&process_id) {
+                            // handle message locally, if message also to self,
+                            // and remove self from target
+                            let mut to_sends = Self::handle_msg(
+                                process_id,
+                                msg.clone(),
+                                state,
+                            );
+                            to_sends.push((target, msg));
+                            to_sends
+                        } else {
+                            vec![(target, msg)]
+                        }
+                    }
+                    Action::ToForward { msg } => {
+                        // there's a single worker, so just handle it locally
+                        Self::handle_msg(process_id, msg, state)
+                    }
                 }
-                Action::ToForward { msg } => {
-                    // there's a single worker, so just handle it locally
-                    Self::handle_msg(process_id, msg, state);
-                }
-            }
-        }
+            })
+            .collect()
     }
 }
 
