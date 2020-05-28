@@ -56,8 +56,11 @@ where
         assert!(process_id > 0);
 
         // create protocol
-        // - TODO: what about periodic events?
         let (protocol, _periodic_events) = P::new(process_id, config);
+
+        // TODO:
+        // - discover
+        // - periodic events
 
         // create executor
         let executor = <<P as Protocol>::Executor>::new(process_id, config);
@@ -68,18 +71,20 @@ where
     }
 
     fn next(i: NextIn<Self>, o: &mut Out<Self>) {
+        // get current protocol state
         let mut state = i.state.clone();
 
         // get msg received
         let Event::Receive(from, msg) = i.event;
+        let from = process_id(from);
 
+        // handle msg
         match msg {
-            KV::Access(cmd) => {
-                Self::handle_submit(cmd, &mut state);
-            }
-            KV::Internal(msg) => {}
+            KV::Access(cmd) => Self::handle_submit(cmd, &mut state),
+            KV::Internal(msg) => Self::handle_msg(from, msg, &mut state),
         }
 
+        // set new protocol state
         o.set_state(state);
     }
 }
@@ -106,11 +111,17 @@ where
         actions: Vec<Action<P>>,
         state: &mut ProtocolActorState<P>,
     ) {
+        // get the id of this process
+        let process_id = state.protocol.id();
+
         for action in actions {
             match action {
-                Action::ToSend { msg, target } => {}
+                Action::ToSend { msg, target } => {
+                    todo!("send to peers");
+                }
                 Action::ToForward { msg } => {
                     // there's a single worker, so just handle it locally
+                    Self::handle_msg(process_id, msg, state);
                 }
             }
         }
