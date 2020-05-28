@@ -408,14 +408,12 @@ async fn handle_from_processes<P>(
 ) where
     P: Protocol + 'static,
 {
-    // handle message in process
-    let action = process.handle(from, msg, time);
-
-    // handle (potentially) new action
-    handle_action(
+    // handle message in process and potentially new actions
+    let actions = process.handle(from, msg, time);
+    handle_actions(
         worker_index,
         process_id,
-        action,
+        actions,
         process,
         to_writers,
         reader_to_workers,
@@ -446,10 +444,11 @@ async fn handle_from_processes<P>(
     }
 }
 
-async fn handle_action<P>(
+// TODO maybe run in parallel
+async fn handle_actions<P>(
     worker_index: usize,
     process_id: ProcessId,
-    mut action: Action<P::Message>,
+    mut actions: Vec<Action<P::Message>>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -457,7 +456,7 @@ async fn handle_action<P>(
 ) where
     P: Protocol + 'static,
 {
-    loop {
+    while let Some(action) = actions.pop() {
         match action {
             Action::ToSend { target, msg } => {
                 // send to writers in parallel
@@ -476,7 +475,7 @@ async fn handle_action<P>(
                 // check if should handle message locally
                 if target.contains(&process_id) {
                     // handle msg locally if self in `target`
-                    action = handle_message_from_self::<P>(
+                    let new_actions = handle_message_from_self::<P>(
                         worker_index,
                         process_id,
                         msg,
@@ -484,14 +483,15 @@ async fn handle_action<P>(
                         reader_to_workers,
                         time,
                     )
-                    .await
+                    .await;
+                    actions.extend(new_actions);
                 } else {
                     break;
                 }
             }
             Action::ToForward { msg } => {
                 // handle msg locally if self in `target`
-                action = handle_message_from_self(
+                let new_actions = handle_message_from_self(
                     worker_index,
                     process_id,
                     msg,
@@ -500,9 +500,7 @@ async fn handle_action<P>(
                     time,
                 )
                 .await;
-            }
-            Action::Nothing => {
-                break;
+                actions.extend(new_actions);
             }
         }
     }
@@ -515,7 +513,7 @@ async fn handle_message_from_self<P>(
     process: &mut P,
     reader_to_workers: &mut ReaderToWorkers<P>,
     time: &RunTime,
-) -> Action<P::Message>
+) -> Vec<Action<P::Message>>
 where
     P: Protocol + 'static,
 {
@@ -530,7 +528,7 @@ where
         if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);
         }
-        Action::Nothing
+        vec![]
     }
 }
 
@@ -593,11 +591,11 @@ async fn handle_from_client<P>(
     P: Protocol + 'static,
 {
     // submit command in process
-    let to_send = process.submit(dot, cmd, time);
-    handle_action(
+    let actions = process.submit(dot, cmd, time);
+    handle_actions(
         worker_index,
         process_id,
-        to_send,
+        actions,
         process,
         to_writers,
         reader_to_workers,
@@ -650,19 +648,17 @@ async fn handle_from_periodic_task<P, R>(
     match msg {
         FromPeriodicMessage::Event(event) => {
             // handle event in process
-            for to_send in process.handle_event(event, time) {
-                // TODO maybe run in parallel
-                handle_action(
-                    worker_index,
-                    process_id,
-                    to_send,
-                    process,
-                    to_writers,
-                    reader_to_workers,
-                    time,
-                )
-                .await;
-            }
+            let actions = process.handle_event(event, time);
+            handle_actions(
+                worker_index,
+                process_id,
+                actions,
+                process,
+                to_writers,
+                reader_to_workers,
+                time,
+            )
+            .await;
         }
         FromPeriodicMessage::Inspect(f, mut tx) => {
             let outcome = f(&process);

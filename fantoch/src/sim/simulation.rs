@@ -75,28 +75,30 @@ where
         match action {
             Action::ToSend { target, msg } => {
                 // handle first in self if self in target
-                let local_action = if target.contains(&process_id) {
+                let local_actions = if target.contains(&process_id) {
                     let (process, _, time) = self.get_process(process_id);
                     process.handle(process_id, msg.clone(), time)
                 } else {
-                    Action::Nothing
+                    vec![]
                 };
 
                 let actions = target
                     .into_iter()
                     // make sure we don't handle again in self
                     .filter(|to| to != &process_id)
-                    .map(|to| {
+                    .flat_map(|to| {
                         let (process, _, time) = self.get_process(to);
-                        let action =
-                            process.handle(process_id, msg.clone(), time);
-                        (to, action)
+                        process
+                            .handle(process_id, msg.clone(), time)
+                            .into_iter()
+                            .map(move |action| (to, action))
                     });
 
                 // make sure that the first to_send is the one from self
-                std::iter::once((process_id, local_action))
+                local_actions
+                    .into_iter()
+                    .map(|action| (process_id, action))
                     .chain(actions)
-                    .filter(|(_, action)| action != &Action::Nothing)
                     .collect()
             }
             action => {

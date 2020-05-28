@@ -62,7 +62,7 @@ pub trait Protocol: Clone {
         dot: Option<Dot>,
         cmd: Command,
         time: &dyn SysTime,
-    ) -> Action<Self::Message>;
+    ) -> Vec<Action<Self::Message>>;
 
     #[must_use]
     fn handle(
@@ -70,7 +70,7 @@ pub trait Protocol: Clone {
         from: ProcessId,
         msg: Self::Message,
         time: &dyn SysTime,
-    ) -> Action<Self::Message>;
+    ) -> Vec<Action<Self::Message>>;
 
     #[must_use]
     fn handle_event(
@@ -133,5 +133,4 @@ pub trait PeriodicEventIndex {
 pub enum Action<M> {
     ToSend { target: HashSet<ProcessId>, msg: M },
     ToForward { msg: M },
-    Nothing,
 }

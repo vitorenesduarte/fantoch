@@ -84,7 +84,7 @@ impl Protocol for Basic {
         dot: Option<Dot>,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Action<Self::Message> {
+    ) -> Vec<Action<Self::Message>> {
         self.handle_submit(dot, cmd)
     }
 
@@ -94,7 +94,7 @@ impl Protocol for Basic {
         from: ProcessId,
         msg: Self::Message,
         _time: &dyn SysTime,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         match msg {
             Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
             Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
@@ -147,7 +147,7 @@ impl Basic {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -156,10 +156,10 @@ impl Basic {
         let target = self.bp.fast_quorum();
 
         // return `ToSend`
-        Action::ToSend {
+        vec![Action::ToSend {
             target,
             msg: mstore,
-        }
+        }]
     }
 
     #[instrument(skip(self, from, dot, cmd))]
@@ -168,7 +168,7 @@ impl Basic {
         from: ProcessId,
         dot: Dot,
         cmd: Command,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!("p{}: MStore({:?}, {:?}) from {}", self.id(), dot, cmd, from);
 
         // get cmd info
@@ -182,10 +182,10 @@ impl Basic {
         let target = singleton![from];
 
         // return `ToSend`
-        Action::ToSend {
+        vec![Action::ToSend {
             target,
             msg: mstoreack,
-        }
+        }]
     }
 
     #[instrument(skip(self, from, dot))]
@@ -193,7 +193,7 @@ impl Basic {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
         // get cmd info
@@ -211,12 +211,12 @@ impl Basic {
             let target = self.bp.all();
 
             // return `ToSend`
-            Action::ToSend {
+            vec![Action::ToSend {
                 target,
                 msg: mcommit,
-            }
+            }]
         } else {
-            Action::Nothing
+            vec![]
         }
     }
 
@@ -226,7 +226,7 @@ impl Basic {
         _from: ProcessId,
         dot: Dot,
         cmd: Command,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // // get cmd info and its rifl
@@ -245,9 +245,9 @@ impl Basic {
         self.to_executor.extend(execution_info);
 
         // notify self with the committed dot
-        Action::ToForward {
+        vec![Action::ToForward {
             msg: Message::MCommitDot { dot },
-        }
+        }]
     }
 
     #[instrument(skip(self, from, dot))]
@@ -255,11 +255,11 @@ impl Basic {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-        Action::Nothing
+        vec![]
     }
 
     #[instrument(skip(self, from, committed))]
@@ -267,7 +267,7 @@ impl Basic {
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -278,9 +278,9 @@ impl Basic {
         // compute newly stable dots
         let stable = self.cmds.stable();
         // create `ToForward` to self
-        Action::ToForward {
+        vec![Action::ToForward {
             msg: Message::MStable { stable },
-        }
+        }]
     }
 
     #[instrument(skip(self, from, stable))]
@@ -288,12 +288,12 @@ impl Basic {
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
-        Action::Nothing
+        vec![]
     }
 
     #[instrument(skip(self))]
@@ -304,12 +304,10 @@ impl Basic {
         let committed = self.cmds.committed();
 
         // create `ToSend`
-        let tosend = Action::ToSend {
+        vec![Action::ToSend {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
-        };
-
-        vec![tosend]
+        }]
     }
 }
 
@@ -492,7 +490,11 @@ mod tests {
         // register command in executor and submit it in basic 1
         let (process, executor, time) = simulation.get_process(process_id_1);
         executor.wait_for(&cmd);
-        let mstore = process.submit(None, cmd, time);
+        let mut actions = process.submit(None, cmd, time);
+
+        // there's a single action
+        assert_eq!(actions.len(), 1);
+        let mstore = actions.pop().unwrap();
 
         // check that the mstore is being sent to 2 processes
         let check_target = |target: &HashSet<u64>| {
@@ -561,8 +563,11 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _, time) = simulation.get_process(target);
-        let action = process.submit(None, cmd, time);
+        let mut actions = process.submit(None, cmd, time);
+        // there's a single action
+        assert_eq!(actions.len(), 1);
+        let mstore = actions.pop().unwrap();
         let check_msg = |msg: &Message| matches!(msg, Message::MStore {dot, ..} if dot == &Dot::new(process_id_1, 2));
-        assert!(matches!(action, Action::ToSend {msg, ..} if check_msg(&msg)));
+        assert!(matches!(mstore, Action::ToSend {msg, ..} if check_msg(&msg)));
     }
 }
