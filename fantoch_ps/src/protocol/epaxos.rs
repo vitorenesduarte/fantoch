@@ -854,6 +854,8 @@ mod tests {
         let mcollect = actions.pop().unwrap();
 
         let check_msg = |msg: &Message| matches!(msg, Message::MCollect {dot, ..} if dot == &Dot::new(process_id_1, 2));
-        assert!(matches!(mcollect, Action::ToSend {msg, ..} if check_msg(&msg)));
+        assert!(
+            matches!(mcollect, Action::ToSend {msg, ..} if check_msg(&msg))
+        );
     }
 }

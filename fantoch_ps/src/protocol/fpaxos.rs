@@ -300,8 +300,8 @@ impl FPaxos {
                 msg => panic!("can't handle {:?} in handle_maccepted", msg),
             }
         } else {
-        // nothing to send
-        vec![]
+            // nothing to send
+            vec![]
         }
     }
 

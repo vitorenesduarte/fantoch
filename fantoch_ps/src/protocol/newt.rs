@@ -143,9 +143,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             Message::MConsensusAck { dot, ballot } => {
                 self.handle_mconsensusack(from, dot, ballot)
             }
-            Message::MCommitDot { dot, detached } => {
-                self.handle_mcommit_dot(from, dot, detached)
-            }
+            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
@@ -474,11 +472,20 @@ impl<KC: KeyClocks> Newt<KC> {
         };
 
         // notify self with the committed dot
-        // - TODO: do not forward detached votes and send them right away (this
-        //   is a hack since we don't support several actions)
-        vec![Action::ToForward {
-            msg: Message::MCommitDot { dot, detached },
-        }]
+        let to_forward = Action::ToForward {
+            msg: Message::MCommitDot { dot },
+        };
+
+        // also send `MDetached` message in case there are any detached votes
+        if detached.is_empty() {
+            vec![to_forward]
+        } else {
+            let to_send = Action::ToSend {
+                target: self.bp.all(),
+                msg: Message::MDetached { detached },
+            };
+            vec![to_forward, to_send]
+        }
     }
 
     #[instrument(skip(self, detached))]
@@ -590,21 +597,11 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        detached: Votes,
     ) -> Vec<Action<Message>> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-
-        // create `MDetached` if there are new votes
-        if detached.is_empty() {
-            vec![]
-        } else {
-            vec![Action::ToSend {
-                target: self.bp.all(),
-                msg: Message::MDetached { detached },
-            }]
-        }
+        vec![]
     }
 
     #[instrument(skip(self, from, committed))]
@@ -759,7 +756,6 @@ pub enum Message {
     },
     MCommitDot {
         dot: Dot,
-        detached: Votes,
     },
     MGarbageCollection {
         committed: VClock<ProcessId>,
@@ -1021,6 +1017,8 @@ mod tests {
         let mcollect = actions.pop().unwrap();
 
         let check_msg = |msg: &Message| matches!(msg, Message::MCollect {dot, ..} if dot == &Dot::new(process_id_1, 2));
-        assert!(matches!(mcollect, Action::ToSend {msg, ..} if check_msg(&msg)));
+        assert!(
+            matches!(mcollect, Action::ToSend {msg, ..} if check_msg(&msg))
+        );
     }
 }
