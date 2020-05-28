@@ -199,11 +199,11 @@ where
                         executor.wait_for(&cmd);
 
                         // submit to process and schedule output messages
-                        let protocol_action = process.submit(None, cmd, time);
-                        self.schedule_protocol_action(
+                        let protocol_actions = process.submit(None, cmd, time);
+                        self.schedule_protocol_actions(
                             process_id,
                             MessageRegion::Process(process_id),
-                            protocol_action,
+                            protocol_actions,
                         );
                     }
                     ScheduleAction::SendToProc(from, process_id, msg) => {
@@ -212,7 +212,7 @@ where
                             self.simulation.get_process(process_id);
 
                         // handle message and get ready commands
-                        let to_send = process.handle(from, msg, time);
+                        let protocol_actions = process.handle(from, msg, time);
 
                         // handle new execution info in the executor
                         let to_executor = process.to_executor();
@@ -223,10 +223,10 @@ where
                             .collect();
 
                         // schedule new messages
-                        self.schedule_protocol_action(
+                        self.schedule_protocol_actions(
                             process_id,
                             MessageRegion::Process(process_id),
-                            to_send,
+                            protocol_actions,
                         );
 
                         // schedule new command results
@@ -274,15 +274,13 @@ where
                             self.simulation.get_process(process_id);
 
                         // handle event
-                        for protocol_action in
-                            process.handle_event(event.clone(), time)
-                        {
-                            self.schedule_protocol_action(
-                                process_id,
-                                MessageRegion::Process(process_id),
-                                protocol_action.clone(),
-                            );
-                        }
+                        let protocol_actions =
+                            process.handle_event(event.clone(), time);
+                        self.schedule_protocol_actions(
+                            process_id,
+                            MessageRegion::Process(process_id),
+                            protocol_actions,
+                        );
 
                         // schedule the next periodic event
                         self.schedule_event(process_id, event, delay);
@@ -318,32 +316,38 @@ where
     }
 
     /// (maybe) Schedules a new send from some process.
-    fn schedule_protocol_action(
+    fn schedule_protocol_actions(
         &mut self,
         process_id: ProcessId,
         from_region: MessageRegion,
-        protocol_action: Action<P::Message>,
+        protocol_actions: Vec<Action<P::Message>>,
     ) {
-        match protocol_action {
-            Action::ToSend { target, msg } => {
-                // for each process in target, schedule message delivery
-                target.into_iter().for_each(|to| {
-                    // otherwise, create action and schedule it
+        for protocol_action in protocol_actions {
+            match protocol_action {
+                Action::ToSend { target, msg } => {
+                    // for each process in target, schedule message delivery
+                    target.into_iter().for_each(|to| {
+                        // otherwise, create action and schedule it
+                        let action = ScheduleAction::SendToProc(
+                            process_id,
+                            to,
+                            msg.clone(),
+                        );
+                        self.schedule_message(
+                            from_region.clone(),
+                            MessageRegion::Process(to),
+                            action,
+                        );
+                    });
+                }
+                Action::ToForward { msg } => {
                     let action =
-                        ScheduleAction::SendToProc(process_id, to, msg.clone());
-                    self.schedule_message(
-                        from_region.clone(),
-                        MessageRegion::Process(to),
-                        action,
-                    );
-                });
+                        ScheduleAction::SendToProc(process_id, process_id, msg);
+                    let from_region = from_region.clone();
+                    let to_region = from_region.clone();
+                    self.schedule_message(from_region, to_region, action);
+                }
             }
-            Action::ToForward { msg } => {
-                let action =
-                    ScheduleAction::SendToProc(process_id, process_id, msg);
-                self.schedule_message(from_region.clone(), from_region, action);
-            }
-            Action::Nothing => {}
         }
     }
 

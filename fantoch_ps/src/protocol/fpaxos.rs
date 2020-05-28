@@ -91,7 +91,7 @@ impl Protocol for FPaxos {
         dot: Option<Dot>,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Self::Message>> {
         self.handle_submit(dot, cmd)
     }
 
@@ -101,7 +101,7 @@ impl Protocol for FPaxos {
         from: ProcessId,
         msg: Self::Message,
         _time: &dyn SysTime,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Self::Message>> {
         match msg {
             Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
             Message::MSpawnCommander { ballot, slot, cmd } => {
@@ -158,7 +158,7 @@ impl FPaxos {
         &mut self,
         _dot: Option<Dot>,
         cmd: Command,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
                 // in this case, we're the leader:
@@ -167,7 +167,7 @@ impl FPaxos {
                 let mspawn = Message::MSpawnCommander { ballot, slot, cmd };
 
                 // return `ToSend`
-                Action::ToForward { msg: mspawn }
+                vec![Action::ToForward { msg: mspawn }]
             }
             MultiSynodMessage::MForwardSubmit(cmd) => {
                 // in this case, we're not the leader and should forward the
@@ -176,10 +176,10 @@ impl FPaxos {
                 let target = singleton![self.leader];
 
                 // return `ToSend`
-                Action::ToSend {
+                vec![Action::ToSend {
                     target,
                     msg: mforward,
-                }
+                }]
             }
             msg => panic!("can't handle {:?} in handle_submit", msg),
         }
@@ -192,7 +192,7 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         cmd: Command,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!(
             "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -216,10 +216,10 @@ impl FPaxos {
                 let target = self.bp.write_quorum();
 
                 // return `ToSend`
-                Action::ToSend {
+                vec![Action::ToSend {
                     target,
                     msg: maccept,
-                }
+                }]
             }
             msg => panic!("can't handle {:?} in handle_mspawn_commander", msg),
         }
@@ -232,7 +232,7 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         cmd: Command,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!(
             "p{}: MAccept({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -253,16 +253,16 @@ impl FPaxos {
                     let target = singleton![from];
 
                     // return `ToSend`
-                    Action::ToSend {
+                    vec![Action::ToSend {
                         target,
                         msg: maccepted,
-                    }
+                    }]
                 }
                 msg => panic!("can't handle {:?} in handle_maccept", msg),
             }
         } else {
             // TODO maybe warn the leader that it is not longer a leader?
-            Action::Nothing
+            vec![]
         }
     }
 
@@ -272,7 +272,7 @@ impl FPaxos {
         from: ProcessId,
         ballot: u64,
         slot: u64,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!(
             "p{}: MAccepted({:?}, {:?}) from {}",
             self.id(),
@@ -292,21 +292,25 @@ impl FPaxos {
                     let target = self.bp.all();
 
                     // return `ToSend`
-                    return Action::ToSend {
+                    vec![Action::ToSend {
                         target,
                         msg: mcommit,
-                    };
+                    }]
                 }
                 msg => panic!("can't handle {:?} in handle_maccepted", msg),
             }
-        }
-
+        } else {
         // nothing to send
-        Action::Nothing
+        vec![]
+        }
     }
 
     #[instrument(skip(self, slot, cmd))]
-    fn handle_mchosen(&mut self, slot: u64, cmd: Command) -> Action<Message> {
+    fn handle_mchosen(
+        &mut self,
+        slot: u64,
+        cmd: Command,
+    ) -> Vec<Action<Message>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
 
         // create execution info
@@ -317,7 +321,7 @@ impl FPaxos {
         self.gc_track.commit(slot);
 
         // nothing to send
-        Action::Nothing
+        vec![]
     }
 
     #[instrument(skip(self, from, committed))]
@@ -325,7 +329,7 @@ impl FPaxos {
         &mut self,
         from: ProcessId,
         committed: u64,
-    ) -> Action<Message> {
+    ) -> Vec<Action<Message>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -337,7 +341,7 @@ impl FPaxos {
         let stable = self.gc_track.stable();
         let stable_count = self.multi_synod.gc(stable);
         self.bp.stable(stable_count);
-        Action::Nothing
+        vec![]
     }
 
     #[instrument(skip(self))]
@@ -348,12 +352,10 @@ impl FPaxos {
         let committed = self.gc_track.committed();
 
         // create `ToSend`
-        let tosend = Action::ToSend {
+        vec![Action::ToSend {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
-        };
-
-        vec![tosend]
+        }]
     }
 }
 
@@ -557,15 +559,21 @@ mod tests {
         // register command in executor and submit it in fpaxos 1
         let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let spawn = process.submit(None, cmd, time);
+        let mut actions = process.submit(None, cmd, time);
+        // there's a single action
+        assert_eq!(actions.len(), 1);
+        let spawn = actions.pop().unwrap();
 
         // check that the register created a spawn commander to self and handle
         // it locally
-        let maccept = if let Action::ToForward { msg } = spawn {
+        let mut actions = if let Action::ToForward { msg } = spawn {
             process.handle(process_id_1, msg, time)
         } else {
             panic!("Action::ToForward not found!");
         };
+        // there's a single action
+        assert_eq!(actions.len(), 1);
+        let maccept = actions.pop().unwrap();
 
         // check that the maccept is being sent to 2 processes
         let check_target = |target: &HashSet<u64>| {
@@ -631,8 +639,12 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _, time) = simulation.get_process(target);
-        let action = process.submit(None, cmd, time);
+        let mut actions = process.submit(None, cmd, time);
+        // there's a single action
+        assert_eq!(actions.len(), 1);
+        let mcollect = actions.pop().unwrap();
+
         let check_msg = |msg: &Message| matches!(msg, Message::MSpawnCommander{slot, ..} if slot == &2);
-        assert!(matches!(action, Action::ToForward {msg} if check_msg(&msg)));
+        assert!(matches!(mcollect, Action::ToForward {msg} if check_msg(&msg)));
     }
 }
