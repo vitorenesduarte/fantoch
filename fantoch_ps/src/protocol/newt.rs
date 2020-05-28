@@ -983,16 +983,24 @@ mod tests {
         // all processes handle it
         let actions = simulation.forward_to_processes(mcommit);
         // there are two actions
-        assert_eq!(actions.len(), 2);
+        assert_eq!(actions.len(), 4);
 
-        // check that it's either an MCommitDot or an MDetached
-        let check_msg = |msg: &Message| {
-            matches!(msg, Message::MCommitDot {..})
-                || matches!(msg, Message::MDetached {..})
-        };
-        assert!(actions.into_iter().all(|(_, action)| {
-            matches!(action, Action::ToForward { msg } if check_msg(&msg))
-        }));
+        // we have 3 MCommitDots and one MDetached (by the process that's not
+        // part of the fast quorum)
+        let mut mcommitdot_count = 0;
+        let mut mdetached_count = 0;
+        actions.into_iter().for_each(|(_, action)| match action {
+            Action::ToForward { msg } => {
+                assert!(matches!(msg, Message::MCommitDot {..}));
+                mcommitdot_count += 1;
+            }
+            Action::ToSend { msg, .. } => {
+                assert!(matches!(msg, Message::MDetached {..}));
+                mdetached_count += 1;
+            }
+        });
+        assert_eq!(mcommitdot_count, 3);
+        assert_eq!(mdetached_count, 1);
 
         // process 1 should have something to the executor
         let (process, executor, _) = simulation.get_process(process_id_1);
