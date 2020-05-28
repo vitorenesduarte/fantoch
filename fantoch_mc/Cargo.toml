@@ -1,0 +1,12 @@
+[package]
+name = "fantoch_mc"
+version = "0.1.0"
+edition = "2018"
+
+authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
+license = "MIT/Apache-2.0"
+
+[dependencies]
+stateright = { git = "https://github.com/stateright/stateright", branch = "master" }
+
+fantoch = { path = "../fantoch" }

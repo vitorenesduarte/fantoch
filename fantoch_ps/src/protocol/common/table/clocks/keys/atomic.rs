@@ -8,7 +8,7 @@ use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AtomicKeyClocks {
     id: ProcessId,
     clocks: Arc<Shared<AtomicU64>>,

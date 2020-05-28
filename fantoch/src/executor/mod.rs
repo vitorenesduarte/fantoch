@@ -18,7 +18,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{self, Debug};
 
-pub trait Executor {
+pub trait Executor: Clone {
     // TODO why is Send needed?
     type ExecutionInfo: Debug
         + Clone

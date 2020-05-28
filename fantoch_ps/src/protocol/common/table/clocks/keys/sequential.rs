@@ -6,7 +6,7 @@ use fantoch::kvs::Key;
 use std::cmp;
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SequentialKeyClocks {
     id: ProcessId,
     clocks: HashMap<Key, u64>,

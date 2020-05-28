@@ -25,7 +25,7 @@ pub type AtlasLocked = Atlas<LockedKeyClocks>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Atlas<KC> {
     bp: BaseProcess,
     keys_clocks: KC,
@@ -95,7 +95,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         dot: Option<Dot>,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         self.handle_submit(dot, cmd)
     }
 
@@ -105,7 +105,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         from: ProcessId,
         msg: Self::Message,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         match msg {
             Message::MCollect {
                 dot,
@@ -138,7 +138,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         &mut self,
         event: Self::PeriodicEvent,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection()
@@ -171,7 +171,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -210,7 +210,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         cmd: Option<Command>,
         quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {}",
             self.id(),
@@ -263,7 +263,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         from: ProcessId,
         dot: Dot,
         clock: VClock<ProcessId>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {}",
             self.id(),
@@ -335,7 +335,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         from: ProcessId,
         dot: Dot,
         value: ConsensusValue,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, value.clock);
 
         // get cmd info
@@ -373,7 +373,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Dot,
         ballot: u64,
         value: ConsensusValue,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MConsensus({:?}, {}, {:?})",
             self.id(),
@@ -420,7 +420,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         from: ProcessId,
         dot: Dot,
         ballot: u64,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
 
         // get cmd info
@@ -454,7 +454,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -466,7 +466,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -487,7 +487,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -496,7 +496,7 @@ impl<KC: KeyClocks> Atlas<KC> {
     }
 
     #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
@@ -537,7 +537,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `AtlasInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AtlasInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
@@ -639,7 +639,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 }
 
 /// `Status` of commands.
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 enum Status {
     START,
     COLLECT,

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use threshold::VClock;
 
+#[derive(Clone)]
 pub struct GraphExecutor {
     execute_at_commit: bool,
     graph: DependencyGraph,

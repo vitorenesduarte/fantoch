@@ -11,8 +11,9 @@ pub use sequential::SequentialKeyClocks;
 use crate::protocol::common::table::Votes;
 use fantoch::command::Command;
 use fantoch::id::ProcessId;
+use std::fmt::Debug;
 
-pub trait KeyClocks: Clone {
+pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance given the local process identifier.
     fn new(id: ProcessId) -> Self;
 

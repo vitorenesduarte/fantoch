@@ -3,7 +3,7 @@ use fantoch::log;
 use std::collections::HashMap;
 use threshold::{AboveExSet, EventSet};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GCTrack {
     process_id: ProcessId,
     n: usize,

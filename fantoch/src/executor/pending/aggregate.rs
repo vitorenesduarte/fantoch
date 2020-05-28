@@ -5,7 +5,7 @@ use crate::kvs::{KVOpResult, Key};
 use std::collections::HashMap;
 
 /// Structure that tracks the progress of pending commands.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AggregatePending {
     pending: HashMap<Rifl, CommandResult>,
 }

@@ -25,7 +25,7 @@ pub type NewtAtomic = Newt<AtomicKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Newt<KC> {
     bp: BaseProcess,
     key_clocks: KC,
@@ -110,7 +110,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         dot: Option<Dot>,
         cmd: Command,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         self.handle_submit(dot, cmd, time)
     }
 
@@ -120,7 +120,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         from: ProcessId,
         msg: Self::Message,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>> {
+    ) -> Vec<Action<Self>> {
         match msg {
             Message::MCollect {
                 dot,
@@ -156,7 +156,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         &mut self,
         event: Self::PeriodicEvent,
         time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection()
@@ -191,7 +191,7 @@ impl<KC: KeyClocks> Newt<KC> {
         dot: Option<Dot>,
         cmd: Command,
         time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -234,7 +234,7 @@ impl<KC: KeyClocks> Newt<KC> {
         quorum: HashSet<ProcessId>,
         remote_clock: u64,
         time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {}) from {}",
             self.id(),
@@ -322,7 +322,7 @@ impl<KC: KeyClocks> Newt<KC> {
         clock: u64,
         remote_votes: Votes,
         time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {}",
             self.id(),
@@ -414,7 +414,7 @@ impl<KC: KeyClocks> Newt<KC> {
         dot: Dot,
         clock: u64,
         mut votes: Votes,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
 
         // get cmd info
@@ -489,7 +489,7 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 
     #[instrument(skip(self, detached))]
-    fn handle_mdetached(&mut self, detached: Votes) -> Vec<Action<Message>> {
+    fn handle_mdetached(&mut self, detached: Votes) -> Vec<Action<Self>> {
         log!("p{}: MDetached({:?})", self.id(), detached);
 
         // create execution info
@@ -509,7 +509,7 @@ impl<KC: KeyClocks> Newt<KC> {
         dot: Dot,
         ballot: u64,
         clock: ConsensusValue,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MConsensus({:?}, {}, {:?})",
             self.id(),
@@ -558,7 +558,7 @@ impl<KC: KeyClocks> Newt<KC> {
         from: ProcessId,
         dot: Dot,
         ballot: u64,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
 
         // get cmd info
@@ -597,7 +597,7 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -609,7 +609,7 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -630,7 +630,7 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -639,7 +639,7 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 
     #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Message>> {
+    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
@@ -656,7 +656,7 @@ impl<KC: KeyClocks> Newt<KC> {
     fn handle_event_clock_bump(
         &mut self,
         time: &dyn SysTime,
-    ) -> Vec<Action<Message>> {
+    ) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::ClockBump", self.id());
 
         // iterate all clocks and bump them to the current time:
@@ -688,7 +688,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `NewtInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct NewtInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
@@ -809,7 +809,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 }
 
 /// `Status` of commands.
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 enum Status {
     START,
     PENDING,

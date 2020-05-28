@@ -11,6 +11,7 @@ use crate::kvs::{KVOpResult, Key};
 use aggregate::AggregatePending;
 use simple::SimplePending;
 
+#[derive(Clone)]
 pub struct Pending {
     // TODO can we not have both simple and aggregate pending and move that
     // decision to compile-time

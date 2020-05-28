@@ -33,7 +33,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
-pub trait Protocol: Clone {
+pub trait Protocol: Debug + Clone {
     type Message: Debug
         + Clone
         + PartialEq
@@ -62,7 +62,7 @@ pub trait Protocol: Clone {
         dot: Option<Dot>,
         cmd: Command,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>>;
+    ) -> Vec<Action<Self>>;
 
     #[must_use]
     fn handle(
@@ -70,14 +70,14 @@ pub trait Protocol: Clone {
         from: ProcessId,
         msg: Self::Message,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>>;
+    ) -> Vec<Action<Self>>;
 
     #[must_use]
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self::Message>>;
+    ) -> Vec<Action<Self>>;
 
     #[must_use]
     fn to_executor(
@@ -130,7 +130,7 @@ pub trait PeriodicEventIndex {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub enum Action<M> {
-    ToSend { target: HashSet<ProcessId>, msg: M },
-    ToForward { msg: M },
+pub enum Action<P: Protocol> {
+    ToSend { target: HashSet<ProcessId>, msg: <P as Protocol>::Message },
+    ToForward { msg: <P as Protocol>::Message },
 }

@@ -320,7 +320,7 @@ where
         &mut self,
         process_id: ProcessId,
         from_region: MessageRegion,
-        protocol_actions: Vec<Action<P::Message>>,
+        protocol_actions: Vec<Action<P>>,
     ) {
         for protocol_action in protocol_actions {
             match protocol_action {

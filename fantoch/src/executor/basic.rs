@@ -6,6 +6,7 @@ use crate::id::{ProcessId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone)]
 pub struct BasicExecutor {
     store: KVStore,
     pending: Pending,

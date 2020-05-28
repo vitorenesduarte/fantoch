@@ -30,7 +30,7 @@ pub enum MultiSynodMessage<V> {
     MAccepted(Ballot, Slot),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MultiSynod<V> {
     // number of processes
     n: usize,
@@ -160,7 +160,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Leader {
     // process identifier
     process_id: ProcessId,
@@ -204,7 +204,7 @@ impl Leader {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Commander<V> {
     // maximum number of allowed failures
     f: usize,
@@ -254,7 +254,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Acceptor<Value> {
     ballot: Ballot,
     accepted: HashMap<Slot, Accepted<Value>>,
