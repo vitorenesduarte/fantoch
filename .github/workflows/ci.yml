@@ -38,6 +38,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: ./lcov.info
+          base-path: ./
 
       - name: Slack (success)
         uses: rtCamp/action-slack-notify@v2.0.2
