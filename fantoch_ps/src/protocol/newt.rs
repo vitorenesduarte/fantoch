@@ -981,11 +981,16 @@ mod tests {
         );
 
         // all processes handle it
-        let to_sends = simulation.forward_to_processes(mcommit);
+        let actions = simulation.forward_to_processes(mcommit);
+        // there are two actions
+        assert_eq!(actions.len(), 2);
 
-        // check the MCommitDot
-        let check_msg = |msg: &Message| matches!(msg, Message::MCommitDot {..});
-        assert!(to_sends.into_iter().all(|(_, action)| {
+        // check that it's either an MCommitDot or an MDetached
+        let check_msg = |msg: &Message| {
+            matches!(msg, Message::MCommitDot {..})
+                || matches!(msg, Message::MDetached {..})
+        };
+        assert!(actions.into_iter().all(|(_, action)| {
             matches!(action, Action::ToForward { msg } if check_msg(&msg))
         }));
 
