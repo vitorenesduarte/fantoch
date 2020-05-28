@@ -136,10 +136,16 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             Message::MCommit { dot, clock, votes } => {
                 self.handle_mcommit(from, dot, clock, votes)
             }
+            Message::MDetached { detached } => self.handle_mdetached(detached),
+            Message::MConsensus { dot, ballot, clock } => {
+                self.handle_mconsensus(from, dot, ballot, clock)
+            }
+            Message::MConsensusAck { dot, ballot } => {
+                self.handle_mconsensusack(from, dot, ballot)
+            }
             Message::MCommitDot { dot, detached } => {
                 self.handle_mcommit_dot(from, dot, detached)
             }
-            Message::MDetached { detached } => self.handle_mdetached(detached),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
             }
@@ -384,8 +390,19 @@ impl<KC: KeyClocks> Newt<KC> {
                 }
             } else {
                 self.bp.slow_path();
-                // TODO slow path
-                todo!("slow path not implemented yet")
+                // slow path: create `MConsensus`
+                let ballot = info.synod.skip_prepare();
+                let mconsensus = Message::MConsensus {
+                    dot,
+                    ballot,
+                    clock: max_clock,
+                };
+                let target = self.bp.write_quorum();
+                // return `ToSend`
+                Action::ToSend {
+                    target,
+                    msg: mconsensus,
+                }
             }
         } else {
             Action::Nothing
@@ -476,6 +493,96 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // nothing to send
         Action::Nothing
+    }
+
+    #[instrument(skip(self, from, dot, ballot, clock))]
+    fn handle_mconsensus(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        ballot: u64,
+        clock: ConsensusValue,
+    ) -> Action<Message> {
+        log!(
+            "p{}: MConsensus({:?}, {}, {:?})",
+            self.id(),
+            dot,
+            ballot,
+            clock
+        );
+
+        // get cmd info
+        let info = self.cmds.get(dot);
+
+        // compute message: that can either be nothing, an ack or an mcommit
+        let msg = match info
+            .synod
+            .handle(from, SynodMessage::MAccept(ballot, clock))
+        {
+            Some(SynodMessage::MAccepted(ballot)) => {
+                // the accept message was accepted: create `MConsensusAck`
+                Message::MConsensusAck { dot, ballot }
+            }
+            Some(SynodMessage::MChosen(clock)) => {
+                // the value has already been chosen: fetch votes and create `MCommit`
+                // TODO: check if in recovery we will have enough votes to make the command stable
+                let votes = info.votes.clone();
+                Message::MCommit { dot, clock, votes }
+            }
+            None => {
+                // ballot too low to be accepted
+                return Action::Nothing;
+            }
+            _ => panic!(
+                "no other type of message should be output by Synod in the MConsensus handler"
+            ),
+        };
+
+        // create target
+        let target = singleton![from];
+
+        // return `ToSend`
+        Action::ToSend { target, msg }
+    }
+
+    #[instrument(skip(self, from, dot, ballot))]
+    fn handle_mconsensusack(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        ballot: u64,
+    ) -> Action<Message> {
+        log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
+
+        // get cmd info
+        let info = self.cmds.get(dot);
+
+        // compute message: that can either be nothing or an mcommit
+        match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
+            Some(SynodMessage::MChosen(clock)) => {
+                // reset local votes as we're going to receive them right away;
+                // this also prevents a `info.votes.clone()`
+                // TODO: check if in recovery we will have enough votes to make the command stable
+                let votes = Self::reset_votes(&mut info.votes);
+
+                // enough accepts were gathered and the value has been chosen: create `MCommit` and target
+                let target = self.bp.all();
+                let mcommit = Message::MCommit { dot, clock, votes };
+
+                // return `ToSend`
+                Action::ToSend {
+                    target,
+                    msg: mcommit,
+                }
+            }
+            None => {
+                // not enough accepts yet
+                Action::Nothing
+            }
+            _ => panic!(
+                "no other type of message should be output by Synod in the MConsensusAck handler"
+            ),
+        }
     }
 
     #[instrument(skip(self, from, dot))]
@@ -645,6 +752,15 @@ pub enum Message {
     MDetached {
         detached: Votes,
     },
+    MConsensus {
+        dot: Dot,
+        ballot: u64,
+        clock: ConsensusValue,
+    },
+    MConsensusAck {
+        dot: Dot,
+        ballot: u64,
+    },
     MCommitDot {
         dot: Dot,
         detached: Votes,
@@ -672,6 +788,8 @@ impl MessageIndex for Message {
             Self::MDetached { .. } => {
                 worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
             }
+            Self::MConsensus { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
             // GC messages
             Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {

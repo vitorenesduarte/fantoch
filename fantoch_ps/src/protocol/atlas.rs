@@ -391,13 +391,11 @@ impl<KC: KeyClocks> Atlas<KC> {
             .handle(from, SynodMessage::MAccept(ballot, value))
         {
             Some(SynodMessage::MAccepted(ballot)) => {
-                // the accept message was accepted:
-                // create `MConsensusAck`
+                // the accept message was accepted: create `MConsensusAck`
                 Message::MConsensusAck { dot, ballot }
             }
             Some(SynodMessage::MChosen(value)) => {
-                // the value has already been chosen:
-                // create `MCommit`
+                // the value has already been chosen: create `MCommit`
                 Message::MCommit { dot, value }
             }
             None => {
@@ -431,9 +429,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         // compute message: that can either be nothing or an mcommit
         match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
             Some(SynodMessage::MChosen(value)) => {
-                // enough accepts were gathered and the value has been chosen
-                // create `MCommit` and target
-                // create target
+                // enough accepts were gathered and the value has been chosen: create `MCommit` and target
                 let target = self.bp.all();
                 let mcommit = Message::MCommit { dot, value };
 

@@ -201,8 +201,6 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    // TODO ignore since the slow path is not yet implemented
-    #[ignore]
     #[test]
     fn sim_newt_5_2_test() {
         let slow_paths = sim_test::<NewtSequential>(config!(5, 2, false));
