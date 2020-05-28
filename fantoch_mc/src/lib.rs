@@ -1,15 +1,17 @@
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
+use fantoch::executor::{Executor, ExecutorResult};
 use fantoch::id::ProcessId;
 use fantoch::protocol::{Action, Protocol};
 use fantoch::time::RunTime;
+use fantoch::util;
 use stateright::actor::{Actor, Event, Id, InitIn, NextIn, Out};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 
-struct ProtocolActor<P: Protocol> {
+pub struct ProtocolActor<P: Protocol> {
     config: Config,
+    topology: HashMap<ProcessId, Vec<ProcessId>>,
     _phantom: PhantomData<P>,
 }
 
@@ -17,22 +19,47 @@ impl<P> ProtocolActor<P>
 where
     P: Protocol,
 {
-    pub fn new(config: Config) -> Self {
+    pub fn new(
+        config: Config,
+        topology: HashMap<ProcessId, Vec<ProcessId>>,
+    ) -> Self {
+        Self::check_topology(config.n(), topology.clone());
         Self {
             config,
+            topology,
             _phantom: PhantomData,
         }
+    }
+
+    fn check_topology(n: usize, topology: HashMap<ProcessId, Vec<ProcessId>>) {
+        let ids = Self::usort(util::process_ids(n));
+        let keys = Self::usort(topology.keys().cloned());
+        assert_eq!(ids, keys);
+        for peers in topology.values() {
+            let peers = Self::usort(peers.into_iter().cloned());
+            assert_eq!(ids, peers);
+        }
+    }
+
+    fn usort<I>(ids: I) -> Vec<ProcessId>
+    where
+        I: Iterator<Item = ProcessId>,
+    {
+        let mut ids: Vec<_> = ids.collect();
+        ids.sort();
+        ids.dedup();
+        ids
     }
 }
 
 #[derive(Clone)]
-struct ProtocolActorState<P: Protocol> {
+pub struct ProtocolActorState<P: Protocol> {
     protocol: P,
     executor: <P as Protocol>::Executor,
 }
 
 #[derive(Clone, Debug)]
-enum KV<M> {
+pub enum KV<M> {
     Access(Command),
     Internal(M),
 }
@@ -61,11 +88,20 @@ where
         assert!(process_id > 0);
 
         // create protocol
-        let (protocol, _periodic_events) = P::new(process_id, config);
+        let (mut protocol, periodic_events) = P::new(process_id, config);
 
-        // TODO:
-        // - discover
-        // - periodic events
+        if !periodic_events.is_empty() {
+            todo!("schedule periodic events: {:?}", periodic_events);
+        }
+
+        // discover peers
+        let peers = i
+            .context
+            .topology
+            .get(&process_id)
+            .cloned()
+            .expect("each process should have a set of peers");
+        protocol.discover(peers);
 
         // create executor
         let executor = <<P as Protocol>::Executor>::new(process_id, config);
@@ -123,7 +159,23 @@ where
         msg: P::Message,
         state: &mut ProtocolActorState<P>,
     ) -> Vec<(HashSet<ProcessId>, P::Message)> {
+        // handle message
         let actions = state.protocol.handle(from, msg, &RunTime);
+
+        // handle new execution info
+        for execution_info in state.protocol.to_executor() {
+            for executor_result in state.executor.handle(execution_info) {
+                match executor_result {
+                    ExecutorResult::Ready(cmd_result) => {
+                        todo!("send result to client: {:?}", cmd_result)
+                    }
+                    ExecutorResult::Partial(_, _, _) => {
+                        panic!("executor result cannot be partial")
+                    }
+                }
+            }
+        }
+
         Self::handle_actions(actions, state)
     }
 
@@ -175,6 +227,10 @@ mod tests {
         let n = 3;
         let f = 1;
         let config = Config::new(n, f);
-        let _ = ProtocolActor::<Basic>::new(config);
+        let mut topology = HashMap::new();
+        topology.insert(1, vec![1, 2, 3]);
+        topology.insert(2, vec![2, 3, 1]);
+        topology.insert(3, vec![3, 1, 2]);
+        let _ = ProtocolActor::<Basic>::new(config, topology);
     }
 }
