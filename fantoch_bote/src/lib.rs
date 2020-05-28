@@ -17,6 +17,7 @@ pub struct Bote {
 }
 
 impl Bote {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let planet = Planet::new();
         Self::from(planet)

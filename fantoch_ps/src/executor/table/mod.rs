@@ -211,7 +211,7 @@ impl VotesTable {
             self.process_id,
             stable
                 .iter()
-                .map(|((_, dot), _)| dot.clone())
+                .map(|((_, dot), _)| *dot)
                 .collect::<Vec<_>>()
         );
 

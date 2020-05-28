@@ -28,6 +28,7 @@ pub struct Planet {
 
 impl Planet {
     /// Creates a new `Planet` instance.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::from(LAT_DIR)
     }

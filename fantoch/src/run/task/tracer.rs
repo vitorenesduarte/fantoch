@@ -21,11 +21,9 @@ pub async fn tracer_task(tracer_show_interval: Option<usize>) {
     let mut interval = time::interval(millis);
 
     loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                // show metrics
-                println!("{:?}", subscriber);
-            }
-        }
+        // wait tick
+        let _ = interval.tick().await;
+        // show metrics
+        println!("{:?}", subscriber);
     }
 }

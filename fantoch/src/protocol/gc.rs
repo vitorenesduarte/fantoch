@@ -66,7 +66,7 @@ impl GCTrack {
                     .expect("actor should exist in the newly stable clock");
                 // compute representation of stable dots.
                 (
-                    process_id.clone(),
+                    *process_id,
                     previous.frontier() + 1,
                     current.frontier(),
                 )

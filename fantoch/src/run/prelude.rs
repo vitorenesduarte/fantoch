@@ -89,7 +89,7 @@ impl pool::PoolIndex for (Option<Dot>, Command) {
             .as_ref()
             .map(worker_dot_index_shift)
             // no necessary reserve if there's a leader
-            .unwrap_or(worker_index_no_shift(LEADER_WORKER_INDEX))
+            .unwrap_or_else(|| worker_index_no_shift(LEADER_WORKER_INDEX))
     }
 }
 

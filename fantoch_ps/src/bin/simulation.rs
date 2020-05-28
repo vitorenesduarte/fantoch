@@ -11,7 +11,8 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
     let f = 1;
-    for n in vec![3, 5] {
+    let ns = vec![3, 5];
+    for n in ns {
         println!(">running atlas n = {} | f = {}", n, f);
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(true);

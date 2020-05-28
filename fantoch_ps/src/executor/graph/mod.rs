@@ -117,7 +117,7 @@ impl DependencyGraph {
             self.strong_connect(&mut finder, dot, newly_ready_commands);
 
         // get sccs
-        let (sccs, visited) = finder.finalize(&mut self.vertex_index);
+        let (sccs, visited) = finder.finalize(&self.vertex_index);
 
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that

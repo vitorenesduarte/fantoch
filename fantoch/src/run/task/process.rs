@@ -470,7 +470,7 @@ async fn handle_actions<P>(
                         }
                     })
                     .collect::<FuturesUnordered<_>>();
-                while let Some(_) = sends.next().await {}
+                while sends.next().await.is_some() {}
 
                 // check if should handle message locally
                 if target.contains(&process_id) {

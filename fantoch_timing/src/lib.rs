@@ -51,6 +51,7 @@ pub struct TimingSubscriber {
 }
 
 impl TimingSubscriber {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             next_id: Arc::new(AtomicU64::new(1)), // span ids must be > 0
@@ -144,10 +145,9 @@ impl fmt::Debug for TimingSubscriber {
 
         for (function_name, id) in name_to_id {
             // find function's histogram
-            match self.histograms.get(&id) {
-                Some(histogram) => {
-                    let histogram = histogram.value();
-                    writeln!(
+            if let Some(histogram) = self.histograms.get(&id) {
+                let histogram = histogram.value();
+                writeln!(
                         f,
                         "{:<35} | count={:<10} min={:<10} max={:<10} avg={:<10} std={:<10} p99={:<10} p99.99={:<10}",
                         function_name,
@@ -159,8 +159,6 @@ impl fmt::Debug for TimingSubscriber {
                         histogram.value_at_quantile(0.99),
                         histogram.value_at_quantile(0.9999),
                     )?;
-                }
-                None => {}
             }
         }
         Ok(())

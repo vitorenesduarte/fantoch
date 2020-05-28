@@ -354,7 +354,7 @@ where
     let mut latency = Histogram::new();
     // let mut throughput = Histogram::new();
 
-    let mut handles = handles.into_iter().collect::<FuturesUnordered<_>>();
+    let mut handles = handles.collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
         let client = join_result?;
         println!("client {} ended", client.id());

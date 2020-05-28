@@ -36,7 +36,7 @@ where
         let keys = Self::usort(topology.keys().cloned());
         assert_eq!(ids, keys);
         for peers in topology.values() {
-            let peers = Self::usort(peers.into_iter().cloned());
+            let peers = Self::usort(peers.iter().cloned());
             assert_eq!(ids, peers);
         }
     }
@@ -127,10 +127,8 @@ where
 
         // send new messages
         for (recipients, msg) in to_sends {
-            let recipients: Vec<_> = recipients
-                .into_iter()
-                .map(|id| from_process_id(id))
-                .collect();
+            let recipients: Vec<_> =
+                recipients.into_iter().map(from_process_id).collect();
             let msg = KV::Internal(msg);
             o.broadcast(&recipients, &msg);
         }
