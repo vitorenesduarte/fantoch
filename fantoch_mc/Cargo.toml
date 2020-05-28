@@ -7,6 +7,6 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-stateright = { git = "https://github.com/stateright/stateright", branch = "master" }
+stateright = { git = "https://github.com/stateright/stateright", rev = "2fa356e17ba1733af6b86e152bed57f376728871" }
 
 fantoch = { path = "../fantoch" }
