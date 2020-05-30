@@ -306,11 +306,7 @@ impl FPaxos {
     }
 
     #[instrument(skip(self, slot, cmd))]
-    fn handle_mchosen(
-        &mut self,
-        slot: u64,
-        cmd: Command,
-    ) -> Vec<Action<Self>> {
+    fn handle_mchosen(&mut self, slot: u64, cmd: Command) -> Vec<Action<Self>> {
         log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
 
         // create execution info

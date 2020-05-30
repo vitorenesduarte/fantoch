@@ -11,8 +11,8 @@ pub use sequential::SequentialKeyClocks;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::util;
-use threshold::VClock;
 use std::fmt::Debug;
+use threshold::VClock;
 
 pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance given the number of processes.

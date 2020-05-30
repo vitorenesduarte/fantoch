@@ -131,6 +131,11 @@ pub trait PeriodicEventIndex {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Action<P: Protocol> {
-    ToSend { target: HashSet<ProcessId>, msg: <P as Protocol>::Message },
-    ToForward { msg: <P as Protocol>::Message },
+    ToSend {
+        target: HashSet<ProcessId>,
+        msg: <P as Protocol>::Message,
+    },
+    ToForward {
+        msg: <P as Protocol>::Message,
+    },
 }
