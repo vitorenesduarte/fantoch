@@ -176,6 +176,12 @@ impl Planet {
 mod tests {
     use super::*;
 
+    fn symmetric(a: &Region, b: &Region, planet: &Planet) -> bool {
+        let a_to_b = planet.ping_latency(a, b).unwrap();
+        let b_to_a = planet.ping_latency(b, a).unwrap();
+        a_to_b == b_to_a
+    }
+
     #[test]
     fn latency() {
         // planet
@@ -183,14 +189,19 @@ mod tests {
 
         // regions
         let eu_w3 = Region::new("europe-west3");
-        let eu_w4 = Region::new("europe-west4");
         let us_c1 = Region::new("us-central1");
 
-        assert_eq!(planet.ping_latency(&eu_w3, &eu_w4).unwrap(), 7);
+        // most times latency is symmetric in GCP
+        assert!(symmetric(&eu_w3, &us_c1, &planet));
 
-        // most times latency is symmetric
-        assert_eq!(planet.ping_latency(&eu_w3, &us_c1).unwrap(), 105);
-        assert_eq!(planet.ping_latency(&us_c1, &eu_w3).unwrap(), 105);
+        // sometimes it's not
+        let us_e1 = Region::new("us-east1");
+        let eu_w3 = Region::new("europe-west3");
+        let us_e4 = Region::new("us-east4");
+        let us_w1 = Region::new("us-west1");
+        assert!(!symmetric(&us_e1, &eu_w3, &planet));
+        assert!(!symmetric(&us_e4, &us_w1, &planet));
+        assert!(!symmetric(&us_w1, &eu_w3, &planet));
     }
 
     #[test]

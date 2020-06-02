@@ -11,6 +11,7 @@ pub use workload::Workload;
 use crate::command::{Command, CommandResult};
 use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
+use crate::log;
 use crate::metrics::Histogram;
 use crate::time::SysTime;
 
@@ -87,9 +88,15 @@ impl Client {
         time: &dyn SysTime,
     ) -> bool {
         // end command in pending and save command latency
-        let (latency, return_time) = self.pending.end(cmd_result.rifl(), time);
+        let (latency, end_time) = self.pending.end(cmd_result.rifl(), time);
+        log!(
+            "rifl {:?} ended after {} at {}",
+            cmd_result.rifl(),
+            latency,
+            end_time
+        );
         self.latency_histogram.increment(latency);
-        self.throughput_histogram.increment(return_time);
+        self.throughput_histogram.increment(end_time);
 
         // we're done once:
         // - the workload is finished and
