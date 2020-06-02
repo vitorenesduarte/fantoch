@@ -4,14 +4,57 @@ use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
-use fantoch_ps::protocol::{AtlasSequential, NewtSequential};
+use fantoch_ps::protocol::{AtlasSequential, EPaxosSequential, NewtSequential};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
+    epaxos_aws();
     newt_vs_spanner();
     newt_real_time();
+}
+
+fn epaxos_aws() {
+    let planet = Planet::from("../latency_aws/");
+    let regions = vec![
+        Region::new("af-south-1"),
+        Region::new("ap-east-1"),
+        Region::new("eu-west-2"),
+        Region::new("me-south-1"),
+        Region::new("us-west-2"),
+    ];
+
+    println!("{}", planet.distance_matrix(regions.clone()).unwrap());
+
+    // processes
+    let n = 5;
+    let f = 2;
+    let transitive_conflicts = true;
+    let mut config = Config::new(n, f);
+    config.set_transitive_conflicts(transitive_conflicts);
+    let process_regions = regions.clone();
+
+    // clients
+    let conflict_rate = 100;
+    let total_commands = 1000;
+    let payload_size = 0;
+    let workload = Workload::new(conflict_rate, total_commands, payload_size);
+    let client_regions = regions.clone();
+
+    for clients_per_region in vec![1] {
+        // for clients_per_region in vec![10, 20, 50, 100, 200] {
+        println!(">running epaxos n = {} | f = {}", n, f);
+
+        run::<EPaxosSequential>(
+            config,
+            workload,
+            clients_per_region,
+            process_regions.clone(),
+            client_regions.clone(),
+            planet.clone(),
+        );
+    }
 }
 
 fn newt_real_time() {
