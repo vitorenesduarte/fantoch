@@ -127,7 +127,16 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 cmd,
                 quorum,
                 clock,
-            } => self.handle_mcollect(from, dot, cmd, quorum, clock, time),
+                coordinator_votes,
+            } => self.handle_mcollect(
+                from,
+                dot,
+                cmd,
+                quorum,
+                clock,
+                coordinator_votes,
+                time,
+            ),
             Message::MCollectAck {
                 dot,
                 clock,
@@ -184,6 +193,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 }
 
 impl<KC: KeyClocks> Newt<KC> {
+    // With tiny quorums and `f = 1`, we can have the fast quorum process
+    // sending the `MCommit` message.
+    fn bypass_mcollectack(&self) -> bool {
+        self.bp.config.newt_tiny_quorums() && self.bp.config.f() == 1
+    }
+
     /// Handles a submit operation by a client.
     #[instrument(skip(self, dot, cmd, time))]
     fn handle_submit(
@@ -203,10 +218,18 @@ impl<KC: KeyClocks> Newt<KC> {
         let (clock, process_votes) =
             self.key_clocks.bump_and_vote(&cmd, min_clock);
 
-        // get cmd info
-        let info = self.cmds.get(dot);
-        // bootstrap votes with initial consumed votes
-        info.votes = process_votes;
+        // compute this now to satisfy the borrow checker
+        let bypass_mcollectack = self.bypass_mcollectack();
+
+        // send votes if we can bypass the mcollectack, otherwise store them
+        let coordinator_votes = if bypass_mcollectack {
+            process_votes
+        } else {
+            // get cmd info
+            let info = self.cmds.get(dot);
+            info.votes = process_votes;
+            Votes::new()
+        };
 
         // create `MCollect` and target
         // TODO maybe just don't send to self with `self.bp.all_but_me()`
@@ -214,6 +237,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             cmd,
             clock,
+            coordinator_votes,
             quorum: self.bp.fast_quorum(),
         };
         let target = self.bp.all();
@@ -225,7 +249,16 @@ impl<KC: KeyClocks> Newt<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
+    #[instrument(skip(
+        self,
+        from,
+        dot,
+        cmd,
+        quorum,
+        remote_clock,
+        votes,
+        time
+    ))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -233,14 +266,16 @@ impl<KC: KeyClocks> Newt<KC> {
         cmd: Command,
         quorum: HashSet<ProcessId>,
         remote_clock: u64,
+        mut votes: Votes,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MCollect({:?}, {:?}, {}) from {}",
+            "p{}: MCollect({:?}, {:?}, {}, {:?}) from {}",
             self.id(),
             dot,
             cmd,
             remote_clock,
+            votes,
             from
         );
 
@@ -299,19 +334,34 @@ impl<KC: KeyClocks> Newt<KC> {
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
 
-        // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck {
-            dot,
-            clock,
-            process_votes,
-        };
-        let target = singleton![from];
+        if !message_from_self && self.bypass_mcollectack() {
+            votes.merge(process_votes);
 
-        // return `ToSend`
-        vec![Action::ToSend {
-            target,
-            msg: mcollectack,
-        }]
+            // if tiny quorums and f = 1, the fast quorum process can commit the
+            // command right away create `MCommit` and target
+            let mcommit = Message::MCommit { dot, clock, votes };
+            let target = self.bp.all();
+
+            // return `ToSend`
+            vec![Action::ToSend {
+                target,
+                msg: mcommit,
+            }]
+        } else {
+            // create `MCollectAck` and target
+            let mcollectack = Message::MCollectAck {
+                dot,
+                clock,
+                process_votes,
+            };
+            let target = singleton![from];
+
+            // return `ToSend`
+            vec![Action::ToSend {
+                target,
+                msg: mcollectack,
+            }]
+        }
     }
 
     #[instrument(skip(self, from, dot, clock, remote_votes, time))]
@@ -731,6 +781,7 @@ pub enum Message {
         cmd: Command,
         quorum: HashSet<ProcessId>,
         clock: u64,
+        coordinator_votes: Votes,
     },
     MCollectAck {
         dot: Dot,
