@@ -143,20 +143,26 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 process_votes,
             } => self.handle_mcollectack(from, dot, clock, process_votes, time),
             Message::MCommit { dot, clock, votes } => {
-                self.handle_mcommit(from, dot, clock, votes)
+                self.handle_mcommit(from, dot, clock, votes, time)
             }
-            Message::MDetached { detached } => self.handle_mdetached(detached),
+            Message::MDetached { detached } => {
+                self.handle_mdetached(detached, time)
+            }
             Message::MConsensus { dot, ballot, clock } => {
-                self.handle_mconsensus(from, dot, ballot, clock)
+                self.handle_mconsensus(from, dot, ballot, clock, time)
             }
             Message::MConsensusAck { dot, ballot } => {
-                self.handle_mconsensusack(from, dot, ballot)
+                self.handle_mconsensusack(from, dot, ballot, time)
             }
-            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
+            Message::MCommitDot { dot } => {
+                self.handle_mcommit_dot(from, dot, time)
+            }
             Message::MGarbageCollection { committed } => {
-                self.handle_mgc(from, committed)
+                self.handle_mgc(from, committed, time)
             }
-            Message::MStable { stable } => self.handle_mstable(from, stable),
+            Message::MStable { stable } => {
+                self.handle_mstable(from, stable, time)
+            }
         }
     }
 
@@ -168,7 +174,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
-                self.handle_event_garbage_collection()
+                self.handle_event_garbage_collection(time)
             }
             PeriodicEvent::ClockBump => self.handle_event_clock_bump(time),
         }
@@ -270,13 +276,14 @@ impl<KC: KeyClocks> Newt<KC> {
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MCollect({:?}, {:?}, {}, {:?}) from {}",
+            "p{}: MCollect({:?}, {:?}, {}, {:?}) from {} | time={}",
             self.id(),
             dot,
             cmd,
             remote_clock,
             votes,
-            from
+            from,
+            time.now()
         );
 
         // get cmd info
@@ -303,7 +310,7 @@ impl<KC: KeyClocks> Newt<KC> {
             if let Some((from, clock, votes)) =
                 self.buffered_commits.remove(&dot)
             {
-                return self.handle_mcommit(from, dot, clock, votes);
+                return self.handle_mcommit(from, dot, clock, votes, time);
             } else {
                 return vec![];
             }
@@ -374,12 +381,13 @@ impl<KC: KeyClocks> Newt<KC> {
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MCollectAck({:?}, {}, {:?}) from {}",
+            "p{}: MCollectAck({:?}, {}, {:?}) from {} | time={}",
             self.id(),
             dot,
             clock,
             remote_votes,
-            from
+            from,
+            time.now()
         );
 
         // get cmd info
@@ -457,15 +465,23 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, clock))]
+    #[instrument(skip(self, from, dot, clock, time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
         dot: Dot,
         clock: u64,
         mut votes: Votes,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
+        log!(
+            "p{}: MCommit({:?}, {}, {:?}) | time={}",
+            self.id(),
+            dot,
+            clock,
+            votes,
+            time.now()
+        );
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -538,9 +554,18 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, detached))]
-    fn handle_mdetached(&mut self, detached: Votes) -> Vec<Action<Self>> {
-        log!("p{}: MDetached({:?})", self.id(), detached);
+    #[instrument(skip(self, detached, time))]
+    fn handle_mdetached(
+        &mut self,
+        detached: Votes,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: MDetached({:?}) | time={}",
+            self.id(),
+            detached,
+            time.now()
+        );
 
         // create execution info
         let execution_info = detached.into_iter().map(|(key, key_votes)| {
@@ -552,20 +577,22 @@ impl<KC: KeyClocks> Newt<KC> {
         vec![]
     }
 
-    #[instrument(skip(self, from, dot, ballot, clock))]
+    #[instrument(skip(self, from, dot, ballot, clock, time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
         clock: ConsensusValue,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MConsensus({:?}, {}, {:?})",
+            "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
             ballot,
-            clock
+            clock,
+            time.now()
         );
 
         // get cmd info
@@ -602,14 +629,21 @@ impl<KC: KeyClocks> Newt<KC> {
         vec![Action::ToSend { target, msg }]
     }
 
-    #[instrument(skip(self, from, dot, ballot))]
+    #[instrument(skip(self, from, dot, ballot, time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
+        log!(
+            "p{}: MConsensusAck({:?}, {}) | time={}",
+            self.id(),
+            dot,
+            ballot,
+            time.now()
+        );
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -642,29 +676,37 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot))]
+    #[instrument(skip(self, from, dot, time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
         dot: Dot,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MCommitDot({:?})", self.id(), dot);
+        log!(
+            "p{}: MCommitDot({:?}) | time={}",
+            self.id(),
+            dot,
+            time.now()
+        );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
         vec![]
     }
 
-    #[instrument(skip(self, from, committed))]
+    #[instrument(skip(self, from, committed, time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MGarbageCollection({:?}) from {}",
+            "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
-            from
+            from,
+            time.now()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -675,22 +717,36 @@ impl<KC: KeyClocks> Newt<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, stable))]
+    #[instrument(skip(self, from, stable, time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
+        log!(
+            "p{}: MStable({:?}) from {} | time={}",
+            self.id(),
+            stable,
+            from,
+            time.now()
+        );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
         vec![]
     }
 
-    #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
-        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
+    #[instrument(skip(self, time))]
+    fn handle_event_garbage_collection(
+        &mut self,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: PeriodicEvent::GarbageCollection | time={}",
+            self.id(),
+            time.now()
+        );
 
         // retrieve the committed clock
         let committed = self.cmds.committed();
