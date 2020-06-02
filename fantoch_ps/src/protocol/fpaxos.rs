@@ -239,12 +239,13 @@ impl FPaxos {
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MAccept({:?}, {:?}, {:?}) from {}",
+            "p{}: MAccept({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
             slot,
             cmd,
-            from
+            from,
+            time.now()
         );
 
         if let Some(msg) = self
