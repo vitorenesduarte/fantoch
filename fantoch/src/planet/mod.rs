@@ -11,8 +11,8 @@ use crate::planet::dat::Dat;
 use std::collections::HashMap;
 use std::fmt::{self, Write};
 
-// directory that contains all dat files
-const LAT_DIR: &str = "../latency_data/";
+// directory that contains all dat files for GCP
+const GCP_LAT_DIR: &str = "../latency_gcp/";
 
 // assume that intra region latency is 0
 const INTRA_REGION_LATENCY: u64 = 0;
@@ -27,10 +27,10 @@ pub struct Planet {
 }
 
 impl Planet {
-    /// Creates a new `Planet` instance.
+    /// Creates a new GCP `Planet` instance.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self::from(LAT_DIR)
+        Self::from(GCP_LAT_DIR)
     }
 
     /// Creates a new `Planet` instance.
