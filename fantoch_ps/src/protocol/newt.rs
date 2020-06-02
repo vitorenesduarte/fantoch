@@ -974,10 +974,9 @@ mod tests {
         let n = 3;
         let f = 1;
         let mut config = Config::new(n, f);
-        // set tiny quorums to true:
-        // - doesn't change the fast quorum size for n = 3 and f = 1 but
-        // - if affects phantom vote generation
-        config.set_newt_tiny_quorums(true);
+        // set tiny quorums to false so that the "skip mcollect ack optimization
+        // doesn't kick in"
+        config.set_newt_tiny_quorums(false);
 
         // executors
         let executor_1 = TableExecutor::new(process_id_1, config);
