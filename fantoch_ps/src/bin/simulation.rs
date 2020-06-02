@@ -10,13 +10,28 @@ use std::thread;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
+    newt_vs_spanner();
+    newt_real_time();
+}
+
+fn newt_real_time() {
+    let regions = vec![
+        Region::new("asia-south1"),
+        Region::new("europe-north1"),
+        Region::new("southamerica-east1"),
+        Region::new("australia-southeast1"),
+        Region::new("europe-west1"),
+    ];
     let f = 1;
     let ns = vec![3, 5];
     for n in ns {
         println!(">running atlas n = {} | f = {}", n, f);
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(true);
-        run_in_thread(move || increasing_load::<AtlasSequential>(config));
+        let exp_regions = regions.clone();
+        run_in_thread(move || {
+            increasing_load::<AtlasSequential>(exp_regions, config)
+        });
 
         let tiny_quorums_config = if n > 3 {
             vec![false, true]
@@ -36,7 +51,10 @@ fn main() {
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
             config.set_newt_real_time(false);
-            run_in_thread(move || increasing_load::<NewtSequential>(config));
+            let exp_regions = regions.clone();
+            run_in_thread(move || {
+                increasing_load::<NewtSequential>(exp_regions, config)
+            });
 
             for hybrid in hybrid_config.clone() {
                 for interval in interval_config.clone() {
@@ -45,12 +63,41 @@ fn main() {
                     config.set_newt_tiny_quorums(tiny_quorums);
                     config.set_newt_real_time(true);
                     config.set_newt_clock_bump_interval(interval);
+                    let exp_regions = regions.clone();
                     run_in_thread(move || {
-                        increasing_load::<NewtSequential>(config)
+                        increasing_load::<NewtSequential>(exp_regions, config)
                     });
                 }
             }
         }
+    }
+}
+
+fn newt_vs_spanner() {
+    let planet = Planet::new();
+    let regions: Vec<_> = planet
+        .regions()
+        .into_iter()
+        .filter(|region| region != &Region::new("us-east1"))
+        .collect();
+
+    let f = 1;
+    let n = 19;
+
+    for interval in vec![5] {
+        println!(
+            ">running newt n = {} | f = {} | clock_bump_interval = {}ms",
+            n, f, interval
+        );
+        let mut config = Config::new(n, f);
+        config.set_newt_tiny_quorums(true);
+        config.set_newt_real_time(true);
+        config.set_newt_hybrid_clocks(true);
+        config.set_newt_clock_bump_interval(interval);
+        let exp_regions = regions.clone();
+        run_in_thread(move || {
+            increasing_load::<NewtSequential>(exp_regions, config)
+        });
     }
 }
 
@@ -97,19 +144,9 @@ fn equidistant<P: Protocol>() {
 }
 
 #[allow(dead_code)]
-fn increasing_load<P: Protocol>(config: Config) {
+fn increasing_load<P: Protocol>(regions: Vec<Region>, config: Config) {
     let planet = Planet::new();
-    let regions = vec![
-        Region::new("asia-south1"),
-        Region::new("europe-north1"),
-        Region::new("southamerica-east1"),
-        Region::new("australia-southeast1"),
-        Region::new("europe-west1"),
-    ];
-    let regions: Vec<_> = regions.into_iter().take(config.n()).collect();
-
-    // number of clients
-    let cs = vec![8, 16, 32, 64, 128, 256];
+    let cs = vec![1, 2, 4, 8, 16, 32, 64, 128, 256];
 
     // clients workload
     let conflict_rate = 10;

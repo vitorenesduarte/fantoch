@@ -5,8 +5,8 @@ use tracing::instrument;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
-const INSTANCE_TYPE: &str = "t3-small";
-const MAX_SPOT_INSTANCE_REQUEST_WAIT: u64 = 10; // seconds
+const INSTANCE_TYPE: &str = "t3.small";
+const MAX_SPOT_INSTANCE_REQUEST_WAIT: u64 = 120; // seconds
 const MAX_INSTANCE_DURATION: usize = 1; // hours
 
 #[tokio::main]
@@ -65,11 +65,12 @@ async fn main() -> Result<(), Report> {
 
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     launcher.set_max_instance_duration(MAX_INSTANCE_DURATION);
-    launcher.spawn(
-        descriptors,
-        Some(Duration::from_secs(MAX_SPOT_INSTANCE_REQUEST_WAIT)),
-    )
-    .await?;
+    launcher
+        .spawn(
+            descriptors,
+            Some(Duration::from_secs(MAX_SPOT_INSTANCE_REQUEST_WAIT)),
+        )
+        .await?;
     let vms = launcher.connect_all().await?;
 
     let pings = all_regions
