@@ -115,11 +115,9 @@ impl AtomicKeyClocks {
     fn bump(&self, key: &Key, min_clock: u64) -> u64 {
         self.clocks
             .get(key)
-            .fetch_update(
-                |value| Some(cmp::max(min_clock, value + 1)),
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            )
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                Some(cmp::max(min_clock, value + 1))
+            })
             .expect("atomic bump should always succeed")
     }
 
@@ -127,17 +125,13 @@ impl AtomicKeyClocks {
     fn maybe_bump(&self, key: &Key, up_to: u64) -> Option<u64> {
         self.clocks
             .get(&key)
-            .fetch_update(
-                |value| {
-                    if value < up_to {
-                        Some(up_to)
-                    } else {
-                        None
-                    }
-                },
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            )
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                if value < up_to {
+                    Some(up_to)
+                } else {
+                    None
+                }
+            })
             .ok()
     }
 

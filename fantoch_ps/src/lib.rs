@@ -1,6 +1,3 @@
-// needed for AtomicU64::fetch_update
-#![feature(no_more_cas)]
-
 // This module contains the implementation of several `Executor`'s.
 pub mod executor;
 
