@@ -83,10 +83,8 @@ pub async fn ping_experiment(
         // sort ping results
         stats.sort();
         let content = stats.join("\n");
-        println!("region: {}", region);
-        println!("stats: {:?}", stats);
-        println!("content: {}", content);
 
+        // save ping results to file
         let mut file = File::create(format!("{}.dat", region))?;
         file.write_all(content.as_bytes())?;
     }
