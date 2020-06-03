@@ -18,15 +18,29 @@ jobs:
           toolchain: nightly
           override: true
 
-      - name: Tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Test fantoch
+        run: cd fantoch/ && cargo test
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        timeout-minutes: 20
+        timeout-minutes: 10
+
+      - name: Test fantoch_ps
+        run: cd fantoch_ps/ && cargo test
+        env:
+          QUICKCHECK_TESTS: '10000'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        timeout-minutes: 10
+
+      - name: Test fantoch_bote
+        run: cd fantoch_bote/ && cargo test
+        env:
+          QUICKCHECK_TESTS: '10000'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        timeout-minutes: 10
 
       - name: Coverage
         uses: actions-rs/grcov@v0.1
