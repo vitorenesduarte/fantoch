@@ -421,19 +421,29 @@ impl<KC: KeyClocks> Newt<KC> {
         // occurrences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
+        // check if it's a message from self
+        let message_from_self = from == self.bp.process_id;
+
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
         // - this prevents us from generating votes (either when clients submit
         //   new operations or when handling `MCollect` from other processes)
         //   that could potentially delay the execution of this command
-        match info.cmd.as_ref() {
-            Some(cmd) => {
-                let min_clock = self.bp.min_clock(max_clock, time);
-                let local_votes = self.key_clocks.vote(cmd, min_clock);
-                // update votes with local votes
-                info.votes.merge(local_votes);
-            }
-            None => {
-                panic!("there should be a command payload in the MCollectAck handler");
+        // - when skipping the mcollectack by fast quorum processes, the
+        //   coordinator can't vote here; if it does, the votes generated here
+        //   will never be sent in the MCommit message
+        // - TODO: if we refactor votes to attached/detached business, then this
+        //   is no longer a problem
+        if !message_from_self {
+            match info.cmd.as_ref() {
+                Some(cmd) => {
+                    let min_clock = self.bp.min_clock(max_clock, time);
+                    let local_votes = self.key_clocks.vote(cmd, min_clock);
+                    // update votes with local votes
+                    info.votes.merge(local_votes);
+                }
+                None => {
+                    panic!("there should be a command payload in the MCollectAck handler");
+                }
             }
         }
 
