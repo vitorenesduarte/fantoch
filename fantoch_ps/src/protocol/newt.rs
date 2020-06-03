@@ -223,6 +223,14 @@ impl<KC: KeyClocks> Newt<KC> {
         let min_clock = self.bp.min_clock(0, time);
         let (clock, process_votes) =
             self.key_clocks.bump_and_vote(&cmd, min_clock);
+        log!(
+            "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+            self.id(),
+            dot,
+            min_clock,
+            clock,
+            process_votes
+        );
 
         // compute this now to satisfy the borrow checker
         let bypass_mcollectack = self.bypass_mcollectack();
@@ -329,6 +337,14 @@ impl<KC: KeyClocks> Newt<KC> {
             let min_clock = self.bp.min_clock(remote_clock, time);
             let (clock, process_votes) =
                 self.key_clocks.bump_and_vote(&cmd, min_clock);
+            log!(
+                "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+                self.bp.process_id,
+                dot,
+                min_clock,
+                clock,
+                process_votes
+            );
             // check that there's one vote per key
             assert_eq!(process_votes.len(), cmd.key_count());
             (clock, process_votes)
