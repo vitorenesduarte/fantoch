@@ -22,7 +22,7 @@ sudo ./aws/install
 Needs:
 - AWS Access Key ID
 - AWS Secret Access Key
-- Default region name: maybe `eu-west3` (`Paris`)
+- Default region name: maybe `eu-west-3` (`Paris`)
 
 ```bash
 aws configure

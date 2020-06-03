@@ -2,6 +2,7 @@ use color_eyre::Report;
 use rusoto_core::Region;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Write;
 use std::time::Duration;
 use tracing::instrument;
 use tsunami::providers::aws;
@@ -89,15 +90,18 @@ async fn main() -> Result<(), Report> {
         .into_iter()
         .zip(all_regions.clone().into_iter())
         .map(|(from, to)| {
-            let from = vms.get(from.name()).unwrap();
-            let to = vms.get(to.name()).unwrap();
-            ping(from, to)
+            let from_name = from.name();
+            let from = vms.get(from_name).unwrap();
+            let to_name = to.name();
+            let to = vms.get(to_name).unwrap();
+            ping(from_name.to_string(), from, to_name.to_string(), to)
         });
 
     let mut results = HashMap::new();
-    for (from, to, result) in futures::future::join_all(pings).await? {
+    for result in futures::future::join_all(pings).await {
+        let (from, to, output) = result?;
         // find the line of interest
-        let mut aggregate: Vec<_> = results
+        let mut aggregate: Vec<_> = output
             .lines()
             .into_iter()
             .filter(|line| line.contains("min/avg/max"))
@@ -105,16 +109,13 @@ async fn main() -> Result<(), Report> {
         assert_eq!(aggregate.len(), 1);
         let aggregate = aggregate.pop().unwrap();
 
-        println!("{} -> {}: {}", from.name(), to.name(), aggregate);
+        println!("{} -> {}: {}", from, to, aggregate);
 
         // create new ping stats
-        let stats = format!("{}:{}", aggregate, to.name());
+        let stats = format!("{}:{}", aggregate, to);
 
         // save stats
-        results
-            .entry(from.name())
-            .or_insert_with(Vec::new)
-            .push(stats);
+        results.entry(from).or_insert_with(Vec::new).push(stats);
     }
 
     for (region, mut stats) in results {
@@ -122,9 +123,8 @@ async fn main() -> Result<(), Report> {
         stats.sort();
         let content = stats.join("\n");
 
-        let file = File::create(format!("{}.dat", region.name()))
-            .expect("it should be possible to create dat file");
-        file.write(content);
+        let mut file = File::create(format!("{}.dat", region))?;
+        file.write_all(content.as_bytes())?;
     }
 
     launcher.terminate_all().await?;
@@ -133,9 +133,11 @@ async fn main() -> Result<(), Report> {
 
 #[instrument]
 async fn ping<'a>(
+    from_name: String,
     from: &'a Machine<'a>,
+    to_name: String,
     to: &'a Machine<'a>,
-) -> Result<(&'a Machine<'a>, &'a Machine<'a>, String), Report> {
+) -> Result<(String, String, String), Report> {
     let to_ip = &to.public_ip;
 
     let out = from
@@ -151,5 +153,5 @@ async fn ping<'a>(
         .output()
         .await?;
     let stdout = String::from_utf8(out.stdout)?;
-    Ok((from, to, stdout))
+    Ok((from_name, to_name, stdout))
 }
