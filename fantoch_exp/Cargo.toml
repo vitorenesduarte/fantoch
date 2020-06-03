@@ -10,6 +10,7 @@ license = "MIT/Apache-2.0"
 color-eyre = "0.3.2"
 futures = "0.3.5"
 rusoto_core = "0.43.0"
+rusoto_ec2 = "0.43.0"
 tracing = "0.1.14"
 tracing-futures = "0.2.4"
 tokio = { version = "0.2.21", features = [ "time" ]}
