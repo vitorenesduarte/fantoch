@@ -7,12 +7,13 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-color-eyre = "0.3.2"
+color-eyre = "0.3.4"
 futures = "0.3.5"
+openssh = "0.6.2"
 rusoto_core = "0.44.0"
 rusoto_ec2 = "0.44.0"
 tracing = "0.1.14"
 tracing-futures = "0.2.4"
 tokio = { version = "0.2.21", features = [ "time" ]}
 tracing-subscriber = "0.2.5"
-tsunami = { git = "https://github.com/jonhoo/tsunami", rev = "29b0c90c5020e18e50cdc1204f5f876d0e548639", features = [ "aws", "baremetal" ] }
+tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "25d7b11141cae2d0982b7da6e90fb51279fca58a", features = [ "aws", "baremetal" ] }

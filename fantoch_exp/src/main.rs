@@ -3,7 +3,7 @@ mod ping;
 use color_eyre::Report;
 use rusoto_core::Region;
 
-const INSTANCE_TYPE: &str = "t3.medium";
+const INSTANCE_TYPE: &str = "m5.large";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 120; // 2 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 const EXPERIMENT_DURATION_SECS: usize = 30 * 60; // 30 minutes

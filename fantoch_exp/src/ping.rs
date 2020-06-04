@@ -8,6 +8,8 @@ use tracing::instrument;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
+const SERVER_ALIVE_INTERVAL_SECS: u64 = 60; //
+
 pub async fn ping_experiment(
     regions: Vec<Region>,
     instance_type: &str,
@@ -22,6 +24,11 @@ pub async fn ping_experiment(
             .instance_type(instance_type)
             .region_with_ubuntu_ami(region.clone())
             .await?
+            .ssh_setup(|ssh_builder| {
+                ssh_builder.server_alive_interval(
+                    std::time::Duration::from_secs(SERVER_ALIVE_INTERVAL_SECS),
+                );
+            })
             .setup(|ssh| {
                 Box::pin(async move {
                     let update = ssh
@@ -98,11 +105,11 @@ pub async fn ping_experiment(
 async fn ping<'a>(
     from: &'a Machine<'a>,
     to: &'a Machine<'a>,
-    experiment_duration: usize,
+    experiment_duration_secs: usize,
 ) -> Result<(String, String, String), Report> {
     println!(
         "starting ping from {} to {} during {} seconds",
-        from.nickname, to.nickname, experiment_duration
+        from.nickname, to.nickname, experiment_duration_secs
     );
 
     let out = from
@@ -110,7 +117,7 @@ async fn ping<'a>(
         .command("ping")
         // specify the duration of the experiment in seconds
         .arg("-w")
-        .arg(experiment_duration.to_string())
+        .arg(experiment_duration_secs.to_string())
         // specify the ping timeout: never
         .arg("-W")
         .arg("0")
