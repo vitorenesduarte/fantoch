@@ -11,9 +11,9 @@ use tsunami::{Machine, Tsunami};
 pub async fn ping_experiment(
     regions: Vec<Region>,
     instance_type: &str,
-    max_spot_instance_request_wait: u64,
-    max_instance_duration: usize,
-    experiment_duration: usize,
+    max_spot_instance_request_wait_secs: u64,
+    max_instance_duration_hours: usize,
+    experiment_duration_secs: usize,
 ) -> Result<(), Report> {
     let mut descriptors = Vec::with_capacity(regions.len());
     for region in &regions {
@@ -40,9 +40,10 @@ pub async fn ping_experiment(
     }
 
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
-    launcher.set_max_instance_duration(max_instance_duration);
+    launcher.set_max_instance_duration(max_instance_duration_hours);
 
-    let max_wait = Some(Duration::from_secs(max_spot_instance_request_wait));
+    let max_wait =
+        Some(Duration::from_secs(max_spot_instance_request_wait_secs));
     if let Err(e) = launcher.spawn(descriptors, max_wait).await {
         launcher.terminate_all().await?;
         return Err(e);
@@ -55,7 +56,7 @@ pub async fn ping_experiment(
         for to in &regions {
             let from = vms.get(from.name()).unwrap();
             let to = vms.get(to.name()).unwrap();
-            let ping = ping(from, to, experiment_duration);
+            let ping = ping(from, to, experiment_duration_secs);
             pings.push(ping);
         }
     }

@@ -4,17 +4,16 @@ use color_eyre::Report;
 use rusoto_core::Region;
 
 const INSTANCE_TYPE: &str = "t3.medium";
-const MAX_SPOT_INSTANCE_REQUEST_WAIT: u64 = 120; // seconds
-const MAX_INSTANCE_DURATION: usize = 1; // hours
-const EXPERIMENT_DURATION: usize = 60; // seconds
+const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 120; // 2 minutes
+const MAX_INSTANCE_DURATION_HOURS: usize = 1;
+const EXPERIMENT_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    // all AWS regions:
-    // - TODO: add missing regions in the next release o rusoto
+    // all AWS regions
     let regions = vec![
         Region::AfSouth1,
         Region::ApEast1,
@@ -38,14 +37,12 @@ async fn main() -> Result<(), Report> {
         Region::UsWest2,
     ];
 
-    let regions = vec![Region::UsWest1, Region::UsWest2];
-
     ping::ping_experiment(
         regions,
         INSTANCE_TYPE,
-        MAX_SPOT_INSTANCE_REQUEST_WAIT,
-        MAX_INSTANCE_DURATION,
-        EXPERIMENT_DURATION,
+        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
+        MAX_INSTANCE_DURATION_HOURS,
+        EXPERIMENT_DURATION_SECS,
     )
     .await
 }
