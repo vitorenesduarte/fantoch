@@ -1,4 +1,3 @@
-mod nuke;
 mod ping;
 
 use color_eyre::Report;
@@ -17,7 +16,7 @@ async fn main() -> Result<(), Report> {
     // all AWS regions:
     // - TODO: add missing regions in the next release o rusoto
     let regions = vec![
-        // Region::AfSouth1,
+        Region::AfSouth1,
         Region::ApEast1,
         Region::ApNortheast1,
         // Region::ApNortheast2, special-region
@@ -27,7 +26,7 @@ async fn main() -> Result<(), Report> {
         Region::CaCentral1,
         Region::EuCentral1,
         Region::EuNorth1,
-        // Region::EuSouth1,
+        Region::EuSouth1,
         Region::EuWest1,
         Region::EuWest2,
         Region::EuWest3,

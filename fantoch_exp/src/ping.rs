@@ -42,12 +42,12 @@ pub async fn ping_experiment(
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     launcher.set_max_instance_duration(max_instance_duration);
 
-    launcher
-        .spawn(
-            descriptors,
-            Some(Duration::from_secs(max_spot_instance_request_wait)),
-        )
-        .await?;
+    let max_wait = Some(Duration::from_secs(max_spot_instance_request_wait));
+    if let Err(e) = launcher.spawn(descriptors, max_wait).await {
+        launcher.terminate_all().await?;
+        return Err(e);
+    }
+
     let vms = launcher.connect_all().await?;
 
     let mut pings = Vec::with_capacity(regions.len() * regions.len());
