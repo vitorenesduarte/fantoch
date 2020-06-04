@@ -15,4 +15,4 @@ tracing = "0.1.14"
 tracing-futures = "0.2.4"
 tokio = { version = "0.2.21", features = [ "time" ]}
 tracing-subscriber = "0.2.5"
-tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "504aecab35c01c6419d9be65a462b7d19c65cf65", features = [ "aws", "baremetal" ] }
+tsunami = { git = "https://github.com/jonhoo/tsunami", rev = "29b0c90c5020e18e50cdc1204f5f876d0e548639", features = [ "aws", "baremetal" ] }
