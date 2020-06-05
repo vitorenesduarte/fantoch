@@ -107,9 +107,9 @@ async fn ping<'a>(
     );
     let out = from
         .ssh
-        .command("sh")
+        .command("bash")
         .arg("-c")
-        .arg(command)
+        .arg(escape(command))
         .output()
         .await?;
 
@@ -132,4 +132,8 @@ async fn ping<'a>(
         .expect("stats should exist in aggregate");
     let stats = format!("{}:{}", stats, to.nickname);
     Ok((from.nickname.clone(), stats))
+}
+
+fn escape(command: String) -> String {
+    format!("\"{}\"", command)
 }
