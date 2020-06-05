@@ -8,7 +8,7 @@ use tracing::instrument;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
-const SERVER_ALIVE_INTERVAL_SECS: u64 = 60; //
+const SERVER_ALIVE_INTERVAL_SECS: u64 = 3600; //
 
 pub async fn ping_experiment(
     regions: Vec<Region>,
@@ -70,21 +70,9 @@ pub async fn ping_experiment(
 
     let mut results = HashMap::new();
     for result in futures::future::join_all(pings).await {
-        let (from, to, output) = result?;
-        // find the line of interest
-        let aggregate = output
-            .lines()
-            .into_iter()
-            .find(|line| line.contains("min/avg/max"))
-            .expect("there should fine a line matching min/avg/max");
-
-        // aggregate is something like:
-        // rtt min/avg/max/mdev = 0.175/0.193/0.283/0.025 ms
-        let stats = aggregate.split(" ").nth(3).unwrap();
-        let stats = format!("{}:{}", stats, to);
-
         // save stats
-        results.entry(from).or_insert_with(Vec::new).push(stats);
+        let (region, stats) = result?;
+        results.entry(region).or_insert_with(Vec::new).push(stats);
     }
 
     for (region, mut stats) in results {
@@ -106,25 +94,42 @@ async fn ping<'a>(
     from: &'a Machine<'a>,
     to: &'a Machine<'a>,
     experiment_duration_secs: usize,
-) -> Result<(String, String, String), Report> {
+) -> Result<(String, String), Report> {
     println!(
         "starting ping from {} to {} during {} seconds",
         from.nickname, to.nickname, experiment_duration_secs
     );
 
+    // execute command
+    let command = format!(
+        "ping -w {} -W 0 {} | tail -n1",
+        experiment_duration_secs, to.public_ip
+    );
     let out = from
         .ssh
-        .command("ping")
-        // specify the duration of the experiment in seconds
-        .arg("-w")
-        .arg(experiment_duration_secs.to_string())
-        // specify the ping timeout: never
-        .arg("-W")
-        .arg("0")
-        .arg(&to.public_ip)
+        .command("sh")
+        .arg("-c")
+        .arg(command)
         .output()
         .await?;
 
+    // get the (last) line retuned
     let stdout = String::from_utf8(out.stdout)?;
-    Ok((from.nickname.clone(), to.nickname.clone(), stdout))
+    println!("{} -> {} stdout: {}", from.nickname, to.nickname, stdout);
+    let aggregate = stdout
+        .lines()
+        .next()
+        .expect("there should fine a line matching min/avg/max");
+
+    // check that indeed matches the expected
+    assert!(aggregate.contains("rtt min/avg/max/mdev = "));
+
+    // aggregate is something like:
+    // rtt min/avg/max/mdev = 0.175/0.193/0.283/0.025 ms
+    let stats = aggregate
+        .split(" ")
+        .nth(3)
+        .expect("stats should exist in aggregate");
+    let stats = format!("{}:{}", stats, to.nickname);
+    Ok((from.nickname.clone(), stats))
 }
