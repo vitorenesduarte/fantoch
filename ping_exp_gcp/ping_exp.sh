@@ -95,7 +95,7 @@ run_region_ping_exp() {
     gcloud compute ssh \
         --ssh-flag="-o ConnectTimeout=10" \
         --zone ${zone} \
-        ${region} --command "bash ${SCRIPT} ${seconds} ${output}"
+        ${region} --command "bash ${SCRIPT} ${HOSTS} ${seconds} ${output}"
     echo "ping exp ended in ${region}"
 
     # retrive ${OUTPUT}

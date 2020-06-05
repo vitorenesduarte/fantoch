@@ -1,14 +1,19 @@
 use color_eyre::Report;
 use rusoto_core::Region;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
+// use std::io::{Read, Write};
 use std::time::Duration;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::instrument;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
-const SERVER_ALIVE_INTERVAL_SECS: u64 = 3600; //
+/// This script should be called like: $ bash script hosts seconds output
+/// - hosts: file where each line looks like "region::ip"
+/// - seconds: number of seconds the ping will run
+/// - output: the file where the output will be written
+const SCRIPT: &str = "./../ping_exp_gcp/region_ping_loop.sh";
+const HOSTS: &str = "./hosts";
 
 pub async fn ping_experiment(
     regions: Vec<Region>,
@@ -43,16 +48,14 @@ pub async fn ping_experiment_run(
 ) -> Result<(), Report> {
     let mut descriptors = Vec::with_capacity(regions.len());
     for region in &regions {
-        let name = String::from(region.name());
+        // get region name
+        let name = region.name().to_string();
+
+        // create setup
         let setup = aws::Setup::default()
             .instance_type(instance_type)
             .region_with_ubuntu_ami(region.clone())
             .await?
-            .ssh_setup(|ssh_builder| {
-                ssh_builder.server_alive_interval(
-                    std::time::Duration::from_secs(SERVER_ALIVE_INTERVAL_SECS),
-                );
-            })
             .setup(|ssh| {
                 Box::pin(async move {
                     let update = ssh
@@ -67,88 +70,117 @@ pub async fn ping_experiment_run(
                     Ok(())
                 })
             });
+
+        // save setup
         descriptors.push((name, setup))
     }
 
+    // spawn and connect
     launcher.set_max_instance_duration(max_instance_duration_hours);
     let max_wait =
         Some(Duration::from_secs(max_spot_instance_request_wait_secs));
     launcher.spawn(descriptors, max_wait).await?;
-
     let vms = launcher.connect_all().await?;
 
-    let mut pings = Vec::with_capacity(regions.len() * regions.len());
-    for from in &regions {
-        for to in &regions {
-            let from = vms.get(from.name()).unwrap();
-            let to = vms.get(to.name()).unwrap();
-            let ping = ping(from, to, experiment_duration_secs);
-            pings.push(ping);
-        }
-    }
+    // create HOSTS file content: each line should be "region::ip"
+    // - create ping future for each region along the way
+    let mut pings = Vec::with_capacity(regions.len());
+    let hosts = regions
+        .iter()
+        .map(|region| {
+            let region_name = region.name();
+            let vm = vms.get(region_name).unwrap();
+            // create ping future
+            pings.push(ping(vm, experiment_duration_secs));
+            // create host entry
+            format!("{}::{}", region_name, vm.public_ip)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    let mut results = HashMap::new();
+    // create HOSTS file
+    let mut file = File::create(HOSTS).await?;
+    file.write_all(hosts.as_bytes()).await?;
+
     for result in futures::future::join_all(pings).await {
-        // save stats
-        let (region, stats) = result?;
-        results.entry(region).or_insert_with(Vec::new).push(stats);
-    }
-
-    for (region, mut stats) in results {
-        // sort ping results
-        stats.sort();
-        let content = stats.join("\n");
-
-        // save ping results to file
-        let mut file = File::create(format!("{}.dat", region))?;
-        file.write_all(content.as_bytes())?;
+        let () = result?;
     }
     Ok(())
 }
 
 #[instrument]
-async fn ping<'a>(
-    from: &'a Machine<'a>,
-    to: &'a Machine<'a>,
+async fn ping(
+    vm: &Machine<'_>,
     experiment_duration_secs: usize,
-) -> Result<(String, String), Report> {
+) -> Result<(), Report> {
     println!(
-        "starting ping from {} to {} during {} seconds",
-        from.nickname, to.nickname, experiment_duration_secs
+        "{}: will launch ping experiment with {} seconds",
+        vm.nickname, experiment_duration_secs
     );
 
-    // execute command
+    // files
+    let script_file = "script.sh";
+    let hosts_file = "hosts";
+    let output_file = format!("{}.dat", vm.nickname);
+
+    // first copy both SCRIPT and HOSTS files to the machine
+    copy_to(SCRIPT, (script_file, vm)).await?;
+    copy_to(HOSTS, (hosts_file, vm)).await?;
+    println!("{}: both files are copied to remote machine", vm.nickname);
+
+    // execute script remotely: "$ bash SCRIPT HOSTS seconds output"
     let command = format!(
-        "ping -w {} -W 0 {} | tail -n1",
-        experiment_duration_secs, to.public_ip
+        "{} {} {} {}",
+        script_file, hosts_file, experiment_duration_secs, output_file
     );
-    let out = from
+    let out = vm
         .ssh
         .command("bash")
         .arg("-c")
         .arg(escape(command))
         .output()
         .await?;
-
-    // get the (last) line retuned
     let stdout = String::from_utf8(out.stdout)?;
-    println!("{} -> {} stdout: {}", from.nickname, to.nickname, stdout);
-    let aggregate = stdout
-        .lines()
-        .next()
-        .expect("there should fine a line matching min/avg/max");
+    println!("{}: script ended {}", vm.nickname, stdout);
 
-    // check that indeed matches the expected
-    assert!(aggregate.contains("rtt min/avg/max/mdev = "));
+    // copy output file
+    copy_from((&output_file, vm), &output_file).await?;
+    println!("{}: output file is copied to local machine", vm.nickname);
+    Ok(())
+}
 
-    // aggregate is something like:
-    // rtt min/avg/max/mdev = 0.175/0.193/0.283/0.025 ms
-    let stats = aggregate
-        .split(" ")
-        .nth(3)
-        .expect("stats should exist in aggregate");
-    let stats = format!("{}:{}", stats, to.nickname);
-    Ok((from.nickname.clone(), stats))
+async fn copy_to(
+    local_path: &str,
+    (remote_path, vm): (&str, &Machine<'_>),
+) -> Result<(), Report> {
+    // get file contents
+    let mut contents = String::new();
+    File::open(local_path)
+        .await?
+        .read_to_string(&mut contents)
+        .await?;
+    // write them in remote machine
+    let mut remote_file = vm.ssh.sftp().write_to(remote_path).await?;
+    remote_file.write_all(contents.as_bytes()).await?;
+    remote_file.close().await?;
+    Ok(())
+}
+
+async fn copy_from(
+    (remote_path, vm): (&str, &Machine<'_>),
+    local_path: &str,
+) -> Result<(), Report> {
+    // get file contents from remote machine
+    let mut contents = String::new();
+    let mut remote_file = vm.ssh.sftp().read_from(remote_path).await?;
+    remote_file.read_to_string(&mut contents).await?;
+    remote_file.close().await?;
+    // write them in file
+    File::create(local_path)
+        .await?
+        .write_all(contents.as_bytes())
+        .await?;
+    Ok(())
 }
 
 fn escape(command: String) -> String {
