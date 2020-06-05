@@ -17,6 +17,30 @@ pub async fn ping_experiment(
     max_instance_duration_hours: usize,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
+    let mut launcher: aws::Launcher<_> = Default::default();
+    let result = ping_experiment_run(
+        &mut launcher,
+        regions,
+        instance_type,
+        max_spot_instance_request_wait_secs,
+        max_instance_duration_hours,
+        experiment_duration_secs,
+    )
+    .await;
+    println!("experiment result: {:?}", result);
+    // make sure we always terminate
+    launcher.terminate_all().await?;
+    result
+}
+
+pub async fn ping_experiment_run(
+    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
+    regions: Vec<Region>,
+    instance_type: &str,
+    max_spot_instance_request_wait_secs: u64,
+    max_instance_duration_hours: usize,
+    experiment_duration_secs: usize,
+) -> Result<(), Report> {
     let mut descriptors = Vec::with_capacity(regions.len());
     for region in &regions {
         let name = String::from(region.name());
@@ -46,15 +70,10 @@ pub async fn ping_experiment(
         descriptors.push((name, setup))
     }
 
-    let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     launcher.set_max_instance_duration(max_instance_duration_hours);
-
     let max_wait =
         Some(Duration::from_secs(max_spot_instance_request_wait_secs));
-    if let Err(e) = launcher.spawn(descriptors, max_wait).await {
-        launcher.terminate_all().await?;
-        return Err(e);
-    }
+    launcher.spawn(descriptors, max_wait).await?;
 
     let vms = launcher.connect_all().await?;
 
@@ -84,8 +103,6 @@ pub async fn ping_experiment(
         let mut file = File::create(format!("{}.dat", region))?;
         file.write_all(content.as_bytes())?;
     }
-
-    launcher.terminate_all().await?;
     Ok(())
 }
 
