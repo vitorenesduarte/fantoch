@@ -4,12 +4,20 @@ use color_eyre::Report;
 use rusoto_core::Region;
 
 const INSTANCE_TYPE: &str = "c5.large";
-const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 120; // 2 minutes
+const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 1;
-const EXPERIMENT_DURATION_SECS: usize = 1 * 20; // 30 minutes
+const EXPERIMENT_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    let args: Vec<String> = std::env::args().collect();
+    assert!(args.len() <= 2, "at most one argument should be provided");
+    let instance_type = if args.len() == 2 {
+        &args[1]
+    } else {
+        INSTANCE_TYPE
+    };
+
     // init logging
     tracing_subscriber::fmt::init();
 
@@ -39,7 +47,7 @@ async fn main() -> Result<(), Report> {
 
     ping::ping_experiment(
         regions,
-        INSTANCE_TYPE,
+        instance_type,
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         MAX_INSTANCE_DURATION_HOURS,
         EXPERIMENT_DURATION_SECS,

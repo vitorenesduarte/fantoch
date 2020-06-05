@@ -30,6 +30,12 @@ aws configure
 
 4. Run
 
+With info logs:
 ```bash
 RUST_LOG=info cargo run --release
+```
+
+Or with [`tsunami`](https://github.com/jonhoo/tsunami) debug logs:
+```bash
+RUST_LOG=tsunami=debug cargo run --release
 ```

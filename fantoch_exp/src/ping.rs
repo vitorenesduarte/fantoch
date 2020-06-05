@@ -1,6 +1,5 @@
 use color_eyre::Report;
 use rusoto_core::Region;
-// use std::io::{Read, Write};
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -17,7 +16,7 @@ const HOSTS: &str = "./hosts";
 
 pub async fn ping_experiment(
     regions: Vec<Region>,
-    instance_type: &str,
+    instance_type: impl ToString + Clone,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     experiment_duration_secs: usize,
@@ -41,7 +40,7 @@ pub async fn ping_experiment(
 pub async fn ping_experiment_run(
     launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
     regions: Vec<Region>,
-    instance_type: &str,
+    instance_type: impl ToString + Clone,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     experiment_duration_secs: usize,
@@ -53,7 +52,7 @@ pub async fn ping_experiment_run(
 
         // create setup
         let setup = aws::Setup::default()
-            .instance_type(instance_type)
+            .instance_type(instance_type.clone())
             .region_with_ubuntu_ami(region.clone())
             .await?
             .setup(|ssh| {
@@ -129,10 +128,14 @@ async fn ping(
     println!("{}: both files are copied to remote machine", vm.nickname);
 
     // execute script remotely: "$ bash SCRIPT HOSTS seconds output"
-    let command = format!(
-        "{} {} {} {}",
-        script_file, hosts_file, experiment_duration_secs, output_file
-    );
+    let command = escape(format!(
+        "chmod u+x {}; ./{} {} {} {}",
+        script_file,
+        script_file,
+        hosts_file,
+        experiment_duration_secs,
+        output_file
+    ));
     let out = vm
         .ssh
         .command("bash")
