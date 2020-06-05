@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
+use crate::log;
 use crate::metrics::Metrics;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
 use crate::time::SysTime;
@@ -87,6 +88,14 @@ impl BaseProcess {
         } else {
             None
         };
+
+        log!(
+            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?}",
+            self.process_id,
+            self.all_but_me,
+            self.fast_quorum,
+            self.write_quorum
+        );
 
         // connected if fast quorum and write quorum are set
         self.fast_quorum.is_some() && self.write_quorum.is_some()

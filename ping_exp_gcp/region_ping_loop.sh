@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-SECONDS=$1
-OUTPUT=$2
-HOSTS=hosts
+HOSTS=$1
+SECONDS=$2
+OUTPUT=$3
 TIMEOUT=0
 
 zone() {

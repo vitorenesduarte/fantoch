@@ -127,27 +127,42 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 cmd,
                 quorum,
                 clock,
-            } => self.handle_mcollect(from, dot, cmd, quorum, clock, time),
+                coordinator_votes,
+            } => self.handle_mcollect(
+                from,
+                dot,
+                cmd,
+                quorum,
+                clock,
+                coordinator_votes,
+                time,
+            ),
             Message::MCollectAck {
                 dot,
                 clock,
                 process_votes,
             } => self.handle_mcollectack(from, dot, clock, process_votes, time),
             Message::MCommit { dot, clock, votes } => {
-                self.handle_mcommit(from, dot, clock, votes)
+                self.handle_mcommit(from, dot, clock, votes, time)
             }
-            Message::MDetached { detached } => self.handle_mdetached(detached),
+            Message::MDetached { detached } => {
+                self.handle_mdetached(detached, time)
+            }
             Message::MConsensus { dot, ballot, clock } => {
-                self.handle_mconsensus(from, dot, ballot, clock)
+                self.handle_mconsensus(from, dot, ballot, clock, time)
             }
             Message::MConsensusAck { dot, ballot } => {
-                self.handle_mconsensusack(from, dot, ballot)
+                self.handle_mconsensusack(from, dot, ballot, time)
             }
-            Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
+            Message::MCommitDot { dot } => {
+                self.handle_mcommit_dot(from, dot, time)
+            }
             Message::MGarbageCollection { committed } => {
-                self.handle_mgc(from, committed)
+                self.handle_mgc(from, committed, time)
             }
-            Message::MStable { stable } => self.handle_mstable(from, stable),
+            Message::MStable { stable } => {
+                self.handle_mstable(from, stable, time)
+            }
         }
     }
 
@@ -159,7 +174,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
-                self.handle_event_garbage_collection()
+                self.handle_event_garbage_collection(time)
             }
             PeriodicEvent::ClockBump => self.handle_event_clock_bump(time),
         }
@@ -184,6 +199,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 }
 
 impl<KC: KeyClocks> Newt<KC> {
+    // With tiny quorums and `f = 1`, we can have the fast quorum process
+    // sending the `MCommit` message.
+    fn bypass_mcollectack(&self) -> bool {
+        self.bp.config.newt_tiny_quorums() && self.bp.config.f() == 1
+    }
+
     /// Handles a submit operation by a client.
     #[instrument(skip(self, dot, cmd, time))]
     fn handle_submit(
@@ -202,11 +223,27 @@ impl<KC: KeyClocks> Newt<KC> {
         let min_clock = self.bp.min_clock(0, time);
         let (clock, process_votes) =
             self.key_clocks.bump_and_vote(&cmd, min_clock);
+        log!(
+            "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+            self.id(),
+            dot,
+            min_clock,
+            clock,
+            process_votes
+        );
 
-        // get cmd info
-        let info = self.cmds.get(dot);
-        // bootstrap votes with initial consumed votes
-        info.votes = process_votes;
+        // compute this now to satisfy the borrow checker
+        let bypass_mcollectack = self.bypass_mcollectack();
+
+        // send votes if we can bypass the mcollectack, otherwise store them
+        let coordinator_votes = if bypass_mcollectack {
+            process_votes
+        } else {
+            // get cmd info
+            let info = self.cmds.get(dot);
+            info.votes = process_votes;
+            Votes::new()
+        };
 
         // create `MCollect` and target
         // TODO maybe just don't send to self with `self.bp.all_but_me()`
@@ -214,6 +251,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             cmd,
             clock,
+            coordinator_votes,
             quorum: self.bp.fast_quorum(),
         };
         let target = self.bp.all();
@@ -225,7 +263,16 @@ impl<KC: KeyClocks> Newt<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
+    #[instrument(skip(
+        self,
+        from,
+        dot,
+        cmd,
+        quorum,
+        remote_clock,
+        votes,
+        time
+    ))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -233,15 +280,18 @@ impl<KC: KeyClocks> Newt<KC> {
         cmd: Command,
         quorum: HashSet<ProcessId>,
         remote_clock: u64,
+        mut votes: Votes,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MCollect({:?}, {:?}, {}) from {}",
+            "p{}: MCollect({:?}, {:?}, {}, {:?}) from {} | time={}",
             self.id(),
             dot,
             cmd,
             remote_clock,
-            from
+            votes,
+            from,
+            time.now()
         );
 
         // get cmd info
@@ -268,7 +318,7 @@ impl<KC: KeyClocks> Newt<KC> {
             if let Some((from, clock, votes)) =
                 self.buffered_commits.remove(&dot)
             {
-                return self.handle_mcommit(from, dot, clock, votes);
+                return self.handle_mcommit(from, dot, clock, votes, time);
             } else {
                 return vec![];
             }
@@ -287,6 +337,14 @@ impl<KC: KeyClocks> Newt<KC> {
             let min_clock = self.bp.min_clock(remote_clock, time);
             let (clock, process_votes) =
                 self.key_clocks.bump_and_vote(&cmd, min_clock);
+            log!(
+                "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+                self.bp.process_id,
+                dot,
+                min_clock,
+                clock,
+                process_votes
+            );
             // check that there's one vote per key
             assert_eq!(process_votes.len(), cmd.key_count());
             (clock, process_votes)
@@ -299,19 +357,34 @@ impl<KC: KeyClocks> Newt<KC> {
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
 
-        // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck {
-            dot,
-            clock,
-            process_votes,
-        };
-        let target = singleton![from];
+        if !message_from_self && self.bypass_mcollectack() {
+            votes.merge(process_votes);
 
-        // return `ToSend`
-        vec![Action::ToSend {
-            target,
-            msg: mcollectack,
-        }]
+            // if tiny quorums and f = 1, the fast quorum process can commit the
+            // command right away create `MCommit` and target
+            let mcommit = Message::MCommit { dot, clock, votes };
+            let target = self.bp.all();
+
+            // return `ToSend`
+            vec![Action::ToSend {
+                target,
+                msg: mcommit,
+            }]
+        } else {
+            // create `MCollectAck` and target
+            let mcollectack = Message::MCollectAck {
+                dot,
+                clock,
+                process_votes,
+            };
+            let target = singleton![from];
+
+            // return `ToSend`
+            vec![Action::ToSend {
+                target,
+                msg: mcollectack,
+            }]
+        }
     }
 
     #[instrument(skip(self, from, dot, clock, remote_votes, time))]
@@ -324,12 +397,13 @@ impl<KC: KeyClocks> Newt<KC> {
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MCollectAck({:?}, {}, {:?}) from {}",
+            "p{}: MCollectAck({:?}, {}, {:?}) from {} | time={}",
             self.id(),
             dot,
             clock,
             remote_votes,
-            from
+            from,
+            time.now()
         );
 
         // get cmd info
@@ -347,19 +421,29 @@ impl<KC: KeyClocks> Newt<KC> {
         // occurrences
         let (max_clock, max_count) = info.quorum_clocks.add(from, clock);
 
+        // check if it's a message from self
+        let message_from_self = from == self.bp.process_id;
+
         // optimization: bump all keys clocks in `cmd` to be `max_clock`
         // - this prevents us from generating votes (either when clients submit
         //   new operations or when handling `MCollect` from other processes)
         //   that could potentially delay the execution of this command
-        match info.cmd.as_ref() {
-            Some(cmd) => {
-                let min_clock = self.bp.min_clock(max_clock, time);
-                let local_votes = self.key_clocks.vote(cmd, min_clock);
-                // update votes with local votes
-                info.votes.merge(local_votes);
-            }
-            None => {
-                panic!("there should be a command payload in the MCollectAck handler");
+        // - when skipping the mcollectack by fast quorum processes, the
+        //   coordinator can't vote here; if it does, the votes generated here
+        //   will never be sent in the MCommit message
+        // - TODO: if we refactor votes to attached/detached business, then this
+        //   is no longer a problem
+        if !message_from_self {
+            match info.cmd.as_ref() {
+                Some(cmd) => {
+                    let min_clock = self.bp.min_clock(max_clock, time);
+                    let local_votes = self.key_clocks.vote(cmd, min_clock);
+                    // update votes with local votes
+                    info.votes.merge(local_votes);
+                }
+                None => {
+                    panic!("there should be a command payload in the MCollectAck handler");
+                }
             }
         }
 
@@ -407,15 +491,23 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, clock))]
+    #[instrument(skip(self, from, dot, clock, time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
         dot: Dot,
         clock: u64,
         mut votes: Votes,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MCommit({:?}, {}, {:?})", self.id(), dot, clock, votes);
+        log!(
+            "p{}: MCommit({:?}, {}, {:?}) | time={}",
+            self.id(),
+            dot,
+            clock,
+            votes,
+            time.now()
+        );
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -488,9 +580,18 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, detached))]
-    fn handle_mdetached(&mut self, detached: Votes) -> Vec<Action<Self>> {
-        log!("p{}: MDetached({:?})", self.id(), detached);
+    #[instrument(skip(self, detached, time))]
+    fn handle_mdetached(
+        &mut self,
+        detached: Votes,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: MDetached({:?}) | time={}",
+            self.id(),
+            detached,
+            time.now()
+        );
 
         // create execution info
         let execution_info = detached.into_iter().map(|(key, key_votes)| {
@@ -502,20 +603,22 @@ impl<KC: KeyClocks> Newt<KC> {
         vec![]
     }
 
-    #[instrument(skip(self, from, dot, ballot, clock))]
+    #[instrument(skip(self, from, dot, ballot, clock, time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
         clock: ConsensusValue,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MConsensus({:?}, {}, {:?})",
+            "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
             ballot,
-            clock
+            clock,
+            time.now()
         );
 
         // get cmd info
@@ -552,14 +655,21 @@ impl<KC: KeyClocks> Newt<KC> {
         vec![Action::ToSend { target, msg }]
     }
 
-    #[instrument(skip(self, from, dot, ballot))]
+    #[instrument(skip(self, from, dot, ballot, time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MConsensusAck({:?}, {})", self.id(), dot, ballot);
+        log!(
+            "p{}: MConsensusAck({:?}, {}) | time={}",
+            self.id(),
+            dot,
+            ballot,
+            time.now()
+        );
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -592,29 +702,37 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot))]
+    #[instrument(skip(self, from, dot, time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
         dot: Dot,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MCommitDot({:?})", self.id(), dot);
+        log!(
+            "p{}: MCommitDot({:?}) | time={}",
+            self.id(),
+            dot,
+            time.now()
+        );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
         vec![]
     }
 
-    #[instrument(skip(self, from, committed))]
+    #[instrument(skip(self, from, committed, time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MGarbageCollection({:?}) from {}",
+            "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
-            from
+            from,
+            time.now()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -625,22 +743,36 @@ impl<KC: KeyClocks> Newt<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, stable))]
+    #[instrument(skip(self, from, stable, time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
+        log!(
+            "p{}: MStable({:?}) from {} | time={}",
+            self.id(),
+            stable,
+            from,
+            time.now()
+        );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
         vec![]
     }
 
-    #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
-        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
+    #[instrument(skip(self, time))]
+    fn handle_event_garbage_collection(
+        &mut self,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: PeriodicEvent::GarbageCollection | time={}",
+            self.id(),
+            time.now()
+        );
 
         // retrieve the committed clock
         let committed = self.cmds.committed();
@@ -731,6 +863,7 @@ pub enum Message {
         cmd: Command,
         quorum: HashSet<ProcessId>,
         clock: u64,
+        coordinator_votes: Votes,
     },
     MCollectAck {
         dot: Dot,
@@ -867,10 +1000,9 @@ mod tests {
         let n = 3;
         let f = 1;
         let mut config = Config::new(n, f);
-        // set tiny quorums to true:
-        // - doesn't change the fast quorum size for n = 3 and f = 1 but
-        // - if affects phantom vote generation
-        config.set_newt_tiny_quorums(true);
+        // set tiny quorums to false so that the "skip mcollect ack optimization
+        // doesn't kick in"
+        config.set_newt_tiny_quorums(false);
 
         // executors
         let executor_1 = TableExecutor::new(process_id_1, config);

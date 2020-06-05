@@ -1,0 +1,20 @@
+[package]
+name = "fantoch_exp"
+version = "0.1.0"
+edition = "2018"
+
+authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
+license = "MIT/Apache-2.0"
+
+[dependencies]
+color-eyre = "0.3.4"
+futures = "0.3.5"
+openssh = "0.6.2"
+rusoto_core = "0.44.0"
+rusoto_credential = "0.44.0"
+rusoto_ec2 = "0.44.0"
+tracing = "0.1.14"
+tracing-futures = "0.2.4"
+tokio = { version = "0.2.21", features = [ "time" ]}
+tracing-subscriber = "0.2.5"
+tsunami = { version = "0.11.0-beta.5", features = [ "aws", "baremetal" ] }

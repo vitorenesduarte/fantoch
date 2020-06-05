@@ -3,6 +3,7 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId};
+use crate::log;
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
@@ -34,6 +35,9 @@ pub struct Runner<P: Protocol> {
     client_to_region: HashMap<ClientId, Region>,
     // total number of clients
     client_count: usize,
+    // boolean indicating whether the runner should make the distance between
+    // regions symmetric
+    make_distances_symmetric: bool,
 }
 
 #[derive(PartialEq)]
@@ -56,7 +60,7 @@ where
         config: Config,
         workload: Workload,
         clients_per_region: usize,
-        process_regions: Vec<Region>,
+        mut process_regions: Vec<Region>,
         client_regions: Vec<Region>,
     ) -> Self {
         // check that we have the correct number of `process_regions`
@@ -68,9 +72,10 @@ where
         let mut periodic_actions = Vec::new();
 
         // create processes
+        process_regions.sort();
         let to_discover: Vec<_> = process_regions
             .into_iter()
-            .zip(1..=config.n())
+            .zip(util::process_ids(config.n()))
             .map(|(region, process_id)| {
                 let process_id = process_id as u64;
                 // create process and save it
@@ -84,6 +89,7 @@ where
                         .map(|(event, delay)| (process_id, event, delay)),
                 );
 
+                log!("id {} for region {:?}", process_id, region);
                 (process_id, region)
             })
             .collect();
@@ -139,6 +145,7 @@ where
             // since we start ids in 1, the last id is the same as the number of
             // clients
             client_count: client_id as usize,
+            make_distances_symmetric: false,
         };
 
         // schedule periodic actions
@@ -147,6 +154,10 @@ where
         }
 
         runner
+    }
+
+    pub fn make_distances_symmetric(&mut self) {
+        self.make_distances_symmetric = true;
     }
 
     /// Run the simulation. `extra_sim_time` indicates how much longer should
@@ -414,12 +425,24 @@ where
     /// Computes the distance between two regions which is half the ping
     /// latency.
     fn distance(&self, from: &Region, to: &Region) -> u64 {
-        let ping_latency = self
+        let from_to = self
             .planet
             .ping_latency(from, to)
             .expect("both regions should exist on the planet");
+
+        // compute ping time (maybe make it symmetric)
+        let ping = if self.make_distances_symmetric {
+            let to_from = self
+                .planet
+                .ping_latency(to, from)
+                .expect("both regions should exist on the planet");
+            (from_to + to_from) / 2
+        } else {
+            from_to
+        };
+
         // distance is half the ping latency
-        ping_latency / 2
+        ping / 2
     }
 
     /// Get processes' metrics.

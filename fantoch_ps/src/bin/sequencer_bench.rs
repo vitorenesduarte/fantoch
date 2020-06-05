@@ -1,5 +1,3 @@
-#![feature(no_more_cas)]
-
 use clap::{App, Arg};
 use fantoch::metrics::Histogram;
 use fantoch::run::task;
@@ -311,9 +309,9 @@ impl Sequencer for AtomicSequencer {
             .map(|key| {
                 let previous_value = self.keys[key]
                     .fetch_update(
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
                         |value| Some(max(proposal, value + 1)),
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
                     )
                     .expect("updates always succeed");
 
@@ -336,6 +334,8 @@ impl Sequencer for AtomicSequencer {
                 // check if we should vote more
                 if *vote_end < max_sequence {
                     let result = self.keys[*key].fetch_update(
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
                         |value| {
                             if value < max_sequence {
                                 Some(max_sequence)
@@ -343,8 +343,6 @@ impl Sequencer for AtomicSequencer {
                                 None
                             }
                         },
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
                     );
                     // check if we generated more votes (maybe votes by other
                     // threads have been generated and it's

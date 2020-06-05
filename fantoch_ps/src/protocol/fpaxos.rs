@@ -100,22 +100,24 @@ impl Protocol for FPaxos {
         &mut self,
         from: ProcessId,
         msg: Self::Message,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         match msg {
             Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
             Message::MSpawnCommander { ballot, slot, cmd } => {
-                self.handle_mspawn_commander(from, ballot, slot, cmd)
+                self.handle_mspawn_commander(from, ballot, slot, cmd, time)
             }
             Message::MAccept { ballot, slot, cmd } => {
-                self.handle_maccept(from, ballot, slot, cmd)
+                self.handle_maccept(from, ballot, slot, cmd, time)
             }
             Message::MAccepted { ballot, slot } => {
-                self.handle_maccepted(from, ballot, slot)
+                self.handle_maccepted(from, ballot, slot, time)
             }
-            Message::MChosen { slot, cmd } => self.handle_mchosen(slot, cmd),
+            Message::MChosen { slot, cmd } => {
+                self.handle_mchosen(slot, cmd, time)
+            }
             Message::MGarbageCollection { committed } => {
-                self.handle_mgc(from, committed)
+                self.handle_mgc(from, committed, time)
             }
         }
     }
@@ -124,11 +126,11 @@ impl Protocol for FPaxos {
     fn handle_event(
         &mut self,
         event: Self::PeriodicEvent,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         match event {
             PeriodicEvent::GarbageCollection => {
-                self.handle_event_garbage_collection()
+                self.handle_event_garbage_collection(time)
             }
         }
     }
@@ -185,21 +187,23 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, ballot, slot, cmd))]
+    #[instrument(skip(self, ballot, slot, cmd, time))]
     fn handle_mspawn_commander(
         &mut self,
         from: ProcessId,
         ballot: u64,
         slot: u64,
         cmd: Command,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {}",
+            "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
             slot,
             cmd,
-            from
+            from,
+            time.now()
         );
         // spawn commander message should come from self
         assert_eq!(from, self.id());
@@ -225,21 +229,23 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, ballot, slot, cmd))]
+    #[instrument(skip(self, ballot, slot, cmd, time))]
     fn handle_maccept(
         &mut self,
         from: ProcessId,
         ballot: u64,
         slot: u64,
         cmd: Command,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MAccept({:?}, {:?}, {:?}) from {}",
+            "p{}: MAccept({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
             slot,
             cmd,
-            from
+            from,
+            time.now()
         );
 
         if let Some(msg) = self
@@ -266,19 +272,21 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, ballot, slot))]
+    #[instrument(skip(self, ballot, slot, time))]
     fn handle_maccepted(
         &mut self,
         from: ProcessId,
         ballot: u64,
         slot: u64,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MAccepted({:?}, {:?}) from {}",
+            "p{}: MAccepted({:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
             slot,
-            from
+            from,
+            time.now()
         );
 
         if let Some(msg) = self
@@ -305,9 +313,20 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, slot, cmd))]
-    fn handle_mchosen(&mut self, slot: u64, cmd: Command) -> Vec<Action<Self>> {
-        log!("p{}: MCommit({:?}, {:?})", self.id(), slot, cmd);
+    #[instrument(skip(self, slot, cmd, time))]
+    fn handle_mchosen(
+        &mut self,
+        slot: u64,
+        cmd: Command,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: MCommit({:?}, {:?}) | time={}",
+            self.id(),
+            slot,
+            cmd,
+            time.now()
+        );
 
         // create execution info
         let execution_info = ExecutionInfo::new(slot, cmd);
@@ -320,17 +339,19 @@ impl FPaxos {
         vec![]
     }
 
-    #[instrument(skip(self, from, committed))]
+    #[instrument(skip(self, from, committed, time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: u64,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MGarbageCollection({:?}) from {}",
+            "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
-            from
+            from,
+            time.now()
         );
         self.gc_track.committed_by(from, committed);
         // perform garbage collection of stable slots
@@ -340,9 +361,16 @@ impl FPaxos {
         vec![]
     }
 
-    #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
-        log!("p{}: PeriodicEvent::GarbageCollection", self.id());
+    #[instrument(skip(self, time))]
+    fn handle_event_garbage_collection(
+        &mut self,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: PeriodicEvent::GarbageCollection | time={}",
+            self.id(),
+            time.now()
+        );
 
         // retrieve the committed slot
         let committed = self.gc_track.committed();
