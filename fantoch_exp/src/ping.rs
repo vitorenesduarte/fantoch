@@ -1,4 +1,5 @@
 use color_eyre::Report;
+use eyre::WrapErr;
 use rusoto_core::Region;
 use std::time::Duration;
 use tokio::fs::File;
@@ -128,21 +129,20 @@ async fn ping(
     println!("{}: both files are copied to remote machine", vm.nickname);
 
     // execute script remotely: "$ bash SCRIPT HOSTS seconds output"
-    let command = escape(format!(
+    let command = format!(
         "chmod u+x {}; ./{} {} {} {}",
         script_file,
         script_file,
         hosts_file,
         experiment_duration_secs,
         output_file
-    ));
+    );
     let out = vm
         .ssh
-        .command("bash")
-        .arg("-c")
-        .arg(escape(command))
+        .shell(command)
         .output()
-        .await?;
+        .await
+        .wrap_err("chmod; script")?;
     let stdout = String::from_utf8(out.stdout)?;
     println!("{}: script ended {}", vm.nickname, stdout);
 
@@ -184,8 +184,4 @@ async fn copy_from(
         .write_all(contents.as_bytes())
         .await?;
     Ok(())
-}
-
-fn escape(command: String) -> String {
-    format!("\"{}\"", command)
 }
