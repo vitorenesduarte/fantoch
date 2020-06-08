@@ -36,7 +36,7 @@ async fn main() -> Result<(), Report> {
 
 async fn bench(instance_type: &str) -> Result<(), Report> {
     // all AWS regions
-    let regions = vec![Region::EuWest1, Region::EuWest2];
+    let regions = vec![Region::EuWest1];
     bench::bench_experiment(
         regions,
         instance_type,

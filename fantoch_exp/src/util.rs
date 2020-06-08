@@ -29,7 +29,7 @@ pub async fn script_exec(
     ssh: &Session,
 ) -> Result<String, Report> {
     let args = args.join(" ");
-    let command = format!("chmod u+x {}; ./{} {}", path, path, args);
+    let command = format!("chmod u+x {}; ./{} {} 2>&1", path, path, args);
     let output = ssh
         .shell(command)
         .output()
