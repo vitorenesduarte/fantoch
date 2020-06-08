@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 
-# - needed for use of unstable functions
-RUST_NIGHTLY="true"
-# - needed for RUN_MODE="flamegraph"
+# needed for RUN_MODE="flamegraph"
 FLAMEGRAPH="false"
+DEBUG=false
+
 # flag indicating whether we should just remove previous installations
+RUST_TOOLCHAIN="nightly"
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
-
-DEBUG=false
 FANTOCH_PACKAGE="fantoch_ps"
 
 # set the debug flag accordingly
@@ -48,23 +47,15 @@ if [ "${NUKE_FANTOCH}" == "true" ]; then
 fi
 
 # install rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain none --profile minimal
 # shellcheck disable=SC1090
 source "${HOME}/.cargo/env"
 
-# check for rust updates (in case it was already installed)
-if [ "${RUST_NIGHTLY}" == "true" ]; then
-    # install nightly
-    rustup toolchain install nightly
-
-    # use nightly
-    rustup override set nightly
-    rustup update nightly
-else
-    # use stable
-    rustup override set stable
-    rustup update stable
-fi
+# install toolchain
+rustup toolchain install ${RUST_TOOLCHAIN}
+rustup override set ${RUST_TOOLCHAIN}
+rustup update ${RUST_TOOLCHAIN}
 
 if [ "${FLAMEGRAPH}" == "true" ]; then
     # install perf:
