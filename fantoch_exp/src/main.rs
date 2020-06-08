@@ -1,12 +1,20 @@
+mod bench;
 mod ping;
+mod util;
 
 use color_eyre::Report;
 use rusoto_core::Region;
 
+// experiment config
 const INSTANCE_TYPE: &str = "c5.large";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 1;
-const EXPERIMENT_DURATION_SECS: usize = 30 * 60; // 30 minutes
+
+// bench-specific config
+const BENCH_BRANCH: &str = "master";
+
+// ping-specific config
+const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
@@ -21,6 +29,26 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
+    // TODO make these binaries
+    bench(instance_type).await
+    // ping(instance_type).await
+}
+
+async fn bench(instance_type: &str) -> Result<(), Report> {
+    // all AWS regions
+    let regions = vec![Region::EuWest1];
+    bench::bench_experiment(
+        regions,
+        instance_type,
+        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
+        MAX_INSTANCE_DURATION_HOURS,
+        BENCH_BRANCH,
+    )
+    .await
+}
+
+#[allow(dead_code)]
+async fn ping(instance_type: &str) -> Result<(), Report> {
     // all AWS regions
     let regions = vec![
         Region::AfSouth1,
@@ -50,7 +78,7 @@ async fn main() -> Result<(), Report> {
         instance_type,
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         MAX_INSTANCE_DURATION_HOURS,
-        EXPERIMENT_DURATION_SECS,
+        PING_DURATION_SECS,
     )
     .await
 }

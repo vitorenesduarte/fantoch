@@ -7,7 +7,9 @@ FLAMEGRAPH="false"
 # flag indicating whether we should just remove previous installations
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
+
 DEBUG=false
+FANTOCH_PACKAGE="fantoch_ps"
 
 # set the debug flag accordingly
 if [[ ${DEBUG} == true ]]; then
@@ -29,6 +31,13 @@ fi
 
 # get branch
 branch=$1
+
+# cargo/deps requirements
+sudo apt update
+sudo apt install -y \
+        build-essential \
+        pkg-config \
+        libssl-dev
 
 # maybe nuke previous stuff
 if [ "${NUKE_RUST}" == "true" ]; then
@@ -118,4 +127,4 @@ git checkout "${branch}"
 git pull
 
 # build all the binaries in release mode for maximum performance
-RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins
+RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p ${FANTOCH_PACKAGE} --bins
