@@ -29,14 +29,14 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    // TODO make these binaries
+    // TODO make these different binaries with proper arguments
     bench(instance_type).await
     // ping(instance_type).await
 }
 
 async fn bench(instance_type: &str) -> Result<(), Report> {
     // all AWS regions
-    let regions = vec![Region::EuWest1];
+    let regions = vec![Region::EuWest1, Region::EuWest2];
     bench::bench_experiment(
         regions,
         instance_type,

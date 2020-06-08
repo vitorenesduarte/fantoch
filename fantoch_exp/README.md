@@ -35,7 +35,7 @@ With info logs:
 RUST_LOG=info cargo run --release
 ```
 
-Or with [`tsunami`](https://github.com/jonhoo/tsunami) debug logs:
+Or with [`tsunami`](https://github.com/jonhoo/tsunami) and `fantoch_exp` debug logs:
 ```bash
-RUST_LOG=tsunami=debug cargo run --release
+RUST_LOG=tsunami=debug,fantoch_exp=debug cargo run --release
 ```

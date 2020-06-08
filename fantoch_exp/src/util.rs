@@ -23,6 +23,22 @@ macro_rules! args {
     }};
 }
 
+pub async fn script_exec(
+    path: &str,
+    args: Vec<String>,
+    ssh: &Session,
+) -> Result<String, Report> {
+    let args = args.join(" ");
+    let command = format!("chmod u+x {}; ./{} {}", path, path, args);
+    let output = ssh
+        .shell(command)
+        .output()
+        .await
+        .wrap_err("chmod; ./script")?;
+    let stdout = String::from_utf8(output.stdout)?;
+    Ok(stdout)
+}
+
 pub async fn copy_to(
     local_path: &str,
     (remote_path, ssh): (&str, &Session),
@@ -55,22 +71,6 @@ pub async fn copy_from(
         .write_all(contents.as_bytes())
         .await?;
     Ok(())
-}
-
-pub async fn script_exec(
-    path: &str,
-    args: Vec<String>,
-    ssh: &Session,
-) -> Result<String, Report> {
-    let args = args.join(" ");
-    let command = format!("chmod u+x {}; ./{} {}", path, path, args);
-    let output = ssh
-        .shell(command)
-        .output()
-        .await
-        .wrap_err("chmod; ./script")?;
-    let stdout = String::from_utf8(output.stdout)?;
-    Ok(stdout)
 }
 
 pub fn fantoch_setup(
