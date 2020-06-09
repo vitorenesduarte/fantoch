@@ -6,12 +6,12 @@ use color_eyre::Report;
 use rusoto_core::Region;
 
 // experiment config
-const INSTANCE_TYPE: &str = "c5.large";
+const INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // bench-specific config
-const BENCH_BRANCH: &str = "master";
+const BRANCH: &str = "exp";
 
 // ping-specific config
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
@@ -29,22 +29,39 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    // TODO make these different binaries with proper arguments
-    bench(instance_type).await
+    let server_instance_type = instance_type.to_string();
+    let client_instance_type = instance_type.to_string();
+    let branch = BRANCH.to_string();
+    bench(server_instance_type, client_instance_type, branch).await
     // ping(instance_type).await
 }
 
-async fn bench(instance_type: &str) -> Result<(), Report> {
-    // all AWS regions
-    let regions = vec![Region::EuWest1];
-    bench::bench_experiment(
-        regions,
-        instance_type,
-        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-        MAX_INSTANCE_DURATION_HOURS,
-        BENCH_BRANCH,
-    )
-    .await
+async fn bench(
+    server_instance_type: String,
+    client_instance_type: String,
+    branch: String,
+) -> Result<(), Report> {
+    let regions = vec![
+        Region::EuWest1,
+        Region::ApEast1,
+        Region::CaCentral1,
+        Region::ApSouth1,
+        Region::UsWest1,
+    ];
+    let ns = vec![3];
+    for n in ns {
+        let regions = regions.clone().into_iter().take(n).collect();
+        bench::bench_experiment(
+            server_instance_type.clone(),
+            client_instance_type.clone(),
+            regions,
+            MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
+            MAX_INSTANCE_DURATION_HOURS,
+            branch.clone(),
+        )
+        .await?
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]

@@ -41,7 +41,7 @@ PROCESS_TCP_NODELAY=true
 # by default, each socket stream is buffered (with a buffer of size 8KBs),
 # which should greatly reduce the number of syscalls for small-sized messages
 PROCESS_TCP_BUFFER_SIZE=$((0 * 1024))
-PROCESS_TCP_FLUSH_INTERVAL=0
+PROCESS_TCP_FLUSH_INTERVAL=""
 
 # client tcp config
 CLIENT_TCP_NODELAY=true
@@ -273,13 +273,15 @@ start_process() {
         --execute_at_commit ${EXECUTE_AT_COMMIT} \
         --tcp_nodelay ${PROCESS_TCP_NODELAY} \
         --tcp_buffer_size ${PROCESS_TCP_BUFFER_SIZE} \
-        --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL} \
         --gc_interval ${GC_INTERVAL} \
         --channel_buffer_size ${CHANNEL_BUFFER_SIZE} \
         --workers ${WORKERS} \
         --executors ${EXECUTORS} \
         --multiplexing ${MULTIPLEXING}"
 
+    if [[ -n ${PROCESS_TCP_FLUSH_INTERVAL} ]]; then
+        command_args="${command_args} --tcp_flush_interval ${PROCESS_TCP_FLUSH_INTERVAL}"
+    fi
 
     # if there's a ${EXECUTION_LOG} append it the ${command_args}
     if [[ -n ${EXECUTION_LOG} ]]; then

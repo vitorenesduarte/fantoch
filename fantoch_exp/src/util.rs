@@ -74,7 +74,7 @@ pub async fn copy_from(
 }
 
 pub fn fantoch_setup(
-    branch: &'static str,
+    branch: String,
 ) -> Box<
     dyn for<'r> Fn(
             &'r mut tsunami::Session,
@@ -85,6 +85,7 @@ pub fn fantoch_setup(
         + 'static,
 > {
     Box::new(move |ssh| {
+        let branch = branch.clone();
         Box::pin(async move {
             // files
             let script_file = "setup.sh";
