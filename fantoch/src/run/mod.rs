@@ -101,7 +101,7 @@ use tokio::time::{self, Duration};
 
 pub async fn process<P, A>(
     process_id: ProcessId,
-    sorted_processes: Vec<ProcessId>,
+    sorted_processes: Option<Vec<ProcessId>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -146,7 +146,7 @@ where
 #[allow(clippy::too_many_arguments)]
 async fn process_with_notify_and_inspect<P, A, R>(
     process_id: ProcessId,
-    sorted_processes: Vec<ProcessId>,
+    sorted_processes: Option<Vec<ProcessId>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -199,6 +199,7 @@ where
     // check ports are different
     assert!(port != client_port);
 
+    // ---------------------
     // start process listener
     let listener = task::listen((ip, port)).await?;
 
@@ -210,8 +211,9 @@ where
     );
 
     // connect to all processes
-    let to_writers = task::process::connect_to_all::<A, P>(
+    let (sorted_processes, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
+        sorted_processes,
         listener,
         addresses,
         reader_to_workers.clone(),
@@ -224,8 +226,9 @@ where
     )
     .await?;
 
+    // ---------------------
     // start client listener
-    let listener = task::listen((ip, client_port)).await?;
+    let client_listener = task::listen((ip, client_port)).await?;
 
     // create atomic dot generator to be used by clients in case the protocol is
     // leaderless:
@@ -264,7 +267,7 @@ where
     // start listener
     task::client::start_listener(
         process_id,
-        listener,
+        client_listener,
         atomic_dot_gen,
         client_to_workers,
         client_to_executors,
@@ -703,7 +706,7 @@ pub mod tests {
             // - id = 2:  [2, 3, 1]
             // - id = 3:  [3, 1, 2]
             let sorted_processes =
-                (process_id..=(n as u64)).chain(1..process_id).collect();
+                Some((process_id..=(n as u64)).chain(1..process_id).collect());
 
             // get ports
             let port = *ports.get(&process_id).unwrap();

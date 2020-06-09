@@ -57,7 +57,7 @@ where
 
 fn parse_args() -> (
     ProcessId,
-    Vec<ProcessId>,
+    Option<Vec<ProcessId>>,
     IpAddr,
     u16,
     u16,
@@ -87,8 +87,7 @@ fn parse_args() -> (
             Arg::with_name("sorted_processes")
                 .long("sorted")
                 .value_name("SORTED_PROCESSES")
-                .help("comma-separated list of process identifiers sorted by distance")
-                .required(true)
+                .help("comma-separated list of process identifiers sorted by distance; if not set processes will ping each other and try to figure out this list from the ping returned latency")
                 .takes_value(true),
         )
         .arg(
@@ -288,8 +287,10 @@ fn parse_args() -> (
     println!("execution log: {:?}", execution_log);
     println!("trace_timing: {:?}", tracer_show_interval);
 
-    // check that the number of sorted processes equals `n`
-    assert_eq!(sorted_processes.len(), config.n());
+    // check that the number of sorted processes equals `n` (if it was set)
+    if let Some(sorted_processes) = sorted_processes.as_ref() {
+        assert_eq!(sorted_processes.len(), config.n());
+    }
 
     // check that the number of addresses equals `n - 1`
     assert_eq!(addresses.len(), config.n() - 1);
@@ -320,11 +321,8 @@ fn parse_leader(leader: Option<&str>) -> Option<ProcessId> {
     leader.map(|leader| parse_id(leader))
 }
 
-fn parse_sorted_processes(ids: Option<&str>) -> Vec<ProcessId> {
-    ids.expect("sorted processes should be set")
-        .split(LIST_SEP)
-        .map(|id| parse_id(id))
-        .collect()
+fn parse_sorted_processes(ids: Option<&str>) -> Option<Vec<ProcessId>> {
+    ids.map(|ids| ids.split(LIST_SEP).map(|id| parse_id(id)).collect())
 }
 
 fn parse_ip(ip: Option<&str>) -> IpAddr {
