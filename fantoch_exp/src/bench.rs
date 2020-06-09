@@ -220,6 +220,7 @@ async fn start_processes(
 
         let output_file = process_file(process_id);
         let command = bin_script(PROTOCOL, args, output_file);
+        println!("starting {} with:\n{}", process_id, command);
         let process = vm
             .ssh
             .shell(command)
