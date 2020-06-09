@@ -199,6 +199,9 @@ where
     // check ports are different
     assert!(port != client_port);
 
+    // check that n - 1 addresses were set
+    assert_eq!(addresses.len(), config.n() - 1);
+
     // ---------------------
     // start process listener
     let listener = task::listen((ip, port)).await?;
@@ -225,6 +228,9 @@ where
         multiplexing,
     )
     .await?;
+
+    // check that we have n processes
+    assert_eq!(sorted_processes.len(), config.n());
 
     // ---------------------
     // start client listener

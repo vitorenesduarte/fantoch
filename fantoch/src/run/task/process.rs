@@ -39,15 +39,15 @@ where
     });
 
     // number of addresses
-    let n = addresses.len();
+    let peer_count = addresses.len();
 
     // create list of in and out connections:
     // - even though TCP is full-duplex, due to the current tokio
     //   non-parallel-tcp-socket-read-write limitation, we going to use in
     //   streams for reading and out streams for writing, which can be done in
     //   parallel
-    let mut outgoing = Vec::with_capacity(n * multiplexing);
-    let mut incoming = Vec::with_capacity(n * multiplexing);
+    let mut outgoing = Vec::with_capacity(peer_count * multiplexing);
+    let mut incoming = Vec::with_capacity(peer_count * multiplexing);
 
     // connect to all addresses (outgoing)
     for address in addresses {
@@ -66,7 +66,7 @@ where
     }
 
     // receive from listener all connected (incoming)
-    for _ in 0..(n * multiplexing) {
+    for _ in 0..(peer_count * multiplexing) {
         let connection = from_listener
             .recv()
             .await
@@ -77,7 +77,7 @@ where
     let res = handshake::<P>(
         process_id,
         sorted_processes,
-        n,
+        peer_count,
         to_workers,
         tcp_flush_interval,
         channel_buffer_size,
@@ -91,7 +91,7 @@ where
 async fn handshake<P>(
     process_id: ProcessId,
     sorted_processes: Option<Vec<ProcessId>>,
-    n: usize,
+    peer_count: usize,
     to_workers: ReaderToWorkers<P>,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
@@ -115,7 +115,7 @@ where
     start_writers::<P>(
         process_id,
         sorted_processes,
-        n,
+        peer_count,
         tcp_flush_interval,
         channel_buffer_size,
         id_to_connection_1,
@@ -166,7 +166,7 @@ fn start_readers<P>(
 async fn start_writers<P>(
     process_id: ProcessId,
     sorted_processes: Option<Vec<ProcessId>>,
-    n: usize,
+    peer_count: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, Connection)>,
@@ -179,7 +179,7 @@ where
         maybe_ping(process_id, sorted_processes, &connections).await;
 
     // mapping from process id to channel broadcast writer should write to
-    let mut writers = HashMap::with_capacity(n);
+    let mut writers = HashMap::with_capacity(peer_count);
 
     // start on writer task per connection
     for (process_id, connection) in connections {
@@ -195,9 +195,8 @@ where
         txs.push(tx);
     }
 
-    // check `sorted_processes` and `writers` size
-    assert_eq!(sorted_processes.len(), n);
-    assert_eq!(writers.len(), n);
+    // check `writers` size
+    assert_eq!(writers.len(), peer_count);
     (sorted_processes, writers)
 }
 
@@ -210,6 +209,7 @@ async fn maybe_ping(
         return sorted_processes;
     }
     let mut pings = HashMap::new();
+
     for (peer_id, connection) in connections {
         // check if we have already pinged this process or not
         if pings.contains_key(peer_id) {
@@ -225,15 +225,21 @@ async fn maybe_ping(
             .output()
             .await
             .expect("ping command should work");
-        let stdout =
-            String::from_utf8(out.stdout).expect("ping output should be utf8");
+        let stdout = String::from_utf8(out.stdout)
+            .expect("ping output should be utf8")
+            .trim()
+            .to_string();
         let latency = stdout
             .parse::<f64>()
             .expect("ping output should be a float");
         let rounded_latency = latency as usize;
-        println!(
-            "p{}: ping to {} with ip {} took {}ms ({})",
-            process_id, peer_id, ip, latency, rounded_latency
+        log!(
+            "p{}: ping to {} with ip {} took {}ms ({}ms)",
+            process_id,
+            peer_id,
+            ip,
+            latency,
+            rounded_latency
         );
         pings.insert(*peer_id, rounded_latency);
     }
@@ -243,9 +249,9 @@ async fn maybe_ping(
         .map(|(id, latency)| (latency, id))
         .collect::<Vec<_>>();
     pings.sort();
-    pings
-        .into_iter()
-        .map(|(_latency, process_id)| process_id)
+    // make sure we're the first process
+    std::iter::once(process_id)
+        .chain(pings.into_iter().map(|(_latency, process_id)| process_id))
         .collect()
 }
 
