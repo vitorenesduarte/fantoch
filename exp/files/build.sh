@@ -32,8 +32,8 @@ fi
 branch=$1
 
 # cargo/deps requirements
-sudo apt update
-sudo apt install -y \
+sudo apt-get update
+sudo apt-get install -y \
         build-essential \
         pkg-config \
         libssl-dev
@@ -118,4 +118,4 @@ git checkout "${branch}"
 git pull
 
 # build all the binaries in release mode for maximum performance
-RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p ${FANTOCH_PACKAGE} --bins
+RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins

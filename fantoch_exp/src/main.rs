@@ -43,7 +43,7 @@ async fn bench(
 ) -> Result<(), Report> {
     let regions = vec![
         Region::EuWest1,
-        Region::ApEast1,
+        Region::ApSoutheast1,
         Region::CaCentral1,
         Region::ApSouth1,
         Region::UsWest1,

@@ -7,17 +7,18 @@ use std::time::Duration;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
+type ProcessId = usize;
 const DEBUG_SECS: u64 = 30 * 60; // 30 minutes
 
 // processes config
 const PORT: usize = 3000;
 const CLIENT_PORT: usize = 4000;
-const PROTOCOL: &str = "newt";
+const PROTOCOL: &str = "newt_atomic";
 const FAULTS: usize = 1;
 const TRANSITIVE_CONFLICTS: bool = true;
 const EXECUTE_AT_COMMIT: bool = false;
 const EXECUTION_LOG: Option<&str> = None;
-const LEADER: Option<usize> = None;
+const LEADER: Option<ProcessId> = None;
 const GC_INTERVAL: usize = 5; // every 5ms
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
@@ -54,15 +55,41 @@ pub async fn bench_experiment(
     max_instance_duration_hours: usize,
     branch: String,
 ) -> Result<(), Report> {
+    let mut launcher: aws::Launcher<_> = Default::default();
+    let res = do_bench_experiment(
+        &mut launcher,
+        server_instance_type,
+        client_instance_type,
+        regions,
+        max_spot_instance_request_wait_secs,
+        max_instance_duration_hours,
+        branch,
+    )
+    .await;
+    tracing::warn!("experiment res: {:?}", res);
+    tokio::time::delay_for(tokio::time::Duration::from_secs(DEBUG_SECS)).await;
+    // make sure we always terminate
+    launcher.terminate_all().await?;
+    Ok(())
+}
+
+async fn do_bench_experiment(
+    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
+    server_instance_type: String,
+    client_instance_type: String,
+    regions: Vec<Region>,
+    max_spot_instance_request_wait_secs: u64,
+    max_instance_duration_hours: usize,
+    branch: String,
+) -> Result<(), Report> {
     let server_tag = "server";
-    let client_tag = "client";
+    // let client_tag = "client";
     let tags = vec![
         (server_tag.to_string(), server_instance_type),
-        (client_tag.to_string(), client_instance_type),
+        // (client_tag.to_string(), client_instance_type),
     ];
-    let mut launcher: aws::Launcher<_> = Default::default();
     let mut vms = spawn(
-        &mut launcher,
+        launcher,
         tags,
         regions,
         max_spot_instance_request_wait_secs,
@@ -70,19 +97,11 @@ pub async fn bench_experiment(
         branch,
     )
     .await?;
-    tracing::debug!("vms: {:?}", vms);
 
     let servers = vms.remove(server_tag).expect("servers vms");
-    let clients = vms.remove(client_tag).expect("client vms");
-
-    start_processes(servers).await?;
-    run_clients(clients).await?;
-
-    // if result.is_err() {
-    tokio::time::delay_for(tokio::time::Duration::from_secs(DEBUG_SECS)).await;
-    // }
-    // make sure we always terminate
-    launcher.terminate_all().await?;
+    // let clients = vms.remove(client_tag).expect("client vms");
+    let processes = start_processes(servers).await?;
+    // run_clients(clients).await?;
     Ok(())
 }
 
@@ -125,7 +144,11 @@ async fn spawn<'l>(
     }
 
     // spawn and connect
-    launcher.set_max_instance_duration(max_instance_duration_hours);
+    launcher
+        .set_max_instance_duration(max_instance_duration_hours)
+        // make sure ports are open
+        // TODO just open PORT and CLIENT_PORT?
+        .open_ports();
     let max_wait =
         Some(Duration::from_secs(max_spot_instance_request_wait_secs));
     launcher.spawn(descriptors, max_wait).await?;
@@ -147,35 +170,39 @@ async fn spawn<'l>(
 
 async fn start_processes(
     vms: HashMap<String, Machine<'_>>,
-) -> Result<(), Report> {
+) -> Result<HashMap<ProcessId, tokio::process::Child>, Report> {
     let ips: HashMap<_, _> = vms
         .iter()
         .map(|(region, vm)| (region.clone(), vm.public_ip.clone()))
         .collect();
+    tracing::debug!("processes ips: {:?}", ips);
     let addresses = |region| {
-        // select ips but self
+        // select all ips but self
         ips.iter()
             .filter_map(|(ip_region, ip)| {
                 if ip_region == region {
                     None
                 } else {
-                    Some(ip.clone())
+                    // create address as "ip:port"
+                    let address = format!("{}:{}", ip, PORT);
+                    Some(address)
                 }
             })
             .collect::<Vec<_>>()
             .join(",")
     };
 
-    let mut processes = HashMap::new();
     let n = vms.len();
+    let mut processes = HashMap::with_capacity(n);
+    let mut wait_processes = Vec::with_capacity(n);
     for (process_id, (region, vm)) in (1..=n).zip(vms.iter()) {
-        let ip = ips.get(region).expect("get region ip");
         let addresses = addresses(region);
         let mut args = args![
             "--id",
             process_id,
+            // bind to 0.0.0.0
             "--ip",
-            ip,
+            "0.0.0.0",
             "--port",
             PORT,
             "--addresses",
@@ -218,16 +245,34 @@ async fn start_processes(
             args.extend(args!["--leader", leader]);
         }
 
-        let output_file = process_file(process_id);
-        let command = bin_script(PROTOCOL, args, output_file);
-        println!("starting {} with:\n{}", process_id, command);
-        let process = vm
-            .ssh
-            .shell(command)
+        let command =
+            fantoch_bin_script(PROTOCOL, args, process_file(process_id));
+        let process = util::prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start process")?;
         processes.insert(process_id, process);
+
+        wait_processes.push(wait_process_started(process_id, &vm));
     }
+
+    // wait all processse started
+    for result in futures::future::join_all(wait_processes).await {
+        let () = result?;
+    }
+
+    Ok(processes)
+}
+
+async fn wait_process_started(
+    process_id: ProcessId,
+    vm: &Machine<'_>,
+) -> Result<(), Report> {
+    let command = format!(
+        "grep -c 'process {} started' {}",
+        process_id,
+        process_file(process_id)
+    );
+    let stdout = util::exec(vm, command).await?;
     Ok(())
 }
 
@@ -235,7 +280,11 @@ async fn run_clients(vms: HashMap<String, Machine<'_>>) -> Result<(), Report> {
     todo!()
 }
 
-fn bin_script(binary: &str, args: Vec<String>, output_file: String) -> String {
+fn fantoch_bin_script(
+    binary: &str,
+    args: Vec<String>,
+    output_file: String,
+) -> String {
     let prefix = "source ~/.cargo/env && cd fantoch";
     let args = args.join(" ");
     format!(
@@ -244,6 +293,6 @@ fn bin_script(binary: &str, args: Vec<String>, output_file: String) -> String {
     )
 }
 
-fn process_file(process_id: usize) -> String {
+fn process_file(process_id: ProcessId) -> String {
     format!("~/.log_process_{}", process_id)
 }

@@ -18,4 +18,10 @@ tracing = "0.1.14"
 tracing-futures = "0.2.4"
 tokio = { version = "0.2.21", features = [ "time" ]}
 tracing-subscriber = "0.2.5"
-tsunami = { version = "0.11.0-beta.6", features = [ "aws", "baremetal" ] }
+tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "5c2727d9d51f6133bcae3c18615c57ff84cd76f4", features = [ "aws" ] }
+
+[profile.release]
+# redefine lto and codegen-units since we don't care that much about performance here, and builds are pretty slow
+# TODO does this do anything?
+lto = false
+codegen-units = 16

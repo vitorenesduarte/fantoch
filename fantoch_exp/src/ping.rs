@@ -10,7 +10,7 @@ use tracing_futures::Instrument;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
-/// This script should be called like: $ bash script hosts seconds output
+/// This script should be called like: $ script hosts seconds output
 /// - hosts: file where each line looks like "region::ip"
 /// - seconds: number of seconds the ping will run
 /// - output: the file where the output will be written
@@ -58,9 +58,10 @@ pub async fn ping_experiment_run(
             .instance_type(instance_type.clone())
             .region_with_ubuntu_ami(region.clone())
             .await?
-            .setup(|ssh| {
+            .setup(|vm| {
                 Box::pin(async move {
-                    let update = ssh
+                    let update = vm
+                        .ssh
                         .command("sudo")
                         .arg("apt")
                         .arg("update")
@@ -138,9 +139,9 @@ async fn ping(
         .wrap_err("copy_to hosts")?;
     tracing::debug!("both files are copied to remote machine");
 
-    // execute script remotely: "$ bash SCRIPT HOSTS seconds output"
+    // execute script remotely: "$ script.sh hosts seconds output"
     let args = args![hosts_file, experiment_duration_secs, output_file];
-    let stdout = util::script_exec(script_file, args, &vm.ssh).await?;
+    let stdout = util::script_exec(script_file, args, &vm).await?;
     tracing::debug!("script ended {}", stdout);
 
     // copy output file
