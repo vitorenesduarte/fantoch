@@ -267,12 +267,17 @@ async fn wait_process_started(
     process_id: ProcessId,
     vm: &Machine<'_>,
 ) -> Result<(), Report> {
-    let command = format!(
-        "grep -c 'process {} started' {}",
-        process_id,
-        process_file(process_id)
-    );
-    let stdout = util::exec(vm, command).await?;
+    let mut count = 0;
+    while count != 1 {
+        tokio::time::delay_for(tokio::time::Duration::from_secs(1)).await;
+        let command = format!(
+            "grep -c 'process {} started' {}",
+            process_id,
+            process_file(process_id)
+        );
+        let stdout = util::exec(vm, command).await.wrap_err("grep -c")?;
+        count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+    }
     Ok(())
 }
 
