@@ -8,6 +8,7 @@ use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
 type ProcessId = usize;
+
 const DEBUG_SECS: u64 = 30 * 60; // 30 minutes
 
 // processes config
@@ -51,6 +52,7 @@ pub async fn bench_experiment(
     server_instance_type: String,
     client_instance_type: String,
     regions: Vec<Region>,
+    clients_per_region: usize,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
@@ -61,6 +63,7 @@ pub async fn bench_experiment(
         server_instance_type,
         client_instance_type,
         regions,
+        clients_per_region,
         max_spot_instance_request_wait_secs,
         max_instance_duration_hours,
         branch,
@@ -78,15 +81,16 @@ async fn do_bench_experiment(
     server_instance_type: String,
     client_instance_type: String,
     regions: Vec<Region>,
+    clients_per_region: usize,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
-) -> Result<(), Report> {
+) -> Result<Vec<String>, Report> {
     let server_tag = "server";
-    // let client_tag = "client";
+    let client_tag = "client";
     let tags = vec![
         (server_tag.to_string(), server_instance_type),
-        // (client_tag.to_string(), client_instance_type),
+        (client_tag.to_string(), client_instance_type),
     ];
     let mut vms = spawn(
         launcher,
@@ -98,11 +102,13 @@ async fn do_bench_experiment(
     )
     .await?;
 
+    // start processes
     let servers = vms.remove(server_tag).expect("servers vms");
-    // let clients = vms.remove(client_tag).expect("client vms");
-    let processes = start_processes(servers).await?;
-    // run_clients(clients).await?;
-    Ok(())
+    let (process_ips, processes) = start_processes(servers).await?;
+
+    // run clients
+    let clients = vms.remove(client_tag).expect("client vms");
+    run_clients(clients_per_region, clients, process_ips).await
 }
 
 async fn spawn<'l>(
@@ -170,7 +176,13 @@ async fn spawn<'l>(
 
 async fn start_processes(
     vms: HashMap<String, Machine<'_>>,
-) -> Result<HashMap<ProcessId, tokio::process::Child>, Report> {
+) -> Result<
+    (
+        HashMap<String, String>,
+        HashMap<ProcessId, tokio::process::Child>,
+    ),
+    Report,
+> {
     let ips: HashMap<_, _> = vms
         .iter()
         .map(|(region, vm)| (region.clone(), vm.public_ip.clone()))
@@ -183,9 +195,7 @@ async fn start_processes(
                 if ip_region == region {
                     None
                 } else {
-                    // create address as "ip:port"
-                    let address = format!("{}:{}", ip, PORT);
-                    Some(address)
+                    Some(address(ip, PORT))
                 }
             })
             .collect::<Vec<_>>()
@@ -195,6 +205,7 @@ async fn start_processes(
     let n = vms.len();
     let mut processes = HashMap::with_capacity(n);
     let mut wait_processes = Vec::with_capacity(n);
+
     for (process_id, (region, vm)) in (1..=n).zip(vms.iter()) {
         let addresses = addresses(region);
         let mut args = args![
@@ -260,7 +271,7 @@ async fn start_processes(
         let () = result?;
     }
 
-    Ok(processes)
+    Ok((ips, processes))
 }
 
 async fn wait_process_started(
@@ -281,8 +292,82 @@ async fn wait_process_started(
     Ok(())
 }
 
-async fn run_clients(vms: HashMap<String, Machine<'_>>) -> Result<(), Report> {
-    todo!()
+async fn run_clients(
+    clients_per_region: usize,
+    vms: HashMap<String, Machine<'_>>,
+    process_ips: HashMap<String, String>,
+) -> Result<Vec<String>, Report> {
+    let n = vms.len();
+    let mut clients = HashMap::with_capacity(n);
+    let mut wait_clients = Vec::with_capacity(n);
+
+    for (client_index, (region, vm)) in (1..=n).zip(vms.iter()) {
+        // get ip for this region
+        let ip = process_ips.get(region).expect("get process ip");
+        let address = address(ip, CLIENT_PORT);
+
+        // compute id start and id end:
+        // - first compute the id end
+        // - and then compute id start: subtract `clients_per_machine` and add 1
+        let id_end = client_index * clients_per_region;
+        let id_start = id_end - clients_per_region + 1;
+
+        let args = args![
+            "--ids",
+            format!("{}-{}", id_start, id_end),
+            "--address",
+            address,
+            "--conflict_rate",
+            CONFLICT_RATE,
+            "--commands_per_client",
+            COMMANDS_PER_CLIENT,
+            "--payload_size",
+            PAYLOAD_SIZE,
+            "--tcp_nodelay",
+            CLIENT_TCP_NODELAY,
+            "--channel_buffer_size",
+            CHANNEL_BUFFER_SIZE,
+        ];
+
+        let command =
+            fantoch_bin_script("client", args, client_file(client_index));
+        let client = util::prepare_command(&vm, command)
+            .spawn()
+            .wrap_err("failed to start client")?;
+        clients.insert(client_index, client);
+
+        wait_clients.push(wait_client_ended(client_index, &vm));
+    }
+
+    // wait all processse started
+    let mut latencies = Vec::with_capacity(n);
+    for result in futures::future::join_all(wait_clients).await {
+        let latency = result?;
+        latencies.push(latency);
+    }
+    Ok(latencies)
+}
+
+async fn wait_client_ended(
+    client_index: usize,
+    vm: &Machine<'_>,
+) -> Result<String, Report> {
+    // wait until all clients end
+    let mut count = 0;
+    while count != 1 {
+        tokio::time::delay_for(tokio::time::Duration::from_secs(1)).await;
+        let command = format!(
+            "grep -c 'all clients ended' {}",
+            client_file(client_index)
+        );
+        let stdout = util::exec(vm, command).await.wrap_err("grep -c")?;
+        count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+    }
+
+    // fetch client log
+    let command = format!("grep latency {}", client_file(client_index));
+    let latency = util::exec(vm, command).await.wrap_err("grep latency")?;
+    Ok(latency)
 }
 
 fn fantoch_bin_script(
@@ -298,6 +383,14 @@ fn fantoch_bin_script(
     )
 }
 
+fn address(ip: impl ToString, port: usize) -> String {
+    format!("{}:{}", ip.to_string(), port)
+}
+
 fn process_file(process_id: ProcessId) -> String {
     format!("~/.log_process_{}", process_id)
+}
+
+fn client_file(client_index: usize) -> String {
+    format!("~/.log_client_{}", client_index)
 }

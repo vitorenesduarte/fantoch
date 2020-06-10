@@ -49,17 +49,23 @@ async fn bench(
         Region::UsWest1,
     ];
     let ns = vec![3];
+    let clients = vec![8, 16];
     for n in ns {
-        let regions = regions.clone().into_iter().take(n).collect();
-        bench::bench_experiment(
-            server_instance_type.clone(),
-            client_instance_type.clone(),
-            regions,
-            MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-            MAX_INSTANCE_DURATION_HOURS,
-            branch.clone(),
-        )
-        .await?
+        // select the first `n` regions
+        let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
+
+        for &clients_per_region in &clients {
+            bench::bench_experiment(
+                server_instance_type.clone(),
+                client_instance_type.clone(),
+                regions.clone(),
+                clients_per_region,
+                MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
+                MAX_INSTANCE_DURATION_HOURS,
+                branch.clone(),
+            )
+            .await?
+        }
     }
     Ok(())
 }
