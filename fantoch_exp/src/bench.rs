@@ -92,7 +92,7 @@ async fn do_bench_experiment(
         (server_tag.to_string(), server_instance_type),
         (client_tag.to_string(), client_instance_type),
     ];
-    let mut vms = spawn(
+    let vms = spawn(
         launcher,
         tags,
         regions,
@@ -103,12 +103,12 @@ async fn do_bench_experiment(
     .await?;
 
     // start processes
-    let servers = vms.remove(server_tag).expect("servers vms");
-    let (process_ips, processes) = start_processes(servers).await?;
+    let server_vms = vms.get(server_tag).expect("servers vms");
+    let (process_ips, processes) = start_processes(server_vms).await?;
 
     // run clients
-    let clients = vms.remove(client_tag).expect("client vms");
-    run_clients(clients_per_region, clients, process_ips).await
+    let client_vms = vms.get(client_tag).expect("client vms");
+    run_clients(clients_per_region, client_vms, process_ips).await
 }
 
 async fn spawn<'l>(
@@ -175,7 +175,7 @@ async fn spawn<'l>(
 }
 
 async fn start_processes(
-    vms: HashMap<String, Machine<'_>>,
+    vms: &HashMap<String, Machine<'_>>,
 ) -> Result<
     (
         HashMap<String, String>,
@@ -274,27 +274,9 @@ async fn start_processes(
     Ok((ips, processes))
 }
 
-async fn wait_process_started(
-    process_id: ProcessId,
-    vm: &Machine<'_>,
-) -> Result<(), Report> {
-    let mut count = 0;
-    while count != 1 {
-        tokio::time::delay_for(tokio::time::Duration::from_secs(1)).await;
-        let command = format!(
-            "grep -c 'process {} started' {}",
-            process_id,
-            process_file(process_id)
-        );
-        let stdout = util::exec(vm, command).await.wrap_err("grep -c")?;
-        count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
-    }
-    Ok(())
-}
-
 async fn run_clients(
     clients_per_region: usize,
-    vms: HashMap<String, Machine<'_>>,
+    vms: &HashMap<String, Machine<'_>>,
     process_ips: HashMap<String, String>,
 ) -> Result<Vec<String>, Report> {
     let n = vms.len();
@@ -348,6 +330,27 @@ async fn run_clients(
     Ok(latencies)
 }
 
+async fn wait_process_started(
+    process_id: ProcessId,
+    vm: &Machine<'_>,
+) -> Result<(), Report> {
+    let mut count = 0;
+    while count != 1 {
+        // small delay between calls
+        let seconds = 2;
+        tokio::time::delay_for(tokio::time::Duration::from_secs(seconds)).await;
+
+        let command = format!(
+            "grep -c 'process {} started' {}",
+            process_id,
+            process_file(process_id)
+        );
+        let stdout = util::exec(vm, command).await.wrap_err("grep -c")?;
+        count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+    }
+    Ok(())
+}
+
 async fn wait_client_ended(
     client_index: usize,
     vm: &Machine<'_>,
@@ -355,7 +358,10 @@ async fn wait_client_ended(
     // wait until all clients end
     let mut count = 0;
     while count != 1 {
-        tokio::time::delay_for(tokio::time::Duration::from_secs(1)).await;
+        // small delay between calls
+        let seconds = 5;
+        tokio::time::delay_for(tokio::time::Duration::from_secs(seconds)).await;
+
         let command = format!(
             "grep -c 'all clients ended' {}",
             client_file(client_index)
