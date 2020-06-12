@@ -225,7 +225,7 @@ impl fmt::Debug for Histogram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "min={}   max={}   avg={}   p95={}   p99={}   p99.9={}   p99.99={}",
+            "min={:<6} max={:<6} avg={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
             self.min().value().round(),
             self.max().value().round(),
             self.mean().value().round(),
