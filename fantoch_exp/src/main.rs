@@ -41,14 +41,17 @@ async fn bench(
     client_instance_type: String,
     branch: String,
 ) -> Result<(), Report> {
-    let regions = vec![
-        Region::EuWest1,
-        Region::ApSoutheast1,
-        Region::CaCentral1,
-        Region::ApNortheast1,
-        Region::UsWest1,
-    ];
-    let ns = vec![5, 3];
+    // let regions = vec![
+    //     Region::EuWest1,
+    //     Region::ApSoutheast1,
+    //     Region::CaCentral1,
+    //     Region::ApNortheast1,
+    //     Region::UsWest1,
+    // ];
+    // let ns = vec![5, 3];
+    let regions =
+        vec![Region::EuWest1, Region::ApSoutheast1, Region::CaCentral1];
+    let ns = vec![3];
     let clients_per_region = vec![8, 32, 128, 256, 512];
     let newt_configs = vec![
         // (tiny, real_time, clock_bump_interval)

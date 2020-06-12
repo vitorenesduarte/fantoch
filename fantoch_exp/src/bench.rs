@@ -500,19 +500,18 @@ async fn stop_processes(
         }
 
         // find process pid in remote vm
+        // TODO: this should equivalent to `pkill newt_atomic`
         let vm = vms.get(&region).expect("process vm should exist");
-        let command = format!(
-            "lsof -i :{} -i :{} | grep -v PID | sort -u",
-            PORT, CLIENT_PORT
-        );
-        let output = util::exec(vm, command)
-            .await
-            .wrap_err("lsof | grep | sort")?;
+        let command =
+            format!("lsof -i :{} -i :{} | grep -v PID", PORT, CLIENT_PORT);
+        let output = util::exec(vm, command).await.wrap_err("lsof | grep")?;
         tracing::debug!("{}", output);
-        let pids: Vec<_> = output
+        let mut pids: Vec<_> = output
             .lines()
             .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
             .collect();
+        pids.sort();
+        pids.dedup();
         // there should be a single pid
         assert_eq!(pids.len(), 1, "there should be a single process pid");
 
@@ -628,7 +627,7 @@ async fn append_to_output_log(
 ) -> Result<(), Report> {
     tracing::info!("{}", line);
     output_log
-        .write_all(line.as_bytes())
+        .write_all(format!("{}\n", line).as_bytes())
         .await
         .wrap_err("output log write")
 }
