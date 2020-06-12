@@ -58,7 +58,11 @@ async fn bench(
         (true, false, 0),
         (true, true, 10),
     ];
-    let output_log = tokio::fs::File::open(OUTPUT_LOG).await?;
+    let output_log = tokio::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(OUTPUT_LOG)
+        .await?;
     bench::bench_experiment(
         server_instance_type.clone(),
         client_instance_type.clone(),
