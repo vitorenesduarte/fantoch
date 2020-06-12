@@ -45,7 +45,7 @@ async fn bench(
         Region::EuWest1,
         Region::ApSoutheast1,
         Region::CaCentral1,
-        Region::ApSouth1,
+        Region::ApNortheast1,
         Region::UsWest1,
     ];
     let ns = vec![5, 3];
