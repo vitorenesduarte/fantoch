@@ -230,7 +230,7 @@ fn parse_args() -> (
             Arg::with_name("tracer_show_interval")
                 .long("tracer_show_interval")
                 .value_name("TRACER_SHOW_INTERVAL")
-                .help("number indicating the interval between tracing information being show; by default there's no tracing; if set, this value should be > 0")
+                .help("number indicating the interval (in milliseconds) between tracing information being show; by default there's no tracing; if set, this value should be > 0")
                 .takes_value(true),
         )
         .arg(
