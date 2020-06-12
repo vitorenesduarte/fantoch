@@ -34,7 +34,6 @@ async fn main() -> Result<(), Report> {
     let client_instance_type = instance_type.to_string();
     let branch = BRANCH.to_string();
     bench(server_instance_type, client_instance_type, branch).await
-    // ping(instance_type).await
 }
 
 async fn bench(

@@ -58,11 +58,45 @@ pub async fn bench_experiment(
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
     newt_configs: Vec<(bool, bool, usize)>,
-    mut output_log: tokio::fs::File,
+    output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let mut launcher: aws::Launcher<_> = Default::default();
-    let (regions, server_vms, client_vms) = spawn(
+    let res = do_bench_experiment(
         &mut launcher,
+        server_instance_type,
+        client_instance_type,
+        regions,
+        max_spot_instance_request_wait_secs,
+        max_instance_duration_hours,
+        branch,
+        ns,
+        clients_per_region,
+        newt_configs,
+        output_log,
+    )
+    .await;
+    if let Err(e) = &res {
+        tracing::warn!("bench experiment error: {:?}", e);
+    }
+    launcher.terminate_all().await?;
+    res
+}
+
+async fn do_bench_experiment(
+    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
+    server_instance_type: String,
+    client_instance_type: String,
+    regions: Vec<Region>,
+    max_spot_instance_request_wait_secs: u64,
+    max_instance_duration_hours: usize,
+    branch: String,
+    ns: Vec<usize>,
+    clients_per_region: Vec<usize>,
+    newt_configs: Vec<(bool, bool, usize)>,
+    mut output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    let (regions, server_vms, client_vms) = spawn(
+        launcher,
         server_instance_type,
         client_instance_type,
         regions,
@@ -144,7 +178,6 @@ pub async fn bench_experiment(
             }
         }
     }
-    launcher.terminate_all().await?;
     Ok(())
 }
 
