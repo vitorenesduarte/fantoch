@@ -12,6 +12,7 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // bench-specific config
 const BRANCH: &str = "exp";
+const OUTPUT_LOG: &str = ".run_log";
 
 // ping-specific config
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
@@ -48,26 +49,29 @@ async fn bench(
         Region::ApSouth1,
         Region::UsWest1,
     ];
-    let ns = vec![3];
-    let clients = vec![8, 16];
-    for n in ns {
-        // select the first `n` regions
-        let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
-
-        for &clients_per_region in &clients {
-            bench::bench_experiment(
-                server_instance_type.clone(),
-                client_instance_type.clone(),
-                regions.clone(),
-                clients_per_region,
-                MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-                MAX_INSTANCE_DURATION_HOURS,
-                branch.clone(),
-            )
-            .await?
-        }
-    }
-    Ok(())
+    let ns = vec![5, 3];
+    let clients_per_region = vec![8, 32, 128, 256, 512];
+    let newt_configs = vec![
+        // (tiny, real_time, clock_bump_interval)
+        (false, false, 0),
+        (false, true, 10),
+        (true, false, 0),
+        (true, true, 10),
+    ];
+    let output_log = tokio::fs::File::open(OUTPUT_LOG).await?;
+    bench::bench_experiment(
+        server_instance_type.clone(),
+        client_instance_type.clone(),
+        regions.clone(),
+        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
+        MAX_INSTANCE_DURATION_HOURS,
+        branch.clone(),
+        ns,
+        clients_per_region,
+        newt_configs,
+        output_log,
+    )
+    .await
 }
 
 #[allow(dead_code)]
