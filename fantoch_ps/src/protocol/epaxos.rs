@@ -516,7 +516,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         );
         self.cmds.committed_by(from, committed);
 
-        // compute newly stable dots per worker
+        // compute newly stable dots
         let stable = self.cmds.stable();
 
         // create `ToForward` to self
