@@ -521,7 +521,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         for dot in self.cmds.stable() {
             // find the worker of this dot (which must exist)
             let (_shift, index) = fantoch::run::worker_dot_index_shift(&dot)
-                .expect("worker dot must exist");
+                .expect("worker index must exist");
 
             // and add new stable dot
             stable_per_worker
