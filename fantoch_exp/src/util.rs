@@ -68,7 +68,7 @@ pub fn prepare_command(
 
 pub async fn copy_to(
     local_path: &str,
-    (remote_path, ssh): (&str, &tsunami::Session),
+    (remote_path, vm): (&str, &tsunami::Machine<'_>),
 ) -> Result<(), Report> {
     // get file contents
     let mut contents = String::new();
@@ -77,19 +77,19 @@ pub async fn copy_to(
         .read_to_string(&mut contents)
         .await?;
     // write them in remote machine
-    let mut remote_file = ssh.sftp().write_to(remote_path).await?;
+    let mut remote_file = vm.ssh.sftp().write_to(remote_path).await?;
     remote_file.write_all(contents.as_bytes()).await?;
     remote_file.close().await?;
     Ok(())
 }
 
 pub async fn copy_from(
-    (remote_path, ssh): (&str, &tsunami::Session),
+    (remote_path, vm): (&str, &tsunami::Machine<'_>),
     local_path: &str,
 ) -> Result<(), Report> {
     // get file contents from remote machine
     let mut contents = String::new();
-    let mut remote_file = ssh.sftp().read_from(remote_path).await?;
+    let mut remote_file = vm.ssh.sftp().read_from(remote_path).await?;
     remote_file.read_to_string(&mut contents).await?;
     remote_file.close().await?;
     // write them in file
@@ -113,12 +113,13 @@ pub fn fantoch_setup(
 > {
     Box::new(move |vm| {
         let branch = branch.clone();
+        let aws = "true";
         Box::pin(async move {
             // files
             let script_file = "setup.sh";
 
             // first copy file to the machine
-            copy_to(SETUP_SCRIPT, (script_file, &vm.ssh))
+            copy_to(SETUP_SCRIPT, (script_file, &vm))
                 .await
                 .wrap_err("copy_to setup script")?;
 
@@ -126,15 +127,15 @@ pub fn fantoch_setup(
             let mut done = false;
             while !done {
                 let stdout =
-                    script_exec(script_file, args![branch], &vm).await?;
+                    script_exec(script_file, args![branch, aws], &vm).await?;
                 // we're done if no warning about these packages was issued
-                done = vec!["build-essential", "pkg-config"].into_iter().all(
-                    |package| {
+                done = vec!["build-essential", "pkg-config", "chrony"]
+                    .into_iter()
+                    .all(|package| {
                         let msg =
                             format!("Package {} is not available", package);
                         !stdout.contains(&msg)
-                    },
-                );
+                    });
                 if !done {
                     tracing::warn!(
                         "trying again since at least one package was not available"

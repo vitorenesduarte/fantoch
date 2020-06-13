@@ -17,15 +17,15 @@ const CLIENT_PORT: usize = 4000;
 const PROTOCOL: &str = "newt_atomic";
 const FAULTS: usize = 1;
 const TRANSITIVE_CONFLICTS: bool = true;
-const EXECUTE_AT_COMMIT: bool = false;
+const EXECUTE_AT_COMMIT: bool = true;
 const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
-const GC_INTERVAL: usize = 500; // every 500ms
-const TRACER_SHOW_INTERVAL: Option<usize> = None;
+const GC_INTERVAL: usize = 200; // every 200ms
+const TRACER_SHOW_INTERVAL: Option<usize> = Some(5000); // every 5s
 
 // parallelism config
-const WORKERS: usize = 8;
-const EXECUTORS: usize = 8;
+const WORKERS: usize = 16;
+const EXECUTORS: usize = 16;
 const MULTIPLEXING: usize = 2;
 
 // clients config
@@ -46,7 +46,8 @@ const CLIENT_TCP_NODELAY: bool = true;
 // if this value is 100, the run doesn't finish, which probably means there's a
 // deadlock somewhere with 1000 we can see that channels fill up sometimes with
 // 10000 that doesn't seem to happen
-const CHANNEL_BUFFER_SIZE: usize = 10000;
+// - in AWS 10000 is not enough; setting it to 100k
+const CHANNEL_BUFFER_SIZE: usize = 100_000;
 
 pub async fn bench_experiment(
     server_instance_type: String,
@@ -78,6 +79,8 @@ pub async fn bench_experiment(
     if let Err(e) = &res {
         tracing::warn!("bench experiment error: {:?}", e);
     }
+    tracing::info!("will wait 5 minutes before terminating spot instances");
+    tokio::time::delay_for(tokio::time::Duration::from_secs(300)).await;
     launcher.terminate_all().await?;
     res
 }
@@ -126,7 +129,17 @@ async fn do_bench_experiment(
             // select the first `n` regions
             let regions: Vec<_> = regions.iter().cloned().take(n).collect();
             for &clients in &clients_per_region {
+                let run_id = format!(
+                    "n{}_f{}_tiny{}_realtime{}_interval{}_clients{}",
+                    n,
+                    FAULTS,
+                    newt_tiny_quorums,
+                    newt_real_time,
+                    newt_clock_bump_interval,
+                    clients,
+                );
                 let latencies = run_experiment(
+                    run_id,
                     &regions,
                     &server_vms,
                     &client_vms,
@@ -145,8 +158,11 @@ async fn do_bench_experiment(
                 // - "min=173   max=183   avg=178   p95=183   p99=183 p99.9=183
                 //   p99.99=183"
                 for (region, region_latency) in latencies {
+                    let region_latency = region_latency
+                        .strip_prefix("latency: ")
+                        .expect("client output should start with 'latency: '");
                     let line =
-                        format!("region = {} | {}", region, region_latency);
+                        format!("region = {:<14} | {}", region, region_latency);
                     append_to_output_log(&mut output_log, line).await?;
 
                     for entry in region_latency.split_whitespace() {
@@ -163,7 +179,7 @@ async fn do_bench_experiment(
                     }
                 }
 
-                let mut line = format!("n = {} AND c = {} |", n, clients);
+                let mut line = format!("n = {} AND c = {:<8} |", n, clients);
                 for metric in metrics {
                     let latencies = latencies_to_avg
                         .remove(metric)
@@ -172,7 +188,7 @@ async fn do_bench_experiment(
                     assert_eq!(latencies.len(), regions.len());
                     let avg =
                         latencies.into_iter().sum::<usize>() / regions.len();
-                    line = format!("{}   {}={}", line, metric, avg);
+                    line = format!("{} {}={:<6}", line, metric, avg);
                 }
                 append_to_output_log(&mut output_log, line).await?;
             }
@@ -182,6 +198,7 @@ async fn do_bench_experiment(
 }
 
 async fn run_experiment(
+    run_id: String,
     regions: &Vec<String>,
     server_vms: &HashMap<String, Machine<'_>>,
     client_vms: &HashMap<String, Machine<'_>>,
@@ -208,7 +225,7 @@ async fn run_experiment(
             .wrap_err("run_clients")?;
 
     // stop processes
-    stop_processes(server_vms, processes)
+    stop_processes(run_id, server_vms, processes)
         .await
         .wrap_err("stop_processes")?;
 
@@ -326,7 +343,7 @@ async fn start_processes(
 ) -> Result<
     (
         HashMap<String, String>,
-        HashMap<String, tokio::process::Child>,
+        HashMap<String, (ProcessId, tokio::process::Child)>,
     ),
     Report,
 > {
@@ -404,7 +421,7 @@ async fn start_processes(
             args.extend(args!["--execution_log", log]);
         }
         if let Some(interval) = TRACER_SHOW_INTERVAL {
-            args.extend(args!["-tracer_show_interval", interval]);
+            args.extend(args!["--tracer_show_interval", interval]);
         }
         if let Some(leader) = LEADER {
             args.extend(args!["--leader", leader]);
@@ -415,7 +432,7 @@ async fn start_processes(
         let process = util::prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start process")?;
-        processes.insert(region.clone(), process);
+        processes.insert(region.clone(), (process_id, process));
 
         wait_processes.push(wait_process_started(process_id, &vm));
     }
@@ -485,11 +502,27 @@ async fn run_clients(
 }
 
 async fn stop_processes(
+    run_id: String,
     vms: &HashMap<String, Machine<'_>>,
-    processes: HashMap<String, tokio::process::Child>,
+    processes: HashMap<String, (ProcessId, tokio::process::Child)>,
 ) -> Result<(), Report> {
+    // first copy the logs
+    for (region, &(process_id, _)) in &processes {
+        let vm = vms.get(region).expect("process vm should exist");
+        util::copy_from(
+            (&process_file(process_id), &vm),
+            &format!(".log_{}_id{}_{}", run_id, process_id, region),
+        )
+        .await
+        .wrap_err("copy log")?;
+    }
+    tracing::info!("copied all process logs");
+
     let mut wait_processes = Vec::with_capacity(vms.len());
-    for (region, mut pchild) in processes {
+    for (region, (_, mut pchild)) in processes {
+        let vm = vms.get(&region).expect("process vm should exist");
+
+        // kill ssh process
         if let Err(e) = pchild.kill() {
             tracing::warn!(
                 "error trying to kill ssh process {} in region {}: {:?}",
@@ -501,7 +534,6 @@ async fn stop_processes(
 
         // find process pid in remote vm
         // TODO: this should equivalent to `pkill newt_atomic`
-        let vm = vms.get(&region).expect("process vm should exist");
         let command =
             format!("lsof -i :{} -i :{} | grep -v PID", PORT, CLIENT_PORT);
         let output = util::exec(vm, command).await.wrap_err("lsof | grep")?;
@@ -601,11 +633,10 @@ fn fantoch_bin_script(
     args: Vec<String>,
     output_file: String,
 ) -> String {
-    let prefix = "source ~/.cargo/env && cd fantoch";
     let args = args.join(" ");
     format!(
-        "{} && ./target/release/{} {} > {} 2>&1",
-        prefix, binary, args, output_file
+        "source ~/.cargo/env && ./fantoch/target/release/{} {} > {} 2>&1",
+        binary, args, output_file
     )
 }
 
@@ -614,11 +645,11 @@ fn address(ip: impl ToString, port: usize) -> String {
 }
 
 fn process_file(process_id: ProcessId) -> String {
-    format!("~/.log_process_{}", process_id)
+    format!(".log_process_{}", process_id)
 }
 
 fn client_file(client_index: usize) -> String {
-    format!("~/.log_client_{}", client_index)
+    format!(".log_client_{}", client_index)
 }
 
 async fn append_to_output_log(
@@ -629,5 +660,7 @@ async fn append_to_output_log(
     output_log
         .write_all(format!("{}\n", line).as_bytes())
         .await
-        .wrap_err("output log write")
+        .wrap_err("output log write")?;
+    output_log.flush().await?;
+    Ok(())
 }

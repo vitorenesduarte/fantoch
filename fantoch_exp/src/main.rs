@@ -12,7 +12,7 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // bench-specific config
 const BRANCH: &str = "exp";
-const OUTPUT_LOG: &str = ".run_log";
+const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
@@ -49,8 +49,7 @@ async fn bench(
     //     Region::UsWest1,
     // ];
     // let ns = vec![5, 3];
-    let regions =
-        vec![Region::EuWest1, Region::ApSoutheast1, Region::CaCentral1];
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::CaCentral1];
     let ns = vec![3];
     let clients_per_region = vec![8, 32, 128, 256, 512];
     let newt_configs = vec![

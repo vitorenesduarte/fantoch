@@ -131,10 +131,10 @@ async fn ping(
     let output_file = format!("{}.dat", vm.nickname);
 
     // first copy both SCRIPT and HOSTS files to the machine
-    util::copy_to(SCRIPT, (script_file, &vm.ssh))
+    util::copy_to(SCRIPT, (script_file, &vm))
         .await
         .wrap_err("copy_to script")?;
-    util::copy_to(HOSTS, (hosts_file, &vm.ssh))
+    util::copy_to(HOSTS, (hosts_file, &vm))
         .await
         .wrap_err("copy_to hosts")?;
     tracing::debug!("both files are copied to remote machine");
@@ -145,7 +145,7 @@ async fn ping(
     tracing::debug!("script ended {}", stdout);
 
     // copy output file
-    util::copy_from((&output_file, &vm.ssh), &output_file)
+    util::copy_from((&output_file, &vm), &output_file)
         .await
         .wrap_err("copy_from")?;
     tracing::info!("output file is copied to local machine");
