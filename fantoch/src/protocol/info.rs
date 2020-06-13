@@ -1,6 +1,5 @@
 use crate::id::{Dot, ProcessId};
 use crate::protocol::gc::GCTrack;
-use crate::util;
 use std::collections::HashMap;
 use threshold::VClock;
 
