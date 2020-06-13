@@ -6,7 +6,6 @@ mod executor;
 pub use executor::{TableExecutionInfo, TableExecutor};
 
 use crate::protocol::common::table::VoteRange;
-use tracing::instrument;
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, Key};
 use fantoch::log;
@@ -14,6 +13,7 @@ use fantoch::util;
 use std::collections::{BTreeMap, HashMap};
 use std::mem;
 use threshold::ARClock;
+use tracing::instrument;
 
 type SortId = (u64, Dot);
 

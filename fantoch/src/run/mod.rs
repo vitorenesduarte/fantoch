@@ -711,8 +711,11 @@ pub mod tests {
             // - id = 1:  [1, 2, 3]
             // - id = 2:  [2, 3, 1]
             // - id = 3:  [3, 1, 2]
-            let sorted_processes =
-                Some((process_id..=(n as ProcessId)).chain(1..process_id).collect());
+            let sorted_processes = Some(
+                (process_id..=(n as ProcessId))
+                    .chain(1..process_id)
+                    .collect(),
+            );
 
             // get ports
             let port = *ports.get(&process_id).unwrap();
@@ -775,8 +778,8 @@ pub mod tests {
                 // id = 1: [1, 2, 3, 4]
                 // id = 2: [5, 6, 7, 8]
                 // id = 3: [9, 10, 11, 12]
-                let id_start = ((process_id as u64 - 1) * clients_per_region) + 1;
-                let id_end = process_id as u64 * clients_per_region;
+                let id_start = ((process_id - 1) * clients_per_region) + 1;
+                let id_end = process_id * clients_per_region;
                 let ids = (id_start..=id_end).collect();
 
                 // get port
