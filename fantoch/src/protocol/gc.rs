@@ -70,7 +70,10 @@ impl GCTrack {
             .collect();
 
         // update the previous stable clock and return newly stable dots
-        self.previous_stable = new_stable;
+        // - here we make sure we never go down on the previous clock, which is
+        //   possible if messages are reordered in the network or if we're
+        //   multiplexing
+        self.previous_stable.join(&new_stable);
         dots
     }
 
