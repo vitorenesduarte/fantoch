@@ -905,6 +905,8 @@ impl MessageIndex for Message {
         use fantoch::run::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
+        debug_assert_eq!(GC_WORKER_INDEX, 0);
+
         match self {
             // Protocol messages
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
@@ -934,6 +936,8 @@ pub enum PeriodicEvent {
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
+        debug_assert_eq!(GC_WORKER_INDEX, 0);
+
         match self {
             Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
             Self::ClockBump => worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX),
