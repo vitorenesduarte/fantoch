@@ -78,22 +78,15 @@ where
     }
 
     /// Returns newly stable dots.
-    pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
-        self.gc_track.stable()
+    pub fn stable(&mut self) -> impl Iterator<Item = Dot> {
+        util::dots(self.gc_track.stable())
     }
 
     /// Performs garbage collection of stable dots.
-    /// Returns how many stable does were removed.
-    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
-        let mut count = 0;
-        util::dots(stable).for_each(|dot| {
-            // remove dot:
-            // - the dot may not exist locally if there are multiple workers and
-            //   this worker is not responsible for such dot
-            if self.dot_to_info.remove(&dot).is_some() {
-                count += 1;
-            }
-        });
-        count
+    pub fn gc(&mut self, stable: Vec<Dot>) {
+        for dot in stable {
+            // remove dot (which must exist)
+            assert!(self.dot_to_info.remove(&dot).is_some());
+        }
     }
 }

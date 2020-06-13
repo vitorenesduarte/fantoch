@@ -9,7 +9,7 @@ use crate::protocol::{
 use crate::time::SysTime;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use threshold::VClock;
 use tracing::instrument;
@@ -275,24 +275,40 @@ impl Basic {
             from
         );
         self.cmds.committed_by(from, committed);
-        // compute newly stable dots
-        let stable = self.cmds.stable();
+
+        // compute newly stable dots per worker
+        let mut stable_per_worker = HashMap::new();
+        for dot in self.cmds.stable() {
+            // find the worker of this dot (which must exist)
+            let (_shift, index) = crate::run::worker_dot_index_shift(&dot)
+                .expect("worker dot must exist");
+
+            // and add new stable dot
+            stable_per_worker
+                .entry(index)
+                .or_insert_with(Vec::new)
+                .push(dot);
+        }
+
         // create `ToForward` to self
-        vec![Action::ToForward {
-            msg: Message::MStable { stable },
-        }]
+        stable_per_worker
+            .into_iter()
+            .map(|(_index, stable)| Action::ToForward {
+                msg: Message::MStable { stable },
+            })
+            .collect()
     }
 
     #[instrument(skip(self, from, stable))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
-        stable: Vec<(ProcessId, u64, u64)>,
+        stable: Vec<Dot>,
     ) -> Vec<Action<Self>> {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
-        let stable_count = self.cmds.gc(stable);
-        self.bp.stable(stable_count);
+        self.bp.stable(stable.len());
+        self.cmds.gc(stable);
         vec![]
     }
 
@@ -342,7 +358,7 @@ pub enum Message {
     MCommit { dot: Dot, cmd: Command },
     MCommitDot { dot: Dot },
     MGarbageCollection { committed: VClock<ProcessId> },
-    MStable { stable: Vec<(ProcessId, u64, u64)> },
+    MStable { stable: Vec<Dot> },
 }
 
 impl MessageIndex for Message {
@@ -360,7 +376,7 @@ impl MessageIndex for Message {
             Self::MGarbageCollection { .. } => {
                 worker_index_no_shift(GC_WORKER_INDEX)
             }
-            Self::MStable { .. } => None,
+            Self::MStable { stable } => worker_dot_index_shift(&stable[0]),
         }
     }
 }
