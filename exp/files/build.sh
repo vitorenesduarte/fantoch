@@ -23,13 +23,14 @@ MAX_OPEN_FILES=100000
 MAX_SO_RCVBUF=$((10 * 1024 * 1024)) # 10mb
 MAX_SO_SNDBUF=$((10 * 1024 * 1024)) # 10mb
 
-if [ $# -ne 1 ]; then
-    echo "usage: build.sh branch"
+if [ $# -ne 2 ]; then
+    echo "usage: build.sh branch aws"
     exit 1
 fi
 
 # get branch
 branch=$1
+aws=$2
 
 # cargo/deps requirements
 sudo apt-get update
@@ -37,6 +38,20 @@ sudo apt-get install -y \
         build-essential \
         pkg-config \
         libssl-dev
+
+# install chrony if in aws
+if [ "${aws}" == "true" ]; then
+    sudo apt-get install chrony -y
+
+    # set chrony server:
+    # - first delete current setting, if any
+    sudo sed -i '/^server 169.254.169.123 ' /etc/chrony/chrony.conf
+    # - then append correct setting
+    echo "server 169.254.169.123 prefer iburst minpoll 4 maxpoll 4" | sudo tee -a /etc/chrony/chrony.conf
+
+    # restart chrony daemon
+    sudo /etc/init.d/chrony restart
+fi
 
 # maybe nuke previous stuff
 if [ "${NUKE_RUST}" == "true" ]; then

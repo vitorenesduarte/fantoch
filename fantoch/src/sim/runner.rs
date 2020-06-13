@@ -77,7 +77,6 @@ where
             .into_iter()
             .zip(util::process_ids(config.n()))
             .map(|(region, process_id)| {
-                let process_id = process_id as u64;
                 // create process and save it
                 let (process, process_events) = P::new(process_id, config);
                 processes.push((region.clone(), process));

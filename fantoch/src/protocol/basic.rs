@@ -497,7 +497,7 @@ mod tests {
         let mstore = actions.pop().unwrap();
 
         // check that the mstore is being sent to 2 processes
-        let check_target = |target: &HashSet<u64>| {
+        let check_target = |target: &HashSet<ProcessId>| {
             target.len() == 2 * f && target.contains(&1) && target.contains(&2)
         };
         assert!(
@@ -527,7 +527,7 @@ mod tests {
 
         // check that the mcommit is sent to everyone
         let mcommit = mcommits.pop().expect("there should be an mcommit");
-        let check_target = |target: &HashSet<u64>| target.len() == n;
+        let check_target = |target: &HashSet<ProcessId>| target.len() == n;
         assert!(
             matches!(mcommit.clone(), (_, Action::ToSend {target, ..}) if check_target(&target))
         );

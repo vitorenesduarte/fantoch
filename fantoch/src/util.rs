@@ -55,7 +55,7 @@ pub fn key_hash(key: &Key) -> u64 {
 /// processes.
 pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
-    (1..=n).map(|id| id as u64)
+    (1..=n).map(|id| id as ProcessId)
 }
 
 /// Converts a reprentation of dots to the actual dots.
