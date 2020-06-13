@@ -20,7 +20,7 @@ const TRANSITIVE_CONFLICTS: bool = true;
 const EXECUTE_AT_COMMIT: bool = true;
 const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
-const GC_INTERVAL: usize = 200; // every 200ms
+const GC_INTERVAL: usize = 50; // every 50ms
 const TRACER_SHOW_INTERVAL: Option<usize> = Some(5000); // every 5s
 
 // parallelism config
