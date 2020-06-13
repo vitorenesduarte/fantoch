@@ -516,16 +516,10 @@ impl<KC: KeyClocks> EPaxos<KC> {
         );
         self.cmds.committed_by(from, committed);
 
-        // compute newly stable dots
-        let (stable_count, stable) = self.cmds.stable();
-
         // compute newly stable dots per worker
-        let workers = self.bp.config.workers();
-        let guess_dots_per_worker = 2 * (1 + (stable_count / workers));
-        let mut stable_per_worker =
-            HashMap::with_capacity(self.bp.config.workers());
+        let mut stable_per_worker = HashMap::new();
 
-        for dot in fantoch::util::dots(stable) {
+        for dot in self.cmds.stable() {
             // find the worker of this dot (which must exist)
             let (_shift, index) = fantoch::run::worker_dot_index_shift(&dot)
                 .expect("worker index must exist");
@@ -533,7 +527,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             // and add new stable dot
             stable_per_worker
                 .entry(index)
-                .or_insert_with(|| Vec::with_capacity(guess_dots_per_worker))
+                .or_insert_with(Vec::new)
                 .push(dot);
         }
 

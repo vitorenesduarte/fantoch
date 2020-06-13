@@ -78,8 +78,8 @@ where
     }
 
     /// Returns newly stable dots.
-    pub fn stable(&mut self) -> (usize, Vec<(ProcessId, u64, u64)>) {
-        self.gc_track.stable()
+    pub fn stable(&mut self) -> impl Iterator<Item = Dot> {
+        crate::util::dots(self.gc_track.stable())
     }
 
     /// Performs garbage collection of stable dots.

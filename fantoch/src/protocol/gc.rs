@@ -53,13 +53,12 @@ impl GCTrack {
 
     /// Computes the new set of stable dots.
     #[instrument(skip(self))]
-    pub fn stable(&mut self) -> (usize, Vec<(ProcessId, u64, u64)>) {
+    pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
         // compute new stable clock
         let new_stable = self.stable_clock();
         log!("GCTrack::stable_clock {:?}", new_stable);
 
         // compute new stable dots
-        let mut stable_count = 0;
         let dots = self
             .previous_stable
             .iter()
@@ -71,12 +70,6 @@ impl GCTrack {
                 // compute representation of stable dots.
                 let start = previous.frontier() + 1;
                 let end = current.frontier();
-
-                // update stable count
-                if end > start {
-                    stable_count += (end - start) as usize;
-                }
-
                 (*process_id, start, end)
             })
             .collect();
@@ -86,7 +79,7 @@ impl GCTrack {
         //   possible if messages are reordered in the network or if we're
         //   multiplexing
         self.previous_stable.join(&new_stable);
-        (stable_count, dots)
+        dots
     }
 
     // TODO we should design a fault-tolerant version of this
@@ -126,9 +119,7 @@ mod tests {
         VClock::from(vec![(1, MaxSet::from(p1)), (2, MaxSet::from(p2))])
     }
 
-    fn stable_dots(
-        (_stable_count, repr): (usize, Vec<(ProcessId, u64, u64)>),
-    ) -> Vec<Dot> {
+    fn stable_dots(repr: Vec<(ProcessId, u64, u64)>) -> Vec<Dot> {
         crate::util::dots(repr).collect()
     }
 
