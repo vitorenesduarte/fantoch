@@ -1,5 +1,6 @@
 use crate::id::{Dot, ProcessId};
 use crate::protocol::gc::GCTrack;
+use crate::util;
 use std::collections::HashMap;
 use threshold::VClock;
 
@@ -82,10 +83,13 @@ where
     }
 
     /// Performs garbage collection of stable dots.
+    /// Returns how many stable does were removed.
     pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
-        crate::util::dots(stable)
+        util::dots(stable)
             .filter(|dot| {
-                // remove dot
+                // remove dot:
+                // - the dot may not exist locally if there are multiple workers
+                //   and this worker is not responsible for such dot
                 self.dot_to_info.remove(&dot).is_some()
             })
             .count()
