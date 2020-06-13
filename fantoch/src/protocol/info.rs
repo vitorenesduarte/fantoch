@@ -85,13 +85,15 @@ where
     /// Performs garbage collection of stable dots.
     /// Returns how many stable does were removed.
     pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
-        util::dots(stable)
-            .filter(|dot| {
-                // remove dot:
-                // - the dot may not exist locally if there are multiple workers
-                //   and this worker is not responsible for such dot
-                self.dot_to_info.remove(&dot).is_some()
-            })
-            .count()
+        let mut count = 0;
+        util::dots(stable).for_each(|dot| {
+            // remove dot:
+            // - the dot may not exist locally if there are multiple workers and
+            //   this worker is not responsible for such dot
+            if self.dot_to_info.remove(&dot).is_some() {
+                count += 1;
+            }
+        });
+        count
     }
 }
