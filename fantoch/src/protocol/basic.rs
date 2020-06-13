@@ -200,10 +200,10 @@ impl Basic {
         let info = self.cmds.get(dot);
 
         // update quorum clocks
-        info.missing_acks -= 1;
+        info.acks.insert(from);
 
         // check if we have all necessary replies
-        if info.missing_acks == 0 {
+        if info.acks.len() == self.bp.config.basic_quorum_size() {
             let mcommit = Message::MCommit {
                 dot,
                 cmd: info.cmd.clone().expect("command should exist"),
@@ -281,7 +281,7 @@ impl Basic {
         for dot in self.cmds.stable() {
             // find the worker of this dot (which must exist)
             let (_shift, index) = crate::run::worker_dot_index_shift(&dot)
-                .expect("worker dot must exist");
+                .expect("worker index must exist");
 
             // and add new stable dot
             stable_per_worker
@@ -332,7 +332,7 @@ impl Basic {
 #[derive(Debug, Clone)]
 struct BasicInfo {
     cmd: Option<Command>,
-    missing_acks: usize,
+    acks: HashSet<ProcessId>,
 }
 
 impl Info for BasicInfo {
@@ -340,12 +340,12 @@ impl Info for BasicInfo {
         _process_id: ProcessId,
         _n: usize,
         _f: usize,
-        fast_quorum_size: usize,
+        _fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
         Self {
             cmd: None,
-            missing_acks: fast_quorum_size,
+            acks: HashSet::new(),
         }
     }
 }
