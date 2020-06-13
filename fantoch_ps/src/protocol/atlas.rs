@@ -506,10 +506,8 @@ impl<KC: KeyClocks> Atlas<KC> {
             time.now()
         );
         self.cmds.committed_by(from, committed);
-
         // compute newly stable dots
         let stable = self.cmds.stable();
-
         // create `ToForward` to self
         vec![Action::ToForward {
             msg: Message::MStable { stable },

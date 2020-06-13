@@ -60,9 +60,9 @@ impl GCTrack {
 
         // compute new stable dots; while at it, update the previous stable
         // clock and return newly stable dots
-        // - here we make sure we never go down on the previous clock, which is
-        //   possible if messages are reordered in the network or if we're
-        //   multiplexing
+        // - here we make sure we never go down on the previous clock, which
+        //   would be possible if messages are reordered in the network or if
+        //   we're multiplexing
         let dots = self
             .previous_stable
             .iter()
@@ -75,7 +75,7 @@ impl GCTrack {
                 let start = previous.frontier() + 1;
                 let end = current.frontier();
 
-                // make sure new clock doens't go backwards
+                // make sure new clock doesn't go backwards
                 current.join(previous);
 
                 // return stable dots representation
@@ -83,6 +83,7 @@ impl GCTrack {
             })
             .collect();
 
+        // update the previous stable clock and return newly stable dots
         self.previous_stable = new_stable;
         dots
     }
