@@ -6,6 +6,7 @@ mod executor;
 pub use executor::{TableExecutionInfo, TableExecutor};
 
 use crate::protocol::common::table::VoteRange;
+use tracing::instrument;
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, Key};
 use fantoch::log;
@@ -123,6 +124,7 @@ impl VotesTable {
         }
     }
 
+    #[instrument(skip(self, dot, clock, rifl, op, votes))]
     fn add(
         &mut self,
         dot: Dot,
@@ -153,6 +155,7 @@ impl VotesTable {
         self.add_votes(votes);
     }
 
+    #[instrument(skip(self, votes))]
     fn add_votes(&mut self, votes: Vec<VoteRange>) {
         log!("p{}: Table::add_votes votes: {:?}", self.process_id, votes);
         votes.into_iter().for_each(|vote_range| {
@@ -172,6 +175,7 @@ impl VotesTable {
         );
     }
 
+    #[instrument(skip(self))]
     fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
         // compute *next* stable sort id:
         // - if clock 10 is stable, then we can execute all ops with an id
