@@ -276,9 +276,16 @@ impl Basic {
         );
         self.cmds.committed_by(from, committed);
 
+        // compute newly stable dots
+        let (stable_count, stable) = self.cmds.stable();
+
         // compute newly stable dots per worker
-        let mut stable_per_worker = HashMap::new();
-        for dot in self.cmds.stable() {
+        let workers = self.bp.config.workers();
+        let guess_dots_per_worker = 2 * (1 + (stable_count / workers));
+        let mut stable_per_worker =
+            HashMap::with_capacity(self.bp.config.workers());
+
+        for dot in crate::util::dots(stable) {
             // find the worker of this dot (which must exist)
             let (_shift, index) = crate::run::worker_dot_index_shift(&dot)
                 .expect("worker index must exist");
@@ -286,7 +293,7 @@ impl Basic {
             // and add new stable dot
             stable_per_worker
                 .entry(index)
-                .or_insert_with(Vec::new)
+                .or_insert_with(|| Vec::with_capacity(guess_dots_per_worker))
                 .push(dot);
         }
 
