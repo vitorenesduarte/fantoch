@@ -328,7 +328,7 @@ where
     // create executor workers
     incoming
         .enumerate()
-        .filter_map(
+        .map(
             |(worker_index, ((from_readers, from_clients), from_periodic))| {
                 // create task
                 let task = process_task::<P, R>(
@@ -343,24 +343,25 @@ where
                     worker_to_executors.clone(),
                     to_execution_logger.clone(),
                 );
-
-                // if this is a reserved worker, run it on its own runtime
-                if worker_index < super::INDEXES_RESERVED {
-                    let thread_name =
-                        format!("worker_{}_runtime", worker_index);
-                    std::thread::spawn(|| {
-                        // create tokio runtime
-                        let mut runtime = tokio::runtime::Builder::new()
-                            .basic_scheduler()
-                            .thread_name(thread_name)
-                            .build()
-                            .expect("tokio runtime build should work");
-                        runtime.block_on(task)
-                    });
-                    None
-                } else {
-                    Some(task::spawn(task))
-                }
+                task::spawn(task)
+                // // if this is a reserved worker, run it on its own runtime
+                // if worker_index < super::INDEXES_RESERVED {
+                //     let thread_name =
+                //         format!("worker_{}_runtime", worker_index);
+                //     tokio::task::spawn_blocking(|| {
+                //         // create tokio runtime
+                //         let mut runtime = tokio::runtime::Builder::new()
+                //             .threaded_scheduler()
+                //             .core_threads(1)
+                //             .thread_name(thread_name)
+                //             .build()
+                //             .expect("tokio runtime build should work");
+                //         runtime.block_on(task)
+                //     });
+                //     None
+                // } else {
+                //     Some(task::spawn(task))
+                // }
             },
         )
         .collect()
