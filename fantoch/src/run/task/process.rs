@@ -328,9 +328,10 @@ where
     // create executor workers
     incoming
         .enumerate()
-        .map(
+        .filter_map(
             |(worker_index, ((from_readers, from_clients), from_periodic))| {
-                task::spawn(process_task::<P, R>(
+                // create task
+                let task = process_task::<P, R>(
                     worker_index,
                     process.clone(),
                     process_id,
@@ -341,7 +342,27 @@ where
                     reader_to_workers.clone(),
                     worker_to_executors.clone(),
                     to_execution_logger.clone(),
-                ))
+                );
+
+                // if this is a reserved worker, run it on its own runtime
+                if worker_index < super::INDEXES_RESERVED {
+                    let thread_name =
+                        format!("worker_{}_runtime", worker_index);
+                    std::thread::spawn(|| {
+                        // create tokio runtime
+                        let mut runtime = tokio::runtime::Builder::new()
+                            .basic_scheduler()
+                            .enable_io()
+                            .enable_time()
+                            .thread_name(thread_name)
+                            .build()
+                            .expect("tokio runtime build should work");
+                        runtime.block_on(task)
+                    });
+                    None
+                } else {
+                    Some(task::spawn(task))
+                }
             },
         )
         .collect()
