@@ -748,15 +748,15 @@ pub mod tests {
             // - id = 1:  [1, 2, 3]
             // - id = 2:  [2, 3, 1]
             // - id = 3:  [3, 1, 2]
-            let sorted_processes = if process_id % 2 == 0 {
-                None
-            } else {
-                // only set if non odd ids
+            let sorted_processes = if process_id % 2 == 1 {
+                // only set if odd ids
                 Some(
                     (process_id..=(n as ProcessId))
                         .chain(1..process_id)
                         .collect(),
                 )
+            } else {
+                None
             };
 
             // get ports
