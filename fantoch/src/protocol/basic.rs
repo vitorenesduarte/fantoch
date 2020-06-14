@@ -9,7 +9,7 @@ use crate::protocol::{
 use crate::time::SysTime;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::mem;
 use threshold::VClock;
 use tracing::instrument;
@@ -278,9 +278,13 @@ impl Basic {
         // compute newly stable dots
         let stable = self.cmds.stable();
         // create `ToForward` to self
-        vec![Action::ToForward {
-            msg: Message::MStable { stable },
-        }]
+        if stable.is_empty() {
+            vec![]
+        } else {
+            vec![Action::ToForward {
+                msg: Message::MStable { stable },
+            }]
+        }
     }
 
     #[instrument(skip(self, from, stable))]

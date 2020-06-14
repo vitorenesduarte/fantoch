@@ -66,7 +66,7 @@ impl GCTrack {
         let dots = self
             .previous_stable
             .iter()
-            .map(|(process_id, previous)| {
+            .filter_map(|(process_id, previous)| {
                 let current = new_stable
                     .get_mut(process_id)
                     .expect("actor should exist in the newly stable clock");
@@ -78,8 +78,12 @@ impl GCTrack {
                 // make sure new clock doesn't go backwards
                 current.join(previous);
 
-                // return stable dots representation
-                (*process_id, start, end)
+                if start < end {
+                    // return stable dots representation
+                    Some((*process_id, start, end))
+                } else {
+                    None
+                }
             })
             .collect();
 

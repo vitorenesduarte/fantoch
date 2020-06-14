@@ -738,9 +738,13 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute newly stable dots
         let stable = self.cmds.stable();
         // create `ToForward` to self
-        vec![Action::ToForward {
-            msg: Message::MStable { stable },
-        }]
+        if stable.is_empty() {
+            vec![]
+        } else {
+            vec![Action::ToForward {
+                msg: Message::MStable { stable },
+            }]
+        }
     }
 
     #[instrument(skip(self, from, stable, time))]
