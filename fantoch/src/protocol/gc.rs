@@ -78,11 +78,12 @@ impl GCTrack {
                 // make sure new clock doesn't go backwards
                 current.join(previous);
 
-                if start < end {
-                    // return stable dots representation
-                    Some((*process_id, start, end))
-                } else {
+                if start > end {
                     None
+                } else {
+                    // return stable dots representation
+                    // - note that `start == end` also represents a stable dot
+                    Some((*process_id, start, end))
                 }
             })
             .collect();
