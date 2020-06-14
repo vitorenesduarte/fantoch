@@ -22,6 +22,7 @@ const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
 const GC_INTERVAL: usize = 50; // every 50ms
 const TRACER_SHOW_INTERVAL: Option<usize> = Some(5000); // every 5s
+const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
 // parallelism config
 const WORKERS: usize = 16;
@@ -429,6 +430,9 @@ async fn start_processes(
         }
         if let Some(interval) = TRACER_SHOW_INTERVAL {
             args.extend(args!["--tracer_show_interval", interval]);
+        }
+        if let Some(interval) = PING_INTERVAL {
+            args.extend(args!["--ping_interval", interval]);
         }
         if let Some(leader) = LEADER {
             args.extend(args!["--leader", leader]);
