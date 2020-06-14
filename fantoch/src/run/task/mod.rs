@@ -19,6 +19,9 @@ pub mod periodic;
 // This module contains tracer's implementation.
 pub mod tracer;
 
+// This module contains ping's implementation.
+pub mod ping;
+
 // Re-exports.
 pub use chan::channel;
 

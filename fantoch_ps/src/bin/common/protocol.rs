@@ -39,6 +39,7 @@ where
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
     ) = parse_args();
 
     let process = fantoch::run::process::<P, String>(
@@ -56,6 +57,7 @@ where
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
     );
     super::tokio_runtime().block_on(process)
 }
@@ -75,6 +77,7 @@ fn parse_args() -> (
     usize,
     Option<String>,
     Option<usize>,
+    Option<usize>,
 ) {
     let matches = App::new("process")
         .version("0.1")
@@ -92,7 +95,7 @@ fn parse_args() -> (
             Arg::with_name("sorted_processes")
                 .long("sorted")
                 .value_name("SORTED_PROCESSES")
-                .help("comma-separated list of process identifiers sorted by distance; if not set processes will ping each other and try to figure out this list from the ping returned latency")
+                .help("comma-separated list of process identifiers sorted by distance; if not set, processes will ping each other and try to figure out this list from ping latency; for this, 'ping_interval' should be set")
                 .takes_value(true),
         )
         .arg(
@@ -234,6 +237,13 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("ping_interval")
+                .long("ping_interval")
+                .value_name("PING_INTERVAL")
+                .help("number indicating the interval (in milliseconds) between pings between processes; by default there's no pinging; if set, this value should be > 0")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("newt_tiny_quorums")
                 .long("newt_tiny_quorums")
                 .value_name("NEWT_TINY_QUORUMS")
@@ -288,6 +298,7 @@ fn parse_args() -> (
         super::parse_execution_log(matches.value_of("execution_log"));
     let tracer_show_interval =
         parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
+    let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
     let (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval) =
         parse_newt_config(
             matches.value_of("newt_tiny_quorums"),
@@ -322,7 +333,8 @@ fn parse_args() -> (
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("multiplexing: {:?}", multiplexing);
     println!("execution log: {:?}", execution_log);
-    println!("trace_timing: {:?}", tracer_show_interval);
+    println!("trace_show_interval: {:?}", tracer_show_interval);
+    println!("ping_interval: {:?}", ping_interval);
 
     // check that the number of sorted processes equals `n` (if it was set)
     if let Some(sorted_processes) = sorted_processes.as_ref() {
@@ -347,6 +359,7 @@ fn parse_args() -> (
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
     )
 }
 
@@ -430,6 +443,14 @@ fn parse_tracer_show_interval(
         tracer_show_interval
             .parse::<usize>()
             .expect("tracer_show_interval should be a number")
+    })
+}
+
+fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
+    ping_interval.map(|ping_interval| {
+        ping_interval
+            .parse::<usize>()
+            .expect("ping_interval should be a number")
     })
 }
 

@@ -114,6 +114,7 @@ pub async fn process<P, A>(
     multiplexing: usize,
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
+    ping_interval: Option<usize>,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
@@ -137,6 +138,7 @@ where
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
         semaphore,
         None,
     )
@@ -159,6 +161,7 @@ async fn process_with_notify_and_inspect<P, A, R>(
     multiplexing: usize,
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
+    ping_interval: Option<usize>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
 ) -> RunResult<()>
@@ -214,9 +217,8 @@ where
     );
 
     // connect to all processes
-    let (sorted_processes, to_writers) = task::process::connect_to_all::<A, P>(
+    let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
-        sorted_processes,
         listener,
         addresses,
         reader_to_workers.clone(),
@@ -228,6 +230,18 @@ where
         multiplexing,
     )
     .await?;
+
+    // start ping process
+    let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
+        task::ping::ping_task(ping_interval, process_id, ips, rx)
+    });
+
+    // get sorted processes (maybe from ping task)
+    let sorted_processes = if let Some(sorted_processes) = sorted_processes {
+        sorted_processes
+    } else {
+        ask_ping_task(to_ping).await
+    };
 
     // check that we have n processes
     assert_eq!(sorted_processes.len(), config.n());
@@ -323,6 +337,18 @@ where
         println!("process ended {:?}", join_result?);
     }
     Ok(())
+}
+
+async fn ask_ping_task(mut to_ping: SortedProcessesSender) -> Vec<ProcessId> {
+    let (tx, mut rx) = task::channel(1);
+    if let Err(e) = to_ping.send(tx).await {
+        panic!("error sending request to ping task: {:?}", e);
+    }
+    if let Some(sorted_processes) = rx.recv().await {
+        sorted_processes
+    } else {
+        panic!("error receiving reply from ping task");
+    }
 }
 
 pub async fn client<A>(
@@ -685,6 +711,8 @@ pub mod tests {
         let channel_buffer_size = 10000;
         let multiplexing = 2;
 
+        let ping_interval = Some(1000); // millis
+
         // create processes ports and client ports
         let n = config.n();
         let ports: HashMap<_, _> = util::process_ids(n)
@@ -754,6 +782,7 @@ pub mod tests {
                 multiplexing,
                 execution_log,
                 tracer_show_interval,
+                ping_interval,
                 semaphore.clone(),
                 Some(inspect),
             ));

@@ -12,13 +12,13 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::net::IpAddr;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
 
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
-    sorted_processes: Option<Vec<ProcessId>>,
     listener: TcpListener,
     addresses: Vec<A>,
     to_workers: ReaderToWorkers<P>,
@@ -28,7 +28,10 @@ pub async fn connect_to_all<A, P>(
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     multiplexing: usize,
-) -> RunResult<(Vec<ProcessId>, HashMap<ProcessId, Vec<WriterSender<P>>>)>
+) -> RunResult<(
+    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, Vec<WriterSender<P>>>,
+)>
 where
     A: ToSocketAddrs + Debug,
     P: Protocol + 'static,
@@ -76,7 +79,6 @@ where
 
     let res = handshake::<P>(
         process_id,
-        sorted_processes,
         peer_count,
         to_workers,
         tcp_flush_interval,
@@ -90,14 +92,16 @@ where
 
 async fn handshake<P>(
     process_id: ProcessId,
-    sorted_processes: Option<Vec<ProcessId>>,
     peer_count: usize,
     to_workers: ReaderToWorkers<P>,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
-) -> (Vec<ProcessId>, HashMap<ProcessId, Vec<WriterSender<P>>>)
+) -> (
+    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, Vec<WriterSender<P>>>,
+)
 where
     P: Protocol + 'static,
 {
@@ -113,8 +117,6 @@ where
     // start readers and writers
     start_readers::<P>(to_workers, id_to_connection_0);
     start_writers::<P>(
-        process_id,
-        sorted_processes,
         peer_count,
         tcp_flush_interval,
         channel_buffer_size,
@@ -164,25 +166,31 @@ fn start_readers<P>(
 }
 
 async fn start_writers<P>(
-    process_id: ProcessId,
-    sorted_processes: Option<Vec<ProcessId>>,
     peer_count: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, Connection)>,
-) -> (Vec<ProcessId>, HashMap<ProcessId, Vec<WriterSender<P>>>)
+) -> (
+    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, Vec<WriterSender<P>>>,
+)
 where
     P: Protocol + 'static,
 {
-    // if `sorted_processes` is not set, ping all peers and build it
-    let sorted_processes =
-        maybe_ping(process_id, sorted_processes, &connections).await;
-
+    let mut ips = HashMap::with_capacity(peer_count);
     // mapping from process id to channel broadcast writer should write to
     let mut writers = HashMap::with_capacity(peer_count);
 
     // start on writer task per connection
     for (process_id, connection) in connections {
+        // save ip
+        ips.insert(
+            process_id,
+            connection
+                .ip_addr()
+                .expect("ip address should be set for outgoing connection"),
+        );
+
         // create channel where parent should write to
         let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
             writer_task::<P>(tcp_flush_interval, connection, rx)
@@ -197,62 +205,7 @@ where
 
     // check `writers` size
     assert_eq!(writers.len(), peer_count);
-    (sorted_processes, writers)
-}
-
-async fn maybe_ping(
-    process_id: ProcessId,
-    sorted_processes: Option<Vec<ProcessId>>,
-    connections: &Vec<(ProcessId, Connection)>,
-) -> Vec<ProcessId> {
-    if let Some(sorted_processes) = sorted_processes {
-        return sorted_processes;
-    }
-    let mut pings = HashMap::new();
-
-    for (peer_id, connection) in connections {
-        // check if we have already pinged this process or not
-        if pings.contains_key(peer_id) {
-            continue;
-        }
-        let ip = connection
-            .ip_addr()
-            .expect("ip address should be set for outgoing connection");
-        let command = format!("ping -c 5 -q {} | tail -n 1 | cut -d/ -f5", ip);
-        let out = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .output()
-            .await
-            .expect("ping command should work");
-        let stdout = String::from_utf8(out.stdout)
-            .expect("ping output should be utf8")
-            .trim()
-            .to_string();
-        let latency = stdout
-            .parse::<f64>()
-            .expect("ping output should be a float");
-        let rounded_latency = latency as usize;
-        log!(
-            "p{}: ping to {} with ip {} took {}ms ({}ms)",
-            process_id,
-            peer_id,
-            ip,
-            latency,
-            rounded_latency
-        );
-        pings.insert(*peer_id, rounded_latency);
-    }
-    // sort processes by ping time
-    let mut pings = pings
-        .into_iter()
-        .map(|(id, latency)| (latency, id))
-        .collect::<Vec<_>>();
-    pings.sort();
-    // make sure we're the first process
-    std::iter::once(process_id)
-        .chain(pings.into_iter().map(|(_latency, process_id)| process_id))
-        .collect()
+    (ips, writers)
 }
 
 /// Reader task.
