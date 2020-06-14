@@ -19,20 +19,35 @@ const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    // TODO replace this
     let args: Vec<String> = std::env::args().collect();
-    let (instance_type, set_sorted_processes) = match args.as_slice() {
-        [_] => (INSTANCE_TYPE, false),
-        [_, instance_type] => (instance_type.as_str(), false),
-        [_, instance_type, set_sorted_processes] => {
-            let set_sorted_processes = set_sorted_processes
-                .parse::<bool>()
-                .expect("second argument should be a boolean");
-            (instance_type.as_str(), set_sorted_processes)
-        }
-        _ => {
-            panic!("at most 2 arguments are expected");
-        }
-    };
+    let (instance_type, set_sorted_processes, tracer_show_interval) =
+        match args.as_slice() {
+            [_] => (INSTANCE_TYPE, false, None),
+            [_, instance_type] => (instance_type.as_str(), false, None),
+            [_, instance_type, set_sorted_processes] => {
+                let set_sorted_processes = set_sorted_processes
+                    .parse::<bool>()
+                    .expect("second argument should be a boolean");
+                (instance_type.as_str(), set_sorted_processes, None)
+            }
+            [_, instance_type, set_sorted_processes, tracer_show_interval] => {
+                let set_sorted_processes = set_sorted_processes
+                    .parse::<bool>()
+                    .expect("set sorted processes should be a boolean");
+                let tracer_interval = tracer_show_interval
+                    .parse::<usize>()
+                    .expect("trace interval should be a number");
+                (
+                    instance_type.as_str(),
+                    set_sorted_processes,
+                    Some(tracer_interval),
+                )
+            }
+            _ => {
+                panic!("at most 3 arguments are expected");
+            }
+        };
 
     // init logging
     tracing_subscriber::fmt::init();
@@ -45,6 +60,7 @@ async fn main() -> Result<(), Report> {
         client_instance_type,
         branch,
         set_sorted_processes,
+        tracer_show_interval,
     )
     .await
 }
@@ -54,6 +70,7 @@ async fn bench(
     client_instance_type: String,
     branch: String,
     set_sorted_processes: bool,
+    tracer_show_interval: Option<usize>,
 ) -> Result<(), Report> {
     // let regions = vec![
     //     Region::EuWest1,
@@ -89,6 +106,7 @@ async fn bench(
         clients_per_region,
         newt_configs,
         set_sorted_processes,
+        tracer_show_interval,
         output_log,
     )
     .await

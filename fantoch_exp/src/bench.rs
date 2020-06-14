@@ -21,7 +21,6 @@ const EXECUTE_AT_COMMIT: bool = true;
 const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
 const GC_INTERVAL: usize = 50; // every 50ms
-const TRACER_SHOW_INTERVAL: Option<usize> = Some(5000); // every 5s
 const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
 // parallelism config
@@ -61,6 +60,7 @@ pub async fn bench_experiment(
     clients_per_region: Vec<usize>,
     newt_configs: Vec<(bool, bool, usize)>,
     set_sorted_processes: bool,
+    tracer_show_interval: Option<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let mut launcher: aws::Launcher<_> = Default::default();
@@ -76,6 +76,7 @@ pub async fn bench_experiment(
         clients_per_region,
         newt_configs,
         set_sorted_processes,
+        tracer_show_interval,
         output_log,
     )
     .await;
@@ -100,6 +101,7 @@ async fn do_bench_experiment(
     clients_per_region: Vec<usize>,
     newt_configs: Vec<(bool, bool, usize)>,
     set_sorted_processes: bool,
+    tracer_show_interval: Option<usize>,
     mut output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let (regions, server_vms, client_vms) = spawn(
@@ -151,6 +153,7 @@ async fn do_bench_experiment(
                     newt_real_time,
                     newt_clock_bump_interval,
                     set_sorted_processes,
+                    tracer_show_interval,
                     clients,
                 )
                 .await?;
@@ -211,6 +214,7 @@ async fn run_experiment(
     newt_real_time: bool,
     newt_clock_bump_interval: usize,
     set_sorted_processes: bool,
+    tracer_show_interval: Option<usize>,
     clients_per_region: usize,
 ) -> Result<Vec<ClientMetrics>, Report> {
     // start processes
@@ -221,6 +225,7 @@ async fn run_experiment(
         newt_real_time,
         newt_clock_bump_interval,
         set_sorted_processes,
+        tracer_show_interval,
     )
     .await
     .wrap_err("start_processes")?;
@@ -348,6 +353,7 @@ async fn start_processes(
     newt_real_time: bool,
     newt_clock_bump_interval: usize,
     set_sorted_processes: bool,
+    tracer_show_interval: Option<usize>,
 ) -> Result<
     (
         HashMap<String, String>,
@@ -428,7 +434,7 @@ async fn start_processes(
         if let Some(log) = EXECUTION_LOG {
             args.extend(args!["--execution_log", log]);
         }
-        if let Some(interval) = TRACER_SHOW_INTERVAL {
+        if let Some(interval) = tracer_show_interval {
             args.extend(args!["--tracer_show_interval", interval]);
         }
         if let Some(interval) = PING_INTERVAL {
