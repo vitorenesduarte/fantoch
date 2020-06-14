@@ -14,7 +14,7 @@ pub async fn ping_task(
     ping_interval: Option<usize>,
     process_id: ProcessId,
     ips: HashMap<ProcessId, IpAddr>,
-    mut parent: SortedProcessesReceiver,
+    parent: Option<SortedProcessesReceiver>,
 ) {
     // if no interval, do not ping
     if ping_interval.is_none() {
@@ -38,9 +38,12 @@ pub async fn ping_task(
         .map(|(process_id, ip)| (process_id, (ip, Histogram::new())))
         .collect();
 
-    // make sure we do at least one round of pinging before receiving any
-    // message from parent
-    ping_task_ping(&mut ping_stats).await;
+    if let Some(mut parent) = parent {
+        // do one round of pinging and then process the parent message
+        ping_task_ping(&mut ping_stats).await;
+        let sort_request = parent.recv().await;
+        ping_task_sort(process_id, &ping_stats, sort_request).await;
+    }
 
     loop {
         tokio::select! {
@@ -49,9 +52,6 @@ pub async fn ping_task(
             }
             _ = ping_show_interval.tick() => {
                 ping_task_show(&ping_stats);
-            }
-            sort_request = parent.recv() => {
-                ping_task_sort(process_id, &ping_stats, sort_request).await;
             }
         }
     }

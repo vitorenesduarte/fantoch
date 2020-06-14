@@ -231,15 +231,24 @@ where
     )
     .await?;
 
-    // start ping process
-    let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
-        task::ping::ping_task(ping_interval, process_id, ips, rx)
-    });
-
     // get sorted processes (maybe from ping task)
     let sorted_processes = if let Some(sorted_processes) = sorted_processes {
+        // in this case, we already have the sorted processes, so simply span
+        // the ping task and return what we have
+        task::spawn(task::ping::ping_task(
+            ping_interval,
+            process_id,
+            ips,
+            None,
+        ));
         sorted_processes
     } else {
+        // when we don't have the sorted processes, spawn the ping task and ask
+        // it for the sorted processes
+        let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
+            let parent = Some(rx);
+            task::ping::ping_task(ping_interval, process_id, ips, parent)
+        });
         ask_ping_task(to_ping).await
     };
 
