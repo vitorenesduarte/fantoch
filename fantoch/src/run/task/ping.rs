@@ -62,7 +62,8 @@ async fn ping_task_ping(
 ) {
     for (ip, histogram) in ping_stats.values_mut() {
         for _ in 0..ITERATIONS_PER_PING {
-            let command = format!("ping -q {} | tail -n 1 | cut -d/ -f5", ip);
+            let command =
+                format!("ping -c 1 -q {} | tail -n 1 | cut -d/ -f5", ip);
             let out = tokio::process::Command::new("sh")
                 .arg("-c")
                 .arg(command)
