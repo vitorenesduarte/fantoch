@@ -97,6 +97,10 @@ impl Histogram {
     pub fn percentile(&self, percentile: f64) -> F64 {
         assert!(percentile >= 0.0 && percentile <= 1.0);
 
+        if self.values.is_empty() {
+            return F64::zero();
+        }
+
         // compute the number of elements in the histogram
         let count = self.count() as f64;
         let index = percentile * count;

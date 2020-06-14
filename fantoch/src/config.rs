@@ -53,7 +53,7 @@ impl Config {
         // `Executor`
         let workers = 1;
         let executors = 1;
-        // by default, commands are committed at commit time
+        // by default, commands are deleted at commit time
         let garbage_collection_interval = None;
         // by default, garbage collection runs every 1ms
         let newt_clock_bump_interval = 1;

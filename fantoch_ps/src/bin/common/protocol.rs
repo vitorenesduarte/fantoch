@@ -189,7 +189,7 @@ fn parse_args() -> (
             Arg::with_name("gc_interval")
                 .long("gc_interval")
                 .value_name("GC_INTERVAL")
-                .help("garbage collection interval (in milliseconds); default: 500")
+                .help("garbage collection interval (in milliseconds); if no value if set, stability doesn't run and commands are deleted at commit time")
                 .takes_value(true),
         )
         .arg(
