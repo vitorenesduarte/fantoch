@@ -557,12 +557,18 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // generate detached votes if committed clock is higher than the local
         // key's clock if not configured with real time
-        let mut actions = if self.bp.config.newt_real_time() {
+        let detached = if self.bp.config.newt_real_time() {
             // nothing to do here, since the clocks will be bumped periodically
-            vec![]
+            Votes::new()
         } else {
             let cmd = info.cmd.as_ref().unwrap();
-            let detached = self.key_clocks.vote(cmd, clock);
+            self.key_clocks.vote(cmd, clock)
+        };
+
+        // maybe create `MDetached` message
+        let mut actions = if detached.is_empty() {
+            vec![]
+        } else {
             vec![Action::ToSend {
                 target: self.bp.all(),
                 msg: Message::MDetached { detached },
@@ -1017,6 +1023,9 @@ mod tests {
         // set tiny quorums to false so that the "skip mcollect ack optimization
         // doesn't kick in"
         config.set_newt_tiny_quorums(false);
+
+        // make sure stability is running
+        config.set_garbage_collection_interval(100);
 
         // executors
         let executor_1 = TableExecutor::new(process_id_1, config);

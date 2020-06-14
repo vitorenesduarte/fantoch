@@ -341,7 +341,7 @@ impl FPaxos {
             self.gc_track.commit(slot);
         } else {
             // if we're not running gc, remove the slot info now
-            let stable_count = self.multi_synod.gc_single(slot);
+            self.multi_synod.gc_single(slot);
         }
 
         // nothing to send

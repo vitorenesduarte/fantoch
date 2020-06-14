@@ -385,7 +385,7 @@ impl<KC: KeyClocks> Atlas<KC> {
                 msg: Message::MCommitDot { dot },
             }]
         } else {
-            // if we're not running gc, remove the dot info not
+            // if we're not running gc, remove the dot info now
             self.cmds.gc_single(dot);
             vec![]
         }
