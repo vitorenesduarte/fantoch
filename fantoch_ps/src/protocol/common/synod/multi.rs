@@ -332,7 +332,9 @@ where
 
     /// Performs garbage collection of a single slot.
     pub fn gc_single(&mut self, slot: u64) {
-        assert!(self.accepted.remove(&slot).is_some())
+        // this only does anything if this acceptor was contacted by the leader
+        // for this slot
+        self.accepted.remove(&slot);
     }
 }
 
