@@ -119,11 +119,37 @@ fn sort_by_distance(
     // sort processes by ping time
     let mut pings = ping_stats
         .iter()
-        .map(|(id, (_, histogram))| (histogram.mean().round(), id))
+        .map(|(id, (_, histogram))| (u64::from(histogram.mean()), id))
         .collect::<Vec<_>>();
     pings.sort();
     // make sure we're the first process
     std::iter::once(process_id)
         .chain(pings.into_iter().map(|(_latency, &process_id)| process_id))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn sort_by_distance_test() {
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+        let mut ping_stats = HashMap::new();
+        assert_eq!(sort_by_distance(1, &ping_stats), vec![1]);
+
+        ping_stats.insert(2, (ip, Histogram::from(vec![10, 20, 30])));
+        assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 2]);
+
+        ping_stats.insert(3, (ip, Histogram::from(vec![5, 5, 5])));
+        assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 3, 2]);
+
+        let (_, histogram_2) = ping_stats.get_mut(&2).unwrap();
+        for _ in 1..100 {
+            histogram_2.increment(1);
+        }
+        assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 2, 3]);
+    }
 }
