@@ -67,8 +67,12 @@ impl Protocol for FPaxos {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval() as u64;
-        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+        let events =
+            if let Some(gc_delay) = config.garbage_collection_interval() {
+                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
+            } else {
+                vec![]
+            };
 
         // return both
         (protocol, events)
@@ -332,11 +336,20 @@ impl FPaxos {
         let execution_info = ExecutionInfo::new(slot, cmd);
         self.to_executor.push(execution_info);
 
-        // register that it has been committed
-        self.gc_track.commit(slot);
+        if self.gc_running() {
+            // register that it has been committed
+            self.gc_track.commit(slot);
+        } else {
+            // if we're not running gc, remove the slot info now
+            let stable_count = self.multi_synod.gc_single(slot);
+        }
 
         // nothing to send
         vec![]
+    }
+
+    fn gc_running(&self) -> bool {
+        self.bp.config.garbage_collection_interval().is_some()
     }
 
     #[instrument(skip(self, from, committed, time))]

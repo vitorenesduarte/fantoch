@@ -76,18 +76,20 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             buffered_commits,
         };
 
-        // create periodic events
-        let gc_interval = config.garbage_collection_interval() as u64;
-        let clock_bump_interval = config.newt_clock_bump_interval() as u64;
-        // only create the clock bump periodic event if `config.newt_real_time`
-        let events = if config.newt_real_time() {
-            vec![
-                (PeriodicEvent::GarbageCollection, gc_interval),
-                (PeriodicEvent::ClockBump, clock_bump_interval),
-            ]
-        } else {
-            vec![(PeriodicEvent::GarbageCollection, gc_interval)]
-        };
+        // maybe create garbage collection periodic event
+        let mut events =
+            if let Some(gc_delay) = config.garbage_collection_interval() {
+                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
+            } else {
+                vec![]
+            };
+
+        // maybe create clock bump periodic event
+        if config.newt_real_time() {
+            let clock_bump_interval = config.newt_clock_bump_interval() as u64;
+            events.reserve_exact(1);
+            events.push((PeriodicEvent::ClockBump, clock_bump_interval));
+        }
 
         // return both
         (protocol, events)
@@ -555,29 +557,29 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // generate detached votes if committed clock is higher than the local
         // key's clock if not configured with real time
-        let detached = if self.bp.config.newt_real_time() {
+        let mut actions = if self.bp.config.newt_real_time() {
             // nothing to do here, since the clocks will be bumped periodically
-            Votes::new()
+            vec![]
         } else {
             let cmd = info.cmd.as_ref().unwrap();
-            self.key_clocks.vote(cmd, clock)
-        };
-
-        // notify self with the committed dot
-        let to_forward = Action::ToForward {
-            msg: Message::MCommitDot { dot },
-        };
-
-        // also send `MDetached` message in case there are any detached votes
-        if detached.is_empty() {
-            vec![to_forward]
-        } else {
-            let to_send = Action::ToSend {
+            let detached = self.key_clocks.vote(cmd, clock);
+            vec![Action::ToSend {
                 target: self.bp.all(),
                 msg: Message::MDetached { detached },
-            };
-            vec![to_forward, to_send]
+            }]
+        };
+
+        if self.gc_running() {
+            // running gc, so notify self with the committed dot
+            actions.reserve_exact(1);
+            actions.push(Action::ToForward {
+                msg: Message::MCommitDot { dot },
+            });
+        } else {
+            // not running gc, so remove the dot info now
+            self.cmds.gc_single(dot);
         }
+        actions
     }
 
     #[instrument(skip(self, detached, time))]
@@ -811,6 +813,10 @@ impl<KC: KeyClocks> Newt<KC> {
     // votes.
     fn reset_votes(local_votes: &mut Votes) -> Votes {
         mem::take(local_votes)
+    }
+
+    fn gc_running(&self) -> bool {
+        self.bp.config.garbage_collection_interval().is_some()
     }
 }
 

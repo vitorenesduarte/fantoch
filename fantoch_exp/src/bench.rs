@@ -14,13 +14,13 @@ type ClientMetrics = (String, String);
 // processes config
 const PORT: usize = 3000;
 const CLIENT_PORT: usize = 4000;
-const PROTOCOL: &str = "newt_atomic";
+const PROTOCOL: &str = "basic";
 const FAULTS: usize = 1;
 const TRANSITIVE_CONFLICTS: bool = true;
-const EXECUTE_AT_COMMIT: bool = true;
+const EXECUTE_AT_COMMIT: bool = false;
 const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
-const GC_INTERVAL: usize = 50; // every 50ms
+const GC_INTERVAL: Option<usize> = None;
 const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
 // parallelism config
@@ -30,7 +30,7 @@ const MULTIPLEXING: usize = 2;
 
 // clients config
 const CONFLICT_RATE: usize = 0;
-const COMMANDS_PER_CLIENT: usize = 1000;
+const COMMANDS_PER_CLIENT: usize = 3000;
 const PAYLOAD_SIZE: usize = 0;
 
 // process tcp config
@@ -411,8 +411,6 @@ async fn start_processes(
             PROCESS_TCP_NODELAY,
             "--tcp_buffer_size",
             PROCESS_TCP_BUFFER_SIZE,
-            "--gc_interval",
-            GC_INTERVAL,
             "--channel_buffer_size",
             CHANNEL_BUFFER_SIZE,
             "--workers",
@@ -436,6 +434,9 @@ async fn start_processes(
         }
         if let Some(interval) = tracer_show_interval {
             args.extend(args!["--tracer_show_interval", interval]);
+        }
+        if let Some(interval) = GC_INTERVAL {
+            args.extend(args!["--gc_interval", interval]);
         }
         if let Some(interval) = PING_INTERVAL {
             args.extend(args!["--ping_interval", interval]);

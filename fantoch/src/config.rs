@@ -23,7 +23,7 @@ pub struct Config {
     /// defines the number of `Executor` workers
     executors: usize,
     /// defines the interval between garbage collections (milliseconds)
-    garbage_collection_interval: usize,
+    garbage_collection_interval: Option<usize>,
     /// defines the interval between clock bumps (milliseconds)
     newt_clock_bump_interval: usize,
 }
@@ -53,8 +53,8 @@ impl Config {
         // `Executor`
         let workers = 1;
         let executors = 1;
-        // by default, garbage collection runs every 500ms
-        let garbage_collection_interval = 500;
+        // by default, commands are committed at commit time
+        let garbage_collection_interval = None;
         // by default, garbage collection runs every 1ms
         let newt_clock_bump_interval = 1;
         Self {
@@ -164,13 +164,13 @@ impl Config {
     }
 
     /// Checks the garbage collection interval.
-    pub fn garbage_collection_interval(&self) -> usize {
+    pub fn garbage_collection_interval(&self) -> Option<usize> {
         self.garbage_collection_interval
     }
 
     /// Sets the garbage collection interval.
     pub fn set_garbage_collection_interval(&mut self, interval: usize) {
-        self.garbage_collection_interval = interval;
+        self.garbage_collection_interval = Some(interval);
     }
 
     /// Checks Newt clock bumpp interval.
@@ -336,12 +336,12 @@ mod tests {
         assert_eq!(config.workers(), 10);
         assert_eq!(config.executors(), 20);
 
-        // by default, the garbage collection interval is 500
-        assert_eq!(config.garbage_collection_interval(), 500);
+        // by default, there's no garbage collection interval
+        assert_eq!(config.garbage_collection_interval(), None);
 
         // change its value and check it has changed
         config.set_garbage_collection_interval(100);
-        assert_eq!(config.garbage_collection_interval(), 100);
+        assert_eq!(config.garbage_collection_interval(), Some(100));
 
         // by default, newt clock bump interval is 1
         assert_eq!(config.newt_clock_bump_interval(), 1);

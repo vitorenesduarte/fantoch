@@ -111,6 +111,11 @@ where
         self.acceptor.gc(stable)
     }
 
+    /// Performs garbage collection of a single slot.
+    pub fn gc_single(&mut self, slot: u64) {
+        self.acceptor.gc_single(slot)
+    }
+
     fn handle_spawn_commander(
         &mut self,
         ballot: Ballot,
@@ -323,6 +328,11 @@ where
                 self.accepted.remove(&slot).is_some()
             })
             .count()
+    }
+
+    /// Performs garbage collection of a single slot.
+    pub fn gc_single(&mut self, slot: u64) {
+        assert!(self.accepted.remove(&slot).is_some())
     }
 }
 

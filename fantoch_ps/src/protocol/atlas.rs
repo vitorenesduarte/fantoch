@@ -71,8 +71,12 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         };
 
         // create periodic events
-        let gc_delay = config.garbage_collection_interval() as u64;
-        let events = vec![(PeriodicEvent::GarbageCollection, gc_delay)];
+        let events =
+            if let Some(gc_delay) = config.garbage_collection_interval() {
+                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
+            } else {
+                vec![]
+            };
 
         // return both
         (protocol, events)
@@ -375,10 +379,16 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.to_executor.push(execution_info);
         }
 
-        // notify self with the committed dot
-        vec![Action::ToForward {
-            msg: Message::MCommitDot { dot },
-        }]
+        if self.gc_running() {
+            // notify self with the committed dot
+            vec![Action::ToForward {
+                msg: Message::MCommitDot { dot },
+            }]
+        } else {
+            // if we're not running gc, remove the dot info not
+            self.cmds.gc_single(dot);
+            vec![]
+        }
     }
 
     #[instrument(skip(self, from, dot, ballot, value, time))]
@@ -557,6 +567,10 @@ impl<KC: KeyClocks> Atlas<KC> {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
         }]
+    }
+
+    fn gc_running(&self) -> bool {
+        self.bp.config.garbage_collection_interval().is_some()
     }
 }
 
