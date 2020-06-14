@@ -352,8 +352,6 @@ where
                         // create tokio runtime
                         let mut runtime = tokio::runtime::Builder::new()
                             .basic_scheduler()
-                            .enable_io()
-                            .enable_time()
                             .thread_name(thread_name)
                             .build()
                             .expect("tokio runtime build should work");

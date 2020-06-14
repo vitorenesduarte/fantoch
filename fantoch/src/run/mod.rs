@@ -79,7 +79,7 @@ pub mod task;
 // Re-exports.
 pub use prelude::{
     worker_dot_index_shift, worker_index_no_shift, worker_index_shift,
-    GC_WORKER_INDEX, LEADER_WORKER_INDEX,
+    GC_WORKER_INDEX, INDEXES_RESERVED, LEADER_WORKER_INDEX,
 };
 
 use crate::client::{Client, Workload};

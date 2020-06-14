@@ -15,12 +15,17 @@ const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 pub fn tokio_runtime() -> tokio::runtime::Runtime {
     // get number of cpus
     let cpus = num_cpus::get();
-    println!("cpus: {}", cpus);
+    let reserved = fantoch::run::INDEXES_RESERVED;
+    let threads = cpus - reserved;
+    println!(
+        "cpus: {} | reserved: {} | runtime threads: {}",
+        cpus, reserved, threads
+    );
 
     // create tokio runtime
     tokio::runtime::Builder::new()
         .threaded_scheduler()
-        .core_threads(cpus)
+        .core_threads(threads)
         .enable_io()
         .enable_time()
         .thread_name("runner")
