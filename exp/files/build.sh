@@ -41,6 +41,7 @@ sudo apt-get install -y \
 
 # install chrony if in aws
 if [ "${aws}" == "true" ]; then
+    # see: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html
     sudo apt-get install chrony -y
 
     # set chrony server:

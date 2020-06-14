@@ -20,11 +20,18 @@ const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     let args: Vec<String> = std::env::args().collect();
-    assert!(args.len() <= 2, "at most one argument should be provided");
-    let instance_type = if args.len() == 2 {
-        &args[1]
-    } else {
-        INSTANCE_TYPE
+    let (instance_type, set_sorted_processes) = match args.as_slice() {
+        [_] => (INSTANCE_TYPE, false),
+        [_, instance_type] => (instance_type.as_str(), false),
+        [_, instance_type, set_sorted_processes] => {
+            let set_sorted_processes = set_sorted_processes
+                .parse::<bool>()
+                .expect("second argument should be a boolean");
+            (instance_type.as_str(), set_sorted_processes)
+        }
+        _ => {
+            panic!("at most 2 arguments are expected");
+        }
     };
 
     // init logging
@@ -33,13 +40,20 @@ async fn main() -> Result<(), Report> {
     let server_instance_type = instance_type.to_string();
     let client_instance_type = instance_type.to_string();
     let branch = BRANCH.to_string();
-    bench(server_instance_type, client_instance_type, branch).await
+    bench(
+        server_instance_type,
+        client_instance_type,
+        branch,
+        set_sorted_processes,
+    )
+    .await
 }
 
 async fn bench(
     server_instance_type: String,
     client_instance_type: String,
     branch: String,
+    set_sorted_processes: bool,
 ) -> Result<(), Report> {
     // let regions = vec![
     //     Region::EuWest1,
@@ -74,6 +88,7 @@ async fn bench(
         ns,
         clients_per_region,
         newt_configs,
+        set_sorted_processes,
         output_log,
     )
     .await

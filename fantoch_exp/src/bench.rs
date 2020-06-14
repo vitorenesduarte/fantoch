@@ -59,6 +59,7 @@ pub async fn bench_experiment(
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
     newt_configs: Vec<(bool, bool, usize)>,
+    set_sorted_processes: bool,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let mut launcher: aws::Launcher<_> = Default::default();
@@ -73,6 +74,7 @@ pub async fn bench_experiment(
         ns,
         clients_per_region,
         newt_configs,
+        set_sorted_processes,
         output_log,
     )
     .await;
@@ -96,6 +98,7 @@ async fn do_bench_experiment(
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
     newt_configs: Vec<(bool, bool, usize)>,
+    set_sorted_processes: bool,
     mut output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let (regions, server_vms, client_vms) = spawn(
@@ -146,6 +149,7 @@ async fn do_bench_experiment(
                     newt_tiny_quorums,
                     newt_real_time,
                     newt_clock_bump_interval,
+                    set_sorted_processes,
                     clients,
                 )
                 .await?;
@@ -205,6 +209,7 @@ async fn run_experiment(
     newt_tiny_quorums: bool,
     newt_real_time: bool,
     newt_clock_bump_interval: usize,
+    set_sorted_processes: bool,
     clients_per_region: usize,
 ) -> Result<Vec<ClientMetrics>, Report> {
     // start processes
@@ -214,6 +219,7 @@ async fn run_experiment(
         newt_tiny_quorums,
         newt_real_time,
         newt_clock_bump_interval,
+        set_sorted_processes,
     )
     .await
     .wrap_err("start_processes")?;
@@ -340,6 +346,7 @@ async fn start_processes(
     newt_tiny_quorums: bool,
     newt_real_time: bool,
     newt_clock_bump_interval: usize,
+    set_sorted_processes: bool,
 ) -> Result<
     (
         HashMap<String, String>,
@@ -425,6 +432,15 @@ async fn start_processes(
         }
         if let Some(leader) = LEADER {
             args.extend(args!["--leader", leader]);
+        }
+
+        if set_sorted_processes {
+            let sorted_processes = (process_id..=(n as ProcessId))
+                .chain(1..process_id)
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            args.extend(args!["--sorted", sorted_processes]);
         }
 
         let command =
