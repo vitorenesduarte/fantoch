@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# needed for RUN_MODE="flamegraph"
-FLAMEGRAPH="false"
 DEBUG=false
 
 # flag indicating whether we should just remove previous installations
@@ -23,14 +21,15 @@ MAX_OPEN_FILES=100000
 MAX_SO_RCVBUF=$((10 * 1024 * 1024)) # 10mb
 MAX_SO_SNDBUF=$((10 * 1024 * 1024)) # 10mb
 
-if [ $# -ne 2 ]; then
-    echo "usage: build.sh branch aws"
+if [ $# -ne 3 ]; then
+    echo "usage: build.sh branch flamegraph aws"
     exit 1
 fi
 
 # get branch
 branch=$1
-aws=$2
+flamegraph=$2
+aws=$3
 
 # cargo/deps requirements
 sudo apt-get update
@@ -73,7 +72,7 @@ rustup toolchain install ${RUST_TOOLCHAIN}
 rustup override set ${RUST_TOOLCHAIN}
 rustup update ${RUST_TOOLCHAIN}
 
-if [ "${FLAMEGRAPH}" == "true" ]; then
+if [ "${flamegraph}" == "true" ]; then
     # install perf:
     # - this command seems to be debian specific
     sudo apt-get update
@@ -88,8 +87,15 @@ if [ "${FLAMEGRAPH}" == "true" ]; then
     # reload system configuration so that previous changes  take place
     sudo sysctl --system
 
-    # install flamegraph
+    # install deps
     sudo apt-get install -y linux-tools-common linux-tools-generic
+
+    # additional requirement if on aws
+    if [ "${aws}" == "true" ]; then
+        sudo apt-get install linux-tools-5.3.0-1023-aws -y
+    fi
+
+    # install flamegraph
     cargo install flamegraph
 fi
 

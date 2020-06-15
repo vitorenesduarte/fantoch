@@ -1,4 +1,5 @@
-use crate::{args, util};
+use crate::args;
+use crate::util::{self, RunMode};
 use color_eyre::Report;
 use eyre::WrapErr;
 use rusoto_core::Region;
@@ -11,13 +12,16 @@ use tsunami::{Machine, Tsunami};
 type ProcessId = usize;
 type ClientMetrics = (String, String);
 
+// run mode
+const RUN_MODE: RunMode = RunMode::Flamegraph;
+
 // processes config
 const PORT: usize = 3000;
 const CLIENT_PORT: usize = 4000;
-const PROTOCOL: &str = "basic";
+const PROTOCOL: &str = "newt_atomic";
 const FAULTS: usize = 1;
 const TRANSITIVE_CONFLICTS: bool = true;
-const EXECUTE_AT_COMMIT: bool = false;
+const EXECUTE_AT_COMMIT: bool = true;
 const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
 const GC_INTERVAL: Option<usize> = None;
@@ -187,7 +191,7 @@ async fn do_bench_experiment(
                     }
                 }
 
-                let mut line = format!("n = {} AND c = {:<8} |", n, clients);
+                let mut line = format!("n = {} AND c = {:<9} |", n, clients);
                 for metric in metrics {
                     let latencies = latencies_to_avg
                         .remove(metric)
@@ -310,7 +314,7 @@ async fn do_spawn(
                 .instance_type(instance_type.clone())
                 .region_with_ubuntu_ami(region.clone())
                 .await?
-                .setup(util::fantoch_setup(branch.clone()));
+                .setup(util::fantoch_setup(branch.clone(), RUN_MODE));
 
             // save setup
             descriptors.push((name, setup))
@@ -454,8 +458,12 @@ async fn start_processes(
             args.extend(args!["--sorted", sorted_processes]);
         }
 
-        let command =
-            fantoch_bin_script(PROTOCOL, args, process_file(process_id));
+        let command = fantoch_bin_script(
+            PROTOCOL,
+            args,
+            RUN_MODE,
+            process_file(process_id),
+        );
         let process = util::prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start process")?;
@@ -509,8 +517,13 @@ async fn run_clients(
             CHANNEL_BUFFER_SIZE,
         ];
 
-        let command =
-            fantoch_bin_script("client", args, client_file(client_index));
+        // always run clients on release mode
+        let command = fantoch_bin_script(
+            "client",
+            args,
+            RunMode::Release,
+            client_file(client_index),
+        );
         let client = util::prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start client")?;
@@ -546,7 +559,7 @@ async fn stop_processes(
     tracing::info!("copied all process logs");
 
     let mut wait_processes = Vec::with_capacity(vms.len());
-    for (region, (_, mut pchild)) in processes {
+    for (region, (process_id, mut pchild)) in processes {
         let vm = vms.get(&region).expect("process vm should exist");
 
         // kill ssh process
@@ -576,11 +589,16 @@ async fn stop_processes(
 
         // kill it
         let pid = pids[0];
-        let command = format!("kill -SIGKILL {}", pid);
+        let command = format!("kill {}", pid);
         let output = util::exec(vm, command).await.wrap_err("kill")?;
         tracing::debug!("{}", output);
 
-        wait_processes.push(wait_process_ended(region, vm));
+        wait_processes.push(wait_process_ended(
+            run_id.clone(),
+            process_id,
+            region,
+            vm,
+        ));
     }
 
     // wait all processse started
@@ -638,33 +656,66 @@ async fn wait_client_ended(
 }
 
 async fn wait_process_ended(
+    run_id: String,
+    process_id: ProcessId,
     region: String,
     vm: &Machine<'_>,
 ) -> Result<(), Report> {
+    // small delay between calls
+    let delay = tokio::time::Duration::from_secs(2);
+
     let mut count = 1;
     while count != 0 {
-        // small delay between calls
-        let seconds = 2;
-        tokio::time::delay_for(tokio::time::Duration::from_secs(seconds)).await;
-
+        tokio::time::delay_for(delay).await;
         let command = format!("lsof -i :{} -i :{} | wc -l", PORT, CLIENT_PORT);
         let stdout = util::exec(vm, command).await.wrap_err("lsof | wc")?;
         count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
     }
-    tracing::info!("process in region {} terminated successfully", region);
+    tracing::info!(
+        "process {} in region {} terminated successfully",
+        process_id,
+        region
+    );
+
+    // maybe copy flamegraph
+    if RUN_MODE == RunMode::Flamegraph {
+        // wait for the flamegraph process to finish writing `flamegraph.svg`
+        let mut count = 1;
+        while count != 0 {
+            tokio::time::delay_for(delay).await;
+            let command =
+                format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
+            let stdout = util::exec(vm, command).await.wrap_err("ps | wc")?;
+            count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+        }
+
+        // copy `flamegraph.svg`
+        util::copy_from(
+            ("flamegraph.svg", &vm),
+            &format!(".flamegraph_{}_id{}_{}.svg", run_id, process_id, region),
+        )
+        .await
+        .wrap_err("copy flamegraph")?;
+
+        tracing::info!(
+            "copied flamegraph log of process {} in region {}",
+            process_id,
+            region
+        );
+    }
+
     Ok(())
 }
 
 fn fantoch_bin_script(
     binary: &str,
     args: Vec<String>,
+    run_mode: RunMode,
     output_file: String,
 ) -> String {
+    let binary = run_mode.binary(binary);
     let args = args.join(" ");
-    format!(
-        "source ~/.cargo/env && ./fantoch/target/release/{} {} > {} 2>&1",
-        binary, args, output_file
-    )
+    format!("{} {} > {} 2>&1", binary, args, output_file)
 }
 
 fn address(ip: impl ToString, port: usize) -> String {
