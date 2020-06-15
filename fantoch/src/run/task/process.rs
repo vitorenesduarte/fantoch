@@ -108,7 +108,7 @@ where
     // say hi to all on both connections
     say_hi(process_id, &mut connections_0).await;
     say_hi(process_id, &mut connections_1).await;
-    println!("said hi to all processes");
+    log!("said hi to all processes");
 
     // receive hi from all on both connections
     let id_to_connection_0 = receive_hi(connections_0).await;
