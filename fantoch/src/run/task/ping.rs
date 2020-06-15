@@ -62,19 +62,30 @@ async fn ping_task_ping(
 ) {
     for (ip, histogram) in ping_stats.values_mut() {
         for _ in 0..ITERATIONS_PER_PING {
-            let command =
-                format!("ping -c 1 -q {} | tail -n 1 | cut -d/ -f5", ip);
-            let out = tokio::process::Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .output()
-                .await
-                .expect("ping command should work");
-            let stdout = String::from_utf8(out.stdout)
-                .expect("ping output should be utf8")
-                .trim()
-                .to_string();
-            let latency = stdout
+            let latency = loop {
+                let command =
+                    format!("ping -c 1 -q {} | tail -n 1 | cut -d/ -f5", ip);
+                let out = tokio::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(command)
+                    .output()
+                    .await
+                    .expect("ping command should work");
+                let stdout = String::from_utf8(out.stdout)
+                    .expect("ping output should be utf8")
+                    .trim()
+                    .to_string();
+
+                if stdout.is_empty() {
+                    println!(
+                        "[ping_task] ping output was empty; trying again..."
+                    )
+                } else {
+                    break stdout;
+                }
+            };
+
+            let latency = latency
                 .parse::<f64>()
                 .expect("ping output should be a float");
             let rounded_latency = latency as u64;
@@ -85,7 +96,7 @@ async fn ping_task_ping(
 
 fn ping_task_show(ping_stats: &HashMap<ProcessId, (IpAddr, Histogram)>) {
     for (process_id, (_, histogram)) in ping_stats {
-        println!("{}: {:?}", process_id, histogram);
+        println!("[ping_task] {}: {:?}", process_id, histogram);
     }
 }
 
