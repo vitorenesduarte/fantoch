@@ -19,6 +19,8 @@ tracing = "0.1.14"
 parking_lot = "0.10.2"
 num_cpus = "1.13.0"
 
+jemallocator = "0.3.2"
+
 fantoch = { path = "../fantoch" }
 
 [dev-dependencies]

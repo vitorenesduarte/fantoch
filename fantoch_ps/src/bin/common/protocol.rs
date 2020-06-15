@@ -19,6 +19,9 @@ const DEFAULT_NEWT_TINY_QUORUMS: bool = false;
 const DEFAULT_NEWT_REAL_TIME: bool = false;
 const DEFAULT_NEWT_CLOCK_BUMP_INTERVAL: usize = 10;
 
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[allow(dead_code)]
 pub fn run<P>() -> Result<(), Box<dyn Error>>
 where
