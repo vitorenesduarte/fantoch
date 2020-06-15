@@ -25,6 +25,7 @@ pub mod ping;
 // Re-exports.
 pub use chan::channel;
 
+use crate::log;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use chan::{ChannelReceiver, ChannelSender};
@@ -174,7 +175,7 @@ async fn listener_task(
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
-                println!("[listener] new connection: {:?}", addr);
+                log!("[listener] new connection: {:?}", addr);
 
                 // create connection
                 let connection =

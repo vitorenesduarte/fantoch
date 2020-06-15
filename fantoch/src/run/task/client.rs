@@ -47,7 +47,7 @@ async fn client_listener_task(
         // handle new client connections
         match rx.recv().await {
             Some(connection) => {
-                println!("[client_listener] new connection");
+                log!("[client_listener] new connection");
                 // start client server task and give it the producer-end of the
                 // channel in order for this client to notify
                 // parent
@@ -115,7 +115,7 @@ async fn server_receive_hi(
 ) -> (ClientId, RiflAckReceiver, ExecutorResultReceiver) {
     // receive hi from client
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
-        println!("[client_server] received hi from client {}", client_id);
+        log!("[client_server] received hi from client {}", client_id);
         client_id
     } else {
         panic!(
@@ -270,7 +270,7 @@ pub async fn client_say_hi(
 
     // receive hi back
     if let Some(ProcessHi(process_id)) = connection.recv().await {
-        println!("[client] received hi from process {}", process_id);
+        log!("[client] received hi from process {}", process_id);
         process_id
     } else {
         panic!("[client] couldn't receive process id from connected process");

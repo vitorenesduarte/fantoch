@@ -127,7 +127,7 @@ async fn handle_from_client<P>(
             }
         }
         FromClient::Register(client_id, rifl_acks_tx, executor_results_tx) => {
-            println!("[executor] client {} registered", client_id);
+            log!("[executor] client {} registered", client_id);
             let res = client_rifl_acks.insert(client_id, rifl_acks_tx);
             assert!(res.is_none());
             let res =
@@ -135,7 +135,7 @@ async fn handle_from_client<P>(
             assert!(res.is_none());
         }
         FromClient::Unregister(client_id) => {
-            println!("[executor] client {} unregistered", client_id);
+            log!("[executor] client {} unregistered", client_id);
             let res = client_rifl_acks.remove(&client_id);
             assert!(res.is_some());
             let res = client_executor_results.remove(&client_id);
