@@ -13,7 +13,7 @@ type ProcessId = usize;
 type ClientMetrics = (String, String);
 
 // run mode
-const RUN_MODE: RunMode = RunMode::Flamegraph;
+const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
 const PORT: usize = 3000;
@@ -584,14 +584,25 @@ async fn stop_processes(
             .collect();
         pids.sort();
         pids.dedup();
-        // there should be a single pid
-        assert_eq!(pids.len(), 1, "there should be a single process pid");
 
-        // kill it
-        let pid = pids[0];
-        let command = format!("kill {}", pid);
-        let output = util::exec(vm, command).await.wrap_err("kill")?;
-        tracing::debug!("{}", output);
+        // there should be at most one pid
+        match pids.len() {
+            0 => {
+                tracing::warn!(
+                    "process {} already not running in region {}",
+                    process_id,
+                    region
+                );
+            }
+            1 => {
+                // kill it
+                let pid = pids[0];
+                let command = format!("kill {}", pid);
+                let output = util::exec(vm, command).await.wrap_err("kill")?;
+                tracing::debug!("{}", output);
+            }
+            n => panic!("there should be at most one pid and found {}", n),
+        }
 
         wait_processes.push(wait_process_ended(
             run_id.clone(),
