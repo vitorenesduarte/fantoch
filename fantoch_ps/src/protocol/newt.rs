@@ -555,24 +555,22 @@ impl<KC: KeyClocks> Newt<KC> {
         });
         self.to_executor.extend(execution_info);
 
-        // generate detached votes if committed clock is higher than the local
-        // key's clock if not configured with real time
-        let detached = if self.bp.config.newt_real_time() {
-            // nothing to do here, since the clocks will be bumped periodically
-            Votes::new()
-        } else {
-            let cmd = info.cmd.as_ref().unwrap();
-            self.key_clocks.vote(cmd, clock)
-        };
-
-        // maybe create `MDetached` message
-        let mut actions = if detached.is_empty() {
+        // generate detached votes if:
+        // - if not configured with real time, and
+        // - part of fast quorum (i.e. we have it non-empty), and
+        // - committed clock is higher than the local key's clock
+        let mut actions = {
+            if !self.bp.config.newt_real_time() && !info.quorum.is_empty() {
+                let cmd = info.cmd.as_ref().unwrap();
+                let detached = self.key_clocks.vote(cmd, clock);
+                if !detached.is_empty() {
+                    return vec![Action::ToSend {
+                        target: self.bp.all(),
+                        msg: Message::MDetached { detached },
+                    }];
+                }
+            }
             vec![]
-        } else {
-            vec![Action::ToSend {
-                target: self.bp.all(),
-                msg: Message::MDetached { detached },
-            }]
         };
 
         if self.gc_running() {
