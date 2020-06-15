@@ -557,10 +557,14 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // generate detached votes if:
         // - if not configured with real time, and
+        // - `n = 3`
         // - part of fast quorum (i.e. we have it non-empty), and
         // - committed clock is higher than the local key's clock
         let mut actions = {
-            if !self.bp.config.newt_real_time() && !info.quorum.is_empty() {
+            if !self.bp.config.newt_real_time()
+                && self.bp.config.n() == 3
+                && !info.quorum.is_empty()
+            {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);
                 if !detached.is_empty() {
