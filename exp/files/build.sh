@@ -120,7 +120,10 @@ sudo apt-get autoremove -y
 
 # clone the repository if dir does not exist
 if [[ ! -d fantoch ]]; then
-    git clone https://github.com/vitorenesduarte/fantoch -b "${branch}"
+    until git clone https://github.com/vitorenesduarte/fantoch -b "${branch}"; do
+        echo "git clone failed; trying again"
+        rm -rf fantoch
+    done
 fi
 
 # pull recent changes in ${branch}
