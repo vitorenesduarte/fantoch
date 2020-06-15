@@ -4,15 +4,27 @@ use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
-use fantoch_ps::protocol::{AtlasSequential, EPaxosSequential, NewtSequential};
+use fantoch_ps::protocol::{
+    AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
+};
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 fn main() {
+    let aws = true;
+    newt_real_time(aws);
+
+    aws_distance_matrix();
     epaxos_aws();
     newt_vs_spanner();
-    newt_real_time();
+}
+
+fn aws_distance_matrix() {
+    let planet = Planet::from("../latency_aws/");
+    let mut regions = planet.regions();
+    regions.sort();
+    println!("{}", planet.distance_matrix(regions).unwrap());
 }
 
 fn epaxos_aws() {
@@ -57,7 +69,20 @@ fn epaxos_aws() {
     }
 }
 
-fn newt_real_time() {
+fn newt_real_time_aws() -> (Planet, Vec<Region>) {
+    let planet = Planet::from("../latency_aws");
+    let regions = vec![
+        Region::new("eu-west-1"),
+        Region::new("ap-east-1"),
+        Region::new("ca-central-1"),
+        Region::new("ap-south-1"),
+        Region::new("us-west-1"),
+    ];
+    (planet, regions)
+}
+
+fn newt_real_time_gcp() -> (Planet, Vec<Region>) {
+    let planet = Planet::new();
     let regions = vec![
         Region::new("asia-south1"),
         Region::new("europe-north1"),
@@ -65,15 +90,43 @@ fn newt_real_time() {
         Region::new("australia-southeast1"),
         Region::new("europe-west1"),
     ];
+    (planet, regions)
+}
+
+fn newt_real_time(aws: bool) {
+    let (planet, regions) = if aws {
+        newt_real_time_aws()
+    } else {
+        newt_real_time_gcp()
+    };
+    println!("{}", planet.distance_matrix(regions.clone()).unwrap());
     let f = 1;
     let ns = vec![3, 5];
     for n in ns {
+        let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
+
         println!(">running atlas n = {} | f = {}", n, f);
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(true);
-        let exp_regions = regions.clone();
+        let planet_ = planet.clone();
+        let regions_ = regions.clone();
         run_in_thread(move || {
-            increasing_load::<AtlasSequential>(exp_regions, config)
+            increasing_load::<AtlasSequential>(planet_, regions_, config)
+        });
+
+        let leader = 1;
+        println!(
+            ">running fpaxos n = {} | f = {} | leader = {:?}",
+            n,
+            f,
+            regions[leader - 1]
+        );
+        let mut config = Config::new(n, f);
+        config.set_leader(1);
+        let planet_ = planet.clone();
+        let regions_ = regions.clone();
+        run_in_thread(move || {
+            increasing_load::<FPaxos>(planet_, regions_, config)
         });
 
         let tiny_quorums_config = if n > 3 {
@@ -83,8 +136,8 @@ fn newt_real_time() {
             vec![false]
         };
 
-        let hybrid_config = vec![false, true];
-        let interval_config = vec![100, 50, 10, 5];
+        let hybrid_config = vec![false];
+        let interval_config = vec![100, 50, 10];
 
         for tiny_quorums in tiny_quorums_config {
             println!(
@@ -94,9 +147,10 @@ fn newt_real_time() {
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
             config.set_newt_real_time(false);
-            let exp_regions = regions.clone();
+            let planet_ = planet.clone();
+            let regions_ = regions.clone();
             run_in_thread(move || {
-                increasing_load::<NewtSequential>(exp_regions, config)
+                increasing_load::<NewtSequential>(planet_, regions_, config)
             });
 
             for hybrid in hybrid_config.clone() {
@@ -106,9 +160,12 @@ fn newt_real_time() {
                     config.set_newt_tiny_quorums(tiny_quorums);
                     config.set_newt_real_time(true);
                     config.set_newt_clock_bump_interval(interval);
-                    let exp_regions = regions.clone();
+                    let regions = regions.clone();
+                    let planet = planet.clone();
                     run_in_thread(move || {
-                        increasing_load::<NewtSequential>(exp_regions, config)
+                        increasing_load::<NewtSequential>(
+                            planet, regions, config,
+                        )
                     });
                 }
             }
@@ -137,9 +194,10 @@ fn newt_vs_spanner() {
         config.set_newt_real_time(true);
         config.set_newt_hybrid_clocks(true);
         config.set_newt_clock_bump_interval(interval);
-        let exp_regions = regions.clone();
+        let planet = planet.clone();
+        let regions = regions.clone();
         run_in_thread(move || {
-            increasing_load::<NewtSequential>(exp_regions, config)
+            increasing_load::<NewtSequential>(planet, regions, config)
         });
     }
 }
@@ -187,9 +245,12 @@ fn equidistant<P: Protocol>() {
 }
 
 #[allow(dead_code)]
-fn increasing_load<P: Protocol>(regions: Vec<Region>, config: Config) {
-    let planet = Planet::new();
-    let cs = vec![1, 2, 4, 8, 16, 32, 64, 128, 256];
+fn increasing_load<P: Protocol>(
+    planet: Planet,
+    regions: Vec<Region>,
+    config: Config,
+) {
+    let cs = vec![8, 16, 32, 64, 128, 256];
 
     // clients workload
     let conflict_rate = 10;

@@ -79,7 +79,7 @@ pub mod task;
 // Re-exports.
 pub use prelude::{
     worker_dot_index_shift, worker_index_no_shift, worker_index_shift,
-    GC_WORKER_INDEX, LEADER_WORKER_INDEX,
+    GC_WORKER_INDEX, INDEXES_RESERVED, LEADER_WORKER_INDEX,
 };
 
 use crate::client::{Client, Workload};
@@ -101,7 +101,7 @@ use tokio::time::{self, Duration};
 
 pub async fn process<P, A>(
     process_id: ProcessId,
-    sorted_processes: Vec<ProcessId>,
+    sorted_processes: Option<Vec<ProcessId>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -114,6 +114,7 @@ pub async fn process<P, A>(
     multiplexing: usize,
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
+    ping_interval: Option<usize>,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
@@ -137,6 +138,7 @@ where
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
         semaphore,
         None,
     )
@@ -146,7 +148,7 @@ where
 #[allow(clippy::too_many_arguments)]
 async fn process_with_notify_and_inspect<P, A, R>(
     process_id: ProcessId,
-    sorted_processes: Vec<ProcessId>,
+    sorted_processes: Option<Vec<ProcessId>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -159,6 +161,7 @@ async fn process_with_notify_and_inspect<P, A, R>(
     multiplexing: usize,
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
+    ping_interval: Option<usize>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
 ) -> RunResult<()>
@@ -199,6 +202,10 @@ where
     // check ports are different
     assert!(port != client_port);
 
+    // check that n - 1 addresses were set
+    assert_eq!(addresses.len(), config.n() - 1);
+
+    // ---------------------
     // start process listener
     let listener = task::listen((ip, port)).await?;
 
@@ -210,7 +217,7 @@ where
     );
 
     // connect to all processes
-    let to_writers = task::process::connect_to_all::<A, P>(
+    let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
         listener,
         addresses,
@@ -224,8 +231,33 @@ where
     )
     .await?;
 
+    // get sorted processes (maybe from ping task)
+    let sorted_processes = if let Some(sorted_processes) = sorted_processes {
+        // in this case, we already have the sorted processes, so simply span
+        // the ping task and return what we have
+        task::spawn(task::ping::ping_task(
+            ping_interval,
+            process_id,
+            ips,
+            None,
+        ));
+        sorted_processes
+    } else {
+        // when we don't have the sorted processes, spawn the ping task and ask
+        // it for the sorted processes
+        let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
+            let parent = Some(rx);
+            task::ping::ping_task(ping_interval, process_id, ips, parent)
+        });
+        ask_ping_task(to_ping).await
+    };
+
+    // check that we have n processes
+    assert_eq!(sorted_processes.len(), config.n());
+
+    // ---------------------
     // start client listener
-    let listener = task::listen((ip, client_port)).await?;
+    let client_listener = task::listen((ip, client_port)).await?;
 
     // create atomic dot generator to be used by clients in case the protocol is
     // leaderless:
@@ -264,7 +296,7 @@ where
     // start listener
     task::client::start_listener(
         process_id,
-        listener,
+        client_listener,
         atomic_dot_gen,
         client_to_workers,
         client_to_executors,
@@ -314,6 +346,18 @@ where
         println!("process ended {:?}", join_result?);
     }
     Ok(())
+}
+
+async fn ask_ping_task(mut to_ping: SortedProcessesSender) -> Vec<ProcessId> {
+    let (tx, mut rx) = task::channel(1);
+    if let Err(e) = to_ping.send(tx).await {
+        panic!("error sending request to ping task: {:?}", e);
+    }
+    if let Some(sorted_processes) = rx.recv().await {
+        sorted_processes
+    } else {
+        panic!("error receiving reply from ping task");
+    }
 }
 
 pub async fn client<A>(
@@ -590,6 +634,9 @@ pub mod tests {
         config.set_workers(workers);
         config.set_executors(executors);
 
+        // make sure stability is running
+        config.set_garbage_collection_interval(100);
+
         let conflict_rate = 100;
         let commands_per_client = 100;
         let clients_per_region = 3;
@@ -676,6 +723,8 @@ pub mod tests {
         let channel_buffer_size = 10000;
         let multiplexing = 2;
 
+        let ping_interval = Some(1000); // millis
+
         // create processes ports and client ports
         let n = config.n();
         let ports: HashMap<_, _> = util::process_ids(n)
@@ -702,8 +751,16 @@ pub mod tests {
             // - id = 1:  [1, 2, 3]
             // - id = 2:  [2, 3, 1]
             // - id = 3:  [3, 1, 2]
-            let sorted_processes =
-                (process_id..=(n as u64)).chain(1..process_id).collect();
+            let sorted_processes = if process_id % 2 == 1 {
+                // only set if odd ids
+                Some(
+                    (process_id..=(n as ProcessId))
+                        .chain(1..process_id)
+                        .collect(),
+                )
+            } else {
+                None
+            };
 
             // get ports
             let port = *ports.get(&process_id).unwrap();
@@ -742,6 +799,7 @@ pub mod tests {
                 multiplexing,
                 execution_log,
                 tracer_show_interval,
+                ping_interval,
                 semaphore.clone(),
                 Some(inspect),
             ));

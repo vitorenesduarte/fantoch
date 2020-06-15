@@ -77,6 +77,10 @@ pub type PeriodicEventReceiver<P, R> =
     ChannelReceiver<FromPeriodicMessage<P, R>>;
 pub type InspectFun<P, R> = (fn(&P) -> R, ChannelSender<R>);
 pub type InspectReceiver<P, R> = ChannelReceiver<InspectFun<P, R>>;
+pub type SortedProcessesSender =
+    ChannelSender<ChannelSender<Vec<ProcessId>>>;
+pub type SortedProcessesReceiver =
+    ChannelReceiver<ChannelSender<Vec<ProcessId>>>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;

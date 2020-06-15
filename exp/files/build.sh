@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
-# - needed for use of unstable functions
-RUST_NIGHTLY="true"
-# - needed for RUN_MODE="flamegraph"
+# needed for RUN_MODE="flamegraph"
 FLAMEGRAPH="false"
+DEBUG=false
+
 # flag indicating whether we should just remove previous installations
+RUST_TOOLCHAIN="nightly-2020-06-10"
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
-DEBUG=false
+FANTOCH_PACKAGE="fantoch_ps"
 
 # set the debug flag accordingly
 if [[ ${DEBUG} == true ]]; then
@@ -22,13 +23,36 @@ MAX_OPEN_FILES=100000
 MAX_SO_RCVBUF=$((10 * 1024 * 1024)) # 10mb
 MAX_SO_SNDBUF=$((10 * 1024 * 1024)) # 10mb
 
-if [ $# -ne 1 ]; then
-    echo "usage: build.sh branch"
+if [ $# -ne 2 ]; then
+    echo "usage: build.sh branch aws"
     exit 1
 fi
 
 # get branch
 branch=$1
+aws=$2
+
+# cargo/deps requirements
+sudo apt-get update
+sudo apt-get install -y \
+        build-essential \
+        pkg-config \
+        libssl-dev
+
+# install chrony if in aws
+if [ "${aws}" == "true" ]; then
+    # see: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html
+    sudo apt-get install chrony -y
+
+    # set chrony server:
+    # - first delete current setting, if any
+    sudo sed -i '/^server 169.254.169.123 ' /etc/chrony/chrony.conf
+    # - then append correct setting
+    echo "server 169.254.169.123 prefer iburst minpoll 4 maxpoll 4" | sudo tee -a /etc/chrony/chrony.conf
+
+    # restart chrony daemon
+    sudo /etc/init.d/chrony restart
+fi
 
 # maybe nuke previous stuff
 if [ "${NUKE_RUST}" == "true" ]; then
@@ -39,23 +63,15 @@ if [ "${NUKE_FANTOCH}" == "true" ]; then
 fi
 
 # install rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain none --profile minimal
 # shellcheck disable=SC1090
 source "${HOME}/.cargo/env"
 
-# check for rust updates (in case it was already installed)
-if [ "${RUST_NIGHTLY}" == "true" ]; then
-    # install nightly
-    rustup toolchain install nightly
-
-    # use nightly
-    rustup override set nightly
-    rustup update nightly
-else
-    # use stable
-    rustup override set stable
-    rustup update stable
-fi
+# install toolchain
+rustup toolchain install ${RUST_TOOLCHAIN}
+rustup override set ${RUST_TOOLCHAIN}
+rustup update ${RUST_TOOLCHAIN}
 
 if [ "${FLAMEGRAPH}" == "true" ]; then
     # install perf:
@@ -118,4 +134,4 @@ git checkout "${branch}"
 git pull
 
 # build all the binaries in release mode for maximum performance
-RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins
+RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins

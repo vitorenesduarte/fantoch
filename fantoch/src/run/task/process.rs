@@ -12,6 +12,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::net::IpAddr;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
@@ -27,26 +28,29 @@ pub async fn connect_to_all<A, P>(
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     multiplexing: usize,
-) -> RunResult<HashMap<ProcessId, Vec<WriterSender<P>>>>
+) -> RunResult<(
+    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, Vec<WriterSender<P>>>,
+)>
 where
     A: ToSocketAddrs + Debug,
     P: Protocol + 'static,
 {
     // spawn listener
-    let mut rx = task::spawn_producer(channel_buffer_size, |tx| {
+    let mut from_listener = task::spawn_producer(channel_buffer_size, |tx| {
         super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
     // number of addresses
-    let n = addresses.len();
+    let peer_count = addresses.len();
 
     // create list of in and out connections:
     // - even though TCP is full-duplex, due to the current tokio
     //   non-parallel-tcp-socket-read-write limitation, we going to use in
     //   streams for reading and out streams for writing, which can be done in
     //   parallel
-    let mut outgoing = Vec::with_capacity(n * multiplexing);
-    let mut incoming = Vec::with_capacity(n * multiplexing);
+    let mut outgoing = Vec::with_capacity(peer_count * multiplexing);
+    let mut incoming = Vec::with_capacity(peer_count * multiplexing);
 
     // connect to all addresses (outgoing)
     for address in addresses {
@@ -65,17 +69,17 @@ where
     }
 
     // receive from listener all connected (incoming)
-    for _ in 0..(n * multiplexing) {
-        let connection = rx
+    for _ in 0..(peer_count * multiplexing) {
+        let connection = from_listener
             .recv()
             .await
             .expect("should receive connection from listener");
         incoming.push(connection);
     }
 
-    let to_writers = handshake::<P>(
+    let res = handshake::<P>(
         process_id,
-        n,
+        peer_count,
         to_workers,
         tcp_flush_interval,
         channel_buffer_size,
@@ -83,18 +87,21 @@ where
         outgoing,
     )
     .await;
-    Ok(to_writers)
+    Ok(res)
 }
 
 async fn handshake<P>(
     process_id: ProcessId,
-    n: usize,
+    peer_count: usize,
     to_workers: ReaderToWorkers<P>,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
-) -> HashMap<ProcessId, Vec<WriterSender<P>>>
+) -> (
+    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, Vec<WriterSender<P>>>,
+)
 where
     P: Protocol + 'static,
 {
@@ -110,11 +117,12 @@ where
     // start readers and writers
     start_readers::<P>(to_workers, id_to_connection_0);
     start_writers::<P>(
-        n,
+        peer_count,
         tcp_flush_interval,
         channel_buffer_size,
         id_to_connection_1,
     )
+    .await
 }
 
 async fn say_hi(process_id: ProcessId, connections: &mut Vec<Connection>) {
@@ -157,20 +165,32 @@ fn start_readers<P>(
     }
 }
 
-fn start_writers<P>(
-    n: usize,
+async fn start_writers<P>(
+    peer_count: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, Connection)>,
-) -> HashMap<ProcessId, Vec<WriterSender<P>>>
+) -> (
+    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, Vec<WriterSender<P>>>,
+)
 where
     P: Protocol + 'static,
 {
+    let mut ips = HashMap::with_capacity(peer_count);
     // mapping from process id to channel broadcast writer should write to
-    let mut writers = HashMap::with_capacity(n);
+    let mut writers = HashMap::with_capacity(peer_count);
 
     // start on writer task per connection
     for (process_id, connection) in connections {
+        // save ip
+        ips.insert(
+            process_id,
+            connection
+                .ip_addr()
+                .expect("ip address should be set for outgoing connection"),
+        );
+
         // create channel where parent should write to
         let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
             writer_task::<P>(tcp_flush_interval, connection, rx)
@@ -184,8 +204,8 @@ where
     }
 
     // check `writers` size
-    assert_eq!(writers.len(), n);
-    writers
+    assert_eq!(writers.len(), peer_count);
+    (ips, writers)
 }
 
 /// Reader task.
@@ -310,7 +330,8 @@ where
         .enumerate()
         .map(
             |(worker_index, ((from_readers, from_clients), from_periodic))| {
-                task::spawn(process_task::<P, R>(
+                // create task
+                let task = process_task::<P, R>(
                     worker_index,
                     process.clone(),
                     process_id,
@@ -321,7 +342,26 @@ where
                     reader_to_workers.clone(),
                     worker_to_executors.clone(),
                     to_execution_logger.clone(),
-                ))
+                );
+                task::spawn(task)
+                // // if this is a reserved worker, run it on its own runtime
+                // if worker_index < super::INDEXES_RESERVED {
+                //     let thread_name =
+                //         format!("worker_{}_runtime", worker_index);
+                //     tokio::task::spawn_blocking(|| {
+                //         // create tokio runtime
+                //         let mut runtime = tokio::runtime::Builder::new()
+                //             .threaded_scheduler()
+                //             .core_threads(1)
+                //             .thread_name(thread_name)
+                //             .build()
+                //             .expect("tokio runtime build should work");
+                //         runtime.block_on(task)
+                //     });
+                //     None
+                // } else {
+                //     Some(task::spawn(task))
+                // }
             },
         )
         .collect()

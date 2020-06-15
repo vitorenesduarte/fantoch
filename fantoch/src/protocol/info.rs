@@ -94,4 +94,9 @@ where
             })
             .count()
     }
+
+    /// Removes a command has been committed.
+    pub fn gc_single(&mut self, dot: Dot) {
+        assert!(self.dot_to_info.remove(&dot).is_some());
+    }
 }

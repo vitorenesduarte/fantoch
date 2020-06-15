@@ -69,6 +69,15 @@ async fn periodic_loop_without_inspect<P, R>(
     R: Clone + 'static,
 {
     match intervals.len() {
+        0 => {
+            // nothing to do, loop forever
+            loop {
+                tokio::time::delay_for(tokio::time::Duration::from_secs(
+                    60 * 60,
+                ))
+                .await;
+            }
+        }
         1 => {
             let (event_msg0, mut interval0) = intervals.remove(0);
             loop {
@@ -110,6 +119,10 @@ async fn periodic_loop_with_inspect<P, R>(
     R: Clone + 'static,
 {
     match intervals.len() {
+        0 => loop {
+            let inspect = to_periodic_inspect.recv().await;
+            periodic_task_inspect(&mut periodic_to_workers, inspect).await;
+        },
         1 => {
             let (event_msg0, mut interval0) = intervals.remove(0);
             loop {

@@ -8,9 +8,11 @@ source "${DIR}/util.sh"
 run_build() {
     # variables
     local branch
+    local aws
 
     # get branch
     branch=$(config branch)
+    aws="false"
 
     # build deps in each machines
     while IFS= read -r machine; do
@@ -19,7 +21,7 @@ run_build() {
 
         # execute build in machine
         # shellcheck disable=SC2029
-        ssh "${SSH_ARGS}" ${machine} "./build.sh ${branch}" </dev/null &
+        ssh "${SSH_ARGS}" ${machine} "./build.sh ${branch} ${aws}" </dev/null &
     done <"${MACHINES_FILE}"
 
     # wait for all builds to complete

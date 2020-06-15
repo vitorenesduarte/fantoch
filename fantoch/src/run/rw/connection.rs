@@ -1,8 +1,14 @@
 use super::Rw;
 use crate::log;
+use std::net::IpAddr;
+use std::ops::{Deref, DerefMut};
 use tokio::net::TcpStream;
 
-pub type Connection = Rw<TcpStream>;
+#[derive(Debug)]
+pub struct Connection {
+    ip_addr: Option<IpAddr>,
+    rw: Rw<TcpStream>,
+}
 
 impl Connection {
     pub fn new(
@@ -10,10 +16,17 @@ impl Connection {
         tcp_nodelay: bool,
         tcp_buffer_size: usize,
     ) -> Self {
+        // get ip addr
+        let ip_addr = stream.peer_addr().ok().map(|peer_addr| peer_addr.ip());
         // configure stream
         configure(&stream, tcp_nodelay, tcp_buffer_size);
         // create rw
-        Rw::from(tcp_buffer_size, tcp_buffer_size, stream)
+        let rw = Rw::from(tcp_buffer_size, tcp_buffer_size, stream);
+        Self { ip_addr, rw }
+    }
+
+    pub fn ip_addr(&self) -> Option<IpAddr> {
+        self.ip_addr
     }
 }
 
@@ -43,4 +56,18 @@ fn configure(stream: &TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) {
         }
     }
     log!("SO_SNDBUF: {:?}", stream.send_buffer_size());
+}
+
+impl Deref for Connection {
+    type Target = Rw<TcpStream>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.rw
+    }
+}
+
+impl DerefMut for Connection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.rw
+    }
 }

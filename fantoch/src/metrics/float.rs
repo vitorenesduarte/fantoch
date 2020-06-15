@@ -90,6 +90,12 @@ impl PartialEq for F64 {
 
 impl Eq for F64 {}
 
+impl From<F64> for u64 {
+    fn from(value: F64) -> Self {
+        value.0 as u64
+    }
+}
+
 impl fmt::Debug for F64 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)

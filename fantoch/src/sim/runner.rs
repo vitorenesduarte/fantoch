@@ -65,6 +65,7 @@ where
     ) -> Self {
         // check that we have the correct number of `process_regions`
         assert_eq!(process_regions.len(), config.n());
+        assert!(config.garbage_collection_interval().is_some());
 
         // create simulation
         let mut simulation = Simulation::new();
@@ -77,7 +78,6 @@ where
             .into_iter()
             .zip(util::process_ids(config.n()))
             .map(|(region, process_id)| {
-                let process_id = process_id as u64;
                 // create process and save it
                 let (process, process_events) = P::new(process_id, config);
                 processes.push((region.clone(), process));
@@ -543,7 +543,10 @@ mod tests {
 
         // config
         let n = 3;
-        let config = Config::new(n, f);
+        let mut config = Config::new(n, f);
+
+        // make sure stability is running
+        config.set_garbage_collection_interval(100);
 
         // clients workload
         let conflict_rate = 100;

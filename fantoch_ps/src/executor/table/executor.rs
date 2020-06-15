@@ -6,6 +6,7 @@ use fantoch::executor::{Executor, ExecutorResult, MessageKey, Pending};
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 
 #[derive(Clone)]
 pub struct TableExecutor {
@@ -82,6 +83,7 @@ impl Executor for TableExecutor {
 }
 
 impl TableExecutor {
+    #[instrument(skip(self, key, to_execute))]
     fn execute<I>(&mut self, key: Key, to_execute: I) -> Vec<ExecutorResult>
     where
         I: Iterator<Item = (Rifl, KVOp)>,

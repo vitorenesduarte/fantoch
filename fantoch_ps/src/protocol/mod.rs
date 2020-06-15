@@ -335,10 +335,13 @@ mod tests {
         (slow_paths, stable_count)
     }
 
-    async fn run_test<P>(config: Config) -> u64
+    async fn run_test<P>(mut config: Config) -> u64
     where
         P: Protocol + Send + 'static,
     {
+        // make sure stability is running
+        config.set_garbage_collection_interval(100);
+
         // run until the clients end + another 10 seconds (10000ms)
         let extra_run_time = Some(10_000);
         let tracer_show_interval = None;
@@ -374,7 +377,10 @@ mod tests {
         check_metrics(config, metrics)
     }
 
-    fn sim_test<P: Protocol>(config: Config) -> u64 {
+    fn sim_test<P: Protocol>(mut config: Config) -> u64 {
+        // make sure stability is running
+        config.set_garbage_collection_interval(100);
+
         // planet
         let planet = Planet::new();
 

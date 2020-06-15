@@ -76,18 +76,20 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             buffered_commits,
         };
 
-        // create periodic events
-        let gc_interval = config.garbage_collection_interval() as u64;
-        let clock_bump_interval = config.newt_clock_bump_interval() as u64;
-        // only create the clock bump periodic event if `config.newt_real_time`
-        let events = if config.newt_real_time() {
-            vec![
-                (PeriodicEvent::GarbageCollection, gc_interval),
-                (PeriodicEvent::ClockBump, clock_bump_interval),
-            ]
-        } else {
-            vec![(PeriodicEvent::GarbageCollection, gc_interval)]
-        };
+        // maybe create garbage collection periodic event
+        let mut events =
+            if let Some(gc_delay) = config.garbage_collection_interval() {
+                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
+            } else {
+                vec![]
+            };
+
+        // maybe create clock bump periodic event
+        if config.newt_real_time() {
+            let clock_bump_interval = config.newt_clock_bump_interval() as u64;
+            events.reserve_exact(1);
+            events.push((PeriodicEvent::ClockBump, clock_bump_interval));
+        }
 
         // return both
         (protocol, events)
@@ -563,21 +565,27 @@ impl<KC: KeyClocks> Newt<KC> {
             self.key_clocks.vote(cmd, clock)
         };
 
-        // notify self with the committed dot
-        let to_forward = Action::ToForward {
-            msg: Message::MCommitDot { dot },
-        };
-
-        // also send `MDetached` message in case there are any detached votes
-        if detached.is_empty() {
-            vec![to_forward]
+        // maybe create `MDetached` message
+        let mut actions = if detached.is_empty() {
+            vec![]
         } else {
-            let to_send = Action::ToSend {
+            vec![Action::ToSend {
                 target: self.bp.all(),
                 msg: Message::MDetached { detached },
-            };
-            vec![to_forward, to_send]
+            }]
+        };
+
+        if self.gc_running() {
+            // running gc, so notify self with the committed dot
+            actions.reserve_exact(1);
+            actions.push(Action::ToForward {
+                msg: Message::MCommitDot { dot },
+            });
+        } else {
+            // not running gc, so remove the dot info now
+            self.cmds.gc_single(dot);
         }
+        actions
     }
 
     #[instrument(skip(self, detached, time))]
@@ -738,9 +746,13 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute newly stable dots
         let stable = self.cmds.stable();
         // create `ToForward` to self
-        vec![Action::ToForward {
-            msg: Message::MStable { stable },
-        }]
+        if stable.is_empty() {
+            vec![]
+        } else {
+            vec![Action::ToForward {
+                msg: Message::MStable { stable },
+            }]
+        }
     }
 
     #[instrument(skip(self, from, stable, time))]
@@ -807,6 +819,10 @@ impl<KC: KeyClocks> Newt<KC> {
     // votes.
     fn reset_votes(local_votes: &mut Votes) -> Votes {
         mem::take(local_votes)
+    }
+
+    fn gc_running(&self) -> bool {
+        self.bp.config.garbage_collection_interval().is_some()
     }
 }
 
@@ -905,6 +921,8 @@ impl MessageIndex for Message {
         use fantoch::run::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
+        debug_assert_eq!(GC_WORKER_INDEX, 0);
+
         match self {
             // Protocol messages
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
@@ -934,6 +952,8 @@ pub enum PeriodicEvent {
 impl PeriodicEventIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
+        debug_assert_eq!(GC_WORKER_INDEX, 0);
+
         match self {
             Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
             Self::ClockBump => worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX),
@@ -1003,6 +1023,9 @@ mod tests {
         // set tiny quorums to false so that the "skip mcollect ack optimization
         // doesn't kick in"
         config.set_newt_tiny_quorums(false);
+
+        // make sure stability is running
+        config.set_garbage_collection_interval(100);
 
         // executors
         let executor_1 = TableExecutor::new(process_id_1, config);

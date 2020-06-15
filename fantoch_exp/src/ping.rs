@@ -1,13 +1,16 @@
+use crate::{args, util};
 use color_eyre::Report;
+use eyre::WrapErr;
 use rusoto_core::Region;
 use std::time::Duration;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tracing::instrument;
+use tracing_futures::Instrument;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
-/// This script should be called like: $ bash script hosts seconds output
+/// This script should be called like: $ script hosts seconds output
 /// - hosts: file where each line looks like "region::ip"
 /// - seconds: number of seconds the ping will run
 /// - output: the file where the output will be written
@@ -31,7 +34,7 @@ pub async fn ping_experiment(
         experiment_duration_secs,
     )
     .await;
-    println!("experiment result: {:?}", result);
+    tracing::info!("experiment result: {:?}", result);
     // make sure we always terminate
     launcher.terminate_all().await?;
     result
@@ -55,9 +58,10 @@ pub async fn ping_experiment_run(
             .instance_type(instance_type.clone())
             .region_with_ubuntu_ami(region.clone())
             .await?
-            .setup(|ssh| {
+            .setup(|vm| {
                 Box::pin(async move {
-                    let update = ssh
+                    let update = vm
+                        .ssh
                         .command("sudo")
                         .arg("apt")
                         .arg("update")
@@ -90,7 +94,11 @@ pub async fn ping_experiment_run(
             let region_name = region.name();
             let vm = vms.get(region_name).unwrap();
             // create ping future
-            pings.push(ping(vm, experiment_duration_secs));
+            let region_span =
+                tracing::info_span!("region", name = ?region_name);
+            let ping =
+                ping(vm, experiment_duration_secs).instrument(region_span);
+            pings.push(ping);
             // create host entry
             format!("{}::{}", region_name, vm.public_ip)
         })
@@ -112,9 +120,9 @@ async fn ping(
     vm: &Machine<'_>,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
-    println!(
-        "{}: will launch ping experiment with {} seconds",
-        vm.nickname, experiment_duration_secs
+    tracing::info!(
+        "will launch ping experiment with {} seconds",
+        experiment_duration_secs
     );
 
     // files
@@ -123,69 +131,23 @@ async fn ping(
     let output_file = format!("{}.dat", vm.nickname);
 
     // first copy both SCRIPT and HOSTS files to the machine
-    copy_to(SCRIPT, (script_file, vm)).await?;
-    copy_to(HOSTS, (hosts_file, vm)).await?;
-    println!("{}: both files are copied to remote machine", vm.nickname);
+    util::copy_to(SCRIPT, (script_file, &vm))
+        .await
+        .wrap_err("copy_to script")?;
+    util::copy_to(HOSTS, (hosts_file, &vm))
+        .await
+        .wrap_err("copy_to hosts")?;
+    tracing::debug!("both files are copied to remote machine");
 
-    // execute script remotely: "$ bash SCRIPT HOSTS seconds output"
-    let command = escape(format!(
-        "chmod u+x {}; ./{} {} {} {}",
-        script_file,
-        script_file,
-        hosts_file,
-        experiment_duration_secs,
-        output_file
-    ));
-    let out = vm
-        .ssh
-        .command("bash")
-        .arg("-c")
-        .arg(escape(command))
-        .output()
-        .await?;
-    let stdout = String::from_utf8(out.stdout)?;
-    println!("{}: script ended {}", vm.nickname, stdout);
+    // execute script remotely: "$ script.sh hosts seconds output"
+    let args = args![hosts_file, experiment_duration_secs, output_file];
+    let stdout = util::script_exec(script_file, args, &vm).await?;
+    tracing::debug!("script ended {}", stdout);
 
     // copy output file
-    copy_from((&output_file, vm), &output_file).await?;
-    println!("{}: output file is copied to local machine", vm.nickname);
+    util::copy_from((&output_file, &vm), &output_file)
+        .await
+        .wrap_err("copy_from")?;
+    tracing::info!("output file is copied to local machine");
     Ok(())
-}
-
-async fn copy_to(
-    local_path: &str,
-    (remote_path, vm): (&str, &Machine<'_>),
-) -> Result<(), Report> {
-    // get file contents
-    let mut contents = String::new();
-    File::open(local_path)
-        .await?
-        .read_to_string(&mut contents)
-        .await?;
-    // write them in remote machine
-    let mut remote_file = vm.ssh.sftp().write_to(remote_path).await?;
-    remote_file.write_all(contents.as_bytes()).await?;
-    remote_file.close().await?;
-    Ok(())
-}
-
-async fn copy_from(
-    (remote_path, vm): (&str, &Machine<'_>),
-    local_path: &str,
-) -> Result<(), Report> {
-    // get file contents from remote machine
-    let mut contents = String::new();
-    let mut remote_file = vm.ssh.sftp().read_from(remote_path).await?;
-    remote_file.read_to_string(&mut contents).await?;
-    remote_file.close().await?;
-    // write them in file
-    File::create(local_path)
-        .await?
-        .write_all(contents.as_bytes())
-        .await?;
-    Ok(())
-}
-
-fn escape(command: String) -> String {
-    format!("\"{}\"", command)
 }

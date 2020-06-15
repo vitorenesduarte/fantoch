@@ -3,6 +3,7 @@ use crate::log;
 use crate::util;
 use std::collections::HashMap;
 use threshold::{AEClock, EventSet, VClock};
+use tracing::instrument;
 
 #[derive(Debug, Clone)]
 pub struct GCTrack {
@@ -51,21 +52,39 @@ impl GCTrack {
     }
 
     /// Computes the new set of stable dots.
+    #[instrument(skip(self))]
     pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
         // compute new stable clock
-        let new_stable = self.stable_clock();
+        let mut new_stable = self.stable_clock();
         log!("GCTrack::stable_clock {:?}", new_stable);
 
-        // compute new stable dots
+        // compute new stable dots; while at it, update the previous stable
+        // clock and return newly stable dots
+        // - here we make sure we never go down on the previous clock, which
+        //   would be possible if messages are reordered in the network or if
+        //   we're multiplexing
         let dots = self
             .previous_stable
             .iter()
-            .map(|(process_id, previous)| {
+            .filter_map(|(process_id, previous)| {
                 let current = new_stable
-                    .get(process_id)
+                    .get_mut(process_id)
                     .expect("actor should exist in the newly stable clock");
+
                 // compute representation of stable dots.
-                (*process_id, previous.frontier() + 1, current.frontier())
+                let start = previous.frontier() + 1;
+                let end = current.frontier();
+
+                // make sure new clock doesn't go backwards
+                current.join(previous);
+
+                if start > end {
+                    None
+                } else {
+                    // return stable dots representation
+                    // - note that `start == end` also represents a stable dot
+                    Some((*process_id, start, end))
+                }
             })
             .collect();
 
@@ -75,6 +94,7 @@ impl GCTrack {
     }
 
     // TODO we should design a fault-tolerant version of this
+    #[instrument(skip(self))]
     fn stable_clock(&mut self) -> VClock<ProcessId> {
         if self.all_but_me.len() != self.n - 1 {
             // if we don't have info from all processes, then there are no

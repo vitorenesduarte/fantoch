@@ -14,6 +14,11 @@ const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
 
+// newt's config
+const DEFAULT_NEWT_TINY_QUORUMS: bool = false;
+const DEFAULT_NEWT_REAL_TIME: bool = false;
+const DEFAULT_NEWT_CLOCK_BUMP_INTERVAL: usize = 10;
+
 #[allow(dead_code)]
 pub fn run<P>() -> Result<(), Box<dyn Error>>
 where
@@ -34,6 +39,7 @@ where
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
     ) = parse_args();
 
     let process = fantoch::run::process::<P, String>(
@@ -51,13 +57,14 @@ where
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
     );
     super::tokio_runtime().block_on(process)
 }
 
 fn parse_args() -> (
     ProcessId,
-    Vec<ProcessId>,
+    Option<Vec<ProcessId>>,
     IpAddr,
     u16,
     u16,
@@ -69,6 +76,7 @@ fn parse_args() -> (
     usize,
     usize,
     Option<String>,
+    Option<usize>,
     Option<usize>,
 ) {
     let matches = App::new("process")
@@ -87,8 +95,7 @@ fn parse_args() -> (
             Arg::with_name("sorted_processes")
                 .long("sorted")
                 .value_name("SORTED_PROCESSES")
-                .help("comma-separated list of process identifiers sorted by distance")
-                .required(true)
+                .help("comma-separated list of process identifiers sorted by distance; if not set, processes will ping each other and try to figure out this list from ping latency; for this, 'ping_interval' should be set")
                 .takes_value(true),
         )
         .arg(
@@ -182,7 +189,7 @@ fn parse_args() -> (
             Arg::with_name("gc_interval")
                 .long("gc_interval")
                 .value_name("GC_INTERVAL")
-                .help("garbage collection interval (in milliseconds); default: 500")
+                .help("garbage collection interval (in milliseconds); if no value if set, stability doesn't run and commands are deleted at commit time")
                 .takes_value(true),
         )
         .arg(
@@ -226,7 +233,35 @@ fn parse_args() -> (
             Arg::with_name("tracer_show_interval")
                 .long("tracer_show_interval")
                 .value_name("TRACER_SHOW_INTERVAL")
-                .help("number indicating the interval between tracing information being show; by default there's no tracing; if set, this value should be > 0")
+                .help("number indicating the interval (in milliseconds) between tracing information being show; by default there's no tracing; if set, this value should be > 0")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("ping_interval")
+                .long("ping_interval")
+                .value_name("PING_INTERVAL")
+                .help("number indicating the interval (in milliseconds) between pings between processes; by default there's no pinging; if set, this value should be > 0")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("newt_tiny_quorums")
+                .long("newt_tiny_quorums")
+                .value_name("NEWT_TINY_QUORUMS")
+                .help("boolean indicating whether newt's tiny quorums are enabled; default: false")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("newt_real_time")
+                .long("newt_real_time")
+                .value_name("NEWT_REAL_TIME")
+                .help("boolean indicating whether newt should use real time to bump its clocks; default: false")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("newt_clock_bump_interval")
+                .long("newt_clock_bump_interval")
+                .value_name("NEWT_CLOCK_BUMP_INTERVAL")
+                .help("number indicating the interval (in milliseconds) between clock bump; this value is only used if 'newt_real_time = true'; default: 10")
                 .takes_value(true),
         )
         .get_matches();
@@ -263,6 +298,13 @@ fn parse_args() -> (
         super::parse_execution_log(matches.value_of("execution_log"));
     let tracer_show_interval =
         parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
+    let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
+    let (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval) =
+        parse_newt_config(
+            matches.value_of("newt_tiny_quorums"),
+            matches.value_of("newt_real_time"),
+            matches.value_of("newt_clock_bump_interval"),
+        );
 
     // update config:
     // - set leader if we have one
@@ -272,6 +314,11 @@ fn parse_args() -> (
     }
     config.set_workers(workers);
     config.set_executors(executors);
+
+    // set newt's config
+    config.set_newt_tiny_quorums(newt_tiny_quorums);
+    config.set_newt_real_time(newt_real_time);
+    config.set_newt_clock_bump_interval(newt_clock_bump_interval);
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -286,10 +333,13 @@ fn parse_args() -> (
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("multiplexing: {:?}", multiplexing);
     println!("execution log: {:?}", execution_log);
-    println!("trace_timing: {:?}", tracer_show_interval);
+    println!("trace_show_interval: {:?}", tracer_show_interval);
+    println!("ping_interval: {:?}", ping_interval);
 
-    // check that the number of sorted processes equals `n`
-    assert_eq!(sorted_processes.len(), config.n());
+    // check that the number of sorted processes equals `n` (if it was set)
+    if let Some(sorted_processes) = sorted_processes.as_ref() {
+        assert_eq!(sorted_processes.len(), config.n());
+    }
 
     // check that the number of addresses equals `n - 1`
     assert_eq!(addresses.len(), config.n() - 1);
@@ -309,6 +359,7 @@ fn parse_args() -> (
         multiplexing,
         execution_log,
         tracer_show_interval,
+        ping_interval,
     )
 }
 
@@ -320,11 +371,8 @@ fn parse_leader(leader: Option<&str>) -> Option<ProcessId> {
     leader.map(|leader| parse_id(leader))
 }
 
-fn parse_sorted_processes(ids: Option<&str>) -> Vec<ProcessId> {
-    ids.expect("sorted processes should be set")
-        .split(LIST_SEP)
-        .map(|id| parse_id(id))
-        .collect()
+fn parse_sorted_processes(ids: Option<&str>) -> Option<Vec<ProcessId>> {
+    ids.map(|ids| ids.split(LIST_SEP).map(|id| parse_id(id)).collect())
 }
 
 fn parse_ip(ip: Option<&str>) -> IpAddr {
@@ -396,4 +444,41 @@ fn parse_tracer_show_interval(
             .parse::<usize>()
             .expect("tracer_show_interval should be a number")
     })
+}
+
+fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
+    ping_interval.map(|ping_interval| {
+        ping_interval
+            .parse::<usize>()
+            .expect("ping_interval should be a number")
+    })
+}
+
+fn parse_newt_config(
+    newt_tiny_quorums: Option<&str>,
+    newt_real_time: Option<&str>,
+    newt_clock_bump_interval: Option<&str>,
+) -> (bool, bool, usize) {
+    let newt_tiny_quorums = newt_tiny_quorums
+        .map(|newt_tiny_quorums| {
+            newt_tiny_quorums
+                .parse::<bool>()
+                .expect("newt_tiny_quorums should be a bool")
+        })
+        .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS);
+    let newt_real_time = newt_real_time
+        .map(|newt_real_time| {
+            newt_real_time
+                .parse::<bool>()
+                .expect("newt_real_time should be a bool")
+        })
+        .unwrap_or(DEFAULT_NEWT_REAL_TIME);
+    let newt_clock_bump_interval = newt_clock_bump_interval
+        .map(|newt_clock_bump_interval| {
+            newt_clock_bump_interval
+                .parse::<usize>()
+                .expect("newt_clock_bump_interval should be a number")
+        })
+        .unwrap_or(DEFAULT_NEWT_CLOCK_BUMP_INTERVAL);
+    (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval)
 }
