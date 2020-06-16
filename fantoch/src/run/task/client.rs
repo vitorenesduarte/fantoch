@@ -152,7 +152,7 @@ async fn server_receive_hi(
 
     // say hi back
     let hi = ProcessHi(process_id);
-    connection.send(hi).await;
+    connection.send(&hi).await;
 
     // return client id and channel where client should read executor results
     (client_id, rifl_acks_rx, executor_results_rx)
@@ -242,7 +242,7 @@ async fn client_server_task_handle_executor_result(
         match executor_result {
             ExecutorResult::Ready(cmd_result) => {
                 // if the command result is ready, simply send ti
-                connection.send(cmd_result).await;
+                connection.send(&cmd_result).await;
             }
             ExecutorResult::Partial(rifl, key, op_result) => {
                 if let Some(result) =
@@ -251,7 +251,7 @@ async fn client_server_task_handle_executor_result(
                     // since pending is in aggregate mode, if there's a result,
                     // then it's ready
                     let cmd_result = result.unwrap_ready();
-                    connection.send(cmd_result).await;
+                    connection.send(&cmd_result).await;
                 }
             }
         }
@@ -266,7 +266,7 @@ pub async fn client_say_hi(
 ) -> ProcessId {
     // say hi
     let hi = ClientHi(client_id);
-    connection.send(hi).await;
+    connection.send(&hi).await;
 
     // receive hi back
     if let Some(ProcessHi(process_id)) = connection.recv().await {
@@ -306,7 +306,7 @@ async fn client_rw_task(
             cmd = from_parent.recv() => {
                 log!("[client_rw] from parent: {:?}", cmd);
                 if let Some(cmd) = cmd {
-                    connection.send(cmd).await;
+                    connection.send(&cmd).await;
                 } else {
                     println!("[client_rw] error while receiving new command from parent");
                     // in this case it means that the parent (the client) is done, and so we can exit the loop

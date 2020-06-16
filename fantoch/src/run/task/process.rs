@@ -13,6 +13,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::IpAddr;
+use std::sync::Arc;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
@@ -254,7 +255,7 @@ async fn writer_task<P>(
                 msg = parent.recv() => {
                     if let Some(msg) = msg {
                         // connection write *doesn't* flush
-                        connection.write(msg).await;
+                        connection.write(&*msg).await;
                     } else {
                         println!("[writer] error receiving message from parent");
                     }
@@ -269,7 +270,7 @@ async fn writer_task<P>(
         loop {
             if let Some(msg) = parent.recv().await {
                 // connection write *does* flush
-                connection.send(msg).await;
+                connection.send(&*msg).await;
             } else {
                 println!("[writer] error receiving message from parent");
             }
@@ -500,12 +501,18 @@ async fn handle_actions<P>(
     while let Some(action) = actions.pop() {
         match action {
             Action::ToSend { target, msg } => {
+                // prevent unnecessary cloning of messages, since send only
+                // requires a reference to the message
+                let msg_to_send = Arc::new(msg.clone());
                 // send to writers in parallel
                 let mut sends = to_writers
                     .iter_mut()
                     .filter_map(|(to, channels)| {
                         if target.contains(to) {
-                            Some(send_to_one_writer::<P>(msg.clone(), channels))
+                            Some(send_to_one_writer::<P>(
+                                msg_to_send.clone(),
+                                channels,
+                            ))
                         } else {
                             None
                         }
@@ -574,7 +581,7 @@ where
 }
 
 async fn send_to_one_writer<P>(
-    msg: P::Message,
+    msg: Arc<P::Message>,
     writers: &mut Vec<WriterSender<P>>,
 ) where
     P: Protocol + 'static,

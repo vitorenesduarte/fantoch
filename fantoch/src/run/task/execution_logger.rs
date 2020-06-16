@@ -38,7 +38,7 @@ pub async fn execution_logger_task<P>(
                 log!("[executor_logger] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     // write execution info to file
-                    logger.write(execution_info).await;
+                    logger.write(&execution_info).await;
                 } else {
                     println!("[executor_logger] error while receiving execution info from parent");
                 }
