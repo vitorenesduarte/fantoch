@@ -542,13 +542,20 @@ impl<KC: KeyClocks> Newt<KC> {
         });
         self.to_executor.extend(execution_info);
 
-        // generate detached votes if:
-        // - if not configured with real time, and
-        // - not message from self, and
-        // - committed clock is higher than the local key's clock
+        // don't try to generate detached votes if:
+        // - message from self (since we have just voted in the mcollect ack
+        //   handler), or
+        // - configured with real time (since it will be done in a periodic
+        //   event), or
+        // - `n = 3` (since both the initial coordinator and the fast quorum
+        //   have voted up to the final timestamp, assuming th ecommand accesses
+        //   a single key)
         let message_from_self = from == self.bp.process_id;
         let mut actions = {
-            if !self.bp.config.newt_real_time() && !message_from_self {
+            let dont_vote = message_from_self
+                || self.bp.config.newt_real_time()
+                || self.bp.config.n() == 3;
+            if !dont_vote {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);
                 if !detached.is_empty() {
