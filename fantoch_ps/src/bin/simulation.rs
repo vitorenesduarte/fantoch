@@ -192,7 +192,6 @@ fn newt_vs_spanner() {
         let mut config = Config::new(n, f);
         config.set_newt_tiny_quorums(true);
         config.set_newt_real_time(true);
-        config.set_newt_hybrid_clocks(true);
         config.set_newt_clock_bump_interval(interval);
         let planet = planet.clone();
         let regions = regions.clone();

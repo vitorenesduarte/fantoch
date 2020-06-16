@@ -111,9 +111,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        self.handle_submit(dot, cmd, time)
+        self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
@@ -209,12 +209,11 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 
     /// Handles a submit operation by a client.
-    #[instrument(skip(self, dot, cmd, time))]
+    #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
@@ -223,14 +222,11 @@ impl<KC: KeyClocks> Newt<KC> {
         // - this may also consume votes since we're bumping the clocks here
         // - for that reason, we'll store these votes locally and not recompute
         //   them once we receive the `MCollect` from self
-        let min_clock = self.bp.min_clock(0, time);
-        let (clock, process_votes) =
-            self.key_clocks.bump_and_vote(&cmd, min_clock);
+        let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
         log!(
-            "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+            "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
             self.id(),
             dot,
-            min_clock,
             clock,
             process_votes
         );
@@ -335,16 +331,13 @@ impl<KC: KeyClocks> Newt<KC> {
             (remote_clock, Votes::new())
         } else {
             // otherwise, compute clock considering the `remote_clock` as its
-            // minimum value (if real time, the min clock is the max between
-            // current time and `remote_clock`)
-            let min_clock = self.bp.min_clock(remote_clock, time);
+            // minimum value
             let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, min_clock);
+                self.key_clocks.bump_and_vote(&cmd, remote_clock);
             log!(
-                "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+                "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
                 self.bp.process_id,
                 dot,
-                min_clock,
                 clock,
                 process_votes
             );
@@ -436,18 +429,11 @@ impl<KC: KeyClocks> Newt<KC> {
         //   will never be sent in the MCommit message
         // - TODO: if we refactor votes to attached/detached business, then this
         //   is no longer a problem
-        if !message_from_self {
-            match info.cmd.as_ref() {
-                Some(cmd) => {
-                    let min_clock = self.bp.min_clock(max_clock, time);
-                    let local_votes = self.key_clocks.vote(cmd, min_clock);
-                    // update votes with local votes
-                    info.votes.merge(local_votes);
-                }
-                None => {
-                    panic!("there should be a command payload in the MCollectAck handler");
-                }
-            }
+        if !self.bp.config.newt_real_time() && !message_from_self {
+            let cmd = info.cmd.as_ref().unwrap();
+            let detached = self.key_clocks.vote(cmd, max_clock);
+            // update votes with detached
+            info.votes.merge(detached);
         }
 
         // check if we have all necessary replies
@@ -558,16 +544,11 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // generate detached votes if:
         // - if not configured with real time, and
-        // - part of fast quorum (i.e. we have it non-empty), and
         // - not message from self, and
         // - committed clock is higher than the local key's clock
-        let part_of_fast_quorum = !info.quorum.is_empty();
         let message_from_self = from == self.bp.process_id;
         let mut actions = {
-            if !self.bp.config.newt_real_time()
-                && part_of_fast_quorum
-                && !message_from_self
-            {
+            if !self.bp.config.newt_real_time() && !message_from_self {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);
                 if !detached.is_empty() {

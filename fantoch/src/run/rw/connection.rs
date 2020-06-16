@@ -1,5 +1,4 @@
 use super::Rw;
-use crate::log;
 use std::net::IpAddr;
 use std::ops::{Deref, DerefMut};
 use tokio::net::TcpStream;
@@ -19,7 +18,7 @@ impl Connection {
         // get ip addr
         let ip_addr = stream.peer_addr().ok().map(|peer_addr| peer_addr.ip());
         // configure stream
-        configure(&stream, tcp_nodelay, tcp_buffer_size);
+        configure(&stream, tcp_nodelay);
         // create rw
         let rw = Rw::from(tcp_buffer_size, tcp_buffer_size, stream);
         Self { ip_addr, rw }
@@ -30,7 +29,7 @@ impl Connection {
     }
 }
 
-fn configure(stream: &TcpStream, tcp_nodelay: bool, tcp_buffer_size: usize) {
+fn configure(stream: &TcpStream, tcp_nodelay: bool) {
     // set TCP_NODELAY
     stream
         .set_nodelay(tcp_nodelay)
