@@ -203,6 +203,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 impl<KC: KeyClocks> Newt<KC> {
     // With tiny quorums and `f = 1`, we can have the fast quorum process
     // sending the `MCommit` message.
+    // TODO: also when `n = 3`.
     fn bypass_mcollectack(&self) -> bool {
         self.bp.config.newt_tiny_quorums() && self.bp.config.f() == 1
     }
@@ -557,13 +558,15 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // generate detached votes if:
         // - if not configured with real time, and
-        // - `n = 3`
         // - part of fast quorum (i.e. we have it non-empty), and
+        // - not message from self, and
         // - committed clock is higher than the local key's clock
+        let part_of_fast_quorum = !info.quorum.is_empty();
+        let message_from_self = from == self.bp.process_id;
         let mut actions = {
             if !self.bp.config.newt_real_time()
-                && self.bp.config.n() == 3
-                && !info.quorum.is_empty()
+                && part_of_fast_quorum
+                && !message_from_self
             {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);

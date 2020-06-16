@@ -15,9 +15,9 @@ fn main() {
     let aws = true;
     newt_real_time(aws);
 
-    aws_distance_matrix();
-    epaxos_aws();
-    newt_vs_spanner();
+    // aws_distance_matrix();
+    // epaxos_aws();
+    // newt_vs_spanner();
 }
 
 fn aws_distance_matrix() {
@@ -73,10 +73,10 @@ fn newt_real_time_aws() -> (Planet, Vec<Region>) {
     let planet = Planet::from("../latency_aws");
     let regions = vec![
         Region::new("eu-west-1"),
-        Region::new("ap-east-1"),
-        Region::new("ca-central-1"),
-        Region::new("ap-south-1"),
         Region::new("us-west-1"),
+        Region::new("ca-central-1"),
+        Region::new("me-south-1"),
+        Region::new("ap-southeast-1"),
     ];
     (planet, regions)
 }
