@@ -82,7 +82,7 @@ async fn bench(
     // let ns = vec![5, 3];
     let regions = vec![Region::EuWest1, Region::UsWest1, Region::CaCentral1];
     let ns = vec![3];
-    let clients_per_region = vec![8, 32, 128, 256, 512];
+    let clients_per_region = vec![8, 256, 512, 1024];
     // let newt_configs = vec![
     //     // (tiny, real_time, clock_bump_interval)
     //     (false, false, 0),
@@ -90,7 +90,8 @@ async fn bench(
     //     (true, false, 0),
     //     (true, true, 10),
     // ];
-    let newt_configs = vec![(false, false, 0), (false, false, 0)];
+    let newt_configs =
+        vec![(false, true, 10), (false, true, 10), (false, false, 0)];
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
         .create(true)

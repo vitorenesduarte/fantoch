@@ -30,7 +30,7 @@ const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 // parallelism config
 const WORKERS: usize = 16;
 const EXECUTORS: usize = 16;
-const MULTIPLEXING: usize = 2;
+const MULTIPLEXING: usize = 16;
 
 // clients config
 const CONFLICT_RATE: usize = 0;
@@ -41,8 +41,8 @@ const PAYLOAD_SIZE: usize = 0;
 const PROCESS_TCP_NODELAY: bool = true;
 // by default, each socket stream is buffered (with a buffer of size 8KBs),
 // which should greatly reduce the number of syscalls for small-sized messages
-const PROCESS_TCP_BUFFER_SIZE: usize = 0 * 1024;
-const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = None;
+const PROCESS_TCP_BUFFER_SIZE: usize = 8 * 1024;
+const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2); // millis
 
 // client tcp config
 const CLIENT_TCP_NODELAY: bool = true;
