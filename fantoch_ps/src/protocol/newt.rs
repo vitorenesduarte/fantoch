@@ -303,10 +303,12 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
-            // make sure there's a clock for each existing key:
-            // - this ensures that all clocks will be bumped in the periodic
-            //   clock bump event
-            self.key_clocks.init_clocks(&cmd);
+            if self.bp.config.newt_real_time() {
+                // make sure there's a clock for each existing key:
+                // - this ensures that all clocks will be bumped in the periodic
+                //   clock bump event
+                self.key_clocks.init_clocks(&cmd);
+            }
 
             // if not, simply save the payload and set status to `PENDING`
             info.status = Status::PENDING;
