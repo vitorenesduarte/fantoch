@@ -342,12 +342,12 @@ impl Info for BasicInfo {
         _process_id: ProcessId,
         _n: usize,
         _f: usize,
-        _fast_quorum_size: usize,
+        fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
         Self {
             cmd: None,
-            acks: HashSet::new(),
+            acks: HashSet::with_capacity(fast_quorum_size),
         }
     }
 }
