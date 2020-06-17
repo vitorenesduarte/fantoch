@@ -545,18 +545,20 @@ impl<KC: KeyClocks> Newt<KC> {
         // don't try to generate detached votes if configured with real time
         // (since it will be done in a periodic event)
         let mut actions = {
-            if !self.bp.config.newt_real_time() {
+            if self.bp.config.newt_real_time() {
+                vec![]
+            } else {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);
-                if !detached.is_empty() {
-                    return vec![Action::ToSend {
+                if detached.is_empty() {
+                    vec![]
+                } else {
+                    vec![Action::ToSend {
                         target: self.bp.all(),
                         msg: Message::MDetached { detached },
-                    }];
+                    }]
                 }
             }
-            // if real time or no new votes, then no new action
-            vec![]
         };
 
         if self.gc_running() {
@@ -1121,7 +1123,7 @@ mod tests {
 
         // all processes handle it
         let actions = simulation.forward_to_processes(mcommit);
-        // there are two actions
+        // there are four actions
         assert_eq!(actions.len(), 4);
 
         // we have 3 MCommitDots and one MDetached (by the process that's not
