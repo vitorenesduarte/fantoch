@@ -10,8 +10,9 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines whether newt should bump clocks based on real time or not
     newt_real_time: bool,
-    /// defines whether newt should use hybrid clocks based on real time or not
-    newt_hybrid_clocks: bool,
+    /// defines whether protocols should try to bypass the fast quorum process
+    /// ack (which is only possible if the fast quorum size is 2)
+    skip_fast_ack: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
@@ -41,8 +42,8 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, `newt_real_time = false`
         let newt_real_time = false;
-        // by default, `newt_hybrid_clocks = false`
-        let newt_hybrid_clocks = false;
+        // by default `skip_fast_ack = false;
+        let skip_fast_ack = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
         // by default, execution is not skipped
@@ -62,7 +63,7 @@ impl Config {
             f,
             newt_tiny_quorums,
             newt_real_time,
-            newt_hybrid_clocks,
+            skip_fast_ack,
             transitive_conflicts,
             execute_at_commit,
             leader,
@@ -101,6 +102,16 @@ impl Config {
     /// Changes the value of `new_real_time`.
     pub fn set_newt_real_time(&mut self, newt_real_time: bool) {
         self.newt_real_time = newt_real_time;
+    }
+
+    /// Checks whether skip fast ack is enabled or not.
+    pub fn skip_fast_ack(&self) -> bool {
+        self.skip_fast_ack
+    }
+
+    /// Changes the value of `skip_fast_ack`.
+    pub fn set_skip_fast_ack(&mut self, skip_fast_ack: bool) {
+        self.skip_fast_ack = skip_fast_ack;
     }
 
     /// Checks whether we can assume that conflicts are transitive.
@@ -280,6 +291,17 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_newt_real_time(true);
         assert!(config.newt_real_time());
+
+        // by default, skip fast ack is false
+        assert!(!config.skip_fast_ack());
+
+        // if we change it to false, remains false
+        config.set_skip_fast_ack(false);
+        assert!(!config.skip_fast_ack());
+
+        // if we change it to true, it becomes true
+        config.set_skip_fast_ack(true);
+        assert!(config.skip_fast_ack());
 
         // by default, transitive conflicts is false
         assert!(!config.transitive_conflicts());
