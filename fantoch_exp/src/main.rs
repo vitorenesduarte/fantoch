@@ -72,7 +72,6 @@ async fn bench(
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
 ) -> Result<(), Report> {
-    /*
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -81,16 +80,19 @@ async fn bench(
         Region::SaEast1,
     ];
     let ns = vec![5];
-    */
+    /*
     let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
     let ns = vec![3];
+    */
     let clients_per_region = vec![8, 32, 256, 512, 1024];
     let newt_configs = vec![
         // tiny, interval, skip fast ack
         (false, None, false),
         (false, Some(10), false),
-        (false, None, true),
-        (false, Some(10), true),
+        (true, None, false),
+        (true, Some(10), false),
+        (true, None, true),
+        (true, Some(10), true),
     ];
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
