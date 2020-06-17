@@ -11,7 +11,7 @@ const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // bench-specific config
-const BRANCH: &str = "master";
+const BRANCH: &str = "executor_metrics";
 const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
