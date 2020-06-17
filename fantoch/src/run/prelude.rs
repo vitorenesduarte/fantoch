@@ -9,6 +9,7 @@ use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
+use std::sync::Arc;
 
 // the worker index that should be used by leader-based protocols
 pub const LEADER_WORKER_INDEX: usize = 0;
@@ -59,8 +60,8 @@ pub type RiflAckReceiver = ChannelReceiver<Rifl>;
 pub type RiflAckSender = ChannelSender<Rifl>;
 pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
-pub type WriterReceiver<P> = ChannelReceiver<<P as Protocol>::Message>;
-pub type WriterSender<P> = ChannelSender<<P as Protocol>::Message>;
+pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
+pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
 pub type CommandReceiver = ChannelReceiver<Command>;
 pub type CommandSender = ChannelSender<Command>;
@@ -77,8 +78,7 @@ pub type PeriodicEventReceiver<P, R> =
     ChannelReceiver<FromPeriodicMessage<P, R>>;
 pub type InspectFun<P, R> = (fn(&P) -> R, ChannelSender<R>);
 pub type InspectReceiver<P, R> = ChannelReceiver<InspectFun<P, R>>;
-pub type SortedProcessesSender =
-    ChannelSender<ChannelSender<Vec<ProcessId>>>;
+pub type SortedProcessesSender = ChannelSender<ChannelSender<Vec<ProcessId>>>;
 pub type SortedProcessesReceiver =
     ChannelReceiver<ChannelSender<Vec<ProcessId>>>;
 

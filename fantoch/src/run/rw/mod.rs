@@ -50,22 +50,21 @@ where
         }
     }
 
-    pub async fn send<V>(&mut self, value: V)
+    pub async fn send<V>(&mut self, value: &V)
     where
         V: Serialize,
     {
-        // TODO here we only need a reference to the value
-        let bytes = serialize(&value);
+        let bytes = serialize(value);
         if let Err(e) = self.rw.send(bytes).await {
             println!("[rw] error while writing to sink: {:?}", e);
         }
     }
 
-    pub async fn write<V>(&mut self, value: V)
+    pub async fn write<V>(&mut self, value: &V)
     where
         V: Serialize,
     {
-        let bytes = serialize(&value);
+        let bytes = serialize(value);
         if let Err(e) =
             futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_ready(cx))
                 .await

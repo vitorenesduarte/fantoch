@@ -9,8 +9,14 @@ source "${DIR}/util.sh"
 KILL_WAIT=3
 
 # mode can be: release, flamegraph
-PROCESS_RUN_MODE="release"
 CLIENT_RUN_MODE="release"
+PROCESS_RUN_MODE="release"
+
+# maybe set flamegraph mode
+flamegraph=$(config flamegraph)
+if [ "${flamegraph}" == "true" ]; then
+    PROCESS_RUN_MODE="flamegraph"
+fi
 
 # processes config
 PORT=3000

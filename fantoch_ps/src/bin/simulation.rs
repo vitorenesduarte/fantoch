@@ -15,9 +15,9 @@ fn main() {
     let aws = true;
     newt_real_time(aws);
 
-    aws_distance_matrix();
-    epaxos_aws();
-    newt_vs_spanner();
+    // aws_distance_matrix();
+    // epaxos_aws();
+    // newt_vs_spanner();
 }
 
 fn aws_distance_matrix() {
@@ -40,19 +40,22 @@ fn epaxos_aws() {
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
     // processes
+    let process_regions = regions.clone();
     let n = 5;
     let f = 2;
     let transitive_conflicts = true;
     let mut config = Config::new(n, f);
     config.set_transitive_conflicts(transitive_conflicts);
-    let process_regions = regions.clone();
+
+    // make sure stability is running
+    config.set_garbage_collection_interval(100);
 
     // clients
+    let client_regions = regions.clone();
     let conflict_rate = 100;
     let total_commands = 1000;
     let payload_size = 0;
     let workload = Workload::new(conflict_rate, total_commands, payload_size);
-    let client_regions = regions.clone();
 
     for clients_per_region in vec![1] {
         // for clients_per_region in vec![10, 20, 50, 100, 200] {
@@ -73,9 +76,7 @@ fn newt_real_time_aws() -> (Planet, Vec<Region>) {
     let planet = Planet::from("../latency_aws");
     let regions = vec![
         Region::new("eu-west-1"),
-        Region::new("ap-east-1"),
         Region::new("ca-central-1"),
-        Region::new("ap-south-1"),
         Region::new("us-west-1"),
     ];
     (planet, regions)
@@ -136,10 +137,10 @@ fn newt_real_time(aws: bool) {
             vec![false]
         };
 
-        let hybrid_config = vec![false];
-        let interval_config = vec![100, 50, 10];
+        let interval_config = vec![50, 10];
 
         for tiny_quorums in tiny_quorums_config {
+            // real time = false
             println!(
                 ">running newt n = {} | f = {} | tiny = {} | real_time = false",
                 n, f, tiny_quorums
@@ -153,21 +154,18 @@ fn newt_real_time(aws: bool) {
                 increasing_load::<NewtSequential>(planet_, regions_, config)
             });
 
-            for hybrid in hybrid_config.clone() {
-                for interval in interval_config.clone() {
-                    println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | hybrid_clocks = {}", n, f, tiny_quorums, interval, hybrid);
-                    let mut config = Config::new(n, f);
-                    config.set_newt_tiny_quorums(tiny_quorums);
-                    config.set_newt_real_time(true);
-                    config.set_newt_clock_bump_interval(interval);
-                    let regions = regions.clone();
-                    let planet = planet.clone();
-                    run_in_thread(move || {
-                        increasing_load::<NewtSequential>(
-                            planet, regions, config,
-                        )
-                    });
-                }
+            // real time = true
+            for interval in interval_config.clone() {
+                println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms", n, f, tiny_quorums, interval);
+                let mut config = Config::new(n, f);
+                config.set_newt_tiny_quorums(tiny_quorums);
+                config.set_newt_real_time(true);
+                config.set_newt_clock_bump_interval(interval);
+                let regions = regions.clone();
+                let planet = planet.clone();
+                run_in_thread(move || {
+                    increasing_load::<NewtSequential>(planet, regions, config)
+                });
             }
         }
     }
@@ -192,7 +190,6 @@ fn newt_vs_spanner() {
         let mut config = Config::new(n, f);
         config.set_newt_tiny_quorums(true);
         config.set_newt_real_time(true);
-        config.set_newt_hybrid_clocks(true);
         config.set_newt_clock_bump_interval(interval);
         let planet = planet.clone();
         let regions = regions.clone();
@@ -248,9 +245,12 @@ fn equidistant<P: Protocol>() {
 fn increasing_load<P: Protocol>(
     planet: Planet,
     regions: Vec<Region>,
-    config: Config,
+    mut config: Config,
 ) {
-    let cs = vec![8, 16, 32, 64, 128, 256];
+    // make sure stability is running
+    config.set_garbage_collection_interval(100);
+
+    let cs = vec![8, 32, 256, 512, 1024];
 
     // clients workload
     let conflict_rate = 10;

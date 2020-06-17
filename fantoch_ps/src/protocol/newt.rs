@@ -111,9 +111,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        self.handle_submit(dot, cmd, time)
+        self.handle_submit(dot, cmd)
     }
 
     /// Handles protocol messages.
@@ -203,17 +203,17 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 impl<KC: KeyClocks> Newt<KC> {
     // With tiny quorums and `f = 1`, we can have the fast quorum process
     // sending the `MCommit` message.
+    // TODO: also when `n = 3`.
     fn bypass_mcollectack(&self) -> bool {
         self.bp.config.newt_tiny_quorums() && self.bp.config.f() == 1
     }
 
     /// Handles a submit operation by a client.
-    #[instrument(skip(self, dot, cmd, time))]
+    #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
-        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
@@ -222,14 +222,11 @@ impl<KC: KeyClocks> Newt<KC> {
         // - this may also consume votes since we're bumping the clocks here
         // - for that reason, we'll store these votes locally and not recompute
         //   them once we receive the `MCollect` from self
-        let min_clock = self.bp.min_clock(0, time);
-        let (clock, process_votes) =
-            self.key_clocks.bump_and_vote(&cmd, min_clock);
+        let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
         log!(
-            "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+            "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
             self.id(),
             dot,
-            min_clock,
             clock,
             process_votes
         );
@@ -306,10 +303,12 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
-            // make sure there's a clock for each existing key:
-            // - this ensures that all clocks will be bumped in the periodic
-            //   clock bump event
-            self.key_clocks.init_clocks(&cmd);
+            if self.bp.config.newt_real_time() {
+                // make sure there's a clock for each existing key:
+                // - this ensures that all clocks will be bumped in the periodic
+                //   clock bump event
+                self.key_clocks.init_clocks(&cmd);
+            }
 
             // if not, simply save the payload and set status to `PENDING`
             info.status = Status::PENDING;
@@ -334,16 +333,13 @@ impl<KC: KeyClocks> Newt<KC> {
             (remote_clock, Votes::new())
         } else {
             // otherwise, compute clock considering the `remote_clock` as its
-            // minimum value (if real time, the min clock is the max between
-            // current time and `remote_clock`)
-            let min_clock = self.bp.min_clock(remote_clock, time);
+            // minimum value
             let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, min_clock);
+                self.key_clocks.bump_and_vote(&cmd, remote_clock);
             log!(
-                "p{}: bump_and_vote: {:?} | min_clock: {} | clock: {} | votes: {:?}",
+                "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
                 self.bp.process_id,
                 dot,
-                min_clock,
                 clock,
                 process_votes
             );
@@ -435,18 +431,15 @@ impl<KC: KeyClocks> Newt<KC> {
         //   will never be sent in the MCommit message
         // - TODO: if we refactor votes to attached/detached business, then this
         //   is no longer a problem
+        //
+        // - TODO: it also seems that this (or the MCommit equivalent) must run
+        //   with real time, otherwise there's a huge tail; but that don't make
+        //   any sense
         if !message_from_self {
-            match info.cmd.as_ref() {
-                Some(cmd) => {
-                    let min_clock = self.bp.min_clock(max_clock, time);
-                    let local_votes = self.key_clocks.vote(cmd, min_clock);
-                    // update votes with local votes
-                    info.votes.merge(local_votes);
-                }
-                None => {
-                    panic!("there should be a command payload in the MCollectAck handler");
-                }
-            }
+            let cmd = info.cmd.as_ref().unwrap();
+            let detached = self.key_clocks.vote(cmd, max_clock);
+            // update votes with detached
+            info.votes.merge(detached);
         }
 
         // check if we have all necessary replies
@@ -536,12 +529,6 @@ impl<KC: KeyClocks> Newt<KC> {
         let msg = SynodMessage::MChosen(clock);
         assert!(info.synod.handle(from, msg).is_none());
 
-        // get current votes (probably from phantom messages) merge them with
-        // received votes so that all together can be added to a votes
-        // table
-        let current_votes = Self::reset_votes(&mut info.votes);
-        votes.merge(current_votes);
-
         // create execution info if not a noop
         let cmd = info.cmd.clone().expect("there should be a command payload");
         // create execution info
@@ -555,24 +542,23 @@ impl<KC: KeyClocks> Newt<KC> {
         });
         self.to_executor.extend(execution_info);
 
-        // generate detached votes if committed clock is higher than the local
-        // key's clock if not configured with real time
-        let detached = if self.bp.config.newt_real_time() {
-            // nothing to do here, since the clocks will be bumped periodically
-            Votes::new()
-        } else {
-            let cmd = info.cmd.as_ref().unwrap();
-            self.key_clocks.vote(cmd, clock)
-        };
-
-        // maybe create `MDetached` message
-        let mut actions = if detached.is_empty() {
-            vec![]
-        } else {
-            vec![Action::ToSend {
-                target: self.bp.all(),
-                msg: Message::MDetached { detached },
-            }]
+        // don't try to generate detached votes if configured with real time
+        // (since it will be done in a periodic event)
+        let mut actions = {
+            if self.bp.config.newt_real_time() {
+                vec![]
+            } else {
+                let cmd = info.cmd.as_ref().unwrap();
+                let detached = self.key_clocks.vote(cmd, clock);
+                if detached.is_empty() {
+                    vec![]
+                } else {
+                    vec![Action::ToSend {
+                        target: self.bp.all(),
+                        msg: Message::MDetached { detached },
+                    }]
+                }
+            }
         };
 
         if self.gc_running() {
@@ -1137,7 +1123,7 @@ mod tests {
 
         // all processes handle it
         let actions = simulation.forward_to_processes(mcommit);
-        // there are two actions
+        // there are four actions
         assert_eq!(actions.len(), 4);
 
         // we have 3 MCommitDots and one MDetached (by the process that's not

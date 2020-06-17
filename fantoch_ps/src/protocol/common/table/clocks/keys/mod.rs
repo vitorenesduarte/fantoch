@@ -42,17 +42,17 @@ mod tests {
 
     #[test]
     fn sequential_key_clocks() {
-        keys_clocks_flow::<SequentialKeyClocks>();
+        keys_clocks_flow::<SequentialKeyClocks>(true);
         keys_clocks_no_double_votes::<SequentialKeyClocks>();
     }
 
     #[test]
     fn atomic_key_clocks() {
-        keys_clocks_flow::<AtomicKeyClocks>();
+        keys_clocks_flow::<AtomicKeyClocks>(false);
         keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
-    fn keys_clocks_flow<KC: KeyClocks>() {
+    fn keys_clocks_flow<KC: KeyClocks>(all_clocks_match: bool) {
         // create key clocks
         let mut clocks = KC::new(1);
 
@@ -93,14 +93,26 @@ mod tests {
         assert_eq!(clock, 3);
         assert_eq!(process_votes.len(), 2); // two keys
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![3]);
-        assert_eq!(get_key_votes(&key_b, &process_votes), vec![1, 2, 3]);
+        if all_clocks_match {
+            assert_eq!(get_key_votes(&key_b, &process_votes), vec![1, 2, 3]);
+        } else {
+            assert_eq!(get_key_votes(&key_b, &process_votes), vec![1]);
+        }
 
         // -------------------------
         // first clock and votes for command b
         let (clock, process_votes) = clocks.bump_and_vote(&cmd_b, 0);
-        assert_eq!(clock, 4);
+        if all_clocks_match {
+            assert_eq!(clock, 4);
+        } else {
+            assert_eq!(clock, 2);
+        }
         assert_eq!(process_votes.len(), 1); // single key
-        assert_eq!(get_key_votes(&key_b, &process_votes), vec![4]);
+        if all_clocks_match {
+            assert_eq!(get_key_votes(&key_b, &process_votes), vec![4]);
+        } else {
+            assert_eq!(get_key_votes(&key_b, &process_votes), vec![2]);
+        }
     }
 
     fn keys_clocks_no_double_votes<KC: KeyClocks>() {

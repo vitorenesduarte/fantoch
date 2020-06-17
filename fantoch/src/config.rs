@@ -103,16 +103,6 @@ impl Config {
         self.newt_real_time = newt_real_time;
     }
 
-    /// Checks whether newt hybrid clocks is enabled or not.
-    pub fn newt_hybrid_clocks(&self) -> bool {
-        self.newt_hybrid_clocks
-    }
-
-    /// Changes the value of `new_real_time`.
-    pub fn set_newt_hybrid_clocks(&mut self, newt_hybrid_clocks: bool) {
-        self.newt_hybrid_clocks = newt_hybrid_clocks;
-    }
-
     /// Checks whether we can assume that conflicts are transitive.
     pub fn transitive_conflicts(&self) -> bool {
         self.transitive_conflicts
@@ -290,17 +280,6 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_newt_real_time(true);
         assert!(config.newt_real_time());
-
-        // by default, newt hybrid clocks is false
-        assert!(!config.newt_hybrid_clocks());
-
-        // if we change it to false, remains false
-        config.set_newt_hybrid_clocks(false);
-        assert!(!config.newt_hybrid_clocks());
-
-        // if we change it to true, it becomes true
-        config.set_newt_hybrid_clocks(true);
-        assert!(config.newt_hybrid_clocks());
 
         // by default, transitive conflicts is false
         assert!(!config.transitive_conflicts());
