@@ -34,6 +34,7 @@ pub struct Newt<KC> {
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
+    skip_fast_ack: bool,
 }
 
 impl<KC: KeyClocks> Protocol for Newt<KC> {
@@ -66,6 +67,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         );
         let to_executor = Vec::new();
         let buffered_commits = HashMap::new();
+        // enable skip fast ack if configured like that and the fast quorum size
+        // is 2
+        let skip_fast_ack = config.skip_fast_ack() && fast_quorum_size == 2;
 
         // create `Newt`
         let protocol = Self {
@@ -74,6 +78,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             cmds,
             to_executor,
             buffered_commits,
+            skip_fast_ack,
         };
 
         // maybe create garbage collection periodic event
@@ -201,13 +206,6 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 }
 
 impl<KC: KeyClocks> Newt<KC> {
-    // With tiny quorums and `f = 1`, we can have the fast quorum process
-    // sending the `MCommit` message.
-    // TODO: also when `n = 3`.
-    fn bypass_mcollectack(&self) -> bool {
-        self.bp.config.newt_tiny_quorums() && self.bp.config.f() == 1
-    }
-
     /// Handles a submit operation by a client.
     #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
@@ -231,11 +229,8 @@ impl<KC: KeyClocks> Newt<KC> {
             process_votes
         );
 
-        // compute this now to satisfy the borrow checker
-        let bypass_mcollectack = self.bypass_mcollectack();
-
         // send votes if we can bypass the mcollectack, otherwise store them
-        let coordinator_votes = if bypass_mcollectack {
+        let coordinator_votes = if self.skip_fast_ack {
             process_votes
         } else {
             // get cmd info
@@ -355,7 +350,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
 
-        if !message_from_self && self.bypass_mcollectack() {
+        if !message_from_self && self.skip_fast_ack {
             votes.merge(process_votes);
 
             // if tiny quorums and f = 1, the fast quorum process can commit the
