@@ -431,7 +431,11 @@ impl<KC: KeyClocks> Newt<KC> {
         //   will never be sent in the MCommit message
         // - TODO: if we refactor votes to attached/detached business, then this
         //   is no longer a problem
-        if !self.bp.config.newt_real_time() && !message_from_self {
+        //
+        // - TODO: it also seems that this (or the MCommit equivalent) must run
+        //   with real time, otherwise there's a huge tail; but that don't make
+        //   any sense
+        if !message_from_self {
             let cmd = info.cmd.as_ref().unwrap();
             let detached = self.key_clocks.vote(cmd, max_clock);
             // update votes with detached
@@ -525,12 +529,6 @@ impl<KC: KeyClocks> Newt<KC> {
         let msg = SynodMessage::MChosen(clock);
         assert!(info.synod.handle(from, msg).is_none());
 
-        // get current votes (probably from phantom messages) merge them with
-        // received votes so that all together can be added to a votes
-        // table
-        let current_votes = Self::reset_votes(&mut info.votes);
-        votes.merge(current_votes);
-
         // create execution info if not a noop
         let cmd = info.cmd.clone().expect("there should be a command payload");
         // create execution info
@@ -544,20 +542,10 @@ impl<KC: KeyClocks> Newt<KC> {
         });
         self.to_executor.extend(execution_info);
 
-        // don't try to generate detached votes if:
-        // - message from self (since we have just voted in the mcollect ack
-        //   handler), or
-        // - configured with real time (since it will be done in a periodic
-        //   event), or
-        // - `n = 3` (since both the initial coordinator and the fast quorum
-        //   have voted up to the final timestamp, assuming th ecommand accesses
-        //   a single key)
-        let message_from_self = from == self.bp.process_id;
+        // don't try to generate detached votes if configured with real time
+        // (since it will be done in a periodic event)
         let mut actions = {
-            let dont_vote = message_from_self
-                || self.bp.config.newt_real_time()
-                || self.bp.config.n() == 3;
-            if !dont_vote {
+            if !self.bp.config.newt_real_time() {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);
                 if !detached.is_empty() {
@@ -567,6 +555,7 @@ impl<KC: KeyClocks> Newt<KC> {
                     }];
                 }
             }
+            // if real time or no new votes, then no new action
             vec![]
         };
 
