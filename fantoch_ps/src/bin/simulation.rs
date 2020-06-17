@@ -77,7 +77,7 @@ fn newt_real_time_aws() -> (Planet, Vec<Region>) {
     let regions = vec![
         Region::new("eu-west-1"),
         Region::new("us-west-1"),
-        Region::new("ap-southeast1"),
+        Region::new("ap-southeast-1"),
         Region::new("ca-central-1"),
         Region::new("sa-east1"),
     ];
