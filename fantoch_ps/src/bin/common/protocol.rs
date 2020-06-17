@@ -19,6 +19,9 @@ const DEFAULT_NEWT_TINY_QUORUMS: bool = false;
 const DEFAULT_NEWT_REAL_TIME: bool = false;
 const DEFAULT_NEWT_CLOCK_BUMP_INTERVAL: usize = 10;
 
+// protocol's config
+const DEFAULT_SKIP_FAST_ACK: bool = false;
+
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
@@ -267,6 +270,13 @@ fn parse_args() -> (
                 .help("number indicating the interval (in milliseconds) between clock bump; this value is only used if 'newt_real_time = true'; default: 10")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("skip_fast_ack")
+                .long("skip_fast_ack")
+                .value_name("SKIP_FAST_ACK")
+                .help("boolean indicating whether protocols should try to enable the skip fast ack optimization; default: false")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -308,6 +318,7 @@ fn parse_args() -> (
             matches.value_of("newt_real_time"),
             matches.value_of("newt_clock_bump_interval"),
         );
+    let skip_fast_ack = parse_skip_fast_ack(matches.value_of("skip_fast_ack"));
 
     // update config:
     // - set leader if we have one
@@ -322,6 +333,9 @@ fn parse_args() -> (
     config.set_newt_tiny_quorums(newt_tiny_quorums);
     config.set_newt_real_time(newt_real_time);
     config.set_newt_clock_bump_interval(newt_clock_bump_interval);
+
+    // set protocol's config
+    config.set_skip_fast_ack(skip_fast_ack);
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -484,4 +498,14 @@ fn parse_newt_config(
         })
         .unwrap_or(DEFAULT_NEWT_CLOCK_BUMP_INTERVAL);
     (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval)
+}
+
+pub fn parse_skip_fast_ack(skip_fast_ack: Option<&str>) -> bool {
+    skip_fast_ack
+        .map(|skip_fast_ack| {
+            skip_fast_ack
+                .parse::<bool>()
+                .expect("skip_fast_ack should be a boolean")
+        })
+        .unwrap_or(DEFAULT_SKIP_FAST_ACK)
 }

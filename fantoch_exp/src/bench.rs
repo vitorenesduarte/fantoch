@@ -30,7 +30,7 @@ const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 // parallelism config
 const WORKERS: usize = 16;
 const EXECUTORS: usize = 16;
-const MULTIPLEXING: usize = 16;
+const MULTIPLEXING: usize = 32;
 
 // clients config
 const CONFLICT_RATE: usize = 10;
@@ -62,7 +62,7 @@ pub async fn bench_experiment(
     branch: String,
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
-    newt_configs: Vec<(bool, bool, usize)>,
+    newt_configs: Vec<(bool, bool, usize, bool)>,
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
     output_log: tokio::fs::File,
@@ -103,7 +103,7 @@ async fn do_bench_experiment(
     branch: String,
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
-    newt_configs: Vec<(bool, bool, usize)>,
+    newt_configs: Vec<(bool, bool, usize, bool)>,
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
     mut output_log: tokio::fs::File,
@@ -122,17 +122,21 @@ async fn do_bench_experiment(
 
     for n in ns {
         for newt_config in newt_configs.clone() {
-            let (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval) =
-                newt_config;
+            let (
+                newt_tiny_quorums,
+                newt_real_time,
+                newt_clock_bump_interval,
+                skip_fast_ack,
+            ) = newt_config;
             if n == 3 && newt_tiny_quorums {
                 tracing::warn!("skipping newt config n = 3 tiny = true");
                 continue;
             }
 
             let line = if newt_real_time {
-                format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms", PROTOCOL, n, FAULTS, newt_tiny_quorums, newt_clock_bump_interval)
+                format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, newt_clock_bump_interval, skip_fast_ack)
             } else {
-                format!(">running {} n = {} | f = {} | tiny = {} | real_time = false", PROTOCOL, n, FAULTS, newt_tiny_quorums)
+                format!(">running {} n = {} | f = {} | tiny = {} | real_time = false | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, skip_fast_ack)
             };
             append_to_output_log(&mut output_log, line).await?;
 
@@ -140,12 +144,13 @@ async fn do_bench_experiment(
             let regions: Vec<_> = regions.iter().cloned().take(n).collect();
             for &clients in &clients_per_region {
                 let run_id = format!(
-                    "n{}_f{}_tiny{}_realtime{}_interval{}_clients{}",
+                    "n{}_f{}_tiny{}_realtime{}_interval{}_skipfast_{}clients{}",
                     n,
                     FAULTS,
                     newt_tiny_quorums,
                     newt_real_time,
                     newt_clock_bump_interval,
+                    skip_fast_ack,
                     clients,
                 );
                 let latencies = run_experiment(
@@ -156,6 +161,7 @@ async fn do_bench_experiment(
                     newt_tiny_quorums,
                     newt_real_time,
                     newt_clock_bump_interval,
+                    skip_fast_ack,
                     set_sorted_processes,
                     tracer_show_interval,
                     clients,
@@ -217,6 +223,7 @@ async fn run_experiment(
     newt_tiny_quorums: bool,
     newt_real_time: bool,
     newt_clock_bump_interval: usize,
+    skip_fast_ack: bool,
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
@@ -228,6 +235,7 @@ async fn run_experiment(
         newt_tiny_quorums,
         newt_real_time,
         newt_clock_bump_interval,
+        skip_fast_ack,
         set_sorted_processes,
         tracer_show_interval,
     )
@@ -356,6 +364,7 @@ async fn start_processes(
     newt_tiny_quorums: bool,
     newt_real_time: bool,
     newt_clock_bump_interval: usize,
+    skip_fast_ack: bool,
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
 ) -> Result<
@@ -429,6 +438,8 @@ async fn start_processes(
             newt_real_time,
             "--newt_clock_bump_interval",
             newt_clock_bump_interval,
+            "--skip_fast_ack",
+            skip_fast_ack,
         ];
         if let Some(interval) = PROCESS_TCP_FLUSH_INTERVAL {
             args.extend(args!["--tcp_flush_interval", interval]);
