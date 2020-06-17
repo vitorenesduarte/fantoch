@@ -62,7 +62,7 @@ pub async fn bench_experiment(
     branch: String,
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
-    newt_configs: Vec<(bool, bool, usize, bool)>,
+    newt_configs: Vec<(bool, Option<usize>, bool)>,
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
     output_log: tokio::fs::File,
@@ -103,7 +103,7 @@ async fn do_bench_experiment(
     branch: String,
     ns: Vec<usize>,
     clients_per_region: Vec<usize>,
-    newt_configs: Vec<(bool, bool, usize, bool)>,
+    newt_configs: Vec<(bool, Option<usize>, bool)>,
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
     mut output_log: tokio::fs::File,
@@ -122,22 +122,24 @@ async fn do_bench_experiment(
 
     for n in ns {
         for newt_config in newt_configs.clone() {
-            let (
-                newt_tiny_quorums,
-                newt_real_time,
-                newt_clock_bump_interval,
-                skip_fast_ack,
-            ) = newt_config;
+            let (newt_tiny_quorums, newt_clock_bump_interval, skip_fast_ack) =
+                newt_config;
             if n == 3 && newt_tiny_quorums {
                 tracing::warn!("skipping newt config n = 3 tiny = true");
                 continue;
             }
 
-            let line = if newt_real_time {
-                format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, newt_clock_bump_interval, skip_fast_ack)
-            } else {
-                format!(">running {} n = {} | f = {} | tiny = {} | real_time = false | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, skip_fast_ack)
-            };
+            let (newt_real_time, newt_clock_bump_interval, line) =
+                match newt_clock_bump_interval {
+                    Some(newt_clock_bump_interval) => {
+                        let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, newt_clock_bump_interval, skip_fast_ack);
+                        (true, newt_clock_bump_interval, line)
+                    }
+                    None => {
+                        let line = format!(">running {} n = {} | f = {} | tiny = {} | real_time = false | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, skip_fast_ack);
+                        (false, 0, line)
+                    }
+                };
             append_to_output_log(&mut output_log, line).await?;
 
             // select the first `n` regions
