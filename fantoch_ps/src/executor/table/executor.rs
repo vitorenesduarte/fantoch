@@ -2,7 +2,9 @@ use crate::executor::table::MultiVotesTable;
 use crate::protocol::common::table::VoteRange;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorResult, MessageKey, Pending};
+use fantoch::executor::{
+    Executor, ExecutorMetrics, ExecutorResult, MessageKey, Pending,
+};
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,7 @@ pub struct TableExecutor {
     table: MultiVotesTable,
     store: KVStore,
     pending: Pending,
+    metrics: ExecutorMetrics,
 }
 
 impl Executor for TableExecutor {
@@ -28,12 +31,14 @@ impl Executor for TableExecutor {
         // aggregate results if the number of executors is 1
         let aggregate = config.executors() == 1;
         let pending = Pending::new(aggregate);
+        let metrics = ExecutorMetrics::new();
 
         Self {
             execute_at_commit: config.execute_at_commit(),
             table,
             store,
             pending,
+            metrics,
         }
     }
 
@@ -79,6 +84,10 @@ impl Executor for TableExecutor {
 
     fn parallel() -> bool {
         true
+    }
+
+    fn metrics(&self) -> &ExecutorMetrics {
+        &self.metrics
     }
 }
 
