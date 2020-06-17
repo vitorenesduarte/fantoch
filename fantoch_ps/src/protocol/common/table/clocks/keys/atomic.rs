@@ -43,7 +43,7 @@ impl KeyClocks for AtomicKeyClocks {
             .keys()
             .map(|key| {
                 // bump the `key` clock
-                let previous_value = self.bump(key, min_clock);
+                let previous_value = self.bump_key(key, min_clock);
                 // compute vote start and vote end
                 let vote_start = previous_value + 1;
                 let vote_end = cmp::max(min_clock, previous_value + 1);
@@ -60,16 +60,25 @@ impl KeyClocks for AtomicKeyClocks {
         (highest, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
+    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
         let key_count = cmd.key_count();
         let keys = cmd.keys().cloned();
-        self.maybe_bump_keys(keys, key_count, clock)
+        self.maybe_bump_keys(keys, key_count, up_to)
     }
 
-    fn vote_all(&mut self, clock: u64) -> Votes {
+    fn vote_all(&mut self, up_to: u64) -> Votes {
         let key_count = self.clocks.len();
-        let keys = self.clocks.iter().map(|entry| entry.key().clone());
-        self.maybe_bump_keys(keys, key_count, clock)
+        // create votes
+        let mut votes = Votes::with_capacity(key_count);
+
+        self.clocks.iter().for_each(|entry| {
+            let clock = entry.value();
+            if let Some(vote_range) = Self::maybe_bump(self.id, clock, up_to) {
+                votes.set(entry.key().clone(), vec![vote_range]);
+            }
+        });
+
+        votes
     }
 
     fn parallel() -> bool {
@@ -79,27 +88,15 @@ impl KeyClocks for AtomicKeyClocks {
 
 impl AtomicKeyClocks {
     // Bump the `key` clock to at least `min_clock`.
-    fn bump(&self, key: &Key, min_clock: u64) -> u64 {
-        self.clocks
-            .get(key)
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                Some(cmp::max(min_clock, value + 1))
-            })
-            .expect("atomic bump should always succeed")
+    fn bump_key(&self, key: &Key, min_clock: u64) -> u64 {
+        let clock = self.clocks.get(key);
+        Self::bump(&clock, min_clock)
     }
 
     // Bump the `key` clock to `up_to` if lower than `up_to`.
-    fn maybe_bump(&self, key: &Key, up_to: u64) -> Option<u64> {
-        self.clocks
-            .get(&key)
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                if value < up_to {
-                    Some(up_to)
-                } else {
-                    None
-                }
-            })
-            .ok()
+    fn maybe_bump_key(&self, key: &Key, up_to: u64) -> Option<VoteRange> {
+        let clock = self.clocks.get(key);
+        Self::maybe_bump(self.id, &clock, up_to)
     }
 
     fn maybe_bump_keys<I>(&self, keys: I, key_count: usize, up_to: u64) -> Votes
@@ -110,18 +107,46 @@ impl AtomicKeyClocks {
         let mut votes = Votes::with_capacity(key_count);
 
         keys.for_each(|key| {
-            if let Some(previous_value) = self.maybe_bump(&key, up_to) {
+            if let Some(vote_range) = self.maybe_bump_key(&key, up_to) {
+                votes.set(key, vec![vote_range]);
+            }
+        });
+
+        votes
+    }
+
+    // Bump the clock to at least `min_clock`.
+    fn bump(clock: &AtomicU64, min_clock: u64) -> u64 {
+        clock
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                Some(cmp::max(min_clock, value + 1))
+            })
+            .expect("atomic bump should always succeed")
+    }
+
+    // Bump the clock to `up_to` if lower than `up_to`.
+    fn maybe_bump(
+        id: ProcessId,
+        clock: &AtomicU64,
+        up_to: u64,
+    ) -> Option<VoteRange> {
+        clock
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                if value < up_to {
+                    Some(up_to)
+                } else {
+                    None
+                }
+            })
+            .ok()
+            .map(|previous_value| {
                 // compute vote start and vote end
                 let vote_start = previous_value + 1;
                 let vote_end = up_to;
 
                 // create second vote range and save it
-                let vr = VoteRange::new(self.id, vote_start, vote_end);
-                votes.set(key, vec![vr]);
-            }
-        });
-
-        votes
+                VoteRange::new(id, vote_start, vote_end)
+            })
     }
 }
 
