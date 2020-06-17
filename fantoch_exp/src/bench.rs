@@ -21,10 +21,10 @@ const CLIENT_PORT: usize = 4000;
 const PROTOCOL: &str = "newt_atomic";
 const FAULTS: usize = 1;
 const TRANSITIVE_CONFLICTS: bool = true;
-const EXECUTE_AT_COMMIT: bool = true;
+const EXECUTE_AT_COMMIT: bool = false;
 const EXECUTION_LOG: Option<&str> = None;
 const LEADER: Option<ProcessId> = None;
-const GC_INTERVAL: Option<usize> = None;
+const GC_INTERVAL: Option<usize> = Some(50); // every 50
 const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
 // parallelism config
@@ -33,7 +33,7 @@ const EXECUTORS: usize = 16;
 const MULTIPLEXING: usize = 16;
 
 // clients config
-const CONFLICT_RATE: usize = 0;
+const CONFLICT_RATE: usize = 10;
 const COMMANDS_PER_CLIENT: usize = 3000;
 const PAYLOAD_SIZE: usize = 0;
 
