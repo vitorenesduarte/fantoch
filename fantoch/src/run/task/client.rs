@@ -79,13 +79,18 @@ async fn client_server_task(
     channel_buffer_size: usize,
     mut connection: Connection,
 ) {
-    let (client_id, mut rifl_acks, mut executor_results) = server_receive_hi(
+    let client = server_receive_hi(
         process_id,
         channel_buffer_size,
         &mut connection,
         &mut client_to_executors,
     )
     .await;
+    if client.is_none() {
+        println!("[client_server] giving up on new client {:?} since handshake failed:", connection);
+        return;
+    }
+    let (client_id, mut rifl_acks, mut executor_results) = client.unwrap();
 
     // create pending
     let aggregate = true;
@@ -112,15 +117,16 @@ async fn server_receive_hi(
     channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
-) -> (ClientId, RiflAckReceiver, ExecutorResultReceiver) {
+) -> Option<(ClientId, RiflAckReceiver, ExecutorResultReceiver)> {
     // receive hi from client
     let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
         log!("[client_server] received hi from client {}", client_id);
         client_id
     } else {
-        panic!(
+        println!(
             "[client_server] couldn't receive client id from connected client"
         );
+        return None;
     };
 
     // create channel where the executors will write:
@@ -155,7 +161,7 @@ async fn server_receive_hi(
     connection.send(&hi).await;
 
     // return client id and channel where client should read executor results
-    (client_id, rifl_acks_rx, executor_results_rx)
+    Some((client_id, rifl_acks_rx, executor_results_rx))
 }
 
 async fn client_server_task_handle_cmd(
@@ -263,7 +269,7 @@ async fn client_server_task_handle_executor_result(
 pub async fn client_say_hi(
     client_id: ClientId,
     connection: &mut Connection,
-) -> ProcessId {
+) -> Option<ProcessId> {
     // say hi
     let hi = ClientHi(client_id);
     connection.send(&hi).await;
@@ -271,9 +277,10 @@ pub async fn client_say_hi(
     // receive hi back
     if let Some(ProcessHi(process_id)) = connection.recv().await {
         log!("[client] received hi from process {}", process_id);
-        process_id
+        Some(process_id)
     } else {
-        panic!("[client] couldn't receive process id from connected process");
+        println!("[client] couldn't receive process id from connected process");
+        None
     }
 }
 

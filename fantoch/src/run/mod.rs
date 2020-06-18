@@ -400,7 +400,7 @@ where
 
     let mut handles = handles.collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
-        let client = join_result?;
+        let client = join_result?.expect("client should run correctly");
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
         // throughput.merge(client.throughput_histogram());
@@ -422,7 +422,7 @@ async fn closed_loop_client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-) -> Client
+) -> Option<Client>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -437,7 +437,7 @@ where
         tcp_nodelay,
         channel_buffer_size,
     )
-    .await;
+    .await?;
 
     // generate and submit commands while there are commands to be generated
     while next_cmd(&mut client, &time, &mut write).await {
@@ -448,7 +448,7 @@ where
     println!("closed loop client {} exited loop", client_id);
 
     // return client
-    client
+    Some(client)
 }
 
 async fn open_loop_client<A>(
@@ -458,7 +458,7 @@ async fn open_loop_client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-) -> Client
+) -> Option<Client>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -473,7 +473,7 @@ where
         tcp_nodelay,
         channel_buffer_size,
     )
-    .await;
+    .await?;
 
     // create interval
     let mut interval = time::interval(Duration::from_millis(interval_ms));
@@ -496,7 +496,7 @@ where
     println!("open loop client {} exited loop", client_id);
 
     // return client
-    client
+    Some(client)
 }
 
 async fn client_setup<A>(
@@ -505,7 +505,7 @@ async fn client_setup<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-) -> (Client, CommandResultReceiver, CommandSender)
+) -> Option<(Client, CommandResultReceiver, CommandSender)>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -536,7 +536,7 @@ where
 
     // say hi
     let process_id =
-        task::client::client_say_hi(client_id, &mut connection).await;
+        task::client::client_say_hi(client_id, &mut connection).await?;
 
     // discover process (although this won't be used)
     client.discover(vec![process_id]);
@@ -547,7 +547,7 @@ where
     write.set_name(format!("command_result_sender_client_{}", client_id));
 
     // return client its connection
-    (client, read, write)
+    Some((client, read, write))
 }
 
 /// Generate the next command, returning a boolean representing whether a new
