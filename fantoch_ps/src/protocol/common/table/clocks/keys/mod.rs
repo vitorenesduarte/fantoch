@@ -29,9 +29,27 @@ pub trait KeyClocks: Debug + Clone {
     fn vote(&mut self, cmd: &Command, clock: u64) -> Votes;
 
     /// Votes up to `clock` on all keys and returns the consumed votes.
-    fn vote_all(&mut self, clock: u64) -> Votes;
+    fn vote_all(
+        &mut self,
+        window: usize,
+        total_windows: usize,
+        clock: u64,
+    ) -> Votes;
 
     fn parallel() -> bool;
+}
+
+fn window_bounds(
+    window: usize,
+    total_windows: usize,
+    total_size: usize,
+) -> (usize, usize) {
+    // since / rounds down, the + 1 makes sure we'll take all elements (the last
+    // window maybe shorter)
+    let window_size = (total_size / total_windows) + 1;
+    let to_skip = window * window_size;
+    let to_take = window_size;
+    (to_skip, to_take)
 }
 
 #[cfg(test)]
@@ -39,6 +57,31 @@ mod tests {
     use super::*;
     use fantoch::id::Rifl;
     use fantoch::kvs::Key;
+
+    #[test]
+    fn window_bounds_test() {
+        for total_size in 0..1000 {
+            for total_windows in 1..=10 {
+                let total_taken = (0..total_windows)
+                    .map(|window| {
+                        let (_to_skip, to_take) = super::window_bounds(
+                            window,
+                            total_windows,
+                            total_size,
+                        );
+                        to_take
+                    })
+                    .sum::<usize>();
+                println!(
+                    "total_size {} | total_windows {} | total_taken {}",
+                    total_size, total_windows, total_taken
+                );
+                // we need that after a full iteration through all windows, all
+                // the items have been taken
+                assert!(total_taken >= total_size);
+            }
+        }
+    }
 
     #[test]
     fn sequential_key_clocks() {

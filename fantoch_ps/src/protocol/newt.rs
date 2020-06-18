@@ -25,6 +25,8 @@ pub type NewtAtomic = Newt<AtomicKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
+const CLOCK_WINDOWS: usize = 5;
+
 #[derive(Debug, Clone)]
 pub struct Newt<KC> {
     bp: BaseProcess,
@@ -35,6 +37,7 @@ pub struct Newt<KC> {
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
     skip_fast_ack: bool,
+    clock_bump_iteration: usize,
 }
 
 impl<KC: KeyClocks> Protocol for Newt<KC> {
@@ -79,6 +82,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             to_executor,
             buffered_commits,
             skip_fast_ack,
+            clock_bump_iteration: 0,
         };
 
         // maybe create garbage collection periodic event
@@ -91,9 +95,13 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
         // maybe create clock bump periodic event
         if config.newt_real_time() {
-            let clock_bump_interval = config.newt_clock_bump_interval() as u64;
+            // since we're going to only bump a fraction (what we're calling a
+            // window) of all clocks on every event, let's divide the clock bump
+            // interval by the number of fractions
+            let clock_bump_interval =
+                config.newt_clock_bump_interval() / CLOCK_WINDOWS;
             events.reserve_exact(1);
-            events.push((PeriodicEvent::ClockBump, clock_bump_interval));
+            events.push((PeriodicEvent::ClockBump, clock_bump_interval as u64));
         }
 
         // return both
@@ -784,10 +792,15 @@ impl<KC: KeyClocks> Newt<KC> {
     ) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::ClockBump", self.id());
 
-        // iterate all clocks and bump them to the current time:
+        // iterate a fraction of all clocks and bump them to the current time:
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
-        let detached = self.key_clocks.vote_all(time.now());
+        let window = self.clock_bump_iteration % CLOCK_WINDOWS;
+        let detached =
+            self.key_clocks.vote_all(window, CLOCK_WINDOWS, time.now());
+
+        // update clock bump iteration
+        self.clock_bump_iteration += 1;
 
         // create `ToSend`
         vec![Action::ToSend {

@@ -58,15 +58,26 @@ impl KeyClocks for SequentialKeyClocks {
         votes
     }
 
-    fn vote_all(&mut self, up_to: u64) -> Votes {
+    fn vote_all(
+        &mut self,
+        window: usize,
+        total_windows: usize,
+        up_to: u64,
+    ) -> Votes {
+        let key_count = self.clocks.len();
+        let (to_skip, to_take) =
+            super::window_bounds(window, total_windows, key_count);
+
         // create votes
-        let mut votes = Votes::with_capacity(self.clocks.len());
+        let mut votes = Votes::with_capacity(key_count);
 
         // vote on each key
         let id = self.id;
-        self.clocks.iter_mut().for_each(|(key, current)| {
-            Self::maybe_bump(id, key, current, up_to, &mut votes);
-        });
+        self.clocks.iter_mut().skip(to_skip).take(to_take).for_each(
+            |(key, current)| {
+                Self::maybe_bump(id, key, current, up_to, &mut votes);
+            },
+        );
 
         // return votes
         votes
