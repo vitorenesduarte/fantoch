@@ -34,6 +34,9 @@ pub struct Newt<KC> {
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
+    // track the highest committed clock; when periodically bumping with real
+    // time, use this value as the minimum value to bump to
+    max_commit_clock: u64,
     skip_fast_ack: bool,
 }
 
@@ -78,6 +81,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             cmds,
             to_executor,
             buffered_commits,
+            max_commit_clock: 0,
             skip_fast_ack,
         };
 
@@ -151,6 +155,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             } => self.handle_mcollectack(from, dot, clock, process_votes, time),
             Message::MCommit { dot, clock, votes } => {
                 self.handle_mcommit(from, dot, clock, votes, time)
+            }
+            Message::MCommitClock { clock } => {
+                self.handle_mcommit_clock(from, clock, time)
             }
             Message::MDetached { detached } => {
                 self.handle_mdetached(detached, time)
@@ -541,7 +548,11 @@ impl<KC: KeyClocks> Newt<KC> {
         // (since it will be done in a periodic event)
         let mut actions = {
             if self.bp.config.newt_real_time() {
-                vec![]
+                // in this case, only notify the clock bump worker of the commit
+                // clock
+                vec![Action::ToForward {
+                    msg: Message::MCommitClock { clock },
+                }]
             } else {
                 let cmd = info.cmd.as_ref().unwrap();
                 let detached = self.key_clocks.vote(cmd, clock);
@@ -567,6 +578,28 @@ impl<KC: KeyClocks> Newt<KC> {
             self.cmds.gc_single(dot);
         }
         actions
+    }
+
+    #[instrument(skip(self, from, clock, time))]
+    fn handle_mcommit_clock(
+        &mut self,
+        from: ProcessId,
+        clock: u64,
+        time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: MCommitClock({}) | time={}",
+            self.id(),
+            clock,
+            time.now()
+        );
+        assert_eq!(from, self.bp.process_id);
+
+        // simply update the highest commit clock
+        self.max_commit_clock = std::cmp::max(self.max_commit_clock, clock);
+
+        // nothing to send
+        vec![]
     }
 
     #[instrument(skip(self, detached, time))]
@@ -784,10 +817,16 @@ impl<KC: KeyClocks> Newt<KC> {
     ) -> Vec<Action<Self>> {
         log!("p{}: PeriodicEvent::ClockBump", self.id());
 
+        // vote up to:
+        // - highest committed clock or
+        // - the current time,
+        // whatever is the highest
+        let min_clock = std::cmp::max(self.max_commit_clock, time.now());
+
         // iterate all clocks and bump them to the current time:
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
-        let detached = self.key_clocks.vote_all(time.now());
+        let detached = self.key_clocks.vote_all(min_clock);
 
         // create `ToSend`
         vec![Action::ToSend {
@@ -872,6 +911,9 @@ pub enum Message {
         clock: u64,
         votes: Votes,
     },
+    MCommitClock {
+        clock: u64,
+    },
     MDetached {
         detached: Votes,
     },
@@ -909,6 +951,10 @@ impl MessageIndex for Message {
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
+            // Clock bump messages
+            Self::MCommitClock { .. } => {
+                worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
+            }
             Self::MDetached { .. } => {
                 worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
             }
