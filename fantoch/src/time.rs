@@ -41,6 +41,10 @@ impl SimTime {
         // - In fact, with 1024, n = 5, tiny quorums and a clock bump interval
         //   of 50ms, I can see commands being committed with a timestamp 9000
         //   higher than the simulation time.
+        // - In fact, the problem may have been somewhere else. We're now
+        //   tracking the highest
+        // committed timestamp in newt to be use as the min clock for bumping
+        // and that should be enough.
         let time = RunTime.now();
         Self { time }
     }
