@@ -66,31 +66,17 @@ impl KeyClocks for AtomicKeyClocks {
         self.maybe_bump_keys(keys, key_count, up_to)
     }
 
-    fn vote_all(
-        &mut self,
-        window: usize,
-        total_windows: usize,
-        up_to: u64,
-    ) -> Votes {
+    fn vote_all(&mut self, up_to: u64) -> Votes {
         let key_count = self.clocks.len();
-        let (to_skip, to_take) =
-            super::window_bounds(window, total_windows, key_count);
-
         // create votes
         let mut votes = Votes::with_capacity(key_count);
 
-        self.clocks
-            .iter()
-            .skip(to_skip)
-            .take(to_take)
-            .for_each(|entry| {
-                let clock = entry.value();
-                if let Some(vote_range) =
-                    Self::maybe_bump(self.id, clock, up_to)
-                {
-                    votes.set(entry.key().clone(), vec![vote_range]);
-                }
-            });
+        self.clocks.iter().for_each(|entry| {
+            let clock = entry.value();
+            if let Some(vote_range) = Self::maybe_bump(self.id, clock, up_to) {
+                votes.set(entry.key().clone(), vec![vote_range]);
+            }
+        });
 
         votes
     }
