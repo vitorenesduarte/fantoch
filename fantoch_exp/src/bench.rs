@@ -34,7 +34,7 @@ const MULTIPLEXING: usize = 32;
 
 // clients config
 const CONFLICT_RATE: usize = 10;
-const COMMANDS_PER_CLIENT: usize = 3000;
+const COMMANDS_PER_CLIENT: usize = 1000;
 const PAYLOAD_SIZE: usize = 0;
 
 // process tcp config

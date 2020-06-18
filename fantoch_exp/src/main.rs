@@ -8,7 +8,7 @@ use rusoto_core::Region;
 // experiment config
 const INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 1;
+const MAX_INSTANCE_DURATION_HOURS: usize = 3;
 
 // bench-specific config
 const BRANCH: &str = "executor_metrics";
@@ -84,16 +84,20 @@ async fn bench(
     let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
     let ns = vec![3];
     */
-    let clients_per_region = vec![8, 32, 256, 512, 1024];
+
     let newt_configs = vec![
         // tiny, interval, skip fast ack
         (false, None, false),
         (false, Some(10), false),
+        // (false, None, true),
+        // (false, Some(10), true),
         (true, None, false),
         (true, Some(10), false),
         (true, None, true),
         (true, Some(10), true),
     ];
+    let clients_per_region = vec![4, 32, 256, 512, 1024];
+
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
         .create(true)
