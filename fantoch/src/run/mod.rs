@@ -773,7 +773,7 @@ pub mod tests {
                 .into_iter()
                 .map(|(_, address)| {
                     let delay = if process_id % 2 == 1 {
-                        // add 0 delay to odd processes with odd ids
+                        // add 0 delay to odd processes
                         Some(0)
                     } else {
                         None
