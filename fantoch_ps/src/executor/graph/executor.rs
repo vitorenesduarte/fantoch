@@ -1,7 +1,9 @@
 use crate::executor::graph::DependencyGraph;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorResult, MessageKey};
+use fantoch::executor::{
+    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
+};
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::KVStore;
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,7 @@ pub struct GraphExecutor {
     graph: DependencyGraph,
     store: KVStore,
     pending: HashSet<Rifl>,
+    metrics: ExecutorMetrics,
 }
 
 impl Executor for GraphExecutor {
@@ -23,11 +26,13 @@ impl Executor for GraphExecutor {
         let graph = DependencyGraph::new(process_id, &config);
         let store = KVStore::new();
         let pending = HashSet::new();
+        let metrics = ExecutorMetrics::new();
         Self {
             execute_at_commit: config.execute_at_commit(),
             graph,
             store,
             pending,
+            metrics,
         }
     }
 
@@ -59,6 +64,10 @@ impl Executor for GraphExecutor {
 
     fn parallel() -> bool {
         false
+    }
+
+    fn metrics(&self) -> &ExecutorMetrics {
+        &self.metrics
     }
 }
 

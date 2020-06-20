@@ -40,20 +40,21 @@ pub trait Executor: Clone {
 
     fn parallel() -> bool;
 
-    fn metrics(&self) -> &ExecutorMetrics {
-        todo!()
-    }
+    fn metrics(&self) -> &ExecutorMetrics;
 }
 
 pub type ExecutorMetrics = Metrics<ExecutorMetricsKind, u64>;
 
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum ExecutorMetricsKind {
+    ChainSize,
     ExecutionDelay,
 }
 
 impl Debug for ExecutorMetricsKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
             ExecutorMetricsKind::ExecutionDelay => write!(f, "execution_delay"),
         }
     }

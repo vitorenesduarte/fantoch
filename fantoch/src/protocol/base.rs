@@ -1,7 +1,6 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::log;
-use crate::metrics::Metrics;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
 use std::collections::HashSet;
 use std::iter::FromIterator;
@@ -44,7 +43,7 @@ impl BaseProcess {
             fast_quorum_size,
             write_quorum_size,
             dot_gen: DotGen::new(process_id),
-            metrics: Metrics::new(),
+            metrics: ProtocolMetrics::new(),
         }
     }
 

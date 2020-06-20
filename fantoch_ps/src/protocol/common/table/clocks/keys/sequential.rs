@@ -39,7 +39,7 @@ impl KeyClocks for SequentialKeyClocks {
         (clock, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, clock: u64) -> Votes {
+    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
         // create votes
         let mut votes = Votes::with_capacity(cmd.key_count());
 
@@ -51,21 +51,21 @@ impl KeyClocks for SequentialKeyClocks {
                 None => self.clocks.entry(key.clone()).or_insert(0),
             };
 
-            Self::maybe_bump(self.id, key, current, clock, &mut votes);
+            Self::maybe_bump(self.id, key, current, up_to, &mut votes);
         });
 
         // return votes
         votes
     }
 
-    fn vote_all(&mut self, clock: u64) -> Votes {
+    fn vote_all(&mut self, up_to: u64) -> Votes {
         // create votes
         let mut votes = Votes::with_capacity(self.clocks.len());
 
         // vote on each key
         let id = self.id;
         self.clocks.iter_mut().for_each(|(key, current)| {
-            Self::maybe_bump(id, key, current, clock, &mut votes);
+            Self::maybe_bump(id, key, current, up_to, &mut votes);
         });
 
         // return votes

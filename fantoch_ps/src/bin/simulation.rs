@@ -158,7 +158,10 @@ fn newt_real_time(aws: bool) {
 
             // real time = true
             for interval in interval_config.clone() {
-                println!(">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms", n, f, tiny_quorums, interval);
+                println!(
+                    ">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms",
+                    n, f, tiny_quorums, interval
+                );
                 let mut config = Config::new(n, f);
                 config.set_newt_tiny_quorums(tiny_quorums);
                 config.set_newt_real_time(true);
@@ -252,11 +255,11 @@ fn increasing_load<P: Protocol>(
     // make sure stability is running
     config.set_garbage_collection_interval(100);
 
-    let cs = vec![8, 32, 256, 512, 1024];
+    let cs = vec![8, 32, 128, 256, 512, 1024];
 
     // clients workload
     let conflict_rate = 10;
-    let total_commands = 500;
+    let total_commands = 3000;
     let payload_size = 0;
     let workload = Workload::new(conflict_rate, total_commands, payload_size);
 
@@ -380,7 +383,7 @@ fn run<P: Protocol>(
         (0, Histogram::new()),
         |(issued_commands_acc, mut histogram_acc),
          (region, (issued_commands, histogram))| {
-            println!("region = {:?} |   {:?}", region, histogram);
+            println!("region = {:<14} | {:?}", region.name(), histogram);
             // merge histograms
             histogram_acc.merge(&histogram);
             (issued_commands_acc + issued_commands, histogram_acc)
@@ -394,7 +397,7 @@ fn run<P: Protocol>(
         );
     }
     println!(
-        "n = {} AND c = {} |  {:?}",
+        "n = {} AND c = {:<9} | {:?}",
         config.n(),
         clients_per_region,
         histogram

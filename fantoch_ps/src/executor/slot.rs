@@ -1,6 +1,8 @@
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorResult, MessageKey};
+use fantoch::executor::{
+    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
+};
 use fantoch::id::{ProcessId, Rifl};
 use fantoch::kvs::KVStore;
 use serde::{Deserialize, Serialize};
@@ -16,6 +18,7 @@ pub struct SlotExecutor {
     next_slot: Slot,
     // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
+    metrics: ExecutorMetrics,
 }
 
 impl Executor for SlotExecutor {
@@ -28,12 +31,14 @@ impl Executor for SlotExecutor {
         let next_slot = 1;
         // there's nothing to execute in the beginnin
         let to_execute = HashMap::new();
+        let metrics = ExecutorMetrics::new();
         Self {
             execute_at_commit: config.execute_at_commit(),
             store,
             pending,
             next_slot,
             to_execute,
+            metrics,
         }
     }
 
@@ -69,6 +74,10 @@ impl Executor for SlotExecutor {
 
     fn parallel() -> bool {
         false
+    }
+
+    fn metrics(&self) -> &ExecutorMetrics {
+        &self.metrics
     }
 }
 

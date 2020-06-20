@@ -8,10 +8,10 @@ use rusoto_core::Region;
 // experiment config
 const INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 1;
+const MAX_INSTANCE_DURATION_HOURS: usize = 3;
 
 // bench-specific config
-const BRANCH: &str = "master";
+const BRANCH: &str = "executor_metrics";
 const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
@@ -72,26 +72,34 @@ async fn bench(
     set_sorted_processes: bool,
     tracer_show_interval: Option<usize>,
 ) -> Result<(), Report> {
-    // let regions = vec![
-    //     Region::EuWest1,
-    //     Region::ApSoutheast1,
-    //     Region::CaCentral1,
-    //     Region::ApNortheast1,
-    //     Region::UsWest1,
-    // ];
-    // let ns = vec![5, 3];
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::CaCentral1];
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
+    ];
+    let ns = vec![5];
+    /*
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
     let ns = vec![3];
-    let clients_per_region = vec![8, 256, 512, 1024];
-    // let newt_configs = vec![
-    //     // (tiny, real_time, clock_bump_interval)
-    //     (false, false, 0),
-    //     (false, true, 10),
-    //     (true, false, 0),
-    //     (true, true, 10),
-    // ];
-    let newt_configs =
-        vec![(false, true, 10), (false, true, 10), (false, false, 0)];
+    */
+
+    let newt_configs = vec![
+        // tiny, interval, skip fast ack
+        (false, None, false),
+        (false, Some(10), false),
+        /*
+        (false, None, true),
+        (false, Some(10), true),
+        */
+        (true, None, false),
+        (true, Some(10), false),
+        (true, None, true),
+        (true, Some(10), true),
+    ];
+    let clients_per_region = vec![4, 32, 256, 512, 1024];
+
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
         .create(true)

@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::config::Config;
 use crate::executor::pending::Pending;
-use crate::executor::{Executor, ExecutorResult, MessageKey};
+use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
 use crate::id::{ProcessId, Rifl};
 use crate::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct BasicExecutor {
     store: KVStore,
     pending: Pending,
+    metrics: ExecutorMetrics,
 }
 
 impl Executor for BasicExecutor {
@@ -20,8 +21,13 @@ impl Executor for BasicExecutor {
         // aggregate results if the number of executors is 1
         let aggregate = config.executors() == 1;
         let pending = Pending::new(aggregate);
+        let metrics = ExecutorMetrics::new();
 
-        Self { store, pending }
+        Self {
+            store,
+            pending,
+            metrics,
+        }
     }
 
     fn wait_for(&mut self, cmd: &Command) {
@@ -50,6 +56,10 @@ impl Executor for BasicExecutor {
 
     fn parallel() -> bool {
         true
+    }
+
+    fn metrics(&self) -> &ExecutorMetrics {
+        &self.metrics
     }
 }
 

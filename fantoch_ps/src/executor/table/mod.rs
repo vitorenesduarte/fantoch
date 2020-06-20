@@ -206,7 +206,7 @@ impl VotesTable {
             let mut remaining = self.ops.split_off(&next_stable);
             // swap remaining with `self.ops`
             mem::swap(&mut remaining, &mut self.ops);
-            // now remaingin contains what's the stable
+            // now remaining contains what's the stable
             remaining
         };
 
@@ -217,7 +217,7 @@ impl VotesTable {
         );
 
         // return stable ops
-        stable.into_iter().map(|(_, id_and_action)| id_and_action)
+        stable.into_iter().map(|(_, id_and_op)| id_and_op)
     }
 
     // Computes the (potentially) new stable clock in this table.

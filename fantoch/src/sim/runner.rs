@@ -69,10 +69,11 @@ where
 
         // create simulation
         let mut simulation = Simulation::new();
+
+        // create processes
         let mut processes = Vec::with_capacity(config.n());
         let mut periodic_actions = Vec::new();
 
-        // create processes
         process_regions.sort();
         let to_discover: Vec<_> = process_regions
             .into_iter()
