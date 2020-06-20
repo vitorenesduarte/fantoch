@@ -22,6 +22,9 @@ pub mod tracer;
 // This module contains ping's implementation.
 pub mod ping;
 
+// This module contains delay's implementation.
+pub mod delay;
+
 // Re-exports.
 pub use chan::channel;
 
