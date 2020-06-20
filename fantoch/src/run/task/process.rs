@@ -21,7 +21,7 @@ use tokio::time::{self, Duration};
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
     listener: TcpListener,
-    addresses: Vec<A>,
+    addresses: Vec<(A, Option<usize>)>,
     to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
@@ -54,16 +54,20 @@ where
     let mut incoming = Vec::with_capacity(peer_count * multiplexing);
 
     // connect to all addresses (outgoing)
-    for address in addresses {
+    for (address, delay) in addresses {
         // create `multiplexing` connections per address
         for _ in 0..multiplexing {
-            let connection = super::connect(
+            let mut connection = super::connect(
                 &address,
                 tcp_nodelay,
                 tcp_buffer_size,
                 connect_retries,
             )
             .await?;
+            // maybe set delay
+            if let Some(delay) = delay {
+                connection.set_delay(delay);
+            }
             // save connection if connected successfully
             outgoing.push(connection);
         }
@@ -192,14 +196,54 @@ where
                 .expect("ip address should be set for outgoing connection"),
         );
 
-        // create channel where parent should write to
-        let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
-            writer_task::<P>(tcp_flush_interval, connection, rx)
-        });
-        // get list set of writers to this process
+        // get connection delay
+        let connection_delay = connection.delay();
+
+        // get list set of writers to this process and create writer channels
         let txs = writers.entry(process_id).or_insert_with(Vec::new);
+        let (mut writer_tx, writer_rx) = task::channel(channel_buffer_size);
+
         // name the channel accordingly
-        tx.set_name(format!("to_writer_{}_process_{}", txs.len(), process_id));
+        writer_tx.set_name(format!(
+            "to_writer_{}_process_{}",
+            txs.len(),
+            process_id
+        ));
+
+        // spawn the writer task
+        task::spawn(writer_task::<P>(
+            tcp_flush_interval,
+            connection,
+            writer_rx,
+        ));
+
+        let tx = if let Some(delay) = connection_delay {
+            // if connection has a delay, spawn a delay task for this writer
+            let (mut delay_tx, delay_rx) = task::channel(channel_buffer_size);
+
+            // name the channel accordingly
+            delay_tx.set_name(format!(
+                "to_delay_{}_process_{}",
+                txs.len(),
+                process_id
+            ));
+
+            // spawn delay task
+            task::spawn(super::delay::delay_task(
+                delay_rx,
+                writer_tx,
+                delay as u64,
+            ));
+
+            // in this case, messages are first forward to the delay task, which
+            // then forwards them to the writer task
+            delay_tx
+        } else {
+            // if there's no connection delay, then send the messages directly
+            // to the writer task
+            writer_tx
+        };
+
         // and add a new writer channel
         txs.push(tx);
     }

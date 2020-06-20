@@ -1,7 +1,7 @@
 use super::chan::{ChannelReceiver, ChannelSender};
 use tokio::time::{self, Duration, Instant};
 
-async fn delay_task<M>(
+pub async fn delay_task<M>(
     mut from: ChannelReceiver<M>,
     mut to: ChannelSender<M>,
     delay: u64,
