@@ -15,9 +15,9 @@ pub struct ChannelReceiver<M> {
 }
 
 pub fn channel<M>(
-    buffer_size: usize,
+    channel_buffer_size: usize,
 ) -> (ChannelSender<M>, ChannelReceiver<M>) {
-    let (sender, receiver) = mpsc::channel(buffer_size);
+    let (sender, receiver) = mpsc::channel(channel_buffer_size);
     (
         ChannelSender { name: None, sender },
         ChannelReceiver { receiver },

@@ -6,6 +6,7 @@ use tokio::net::TcpStream;
 #[derive(Debug)]
 pub struct Connection {
     ip_addr: Option<IpAddr>,
+    delay: Option<usize>,
     rw: Rw<TcpStream>,
 }
 
@@ -21,11 +22,23 @@ impl Connection {
         configure(&stream, tcp_nodelay);
         // create rw
         let rw = Rw::from(tcp_buffer_size, tcp_buffer_size, stream);
-        Self { ip_addr, rw }
+        Self {
+            ip_addr,
+            delay: None,
+            rw,
+        }
     }
 
     pub fn ip_addr(&self) -> Option<IpAddr> {
         self.ip_addr
+    }
+
+    pub fn delay(&self) -> Option<usize> {
+        self.delay
+    }
+
+    pub fn set_delay(&mut self, delay: usize) {
+        self.delay = Some(delay)
     }
 }
 

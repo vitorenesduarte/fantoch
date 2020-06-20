@@ -105,7 +105,7 @@ pub async fn process<P, A>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<A>,
+    addresses: Vec<(A, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
@@ -152,7 +152,7 @@ async fn process_with_notify_and_inspect<P, A, R>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<A>,
+    addresses: Vec<(A, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
@@ -234,7 +234,7 @@ where
     // get sorted processes (maybe from ping task)
     let sorted_processes = if let Some(sorted_processes) = sorted_processes {
         // in this case, we already have the sorted processes, so simply span
-        // the ping task and return what we have
+        // the ping task without a parent and return what we have
         task::spawn(task::ping::ping_task(
             ping_interval,
             process_id,
@@ -769,8 +769,18 @@ pub mod tests {
             // addresses: all but self
             let mut addresses = all_addresses.clone();
             addresses.remove(&process_id);
-            let addresses =
-                addresses.into_iter().map(|(_, address)| address).collect();
+            let addresses = addresses
+                .into_iter()
+                .map(|(_, address)| {
+                    let delay = if process_id % 2 == 1 {
+                        // add 0 delay to odd processes with odd ids
+                        Some(0)
+                    } else {
+                        None
+                    };
+                    (address, delay)
+                })
+                .collect();
 
             // execution log
             let execution_log = Some(format!("p{}.execution_log", process_id));

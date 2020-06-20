@@ -74,7 +74,7 @@ fn parse_args() -> (
     IpAddr,
     u16,
     u16,
-    Vec<String>,
+    Vec<(String, Option<usize>)>,
     Config,
     bool,
     usize,
@@ -129,7 +129,7 @@ fn parse_args() -> (
             Arg::with_name("addresses")
                 .long("addresses")
                 .value_name("ADDR")
-                .help("comma-separated list of addresses to connect to")
+                .help("comma-separated list of addresses to connect to; if a delay (in milliseconds) is to be injected, the address should be of the form IP-DELAY; for example, 127.0.0.1:300-120 injects a delay of 120 milliseconds before sending a message to the process at the 127.0.0.1:3000 address")
                 .required(true)
                 .takes_value(true),
         )
@@ -410,11 +410,29 @@ fn parse_client_port(port: Option<&str>) -> u16 {
     .unwrap_or(DEFAULT_CLIENT_PORT)
 }
 
-fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
+fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
     addresses
         .expect("addresses should be set")
         .split(LIST_SEP)
-        .map(|address| address.to_string())
+        .map(|address| {
+            let parts: Vec<_> = address.split("-").collect();
+            let address = parts[0].to_string();
+            match parts.len() {
+                1 => {
+                    // in this case, no delay was set
+                    (address, None)
+                }
+                2 => {
+                    let delay = parts[1]
+                        .parse::<usize>()
+                        .expect("address delay should be a number");
+                    (address, Some(delay))
+                }
+                _ => {
+                    panic!("invalid address: {:?}", address);
+                }
+            }
+        })
         .collect()
 }
 
