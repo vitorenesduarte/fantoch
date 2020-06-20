@@ -34,8 +34,11 @@ pub struct Newt<KC> {
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
-    // track the highest committed clock; when periodically bumping with real
-    // time, use this value as the minimum value to bump to
+    // With many many operations, it can happen that logical clocks are
+    // higher that current time (if it starts at 0), and in that case,
+    // the real time feature of newt doesn't work. Solution: track the highest
+    // committed clock; when periodically bumping with real time, use this
+    // value as the minimum value to bump to
     max_commit_clock: u64,
     skip_fast_ack: bool,
 }

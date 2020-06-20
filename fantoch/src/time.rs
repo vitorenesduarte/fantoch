@@ -32,21 +32,7 @@ pub struct SimTime {
 impl SimTime {
     /// Creates a new simulation time.
     pub fn new() -> Self {
-        // With many many operations, it can happen that logical clocks are
-        // higher that simulation time (if it starts at 0), and in that case,
-        // the real time feature of newt doesn't work.
-        // - By initializing it the the milliseconds since the unix epoch, we
-        // "make sure" that such situation never arises.
-        // - TODO assert that logical clocks are never higher that time.
-        // - In fact, with 1024, n = 5, tiny quorums and a clock bump interval
-        //   of 50ms, I can see commands being committed with a timestamp 9000
-        //   higher than the simulation time.
-        // - In fact, the problem may have been somewhere else. We're now
-        //   tracking the highest
-        // committed timestamp in newt to be use as the min clock for bumping
-        // and that should be enough.
-        let time = RunTime.now();
-        Self { time }
+        Default::default()
     }
 
     /// Increases simulation time by `tick`.
