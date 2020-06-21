@@ -89,18 +89,16 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         };
 
         // maybe create garbage collection periodic event
-        let mut events =
-            if let Some(gc_delay) = config.garbage_collection_interval() {
-                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
-            } else {
-                vec![]
-            };
+        let mut events = if let Some(interval) = config.gc_interval() {
+            vec![(PeriodicEvent::GarbageCollection, interval as u64)]
+        } else {
+            vec![]
+        };
 
         // maybe create clock bump periodic event
-        if config.newt_real_time() {
-            let clock_bump_interval = config.newt_clock_bump_interval() as u64;
+        if let Some(interval) = config.newt_clock_bump_interval() {
             events.reserve_exact(1);
-            events.push((PeriodicEvent::ClockBump, clock_bump_interval));
+            events.push((PeriodicEvent::ClockBump, interval as u64));
         }
 
         // return both
@@ -308,7 +306,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
-            if self.bp.config.newt_real_time() {
+            if self.bp.config.newt_clock_bump_interval().is_some() {
                 // make sure there's a clock for each existing key:
                 // - this ensures that all clocks will be bumped in the periodic
                 //   clock bump event
@@ -550,7 +548,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // don't try to generate detached votes if configured with real time
         // (since it will be done in a periodic event)
         let mut actions = {
-            if self.bp.config.newt_real_time() {
+            if self.bp.config.newt_clock_bump_interval().is_some() {
                 // in this case, only notify the clock bump worker of the commit
                 // clock
                 vec![Action::ToForward {
@@ -845,7 +843,7 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 
     fn gc_running(&self) -> bool {
-        self.bp.config.garbage_collection_interval().is_some()
+        self.bp.config.gc_interval().is_some()
     }
 }
 
@@ -1055,12 +1053,13 @@ mod tests {
         config.set_newt_tiny_quorums(false);
 
         // make sure stability is running
-        config.set_garbage_collection_interval(100);
+        config.set_gc_interval(100);
 
         // executors
-        let executor_1 = TableExecutor::new(process_id_1, config);
-        let executor_2 = TableExecutor::new(process_id_2, config);
-        let executor_3 = TableExecutor::new(process_id_3, config);
+        let executors = 1;
+        let executor_1 = TableExecutor::new(process_id_1, config, executors);
+        let executor_2 = TableExecutor::new(process_id_2, config, executors);
+        let executor_3 = TableExecutor::new(process_id_3, config, executors);
 
         // newts
         let (mut newt_1, _) = Newt::<KC>::new(process_id_1, config);

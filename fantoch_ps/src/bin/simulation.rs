@@ -48,7 +48,7 @@ fn epaxos_aws() {
     config.set_transitive_conflicts(transitive_conflicts);
 
     // make sure stability is running
-    config.set_garbage_collection_interval(100);
+    config.set_gc_interval(100);
 
     // clients
     let client_regions = regions.clone();
@@ -149,7 +149,6 @@ fn newt_real_time(aws: bool) {
             );
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
-            config.set_newt_real_time(false);
             let planet_ = planet.clone();
             let regions_ = regions.clone();
             run_in_thread(move || {
@@ -164,7 +163,6 @@ fn newt_real_time(aws: bool) {
                 );
                 let mut config = Config::new(n, f);
                 config.set_newt_tiny_quorums(tiny_quorums);
-                config.set_newt_real_time(true);
                 config.set_newt_clock_bump_interval(interval);
                 let regions = regions.clone();
                 let planet = planet.clone();
@@ -194,7 +192,6 @@ fn newt_vs_spanner() {
         );
         let mut config = Config::new(n, f);
         config.set_newt_tiny_quorums(true);
-        config.set_newt_real_time(true);
         config.set_newt_clock_bump_interval(interval);
         let planet = planet.clone();
         let regions = regions.clone();
@@ -253,7 +250,7 @@ fn increasing_load<P: Protocol>(
     mut config: Config,
 ) {
     // make sure stability is running
-    config.set_garbage_collection_interval(100);
+    config.set_gc_interval(100);
 
     let cs = vec![8, 32, 128, 256, 512, 1024];
 

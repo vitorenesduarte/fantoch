@@ -22,7 +22,7 @@ pub struct GraphExecutor {
 impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
-    fn new(process_id: ProcessId, config: Config) -> Self {
+    fn new(process_id: ProcessId, config: Config, _executors: usize) -> Self {
         let graph = DependencyGraph::new(process_id, &config);
         let store = KVStore::new();
         let pending = HashSet::new();

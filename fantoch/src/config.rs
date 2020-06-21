@@ -6,27 +6,21 @@ pub struct Config {
     n: usize,
     /// number of tolerated faults
     f: usize,
-    /// defines whether newt should employ tiny quorums or not
-    newt_tiny_quorums: bool,
-    /// defines whether newt should bump clocks based on real time or not
-    newt_real_time: bool,
-    /// defines whether protocols should try to bypass the fast quorum process
-    /// ack (which is only possible if the fast quorum size is 2)
-    skip_fast_ack: bool,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
+    /// defines the interval between garbage collections (milliseconds)
+    gc_interval: Option<usize>,
     // starting leader process
     leader: Option<ProcessId>,
-    /// defines the number of `Protocol` workers
-    workers: usize,
-    /// defines the number of `Executor` workers
-    executors: usize,
-    /// defines the interval between garbage collections (milliseconds)
-    garbage_collection_interval: Option<usize>,
-    /// defines the interval between clock bumps (milliseconds)
-    newt_clock_bump_interval: usize,
+    /// defines whether newt should employ tiny quorums or not
+    newt_tiny_quorums: bool,
+    /// defines the interval between clock bumps (milliseconds), if any
+    newt_clock_bump_interval: Option<usize>,
+    /// defines whether protocols should try to bypass the fast quorum process
+    /// ack (which is only possible if the fast quorum size is 2)
+    skip_fast_ack: bool,
 }
 
 impl Config {
@@ -38,39 +32,30 @@ impl Config {
         if f > n / 2 {
             println!("WARNING: f={} is larger than a minority with n={}", f, n);
         }
-        // by default, `newt_tiny_quorums = false`
-        let newt_tiny_quorums = false;
-        // by default, `newt_real_time = false`
-        let newt_real_time = false;
-        // by default `skip_fast_ack = false;
-        let skip_fast_ack = false;
         // by default, `transitive_conflicts = false`
         let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
+        // by default, commands are deleted at commit time
+        let gc_interval = None;
         // by default, there's no leader
         let leader = None;
-        // by default there's one worker for `Protocol` and one worker for
-        // `Executor`
-        let workers = 1;
-        let executors = 1;
-        // by default, commands are deleted at commit time
-        let garbage_collection_interval = None;
-        // by default, garbage collection runs every 1ms
-        let newt_clock_bump_interval = 1;
+        // by default, `newt_tiny_quorums = false`
+        let newt_tiny_quorums = false;
+        // by default, clocks are not bumped periodically
+        let newt_clock_bump_interval = None;
+        // by default `skip_fast_ack = false;
+        let skip_fast_ack = false;
         Self {
             n,
             f,
-            newt_tiny_quorums,
-            newt_real_time,
-            skip_fast_ack,
             transitive_conflicts,
             execute_at_commit,
+            gc_interval,
             leader,
-            workers,
-            executors,
-            garbage_collection_interval,
+            newt_tiny_quorums,
             newt_clock_bump_interval,
+            skip_fast_ack,
         }
     }
 
@@ -82,36 +67,6 @@ impl Config {
     /// Retrieve the number of faults tolerated.
     pub fn f(&self) -> usize {
         self.f
-    }
-
-    /// Checks whether newt tiny quorums is enabled or not.
-    pub fn newt_tiny_quorums(&self) -> bool {
-        self.newt_tiny_quorums
-    }
-
-    /// Changes the value of `newt_tiny_quorums`.
-    pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
-        self.newt_tiny_quorums = newt_tiny_quorums;
-    }
-
-    /// Checks whether newt real time is enabled or not.
-    pub fn newt_real_time(&self) -> bool {
-        self.newt_real_time
-    }
-
-    /// Changes the value of `new_real_time`.
-    pub fn set_newt_real_time(&mut self, newt_real_time: bool) {
-        self.newt_real_time = newt_real_time;
-    }
-
-    /// Checks whether skip fast ack is enabled or not.
-    pub fn skip_fast_ack(&self) -> bool {
-        self.skip_fast_ack
-    }
-
-    /// Changes the value of `skip_fast_ack`.
-    pub fn set_skip_fast_ack(&mut self, skip_fast_ack: bool) {
-        self.skip_fast_ack = skip_fast_ack;
     }
 
     /// Checks whether we can assume that conflicts are transitive.
@@ -134,6 +89,16 @@ impl Config {
         self.execute_at_commit = execute_at_commit;
     }
 
+    /// Checks the garbage collection interval.
+    pub fn gc_interval(&self) -> Option<usize> {
+        self.gc_interval
+    }
+
+    /// Sets the garbage collection interval.
+    pub fn set_gc_interval(&mut self, interval: usize) {
+        self.gc_interval = Some(interval);
+    }
+
     /// Checks whether a starting leader has been defined.
     pub fn leader(&self) -> Option<ProcessId> {
         self.leader
@@ -144,44 +109,34 @@ impl Config {
         self.leader = Some(leader);
     }
 
-    /// Checks the number of `Protocol` workers.
-    pub fn workers(&self) -> usize {
-        self.workers
+    /// Checks whether newt tiny quorums is enabled or not.
+    pub fn newt_tiny_quorums(&self) -> bool {
+        self.newt_tiny_quorums
     }
 
-    /// Changes the value of `Protocol` workers.
-    pub fn set_workers(&mut self, workers: usize) {
-        self.workers = workers;
-    }
-
-    /// Checks the number of `Executor`'s.
-    pub fn executors(&self) -> usize {
-        self.executors
-    }
-
-    /// Changes the value of `Executor`'s.
-    pub fn set_executors(&mut self, executors: usize) {
-        self.executors = executors;
-    }
-
-    /// Checks the garbage collection interval.
-    pub fn garbage_collection_interval(&self) -> Option<usize> {
-        self.garbage_collection_interval
-    }
-
-    /// Sets the garbage collection interval.
-    pub fn set_garbage_collection_interval(&mut self, interval: usize) {
-        self.garbage_collection_interval = Some(interval);
+    /// Changes the value of `newt_tiny_quorums`.
+    pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
+        self.newt_tiny_quorums = newt_tiny_quorums;
     }
 
     /// Checks Newt clock bumpp interval.
-    pub fn newt_clock_bump_interval(&self) -> usize {
+    pub fn newt_clock_bump_interval(&self) -> Option<usize> {
         self.newt_clock_bump_interval
     }
 
     /// Sets newt clock bump interval.
     pub fn set_newt_clock_bump_interval(&mut self, interval: usize) {
-        self.newt_clock_bump_interval = interval;
+        self.newt_clock_bump_interval = Some(interval);
+    }
+
+    /// Checks whether skip fast ack is enabled or not.
+    pub fn skip_fast_ack(&self) -> bool {
+        self.skip_fast_ack
+    }
+
+    /// Changes the value of `skip_fast_ack`.
+    pub fn set_skip_fast_ack(&mut self, skip_fast_ack: bool) {
+        self.skip_fast_ack = skip_fast_ack;
     }
 }
 
@@ -270,39 +225,6 @@ mod tests {
         assert_eq!(config.n(), n);
         assert_eq!(config.f(), f);
 
-        // by default, newt tiny quorums is false
-        assert!(!config.newt_tiny_quorums());
-
-        // if we change it to false, remains false
-        config.set_newt_tiny_quorums(false);
-        assert!(!config.newt_tiny_quorums());
-
-        // if we change it to true, it becomes true
-        config.set_newt_tiny_quorums(true);
-        assert!(config.newt_tiny_quorums());
-
-        // by default, newt real time is false
-        assert!(!config.newt_real_time());
-
-        // if we change it to false, remains false
-        config.set_newt_real_time(false);
-        assert!(!config.newt_real_time());
-
-        // if we change it to true, it becomes true
-        config.set_newt_real_time(true);
-        assert!(config.newt_real_time());
-
-        // by default, skip fast ack is false
-        assert!(!config.skip_fast_ack());
-
-        // if we change it to false, remains false
-        config.set_skip_fast_ack(false);
-        assert!(!config.skip_fast_ack());
-
-        // if we change it to true, it becomes true
-        config.set_skip_fast_ack(true);
-        assert!(config.skip_fast_ack());
-
         // by default, transitive conflicts is false
         assert!(!config.transitive_conflicts());
 
@@ -320,6 +242,13 @@ mod tests {
         config.set_execute_at_commit(true);
         assert!(config.execute_at_commit());
 
+        // by default, there's no garbage collection interval
+        assert_eq!(config.gc_interval(), None);
+
+        // change its value and check it has changed
+        config.set_gc_interval(100);
+        assert_eq!(config.gc_interval(), Some(100));
+
         // by default, there's no leader
         assert!(config.leader().is_none());
         // but that can change
@@ -327,29 +256,34 @@ mod tests {
         config.set_leader(leader);
         assert_eq!(config.leader(), Some(leader));
 
-        // by default, there's one protocol worker and one executor worker
-        assert_eq!(config.workers(), 1);
-        assert_eq!(config.executors(), 1);
+        // by default, newt tiny quorums is false
+        assert!(!config.newt_tiny_quorums());
 
-        // change their values and check they have changed
-        config.set_workers(10);
-        config.set_executors(20);
-        assert_eq!(config.workers(), 10);
-        assert_eq!(config.executors(), 20);
+        // if we change it to false, remains false
+        config.set_newt_tiny_quorums(false);
+        assert!(!config.newt_tiny_quorums());
 
-        // by default, there's no garbage collection interval
-        assert_eq!(config.garbage_collection_interval(), None);
+        // if we change it to true, it becomes true
+        config.set_newt_tiny_quorums(true);
+        assert!(config.newt_tiny_quorums());
 
-        // change its value and check it has changed
-        config.set_garbage_collection_interval(100);
-        assert_eq!(config.garbage_collection_interval(), Some(100));
+        // by default, there's no clock bump interval
+        assert!(config.newt_clock_bump_interval().is_none());
+        // but that can change
+        let interval = 1;
+        config.set_newt_clock_bump_interval(interval);
+        assert_eq!(config.newt_clock_bump_interval(), Some(interval));
 
-        // by default, newt clock bump interval is 1
-        assert_eq!(config.newt_clock_bump_interval(), 1);
+        // by default, skip fast ack is false
+        assert!(!config.skip_fast_ack());
 
-        // change its value and check it has changed
-        config.set_newt_clock_bump_interval(10);
-        assert_eq!(config.newt_clock_bump_interval(), 10);
+        // if we change it to false, remains false
+        config.set_skip_fast_ack(false);
+        assert!(!config.skip_fast_ack());
+
+        // if we change it to true, it becomes true
+        config.set_skip_fast_ack(true);
+        assert!(config.skip_fast_ack());
     }
 
     #[test]

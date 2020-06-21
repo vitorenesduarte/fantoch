@@ -2,10 +2,6 @@
 #[allow(dead_code)]
 pub mod protocol;
 
-use fantoch::config::Config;
-
-const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
-const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
@@ -25,51 +21,6 @@ pub fn tokio_runtime() -> tokio::runtime::Runtime {
         .thread_name("runner")
         .build()
         .expect("tokio runtime build should work")
-}
-
-pub fn parse_config(
-    n: Option<&str>,
-    f: Option<&str>,
-    transitive_conflicts: Option<&str>,
-    execute_at_commit: Option<&str>,
-    gc_interval: Option<&str>,
-) -> Config {
-    let n = n
-        .expect("n should be set")
-        .parse::<usize>()
-        .expect("n should be a number");
-    let f = f
-        .expect("f should be set")
-        .parse::<usize>()
-        .expect("f should be a number");
-    let transitive_conflicts = transitive_conflicts
-        .map(|transitive_conflicts| {
-            transitive_conflicts
-                .parse::<bool>()
-                .expect("transitive conflicts should be a bool")
-        })
-        .unwrap_or(DEFAULT_TRANSITIVE_CONFLICTS);
-    let execute_at_commit = execute_at_commit
-        .map(|execute_at_commit| {
-            execute_at_commit
-                .parse::<bool>()
-                .expect("execute_at_commit should be a bool")
-        })
-        .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT);
-    let gc_interval = gc_interval.map(|gc_interval| {
-        gc_interval
-            .parse::<usize>()
-            .expect("gc_interval should be a number")
-    });
-    // create config
-    let mut config = Config::new(n, f);
-    // set transitive conflicts and skip execution
-    config.set_transitive_conflicts(transitive_conflicts);
-    config.set_execute_at_commit(execute_at_commit);
-    if let Some(gc_interval) = gc_interval {
-        config.set_garbage_collection_interval(gc_interval);
-    }
-    config
 }
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
@@ -106,8 +57,4 @@ fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
                 .expect("buffer size should be a number")
         })
         .unwrap_or(default)
-}
-
-pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
-    execution_log.map(String::from)
 }

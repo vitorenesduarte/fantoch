@@ -69,12 +69,11 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         };
 
         // create periodic events
-        let events =
-            if let Some(gc_delay) = config.garbage_collection_interval() {
-                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
-            } else {
-                vec![]
-            };
+        let events = if let Some(interval) = config.gc_interval() {
+            vec![(PeriodicEvent::GarbageCollection, interval as u64)]
+        } else {
+            vec![]
+        };
 
         // return both
         (protocol, events)
@@ -579,7 +578,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
     }
 
     fn gc_running(&self) -> bool {
-        self.bp.config.garbage_collection_interval().is_some()
+        self.bp.config.gc_interval().is_some()
     }
 }
 
@@ -777,9 +776,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(process_id_1, config);
-        let executor_2 = GraphExecutor::new(process_id_2, config);
-        let executor_3 = GraphExecutor::new(process_id_3, config);
+        let executor_1 = GraphExecutor::new(process_id_1, config, 0);
+        let executor_2 = GraphExecutor::new(process_id_2, config, 0);
+        let executor_3 = GraphExecutor::new(process_id_3, config, 0);
 
         // epaxos
         let (mut epaxos_1, _) = EPaxos::<KC>::new(process_id_1, config);

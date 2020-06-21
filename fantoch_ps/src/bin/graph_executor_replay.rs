@@ -14,7 +14,7 @@ async fn main() {
     let process_id = 1;
     let (config, execution_log) = parse_args();
     // create graph executor
-    let mut executor = GraphExecutor::new(process_id, config);
+    let mut executor = GraphExecutor::new(process_id, config, 0);
 
     // open execution log file
     let file = File::open(execution_log)
@@ -72,16 +72,17 @@ fn parse_args() -> (Config, String) {
         .get_matches();
 
     // parse arguments
-    let config = common::parse_config(
-        matches.value_of("n"),
-        matches.value_of("f"),
+    let n = common::protocol::parse_n(matches.value_of("n"));
+    let f = common::protocol::parse_f(matches.value_of("f"));
+    let transitive_conflicts = common::protocol::parse_transitive_conflicts(
         matches.value_of("transitive_conflicts"),
-        None,
-        None,
     );
-    let execution_log =
-        common::parse_execution_log(matches.value_of("execution_log"))
-            .expect("execution log should be set");
+    let mut config = Config::new(n, f);
+    config.set_transitive_conflicts(transitive_conflicts);
+    let execution_log = common::protocol::parse_execution_log(
+        matches.value_of("execution_log"),
+    )
+    .expect("execution log should be set");
 
     println!("config: {:?}", config);
     println!("execution log: {:?}", execution_log);

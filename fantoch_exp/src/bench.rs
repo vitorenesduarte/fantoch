@@ -1,7 +1,9 @@
-use crate::args;
+use crate::config::{ClientConfig, ProcessConfig, CLIENT_PORT, PORT};
 use crate::util::{self, RunMode};
 use color_eyre::Report;
 use eyre::WrapErr;
+use fantoch::config::Config;
+use fantoch::id::ProcessId;
 use rusoto_core::Region;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -9,49 +11,10 @@ use tokio::io::AsyncWriteExt;
 use tsunami::providers::aws;
 use tsunami::{Machine, Tsunami};
 
-type ProcessId = usize;
 type ClientMetrics = (String, String);
 
 // run mode
 const RUN_MODE: RunMode = RunMode::Release;
-
-// processes config
-const PORT: usize = 3000;
-const CLIENT_PORT: usize = 4000;
-const PROTOCOL: &str = "newt_atomic";
-const FAULTS: usize = 1;
-const TRANSITIVE_CONFLICTS: bool = true;
-const EXECUTE_AT_COMMIT: bool = false;
-const EXECUTION_LOG: Option<&str> = None;
-const LEADER: Option<ProcessId> = None;
-const GC_INTERVAL: Option<usize> = Some(50); // every 50
-const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
-
-// parallelism config
-const WORKERS: usize = 16;
-const EXECUTORS: usize = 16;
-const MULTIPLEXING: usize = 32;
-
-// clients config
-const CONFLICT_RATE: usize = 10;
-const COMMANDS_PER_CLIENT: usize = 1000;
-const PAYLOAD_SIZE: usize = 0;
-
-// process tcp config
-const PROCESS_TCP_NODELAY: bool = true;
-// by default, each socket stream is buffered (with a buffer of size 8KBs),
-// which should greatly reduce the number of syscalls for small-sized messages
-const PROCESS_TCP_BUFFER_SIZE: usize = 8 * 1024;
-const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2); // millis
-
-// client tcp config
-const CLIENT_TCP_NODELAY: bool = true;
-
-// if this value is 100, the run doesn't finish, which probably means there's a
-// deadlock somewhere with 1000 we can see that channels fill up sometimes with
-// 10000 that doesn't seem to happen
-// - in AWS 10000 is not enough; setting it to 100k
-const CHANNEL_BUFFER_SIZE: usize = 100_000;
 
 pub async fn bench_experiment(
     server_instance_type: String,
@@ -60,11 +23,10 @@ pub async fn bench_experiment(
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
-    ns: Vec<usize>,
-    clients_per_region: Vec<usize>,
-    newt_configs: Vec<(bool, Option<usize>, bool)>,
-    set_sorted_processes: bool,
+    protocol: String,
+    configs: Vec<Config>,
     tracer_show_interval: Option<usize>,
+    clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let mut launcher: aws::Launcher<_> = Default::default();
@@ -75,12 +37,11 @@ pub async fn bench_experiment(
         regions,
         max_spot_instance_request_wait_secs,
         max_instance_duration_hours,
+        protocol,
         branch,
-        ns,
-        clients_per_region,
-        newt_configs,
-        set_sorted_processes,
+        configs,
         tracer_show_interval,
+        clients_per_region,
         output_log,
     )
     .await;
@@ -101,11 +62,10 @@ async fn do_bench_experiment(
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
-    ns: Vec<usize>,
-    clients_per_region: Vec<usize>,
-    newt_configs: Vec<(bool, Option<usize>, bool)>,
-    set_sorted_processes: bool,
+    protocol: String,
+    configs: Vec<Config>,
     tracer_show_interval: Option<usize>,
+    clients_per_region: Vec<usize>,
     mut output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let (regions, server_vms, client_vms) = spawn(
@@ -120,98 +80,75 @@ async fn do_bench_experiment(
     .await
     .wrap_err("spawn machines")?;
 
-    for n in ns {
-        for newt_config in newt_configs.clone() {
-            let (newt_tiny_quorums, newt_clock_bump_interval, skip_fast_ack) =
-                newt_config;
-            if n == 3 && newt_tiny_quorums {
-                tracing::warn!("skipping newt config n = 3 tiny = true");
-                continue;
-            }
+    for config in configs {
+        let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", protocol, config.n(), config.f(), config.newt_tiny_quorums(), config.newt_clock_bump_interval().unwrap_or(0), config.skip_fast_ack());
+        append_to_output_log(&mut output_log, line).await?;
 
-            let (newt_real_time, newt_clock_bump_interval, line) =
-                match newt_clock_bump_interval {
-                    Some(newt_clock_bump_interval) => {
-                        let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, newt_clock_bump_interval, skip_fast_ack);
-                        (true, newt_clock_bump_interval, line)
-                    }
-                    None => {
-                        let line = format!(">running {} n = {} | f = {} | tiny = {} | real_time = false | skip_fast_ack = {}", PROTOCOL, n, FAULTS, newt_tiny_quorums, skip_fast_ack);
-                        (false, 0, line)
-                    }
-                };
-            append_to_output_log(&mut output_log, line).await?;
+        // check that we have the correct number of regions
+        assert_eq!(regions.len(), config.n());
+        for &clients in &clients_per_region {
+            let run_id = format!(
+                "n{}_f{}_tiny{}_interval{}_skipfast_{}clients{}",
+                config.n(),
+                config.f(),
+                config.newt_tiny_quorums(),
+                config.newt_clock_bump_interval().unwrap_or(0),
+                config.skip_fast_ack(),
+                clients,
+            );
+            let latencies = run_experiment(
+                run_id,
+                &regions,
+                &server_vms,
+                &client_vms,
+                &protocol,
+                config,
+                tracer_show_interval,
+                clients,
+            )
+            .await?;
 
-            // select the first `n` regions
-            let regions: Vec<_> = regions.iter().cloned().take(n).collect();
-            for &clients in &clients_per_region {
-                let run_id = format!(
-                    "n{}_f{}_tiny{}_realtime{}_interval{}_skipfast_{}clients{}",
-                    n,
-                    FAULTS,
-                    newt_tiny_quorums,
-                    newt_real_time,
-                    newt_clock_bump_interval,
-                    skip_fast_ack,
-                    clients,
-                );
-                let latencies = run_experiment(
-                    run_id,
-                    &regions,
-                    &server_vms,
-                    &client_vms,
-                    newt_tiny_quorums,
-                    newt_real_time,
-                    newt_clock_bump_interval,
-                    skip_fast_ack,
-                    set_sorted_processes,
-                    tracer_show_interval,
-                    clients,
-                )
-                .await?;
+            let metrics =
+                vec!["min", "max", "avg", "p95", "p99", "p99.9", "p99.99"];
+            let mut latencies_to_avg = HashMap::new();
 
-                let metrics =
-                    vec!["min", "max", "avg", "p95", "p99", "p99.9", "p99.99"];
-                let mut latencies_to_avg = HashMap::new();
-
-                // region latency should be something like:
-                // - "min=173   max=183   avg=178   p95=183   p99=183 p99.9=183
-                //   p99.99=183"
-                for (region, region_latency) in latencies {
-                    let region_latency = region_latency
-                        .strip_prefix("latency: ")
-                        .expect("client output should start with 'latency: '");
-                    let line =
-                        format!("region = {:<14} | {}", region, region_latency);
-                    append_to_output_log(&mut output_log, line).await?;
-
-                    for entry in region_latency.split_whitespace() {
-                        // entry should be something like:
-                        // - "min=78"
-                        let parts: Vec<_> = entry.split("=").collect();
-                        assert_eq!(parts.len(), 2);
-                        let metric = parts[0].to_string();
-                        let latency = parts[1].parse::<usize>()?;
-                        latencies_to_avg
-                            .entry(metric)
-                            .or_insert_with(Vec::new)
-                            .push(latency);
-                    }
-                }
-
-                let mut line = format!("n = {} AND c = {:<9} |", n, clients);
-                for metric in metrics {
-                    let latencies = latencies_to_avg
-                        .remove(metric)
-                        .expect("metric should exist");
-                    // there should be as many latencies as regions
-                    assert_eq!(latencies.len(), regions.len());
-                    let avg =
-                        latencies.into_iter().sum::<usize>() / regions.len();
-                    line = format!("{} {}={:<6}", line, metric, avg);
-                }
+            // region latency should be something like:
+            // - "min=173   max=183   avg=178   p95=183   p99=183 p99.9=183
+            //   p99.99=183"
+            for (region, region_latency) in latencies {
+                let region_latency = region_latency
+                    .strip_prefix("latency: ")
+                    .expect("client output should start with 'latency: '");
+                let line =
+                    format!("region = {:<14} | {}", region, region_latency);
                 append_to_output_log(&mut output_log, line).await?;
+
+                for entry in region_latency.split_whitespace() {
+                    // entry should be something like:
+                    // - "min=78"
+                    let parts: Vec<_> = entry.split("=").collect();
+                    assert_eq!(parts.len(), 2);
+                    let metric = parts[0].to_string();
+                    let latency = parts[1].parse::<usize>()?;
+                    latencies_to_avg
+                        .entry(metric)
+                        .or_insert_with(Vec::new)
+                        .push(latency);
+                }
             }
+
+            let mut line =
+                format!("n = {} AND c = {:<9} |", config.n(), clients);
+            for metric in metrics {
+                let latencies = latencies_to_avg
+                    .remove(metric)
+                    .expect("metric should exist");
+                // there should be as many latencies as regions
+                assert_eq!(latencies.len(), regions.len());
+                let avg = latencies.into_iter().sum::<usize>() / regions.len();
+                line = format!("{} {}={:<6}", line, metric, avg);
+            }
+            append_to_output_log(&mut output_log, line).await?;
         }
     }
     Ok(())
@@ -222,11 +159,8 @@ async fn run_experiment(
     regions: &Vec<String>,
     server_vms: &HashMap<String, Machine<'_>>,
     client_vms: &HashMap<String, Machine<'_>>,
-    newt_tiny_quorums: bool,
-    newt_real_time: bool,
-    newt_clock_bump_interval: usize,
-    skip_fast_ack: bool,
-    set_sorted_processes: bool,
+    protocol: &str,
+    config: Config,
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
 ) -> Result<Vec<ClientMetrics>, Report> {
@@ -234,11 +168,8 @@ async fn run_experiment(
     let (process_ips, processes) = start_processes(
         regions,
         server_vms,
-        newt_tiny_quorums,
-        newt_real_time,
-        newt_clock_bump_interval,
-        skip_fast_ack,
-        set_sorted_processes,
+        protocol,
+        config,
         tracer_show_interval,
     )
     .await
@@ -363,11 +294,8 @@ async fn do_spawn(
 async fn start_processes(
     regions: &Vec<String>,
     vms: &HashMap<String, Machine<'_>>,
-    newt_tiny_quorums: bool,
-    newt_real_time: bool,
-    newt_clock_bump_interval: usize,
-    skip_fast_ack: bool,
-    set_sorted_processes: bool,
+    protocol: &str,
+    config: Config,
     tracer_show_interval: Option<usize>,
 ) -> Result<
     (
@@ -376,103 +304,57 @@ async fn start_processes(
     ),
     Report,
 > {
+    let n = config.n();
+    // check that we have the correct number of regions and vms
+    assert_eq!(regions.len(), n);
+    assert_eq!(vms.len(), n);
+
     let ips: HashMap<_, _> = vms
         .iter()
         .map(|(region, vm)| (region.clone(), vm.public_ip.clone()))
         .collect();
     tracing::debug!("processes ips: {:?}", ips);
-    let addresses = |region| {
+    let all_but_self = |region| {
         // select all ips but self
         ips.iter()
-            .filter_map(|(ip_region, ip)| {
-                if ip_region == region {
-                    None
-                } else {
-                    Some(address(ip, PORT))
-                }
-            })
+            .filter_map(
+                |(ip_region, ip)| {
+                    if ip_region == region {
+                        None
+                    } else {
+                        Some(ip)
+                    }
+                },
+            )
             .collect::<Vec<_>>()
-            .join(",")
     };
 
-    let n = vms.len();
     let mut processes = HashMap::with_capacity(n);
     let mut wait_processes = Vec::with_capacity(n);
 
-    for (process_id, region) in (1..=n).zip(regions.iter()) {
+    for (process_id, region) in
+        fantoch::util::process_ids(n).zip(regions.iter())
+    {
         let vm = vms.get(region).expect("process vm should exist");
-        let addresses = addresses(region);
-        let mut args = args![
-            "--id",
-            process_id,
-            // bind to 0.0.0.0
-            "--ip",
-            "0.0.0.0",
-            "--port",
-            PORT,
-            "--addresses",
-            addresses,
-            "--client_port",
-            CLIENT_PORT,
-            "--processes",
-            n,
-            "--faults",
-            FAULTS,
-            "--transitive_conflicts",
-            TRANSITIVE_CONFLICTS,
-            "--execute_at_commit",
-            EXECUTE_AT_COMMIT,
-            "--tcp_nodelay",
-            PROCESS_TCP_NODELAY,
-            "--tcp_buffer_size",
-            PROCESS_TCP_BUFFER_SIZE,
-            "--channel_buffer_size",
-            CHANNEL_BUFFER_SIZE,
-            "--workers",
-            WORKERS,
-            "--executors",
-            EXECUTORS,
-            "--multiplexing",
-            MULTIPLEXING,
-            "--newt_tiny_quorums",
-            newt_tiny_quorums,
-            "--newt_real_time",
-            newt_real_time,
-            "--newt_clock_bump_interval",
-            newt_clock_bump_interval,
-            "--skip_fast_ack",
-            skip_fast_ack,
-        ];
-        if let Some(interval) = PROCESS_TCP_FLUSH_INTERVAL {
-            args.extend(args!["--tcp_flush_interval", interval]);
-        }
-        if let Some(log) = EXECUTION_LOG {
-            args.extend(args!["--execution_log", log]);
-        }
-        if let Some(interval) = tracer_show_interval {
-            args.extend(args!["--tracer_show_interval", interval]);
-        }
-        if let Some(interval) = GC_INTERVAL {
-            args.extend(args!["--gc_interval", interval]);
-        }
-        if let Some(interval) = PING_INTERVAL {
-            args.extend(args!["--ping_interval", interval]);
-        }
-        if let Some(leader) = LEADER {
-            args.extend(args!["--leader", leader]);
-        }
 
-        if set_sorted_processes {
-            let sorted_processes = (process_id..=(n as ProcessId))
-                .chain(1..process_id)
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
-            args.extend(args!["--sorted", sorted_processes]);
+        // get ips for this region
+        let ips = all_but_self(region)
+            .into_iter()
+            .map(|ip| {
+                let delay = None;
+                (ip.clone(), delay)
+            })
+            .collect();
+
+        // create process config and generate args
+        let mut process_config = ProcessConfig::new(process_id, config, ips);
+        if let Some(interval) = tracer_show_interval {
+            process_config.set_tracer_show_interval(interval);
         }
+        let args = process_config.to_args();
 
         let command = fantoch_bin_script(
-            PROTOCOL,
+            &protocol,
             args,
             RUN_MODE,
             process_file(process_id),
@@ -503,32 +385,18 @@ async fn run_clients(
     let mut wait_clients = Vec::with_capacity(n);
 
     for (client_index, (region, vm)) in (1..=n).zip(vms.iter()) {
-        // get ip for this region
-        let ip = process_ips.get(region).expect("get process ip");
-        let address = address(ip, CLIENT_PORT);
-
         // compute id start and id end:
         // - first compute the id end
         // - and then compute id start: subtract `clients_per_machine` and add 1
         let id_end = client_index * clients_per_region;
         let id_start = id_end - clients_per_region + 1;
 
-        let args = args![
-            "--ids",
-            format!("{}-{}", id_start, id_end),
-            "--address",
-            address,
-            "--conflict_rate",
-            CONFLICT_RATE,
-            "--commands_per_client",
-            COMMANDS_PER_CLIENT,
-            "--payload_size",
-            PAYLOAD_SIZE,
-            "--tcp_nodelay",
-            CLIENT_TCP_NODELAY,
-            "--channel_buffer_size",
-            CHANNEL_BUFFER_SIZE,
-        ];
+        // get ip for this region
+        let ip = process_ips.get(region).expect("get process ip").clone();
+
+        // create client config and generate args
+        let client_config = ClientConfig::new(id_start, id_end, ip);
+        let args = client_config.to_args();
 
         // always run clients on release mode
         let command = fantoch_bin_script(
@@ -740,10 +608,6 @@ fn fantoch_bin_script(
     let binary = run_mode.binary(binary);
     let args = args.join(" ");
     format!("{} {} > {} 2>&1", binary, args, output_file)
-}
-
-fn address(ip: impl ToString, port: usize) -> String {
-    format!("{}:{}", ip.to_string(), port)
 }
 
 fn process_file(process_id: ProcessId) -> String {
