@@ -149,7 +149,6 @@ fn newt_real_time(aws: bool) {
             );
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
-            config.set_newt_real_time(false);
             let planet_ = planet.clone();
             let regions_ = regions.clone();
             run_in_thread(move || {
@@ -164,7 +163,6 @@ fn newt_real_time(aws: bool) {
                 );
                 let mut config = Config::new(n, f);
                 config.set_newt_tiny_quorums(tiny_quorums);
-                config.set_newt_real_time(true);
                 config.set_newt_clock_bump_interval(interval);
                 let regions = regions.clone();
                 let planet = planet.clone();
@@ -194,7 +192,6 @@ fn newt_vs_spanner() {
         );
         let mut config = Config::new(n, f);
         config.set_newt_tiny_quorums(true);
-        config.set_newt_real_time(true);
         config.set_newt_clock_bump_interval(interval);
         let planet = planet.clone();
         let regions = regions.clone();

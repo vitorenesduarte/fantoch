@@ -52,7 +52,6 @@ mod tests {
                 config.set_leader(1);
             }
             config.set_newt_tiny_quorums(true);
-            config.set_newt_real_time(true);
             config.set_newt_clock_bump_interval($clock_bump_interval);
             config
         }};
@@ -73,7 +72,6 @@ mod tests {
             config.set_workers($workers);
             config.set_executors($executors);
             config.set_newt_tiny_quorums(true);
-            config.set_newt_real_time(true);
             config.set_newt_clock_bump_interval($clock_bump_interval);
             config
         }};

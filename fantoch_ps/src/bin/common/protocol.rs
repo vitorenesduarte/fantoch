@@ -16,7 +16,6 @@ const DEFAULT_MULTIPLEXING: usize = 1;
 
 // newt's config
 const DEFAULT_NEWT_TINY_QUORUMS: bool = false;
-const DEFAULT_NEWT_REAL_TIME: bool = false;
 const DEFAULT_NEWT_CLOCK_BUMP_INTERVAL: usize = 10;
 
 // protocol's config
@@ -257,17 +256,10 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("newt_real_time")
-                .long("newt_real_time")
-                .value_name("NEWT_REAL_TIME")
-                .help("boolean indicating whether newt should use real time to bump its clocks; default: false")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("newt_clock_bump_interval")
                 .long("newt_clock_bump_interval")
                 .value_name("NEWT_CLOCK_BUMP_INTERVAL")
-                .help("number indicating the interval (in milliseconds) between clock bump; this value is only used if 'newt_real_time = true'; default: 10")
+                .help("number indicating the interval (in milliseconds) between clock bump; if this value is not set, then clocks are not bumped periodically")
                 .takes_value(true),
         )
         .arg(
@@ -312,12 +304,11 @@ fn parse_args() -> (
     let tracer_show_interval =
         parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
     let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
-    let (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval) =
-        parse_newt_config(
-            matches.value_of("newt_tiny_quorums"),
-            matches.value_of("newt_real_time"),
-            matches.value_of("newt_clock_bump_interval"),
-        );
+    let newt_tiny_quorums =
+        parse_newt_tiny_quorums(matches.value_of("newt_tiny_quorums"));
+    let newt_clock_bump_interval = parse_newt_clock_bump_interval(
+        matches.value_of("newt_clock_bump_interval"),
+    );
     let skip_fast_ack = parse_skip_fast_ack(matches.value_of("skip_fast_ack"));
 
     // update config:
@@ -331,8 +322,9 @@ fn parse_args() -> (
 
     // set newt's config
     config.set_newt_tiny_quorums(newt_tiny_quorums);
-    config.set_newt_real_time(newt_real_time);
-    config.set_newt_clock_bump_interval(newt_clock_bump_interval);
+    if let Some(interval) = newt_clock_bump_interval {
+        config.set_newt_clock_bump_interval(interval);
+    }
 
     // set protocol's config
     config.set_skip_fast_ack(skip_fast_ack);
@@ -489,35 +481,25 @@ fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
     })
 }
 
-fn parse_newt_config(
-    newt_tiny_quorums: Option<&str>,
-    newt_real_time: Option<&str>,
-    newt_clock_bump_interval: Option<&str>,
-) -> (bool, bool, usize) {
-    let newt_tiny_quorums = newt_tiny_quorums
+fn parse_newt_tiny_quorums(newt_tiny_quorums: Option<&str>) -> bool {
+    newt_tiny_quorums
         .map(|newt_tiny_quorums| {
             newt_tiny_quorums
                 .parse::<bool>()
                 .expect("newt_tiny_quorums should be a bool")
         })
-        .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS);
-    let newt_real_time = newt_real_time
-        .map(|newt_real_time| {
-            newt_real_time
-                .parse::<bool>()
-                .expect("newt_real_time should be a bool")
-        })
-        .unwrap_or(DEFAULT_NEWT_REAL_TIME);
-    let newt_clock_bump_interval = newt_clock_bump_interval
-        .map(|newt_clock_bump_interval| {
-            newt_clock_bump_interval
-                .parse::<usize>()
-                .expect("newt_clock_bump_interval should be a number")
-        })
-        .unwrap_or(DEFAULT_NEWT_CLOCK_BUMP_INTERVAL);
-    (newt_tiny_quorums, newt_real_time, newt_clock_bump_interval)
+        .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS)
 }
 
+fn parse_newt_clock_bump_interval(
+    newt_clock_bump_interval: Option<&str>,
+) -> Option<usize> {
+    newt_clock_bump_interval.map(|newt_clock_bump_interval| {
+        newt_clock_bump_interval
+            .parse::<usize>()
+            .expect("newt_clock_bump_interval should be a number")
+    })
+}
 pub fn parse_skip_fast_ack(skip_fast_ack: Option<&str>) -> bool {
     skip_fast_ack
         .map(|skip_fast_ack| {

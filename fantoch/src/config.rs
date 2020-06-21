@@ -8,8 +8,8 @@ pub struct Config {
     f: usize,
     /// defines whether newt should employ tiny quorums or not
     newt_tiny_quorums: bool,
-    /// defines whether newt should bump clocks based on real time or not
-    newt_real_time: bool,
+    /// defines the interval between clock bumps (milliseconds), if any
+    newt_clock_bump_interval: Option<usize>,
     /// defines whether protocols should try to bypass the fast quorum process
     /// ack (which is only possible if the fast quorum size is 2)
     skip_fast_ack: bool,
@@ -25,8 +25,6 @@ pub struct Config {
     executors: usize,
     /// defines the interval between garbage collections (milliseconds)
     garbage_collection_interval: Option<usize>,
-    /// defines the interval between clock bumps (milliseconds)
-    newt_clock_bump_interval: usize,
 }
 
 impl Config {
@@ -40,8 +38,8 @@ impl Config {
         }
         // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;
-        // by default, `newt_real_time = false`
-        let newt_real_time = false;
+        // by default, clocks are not bumped periodically
+        let newt_clock_bump_interval = None;
         // by default `skip_fast_ack = false;
         let skip_fast_ack = false;
         // by default, `transitive_conflicts = false`
@@ -56,13 +54,11 @@ impl Config {
         let executors = 1;
         // by default, commands are deleted at commit time
         let garbage_collection_interval = None;
-        // by default, garbage collection runs every 1ms
-        let newt_clock_bump_interval = 1;
         Self {
             n,
             f,
             newt_tiny_quorums,
-            newt_real_time,
+            newt_clock_bump_interval,
             skip_fast_ack,
             transitive_conflicts,
             execute_at_commit,
@@ -70,7 +66,6 @@ impl Config {
             workers,
             executors,
             garbage_collection_interval,
-            newt_clock_bump_interval,
         }
     }
 
@@ -94,14 +89,14 @@ impl Config {
         self.newt_tiny_quorums = newt_tiny_quorums;
     }
 
-    /// Checks whether newt real time is enabled or not.
-    pub fn newt_real_time(&self) -> bool {
-        self.newt_real_time
+    /// Checks Newt clock bumpp interval.
+    pub fn newt_clock_bump_interval(&self) -> Option<usize> {
+        self.newt_clock_bump_interval
     }
 
-    /// Changes the value of `new_real_time`.
-    pub fn set_newt_real_time(&mut self, newt_real_time: bool) {
-        self.newt_real_time = newt_real_time;
+    /// Sets newt clock bump interval.
+    pub fn set_newt_clock_bump_interval(&mut self, interval: usize) {
+        self.newt_clock_bump_interval = Some(interval);
     }
 
     /// Checks whether skip fast ack is enabled or not.
@@ -172,16 +167,6 @@ impl Config {
     /// Sets the garbage collection interval.
     pub fn set_garbage_collection_interval(&mut self, interval: usize) {
         self.garbage_collection_interval = Some(interval);
-    }
-
-    /// Checks Newt clock bumpp interval.
-    pub fn newt_clock_bump_interval(&self) -> usize {
-        self.newt_clock_bump_interval
-    }
-
-    /// Sets newt clock bump interval.
-    pub fn set_newt_clock_bump_interval(&mut self, interval: usize) {
-        self.newt_clock_bump_interval = interval;
     }
 }
 
@@ -281,16 +266,12 @@ mod tests {
         config.set_newt_tiny_quorums(true);
         assert!(config.newt_tiny_quorums());
 
-        // by default, newt real time is false
-        assert!(!config.newt_real_time());
-
-        // if we change it to false, remains false
-        config.set_newt_real_time(false);
-        assert!(!config.newt_real_time());
-
-        // if we change it to true, it becomes true
-        config.set_newt_real_time(true);
-        assert!(config.newt_real_time());
+        // by default, there's no clock bump interval
+        assert!(config.newt_clock_bump_interval().is_none());
+        // but that can change
+        let interval = 1;
+        config.set_newt_clock_bump_interval(interval);
+        assert_eq!(config.newt_clock_bump_interval(), Some(interval));
 
         // by default, skip fast ack is false
         assert!(!config.skip_fast_ack());
@@ -343,13 +324,6 @@ mod tests {
         // change its value and check it has changed
         config.set_garbage_collection_interval(100);
         assert_eq!(config.garbage_collection_interval(), Some(100));
-
-        // by default, newt clock bump interval is 1
-        assert_eq!(config.newt_clock_bump_interval(), 1);
-
-        // change its value and check it has changed
-        config.set_newt_clock_bump_interval(10);
-        assert_eq!(config.newt_clock_bump_interval(), 10);
     }
 
     #[test]
