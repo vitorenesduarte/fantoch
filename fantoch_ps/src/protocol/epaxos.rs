@@ -69,12 +69,11 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         };
 
         // create periodic events
-        let events =
-            if let Some(gc_delay) = config.gc_interval() {
-                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
-            } else {
-                vec![]
-            };
+        let events = if let Some(gc_delay) = config.gc_interval() {
+            vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
+        } else {
+            vec![]
+        };
 
         // return both
         (protocol, events)

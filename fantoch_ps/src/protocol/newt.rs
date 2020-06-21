@@ -89,12 +89,11 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         };
 
         // maybe create garbage collection periodic event
-        let mut events =
-            if let Some(gc_delay) = config.gc_interval() {
-                vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
-            } else {
-                vec![]
-            };
+        let mut events = if let Some(gc_delay) = config.gc_interval() {
+            vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
+        } else {
+            vec![]
+        };
 
         // maybe create clock bump periodic event
         if let Some(interval) = config.newt_clock_bump_interval() {

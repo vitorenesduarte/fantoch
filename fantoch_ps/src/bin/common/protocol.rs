@@ -10,12 +10,12 @@ const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_CLIENT_PORT: u16 = 4000;
 
+const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
+const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
+
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
-
-const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
-const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 
 // newt's config
 const DEFAULT_NEWT_TINY_QUORUMS: bool = false;

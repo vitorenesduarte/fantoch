@@ -25,9 +25,9 @@ const OUTPUT_LOG: &str = ".tracer_log";
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 macro_rules! config {
-    ($n:expr, $f:expr, $tiny:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
+    ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
         let mut config = Config::new($n, $f);
-        config.set_newt_tiny_quorums($tiny);
+        config.set_newt_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
             config.set_newt_clock_bump_interval(interval);
         }
@@ -63,7 +63,7 @@ async fn bench(
         Region::SaEast1,
     ];
     let configs = vec![
-        // tiny, interval, skip fast ack
+        // n, f, tiny quorums, clock bump interval, skip fast ack
         config!(5, 1, false, None, false),
         config!(5, 1, false, Some(10), false),
         config!(5, 1, false, None, true),
