@@ -55,26 +55,6 @@ mod tests {
             config.set_newt_clock_bump_interval($clock_bump_interval);
             config
         }};
-        ($n:expr, $f:expr, $with_leader:expr, $workers:expr, $executors:expr) => {{
-            let mut config = Config::new($n, $f);
-            if $with_leader {
-                config.set_leader(1);
-            }
-            config.set_workers($workers);
-            config.set_executors($executors);
-            config
-        }};
-        ($n:expr, $f:expr, $with_leader:expr, $workers:expr, $executors:expr, $clock_bump_interval:expr) => {{
-            let mut config = Config::new($n, $f);
-            if $with_leader {
-                config.set_leader(1);
-            }
-            config.set_workers($workers);
-            config.set_executors($executors);
-            config.set_newt_tiny_quorums(true);
-            config.set_newt_clock_bump_interval($clock_bump_interval);
-            config
-        }};
     }
 
     #[test]
@@ -120,9 +100,11 @@ mod tests {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 4;
-        let slow_paths = run_test::<NewtSequential>(config!(
-            3, 1, false, workers, executors
-        ))
+        let slow_paths = run_test::<NewtSequential>(
+            config!(3, 1, false),
+            workers,
+            executors,
+        )
         .await;
         assert_eq!(slow_paths, 0);
     }
@@ -134,7 +116,7 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<NewtAtomic>(config!(3, 1, false, workers, executors))
+            run_test::<NewtAtomic>(config!(3, 1, false), workers, executors)
                 .await;
         assert_eq!(slow_paths, 0);
     }
@@ -144,14 +126,11 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let clock_bump_interval = 50;
-        let slow_paths = run_test::<NewtAtomic>(config!(
-            3,
-            1,
-            false,
+        let slow_paths = run_test::<NewtAtomic>(
+            config!(3, 1, false, clock_bump_interval),
             workers,
             executors,
-            clock_bump_interval
-        ))
+        )
         .await;
         assert_eq!(slow_paths, 0);
     }
@@ -161,9 +140,11 @@ mod tests {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 4;
-        let slow_paths = run_test::<NewtSequential>(config!(
-            5, 1, false, workers, executors
-        ))
+        let slow_paths = run_test::<NewtSequential>(
+            config!(5, 1, false),
+            workers,
+            executors,
+        )
         .await;
         assert_eq!(slow_paths, 0);
     }
@@ -175,7 +156,7 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<NewtAtomic>(config!(5, 1, false, workers, executors))
+            run_test::<NewtAtomic>(config!(5, 1, false), workers, executors)
                 .await;
         assert_eq!(slow_paths, 0);
     }
@@ -185,14 +166,11 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let clock_bump_interval = 50;
-        let slow_paths = run_test::<NewtAtomic>(config!(
-            5,
-            1,
-            false,
+        let slow_paths = run_test::<NewtAtomic>(
+            config!(5, 1, false, clock_bump_interval),
             workers,
             executors,
-            clock_bump_interval
-        ))
+        )
         .await;
         assert_eq!(slow_paths, 0);
     }
@@ -226,9 +204,11 @@ mod tests {
         // atlas sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        let slow_paths = run_test::<AtlasSequential>(config!(
-            3, 1, false, workers, executors
-        ))
+        let slow_paths = run_test::<AtlasSequential>(
+            config!(3, 1, false),
+            workers,
+            executors,
+        )
         .await;
         assert_eq!(slow_paths, 0);
     }
@@ -240,7 +220,7 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<AtlasLocked>(config!(3, 1, false, workers, executors))
+            run_test::<AtlasLocked>(config!(3, 1, false), workers, executors)
                 .await;
         assert_eq!(slow_paths, 0);
     }
@@ -262,9 +242,11 @@ mod tests {
         // epaxos sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        let slow_paths = run_test::<EPaxosSequential>(config!(
-            3, 1, false, workers, executors
-        ))
+        let slow_paths = run_test::<EPaxosSequential>(
+            config!(3, 1, false),
+            workers,
+            executors,
+        )
         .await;
         assert_eq!(slow_paths, 0);
     }
@@ -276,7 +258,7 @@ mod tests {
         let workers = 4;
         let executors = 1;
         let slow_paths =
-            run_test::<EPaxosLocked>(config!(3, 1, false, workers, executors))
+            run_test::<EPaxosLocked>(config!(3, 1, false), workers, executors)
                 .await;
         assert_eq!(slow_paths, 0);
     }
@@ -296,7 +278,7 @@ mod tests {
         // run fpaxos in sequential mode
         let workers = 1;
         let executors = 1;
-        run_test::<FPaxos>(config!(3, 1, true, workers, executors)).await;
+        run_test::<FPaxos>(config!(3, 1, true), workers, executors).await;
     }
 
     #[tokio::test]
@@ -305,7 +287,7 @@ mod tests {
         // never parallel)
         let workers = 3;
         let executors = 1;
-        run_test::<FPaxos>(config!(3, 1, true, workers, executors)).await;
+        run_test::<FPaxos>(config!(3, 1, true), workers, executors).await;
     }
 
     // global test config
@@ -331,7 +313,11 @@ mod tests {
         (slow_paths, stable_count)
     }
 
-    async fn run_test<P>(mut config: Config) -> u64
+    async fn run_test<P>(
+        mut config: Config,
+        workers: usize,
+        executors: usize,
+    ) -> u64
     where
         P: Protocol + Send + 'static,
     {
@@ -339,16 +325,18 @@ mod tests {
         config.set_garbage_collection_interval(100);
 
         // run until the clients end + another 10 seconds (10000ms)
-        let extra_run_time = Some(10_000);
         let tracer_show_interval = None;
+        let extra_run_time = Some(10_000);
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             config,
             CONFLICT_RATE,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
-            extra_run_time,
+            workers,
+            executors,
             tracer_show_interval,
             Some(metrics_inspect),
+            extra_run_time,
         )
         .await
         .expect("run should complete successfully")

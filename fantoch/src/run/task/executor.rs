@@ -11,6 +11,7 @@ use std::collections::HashMap;
 pub fn start_executors<P>(
     process_id: ProcessId,
     config: Config,
+    executors: usize,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientReceiver>,
 ) where
@@ -26,6 +27,7 @@ pub fn start_executors<P>(
         task::spawn(executor_task::<P>(
             process_id,
             config,
+            executors,
             from_workers,
             from_clients,
         ));
@@ -35,13 +37,14 @@ pub fn start_executors<P>(
 async fn executor_task<P>(
     process_id: ProcessId,
     config: Config,
+    executors: usize,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientReceiver,
 ) where
     P: Protocol,
 {
     // create executor
-    let mut executor = P::Executor::new(process_id, config);
+    let mut executor = P::Executor::new(process_id, config, executors);
 
     // mapping from client id to its rifl acks channel
     let mut client_rifl_acks = HashMap::new();

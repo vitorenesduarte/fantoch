@@ -528,9 +528,9 @@ mod tests {
         config.set_leader(process_id_1);
 
         // executors
-        let executor_1 = SlotExecutor::new(process_id_1, config);
-        let executor_2 = SlotExecutor::new(process_id_2, config);
-        let executor_3 = SlotExecutor::new(process_id_3, config);
+        let executor_1 = SlotExecutor::new(process_id_1, config, 0);
+        let executor_2 = SlotExecutor::new(process_id_2, config, 0);
+        let executor_3 = SlotExecutor::new(process_id_3, config, 0);
 
         // fpaxos
         let (mut fpaxos_1, _) = FPaxos::new(process_id_1, config);

@@ -28,7 +28,7 @@ pub trait Executor: Clone {
         + Sync
         + MessageKey; // TODO why is Sync needed??
 
-    fn new(process_id: ProcessId, config: Config) -> Self;
+    fn new(process_id: ProcessId, config: Config, executors: usize) -> Self;
 
     fn wait_for(&mut self, cmd: &Command);
 

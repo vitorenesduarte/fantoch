@@ -1057,9 +1057,10 @@ mod tests {
         config.set_garbage_collection_interval(100);
 
         // executors
-        let executor_1 = TableExecutor::new(process_id_1, config);
-        let executor_2 = TableExecutor::new(process_id_2, config);
-        let executor_3 = TableExecutor::new(process_id_3, config);
+        let executors = 1;
+        let executor_1 = TableExecutor::new(process_id_1, config, executors);
+        let executor_2 = TableExecutor::new(process_id_2, config, executors);
+        let executor_3 = TableExecutor::new(process_id_3, config, executors);
 
         // newts
         let (mut newt_1, _) = Newt::<KC>::new(process_id_1, config);

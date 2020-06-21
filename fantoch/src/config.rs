@@ -139,26 +139,6 @@ impl Config {
         self.leader = Some(leader);
     }
 
-    /// Checks the number of `Protocol` workers.
-    pub fn workers(&self) -> usize {
-        self.workers
-    }
-
-    /// Changes the value of `Protocol` workers.
-    pub fn set_workers(&mut self, workers: usize) {
-        self.workers = workers;
-    }
-
-    /// Checks the number of `Executor`'s.
-    pub fn executors(&self) -> usize {
-        self.executors
-    }
-
-    /// Changes the value of `Executor`'s.
-    pub fn set_executors(&mut self, executors: usize) {
-        self.executors = executors;
-    }
-
     /// Checks the garbage collection interval.
     pub fn garbage_collection_interval(&self) -> Option<usize> {
         self.garbage_collection_interval
@@ -307,16 +287,6 @@ mod tests {
         let leader = 1;
         config.set_leader(leader);
         assert_eq!(config.leader(), Some(leader));
-
-        // by default, there's one protocol worker and one executor worker
-        assert_eq!(config.workers(), 1);
-        assert_eq!(config.executors(), 1);
-
-        // change their values and check they have changed
-        config.set_workers(10);
-        config.set_executors(20);
-        assert_eq!(config.workers(), 10);
-        assert_eq!(config.executors(), 20);
 
         // by default, there's no garbage collection interval
         assert_eq!(config.garbage_collection_interval(), None);

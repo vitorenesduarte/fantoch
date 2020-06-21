@@ -111,6 +111,8 @@ pub async fn process<P, A>(
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
+    workers: usize,
+    executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
@@ -135,6 +137,8 @@ where
         tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
+        workers,
+        executors,
         multiplexing,
         execution_log,
         tracer_show_interval,
@@ -158,6 +162,8 @@ async fn process_with_notify_and_inspect<P, A, R>(
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
+    workers: usize,
+    executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
@@ -171,19 +177,13 @@ where
     R: Clone + Debug + Send + 'static,
 {
     // panic if protocol is not parallel and we have more than one worker
-    if config.workers() > 1 && !P::parallel() {
-        panic!(
-            "running non-parallel protocol with {} workers",
-            config.workers()
-        )
+    if workers > 1 && !P::parallel() {
+        panic!("running non-parallel protocol with {} workers", workers,)
     }
 
     // panic if executor is not parallel and we have more than one executor
-    if config.executors() > 1 && !P::Executor::parallel() {
-        panic!(
-            "running non-parallel executor with {} executors",
-            config.executors()
-        )
+    if executors > 1 && !P::Executor::parallel() {
+        panic!("running non-parallel executor with {} executors", executors)
     }
 
     // panic if protocol is leaderless and there's a leader
@@ -213,7 +213,7 @@ where
     let (reader_to_workers, reader_to_workers_rxs) = ReaderToWorkers::<P>::new(
         "reader_to_workers",
         channel_buffer_size,
-        config.workers(),
+        workers,
     );
 
     // connect to all processes
@@ -273,24 +273,21 @@ where
     };
 
     // create forward channels: client -> workers
-    let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(
-        "client_to_workers",
-        channel_buffer_size,
-        config.workers(),
-    );
+    let (client_to_workers, client_to_workers_rxs) =
+        ClientToWorkers::new("client_to_workers", channel_buffer_size, workers);
 
     // create forward channels: periodic task -> workers
     let (periodic_to_workers, periodic_to_workers_rxs) = PeriodicToWorkers::new(
         "periodic_to_workers",
         channel_buffer_size,
-        config.workers(),
+        workers,
     );
 
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
         "client_to_executors",
         channel_buffer_size,
-        config.executors(),
+        executors,
     );
 
     // start listener
@@ -309,13 +306,14 @@ where
         WorkerToExecutors::<P>::new(
             "worker_to_executors",
             channel_buffer_size,
-            config.executors(),
+            executors,
         );
 
     // start executors
     task::executor::start_executors::<P>(
         process_id,
         config,
+        executors,
         worker_to_executors_rxs,
         client_to_executors_rxs,
     );
@@ -628,11 +626,7 @@ pub mod tests {
         // config
         let n = 3;
         let f = 1;
-        let workers = 2;
-        let executors = 3;
         let mut config = Config::new(n, f);
-        config.set_workers(workers);
-        config.set_executors(executors);
 
         // make sure stability is running
         config.set_garbage_collection_interval(100);
@@ -640,6 +634,8 @@ pub mod tests {
         let conflict_rate = 100;
         let commands_per_client = 100;
         let clients_per_region = 3;
+        let workers = 2;
+        let executors = 2;
         let tracer_show_interval = Some(3000);
         let extra_run_time = Some(5000);
 
@@ -650,9 +646,11 @@ pub mod tests {
                 conflict_rate,
                 commands_per_client,
                 clients_per_region,
-                extra_run_time,
+                workers,
+                executors,
                 tracer_show_interval,
                 Some(inspect_stable_commands),
+                extra_run_time,
             )
             .await
             .expect("run should complete successfully")
@@ -670,9 +668,11 @@ pub mod tests {
         conflict_rate: usize,
         commands_per_client: usize,
         clients_per_region: usize,
-        extra_run_time: Option<u64>,
+        workers: usize,
+        executors: usize,
         tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
+        extra_run_time: Option<u64>,
     ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
         P: Protocol + Send + 'static,
@@ -689,9 +689,11 @@ pub mod tests {
                     conflict_rate,
                     commands_per_client,
                     clients_per_region,
-                    extra_run_time,
+                    workers,
+                    executors,
                     tracer_show_interval,
                     inspect_fun,
+                    extra_run_time,
                 )
                 .await
             })
@@ -703,9 +705,11 @@ pub mod tests {
         conflict_rate: usize,
         commands_per_client: usize,
         clients_per_region: usize,
-        extra_run_time: Option<u64>,
+        workers: usize,
+        executors: usize,
         tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
+        extra_run_time: Option<u64>,
     ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
         P: Protocol + Send + 'static,
@@ -806,6 +810,8 @@ pub mod tests {
                 tcp_buffer_size,
                 tcp_flush_interval,
                 channel_buffer_size,
+                workers,
+                executors,
                 multiplexing,
                 execution_log,
                 tracer_show_interval,
@@ -887,8 +893,7 @@ pub mod tests {
                     .blind_send((inspect_fun, reply_chan_tx.clone()))
                     .await;
                 let replies =
-                    gather_workers_replies(config.workers(), &mut reply_chan)
-                        .await;
+                    gather_workers_replies(workers, &mut reply_chan).await;
                 result.insert(process_id, replies);
             }
         }

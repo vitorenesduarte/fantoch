@@ -109,7 +109,9 @@ where
             assert!(process.discover(sorted));
 
             // create executor for this process
-            let executor = <P::Executor as Executor>::new(process.id(), config);
+            let executors = 1;
+            let executor =
+                <P::Executor as Executor>::new(process.id(), config, executors);
 
             // and register both
             simulation.register_process(process, executor);
