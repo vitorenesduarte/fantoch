@@ -9,10 +9,13 @@ const LIST_SEP: &str = ",";
 const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_CLIENT_PORT: u16 = 4000;
-const DEFAULT_TCP_NODELAY: bool = true;
+
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
+
+const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
+const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 
 // newt's config
 const DEFAULT_NEWT_TINY_QUORUMS: bool = false;
@@ -41,6 +44,8 @@ where
         tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
+        workers,
+        executors,
         multiplexing,
         execution_log,
         tracer_show_interval,
@@ -59,6 +64,8 @@ where
         tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
+        workers,
+        executors,
         multiplexing,
         execution_log,
         tracer_show_interval,
@@ -78,6 +85,8 @@ fn parse_args() -> (
     bool,
     usize,
     Option<usize>,
+    usize,
+    usize,
     usize,
     usize,
     Option<String>,
@@ -163,10 +172,38 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("gc_interval")
+                .long("gc_interval")
+                .value_name("GC_INTERVAL")
+                .help("garbage collection interval (in milliseconds); if no value if set, stability doesn't run and commands are deleted at commit time")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("leader")
                 .long("leader")
                 .value_name("LEADER")
                 .help("id of the starting leader process in leader-based protocols")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("newt_tiny_quorums")
+                .long("newt_tiny_quorums")
+                .value_name("NEWT_TINY_QUORUMS")
+                .help("boolean indicating whether newt's tiny quorums are enabled; default: false")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("newt_clock_bump_interval")
+                .long("newt_clock_bump_interval")
+                .value_name("NEWT_CLOCK_BUMP_INTERVAL")
+                .help("number indicating the interval (in milliseconds) between clock bump; if this value is not set, then clocks are not bumped periodically")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("skip_fast_ack")
+                .long("skip_fast_ack")
+                .value_name("SKIP_FAST_ACK")
+                .help("boolean indicating whether protocols should try to enable the skip fast ack optimization; default: false")
                 .takes_value(true),
         )
         .arg(
@@ -188,13 +225,6 @@ fn parse_args() -> (
                 .long("tcp_flush_interval")
                 .value_name("TCP_FLUSH_INTERVAL")
                 .help("TCP flush interval (in milliseconds); if 0, then flush occurs on every send; default: 0")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("gc_interval")
-                .long("gc_interval")
-                .value_name("GC_INTERVAL")
-                .help("garbage collection interval (in milliseconds); if no value if set, stability doesn't run and commands are deleted at commit time")
                 .takes_value(true),
         )
         .arg(
@@ -248,27 +278,6 @@ fn parse_args() -> (
                 .help("number indicating the interval (in milliseconds) between pings between processes; by default there's no pinging; if set, this value should be > 0")
                 .takes_value(true),
         )
-        .arg(
-            Arg::with_name("newt_tiny_quorums")
-                .long("newt_tiny_quorums")
-                .value_name("NEWT_TINY_QUORUMS")
-                .help("boolean indicating whether newt's tiny quorums are enabled; default: false")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("newt_clock_bump_interval")
-                .long("newt_clock_bump_interval")
-                .value_name("NEWT_CLOCK_BUMP_INTERVAL")
-                .help("number indicating the interval (in milliseconds) between clock bump; if this value is not set, then clocks are not bumped periodically")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("skip_fast_ack")
-                .long("skip_fast_ack")
-                .value_name("SKIP_FAST_ACK")
-                .help("boolean indicating whether protocols should try to enable the skip fast ack optimization; default: false")
-                .takes_value(true),
-        )
         .get_matches();
 
     // parse arguments
@@ -279,14 +288,21 @@ fn parse_args() -> (
     let port = parse_port(matches.value_of("port"));
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
-    let mut config = super::parse_config(
-        matches.value_of("n"),
-        matches.value_of("f"),
-        matches.value_of("transitive_conflicts"),
-        matches.value_of("execute_at_commit"),
-        matches.value_of("gc_interval"),
+
+    let config = build_config(
+        parse_n(matches.value_of("n")),
+        parse_f(matches.value_of("f")),
+        parse_transitive_conflicts(matches.value_of("transitive_conflicts")),
+        parse_execute_at_commit(matches.value_of("execute_at_commit")),
+        parse_gc_interval(matches.value_of("gc_interval")),
+        parse_leader(matches.value_of("leader")),
+        parse_newt_tiny_quorums(matches.value_of("newt_tiny_quorums")),
+        parse_newt_clock_bump_interval(
+            matches.value_of("newt_clock_bump_interval"),
+        ),
+        parse_skip_fast_ack(matches.value_of("skip_fast_ack")),
     );
-    let leader = parse_leader(matches.value_of("leader"));
+
     let tcp_nodelay = super::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let tcp_buffer_size =
         super::parse_tcp_buffer_size(matches.value_of("tcp_buffer_size"));
@@ -299,35 +315,10 @@ fn parse_args() -> (
     let workers = parse_workers(matches.value_of("workers"));
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
-    let execution_log =
-        super::parse_execution_log(matches.value_of("execution_log"));
+    let execution_log = parse_execution_log(matches.value_of("execution_log"));
     let tracer_show_interval =
         parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
     let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
-    let newt_tiny_quorums =
-        parse_newt_tiny_quorums(matches.value_of("newt_tiny_quorums"));
-    let newt_clock_bump_interval = parse_newt_clock_bump_interval(
-        matches.value_of("newt_clock_bump_interval"),
-    );
-    let skip_fast_ack = parse_skip_fast_ack(matches.value_of("skip_fast_ack"));
-
-    // update config:
-    // - set leader if we have one
-    // - set the number of workers and executors
-    if let Some(leader) = leader {
-        config.set_leader(leader);
-    }
-    config.set_workers(workers);
-    config.set_executors(executors);
-
-    // set newt's config
-    config.set_newt_tiny_quorums(newt_tiny_quorums);
-    if let Some(interval) = newt_clock_bump_interval {
-        config.set_newt_clock_bump_interval(interval);
-    }
-
-    // set protocol's config
-    config.set_skip_fast_ack(skip_fast_ack);
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -340,13 +331,15 @@ fn parse_args() -> (
     println!("tcp buffer size: {:?}", tcp_buffer_size);
     println!("tcp flush interval: {:?}", tcp_flush_interval);
     println!("channel buffer size: {:?}", channel_buffer_size);
+    println!("workers: {:?}", workers);
+    println!("executors: {:?}", executors);
     println!("multiplexing: {:?}", multiplexing);
     println!("execution log: {:?}", execution_log);
     println!("trace_show_interval: {:?}", tracer_show_interval);
     println!("ping_interval: {:?}", ping_interval);
 
     // check that the number of sorted processes equals `n` (if it was set)
-    if let Some(sorted_processes) = sorted_processes.as_ref() {
+    if let Some(sorted_processes) = &sorted_processes {
         assert_eq!(sorted_processes.len(), config.n());
     }
 
@@ -365,6 +358,8 @@ fn parse_args() -> (
         tcp_buffer_size,
         tcp_flush_interval,
         channel_buffer_size,
+        workers,
+        executors,
         multiplexing,
         execution_log,
         tracer_show_interval,
@@ -376,8 +371,9 @@ fn parse_process_id(id: Option<&str>) -> ProcessId {
     parse_id(id.expect("process id should be set"))
 }
 
-fn parse_leader(leader: Option<&str>) -> Option<ProcessId> {
-    leader.map(|leader| parse_id(leader))
+fn parse_id(id: &str) -> ProcessId {
+    id.parse::<ProcessId>()
+        .expect("process id should be a number")
 }
 
 fn parse_sorted_processes(ids: Option<&str>) -> Option<Vec<ProcessId>> {
@@ -428,9 +424,109 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
         .collect()
 }
 
-fn parse_id(id: &str) -> ProcessId {
-    id.parse::<ProcessId>()
-        .expect("process id should be a number")
+pub fn build_config(
+    n: usize,
+    f: usize,
+    transitive_conflicts: bool,
+    execute_at_commit: bool,
+    gc_interval: Option<usize>,
+    leader: Option<ProcessId>,
+    newt_tiny_quorums: bool,
+    newt_clock_bump_interval: Option<usize>,
+    skip_fast_ack: bool,
+) -> Config {
+    // create config
+    let mut config = Config::new(n, f);
+    config.set_transitive_conflicts(transitive_conflicts);
+    config.set_execute_at_commit(execute_at_commit);
+    if let Some(gc_interval) = gc_interval {
+        config.set_garbage_collection_interval(gc_interval);
+    }
+    // set leader if we have one
+    if let Some(leader) = leader {
+        config.set_leader(leader);
+    }
+    // set newt's config
+    config.set_newt_tiny_quorums(newt_tiny_quorums);
+    if let Some(interval) = newt_clock_bump_interval {
+        config.set_newt_clock_bump_interval(interval);
+    }
+    // set protocol's config
+    config.set_skip_fast_ack(skip_fast_ack);
+    config
+}
+
+pub fn parse_n(n: Option<&str>) -> usize {
+    n.expect("n should be set")
+        .parse::<usize>()
+        .expect("n should be a number")
+}
+
+pub fn parse_f(f: Option<&str>) -> usize {
+    f.expect("f should be set")
+        .parse::<usize>()
+        .expect("f should be a number")
+}
+
+pub fn parse_transitive_conflicts(transitive_conflicts: Option<&str>) -> bool {
+    transitive_conflicts
+        .map(|transitive_conflicts| {
+            transitive_conflicts
+                .parse::<bool>()
+                .expect("transitive conflicts should be a bool")
+        })
+        .unwrap_or(DEFAULT_TRANSITIVE_CONFLICTS)
+}
+
+pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {
+    execute_at_commit
+        .map(|execute_at_commit| {
+            execute_at_commit
+                .parse::<bool>()
+                .expect("execute_at_commit should be a bool")
+        })
+        .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT)
+}
+
+pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<usize> {
+    gc_interval.map(|gc_interval| {
+        gc_interval
+            .parse::<usize>()
+            .expect("gc_interval should be a number")
+    })
+}
+
+fn parse_leader(leader: Option<&str>) -> Option<ProcessId> {
+    leader.map(|leader| parse_id(leader))
+}
+
+fn parse_newt_tiny_quorums(newt_tiny_quorums: Option<&str>) -> bool {
+    newt_tiny_quorums
+        .map(|newt_tiny_quorums| {
+            newt_tiny_quorums
+                .parse::<bool>()
+                .expect("newt_tiny_quorums should be a bool")
+        })
+        .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS)
+}
+
+fn parse_newt_clock_bump_interval(
+    newt_clock_bump_interval: Option<&str>,
+) -> Option<usize> {
+    newt_clock_bump_interval.map(|newt_clock_bump_interval| {
+        newt_clock_bump_interval
+            .parse::<usize>()
+            .expect("newt_clock_bump_interval should be a number")
+    })
+}
+pub fn parse_skip_fast_ack(skip_fast_ack: Option<&str>) -> bool {
+    skip_fast_ack
+        .map(|skip_fast_ack| {
+            skip_fast_ack
+                .parse::<bool>()
+                .expect("skip_fast_ack should be a boolean")
+        })
+        .unwrap_or(DEFAULT_SKIP_FAST_ACK)
 }
 
 fn parse_workers(workers: Option<&str>) -> usize {
@@ -463,6 +559,10 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
         .unwrap_or(DEFAULT_MULTIPLEXING)
 }
 
+pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
+    execution_log.map(String::from)
+}
+
 fn parse_tracer_show_interval(
     tracer_show_interval: Option<&str>,
 ) -> Option<usize> {
@@ -479,33 +579,4 @@ fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
             .parse::<usize>()
             .expect("ping_interval should be a number")
     })
-}
-
-fn parse_newt_tiny_quorums(newt_tiny_quorums: Option<&str>) -> bool {
-    newt_tiny_quorums
-        .map(|newt_tiny_quorums| {
-            newt_tiny_quorums
-                .parse::<bool>()
-                .expect("newt_tiny_quorums should be a bool")
-        })
-        .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS)
-}
-
-fn parse_newt_clock_bump_interval(
-    newt_clock_bump_interval: Option<&str>,
-) -> Option<usize> {
-    newt_clock_bump_interval.map(|newt_clock_bump_interval| {
-        newt_clock_bump_interval
-            .parse::<usize>()
-            .expect("newt_clock_bump_interval should be a number")
-    })
-}
-pub fn parse_skip_fast_ack(skip_fast_ack: Option<&str>) -> bool {
-    skip_fast_ack
-        .map(|skip_fast_ack| {
-            skip_fast_ack
-                .parse::<bool>()
-                .expect("skip_fast_ack should be a boolean")
-        })
-        .unwrap_or(DEFAULT_SKIP_FAST_ACK)
 }
