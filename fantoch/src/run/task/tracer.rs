@@ -1,10 +1,24 @@
-use crate::log;
-use fantoch_timing::TimingSubscriber;
-use tokio::time::{self, Duration};
-
+#[cfg(not(feature = "timing"))]
 pub async fn tracer_task(tracer_show_interval: Option<usize>) {
+    match tracer_show_interval {
+        Some(_) => {
+            panic!("[tracker_task] tracer show interval was set but the timing feature is disabled");
+        }
+        None => {
+            println!("[tracker_task] disabled since the timing feature is not enabled");
+        }
+    }
+}
+
+#[cfg(feature = "timing")]
+pub async fn tracer_task(tracer_show_interval: Option<usize>) {
+    use crate::log;
+    use fantoch_timing::TimingSubscriber;
+    use tokio::time::{self, Duration};
+
     // if no interval, do not trace
     if tracer_show_interval.is_none() {
+        println!("[tracker_task] tracer show interval was not set even though the timing feature is enabled");
         return;
     }
     let tracer_show_interval = tracer_show_interval.unwrap();

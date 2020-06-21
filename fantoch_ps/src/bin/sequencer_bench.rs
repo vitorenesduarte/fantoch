@@ -3,7 +3,6 @@ use fantoch::metrics::Histogram;
 use fantoch::run::task;
 use fantoch::run::task::chan::{ChannelReceiver, ChannelSender};
 use fantoch::time::{RunTime, SysTime};
-use futures::future::join_all;
 use parking_lot::Mutex;
 use rand::Rng;
 use std::cmp::max;
@@ -101,7 +100,7 @@ async fn bench(
     let mut latency = Histogram::new();
     let mut all_votes = HashMap::new();
 
-    for join_result in join_all(handles).await {
+    for join_result in futures::future::join_all(handles).await {
         let (client_histogram, votes) = join_result?;
         latency.merge(&client_histogram);
         for (key, vote_start, vote_end) in votes {
