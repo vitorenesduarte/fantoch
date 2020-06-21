@@ -629,7 +629,7 @@ pub mod tests {
         let mut config = Config::new(n, f);
 
         // make sure stability is running
-        config.set_garbage_collection_interval(100);
+        config.set_gc_interval(100);
 
         let conflict_rate = 100;
         let commands_per_client = 100;

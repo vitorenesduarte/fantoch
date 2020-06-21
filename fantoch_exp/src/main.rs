@@ -1,14 +1,21 @@
 mod bench;
+mod config;
 mod ping;
 mod util;
 
 use color_eyre::Report;
+use fantoch::config::Config;
 use rusoto_core::Region;
 
 // experiment config
 const INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 3;
+
+// processes config
+const PROTOCOL: &str = "newt_atomic";
+const GC_INTERVAL: Option<usize> = Some(50); // every 50
+const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
 const BRANCH: &str = "executor_metrics";
@@ -17,60 +24,36 @@ const OUTPUT_LOG: &str = ".tracer_log";
 // ping-specific config
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
+macro_rules! config {
+    ($n:expr, $f:expr, $tiny:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
+        let mut config = Config::new($n, $f);
+        config.set_newt_tiny_quorums($tiny);
+        if let Some(interval) = $clock_bump_interval {
+            config.set_newt_clock_bump_interval(interval);
+        }
+        config.set_skip_fast_ack($skip_fast_ack);
+        if let Some(interval) = GC_INTERVAL {
+            config.set_gc_interval(interval);
+        }
+        config
+    }};
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    // TODO replace this
-    let args: Vec<String> = std::env::args().collect();
-    let (instance_type, set_sorted_processes, tracer_show_interval) =
-        match args.as_slice() {
-            [_] => (INSTANCE_TYPE, false, None),
-            [_, instance_type] => (instance_type.as_str(), false, None),
-            [_, instance_type, set_sorted_processes] => {
-                let set_sorted_processes = set_sorted_processes
-                    .parse::<bool>()
-                    .expect("second argument should be a boolean");
-                (instance_type.as_str(), set_sorted_processes, None)
-            }
-            [_, instance_type, set_sorted_processes, tracer_show_interval] => {
-                let set_sorted_processes = set_sorted_processes
-                    .parse::<bool>()
-                    .expect("set sorted processes should be a boolean");
-                let tracer_interval = tracer_show_interval
-                    .parse::<usize>()
-                    .expect("trace interval should be a number");
-                (
-                    instance_type.as_str(),
-                    set_sorted_processes,
-                    Some(tracer_interval),
-                )
-            }
-            _ => {
-                panic!("at most 3 arguments are expected");
-            }
-        };
-
     // init logging
     tracing_subscriber::fmt::init();
 
-    let server_instance_type = instance_type.to_string();
-    let client_instance_type = instance_type.to_string();
+    let server_instance_type = INSTANCE_TYPE.to_string();
+    let client_instance_type = INSTANCE_TYPE.to_string();
     let branch = BRANCH.to_string();
-    bench(
-        server_instance_type,
-        client_instance_type,
-        branch,
-        set_sorted_processes,
-        tracer_show_interval,
-    )
-    .await
+    bench(server_instance_type, client_instance_type, branch).await
 }
 
 async fn bench(
     server_instance_type: String,
     client_instance_type: String,
     branch: String,
-    set_sorted_processes: bool,
-    tracer_show_interval: Option<usize>,
 ) -> Result<(), Report> {
     let regions = vec![
         Region::EuWest1,
@@ -79,24 +62,16 @@ async fn bench(
         Region::CaCentral1,
         Region::SaEast1,
     ];
-    let ns = vec![5];
-    /*
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
-    let ns = vec![3];
-    */
-
-    let newt_configs = vec![
+    let configs = vec![
         // tiny, interval, skip fast ack
-        (false, None, false),
-        (false, Some(10), false),
-        /*
-        (false, None, true),
-        (false, Some(10), true),
-        */
-        (true, None, false),
-        (true, Some(10), false),
-        (true, None, true),
-        (true, Some(10), true),
+        config!(5, 1, false, None, false),
+        config!(5, 1, false, Some(10), false),
+        config!(5, 1, false, None, true),
+        config!(5, 1, false, Some(10), true),
+        config!(5, 1, true, None, false),
+        config!(5, 1, true, Some(10), false),
+        config!(5, 1, true, None, true),
+        config!(5, 1, true, Some(10), true),
     ];
     let clients_per_region = vec![4, 32, 256, 512, 1024];
 
@@ -112,11 +87,10 @@ async fn bench(
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         MAX_INSTANCE_DURATION_HOURS,
         branch.clone(),
-        ns,
+        PROTOCOL.to_string(),
+        configs,
+        TRACER_SHOW_INTERVAL,
         clients_per_region,
-        newt_configs,
-        set_sorted_processes,
-        tracer_show_interval,
         output_log,
     )
     .await

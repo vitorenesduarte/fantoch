@@ -61,7 +61,7 @@ impl Protocol for Basic {
 
         // create periodic events
         let events =
-            if let Some(gc_delay) = config.garbage_collection_interval() {
+            if let Some(gc_delay) = config.gc_interval() {
                 vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
             } else {
                 vec![]
@@ -325,7 +325,7 @@ impl Basic {
     }
 
     fn gc_running(&self) -> bool {
-        self.bp.config.garbage_collection_interval().is_some()
+        self.bp.config.gc_interval().is_some()
     }
 }
 
@@ -440,9 +440,10 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = BasicExecutor::new(process_id_1, config);
-        let executor_2 = BasicExecutor::new(process_id_2, config);
-        let executor_3 = BasicExecutor::new(process_id_3, config);
+        let executors = 1;
+        let executor_1 = BasicExecutor::new(process_id_1, config, executors);
+        let executor_2 = BasicExecutor::new(process_id_2, config, executors);
+        let executor_3 = BasicExecutor::new(process_id_3, config, executors);
 
         // basic
         let (mut basic_1, _) = Basic::new(process_id_1, config);

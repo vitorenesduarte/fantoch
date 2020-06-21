@@ -6,6 +6,14 @@ pub struct Config {
     n: usize,
     /// number of tolerated faults
     f: usize,
+    /// defines whether we can assume if the conflict relation is transitive
+    transitive_conflicts: bool,
+    /// if enabled, then execution is skipped
+    execute_at_commit: bool,
+    /// defines the interval between garbage collections (milliseconds)
+    gc_interval: Option<usize>,
+    // starting leader process
+    leader: Option<ProcessId>,
     /// defines whether newt should employ tiny quorums or not
     newt_tiny_quorums: bool,
     /// defines the interval between clock bumps (milliseconds), if any
@@ -13,18 +21,6 @@ pub struct Config {
     /// defines whether protocols should try to bypass the fast quorum process
     /// ack (which is only possible if the fast quorum size is 2)
     skip_fast_ack: bool,
-    /// defines whether we can assume if the conflict relation is transitive
-    transitive_conflicts: bool,
-    /// if enabled, then execution is skipped
-    execute_at_commit: bool,
-    // starting leader process
-    leader: Option<ProcessId>,
-    /// defines the number of `Protocol` workers
-    workers: usize,
-    /// defines the number of `Executor` workers
-    executors: usize,
-    /// defines the interval between garbage collections (milliseconds)
-    garbage_collection_interval: Option<usize>,
 }
 
 impl Config {
@@ -36,36 +32,30 @@ impl Config {
         if f > n / 2 {
             println!("WARNING: f={} is larger than a minority with n={}", f, n);
         }
+        // by default, `transitive_conflicts = false`
+        let transitive_conflicts = false;
+        // by default, execution is not skipped
+        let execute_at_commit = false;
+        // by default, commands are deleted at commit time
+        let gc_interval = None;
+        // by default, there's no leader
+        let leader = None;
         // by default, `newt_tiny_quorums = false`
         let newt_tiny_quorums = false;
         // by default, clocks are not bumped periodically
         let newt_clock_bump_interval = None;
         // by default `skip_fast_ack = false;
         let skip_fast_ack = false;
-        // by default, `transitive_conflicts = false`
-        let transitive_conflicts = false;
-        // by default, execution is not skipped
-        let execute_at_commit = false;
-        // by default, there's no leader
-        let leader = None;
-        // by default there's one worker for `Protocol` and one worker for
-        // `Executor`
-        let workers = 1;
-        let executors = 1;
-        // by default, commands are deleted at commit time
-        let garbage_collection_interval = None;
         Self {
             n,
             f,
+            transitive_conflicts,
+            execute_at_commit,
+            gc_interval,
+            leader,
             newt_tiny_quorums,
             newt_clock_bump_interval,
             skip_fast_ack,
-            transitive_conflicts,
-            execute_at_commit,
-            leader,
-            workers,
-            executors,
-            garbage_collection_interval,
         }
     }
 
@@ -77,6 +67,46 @@ impl Config {
     /// Retrieve the number of faults tolerated.
     pub fn f(&self) -> usize {
         self.f
+    }
+
+    /// Checks whether we can assume that conflicts are transitive.
+    pub fn transitive_conflicts(&self) -> bool {
+        self.transitive_conflicts
+    }
+
+    /// Changes the value of `transitive_conflicts`.
+    pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
+        self.transitive_conflicts = transitive_conflicts;
+    }
+
+    /// Checks whether execution is to be skipped.
+    pub fn execute_at_commit(&self) -> bool {
+        self.execute_at_commit
+    }
+
+    /// Changes the value of `execute_at_commit`.
+    pub fn set_execute_at_commit(&mut self, execute_at_commit: bool) {
+        self.execute_at_commit = execute_at_commit;
+    }
+
+    /// Checks the garbage collection interval.
+    pub fn gc_interval(&self) -> Option<usize> {
+        self.gc_interval
+    }
+
+    /// Sets the garbage collection interval.
+    pub fn set_gc_interval(&mut self, interval: usize) {
+        self.gc_interval = Some(interval);
+    }
+
+    /// Checks whether a starting leader has been defined.
+    pub fn leader(&self) -> Option<ProcessId> {
+        self.leader
+    }
+
+    /// Sets the starting leader.
+    pub fn set_leader(&mut self, leader: ProcessId) {
+        self.leader = Some(leader);
     }
 
     /// Checks whether newt tiny quorums is enabled or not.
@@ -107,46 +137,6 @@ impl Config {
     /// Changes the value of `skip_fast_ack`.
     pub fn set_skip_fast_ack(&mut self, skip_fast_ack: bool) {
         self.skip_fast_ack = skip_fast_ack;
-    }
-
-    /// Checks whether we can assume that conflicts are transitive.
-    pub fn transitive_conflicts(&self) -> bool {
-        self.transitive_conflicts
-    }
-
-    /// Changes the value of `transitive_conflicts`.
-    pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
-        self.transitive_conflicts = transitive_conflicts;
-    }
-
-    /// Checks whether execution is to be skipped.
-    pub fn execute_at_commit(&self) -> bool {
-        self.execute_at_commit
-    }
-
-    /// Changes the value of `execute_at_commit`.
-    pub fn set_execute_at_commit(&mut self, execute_at_commit: bool) {
-        self.execute_at_commit = execute_at_commit;
-    }
-
-    /// Checks whether a starting leader has been defined.
-    pub fn leader(&self) -> Option<ProcessId> {
-        self.leader
-    }
-
-    /// Sets the starting leader.
-    pub fn set_leader(&mut self, leader: ProcessId) {
-        self.leader = Some(leader);
-    }
-
-    /// Checks the garbage collection interval.
-    pub fn garbage_collection_interval(&self) -> Option<usize> {
-        self.garbage_collection_interval
-    }
-
-    /// Sets the garbage collection interval.
-    pub fn set_garbage_collection_interval(&mut self, interval: usize) {
-        self.garbage_collection_interval = Some(interval);
     }
 }
 
@@ -235,6 +225,37 @@ mod tests {
         assert_eq!(config.n(), n);
         assert_eq!(config.f(), f);
 
+        // by default, transitive conflicts is false
+        assert!(!config.transitive_conflicts());
+
+        // if we change it to false, remains false
+        config.set_transitive_conflicts(false);
+        assert!(!config.transitive_conflicts());
+
+        // if we change it to true, it becomes true
+        config.set_transitive_conflicts(true);
+        assert!(config.transitive_conflicts());
+
+        // by deafult, execute at commit is false
+        assert!(!config.execute_at_commit());
+        // but that can change
+        config.set_execute_at_commit(true);
+        assert!(config.execute_at_commit());
+
+        // by default, there's no garbage collection interval
+        assert_eq!(config.gc_interval(), None);
+
+        // change its value and check it has changed
+        config.set_gc_interval(100);
+        assert_eq!(config.gc_interval(), Some(100));
+
+        // by default, there's no leader
+        assert!(config.leader().is_none());
+        // but that can change
+        let leader = 1;
+        config.set_leader(leader);
+        assert_eq!(config.leader(), Some(leader));
+
         // by default, newt tiny quorums is false
         assert!(!config.newt_tiny_quorums());
 
@@ -263,37 +284,6 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_skip_fast_ack(true);
         assert!(config.skip_fast_ack());
-
-        // by default, transitive conflicts is false
-        assert!(!config.transitive_conflicts());
-
-        // if we change it to false, remains false
-        config.set_transitive_conflicts(false);
-        assert!(!config.transitive_conflicts());
-
-        // if we change it to true, it becomes true
-        config.set_transitive_conflicts(true);
-        assert!(config.transitive_conflicts());
-
-        // by deafult, execute at commit is false
-        assert!(!config.execute_at_commit());
-        // but that can change
-        config.set_execute_at_commit(true);
-        assert!(config.execute_at_commit());
-
-        // by default, there's no leader
-        assert!(config.leader().is_none());
-        // but that can change
-        let leader = 1;
-        config.set_leader(leader);
-        assert_eq!(config.leader(), Some(leader));
-
-        // by default, there's no garbage collection interval
-        assert_eq!(config.garbage_collection_interval(), None);
-
-        // change its value and check it has changed
-        config.set_garbage_collection_interval(100);
-        assert_eq!(config.garbage_collection_interval(), Some(100));
     }
 
     #[test]

@@ -70,7 +70,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
 
         // create periodic events
         let events =
-            if let Some(gc_delay) = config.garbage_collection_interval() {
+            if let Some(gc_delay) = config.gc_interval() {
                 vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
             } else {
                 vec![]
@@ -579,7 +579,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
     }
 
     fn gc_running(&self) -> bool {
-        self.bp.config.garbage_collection_interval().is_some()
+        self.bp.config.gc_interval().is_some()
     }
 }
 

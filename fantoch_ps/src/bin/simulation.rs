@@ -48,7 +48,7 @@ fn epaxos_aws() {
     config.set_transitive_conflicts(transitive_conflicts);
 
     // make sure stability is running
-    config.set_garbage_collection_interval(100);
+    config.set_gc_interval(100);
 
     // clients
     let client_regions = regions.clone();
@@ -250,7 +250,7 @@ fn increasing_load<P: Protocol>(
     mut config: Config,
 ) {
     // make sure stability is running
-    config.set_garbage_collection_interval(100);
+    config.set_gc_interval(100);
 
     let cs = vec![8, 32, 128, 256, 512, 1024];
 

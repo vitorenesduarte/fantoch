@@ -90,7 +90,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
         // maybe create garbage collection periodic event
         let mut events =
-            if let Some(gc_delay) = config.garbage_collection_interval() {
+            if let Some(gc_delay) = config.gc_interval() {
                 vec![(PeriodicEvent::GarbageCollection, gc_delay as u64)]
             } else {
                 vec![]
@@ -844,7 +844,7 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 
     fn gc_running(&self) -> bool {
-        self.bp.config.garbage_collection_interval().is_some()
+        self.bp.config.gc_interval().is_some()
     }
 }
 
@@ -1054,7 +1054,7 @@ mod tests {
         config.set_newt_tiny_quorums(false);
 
         // make sure stability is running
-        config.set_garbage_collection_interval(100);
+        config.set_gc_interval(100);
 
         // executors
         let executors = 1;

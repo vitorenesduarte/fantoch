@@ -440,7 +440,7 @@ pub fn build_config(
     config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
     if let Some(gc_interval) = gc_interval {
-        config.set_garbage_collection_interval(gc_interval);
+        config.set_gc_interval(gc_interval);
     }
     // set leader if we have one
     if let Some(leader) = leader {

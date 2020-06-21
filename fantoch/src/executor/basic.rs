@@ -16,7 +16,7 @@ pub struct BasicExecutor {
 impl Executor for BasicExecutor {
     type ExecutionInfo = BasicExecutionInfo;
 
-    fn new(_process_id: ProcessId, config: Config, executors: usize) -> Self {
+    fn new(_process_id: ProcessId, _config: Config, executors: usize) -> Self {
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = executors == 1;

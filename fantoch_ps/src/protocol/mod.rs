@@ -322,7 +322,7 @@ mod tests {
         P: Protocol + Send + 'static,
     {
         // make sure stability is running
-        config.set_garbage_collection_interval(100);
+        config.set_gc_interval(100);
 
         // run until the clients end + another 10 seconds (10000ms)
         let tracer_show_interval = None;
@@ -363,7 +363,7 @@ mod tests {
 
     fn sim_test<P: Protocol>(mut config: Config) -> u64 {
         // make sure stability is running
-        config.set_garbage_collection_interval(100);
+        config.set_gc_interval(100);
 
         // planet
         let planet = Planet::new();
