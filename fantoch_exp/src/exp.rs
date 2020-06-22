@@ -44,7 +44,7 @@ pub fn fantoch_setup(
     run_mode: RunMode,
 ) -> Box<
     dyn for<'r> Fn(
-            &'r mut tsunami::Machine<'_>,
+            &'r tsunami::Machine<'_>,
         ) -> Pin<
             Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
         > + Send

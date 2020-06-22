@@ -1,3 +1,4 @@
+use super::{CLIENT_TAG, SERVER_TAG};
 use crate::exp::{self, Machines, RunMode};
 use color_eyre::Report;
 use rusoto_core::Region;
@@ -5,7 +6,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tsunami::Tsunami;
 
-pub async fn spawn(
+pub async fn setup(
     launcher: &mut tsunami::providers::aws::Launcher<
         rusoto_credential::DefaultCredentialsProvider,
     >,
@@ -17,13 +18,11 @@ pub async fn spawn(
     branch: String,
     run_mode: RunMode,
 ) -> Result<Machines<'_>, Report> {
-    let server_tag = "server";
-    let client_tag = "client";
     let tags = vec![
-        (server_tag.to_string(), server_instance_type),
-        (client_tag.to_string(), client_instance_type),
+        (SERVER_TAG.to_string(), server_instance_type),
+        (CLIENT_TAG.to_string(), client_instance_type),
     ];
-    let (regions, mut vms) = do_spawn(
+    let (regions, mut vms) = spawn_and_setup(
         launcher,
         tags,
         regions,
@@ -33,8 +32,8 @@ pub async fn spawn(
         run_mode,
     )
     .await?;
-    let servers = vms.remove(server_tag).expect("servers vms");
-    let clients = vms.remove(client_tag).expect("client vms");
+    let servers = vms.remove(SERVER_TAG).expect("servers vms");
+    let clients = vms.remove(CLIENT_TAG).expect("client vms");
     Ok(Machines {
         regions,
         servers,
@@ -42,7 +41,7 @@ pub async fn spawn(
     })
 }
 
-async fn do_spawn(
+async fn spawn_and_setup(
     launcher: &mut tsunami::providers::aws::Launcher<
         rusoto_credential::DefaultCredentialsProvider,
     >,
@@ -59,21 +58,12 @@ async fn do_spawn(
     ),
     Report,
 > {
-    let sep = "_";
-    let to_name =
-        |tag, region: &Region| format!("{}{}{}", tag, sep, region.name());
-    let from_name = |name: String| {
-        let parts: Vec<_> = name.split(sep).collect();
-        assert_eq!(parts.len(), 2);
-        (parts[0].to_string(), parts[1].to_string())
-    };
-
     // create machine descriptors
     let mut descriptors = Vec::with_capacity(regions.len());
     for (tag, instance_type) in &tags {
         for region in &regions {
             // get instance name
-            let name = to_name(tag, region);
+            let name = super::to_nickname(tag, region.name());
 
             // create setup
             let setup = tsunami::providers::aws::Setup::default()
@@ -102,16 +92,12 @@ async fn do_spawn(
     let mut results: HashMap<_, HashMap<_, _>> =
         HashMap::with_capacity(tags.len());
     for (name, vm) in vms {
-        let (tag, region) = from_name(name);
+        let (tag, region) = super::from_nickname(name);
         let res = results
             .entry(tag)
             .or_insert_with(|| HashMap::with_capacity(regions.len()))
             .insert(region, vm);
         assert!(res.is_none());
     }
-    let regions = regions
-        .into_iter()
-        .map(|region| region.name().to_string())
-        .collect();
-    Ok((regions, results))
+    Ok((super::regions(regions), results))
 }

@@ -18,6 +18,6 @@ tracing = "0.1.14"
 tracing-futures = "0.2.4"
 tracing-subscriber = "0.2.5"
 tokio = { version = "0.2.21", features = [ "time" ]}
-tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "5c2727d9d51f6133bcae3c18615c57ff84cd76f4", features = [ "aws" ] }
+tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "1a4b5bc4b5d95c3770c01761579e0ba8d0d051c5", features = [ "aws" ] }
 
 fantoch = { path = "../fantoch" }

@@ -6,7 +6,7 @@ mod testbed;
 mod util;
 
 use color_eyre::Report;
-use exp::RunMode;
+use exp::{Machines, RunMode};
 use eyre::WrapErr;
 use fantoch::config::Config;
 use rusoto_core::Region;
@@ -16,7 +16,7 @@ use tsunami::Tsunami;
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 3;
+const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // run mode
 const RUN_MODE: RunMode = RunMode::Release;
@@ -80,9 +80,31 @@ async fn main() -> Result<(), Report> {
         .open(OUTPUT_LOG)
         .await?;
 
-    aws_bench(regions, configs, clients_per_region, output_log).await
+    baremetal_bench(regions, configs, clients_per_region, output_log).await
+    // aws_bench(regions, configs, clients_per_region, output_log).await
 }
 
+async fn baremetal_bench(
+    regions: Vec<Region>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    // setup baremetal machines
+    let machines =
+        testbed::baremetal::setup(regions, BRANCH.to_string(), RUN_MODE)
+            .await
+            .wrap_err("baremetal spawn")?;
+
+    // run benchmarks
+    run_bench(machines, configs, clients_per_region, output_log)
+        .await
+        .wrap_err("run bench")?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
 async fn aws_bench(
     regions: Vec<Region>,
     configs: Vec<Config>,
@@ -98,11 +120,14 @@ async fn aws_bench(
         output_log,
     )
     .await;
+
+    // trap errors to make sure there's time for a debug
     if let Err(e) = &res {
         tracing::warn!("aws bench experiment error: {:?}", e);
     }
     tracing::info!("will wait 5 minutes before terminating spot instances");
     tokio::time::delay_for(tokio::time::Duration::from_secs(300)).await;
+
     launcher.terminate_all().await?;
     Ok(())
 }
@@ -116,7 +141,8 @@ async fn do_aws_bench(
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
-    let machines = testbed::aws::spawn(
+    // setup aws machines
+    let machines = testbed::aws::setup(
         launcher,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
@@ -128,6 +154,21 @@ async fn do_aws_bench(
     )
     .await
     .wrap_err("aws spawn")?;
+
+    // run benchmarks
+    run_bench(machines, configs, clients_per_region, output_log)
+        .await
+        .wrap_err("run bench")?;
+
+    Ok(())
+}
+
+async fn run_bench(
+    machines: Machines<'_>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
     bench::bench_experiment(
         machines,
         RUN_MODE,
@@ -138,8 +179,6 @@ async fn do_aws_bench(
         output_log,
     )
     .await
-    .wrap_err("bench experiment")?;
-    todo!()
 }
 
 #[allow(dead_code)]
