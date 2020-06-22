@@ -90,11 +90,27 @@ async fn baremetal_bench(
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
+    let servers_count = regions.len();
+    let clients_count = regions.len();
+
+    // create one launcher per machine:
+    // - TODO this is needed since tsunami's baremetal provider does not give a
+    //   global tsunami launcher as the aws provider
+    let mut launchers = (0..servers_count + clients_count)
+        .map(|_| tsunami::providers::baremetal::Machine::default())
+        .collect();
+
     // setup baremetal machines
-    let machines =
-        testbed::baremetal::setup(regions, BRANCH.to_string(), RUN_MODE)
-            .await
-            .wrap_err("baremetal spawn")?;
+    let machines = testbed::baremetal::setup(
+        &mut launchers,
+        servers_count,
+        clients_count,
+        regions,
+        BRANCH.to_string(),
+        RUN_MODE,
+    )
+    .await
+    .wrap_err("baremetal spawn")?;
 
     // run benchmarks
     run_bench(machines, configs, clients_per_region, output_log)

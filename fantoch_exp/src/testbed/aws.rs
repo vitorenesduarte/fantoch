@@ -22,10 +22,10 @@ pub async fn setup(
         (SERVER_TAG.to_string(), server_instance_type),
         (CLIENT_TAG.to_string(), client_instance_type),
     ];
-    let (regions, mut vms) = spawn_and_setup(
+    let mut vms = spawn_and_setup(
         launcher,
         tags,
-        regions,
+        &regions,
         max_spot_instance_request_wait_secs,
         max_instance_duration_hours,
         branch,
@@ -35,33 +35,27 @@ pub async fn setup(
     let servers = vms.remove(SERVER_TAG).expect("servers vms");
     let clients = vms.remove(CLIENT_TAG).expect("client vms");
     Ok(Machines {
-        regions,
+        regions: super::regions(regions),
         servers,
         clients,
     })
 }
 
-async fn spawn_and_setup(
-    launcher: &mut tsunami::providers::aws::Launcher<
+async fn spawn_and_setup<'a>(
+    launcher: &'a mut tsunami::providers::aws::Launcher<
         rusoto_credential::DefaultCredentialsProvider,
     >,
     tags: Vec<(String, String)>,
-    regions: Vec<Region>,
+    regions: &'_ Vec<Region>,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
     run_mode: RunMode,
-) -> Result<
-    (
-        Vec<String>,
-        HashMap<String, HashMap<String, tsunami::Machine<'_>>>,
-    ),
-    Report,
-> {
+) -> Result<HashMap<String, HashMap<String, tsunami::Machine<'a>>>, Report> {
     // create machine descriptors
     let mut descriptors = Vec::with_capacity(regions.len());
     for (tag, instance_type) in &tags {
-        for region in &regions {
+        for region in regions {
             // get instance name
             let name = super::to_nickname(tag, region.name());
 
@@ -99,5 +93,5 @@ async fn spawn_and_setup(
             .insert(region, vm);
         assert!(res.is_none());
     }
-    Ok((super::regions(regions), results))
+    Ok(results)
 }
