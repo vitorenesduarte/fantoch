@@ -29,6 +29,9 @@ pub async fn bench_experiment(
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
+    if tracer_show_interval.is_some() {
+        panic!("vitor: you should set the timing feature for this to work!");
+    }
     let mut launcher: aws::Launcher<_> = Default::default();
     let res = do_bench_experiment(
         &mut launcher,
