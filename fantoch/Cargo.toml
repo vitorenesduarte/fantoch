@@ -13,7 +13,7 @@ timing = ["fantoch_timing"]
 ahash = "0.3.4"
 bincode = "1.2.1"
 bytes = "0.5.4"
-futures = { version = "0.3.5", features = ["alloc"] }
+futures = { version = "0.3.5", default-features = false, features = ["alloc"] }
 parking_lot = "0.10.2"
 rand = "0.7.3"
 serde = { version = "1.0.110", features = ["derive"] }
