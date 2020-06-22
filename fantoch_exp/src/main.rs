@@ -58,6 +58,22 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
+    ];
+    let configs = vec![
+        // n, f, tiny quorums, clock bump interval, skip fast ack
+        config!(3, 1, false, None, false),
+        config!(3, 1, false, Some(10), false),
+        config!(3, 1, true, None, false),
+        config!(3, 1, true, Some(10), false),
+        config!(3, 1, true, None, true),
+        config!(3, 1, true, Some(10), true),
+    ];
+
+    /*
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
         Region::CaCentral1,
         Region::SaEast1,
     ];
@@ -65,13 +81,13 @@ async fn main() -> Result<(), Report> {
         // n, f, tiny quorums, clock bump interval, skip fast ack
         config!(5, 1, false, None, false),
         config!(5, 1, false, Some(10), false),
-        config!(5, 1, false, None, true),
-        config!(5, 1, false, Some(10), true),
         config!(5, 1, true, None, false),
         config!(5, 1, true, Some(10), false),
         config!(5, 1, true, None, true),
         config!(5, 1, true, Some(10), true),
     ];
+    */
+
     let clients_per_region = vec![4, 32, 256, 512, 1024];
 
     let output_log = tokio::fs::OpenOptions::new()
