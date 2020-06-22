@@ -7,8 +7,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tracing::instrument;
 use tracing_futures::Instrument;
-use tsunami::providers::aws;
-use tsunami::{Machine, Tsunami};
+use tsunami::Tsunami;
 
 /// This script should be called like: $ script hosts seconds output
 /// - hosts: file where each line looks like "region::ip"
@@ -24,7 +23,7 @@ pub async fn ping_experiment(
     max_instance_duration_hours: usize,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
-    let mut launcher: aws::Launcher<_> = Default::default();
+    let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     let result = ping_experiment_run(
         &mut launcher,
         regions,
@@ -41,7 +40,9 @@ pub async fn ping_experiment(
 }
 
 pub async fn ping_experiment_run(
-    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
+    launcher: &mut tsunami::providers::aws::Launcher<
+        rusoto_credential::DefaultCredentialsProvider,
+    >,
     regions: Vec<Region>,
     instance_type: impl ToString + Clone,
     max_spot_instance_request_wait_secs: u64,
@@ -54,7 +55,7 @@ pub async fn ping_experiment_run(
         let name = region.name().to_string();
 
         // create setup
-        let setup = aws::Setup::default()
+        let setup = tsunami::providers::aws::Setup::default()
             .instance_type(instance_type.clone())
             .region_with_ubuntu_ami(region.clone())
             .await?
@@ -117,7 +118,7 @@ pub async fn ping_experiment_run(
 
 #[instrument]
 async fn ping(
-    vm: &Machine<'_>,
+    vm: &tsunami::Machine<'_>,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
     tracing::info!(

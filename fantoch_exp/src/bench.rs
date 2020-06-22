@@ -1,94 +1,34 @@
 use crate::config::{ClientConfig, ProcessConfig, CLIENT_PORT, PORT};
-use crate::util::{self, RunMode};
+use crate::exp::{self, Machines, RunMode};
+use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
-use rusoto_core::Region;
 use std::collections::HashMap;
-use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tsunami::providers::aws;
-use tsunami::{Machine, Tsunami};
 
 type ClientMetrics = (String, String);
 
-// run mode
-const RUN_MODE: RunMode = RunMode::Release;
-
 pub async fn bench_experiment(
-    server_instance_type: String,
-    client_instance_type: String,
-    regions: Vec<Region>,
-    max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
-    branch: String,
-    protocol: String,
-    configs: Vec<Config>,
-    tracer_show_interval: Option<usize>,
-    clients_per_region: Vec<usize>,
-    output_log: tokio::fs::File,
-) -> Result<(), Report> {
-    if tracer_show_interval.is_some() {
-        panic!("vitor: you should set the timing feature for this to work!");
-    }
-    let mut launcher: aws::Launcher<_> = Default::default();
-    let res = do_bench_experiment(
-        &mut launcher,
-        server_instance_type,
-        client_instance_type,
-        regions,
-        max_spot_instance_request_wait_secs,
-        max_instance_duration_hours,
-        protocol,
-        branch,
-        configs,
-        tracer_show_interval,
-        clients_per_region,
-        output_log,
-    )
-    .await;
-    if let Err(e) = &res {
-        tracing::warn!("bench experiment error: {:?}", e);
-    }
-    tracing::info!("will wait 5 minutes before terminating spot instances");
-    tokio::time::delay_for(tokio::time::Duration::from_secs(300)).await;
-    launcher.terminate_all().await?;
-    res
-}
-
-async fn do_bench_experiment(
-    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
-    server_instance_type: String,
-    client_instance_type: String,
-    regions: Vec<Region>,
-    max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
-    branch: String,
+    machines: Machines<'_>,
+    run_mode: RunMode,
     protocol: String,
     configs: Vec<Config>,
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
     mut output_log: tokio::fs::File,
 ) -> Result<(), Report> {
-    let (regions, server_vms, client_vms) = spawn(
-        launcher,
-        server_instance_type,
-        client_instance_type,
-        regions,
-        max_spot_instance_request_wait_secs,
-        max_instance_duration_hours,
-        branch,
-    )
-    .await
-    .wrap_err("spawn machines")?;
+    if tracer_show_interval.is_some() {
+        panic!("vitor: you should set the timing feature for this to work!");
+    }
 
     for config in configs {
         let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", protocol, config.n(), config.f(), config.newt_tiny_quorums(), config.newt_clock_bump_interval().unwrap_or(0), config.skip_fast_ack());
         append_to_output_log(&mut output_log, line).await?;
 
         // check that we have the correct number of regions
-        assert_eq!(regions.len(), config.n());
+        assert_eq!(machines.regions.len(), config.n());
         for &clients in &clients_per_region {
             let run_id = format!(
                 "n{}_f{}_tiny{}_interval{}_skipfast_{}clients{}",
@@ -101,9 +41,8 @@ async fn do_bench_experiment(
             );
             let latencies = run_experiment(
                 run_id,
-                &regions,
-                &server_vms,
-                &client_vms,
+                run_mode,
+                &machines,
                 &protocol,
                 config,
                 tracer_show_interval,
@@ -147,8 +86,9 @@ async fn do_bench_experiment(
                     .remove(metric)
                     .expect("metric should exist");
                 // there should be as many latencies as regions
-                assert_eq!(latencies.len(), regions.len());
-                let avg = latencies.into_iter().sum::<usize>() / regions.len();
+                assert_eq!(latencies.len(), machines.regions.len());
+                let avg = latencies.into_iter().sum::<usize>()
+                    / machines.regions.len();
                 line = format!("{} {}={:<6}", line, metric, avg);
             }
             append_to_output_log(&mut output_log, line).await?;
@@ -159,9 +99,8 @@ async fn do_bench_experiment(
 
 async fn run_experiment(
     run_id: String,
-    regions: &Vec<String>,
-    server_vms: &HashMap<String, Machine<'_>>,
-    client_vms: &HashMap<String, Machine<'_>>,
+    run_mode: RunMode,
+    machines: &Machines<'_>,
     protocol: &str,
     config: Config,
     tracer_show_interval: Option<usize>,
@@ -169,8 +108,8 @@ async fn run_experiment(
 ) -> Result<Vec<ClientMetrics>, Report> {
     // start processes
     let (process_ips, processes) = start_processes(
-        regions,
-        server_vms,
+        run_mode,
+        machines,
         protocol,
         config,
         tracer_show_interval,
@@ -179,124 +118,21 @@ async fn run_experiment(
     .wrap_err("start_processes")?;
 
     // run clients
-    let client_metrics =
-        run_clients(clients_per_region, client_vms, process_ips)
-            .await
-            .wrap_err("run_clients")?;
+    let client_metrics = run_clients(clients_per_region, machines, process_ips)
+        .await
+        .wrap_err("run_clients")?;
 
     // stop processes
-    stop_processes(run_id, server_vms, processes)
+    stop_processes(run_id, run_mode, machines, processes)
         .await
         .wrap_err("stop_processes")?;
 
     Ok(client_metrics)
 }
 
-async fn spawn(
-    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
-    server_instance_type: String,
-    client_instance_type: String,
-    regions: Vec<Region>,
-    max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
-    branch: String,
-) -> Result<
-    (
-        Vec<String>,
-        HashMap<String, Machine<'_>>,
-        HashMap<String, Machine<'_>>,
-    ),
-    Report,
-> {
-    let server_tag = "server";
-    let client_tag = "client";
-    let tags = vec![
-        (server_tag.to_string(), server_instance_type),
-        (client_tag.to_string(), client_instance_type),
-    ];
-    let (regions, mut vms) = do_spawn(
-        launcher,
-        tags,
-        regions,
-        max_spot_instance_request_wait_secs,
-        max_instance_duration_hours,
-        branch,
-    )
-    .await?;
-    let server_vms = vms.remove(server_tag).expect("servers vms");
-    let client_vms = vms.remove(client_tag).expect("client vms");
-    Ok((regions, server_vms, client_vms))
-}
-
-async fn do_spawn(
-    launcher: &mut aws::Launcher<rusoto_credential::DefaultCredentialsProvider>,
-    tags: Vec<(String, String)>,
-    regions: Vec<Region>,
-    max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
-    branch: String,
-) -> Result<(Vec<String>, HashMap<String, HashMap<String, Machine<'_>>>), Report>
-{
-    let sep = "_";
-    let to_name =
-        |tag, region: &Region| format!("{}{}{}", tag, sep, region.name());
-    let from_name = |name: String| {
-        let parts: Vec<_> = name.split(sep).collect();
-        assert_eq!(parts.len(), 2);
-        (parts[0].to_string(), parts[1].to_string())
-    };
-
-    // create machine descriptors
-    let mut descriptors = Vec::with_capacity(regions.len());
-    for (tag, instance_type) in &tags {
-        for region in &regions {
-            // get instance name
-            let name = to_name(tag, region);
-
-            // create setup
-            let setup = aws::Setup::default()
-                .instance_type(instance_type.clone())
-                .region_with_ubuntu_ami(region.clone())
-                .await?
-                .setup(util::fantoch_setup(branch.clone(), RUN_MODE));
-
-            // save setup
-            descriptors.push((name, setup))
-        }
-    }
-
-    // spawn and connect
-    launcher
-        .set_max_instance_duration(max_instance_duration_hours)
-        // make sure ports are open
-        // TODO just open PORT and CLIENT_PORT?
-        .open_ports();
-    let max_wait =
-        Some(Duration::from_secs(max_spot_instance_request_wait_secs));
-    launcher.spawn(descriptors, max_wait).await?;
-    let vms = launcher.connect_all().await?;
-
-    // mapping from tag, to a mapping from region to vm
-    let mut results: HashMap<_, HashMap<_, _>> =
-        HashMap::with_capacity(tags.len());
-    for (name, vm) in vms {
-        let (tag, region) = from_name(name);
-        let res = results
-            .entry(tag)
-            .or_insert_with(|| HashMap::with_capacity(regions.len()))
-            .insert(region, vm);
-        assert!(res.is_none());
-    }
-    let regions = regions
-        .into_iter()
-        .map(|region| region.name().to_string())
-        .collect();
-    Ok((regions, results))
-}
-
 async fn start_processes(
-    regions: &Vec<String>,
-    vms: &HashMap<String, Machine<'_>>,
+    run_mode: RunMode,
+    machines: &Machines<'_>,
     protocol: &str,
     config: Config,
     tracer_show_interval: Option<usize>,
@@ -309,10 +145,11 @@ async fn start_processes(
 > {
     let n = config.n();
     // check that we have the correct number of regions and vms
-    assert_eq!(regions.len(), n);
-    assert_eq!(vms.len(), n);
+    assert_eq!(machines.regions.len(), n);
+    assert_eq!(machines.servers.len(), n);
 
-    let ips: HashMap<_, _> = vms
+    let ips: HashMap<_, _> = machines
+        .servers
         .iter()
         .map(|(region, vm)| (region.clone(), vm.public_ip.clone()))
         .collect();
@@ -336,9 +173,12 @@ async fn start_processes(
     let mut wait_processes = Vec::with_capacity(n);
 
     for (process_id, region) in
-        fantoch::util::process_ids(n).zip(regions.iter())
+        fantoch::util::process_ids(n).zip(machines.regions.iter())
     {
-        let vm = vms.get(region).expect("process vm should exist");
+        let vm = machines
+            .servers
+            .get(region)
+            .expect("process vm should exist");
 
         // get ips for this region
         let ips = all_but_self(region)
@@ -356,10 +196,10 @@ async fn start_processes(
         }
         let args = process_config.to_args();
 
-        let command = fantoch_bin_script(
+        let command = exp::fantoch_bin_script(
             &protocol,
             args,
-            RUN_MODE,
+            run_mode,
             process_file(process_id),
         );
         let process = util::prepare_command(&vm, command)
@@ -380,14 +220,16 @@ async fn start_processes(
 
 async fn run_clients(
     clients_per_region: usize,
-    vms: &HashMap<String, Machine<'_>>,
+    machines: &Machines<'_>,
     process_ips: HashMap<String, String>,
 ) -> Result<Vec<ClientMetrics>, Report> {
-    let n = vms.len();
-    let mut clients = HashMap::with_capacity(n);
-    let mut wait_clients = Vec::with_capacity(n);
+    let regions_with_clients = machines.clients.len();
+    let mut clients = HashMap::with_capacity(regions_with_clients);
+    let mut wait_clients = Vec::with_capacity(regions_with_clients);
 
-    for (client_index, (region, vm)) in (1..=n).zip(vms.iter()) {
+    for (client_index, (region, vm)) in
+        (1..=regions_with_clients).zip(machines.clients.iter())
+    {
         // compute id start and id end:
         // - first compute the id end
         // - and then compute id start: subtract `clients_per_machine` and add 1
@@ -401,10 +243,10 @@ async fn run_clients(
         let client_config = ClientConfig::new(id_start, id_end, ip);
         let args = client_config.to_args();
 
-        // always run clients on release mode
-        let command = fantoch_bin_script(
+        let command = exp::fantoch_bin_script(
             "client",
             args,
+            // always run clients on release mode
             RunMode::Release,
             client_file(client_index),
         );
@@ -417,7 +259,7 @@ async fn run_clients(
     }
 
     // wait all processse started
-    let mut latencies = Vec::with_capacity(n);
+    let mut latencies = Vec::with_capacity(regions_with_clients);
     for result in futures::future::join_all(wait_clients).await {
         let latency = result?;
         latencies.push(latency);
@@ -427,12 +269,16 @@ async fn run_clients(
 
 async fn stop_processes(
     run_id: String,
-    vms: &HashMap<String, Machine<'_>>,
+    run_mode: RunMode,
+    machines: &Machines<'_>,
     processes: HashMap<String, (ProcessId, tokio::process::Child)>,
 ) -> Result<(), Report> {
     // first copy the logs
     for (region, &(process_id, _)) in &processes {
-        let vm = vms.get(region).expect("process vm should exist");
+        let vm = machines
+            .servers
+            .get(region)
+            .expect("process vm should exist");
         util::copy_from(
             (&process_file(process_id), &vm),
             &format!(".log_{}_id{}_{}", run_id, process_id, region),
@@ -442,9 +288,12 @@ async fn stop_processes(
     }
     tracing::info!("copied all process logs");
 
-    let mut wait_processes = Vec::with_capacity(vms.len());
+    let mut wait_processes = Vec::with_capacity(machines.servers.len());
     for (region, (process_id, mut pchild)) in processes {
-        let vm = vms.get(&region).expect("process vm should exist");
+        let vm = machines
+            .servers
+            .get(&region)
+            .expect("process vm should exist");
 
         // kill ssh process
         if let Err(e) = pchild.kill() {
@@ -490,6 +339,7 @@ async fn stop_processes(
 
         wait_processes.push(wait_process_ended(
             run_id.clone(),
+            run_mode,
             process_id,
             region,
             vm,
@@ -505,7 +355,7 @@ async fn stop_processes(
 
 async fn wait_process_started(
     process_id: ProcessId,
-    vm: &Machine<'_>,
+    vm: &tsunami::Machine<'_>,
 ) -> Result<(), Report> {
     let mut count = 0;
     while count != 1 {
@@ -527,7 +377,7 @@ async fn wait_process_started(
 async fn wait_client_ended(
     client_index: usize,
     region: String,
-    vm: &Machine<'_>,
+    vm: &tsunami::Machine<'_>,
 ) -> Result<ClientMetrics, Report> {
     // wait until all clients end
     let mut count = 0;
@@ -552,9 +402,10 @@ async fn wait_client_ended(
 
 async fn wait_process_ended(
     run_id: String,
+    run_mode: RunMode,
     process_id: ProcessId,
     region: String,
-    vm: &Machine<'_>,
+    vm: &tsunami::Machine<'_>,
 ) -> Result<(), Report> {
     // small delay between calls
     let delay = tokio::time::Duration::from_secs(2);
@@ -573,7 +424,7 @@ async fn wait_process_ended(
     );
 
     // maybe copy flamegraph
-    if RUN_MODE == RunMode::Flamegraph {
+    if run_mode == RunMode::Flamegraph {
         // wait for the flamegraph process to finish writing `flamegraph.svg`
         let mut count = 1;
         while count != 0 {
@@ -600,17 +451,6 @@ async fn wait_process_ended(
     }
 
     Ok(())
-}
-
-fn fantoch_bin_script(
-    binary: &str,
-    args: Vec<String>,
-    run_mode: RunMode,
-    output_file: String,
-) -> String {
-    let binary = run_mode.binary(binary);
-    let args = args.join(" ");
-    format!("{} {} > {} 2>&1", binary, args, output_file)
 }
 
 fn process_file(process_id: ProcessId) -> String {

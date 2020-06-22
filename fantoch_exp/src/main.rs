@@ -1,24 +1,34 @@
 mod bench;
 mod config;
+mod exp;
 mod ping;
+mod testbed;
 mod util;
 
 use color_eyre::Report;
+use exp::RunMode;
+use eyre::WrapErr;
 use fantoch::config::Config;
 use rusoto_core::Region;
+use tsunami::Tsunami;
 
-// experiment config
-const INSTANCE_TYPE: &str = "c5.2xlarge";
+// aws experiment config
+const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
+const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 3;
+
+// run mode
+const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
 const PROTOCOL: &str = "newt_atomic";
 const GC_INTERVAL: Option<usize> = Some(50); // every 50
+
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "executor_metrics";
+const BRANCH: &str = "baremetal";
 const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
@@ -44,17 +54,6 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    let server_instance_type = INSTANCE_TYPE.to_string();
-    let client_instance_type = INSTANCE_TYPE.to_string();
-    let branch = BRANCH.to_string();
-    bench(server_instance_type, client_instance_type, branch).await
-}
-
-async fn bench(
-    server_instance_type: String,
-    client_instance_type: String,
-    branch: String,
-) -> Result<(), Report> {
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -80,13 +79,58 @@ async fn bench(
         .create(true)
         .open(OUTPUT_LOG)
         .await?;
-    bench::bench_experiment(
-        server_instance_type.clone(),
-        client_instance_type.clone(),
-        regions.clone(),
+
+    aws_bench(regions, configs, clients_per_region, output_log).await
+}
+
+async fn aws_bench(
+    regions: Vec<Region>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
+    let res = do_aws_bench(
+        &mut launcher,
+        regions,
+        configs,
+        clients_per_region,
+        output_log,
+    )
+    .await;
+    if let Err(e) = &res {
+        tracing::warn!("aws bench experiment error: {:?}", e);
+    }
+    tracing::info!("will wait 5 minutes before terminating spot instances");
+    tokio::time::delay_for(tokio::time::Duration::from_secs(300)).await;
+    launcher.terminate_all().await?;
+    Ok(())
+}
+
+async fn do_aws_bench(
+    launcher: &mut tsunami::providers::aws::Launcher<
+        rusoto_credential::DefaultCredentialsProvider,
+    >,
+    regions: Vec<Region>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    let machines = testbed::aws::spawn(
+        launcher,
+        SERVER_INSTANCE_TYPE.to_string(),
+        CLIENT_INSTANCE_TYPE.to_string(),
+        regions,
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         MAX_INSTANCE_DURATION_HOURS,
-        branch.clone(),
+        BRANCH.to_string(),
+        RUN_MODE,
+    )
+    .await
+    .wrap_err("aws spawn")?;
+    bench::bench_experiment(
+        machines,
+        RUN_MODE,
         PROTOCOL.to_string(),
         configs,
         TRACER_SHOW_INTERVAL,
@@ -94,6 +138,8 @@ async fn bench(
         output_log,
     )
     .await
+    .wrap_err("bench experiment")?;
+    todo!()
 }
 
 #[allow(dead_code)]
