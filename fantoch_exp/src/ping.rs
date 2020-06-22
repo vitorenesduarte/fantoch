@@ -142,7 +142,7 @@ async fn ping(
 
     // execute script remotely: "$ script.sh hosts seconds output"
     let args = args![hosts_file, experiment_duration_secs, output_file];
-    let stdout = util::script_exec(script_file, args, &vm).await?;
+    let stdout = util::vm_script_exec(script_file, args, &vm).await?;
     tracing::debug!("script ended {}", stdout);
 
     // copy output file

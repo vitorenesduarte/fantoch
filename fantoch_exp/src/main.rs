@@ -54,11 +54,7 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    let regions = vec![
-        Region::EuWest1,
-        Region::UsWest1,
-        Region::ApSoutheast1,
-    ];
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
     let configs = vec![
         // n, f, tiny quorums, clock bump interval, skip fast ack
         config!(3, 1, false, None, false),

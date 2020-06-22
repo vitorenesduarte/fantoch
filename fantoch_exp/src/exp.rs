@@ -67,7 +67,7 @@ pub fn fantoch_setup(
             // execute script remotely: "$ setup.sh branch"
             let mut done = false;
             while !done {
-                let stdout = util::script_exec(
+                let stdout = util::vm_script_exec(
                     script_file,
                     args![branch, flamegraph, aws],
                     &vm,

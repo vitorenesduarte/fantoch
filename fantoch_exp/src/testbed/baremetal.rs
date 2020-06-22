@@ -5,7 +5,7 @@ use eyre::WrapErr;
 use rusoto_core::Region;
 use std::collections::HashMap;
 
-const MACHINE: &str = "./../exp/files/machine";
+const MACHINE: &str = "./../exp/files/machines";
 const PRIVATE_KEY: &str = "~/.ssh/id_rsa";
 
 pub async fn setup<'a>(

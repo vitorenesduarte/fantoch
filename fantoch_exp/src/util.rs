@@ -15,11 +15,48 @@ macro_rules! args {
     }};
 }
 
-pub async fn exec(
+pub async fn vm_exec(
     vm: &tsunami::Machine<'_>,
     command: String,
 ) -> Result<String, Report> {
-    let out = prepare_command(vm, command)
+    exec(
+        &vm.username,
+        &vm.public_ip,
+        vm.private_key.as_ref().expect("private key should be set"),
+        command,
+    )
+    .await
+}
+
+pub async fn vm_script_exec(
+    path: &str,
+    args: Vec<String>,
+    vm: &tsunami::Machine<'_>,
+) -> Result<String, Report> {
+    let args = args.join(" ");
+    let command = format!("chmod u+x {} && ./{} {}", path, path, args);
+    vm_exec(vm, command).await.wrap_err("chmod && ./script")
+}
+
+pub fn vm_prepare_command(
+    vm: &tsunami::Machine<'_>,
+    command: String,
+) -> tokio::process::Command {
+    prepare_command(
+        &vm.username,
+        &vm.public_ip,
+        vm.private_key.as_ref().expect("private key should be set"),
+        command,
+    )
+}
+
+pub async fn exec(
+    username: &String,
+    public_ip: &String,
+    private_key: &std::path::PathBuf,
+    command: String,
+) -> Result<String, Report> {
+    let out = prepare_command(username, public_ip, private_key, command)
         .output()
         .await
         .wrap_err("ssh command")?;
@@ -30,30 +67,20 @@ pub async fn exec(
     Ok(out)
 }
 
-pub async fn script_exec(
-    path: &str,
-    args: Vec<String>,
-    vm: &tsunami::Machine<'_>,
-) -> Result<String, Report> {
-    let args = args.join(" ");
-    let command = format!("chmod u+x {} && ./{} {}", path, path, args);
-    exec(vm, command).await.wrap_err("chmod && ./script")
-}
-
 pub fn prepare_command(
-    vm: &tsunami::Machine<'_>,
+    username: &String,
+    public_ip: &String,
+    private_key: &std::path::PathBuf,
     command: String,
 ) -> tokio::process::Command {
-    let private_key =
-        vm.private_key.clone().expect("private key should be set");
     let ssh_command = format!(
         "ssh {}@{} -i {} {}",
-        vm.username,
-        vm.public_ip,
+        username,
+        public_ip,
         private_key.as_path().display(),
         escape(command)
     );
-    tracing::debug!("prepared: {}", ssh_command);
+    tracing::debug!("{}", ssh_command);
     let mut command = tokio::process::Command::new("sh");
     command.arg("-c");
     command.arg(ssh_command);

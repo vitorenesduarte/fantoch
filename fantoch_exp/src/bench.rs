@@ -202,7 +202,7 @@ async fn start_processes(
             run_mode,
             process_file(process_id),
         );
-        let process = util::prepare_command(&vm, command)
+        let process = util::vm_prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start process")?;
         processes.insert(region.clone(), (process_id, process));
@@ -250,7 +250,7 @@ async fn run_clients(
             RunMode::Release,
             client_file(client_index),
         );
-        let client = util::prepare_command(&vm, command)
+        let client = util::vm_prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start client")?;
         clients.insert(client_index, client);
@@ -309,7 +309,8 @@ async fn stop_processes(
         // TODO: this should equivalent to `pkill newt_atomic`
         let command =
             format!("lsof -i :{} -i :{} | grep -v PID", PORT, CLIENT_PORT);
-        let output = util::exec(vm, command).await.wrap_err("lsof | grep")?;
+        let output =
+            util::vm_exec(vm, command).await.wrap_err("lsof | grep")?;
         tracing::debug!("{}", output);
         let mut pids: Vec<_> = output
             .lines()
@@ -331,7 +332,8 @@ async fn stop_processes(
                 // kill it
                 let pid = pids[0];
                 let command = format!("kill {}", pid);
-                let output = util::exec(vm, command).await.wrap_err("kill")?;
+                let output =
+                    util::vm_exec(vm, command).await.wrap_err("kill")?;
                 tracing::debug!("{}", output);
             }
             n => panic!("there should be at most one pid and found {}", n),
@@ -368,7 +370,7 @@ async fn wait_process_started(
             process_id,
             process_file(process_id)
         );
-        let stdout = util::exec(vm, command).await.wrap_err("grep -c")?;
+        let stdout = util::vm_exec(vm, command).await.wrap_err("grep -c")?;
         count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
     }
     Ok(())
@@ -390,13 +392,13 @@ async fn wait_client_ended(
             "grep -c 'all clients ended' {}",
             client_file(client_index)
         );
-        let stdout = util::exec(vm, command).await.wrap_err("grep -c")?;
+        let stdout = util::vm_exec(vm, command).await.wrap_err("grep -c")?;
         count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
     }
 
     // fetch client log
     let command = format!("grep latency {}", client_file(client_index));
-    let latency = util::exec(vm, command).await.wrap_err("grep latency")?;
+    let latency = util::vm_exec(vm, command).await.wrap_err("grep latency")?;
     Ok((region, latency))
 }
 
@@ -414,7 +416,7 @@ async fn wait_process_ended(
     while count != 0 {
         tokio::time::delay_for(delay).await;
         let command = format!("lsof -i :{} -i :{} | wc -l", PORT, CLIENT_PORT);
-        let stdout = util::exec(vm, command).await.wrap_err("lsof | wc")?;
+        let stdout = util::vm_exec(vm, command).await.wrap_err("lsof | wc")?;
         count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
     }
     tracing::info!(
@@ -431,7 +433,8 @@ async fn wait_process_ended(
             tokio::time::delay_for(delay).await;
             let command =
                 format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
-            let stdout = util::exec(vm, command).await.wrap_err("ps | wc")?;
+            let stdout =
+                util::vm_exec(vm, command).await.wrap_err("ps | wc")?;
             count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
         }
 
