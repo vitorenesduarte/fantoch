@@ -60,9 +60,6 @@
 /// Other notes:
 /// - the runner allows `Protocol` workers to share state; however, it assumes
 ///   that `Executor` workers never do
-
-const CONNECT_RETRIES: usize = 100;
-
 // This module contains the "runner" prelude.
 mod prelude;
 
@@ -75,6 +72,9 @@ pub mod rw;
 // This module contains the implementation of channels, clients, connections,
 // executors, and process workers.
 pub mod task;
+
+const CONNECT_RETRIES: usize = 100;
+type ConnectionDelay = Option<usize>;
 
 // Re-exports.
 pub use prelude::{
@@ -105,7 +105,7 @@ pub async fn process<P, A>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<(A, Option<usize>)>,
+    addresses: Vec<(A, ConnectionDelay)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
@@ -156,7 +156,7 @@ async fn process_with_notify_and_inspect<P, A, R>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<(A, Option<usize>)>,
+    addresses: Vec<(A, ConnectionDelay)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,

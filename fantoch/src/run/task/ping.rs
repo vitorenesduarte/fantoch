@@ -3,6 +3,7 @@ use crate::id::ProcessId;
 use crate::log;
 use crate::metrics::Histogram;
 use crate::run::prelude::*;
+use crate::run::ConnectionDelay;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use tokio::time::{self, Duration};
@@ -13,7 +14,7 @@ const ITERATIONS_PER_PING: u64 = 5;
 pub async fn ping_task(
     ping_interval: Option<usize>,
     process_id: ProcessId,
-    ips: HashMap<ProcessId, IpAddr>,
+    ips: HashMap<ProcessId, (IpAddr, ConnectionDelay)>,
     parent: Option<SortedProcessesReceiver>,
 ) {
     // if no interval, do not ping
@@ -35,7 +36,9 @@ pub async fn ping_task(
     //  create ping stats
     let mut ping_stats = ips
         .into_iter()
-        .map(|(process_id, ip)| (process_id, (ip, Histogram::new())))
+        .map(|(process_id, (ip, delay))| {
+            (process_id, (ip, delay, Histogram::new()))
+        })
         .collect();
 
     if let Some(mut parent) = parent {
@@ -58,9 +61,9 @@ pub async fn ping_task(
 }
 
 async fn ping_task_ping(
-    ping_stats: &mut HashMap<ProcessId, (IpAddr, Histogram)>,
+    ping_stats: &mut HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
 ) {
-    for (ip, histogram) in ping_stats.values_mut() {
+    for (ip, delay, histogram) in ping_stats.values_mut() {
         for _ in 0..ITERATIONS_PER_PING {
             let latency = loop {
                 let command =
@@ -89,20 +92,30 @@ async fn ping_task_ping(
                 .parse::<f64>()
                 .expect("ping output should be a float");
             let rounded_latency = latency as u64;
+            // add two times the delay (since delay should be half the ping
+            // latency), if there's one
+            let rounded_latency = if let Some(delay) = delay {
+                let delay = *delay as u64;
+                rounded_latency + 2 * delay
+            } else {
+                rounded_latency
+            };
             histogram.increment(rounded_latency);
         }
     }
 }
 
-fn ping_task_show(ping_stats: &HashMap<ProcessId, (IpAddr, Histogram)>) {
-    for (process_id, (_, histogram)) in ping_stats {
+fn ping_task_show(
+    ping_stats: &HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
+) {
+    for (process_id, (_, _, histogram)) in ping_stats {
         println!("[ping_task] {}: {:?}", process_id, histogram);
     }
 }
 
 async fn ping_task_sort(
     process_id: ProcessId,
-    ping_stats: &HashMap<ProcessId, (IpAddr, Histogram)>,
+    ping_stats: &HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
     sort_request: Option<ChannelSender<Vec<ProcessId>>>,
 ) {
     match sort_request {
@@ -125,12 +138,12 @@ async fn ping_task_sort(
 /// returned list.
 fn sort_by_distance(
     process_id: ProcessId,
-    ping_stats: &HashMap<ProcessId, (IpAddr, Histogram)>,
+    ping_stats: &HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
 ) -> Vec<ProcessId> {
     // sort processes by ping time
     let mut pings = ping_stats
         .iter()
-        .map(|(id, (_, histogram))| (u64::from(histogram.mean()), id))
+        .map(|(id, (_, _, histogram))| (u64::from(histogram.mean()), id))
         .collect::<Vec<_>>();
     pings.sort();
     // make sure we're the first process
@@ -151,13 +164,13 @@ mod tests {
         let mut ping_stats = HashMap::new();
         assert_eq!(sort_by_distance(1, &ping_stats), vec![1]);
 
-        ping_stats.insert(2, (ip, Histogram::from(vec![10, 20, 30])));
+        ping_stats.insert(2, (ip, None, Histogram::from(vec![10, 20, 30])));
         assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 2]);
 
-        ping_stats.insert(3, (ip, Histogram::from(vec![5, 5, 5])));
+        ping_stats.insert(3, (ip, None, Histogram::from(vec![5, 5, 5])));
         assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 3, 2]);
 
-        let (_, histogram_2) = ping_stats.get_mut(&2).unwrap();
+        let (_, _, histogram_2) = ping_stats.get_mut(&2).unwrap();
         for _ in 1..100 {
             histogram_2.increment(1);
         }
