@@ -311,7 +311,6 @@ async fn stop_processes(
             format!("lsof -i :{} -i :{} | grep -v PID", PORT, CLIENT_PORT);
         let output =
             util::vm_exec(vm, command).await.wrap_err("lsof | grep")?;
-        tracing::debug!("{}", output);
         let mut pids: Vec<_> = output
             .lines()
             .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])

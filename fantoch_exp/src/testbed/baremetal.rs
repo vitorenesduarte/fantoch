@@ -89,7 +89,6 @@ async fn baremetal_setup(
     let parts: Vec<_> = machine.split("@").collect();
     assert_eq!(parts.len(), 2, "machine should have the form username@addr");
     let username = parts[0].to_string();
-    // TODO I think addr needs a port to work in tsunami
     let hostname = parts[1].to_string();
 
     // fetch public ip
