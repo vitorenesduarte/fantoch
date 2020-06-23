@@ -3,7 +3,6 @@ use crate::exp::{self, Machines, RunMode, Testbed};
 use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
-use rusoto_core::Region;
 use std::collections::HashMap;
 
 const MACHINE: &str = "./../exp/files/machines";
@@ -13,7 +12,7 @@ pub async fn setup<'a>(
     launchers: &'a mut Vec<tsunami::providers::baremetal::Machine>,
     servers_count: usize,
     clients_count: usize,
-    regions: Vec<Region>,
+    regions: Vec<rusoto_core::Region>,
     branch: String,
     run_mode: RunMode,
 ) -> Result<Machines<'a>, Report> {
@@ -75,7 +74,7 @@ pub async fn setup<'a>(
     assert_eq!(clients.len(), clients_count, "not enough client vms");
 
     Ok(Machines {
-        regions: super::regions(regions),
+        regions: super::to_regions(regions),
         servers,
         clients,
     })

@@ -6,9 +6,10 @@ mod testbed;
 mod util;
 
 use color_eyre::Report;
-use exp::{Machines, RunMode};
+use exp::{Machines, RunMode, Testbed};
 use eyre::WrapErr;
 use fantoch::config::Config;
+use fantoch::planet::Planet;
 use rusoto_core::Region;
 use tsunami::Tsunami;
 
@@ -124,10 +125,20 @@ async fn baremetal_bench(
     .await
     .wrap_err("baremetal spawn")?;
 
+    // create AWS planet
+    let planet = Some(Planet::from("../latency_aws"));
+
     // run benchmarks
-    run_bench(machines, configs, clients_per_region, output_log)
-        .await
-        .wrap_err("run bench")?;
+    run_bench(
+        machines,
+        Testbed::Baremetal,
+        planet,
+        configs,
+        clients_per_region,
+        output_log,
+    )
+    .await
+    .wrap_err("run bench")?;
 
     Ok(())
 }
@@ -183,16 +194,28 @@ async fn do_aws_bench(
     .await
     .wrap_err("aws spawn")?;
 
+    // no need for aws planet
+    let planet = None;
+
     // run benchmarks
-    run_bench(machines, configs, clients_per_region, output_log)
-        .await
-        .wrap_err("run bench")?;
+    run_bench(
+        machines,
+        Testbed::Aws,
+        planet,
+        configs,
+        clients_per_region,
+        output_log,
+    )
+    .await
+    .wrap_err("run bench")?;
 
     Ok(())
 }
 
 async fn run_bench(
     machines: Machines<'_>,
+    testbed: Testbed,
+    planet: Option<Planet>,
     configs: Vec<Config>,
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
@@ -200,6 +223,8 @@ async fn run_bench(
     bench::bench_experiment(
         machines,
         RUN_MODE,
+        testbed,
+        planet,
         PROTOCOL.to_string(),
         configs,
         TRACER_SHOW_INTERVAL,

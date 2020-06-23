@@ -1,7 +1,6 @@
 use super::{CLIENT_TAG, SERVER_TAG};
 use crate::exp::{self, Machines, RunMode, Testbed};
 use color_eyre::Report;
-use rusoto_core::Region;
 use std::collections::HashMap;
 use std::time::Duration;
 use tsunami::Tsunami;
@@ -12,7 +11,7 @@ pub async fn setup(
     >,
     server_instance_type: String,
     client_instance_type: String,
-    regions: Vec<Region>,
+    regions: Vec<rusoto_core::Region>,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
@@ -35,7 +34,7 @@ pub async fn setup(
     let servers = vms.remove(SERVER_TAG).expect("servers vms");
     let clients = vms.remove(CLIENT_TAG).expect("client vms");
     Ok(Machines {
-        regions: super::regions(regions),
+        regions: super::to_regions(regions),
         servers,
         clients,
     })
@@ -46,12 +45,15 @@ async fn spawn_and_setup<'a>(
         rusoto_credential::DefaultCredentialsProvider,
     >,
     tags: Vec<(String, String)>,
-    regions: &'_ Vec<Region>,
+    regions: &'_ Vec<rusoto_core::Region>,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
     run_mode: RunMode,
-) -> Result<HashMap<String, HashMap<String, tsunami::Machine<'a>>>, Report> {
+) -> Result<
+    HashMap<String, HashMap<fantoch::planet::Region, tsunami::Machine<'a>>>,
+    Report,
+> {
     // create machine descriptors
     let mut descriptors = Vec::with_capacity(regions.len());
     for (tag, instance_type) in &tags {

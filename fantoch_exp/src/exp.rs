@@ -2,6 +2,7 @@ use crate::args;
 use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
+use fantoch::planet::Region;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -11,9 +12,9 @@ use std::pin::Pin;
 const SETUP_SCRIPT: &str = "./../exp/files/build.sh";
 
 pub struct Machines<'a> {
-    pub regions: Vec<String>,
-    pub servers: HashMap<String, tsunami::Machine<'a>>,
-    pub clients: HashMap<String, tsunami::Machine<'a>>,
+    pub regions: Vec<Region>,
+    pub servers: HashMap<Region, tsunami::Machine<'a>>,
+    pub clients: HashMap<Region, tsunami::Machine<'a>>,
 }
 
 #[derive(PartialEq, Clone, Copy)]

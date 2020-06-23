@@ -1,18 +1,21 @@
 use crate::config::{ClientConfig, ProcessConfig, CLIENT_PORT, PORT};
-use crate::exp::{self, Machines, RunMode};
+use crate::exp::{self, Machines, RunMode, Testbed};
 use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
+use fantoch::planet::{Planet, Region};
 use std::collections::HashMap;
 use tokio::io::AsyncWriteExt;
 
-type ClientMetrics = (String, String);
+type ClientMetrics = (Region, String);
 
 pub async fn bench_experiment(
     machines: Machines<'_>,
     run_mode: RunMode,
+    testbed: Testbed,
+    planet: Option<Planet>,
     protocol: String,
     configs: Vec<Config>,
     tracer_show_interval: Option<usize>,
@@ -40,9 +43,11 @@ pub async fn bench_experiment(
                 clients,
             );
             let latencies = run_experiment(
+                &machines,
                 run_id,
                 run_mode,
-                &machines,
+                testbed,
+                &planet,
                 &protocol,
                 config,
                 tracer_show_interval,
@@ -61,8 +66,11 @@ pub async fn bench_experiment(
                 let region_latency = region_latency
                     .strip_prefix("latency: ")
                     .expect("client output should start with 'latency: '");
-                let line =
-                    format!("region = {:<14} | {}", region, region_latency);
+                let line = format!(
+                    "region = {:<14} | {}",
+                    region.name(),
+                    region_latency
+                );
                 append_to_output_log(&mut output_log, line).await?;
 
                 for entry in region_latency.split_whitespace() {
@@ -98,9 +106,11 @@ pub async fn bench_experiment(
 }
 
 async fn run_experiment(
+    machines: &Machines<'_>,
     run_id: String,
     run_mode: RunMode,
-    machines: &Machines<'_>,
+    testbed: Testbed,
+    planet: &Option<Planet>,
     protocol: &str,
     config: Config,
     tracer_show_interval: Option<usize>,
@@ -108,8 +118,10 @@ async fn run_experiment(
 ) -> Result<Vec<ClientMetrics>, Report> {
     // start processes
     let (process_ips, processes) = start_processes(
-        run_mode,
         machines,
+        run_mode,
+        testbed,
+        planet,
         protocol,
         config,
         tracer_show_interval,
@@ -131,15 +143,17 @@ async fn run_experiment(
 }
 
 async fn start_processes(
-    run_mode: RunMode,
     machines: &Machines<'_>,
+    run_mode: RunMode,
+    testbed: Testbed,
+    planet: &Option<Planet>,
     protocol: &str,
     config: Config,
     tracer_show_interval: Option<usize>,
 ) -> Result<
     (
-        HashMap<String, String>,
-        HashMap<String, (ProcessId, tokio::process::Child)>,
+        HashMap<Region, String>,
+        HashMap<Region, (ProcessId, tokio::process::Child)>,
     ),
     Report,
 > {
@@ -154,37 +168,30 @@ async fn start_processes(
         .map(|(region, vm)| (region.clone(), vm.public_ip.clone()))
         .collect();
     tracing::debug!("processes ips: {:?}", ips);
-    let all_but_self = |region| {
+    let all_but_self = |region: &Region| {
         // select all ips but self
         ips.iter()
-            .filter_map(
-                |(ip_region, ip)| {
-                    if ip_region == region {
-                        None
-                    } else {
-                        Some(ip)
-                    }
-                },
-            )
+            .filter(|(ip_region, _ip)| ip_region != &region)
             .collect::<Vec<_>>()
     };
 
     let mut processes = HashMap::with_capacity(n);
     let mut wait_processes = Vec::with_capacity(n);
 
-    for (process_id, region) in
+    for (process_id, from_region) in
         fantoch::util::process_ids(n).zip(machines.regions.iter())
     {
         let vm = machines
             .servers
-            .get(region)
+            .get(from_region)
             .expect("process vm should exist");
 
         // get ips for this region
-        let ips = all_but_self(region)
+        let ips = all_but_self(from_region)
             .into_iter()
-            .map(|ip| {
-                let delay = None;
+            .map(|(to_region, ip)| {
+                let delay =
+                    maybe_inject_delay(from_region, to_region, testbed, planet);
                 (ip.clone(), delay)
             })
             .collect();
@@ -205,7 +212,7 @@ async fn start_processes(
         let process = util::vm_prepare_command(&vm, command)
             .spawn()
             .wrap_err("failed to start process")?;
-        processes.insert(region.clone(), (process_id, process));
+        processes.insert(from_region.clone(), (process_id, process));
 
         wait_processes.push(wait_process_started(process_id, &vm));
     }
@@ -218,10 +225,35 @@ async fn start_processes(
     Ok((ips, processes))
 }
 
+fn maybe_inject_delay(
+    from: &Region,
+    to: &Region,
+    testbed: Testbed,
+    planet: &Option<Planet>,
+) -> Option<usize> {
+    match testbed {
+        Testbed::Aws => {
+            // do not inject delay in AWS
+            None
+        }
+        Testbed::Baremetal => {
+            // in this case, there should be a planet
+            let planet = planet.as_ref().expect("planet not found");
+            // find ping latency
+            let ping = planet
+                .ping_latency(from, to)
+                .expect("both regions should be part of the planet");
+            // the delay should be half the ping latency
+            let delay = (ping / 2) as usize;
+            Some(delay)
+        }
+    }
+}
+
 async fn run_clients(
     clients_per_region: usize,
     machines: &Machines<'_>,
-    process_ips: HashMap<String, String>,
+    process_ips: HashMap<Region, String>,
 ) -> Result<Vec<ClientMetrics>, Report> {
     let regions_with_clients = machines.clients.len();
     let mut clients = HashMap::with_capacity(regions_with_clients);
@@ -271,7 +303,7 @@ async fn stop_processes(
     run_id: String,
     run_mode: RunMode,
     machines: &Machines<'_>,
-    processes: HashMap<String, (ProcessId, tokio::process::Child)>,
+    processes: HashMap<Region, (ProcessId, tokio::process::Child)>,
 ) -> Result<(), Report> {
     // first copy the logs
     for (region, &(process_id, _)) in &processes {
@@ -281,7 +313,7 @@ async fn stop_processes(
             .expect("process vm should exist");
         util::copy_from(
             (&process_file(process_id), &vm),
-            &format!(".log_{}_id{}_{}", run_id, process_id, region),
+            &format!(".log_{}_id{}_{:?}", run_id, process_id, region),
         )
         .await
         .wrap_err("copy log")?;
@@ -298,7 +330,7 @@ async fn stop_processes(
         // kill ssh process
         if let Err(e) = pchild.kill() {
             tracing::warn!(
-                "error trying to kill ssh process {} in region {}: {:?}",
+                "error trying to kill ssh process {} in region {:?}: {:?}",
                 pchild.id(),
                 region,
                 e
@@ -322,7 +354,7 @@ async fn stop_processes(
         match pids.len() {
             0 => {
                 tracing::warn!(
-                    "process {} already not running in region {}",
+                    "process {} already not running in region {:?}",
                     process_id,
                     region
                 );
@@ -377,7 +409,7 @@ async fn wait_process_started(
 
 async fn wait_client_ended(
     client_index: usize,
-    region: String,
+    region: Region,
     vm: &tsunami::Machine<'_>,
 ) -> Result<ClientMetrics, Report> {
     // wait until all clients end
@@ -405,7 +437,7 @@ async fn wait_process_ended(
     run_id: String,
     run_mode: RunMode,
     process_id: ProcessId,
-    region: String,
+    region: Region,
     vm: &tsunami::Machine<'_>,
 ) -> Result<(), Report> {
     // small delay between calls
@@ -419,7 +451,7 @@ async fn wait_process_ended(
         count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
     }
     tracing::info!(
-        "process {} in region {} terminated successfully",
+        "process {} in region {:?} terminated successfully",
         process_id,
         region
     );
@@ -440,13 +472,16 @@ async fn wait_process_ended(
         // copy `flamegraph.svg`
         util::copy_from(
             ("flamegraph.svg", &vm),
-            &format!(".flamegraph_{}_id{}_{}.svg", run_id, process_id, region),
+            &format!(
+                ".flamegraph_{}_id{}_{:?}.svg",
+                run_id, process_id, region
+            ),
         )
         .await
         .wrap_err("copy flamegraph")?;
 
         tracing::info!(
-            "copied flamegraph log of process {} in region {}",
+            "copied flamegraph log of process {} in region {:?}",
             process_id,
             region
         );
