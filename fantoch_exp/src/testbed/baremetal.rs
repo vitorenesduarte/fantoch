@@ -1,5 +1,6 @@
 use super::{CLIENT_TAG, SERVER_TAG};
 use crate::exp::{self, Machines, RunMode};
+use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
 use rusoto_core::Region;
@@ -36,7 +37,9 @@ pub async fn setup<'a>(
             let launcher = launcher_iter.next().unwrap();
 
             // create baremetal setup
-            let setup = baremetal_setup(machine, branch.clone(), run_mode)?;
+            let setup = baremetal_setup(machine, branch.clone(), run_mode)
+                .await
+                .wrap_err("baremetal setup")?;
 
             // save baremetal launch
             let launch = baremetal_launch(
@@ -78,7 +81,7 @@ pub async fn setup<'a>(
     })
 }
 
-fn baremetal_setup(
+async fn baremetal_setup(
     machine: &str,
     branch: String,
     run_mode: RunMode,
@@ -87,11 +90,30 @@ fn baremetal_setup(
     assert_eq!(parts.len(), 2, "machine should have the form username@addr");
     let username = parts[0].to_string();
     // TODO I think addr needs a port to work in tsunami
-    let addr = parts[1];
-    let setup =
-        tsunami::providers::baremetal::Setup::new(addr, Some(username))?
-            .key_path(PRIVATE_KEY)
-            .setup(exp::fantoch_setup(branch, run_mode));
+    let hostname = parts[1].to_string();
+
+    // fetch public ip
+    let command = String::from("hostname - I");
+    let hostname = util::exec(
+        &username,
+        &hostname,
+        &std::path::PathBuf::from(PRIVATE_KEY),
+        command,
+    )
+    .await
+    .wrap_err("hostname -I")?;
+    // hostname should be of the form "vitor.enes@apollo-2-1.imdea 10.10.5.61"
+    let parts: Vec<_> = hostname.split(" ").collect();
+    assert_eq!(
+        parts.len(),
+        2,
+        "hostname should have the form username@hostname ip"
+    );
+    let ip = parts[1].to_string();
+
+    let setup = tsunami::providers::baremetal::Setup::new(ip, Some(username))?
+        .key_path(PRIVATE_KEY)
+        .setup(exp::fantoch_setup(branch, run_mode));
     Ok(setup)
 }
 
