@@ -7,6 +7,7 @@ use crate::protocol::{Action, Protocol};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
+use crate::run::ConnectionDelay;
 use crate::time::RunTime;
 use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
@@ -21,7 +22,7 @@ use tokio::time::{self, Duration};
 pub async fn connect_to_all<A, P>(
     process_id: ProcessId,
     listener: TcpListener,
-    addresses: Vec<(A, Option<usize>)>,
+    addresses: Vec<(A, ConnectionDelay)>,
     to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
@@ -30,7 +31,7 @@ pub async fn connect_to_all<A, P>(
     channel_buffer_size: usize,
     multiplexing: usize,
 ) -> RunResult<(
-    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, (IpAddr, Option<usize>)>,
     HashMap<ProcessId, Vec<WriterSender<P>>>,
 )>
 where
@@ -104,7 +105,7 @@ async fn handshake<P>(
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
 ) -> (
-    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, (IpAddr, ConnectionDelay)>,
     HashMap<ProcessId, Vec<WriterSender<P>>>,
 )
 where
@@ -176,7 +177,7 @@ async fn start_writers<P>(
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, Connection)>,
 ) -> (
-    HashMap<ProcessId, IpAddr>,
+    HashMap<ProcessId, (IpAddr, ConnectionDelay)>,
     HashMap<ProcessId, Vec<WriterSender<P>>>,
 )
 where
@@ -188,13 +189,12 @@ where
 
     // start on writer task per connection
     for (process_id, connection) in connections {
-        // save ip
-        ips.insert(
-            process_id,
-            connection
-                .ip_addr()
-                .expect("ip address should be set for outgoing connection"),
-        );
+        // save ip and connection delay
+        let ip = connection
+            .ip_addr()
+            .expect("ip address should be set for outgoing connection");
+        let delay = connection.delay();
+        ips.insert(process_id, (ip, delay));
 
         // get connection delay
         let connection_delay = connection.delay();
