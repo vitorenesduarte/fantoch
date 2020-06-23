@@ -102,15 +102,9 @@ async fn baremetal_setup(
     )
     .await
     .wrap_err("hostname -I")?;
-    println!("hostname: {}", ips);
 
-    // hostname should be of the form "10.10.5.61 172.17.0.1"
+    // hostname should return at least one ip like so "10.10.5.61 172.17.0.1"
     let parts: Vec<_> = ips.split(" ").collect();
-    assert_eq!(
-        parts.len(),
-        2,
-        "output of hostname -I should have the form ip ip",
-    );
     let ip = parts[0];
 
     // append ssh port
