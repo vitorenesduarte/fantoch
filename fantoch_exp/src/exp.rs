@@ -39,9 +39,22 @@ impl RunMode {
     }
 }
 
+#[derive(PartialEq, Clone, Copy)]
+pub enum Testbed {
+    Aws,
+    Baremetal,
+}
+
+impl Testbed {
+    pub fn is_aws(&self) -> bool {
+        self == &Testbed::Aws
+    }
+}
+
 pub fn fantoch_setup(
     branch: String,
     run_mode: RunMode,
+    testbed: Testbed,
 ) -> Box<
     dyn for<'r> Fn(
             &'r tsunami::Machine<'_>,
@@ -54,7 +67,7 @@ pub fn fantoch_setup(
     Box::new(move |vm| {
         let branch = branch.clone();
         let flamegraph = run_mode.is_flamegraph();
-        let aws = "true";
+        let aws = testbed.is_aws();
         Box::pin(async move {
             // files
             let script_file = "setup.sh";

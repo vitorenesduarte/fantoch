@@ -1,5 +1,5 @@
 use super::{CLIENT_TAG, SERVER_TAG};
-use crate::exp::{self, Machines, RunMode};
+use crate::exp::{self, Machines, RunMode, Testbed};
 use color_eyre::Report;
 use rusoto_core::Region;
 use std::collections::HashMap;
@@ -64,7 +64,11 @@ async fn spawn_and_setup<'a>(
                 .instance_type(instance_type.clone())
                 .region_with_ubuntu_ami(region.clone())
                 .await?
-                .setup(exp::fantoch_setup(branch.clone(), run_mode));
+                .setup(exp::fantoch_setup(
+                    branch.clone(),
+                    run_mode,
+                    Testbed::Aws,
+                ));
 
             // save setup
             descriptors.push((name, setup))

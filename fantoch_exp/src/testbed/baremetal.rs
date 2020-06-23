@@ -1,5 +1,5 @@
 use super::{CLIENT_TAG, SERVER_TAG};
-use crate::exp::{self, Machines, RunMode};
+use crate::exp::{self, Machines, RunMode, Testbed};
 use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
@@ -114,7 +114,7 @@ async fn baremetal_setup(
     let setup =
         tsunami::providers::baremetal::Setup::new(addr, Some(username))?
             .key_path(PRIVATE_KEY)
-            .setup(exp::fantoch_setup(branch, run_mode));
+            .setup(exp::fantoch_setup(branch, run_mode, Testbed::Baremetal));
     Ok(setup)
 }
 
