@@ -74,7 +74,7 @@ pub fn prepare_command(
     command: String,
 ) -> tokio::process::Command {
     let ssh_command = format!(
-        "ssh {}@{} -i {} {}",
+        "ssh -o StrictHostKeyChecking=no {}@{} -i {} {}",
         username,
         public_ip,
         private_key.as_path().display(),

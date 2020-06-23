@@ -93,8 +93,8 @@ async fn baremetal_setup(
     let hostname = parts[1].to_string();
 
     // fetch public ip
-    let command = String::from("hostname - I");
-    let hostname = util::exec(
+    let command = String::from("hostname -I");
+    let ips = util::exec(
         &username,
         &hostname,
         &std::path::PathBuf::from(PRIVATE_KEY),
@@ -102,18 +102,25 @@ async fn baremetal_setup(
     )
     .await
     .wrap_err("hostname -I")?;
-    // hostname should be of the form "vitor.enes@apollo-2-1.imdea 10.10.5.61"
-    let parts: Vec<_> = hostname.split(" ").collect();
+    println!("hostname: {}", ips);
+
+    // hostname should be of the form "10.10.5.61 172.17.0.1"
+    let parts: Vec<_> = ips.split(" ").collect();
     assert_eq!(
         parts.len(),
         2,
-        "hostname should have the form username@hostname ip"
+        "output of hostname -I should have the form ip ip",
     );
-    let ip = parts[1].to_string();
+    let ip = parts[0];
 
-    let setup = tsunami::providers::baremetal::Setup::new(ip, Some(username))?
-        .key_path(PRIVATE_KEY)
-        .setup(exp::fantoch_setup(branch, run_mode));
+    // append ssh port
+    // - TODO: I think this should be fixed in tsunami, not here
+    let addr = format!("{}:22", ip);
+
+    let setup =
+        tsunami::providers::baremetal::Setup::new(addr, Some(username))?
+            .key_path(PRIVATE_KEY)
+            .setup(exp::fantoch_setup(branch, run_mode));
     Ok(setup)
 }
 
