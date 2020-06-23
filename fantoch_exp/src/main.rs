@@ -1,24 +1,35 @@
 mod bench;
 mod config;
+mod exp;
 mod ping;
+mod testbed;
 mod util;
 
 use color_eyre::Report;
+use exp::{Machines, RunMode, Testbed};
+use eyre::WrapErr;
 use fantoch::config::Config;
+use fantoch::planet::Planet;
 use rusoto_core::Region;
+use tsunami::Tsunami;
 
-// experiment config
-const INSTANCE_TYPE: &str = "c5.2xlarge";
+// aws experiment config
+const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
+const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 3;
+const MAX_INSTANCE_DURATION_HOURS: usize = 1;
+
+// run mode
+const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
 const PROTOCOL: &str = "newt_atomic";
 const GC_INTERVAL: Option<usize> = Some(50); // every 50
+
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "executor_metrics";
+const BRANCH: &str = "baremetal";
 const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
@@ -44,17 +55,18 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    let server_instance_type = INSTANCE_TYPE.to_string();
-    let client_instance_type = INSTANCE_TYPE.to_string();
-    let branch = BRANCH.to_string();
-    bench(server_instance_type, client_instance_type, branch).await
-}
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
+    let configs = vec![
+        // n, f, tiny quorums, clock bump interval, skip fast ack
+        config!(3, 1, false, None, false),
+        config!(3, 1, false, Some(10), false),
+        config!(3, 1, true, None, false),
+        config!(3, 1, true, Some(10), false),
+        config!(3, 1, true, None, true),
+        config!(3, 1, true, Some(10), true),
+    ];
 
-async fn bench(
-    server_instance_type: String,
-    client_instance_type: String,
-    branch: String,
-) -> Result<(), Report> {
+    /*
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -66,13 +78,13 @@ async fn bench(
         // n, f, tiny quorums, clock bump interval, skip fast ack
         config!(5, 1, false, None, false),
         config!(5, 1, false, Some(10), false),
-        config!(5, 1, false, None, true),
-        config!(5, 1, false, Some(10), true),
         config!(5, 1, true, None, false),
         config!(5, 1, true, Some(10), false),
         config!(5, 1, true, None, true),
         config!(5, 1, true, Some(10), true),
     ];
+    */
+
     let clients_per_region = vec![4, 32, 256, 512, 1024];
 
     let output_log = tokio::fs::OpenOptions::new()
@@ -80,13 +92,139 @@ async fn bench(
         .create(true)
         .open(OUTPUT_LOG)
         .await?;
-    bench::bench_experiment(
-        server_instance_type.clone(),
-        client_instance_type.clone(),
-        regions.clone(),
+
+    baremetal_bench(regions, configs, clients_per_region, output_log).await
+    // aws_bench(regions, configs, clients_per_region, output_log).await
+}
+
+async fn baremetal_bench(
+    regions: Vec<Region>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    let servers_count = regions.len();
+    let clients_count = regions.len();
+
+    // create one launcher per machine:
+    // - TODO this is needed since tsunami's baremetal provider does not give a
+    //   global tsunami launcher as the aws provider
+    let mut launchers = (0..servers_count + clients_count)
+        .map(|_| tsunami::providers::baremetal::Machine::default())
+        .collect();
+
+    // setup baremetal machines
+    let machines = testbed::baremetal::setup(
+        &mut launchers,
+        servers_count,
+        clients_count,
+        regions,
+        BRANCH.to_string(),
+        RUN_MODE,
+    )
+    .await
+    .wrap_err("baremetal spawn")?;
+
+    // create AWS planet
+    let planet = Some(Planet::from("../latency_aws"));
+
+    // run benchmarks
+    run_bench(
+        machines,
+        Testbed::Baremetal,
+        planet,
+        configs,
+        clients_per_region,
+        output_log,
+    )
+    .await
+    .wrap_err("run bench")?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+async fn aws_bench(
+    regions: Vec<Region>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
+    let res = do_aws_bench(
+        &mut launcher,
+        regions,
+        configs,
+        clients_per_region,
+        output_log,
+    )
+    .await;
+
+    // trap errors to make sure there's time for a debug
+    if let Err(e) = &res {
+        tracing::warn!("aws bench experiment error: {:?}", e);
+    }
+    tracing::info!("will wait 5 minutes before terminating spot instances");
+    tokio::time::delay_for(tokio::time::Duration::from_secs(300)).await;
+
+    launcher.terminate_all().await?;
+    Ok(())
+}
+
+async fn do_aws_bench(
+    launcher: &mut tsunami::providers::aws::Launcher<
+        rusoto_credential::DefaultCredentialsProvider,
+    >,
+    regions: Vec<Region>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    // setup aws machines
+    let machines = testbed::aws::setup(
+        launcher,
+        SERVER_INSTANCE_TYPE.to_string(),
+        CLIENT_INSTANCE_TYPE.to_string(),
+        regions,
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         MAX_INSTANCE_DURATION_HOURS,
-        branch.clone(),
+        BRANCH.to_string(),
+        RUN_MODE,
+    )
+    .await
+    .wrap_err("aws spawn")?;
+
+    // no need for aws planet
+    let planet = None;
+
+    // run benchmarks
+    run_bench(
+        machines,
+        Testbed::Aws,
+        planet,
+        configs,
+        clients_per_region,
+        output_log,
+    )
+    .await
+    .wrap_err("run bench")?;
+
+    Ok(())
+}
+
+async fn run_bench(
+    machines: Machines<'_>,
+    testbed: Testbed,
+    planet: Option<Planet>,
+    configs: Vec<Config>,
+    clients_per_region: Vec<usize>,
+    output_log: tokio::fs::File,
+) -> Result<(), Report> {
+    bench::bench_experiment(
+        machines,
+        RUN_MODE,
+        testbed,
+        planet,
         PROTOCOL.to_string(),
         configs,
         TRACER_SHOW_INTERVAL,
