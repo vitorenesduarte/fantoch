@@ -11,8 +11,15 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size, metrics_log) =
-        parse_args();
+    let (
+        ids,
+        address,
+        interval,
+        workload,
+        tcp_nodelay,
+        channel_buffer_size,
+        metrics_log,
+    ) = parse_args();
 
     common::tokio_runtime().block_on(fantoch::run::client(
         ids,
@@ -25,7 +32,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     ))
 }
 
-fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize, Option<String>) {
+fn parse_args() -> (
+    Vec<ClientId>,
+    String,
+    Option<u64>,
+    Workload,
+    bool,
+    usize,
+    Option<String>,
+) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
