@@ -16,8 +16,7 @@ pub async fn bench_experiment(
     run_mode: RunMode,
     testbed: Testbed,
     planet: Option<Planet>,
-    protocol: Protocol,
-    configs: Vec<Config>,
+    configs: Vec<(Protocol, Config)>,
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
     mut output_log: tokio::fs::File,
@@ -26,7 +25,7 @@ pub async fn bench_experiment(
         panic!("vitor: you should set the timing feature for this to work!");
     }
 
-    for config in configs {
+    for (protocol, config) in configs {
         let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", protocol.binary(), config.n(), config.f(), config.newt_tiny_quorums(), config.newt_clock_bump_interval().unwrap_or(0), config.skip_fast_ack());
         append_to_output_log(&mut output_log, line).await?;
 
