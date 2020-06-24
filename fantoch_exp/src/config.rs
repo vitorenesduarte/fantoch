@@ -35,7 +35,7 @@ const LEADER: ProcessId = 1;
 
 // clients config
 const CONFLICT_RATE: usize = 10;
-const COMMANDS_PER_CLIENT: usize = 1000;
+const COMMANDS_PER_CLIENT: usize = 500;
 const PAYLOAD_SIZE: usize = 0;
 
 // client tcp config

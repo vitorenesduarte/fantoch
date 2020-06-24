@@ -53,14 +53,10 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
-    let configs = vec![
-        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::FPaxos, config!(3, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(3, 1, false, None, false)),
-    ];
-
     /*
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
+    */
+
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -68,9 +64,23 @@ async fn main() -> Result<(), Report> {
         Region::CaCentral1,
         Region::SaEast1,
     ];
-    */
 
-    let clients_per_region = vec![1024 * 16, 1024 * 32, 1024 * 64];
+    let configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::NewtAtomic, config!(5, 1, false, None, false)),
+        (Protocol::FPaxos, config!(5, 1, false, None, false)),
+    ];
+
+    let clients_per_region = vec![
+        1024,
+        1024 * 2,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 64,
+        1024 * 128,
+    ];
 
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
