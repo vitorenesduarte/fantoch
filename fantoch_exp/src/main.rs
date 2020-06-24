@@ -6,7 +6,7 @@ mod testbed;
 mod util;
 
 use color_eyre::Report;
-use exp::{Machines, RunMode, Testbed};
+use exp::{Machines, Protocol, RunMode, Testbed};
 use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
@@ -23,7 +23,7 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
-const PROTOCOL: &str = "newt_atomic";
+const PROTOCOL: Protocol = Protocol::FPaxos;
 const GC_INTERVAL: Option<usize> = Some(50); // every 50
 
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
@@ -59,11 +59,7 @@ async fn main() -> Result<(), Report> {
     let configs = vec![
         // n, f, tiny quorums, clock bump interval, skip fast ack
         config!(3, 1, false, None, false),
-        config!(3, 1, false, Some(10), false),
-        config!(3, 1, true, None, false),
-        config!(3, 1, true, Some(10), false),
-        config!(3, 1, true, None, true),
-        config!(3, 1, true, Some(10), true),
+        // config!(3, 1, false, Some(10), false),
     ];
 
     /*
@@ -76,16 +72,17 @@ async fn main() -> Result<(), Report> {
     ];
     let configs = vec![
         // n, f, tiny quorums, clock bump interval, skip fast ack
-        config!(5, 1, false, None, false),
-        config!(5, 1, false, Some(10), false),
-        config!(5, 1, true, None, false),
+        // config!(5, 1, false, None, false),
+        // config!(5, 1, false, Some(10), false),
+        // config!(5, 1, true, None, false),
         config!(5, 1, true, Some(10), false),
-        config!(5, 1, true, None, true),
+        // config!(5, 1, true, None, true),
         config!(5, 1, true, Some(10), true),
     ];
     */
 
-    let clients_per_region = vec![4, 32, 256, 512, 1024];
+    let clients_per_region =
+        vec![4, 1024, 1024 * 2, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
 
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
@@ -225,7 +222,7 @@ async fn run_bench(
         RUN_MODE,
         testbed,
         planet,
-        PROTOCOL.to_string(),
+        PROTOCOL,
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,

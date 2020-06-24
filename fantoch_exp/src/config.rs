@@ -1,4 +1,5 @@
 use crate::args;
+use crate::exp::Protocol;
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 
@@ -29,6 +30,9 @@ const EXECUTION_LOG: Option<String> = None;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
+// if paxos, set process 1 as the leader
+const LEADER: ProcessId = 1;
+
 // clients config
 const CONFLICT_RATE: usize = 10;
 const COMMANDS_PER_CLIENT: usize = 1000;
@@ -37,7 +41,7 @@ const PAYLOAD_SIZE: usize = 0;
 // client tcp config
 const CLIENT_TCP_NODELAY: bool = true;
 
-pub struct ProcessConfig {
+pub struct ProtocolConfig {
     id: ProcessId,
     ips: Vec<(String, Option<usize>)>,
     config: Config,
@@ -53,12 +57,25 @@ pub struct ProcessConfig {
     ping_interval: Option<usize>,
 }
 
-impl ProcessConfig {
+impl ProtocolConfig {
     pub fn new(
+        protocol: Protocol,
         id: ProcessId,
-        config: Config,
+        mut config: Config,
         ips: Vec<(String, Option<usize>)>,
     ) -> Self {
+        // for all protocol but newt, create a single executor
+        let (workers, executors) = match protocol {
+            Protocol::AtlasLocked => (WORKERS + EXECUTORS, 1),
+            Protocol::EPaxosLocked => (WORKERS + EXECUTORS, 1),
+            Protocol::FPaxos => {
+                // in the case of paxos, also set a leader
+                config.set_leader(LEADER);
+                (WORKERS + EXECUTORS, 1)
+            }
+            Protocol::NewtAtomic => (WORKERS, EXECUTORS),
+        };
+
         Self {
             id,
             ips,
@@ -67,8 +84,8 @@ impl ProcessConfig {
             tcp_buffer_size: PROCESS_TCP_BUFFER_SIZE,
             tcp_flush_interval: PROCESS_TCP_FLUSH_INTERVAL,
             channel_buffer_size: CHANNEL_BUFFER_SIZE,
-            workers: WORKERS,
-            executors: EXECUTORS,
+            workers,
+            executors,
             multiplexing: MULTIPLEXING,
             execution_log: EXECUTION_LOG,
             tracer_show_interval: TRACER_SHOW_INTERVAL,

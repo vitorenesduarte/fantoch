@@ -40,6 +40,26 @@ impl RunMode {
     }
 }
 
+#[allow(dead_code)]
+#[derive(PartialEq, Clone, Copy)]
+pub enum Protocol {
+    AtlasLocked,
+    EPaxosLocked,
+    FPaxos,
+    NewtAtomic,
+}
+
+impl Protocol {
+    pub fn binary(&self) -> &str {
+        match self {
+            Protocol::AtlasLocked => "atlas_locked",
+            Protocol::EPaxosLocked => "epaxos_locked",
+            Protocol::FPaxos => "fpaxos",
+            Protocol::NewtAtomic => "newt_atomic",
+        }
+    }
+}
+
 #[derive(PartialEq, Clone, Copy)]
 pub enum Testbed {
     Aws,

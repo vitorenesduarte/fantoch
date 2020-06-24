@@ -1,5 +1,5 @@
-use crate::config::{ClientConfig, ProcessConfig, CLIENT_PORT, PORT};
-use crate::exp::{self, Machines, RunMode, Testbed};
+use crate::config::{ClientConfig, ProtocolConfig, CLIENT_PORT, PORT};
+use crate::exp::{self, Machines, Protocol, RunMode, Testbed};
 use crate::util;
 use color_eyre::Report;
 use eyre::WrapErr;
@@ -16,7 +16,7 @@ pub async fn bench_experiment(
     run_mode: RunMode,
     testbed: Testbed,
     planet: Option<Planet>,
-    protocol: String,
+    protocol: Protocol,
     configs: Vec<Config>,
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
@@ -27,7 +27,7 @@ pub async fn bench_experiment(
     }
 
     for config in configs {
-        let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", protocol, config.n(), config.f(), config.newt_tiny_quorums(), config.newt_clock_bump_interval().unwrap_or(0), config.skip_fast_ack());
+        let line = format!(">running {} n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms | skip_fast_ack = {}", protocol.binary(), config.n(), config.f(), config.newt_tiny_quorums(), config.newt_clock_bump_interval().unwrap_or(0), config.skip_fast_ack());
         append_to_output_log(&mut output_log, line).await?;
 
         // check that we have the correct number of regions
@@ -48,7 +48,7 @@ pub async fn bench_experiment(
                 run_mode,
                 testbed,
                 &planet,
-                &protocol,
+                protocol,
                 config,
                 tracer_show_interval,
                 clients,
@@ -111,7 +111,7 @@ async fn run_experiment(
     run_mode: RunMode,
     testbed: Testbed,
     planet: &Option<Planet>,
-    protocol: &str,
+    protocol: Protocol,
     config: Config,
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
@@ -147,7 +147,7 @@ async fn start_processes(
     run_mode: RunMode,
     testbed: Testbed,
     planet: &Option<Planet>,
-    protocol: &str,
+    protocol: Protocol,
     config: Config,
     tracer_show_interval: Option<usize>,
 ) -> Result<
@@ -196,15 +196,16 @@ async fn start_processes(
             })
             .collect();
 
-        // create process config and generate args
-        let mut process_config = ProcessConfig::new(process_id, config, ips);
+        // create protocol config and generate args
+        let mut protocol_config =
+            ProtocolConfig::new(protocol, process_id, config, ips);
         if let Some(interval) = tracer_show_interval {
-            process_config.set_tracer_show_interval(interval);
+            protocol_config.set_tracer_show_interval(interval);
         }
-        let args = process_config.to_args();
+        let args = protocol_config.to_args();
 
         let command = exp::fantoch_bin_script(
-            &protocol,
+            protocol.binary(),
             args,
             run_mode,
             process_file(process_id),
