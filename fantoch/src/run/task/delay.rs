@@ -1,4 +1,5 @@
 use super::chan::{ChannelReceiver, ChannelSender};
+use std::collections::VecDeque;
 use tokio::time::{self, Duration, Instant};
 
 pub async fn delay_task<M>(
@@ -8,26 +9,25 @@ pub async fn delay_task<M>(
 ) where
     M: std::fmt::Debug + 'static,
 {
-    let mut queue = Vec::new();
+    // important to use VecDeque here since we want to always pop the first
+    // element
+    let mut queue = VecDeque::new();
     let delay = Duration::from_millis(delay);
     loop {
-        match queue.first() {
+        match queue.front() {
             None => {
                 let msg = from.recv().await;
-                println!("none-enqueue: {:?}", msg);
                 enqueue(msg, delay, &mut queue);
             }
             Some((next_instant, _)) => {
                 tokio::select! {
                     _ = time::delay_until(*next_instant) => {
-                        let (i, msg) = queue.pop().unwrap();
-                        println!("deadline {:?} of {:?}", i, msg);
+                        let msg = dequeue(&mut queue);
                         if let Err(e) = to.send(msg).await {
                             println!("[delay_task] error forwarding message: {:?}", e);
                         }
                     }
                     msg = from.recv() => {
-                        println!("some-enqueue: {:?}", msg);
                         enqueue(msg, delay, &mut queue);
                     }
                 }
@@ -36,12 +36,21 @@ pub async fn delay_task<M>(
     }
 }
 
-fn enqueue<M>(msg: Option<M>, delay: Duration, queue: &mut Vec<(Instant, M)>) {
+fn enqueue<M>(
+    msg: Option<M>,
+    delay: Duration,
+    queue: &mut VecDeque<(Instant, M)>,
+) {
     if let Some(msg) = msg {
-        queue.push((deadline(delay), msg));
+        queue.push_back((deadline(delay), msg));
     } else {
         println!("[delay_task] error receiving message from parent");
     }
+}
+
+fn dequeue<M>(queue: &mut VecDeque<(Instant, M)>) -> M {
+    let (_, msg) = queue.pop_front().expect("a first element should exist");
+    msg
 }
 
 fn deadline(delay: Duration) -> Instant {
@@ -80,7 +89,6 @@ mod tests {
                 latencies.push(delay);
             }
 
-            println!("{:#?}", latencies);
             // compute average
             let sum = latencies.into_iter().sum::<u64>();
             sum / (OPERATIONS as u64)
