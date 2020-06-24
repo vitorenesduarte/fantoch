@@ -37,9 +37,11 @@ impl Pending {
         // make sure time is monotonic
         assert!(start_time <= end_time);
         // compute latency
-        let latency = end_time - start_time;
+        let micros = end_time - start_time;
+        // convert micros to millis
+        let millis = micros / 1000;
         // (both should fit in u64)
-        (latency as u64, end_time as u64)
+        (millis as u64, end_time as u64)
     }
 
     /// Checks whether pending is empty.
