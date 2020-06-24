@@ -19,7 +19,7 @@ serde = { version = "1.0.110", features = ["derive"] }
 threshold = "0.8.7"
 tokio = { version = "0.2.21", features = ["full", "parking_lot"] }
 tracing = "0.1.14"
-parking_lot = "0.10.2"
+parking_lot = "0.11.0"
 num_cpus = "1.13.0"
 
 jemallocator = "0.3.2"
