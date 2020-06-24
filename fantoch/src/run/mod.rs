@@ -365,6 +365,7 @@ pub async fn client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    metrics_log: Option<String>,
 ) -> RunResult<()>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -394,22 +395,28 @@ where
 
     // wait for all clients to complete and aggregate their metrics
     let mut latency = Histogram::new();
-    // let mut throughput = Histogram::new();
+    let mut throughput = Histogram::new();
 
     let mut handles = handles.collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
         let client = join_result?.expect("client should run correctly");
         println!("client {} ended", client.id());
         latency.merge(client.latency_histogram());
-        // throughput.merge(client.throughput_histogram());
+        throughput.merge(client.throughput_histogram());
         println!("metrics from {} collected", client.id());
     }
 
     // show global metrics
-    // TODO write both metrics (latency and throughput) to a file; the filename
-    // should be provided as input (as an Option)
     println!("latency: {:?}", latency);
-    // println!("throughput: {}", throughput.all_values());
+
+    if let Some(metrics_log) = metrics_log {
+        println!(
+            "will write latency and throughput metrics to {}",
+            metrics_log
+        );
+        serialize_client_metrics(latency, throughput, metrics_log)?;
+    }
+
     println!("all clients ended");
     Ok(())
 }
@@ -580,6 +587,44 @@ fn handle_cmd_result(
     } else {
         panic!("[client] error while receiving command result from client read-write task");
     }
+}
+
+// TODO make this async
+fn serialize_client_metrics(
+    latency: Histogram,
+    throughput: Histogram,
+    metrics_log: String,
+) -> RunResult<()> {
+    let value = (latency, throughput);
+    // if the file does not exist it will be created, otherwise truncated
+    std::fs::File::create(metrics_log)
+        .ok()
+        // create a buf writer
+        .map(std::io::BufWriter::new)
+        // and try to serialize
+        .map(|writer| {
+            bincode::serialize_into(writer, &value)
+                .expect("error serializing client metrics")
+        })
+        .unwrap_or_else(|| panic!("couldn't save metrics"));
+
+    Ok(())
+}
+
+// TODO make this async
+pub fn deserialize_client_metrics(
+    metrics_log: String,
+) -> Option<(Histogram, Histogram)> {
+    // open the file in read-only
+    std::fs::File::open(metrics_log)
+        .ok()
+        // create a buf reader
+        .map(std::io::BufReader::new)
+        // and try to deserialize
+        .map(|reader| {
+            bincode::deserialize_from(reader)
+                .expect("error deserializing client metrics")
+        })
 }
 
 // TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the
@@ -858,6 +903,7 @@ pub mod tests {
                 };
 
                 // spawn client
+                let metrics_log = format!(".metrics_client_{}", process_id);
                 tokio::task::spawn_local(client(
                     ids,
                     address,
@@ -865,6 +911,7 @@ pub mod tests {
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
+                    Some(metrics_log),
                 ))
             })
             .collect();

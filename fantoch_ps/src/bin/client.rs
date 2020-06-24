@@ -11,7 +11,7 @@ const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size) =
+    let (ids, address, interval, workload, tcp_nodelay, channel_buffer_size, metrics_log) =
         parse_args();
 
     common::tokio_runtime().block_on(fantoch::run::client(
@@ -21,10 +21,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        metrics_log,
     ))
 }
 
-fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
+fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize, Option<String>) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -87,6 +88,13 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
                 .help("set the size of the buffer in each channel used for task communication; default: 10000")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("metrics_log")
+                .long("metrics_log")
+                .value_name("METRICS_LOG")
+                .help("log file in which metrics written to; by default metrics are not logged")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -103,6 +111,7 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
     let channel_buffer_size = common::parse_channel_buffer_size(
         matches.value_of("channel_buffer_size"),
     );
+    let metrics_log = parse_metrics_log(matches.value_of("metrics_log"));
 
     println!("ids: {:?}", ids);
     println!("client number: {}", ids.len());
@@ -110,6 +119,7 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
+    println!("metrics log: {:?}", metrics_log);
 
     (
         ids,
@@ -118,6 +128,7 @@ fn parse_args() -> (Vec<ClientId>, String, Option<u64>, Workload, bool, usize) {
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        metrics_log,
     )
 }
 
@@ -192,4 +203,8 @@ fn parse_payload_size(number: Option<&str>) -> usize {
                 .expect("payload size should be a number")
         })
         .unwrap_or(DEFAULT_PAYLOAD_SIZE)
+}
+
+pub fn parse_metrics_log(metrics_log: Option<&str>) -> Option<String> {
+    metrics_log.map(String::from)
 }
