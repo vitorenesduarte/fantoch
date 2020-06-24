@@ -1,2 +1,3 @@
 hosts
 *.dat
+.*_log

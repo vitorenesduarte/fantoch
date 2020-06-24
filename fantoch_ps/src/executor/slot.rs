@@ -29,7 +29,7 @@ impl Executor for SlotExecutor {
         let pending = HashSet::new();
         // the next slot to be executed is 1
         let next_slot = 1;
-        // there's nothing to execute in the beginnin
+        // there's nothing to execute in the beginning
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
         Self {

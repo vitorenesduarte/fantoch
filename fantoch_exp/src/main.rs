@@ -6,7 +6,7 @@ mod testbed;
 mod util;
 
 use color_eyre::Report;
-use exp::{Machines, RunMode, Testbed};
+use exp::{Machines, Protocol, RunMode, Testbed};
 use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
@@ -23,9 +23,7 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
-const PROTOCOL: &str = "newt_atomic";
 const GC_INTERVAL: Option<usize> = Some(50); // every 50
-
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
@@ -55,18 +53,10 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
-    let configs = vec![
-        // n, f, tiny quorums, clock bump interval, skip fast ack
-        config!(3, 1, false, None, false),
-        config!(3, 1, false, Some(10), false),
-        config!(3, 1, true, None, false),
-        config!(3, 1, true, Some(10), false),
-        config!(3, 1, true, None, true),
-        config!(3, 1, true, Some(10), true),
-    ];
-
     /*
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
+    */
+
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -74,18 +64,23 @@ async fn main() -> Result<(), Report> {
         Region::CaCentral1,
         Region::SaEast1,
     ];
-    let configs = vec![
-        // n, f, tiny quorums, clock bump interval, skip fast ack
-        config!(5, 1, false, None, false),
-        config!(5, 1, false, Some(10), false),
-        config!(5, 1, true, None, false),
-        config!(5, 1, true, Some(10), false),
-        config!(5, 1, true, None, true),
-        config!(5, 1, true, Some(10), true),
-    ];
-    */
 
-    let clients_per_region = vec![4, 32, 256, 512, 1024];
+    let configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::NewtAtomic, config!(5, 1, false, None, false)),
+        (Protocol::FPaxos, config!(5, 1, false, None, false)),
+    ];
+
+    let clients_per_region = vec![
+        1024,
+        1024 * 2,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 64,
+        1024 * 128,
+    ];
 
     let output_log = tokio::fs::OpenOptions::new()
         .append(true)
@@ -99,7 +94,7 @@ async fn main() -> Result<(), Report> {
 
 async fn baremetal_bench(
     regions: Vec<Region>,
-    configs: Vec<Config>,
+    configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
@@ -146,7 +141,7 @@ async fn baremetal_bench(
 #[allow(dead_code)]
 async fn aws_bench(
     regions: Vec<Region>,
-    configs: Vec<Config>,
+    configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
@@ -176,7 +171,7 @@ async fn do_aws_bench(
         rusoto_credential::DefaultCredentialsProvider,
     >,
     regions: Vec<Region>,
-    configs: Vec<Config>,
+    configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
@@ -216,7 +211,7 @@ async fn run_bench(
     machines: Machines<'_>,
     testbed: Testbed,
     planet: Option<Planet>,
-    configs: Vec<Config>,
+    configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     output_log: tokio::fs::File,
 ) -> Result<(), Report> {
@@ -225,7 +220,6 @@ async fn run_bench(
         RUN_MODE,
         testbed,
         planet,
-        PROTOCOL.to_string(),
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,

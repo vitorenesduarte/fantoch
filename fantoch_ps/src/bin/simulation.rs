@@ -7,6 +7,7 @@ use fantoch::sim::Runner;
 use fantoch_ps::protocol::{
     AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
 };
+use std::collections::HashMap;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
@@ -108,6 +109,7 @@ fn newt_real_time(aws: bool) {
     for n in ns {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
 
+        /*
         println!(">running atlas n = {} | f = {}", n, f);
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(true);
@@ -131,45 +133,42 @@ fn newt_real_time(aws: bool) {
         run_in_thread(move || {
             increasing_load::<FPaxos>(planet_, regions_, config)
         });
+        */
 
-        let tiny_quorums_config = if n > 3 {
-            vec![false, true]
+        let configs = if n == 3 {
+            // tiny quorums does nothing for n = 3
+            vec![
+                // tiny quorums, clock bump interval, skip fast ack
+                (false, None, false),
+                (false, Some(10), false),
+            ]
         } else {
-            // true same as false
-            vec![false]
+            vec![
+                // tiny quorums, clock bump interval, skip fast ack
+                (false, None, false),
+                (false, Some(10), false),
+                (true, Some(10), false),
+                (true, Some(10), true),
+            ]
         };
 
-        let interval_config = vec![50, 10];
-
-        for tiny_quorums in tiny_quorums_config {
-            // real time = false
+        for (tiny_quorums, clock_bump_interval, skip_fast_ack) in configs {
             println!(
-                ">running newt n = {} | f = {} | tiny = {} | real_time = false",
-                n, f, tiny_quorums
+                ">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {} | skip_fast_ack = {}",
+                n, f, tiny_quorums, clock_bump_interval.unwrap_or(0), skip_fast_ack
             );
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
+            if let Some(interval) = clock_bump_interval {
+                config.set_newt_clock_bump_interval(interval);
+            }
+            config.set_skip_fast_ack(skip_fast_ack);
+
             let planet_ = planet.clone();
             let regions_ = regions.clone();
             run_in_thread(move || {
                 increasing_load::<NewtSequential>(planet_, regions_, config)
             });
-
-            // real time = true
-            for interval in interval_config.clone() {
-                println!(
-                    ">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {}ms",
-                    n, f, tiny_quorums, interval
-                );
-                let mut config = Config::new(n, f);
-                config.set_newt_tiny_quorums(tiny_quorums);
-                config.set_newt_clock_bump_interval(interval);
-                let regions = regions.clone();
-                let planet = planet.clone();
-                run_in_thread(move || {
-                    increasing_load::<NewtSequential>(planet, regions, config)
-                });
-            }
         }
     }
 }
@@ -252,11 +251,11 @@ fn increasing_load<P: Protocol>(
     // make sure stability is running
     config.set_gc_interval(100);
 
-    let cs = vec![8, 32, 128, 256, 512, 1024];
+    let cs = vec![4, 32, 256, 512, 1024];
 
     // clients workload
     let conflict_rate = 10;
-    let total_commands = 3000;
+    let total_commands = 500;
     let payload_size = 0;
     let workload = Workload::new(conflict_rate, total_commands, payload_size);
 
@@ -376,16 +375,10 @@ fn run<P: Protocol>(
         });
 
     // compute clients stats
-    let (issued_commands, histogram) = clients_latencies.into_iter().fold(
-        (0, Histogram::new()),
-        |(issued_commands_acc, mut histogram_acc),
-         (region, (issued_commands, histogram))| {
-            println!("region = {:<14} | {:?}", region.name(), histogram);
-            // merge histograms
-            histogram_acc.merge(&histogram);
-            (issued_commands_acc + issued_commands, histogram_acc)
-        },
-    );
+    let issued_commands = clients_latencies
+        .values()
+        .map(|(issued_commands, _histogram)| issued_commands)
+        .sum::<usize>();
 
     if issued_commands != expected_commands {
         panic!(
@@ -393,12 +386,78 @@ fn run<P: Protocol>(
             issued_commands, expected_commands,
         );
     }
+
+    /*
+    // compute clients stats
+    let histogram = clients_latencies.into_iter().fold(
+        Histogram::new(),
+        |mut histogram_acc, (region, (_issued_commands, histogram))| {
+            println!("region = {:<14} | {:?}", region.name(), histogram);
+            // merge histograms
+            histogram_acc.merge(&histogram);
+            histogram_acc
+        },
+    );
+
     println!(
         "n = {} AND c = {:<9} | {:?}",
         config.n(),
         clients_per_region,
         histogram
     );
+    */
+
+    // do average of percentiles, instead of merging all histograms, as above.
+    // TODO: go back to the version above
+    let metrics = vec!["min", "max", "avg", "p95", "p99", "p99.9", "p99.99"];
+    let mut latencies_to_avg: HashMap<&str, Vec<_>> = Default::default();
+
+    clients_latencies.into_iter().for_each(
+        |(region, (_issued_commands, histogram))| {
+            println!("region = {:<14} | {:?}", region.name(), histogram);
+            latencies_to_avg
+                .entry("min")
+                .or_default()
+                .push(histogram.min().value().round());
+            latencies_to_avg
+                .entry("max")
+                .or_default()
+                .push(histogram.max().value().round());
+            latencies_to_avg
+                .entry("avg")
+                .or_default()
+                .push(histogram.mean().value().round());
+            latencies_to_avg
+                .entry("p95")
+                .or_default()
+                .push(histogram.percentile(0.95).value().round());
+            latencies_to_avg
+                .entry("p99")
+                .or_default()
+                .push(histogram.percentile(0.99).value().round());
+            latencies_to_avg
+                .entry("p99.9")
+                .or_default()
+                .push(histogram.percentile(0.999).value().round());
+            latencies_to_avg
+                .entry("p99.99")
+                .or_default()
+                .push(histogram.percentile(0.9999).value().round());
+        },
+    );
+
+    let mut line =
+        format!("n = {} AND c = {:<9} |", config.n(), clients_per_region);
+    for metric in metrics {
+        let latencies = latencies_to_avg
+            .remove(metric)
+            .expect("metric should exist");
+        // there should be as many latencies as regions
+        assert_eq!(latencies.len(), config.n());
+        let avg = latencies.into_iter().sum::<f64>() as usize / config.n();
+        line = format!("{} {}={:<6}", line, metric, avg);
+    }
+    println!("{}", line);
 }
 
 fn run_in_thread<F>(run: F)
