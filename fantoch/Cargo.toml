@@ -11,7 +11,7 @@ timing = ["fantoch_timing"]
 
 [dependencies]
 ahash = "0.3.4"
-bincode = "1.2.1"
+bincode = "1.3.0"
 bytes = "0.5.4"
 futures = { version = "0.3.5", default-features = false, features = ["alloc"] }
 parking_lot = "0.11.0"
