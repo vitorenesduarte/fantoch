@@ -14,7 +14,7 @@ impl SysTime for RunTime {
         let micros = now
             .duration_since(UNIX_EPOCH)
             .expect("we're way past UNIX EPOCH")
-            .as_millis();
+            .as_micros();
         // TODO check following is not needed to make we don't truncate
         // const MAX_U64: u128 = u64::max_value() as u128;
         // if micros > MAX_U64 {
