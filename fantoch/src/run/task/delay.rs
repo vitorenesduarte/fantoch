@@ -14,17 +14,20 @@ pub async fn delay_task<M>(
         match queue.first() {
             None => {
                 let msg = from.recv().await;
+                println!("none-enqueue: {:?}", msg);
                 enqueue(msg, delay, &mut queue);
             }
             Some((next_instant, _)) => {
                 tokio::select! {
                     _ = time::delay_until(*next_instant) => {
-                        let (_, msg) = queue.pop().unwrap();
+                        let (i, msg) = queue.pop().unwrap();
+                        println!("deadline {:?} of {:?}", i, msg);
                         if let Err(e) = to.send(msg).await {
                             println!("[delay_task] error forwarding message: {:?}", e);
                         }
                     }
                     msg = from.recv() => {
+                        println!("some-enqueue: {:?}", msg);
                         enqueue(msg, delay, &mut queue);
                     }
                 }
@@ -45,4 +48,57 @@ fn deadline(delay: Duration) -> Instant {
     Instant::now()
         .checked_add(delay)
         .expect("deadline should exist")
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::Rng;
+    use tokio::time::{Duration, Instant};
+
+    const OPERATIONS: usize = 1000;
+    const MAX_SLEEP: u64 = 20;
+    const DELAY: u64 = 42;
+
+    #[tokio::test]
+    async fn delay_test() {
+        // make sure there's enough space in the buffer channel
+        let (tx, mut rx) = crate::run::task::channel::<Instant>(OPERATIONS * 2);
+        let (mut delay_tx, delay_rx) =
+            crate::run::task::channel::<Instant>(OPERATIONS * 2);
+
+        // spawn delay task
+        tokio::spawn(super::delay_task(delay_rx, tx, DELAY));
+
+        // spawn reader
+        let reader = tokio::spawn(async move {
+            let mut latencies = Vec::with_capacity(OPERATIONS);
+            for _ in 0..OPERATIONS {
+                let start = rx.recv().await.expect("operation received");
+
+                // compute
+                let delay = start.elapsed().as_millis() as u64;
+                latencies.push(delay);
+            }
+
+            println!("{:#?}", latencies);
+            // compute average
+            let sum = latencies.into_iter().sum::<u64>();
+            sum / (OPERATIONS as u64)
+        });
+
+        // spawn writer
+        let writer = tokio::spawn(async move {
+            for _ in 0..OPERATIONS {
+                let sleep_time = rand::thread_rng().gen_range(1, MAX_SLEEP + 1);
+                tokio::time::delay_for(Duration::from_millis(sleep_time)).await;
+                let start = Instant::now();
+                // send to delay task
+                delay_tx.send(start).await.expect("operation sent");
+            }
+        });
+
+        writer.await.expect("writer finished");
+        let latency = reader.await.expect("reader finished");
+        assert_eq!(latency, DELAY);
+    }
 }
