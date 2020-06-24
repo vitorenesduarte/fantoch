@@ -107,6 +107,9 @@ mod tests {
 
         writer.await.expect("writer finished");
         let latency = reader.await.expect("reader finished");
-        assert_eq!(latency, DELAY);
+        // allow messages to be suffer an extra delay of 1/2ms
+        assert!(
+            latency == DELAY || latency == DELAY + 1 || latency == DELAY + 2
+        );
     }
 }
