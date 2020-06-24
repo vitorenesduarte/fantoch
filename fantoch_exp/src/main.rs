@@ -29,7 +29,7 @@ const GC_INTERVAL: Option<usize> = Some(50); // every 50
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "baremetal";
+const BRANCH: &str = "master";
 const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
