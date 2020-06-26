@@ -374,7 +374,10 @@ where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
     // create client pool
-    let mut pool: Vec<Vec<_>> = Vec::with_capacity(MAX_CLIENT_CONNECTIONS);
+    let mut pool = Vec::with_capacity(MAX_CLIENT_CONNECTIONS);
+    // init each entry
+    pool.resize_with(MAX_CLIENT_CONNECTIONS, Vec::new);
+
     ids.into_iter().enumerate().for_each(|(index, client_id)| {
         let index = index % MAX_CLIENT_CONNECTIONS;
         pool[index].push(client_id);
@@ -962,7 +965,7 @@ pub mod tests {
                 tokio::task::spawn_local(client(
                     ids,
                     address,
-                    interval_ms,
+                    None,
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
