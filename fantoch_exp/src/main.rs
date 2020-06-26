@@ -24,10 +24,11 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
 const GC_INTERVAL: Option<usize> = Some(50); // every 50
+const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "master";
+const BRANCH: &str = "client_connection_pool";
 const OUTPUT_LOG: &str = ".tracer_log";
 
 // ping-specific config
@@ -44,6 +45,7 @@ macro_rules! config {
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
+        config.set_transitive_conflicts(TRANSITIVE_CONFLICTS);
         config
     }};
 }
@@ -53,10 +55,6 @@ async fn main() -> Result<(), Report> {
     // init logging
     tracing_subscriber::fmt::init();
 
-    /*
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
-    */
-
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -64,14 +62,25 @@ async fn main() -> Result<(), Report> {
         Region::CaCentral1,
         Region::SaEast1,
     ];
+    /*
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
+    */
+    let n = regions.len();
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(5, 1, false, None, false)),
-        (Protocol::FPaxos, config!(5, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        /*
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        */
     ];
 
     let clients_per_region = vec![
+        4,
+        32,
+        256,
+        512,
         1024,
         1024 * 2,
         1024 * 4,
