@@ -387,17 +387,14 @@ where
     let handles = pool.into_iter().map(|client_ids| {
         // start the open loop client if some interval was provided
         if let Some(interval_ms) = interval_ms {
-            panic!("open loop clients no longer supported!");
-        /*
-        task::spawn(open_loop_client::<A>(
-            client_id,
-            address.clone(),
-            interval_ms,
-            workload,
-            tcp_nodelay,
-            channel_buffer_size,
-        ))
-        */
+            task::spawn(open_loop_client::<A>(
+                client_ids,
+                address.clone(),
+                interval_ms,
+                workload,
+                tcp_nodelay,
+                channel_buffer_size,
+            ))
         } else {
             task::spawn(closed_loop_client::<A>(
                 client_ids,
@@ -475,12 +472,11 @@ where
     while finished.len() < clients.len() {
         // and wait for next result
         let cmd_result = read.recv().await;
-        if let Some(client_id) =
-            handle_cmd_result(&mut clients, &time, cmd_result)
+        if let Some(client) =
+            handle_cmd_result(&mut clients, &time, cmd_result, &mut finished)
         {
-            // record that this client is finished
-            println!("closed loop client {:?} exited loop", client_id);
-            assert!(finished.insert(client_id));
+            // if client hasn't finished, issue a new command
+            next_cmd(client, &time, &mut write).await;
         }
     }
 
@@ -493,15 +489,14 @@ where
     )
 }
 
-/*
 async fn open_loop_client<A>(
-    client_id: ClientId,
+    client_ids: Vec<ClientId>,
     address: A,
     interval_ms: u64,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-) -> Option<Client>
+) -> Option<Vec<Client>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -509,8 +504,8 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut client, mut read, mut write) = client_setup(
-        client_id,
+    let (mut clients, mut read, mut write) = client_setup(
+        client_ids,
         address,
         workload,
         tcp_nodelay,
@@ -521,27 +516,31 @@ where
     // create interval
     let mut interval = time::interval(Duration::from_millis(interval_ms));
 
-    loop {
+    // track which clients are finished
+    let mut finished = HashSet::new();
+
+    while finished.len() < clients.len() {
         tokio::select! {
             cmd_result = read.recv() => {
-                if handle_cmd_result(&mut client, &time, cmd_result) {
-                    // check if we have generated all commands and received all the corresponding command results, exit
-                    break;
-                }
+                handle_cmd_result(&mut clients, &time, cmd_result, &mut finished);
             }
             _ = interval.tick() => {
-                // submit new command on every tick (if there are still commands to be generated)
-                next_cmd(&mut client, &time, &mut write).await;
+                // submit new command on every tick for each connected client (if there are still commands to be generated)
+                for (_, client) in clients.iter_mut(){
+                    next_cmd(client, &time, &mut write).await;
+                }
             }
         }
     }
 
-    println!("open loop client {} exited loop", client_id);
-
-    // return client
-    Some(client)
+    // return clients
+    Some(
+        clients
+            .into_iter()
+            .map(|(_client_id, client)| client)
+            .collect(),
+    )
 }
-*/
 
 async fn client_setup<A>(
     client_ids: Vec<ClientId>,
@@ -624,23 +623,29 @@ async fn next_cmd(
     }
 }
 
-/// Handles a command result. If the client that generated this command results
-/// is finished, its identifier is returned.
-fn handle_cmd_result(
-    clients: &mut HashMap<ClientId, Client>,
+/// Handles a command result. It returns the id of the client if it hasn't
+/// finished yet.
+fn handle_cmd_result<'a>(
+    clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
     cmd_result: Option<CommandResult>,
-) -> Option<ClientId> {
+    finished: &mut HashSet<ClientId>,
+) -> Option<&'a mut Client> {
     if let Some(cmd_result) = cmd_result {
         // find the client this command result belongs to
         let client_id = cmd_result.rifl().source();
         let client = clients
             .get_mut(&client_id)
             .expect("[client] command result should belong to a client");
+
+        // handle command results and check if client is finished
         if client.handle(cmd_result, time) {
-            Some(client_id)
-        } else {
+            // record that this client is finished
+            println!("client {:?} exited loop", client_id);
+            assert!(finished.insert(client_id));
             None
+        } else {
+            Some(client)
         }
     } else {
         panic!("[client] error while receiving command result from client read-write task");
@@ -965,7 +970,7 @@ pub mod tests {
                 tokio::task::spawn_local(client(
                     ids,
                     address,
-                    None,
+                    interval_ms,
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
