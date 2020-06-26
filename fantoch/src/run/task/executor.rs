@@ -129,20 +129,24 @@ async fn handle_from_client<P>(
                 );
             }
         }
-        FromClient::Register(client_id, rifl_acks_tx, executor_results_tx) => {
-            log!("[executor] client {} registered", client_id);
-            let res = client_rifl_acks.insert(client_id, rifl_acks_tx);
-            assert!(res.is_none());
-            let res =
-                client_executor_results.insert(client_id, executor_results_tx);
-            assert!(res.is_none());
+        FromClient::Register(client_ids, rifl_acks_tx, executor_results_tx) => {
+            for client_id in client_ids {
+                log!("[executor] clients {} registered", client_id);
+                let res = client_rifl_acks.insert(client_id, rifl_acks_tx.clone());
+                assert!(res.is_none());
+                let res = client_executor_results
+                    .insert(client_id, executor_results_tx.clone());
+                assert!(res.is_none());
+            }
         }
-        FromClient::Unregister(client_id) => {
-            log!("[executor] client {} unregistered", client_id);
-            let res = client_rifl_acks.remove(&client_id);
-            assert!(res.is_some());
-            let res = client_executor_results.remove(&client_id);
-            assert!(res.is_some());
+        FromClient::Unregister(client_ids) => {
+            for client_id in client_ids {
+                log!("[executor] client {} unregistered", client_id);
+                let res = client_rifl_acks.remove(&client_id);
+                assert!(res.is_some());
+                let res = client_executor_results.remove(&client_id);
+                assert!(res.is_some());
+            }
         }
     }
 }
