@@ -12,7 +12,7 @@ use crate::command::{Command, CommandResult};
 use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
 use crate::log;
-use crate::metrics::Histogram;
+use crate::metrics::{Histogram, HistogramData};
 use crate::time::SysTime;
 
 pub struct Client {
@@ -32,7 +32,7 @@ pub struct Client {
     /// client; this is useful for throughput/time plots or in general to
     /// compute throughput (this makes little sense for a single client, but
     /// it's useful since we can aggregate the `Histogram`s of several clients)
-    throughput_histogram: Histogram,
+    throughput_histogram: HistogramData,
 }
 
 impl Client {
@@ -46,7 +46,7 @@ impl Client {
             workload,
             pending: Pending::new(),
             latency_histogram: Histogram::new(),
-            throughput_histogram: Histogram::new(),
+            throughput_histogram: HistogramData::new(),
         }
     }
 
@@ -110,7 +110,7 @@ impl Client {
     }
 
     /// Returns the throughput histogram.
-    pub fn throughput_histogram(&self) -> &Histogram {
+    pub fn throughput_histogram(&self) -> &HistogramData {
         &self.throughput_histogram
     }
 
@@ -229,7 +229,7 @@ mod tests {
         // check latencies
         assert_eq!(
             client.throughput_histogram(),
-            &Histogram::from(vec![10, 15])
+            &HistogramData::from(vec![10, 15])
         );
     }
 }

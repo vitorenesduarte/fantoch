@@ -87,7 +87,7 @@ use crate::command::CommandResult;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
-use crate::metrics::Histogram;
+use crate::metrics::{Histogram, HistogramData};
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -378,6 +378,7 @@ where
     // init each entry
     pool.resize_with(MAX_CLIENT_CONNECTIONS, Vec::new);
 
+    // assign each client to a client worker
     ids.into_iter().enumerate().for_each(|(index, client_id)| {
         let index = index % MAX_CLIENT_CONNECTIONS;
         pool[index].push(client_id);
@@ -408,7 +409,7 @@ where
 
     // wait for all clients to complete and aggregate their metrics
     let mut latency = Histogram::new();
-    let mut throughput = Histogram::new();
+    let mut throughput = HistogramData::new();
 
     let mut handles = handles.collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
@@ -655,7 +656,7 @@ fn handle_cmd_result<'a>(
 // TODO make this async
 fn serialize_client_metrics(
     latency: Histogram,
-    throughput: Histogram,
+    throughput: HistogramData,
     metrics_log: String,
 ) -> RunResult<()> {
     let value = (latency, throughput);
@@ -677,7 +678,7 @@ fn serialize_client_metrics(
 // TODO make this async
 pub fn deserialize_client_metrics(
     metrics_log: String,
-) -> Option<(Histogram, Histogram)> {
+) -> Option<(Histogram, HistogramData)> {
     // open the file in read-only
     std::fs::File::open(metrics_log)
         .ok()
