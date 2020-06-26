@@ -139,8 +139,8 @@ cd fantoch/ || {
 }
 # stash before checkout to make sure checkout will succeed
 git stash
-git checkout "${branch}"
 git pull
+git checkout "${branch}"
 
 # build all the binaries in release mode for maximum performance
 RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins
