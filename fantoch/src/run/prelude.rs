@@ -43,14 +43,14 @@ pub type RunResult<V> = Result<V, Box<dyn Error>>;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProcessHi(pub ProcessId);
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ClientHi(pub ClientId);
+pub struct ClientHi(pub Vec<ClientId>);
 
 #[derive(Debug, Clone)]
 pub enum FromClient {
     // clients can register
-    Register(ClientId, RiflAckSender, ExecutorResultSender),
+    Register(Vec<ClientId>, RiflAckSender, ExecutorResultSender),
     // unregister
-    Unregister(ClientId),
+    Unregister(Vec<ClientId>),
     // register for notifications on a partial about this `Rifl`.
     WaitForRifl(Rifl),
 }

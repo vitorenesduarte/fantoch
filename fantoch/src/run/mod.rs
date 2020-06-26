@@ -92,6 +92,7 @@ use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -358,6 +359,8 @@ async fn ask_ping_task(mut to_ping: SortedProcessesSender) -> Vec<ProcessId> {
     }
 }
 
+const MAX_CLIENT_CONNECTIONS: usize = 128;
+
 pub async fn client<A>(
     ids: Vec<ClientId>,
     address: A,
@@ -370,21 +373,31 @@ pub async fn client<A>(
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
-    // start one client per id
-    let handles = ids.into_iter().map(|client_id| {
+    // create client pool
+    let mut pool: Vec<Vec<_>> = Vec::with_capacity(MAX_CLIENT_CONNECTIONS);
+    ids.into_iter().enumerate().for_each(|(index, client_id)| {
+        let index = index % MAX_CLIENT_CONNECTIONS;
+        pool[index].push(client_id);
+    });
+
+    // start each client worker in pool
+    let handles = pool.into_iter().map(|client_ids| {
         // start the open loop client if some interval was provided
         if let Some(interval_ms) = interval_ms {
-            task::spawn(open_loop_client::<A>(
-                client_id,
-                address.clone(),
-                interval_ms,
-                workload,
-                tcp_nodelay,
-                channel_buffer_size,
-            ))
+            panic!("open loop clients no longer supported!");
+        /*
+        task::spawn(open_loop_client::<A>(
+            client_id,
+            address.clone(),
+            interval_ms,
+            workload,
+            tcp_nodelay,
+            channel_buffer_size,
+        ))
+        */
         } else {
             task::spawn(closed_loop_client::<A>(
-                client_id,
+                client_ids,
                 address.clone(),
                 workload,
                 tcp_nodelay,
@@ -399,11 +412,13 @@ where
 
     let mut handles = handles.collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
-        let client = join_result?.expect("client should run correctly");
-        println!("client {} ended", client.id());
-        latency.merge(client.latency_histogram());
-        throughput.merge(client.throughput_histogram());
-        println!("metrics from {} collected", client.id());
+        let clients = join_result?.expect("client should run correctly");
+        for client in clients {
+            println!("client {} ended", client.id());
+            latency.merge(client.latency_histogram());
+            throughput.merge(client.throughput_histogram());
+            println!("metrics from {} collected", client.id());
+        }
     }
 
     // show global metrics
@@ -422,12 +437,12 @@ where
 }
 
 async fn closed_loop_client<A>(
-    client_id: ClientId,
+    client_ids: Vec<ClientId>,
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-) -> Option<Client>
+) -> Option<Vec<Client>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -435,8 +450,8 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut client, mut read, mut write) = client_setup(
-        client_id,
+    let (mut clients, mut read, mut write) = client_setup(
+        client_ids,
         address,
         workload,
         tcp_nodelay,
@@ -444,18 +459,38 @@ where
     )
     .await?;
 
-    // generate and submit commands while there are commands to be generated
-    while next_cmd(&mut client, &time, &mut write).await {
-        // and wait for their return
-        let cmd_result = read.recv().await;
-        handle_cmd_result(&mut client, &time, cmd_result);
+    // generate the first message of each client
+    for (_client_id, client) in clients.iter_mut() {
+        next_cmd(client, &time, &mut write).await;
     }
-    println!("closed loop client {} exited loop", client_id);
 
-    // return client
-    Some(client)
+    // track which clients are finished
+    let mut finished = HashSet::new();
+
+    // wait for results and generate/submit new commands while there are
+    // commands to be generated
+    while finished.len() < clients.len() {
+        // and wait for next result
+        let cmd_result = read.recv().await;
+        if let Some(client_id) =
+            handle_cmd_result(&mut clients, &time, cmd_result)
+        {
+            // record that this client is finished
+            println!("closed loop client {:?} exited loop", client_id);
+            assert!(finished.insert(client_id));
+        }
+    }
+
+    // return clients
+    Some(
+        clients
+            .into_iter()
+            .map(|(_client_id, client)| client)
+            .collect(),
+    )
 }
 
+/*
 async fn open_loop_client<A>(
     client_id: ClientId,
     address: A,
@@ -503,14 +538,19 @@ where
     // return client
     Some(client)
 }
+*/
 
 async fn client_setup<A>(
-    client_id: ClientId,
+    client_ids: Vec<ClientId>,
     address: A,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-) -> Option<(Client, CommandResultReceiver, CommandSender)>
+) -> Option<(
+    HashMap<ClientId, Client>,
+    CommandResultReceiver,
+    CommandSender,
+)>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -530,29 +570,38 @@ where
             // 'static (required by tokio::spawn) and still be able
             // to use the ? operator
             panic!(
-                "[client] error connecting at client {}: {:?}",
-                client_id, e
+                "[client] error connecting at clients {:?}: {:?}",
+                client_ids, e
             );
         }
     };
 
-    // create client
-    let mut client = Client::new(client_id, workload);
-
     // say hi
     let process_id =
-        task::client::client_say_hi(client_id, &mut connection).await?;
-
-    // discover process (although this won't be used)
-    client.discover(vec![process_id]);
+        task::client::client_say_hi(client_ids.clone(), &mut connection)
+            .await?;
 
     // start client read-write task
     let (read, mut write) =
         task::client::start_client_rw_task(channel_buffer_size, connection);
-    write.set_name(format!("command_result_sender_client_{}", client_id));
+    write.set_name(format!(
+        "command_result_sender_client_{}",
+        task::client::ids_repr(&client_ids)
+    ));
+
+    // create clients
+    let clients = client_ids
+        .into_iter()
+        .map(|client_id| {
+            let mut client = Client::new(client_id, workload);
+            // discover process (although this won't be used)
+            client.discover(vec![process_id]);
+            (client_id, client)
+        })
+        .collect();
 
     // return client its connection
-    Some((client, read, write))
+    Some((clients, read, write))
 }
 
 /// Generate the next command, returning a boolean representing whether a new
@@ -561,7 +610,7 @@ async fn next_cmd(
     client: &mut Client,
     time: &dyn SysTime,
     write: &mut CommandSender,
-) -> bool {
+) {
     if let Some((_, cmd)) = client.next_cmd(time) {
         if let Err(e) = write.send(cmd).await {
             println!(
@@ -569,21 +618,27 @@ async fn next_cmd(
                 e
             );
         }
-        true
-    } else {
-        false
     }
 }
 
-/// Handles a command result. The returned boolean indicates whether this client
-/// is finished or not.
+/// Handles a command result. If the client that generated this command results
+/// is finished, its identifier is returned.
 fn handle_cmd_result(
-    client: &mut Client,
+    clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
     cmd_result: Option<CommandResult>,
-) -> bool {
+) -> Option<ClientId> {
     if let Some(cmd_result) = cmd_result {
-        client.handle(cmd_result, time)
+        // find the client this command result belongs to
+        let client_id = cmd_result.rifl().source();
+        let client = clients
+            .get_mut(&client_id)
+            .expect("[client] command result should belong to a client");
+        if client.handle(cmd_result, time) {
+            Some(client_id)
+        } else {
+            None
+        }
     } else {
         panic!("[client] error while receiving command result from client read-write task");
     }

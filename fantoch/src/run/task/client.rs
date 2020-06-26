@@ -90,7 +90,7 @@ async fn client_server_task(
         println!("[client_server] giving up on new client {:?} since handshake failed:", connection);
         return;
     }
-    let (client_id, mut rifl_acks, mut executor_results) = client.unwrap();
+    let (client_ids, mut rifl_acks, mut executor_results) = client.unwrap();
 
     // create pending
     let aggregate = true;
@@ -104,7 +104,7 @@ async fn client_server_task(
             }
             cmd = connection.recv() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, client_id, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
+                if !client_server_task_handle_cmd(cmd, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
                     return;
                 }
             }
@@ -117,14 +117,15 @@ async fn server_receive_hi(
     channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
-) -> Option<(ClientId, RiflAckReceiver, ExecutorResultReceiver)> {
+) -> Option<(Vec<ClientId>, RiflAckReceiver, ExecutorResultReceiver)> {
     // receive hi from client
-    let client_id = if let Some(ClientHi(client_id)) = connection.recv().await {
-        log!("[client_server] received hi from client {}", client_id);
-        client_id
+    let client_ids = if let Some(ClientHi(client_ids)) = connection.recv().await
+    {
+        log!("[client_server] received hi from clients {:?}", client_ids);
+        client_ids
     } else {
         println!(
-            "[client_server] couldn't receive client id from connected client"
+            "[client_server] couldn't receive client ids from connected client"
         );
         return None;
     };
@@ -137,21 +138,22 @@ async fn server_receive_hi(
         super::channel(channel_buffer_size);
 
     // set channels name
-    rifl_acks_tx.set_name(format!("client_server_rifl_acks_{}", client_id));
+    let ids_repr = ids_repr(&client_ids);
+    rifl_acks_tx.set_name(format!("client_server_rifl_acks_{}", ids_repr));
     executor_results_tx
-        .set_name(format!("client_server_executor_results_{}", client_id));
+        .set_name(format!("client_server_executor_results_{}", ids_repr));
 
-    // register client in all executors
+    // register clients in all executors
     if let Err(e) = client_to_executors
         .broadcast(FromClient::Register(
-            client_id,
+            client_ids.clone(),
             rifl_acks_tx,
             executor_results_tx,
         ))
         .await
     {
         println!(
-            "[client_server] error while registering client in executors: {:?}",
+            "[client_server] error while registering clients in executors: {:?}",
             e
         );
     }
@@ -161,12 +163,12 @@ async fn server_receive_hi(
     connection.send(&hi).await;
 
     // return client id and channel where client should read executor results
-    Some((client_id, rifl_acks_rx, executor_results_rx))
+    Some((client_ids, rifl_acks_rx, executor_results_rx))
 }
 
 async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
-    client_id: ClientId,
+    client_ids: &Vec<ClientId>,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
@@ -227,7 +229,7 @@ async fn client_server_task_handle_cmd(
         println!("[client_server] client disconnected.");
         // unregister client in all executors
         if let Err(e) = client_to_executors
-            .broadcast(FromClient::Unregister(client_id))
+            .broadcast(FromClient::Unregister(client_ids.clone()))
             .await
         {
             println!(
@@ -267,11 +269,11 @@ async fn client_server_task_handle_executor_result(
 }
 
 pub async fn client_say_hi(
-    client_id: ClientId,
+    client_ids: Vec<ClientId>,
     connection: &mut Connection,
 ) -> Option<ProcessId> {
     // say hi
-    let hi = ClientHi(client_id);
+    let hi = ClientHi(client_ids);
     connection.send(&hi).await;
 
     // receive hi back
@@ -322,4 +324,12 @@ async fn client_rw_task(
             }
         }
     }
+}
+
+pub fn ids_repr(client_ids: &Vec<ClientId>) -> String {
+    client_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join("-")
 }
