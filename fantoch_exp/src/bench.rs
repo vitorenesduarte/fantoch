@@ -305,18 +305,23 @@ async fn stop_processes(
     machines: &Machines<'_>,
     processes: HashMap<Region, (ProcessId, tokio::process::Child)>,
 ) -> Result<(), Report> {
-    // first copy the logs
-    for (region, &(process_id, _)) in &processes {
+    // first copy the logs in parallel
+    let mut copies = Vec::with_capacity(processes.len());
+    for (region, &(process_id, _)) in processes.iter() {
+        let remote_path = process_file(process_id);
+        let local_path =
+            format!(".log_{}_id{}_{:?}", run_id, process_id, region);
+        tracing::debug!("copying remote {} to {}", remote_path, local_path);
+
         let vm = machines
             .servers
             .get(region)
             .expect("process vm should exist");
-        util::copy_from(
-            (&process_file(process_id), &vm),
-            &format!(".log_{}_id{}_{:?}", run_id, process_id, region),
-        )
-        .await
-        .wrap_err("copy log")?;
+        let copy = util::copy_from((remote_path, &vm), local_path);
+        copies.push(copy);
+    }
+    for result in futures::future::join_all(copies).await {
+        let _ = result.wrap_err("copy log")?;
     }
     tracing::info!("copied all process logs");
 

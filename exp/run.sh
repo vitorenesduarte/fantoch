@@ -167,6 +167,9 @@ stop_fantoch() {
     # shellcheck disable=SC2029
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
+    cmd="ps -aux | grep fantoch/target/release/client | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+
     cmd="lsof -i :${PORT} -i :${CLIENT_PORT} | wc -l"
 
     local running=-1

@@ -1,5 +1,6 @@
 use color_eyre::Report;
 use eyre::WrapErr;
+use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[macro_export]
@@ -88,8 +89,8 @@ pub fn prepare_command(
 }
 
 pub async fn copy_to(
-    local_path: &str,
-    (remote_path, vm): (&str, &tsunami::Machine<'_>),
+    local_path: impl AsRef<Path>,
+    (remote_path, vm): (impl AsRef<Path>, &tsunami::Machine<'_>),
 ) -> Result<(), Report> {
     // get file contents
     let mut contents = String::new();
@@ -105,8 +106,8 @@ pub async fn copy_to(
 }
 
 pub async fn copy_from(
-    (remote_path, vm): (&str, &tsunami::Machine<'_>),
-    local_path: &str,
+    (remote_path, vm): (impl AsRef<Path>, &tsunami::Machine<'_>),
+    local_path: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // get file contents from remote machine
     let mut contents = String::new();

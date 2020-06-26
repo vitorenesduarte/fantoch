@@ -5,7 +5,7 @@ use color_eyre::Report;
 use eyre::WrapErr;
 use std::collections::HashMap;
 
-const MACHINE: &str = "./../exp/files/machines";
+const MACHINES: &str = "./../exp/files/machines";
 const PRIVATE_KEY: &str = "~/.ssh/id_rsa";
 
 pub async fn setup<'a>(
@@ -19,7 +19,7 @@ pub async fn setup<'a>(
     let machines_count = servers_count + clients_count;
 
     // get ips and check that we have enough of them
-    let content = tokio::fs::read_to_string(MACHINE).await?;
+    let content = tokio::fs::read_to_string(MACHINES).await?;
     let machines: Vec<_> = content.lines().take(machines_count).collect();
     assert_eq!(machines.len(), machines_count, "not enough machines");
 
@@ -29,8 +29,8 @@ pub async fn setup<'a>(
 
     // setup machines
     let mut launches = Vec::with_capacity(machines_count);
-    for region in regions.iter() {
-        for tag in vec![SERVER_TAG, CLIENT_TAG] {
+    for tag in vec![SERVER_TAG, CLIENT_TAG] {
+        for region in regions.iter() {
             // find one machine and a launcher for this machine
             let machine = machines_iter.next().unwrap();
             let launcher = launcher_iter.next().unwrap();
