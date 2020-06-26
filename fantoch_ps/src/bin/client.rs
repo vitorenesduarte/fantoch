@@ -128,7 +128,7 @@ fn parse_args() -> (
     );
     let metrics_log = parse_metrics_log(matches.value_of("metrics_log"));
 
-    println!("ids: {:?}", ids);
+    println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
     println!("client number: {}", ids.len());
     println!("process address: {}", address);
     println!("workload: {:?}", workload);
