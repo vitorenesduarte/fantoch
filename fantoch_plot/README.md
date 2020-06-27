@@ -8,7 +8,7 @@
 sudo apt install python3-dev python-dev python3-venv python3-pip
 ```
 
-1. Install `matplotlib`
+2. Install `matplotlib`
 ```bash
 pip3 install matplotlib
 ```

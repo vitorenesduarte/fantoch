@@ -24,7 +24,11 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2); // millis
 // deadlock somewhere with 1000 we can see that channels fill up sometimes with
 // 10000 that doesn't seem to happen
 // - in AWS 10000 is not enough; setting it to 100k
-const CHANNEL_BUFFER_SIZE: usize = 100_000;
+// - in Apollo with 32k clients per site, 100k is not enough at the fpaxos
+//   leader; setting it to 1M
+// - in Apollo with 16k clients per site, 1M is not enough with newt; setting it
+//   to 100M (since 10M is also not enough)
+const CHANNEL_BUFFER_SIZE: usize = 100_000_000;
 
 const EXECUTION_LOG: Option<String> = None;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
@@ -36,7 +40,7 @@ const LEADER: ProcessId = 1;
 // clients config
 const CONFLICT_RATE: usize = 10;
 const COMMANDS_PER_CLIENT: usize = 500;
-const PAYLOAD_SIZE: usize = 0;
+const PAYLOAD_SIZE: usize = 4 * 1024;
 
 // client tcp config
 const CLIENT_TCP_NODELAY: bool = true;
