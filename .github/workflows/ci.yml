@@ -45,6 +45,9 @@ jobs:
       - name: Check fantoch_exp
         run: cd fantoch_exp/ && cargo check
 
+      - name: Check fantoch_plot
+        run: cd fantoch_plot/ && cargo check
+
       - name: Coverage
         uses: actions-rs/grcov@v0.1
         with:
