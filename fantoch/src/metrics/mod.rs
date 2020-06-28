@@ -4,13 +4,9 @@ pub mod float;
 // This module contains the definition of `Histogram`.
 mod histogram;
 
-// This module contains the definition of `HistogramData`.
-mod histogram_data;
-
 // Re-exports.
 pub use float::F64;
 pub use histogram::{Histogram, Stats};
-pub use histogram_data::{HistogramData};
 
 use std::collections::HashMap;
 use std::fmt;

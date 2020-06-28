@@ -463,7 +463,9 @@ where
                 *commands += client.issued_commands();
 
                 // update region's histogram with this client's histogram
-                histogram.merge(client.latency_histogram());
+                for latency in client.data().latency_data() {
+                    histogram.increment(latency);
+                }
             },
         )
     }

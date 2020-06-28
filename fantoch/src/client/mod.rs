@@ -4,7 +4,11 @@ pub mod workload;
 // This module contains the definition of `Pending`
 pub mod pending;
 
+// This module contains the definition of `ClientData`
+pub mod data;
+
 // Re-exports.
+pub use data::ClientData;
 pub use pending::Pending;
 pub use workload::Workload;
 
@@ -12,7 +16,6 @@ use crate::command::{Command, CommandResult};
 use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
 use crate::log;
-use crate::metrics::{Histogram, HistogramData};
 use crate::time::SysTime;
 
 pub struct Client {
@@ -26,13 +29,8 @@ pub struct Client {
     workload: Workload,
     /// map from pending command RIFL to its start time
     pending: Pending,
-    /// an histogram with all latencies observed by this client
-    latency_histogram: Histogram,
-    /// an histogram with all the times in which commands were returned to this
-    /// client; this is useful for throughput/time plots or in general to
-    /// compute throughput (this makes little sense for a single client, but
-    /// it's useful since we can aggregate the `Histogram`s of several clients)
-    throughput_histogram: HistogramData,
+    /// mapping from
+    data: ClientData,
 }
 
 impl Client {
@@ -45,8 +43,7 @@ impl Client {
             rifl_gen: RiflGen::new(client_id),
             workload,
             pending: Pending::new(),
-            latency_histogram: Histogram::new(),
-            throughput_histogram: HistogramData::new(),
+            data: ClientData::new(),
         }
     }
 
@@ -95,8 +92,7 @@ impl Client {
             latency,
             end_time
         );
-        self.latency_histogram.increment(latency);
-        self.throughput_histogram.increment(end_time);
+        self.data.record(latency, end_time);
 
         // we're done once:
         // - the workload is finished and
@@ -104,14 +100,8 @@ impl Client {
         self.workload.finished() && self.pending.is_empty()
     }
 
-    /// Returns the latency histogram.
-    pub fn latency_histogram(&self) -> &Histogram {
-        &self.latency_histogram
-    }
-
-    /// Returns the throughput histogram.
-    pub fn throughput_histogram(&self) -> &HistogramData {
-        &self.throughput_histogram
+    pub fn data(&self) -> &ClientData {
+        &self.data
     }
 
     /// Returns the number of commands already issued.
@@ -223,13 +213,14 @@ mod tests {
         // check there's no next command
         assert!(next.is_none());
 
-        // check latencies
-        assert_eq!(client.latency_histogram(), &Histogram::from(vec![10, 5]));
+        // check latency
+        let mut latency: Vec<_> = client.data().latency_data().collect();
+        latency.sort();
+        assert_eq!(latency, vec![5, 10]);
 
-        // check latencies
-        assert_eq!(
-            client.throughput_histogram(),
-            &HistogramData::from(vec![10, 15])
-        );
+        // check throughput
+        let mut throughput: Vec<_> = client.data().throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(10, 1), (15, 1)],);
     }
 }

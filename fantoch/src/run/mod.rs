@@ -82,12 +82,12 @@ pub use prelude::{
     GC_WORKER_INDEX, INDEXES_RESERVED, LEADER_WORKER_INDEX,
 };
 
-use crate::client::{Client, Workload};
+use crate::client::{Client, ClientData, Workload};
 use crate::command::CommandResult;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
-use crate::metrics::{Histogram, HistogramData};
+use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -408,29 +408,24 @@ where
     });
 
     // wait for all clients to complete and aggregate their metrics
-    let mut latency = Histogram::new();
-    let mut throughput = HistogramData::new();
+    let mut data = ClientData::new();
 
     let mut handles = handles.collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
         let clients = join_result?.expect("client should run correctly");
         for client in clients {
             println!("client {} ended", client.id());
-            latency.merge(client.latency_histogram());
-            throughput.merge(client.throughput_histogram());
+            data.merge(client.data());
             println!("metrics from {} collected", client.id());
         }
     }
 
     // show global metrics
-    println!("latency: {:?}", latency);
+    println!("latency: {:?}", Histogram::from(data.latency_data()));
 
     if let Some(metrics_log) = metrics_log {
-        println!(
-            "will write latency and throughput metrics to {}",
-            metrics_log
-        );
-        serialize_client_metrics(latency, throughput, metrics_log)?;
+        println!("will write client data to {}", metrics_log);
+        serialize_client_data(data, metrics_log)?;
     }
 
     println!("all clients ended");
@@ -654,12 +649,10 @@ fn handle_cmd_result<'a>(
 }
 
 // TODO make this async
-fn serialize_client_metrics(
-    latency: Histogram,
-    throughput: HistogramData,
+fn serialize_client_data(
+    data: ClientData,
     metrics_log: String,
 ) -> RunResult<()> {
-    let value = (latency, throughput);
     // if the file does not exist it will be created, otherwise truncated
     std::fs::File::create(metrics_log)
         .ok()
@@ -667,18 +660,16 @@ fn serialize_client_metrics(
         .map(std::io::BufWriter::new)
         // and try to serialize
         .map(|writer| {
-            bincode::serialize_into(writer, &value)
-                .expect("error serializing client metrics")
+            bincode::serialize_into(writer, &data)
+                .expect("error serializing client data")
         })
-        .unwrap_or_else(|| panic!("couldn't save metrics"));
+        .unwrap_or_else(|| panic!("couldn't save client data"));
 
     Ok(())
 }
 
 // TODO make this async
-pub fn deserialize_client_metrics(
-    metrics_log: String,
-) -> Option<(Histogram, HistogramData)> {
+pub fn deserialize_client_data(metrics_log: String) -> Option<ClientData> {
     // open the file in read-only
     std::fs::File::open(metrics_log)
         .ok()
@@ -687,7 +678,7 @@ pub fn deserialize_client_metrics(
         // and try to deserialize
         .map(|reader| {
             bincode::deserialize_from(reader)
-                .expect("error deserializing client metrics")
+                .expect("error deserializing client data")
         })
 }
 

@@ -132,7 +132,8 @@ async fn handle_from_client<P>(
         FromClient::Register(client_ids, rifl_acks_tx, executor_results_tx) => {
             for client_id in client_ids {
                 log!("[executor] clients {} registered", client_id);
-                let res = client_rifl_acks.insert(client_id, rifl_acks_tx.clone());
+                let res =
+                    client_rifl_acks.insert(client_id, rifl_acks_tx.clone());
                 assert!(res.is_none());
                 let res = client_executor_results
                     .insert(client_id, executor_results_tx.clone());
