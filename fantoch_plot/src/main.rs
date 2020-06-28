@@ -23,6 +23,7 @@ fn main() -> PyResult<()> {
     plt.xlabel("throughput (ops/s)")?;
     plt.ylabel("latency (ms)")?;
 
-    plt.savefig("plot.pdf")?;
+    let kwargs = &[("format", "pdf")];
+    plt.savefig("plot.pdf", Some(kwargs), py)?;
     Ok(())
 }

@@ -46,11 +46,55 @@ impl<'p> Matplotlib<'p> {
         Ok(())
     }
 
-    pub fn savefig(&self, path: &str) -> PyResult<()> {
+    pub fn savefig(
+        &self,
+        path: &str,
+        kwargs: Option<impl IntoPyDict>,
+        py: Python<'p>,
+    ) -> PyResult<()> {
+        let kwargs = kwargs.map(|kwargs| kwargs.into_py_dict(py));
+        self.plt.call("savefig", (path,), kwargs)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_pdf_test() {
+        let path = "plot.pdf";
+        if let Err(e) = save_pdf(path) {
+            panic!("error while saving pdf: {:?}", e);
+        }
+
+        // check that the file was indeed created
+        assert_eq!(std::path::Path::new(path).is_file(), true);
+    }
+
+    fn save_pdf(path: &str) -> PyResult<()> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        let kwargs = [("format", "pdf")].into_py_dict(py);
-        self.plt.call("savefig", (path,), Some(kwargs))?;
+        let plt = Matplotlib::new(py)?;
+
+        let x = vec!["us-east-1", "ca-central-1", "eu-west-2"];
+        let y = vec![10, 20, 30];
+        plt.subplot(2, 1, 1)?;
+        plt.plot(x, y, "o-")?;
+        plt.title("A tale of 2 subplots")?;
+        plt.xlabel("regions")?;
+        plt.ylabel("latency (ms)")?;
+
+        let x = vec![8, 16, 32, 64, 128];
+        let y = vec![5, 10, 18, 32, 40];
+        plt.subplot(2, 1, 2)?;
+        plt.plot(x, y, ".-")?;
+        plt.xlabel("throughput (ops/s)")?;
+        plt.ylabel("latency (ms)")?;
+
+        let kwargs = &[("format", "pdf")];
+        plt.savefig(path, Some(kwargs), py)?;
         Ok(())
     }
 }
