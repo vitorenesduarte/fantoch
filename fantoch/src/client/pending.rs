@@ -17,7 +17,7 @@ impl Pending {
     /// Start a command given its rifl.
     pub fn start(&mut self, rifl: Rifl, time: &dyn SysTime) {
         // compute start time
-        let start_time = time.now();
+        let start_time = time.millis();
         // add to pending and check it has never been added before
         // TODO: replace with `.expect_none` once it's stabilized
         if self.pending.insert(rifl, start_time).is_some() {
@@ -33,15 +33,13 @@ impl Pending {
             .remove(&rifl)
             .expect("can't end a command if a command has not started");
         // compute end time
-        let end_time = time.now();
+        let end_time = time.millis();
         // make sure time is monotonic
         assert!(start_time <= end_time);
         // compute latency
-        let micros = end_time - start_time;
-        // convert micros to millis
-        let millis = micros / 1000;
+        let latency = end_time - start_time;
         // (both should fit in u64)
-        (millis as u64, end_time as u64)
+        (latency as u64, end_time as u64)
     }
 
     /// Checks whether pending is empty.
@@ -81,14 +79,14 @@ mod tests {
         assert!(!pending.is_empty());
 
         // start second rifl at time 10
-        time.tick(10);
+        time.add_millis(10);
         pending.start(rifl2, &time);
 
         // pending is not empty
         assert!(!pending.is_empty());
 
         // end first rifl at time 11
-        time.tick(1);
+        time.add_millis(1);
         let (latency, return_time) = pending.end(rifl1, &time);
         assert_eq!(latency, 11);
         assert_eq!(return_time, 11);
@@ -97,14 +95,14 @@ mod tests {
         assert!(!pending.is_empty());
 
         // start third rifl at time 15
-        time.tick(4);
+        time.add_millis(4);
         pending.start(rifl3, &time);
 
         // pending is not empty
         assert!(!pending.is_empty());
 
         // end third rifl at time 16
-        time.tick(1);
+        time.add_millis(1);
         let (latency, return_time) = pending.end(rifl3, &time);
         assert_eq!(latency, 1);
         assert_eq!(return_time, 16);
@@ -113,7 +111,7 @@ mod tests {
         assert!(!pending.is_empty());
 
         // end second rifl at time 20
-        time.tick(4);
+        time.add_millis(4);
         let (latency, return_time) = pending.end(rifl2, &time);
         assert_eq!(latency, 10);
         assert_eq!(return_time, 20);

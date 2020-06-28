@@ -293,7 +293,7 @@ impl<KC: KeyClocks> Newt<KC> {
             remote_clock,
             votes,
             from,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -404,7 +404,7 @@ impl<KC: KeyClocks> Newt<KC> {
             clock,
             remote_votes,
             from,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -504,7 +504,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             clock,
             votes,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -592,7 +592,7 @@ impl<KC: KeyClocks> Newt<KC> {
             "p{}: MCommitClock({}) | time={}",
             self.id(),
             clock,
-            time.now()
+            time.millis()
         );
         assert_eq!(from, self.bp.process_id);
 
@@ -613,7 +613,7 @@ impl<KC: KeyClocks> Newt<KC> {
             "p{}: MDetached({:?}) | time={}",
             self.id(),
             detached,
-            time.now()
+            time.millis()
         );
 
         // create execution info
@@ -641,7 +641,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             ballot,
             clock,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -691,7 +691,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             dot,
             ballot,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -736,7 +736,7 @@ impl<KC: KeyClocks> Newt<KC> {
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            time.now()
+            time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -755,7 +755,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             committed,
             from,
-            time.now()
+            time.millis()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -782,7 +782,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             stable,
             from,
-            time.now()
+            time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -798,7 +798,7 @@ impl<KC: KeyClocks> Newt<KC> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            time.now()
+            time.millis()
         );
 
         // retrieve the committed clock
@@ -821,8 +821,11 @@ impl<KC: KeyClocks> Newt<KC> {
         // vote up to:
         // - highest committed clock or
         // - the current time,
-        // whatever is the highest
-        let min_clock = std::cmp::max(self.max_commit_clock, time.now());
+        // whatever is the highest.
+        // The fact that micros as used here is not an accident. With many
+        // clients (like 1024 per site with 5 sites), millis do not provide
+        // "enough precision".
+        let min_clock = std::cmp::max(self.max_commit_clock, time.micros());
 
         // iterate all clocks and bump them to the current time:
         // - TODO: only bump the clocks of active keys (i.e. keys with an

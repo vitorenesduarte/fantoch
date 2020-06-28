@@ -270,7 +270,7 @@ where
                                         // if there's extra time, compute the
                                         // final simulation time
                                         simulation_final_time =
-                                            self.simulation.time().now()
+                                            self.simulation.time().millis()
                                                 + extra;
                                         SimulationStatus::ExtraSimulationTime
                                     }
@@ -306,7 +306,7 @@ where
             // simulation if we're past the final simulation time
             let should_end_sim = simulation_status
                 == SimulationStatus::ExtraSimulationTime
-                && self.simulation.time().now() > simulation_final_time;
+                && self.simulation.time().millis() > simulation_final_time;
             if should_end_sim {
                 simulation_status = SimulationStatus::Done;
             }

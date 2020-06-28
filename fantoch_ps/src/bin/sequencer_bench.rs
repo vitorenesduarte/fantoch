@@ -198,7 +198,7 @@ async fn client(
         let request = (proposal, command, tx);
 
         // register start time
-        let start_start = time.now();
+        let start_start = time.micros();
 
         // send request to worker
         if let Err(e) = to_workers[worker_index].send(request).await {
@@ -212,7 +212,7 @@ async fn client(
         match rx.await {
             Ok(votes) => {
                 // register end time
-                let end_time = time.now();
+                let end_time = time.micros();
 
                 // update highest proposal seen:w
                 let highest_reply = votes

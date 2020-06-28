@@ -230,7 +230,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             cmd,
             remote_clock,
             from,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -284,7 +284,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             dot,
             clock,
             from,
-            time.now()
+            time.millis()
         );
 
         // ignore ack from self (see `EPaxosInfo::new` for the reason why)
@@ -362,7 +362,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             dot,
             value.clock,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -414,7 +414,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             dot,
             ballot,
             value.clock,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -462,7 +462,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             dot,
             ballot,
-            time.now()
+            time.millis()
         );
 
         // get cmd info
@@ -502,7 +502,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            time.now()
+            time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -521,7 +521,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             committed,
             from,
-            time.now()
+            time.millis()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -548,7 +548,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             stable,
             from,
-            time.now()
+            time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -564,7 +564,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            time.now()
+            time.millis()
         );
 
         // retrieve the committed clock

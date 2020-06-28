@@ -1,56 +1,71 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub trait SysTime: Send + 'static + Sync /* TODO why is Sync needed here */ {
-    /// Returns the current time in milliseconds.
-    fn now(&self) -> u64;
+    fn millis(&self) -> u64;
+    fn micros(&self) -> u64;
 }
 
 // TODO find a better name
 pub struct RunTime;
 
-impl SysTime for RunTime {
-    fn now(&self) -> u64 {
+impl RunTime {
+    fn duration_since_unix_epoch(&self) -> Duration {
         let now = SystemTime::now();
-        let micros = now
-            .duration_since(UNIX_EPOCH)
+        now.duration_since(UNIX_EPOCH)
             .expect("we're way past UNIX EPOCH")
-            .as_micros();
-        // TODO check following is not needed to make we don't truncate
-        // const MAX_U64: u128 = u64::max_value() as u128;
-        // if micros > MAX_U64 {
-        //     panic!("current time (millis) doesn't fit in 64bits");
-        // }
-        micros as u64
+    }
+}
+
+impl SysTime for RunTime {
+    fn millis(&self) -> u64 {
+        self.duration_since_unix_epoch().as_millis() as u64
+    }
+
+    fn micros(&self) -> u64 {
+        self.duration_since_unix_epoch().as_micros() as u64
     }
 }
 
 #[derive(Default)]
 pub struct SimTime {
-    time: u64,
+    micros: u64,
 }
 
 impl SimTime {
     /// Creates a new simulation time.
     pub fn new() -> Self {
-        Default::default()
+        Self { micros: 0 }
     }
 
-    /// Increases simulation time by `tick`.
-    pub fn tick(&mut self, tick: u64) {
-        self.time += tick;
+    // Increases simulation time by `millis`.
+    pub fn add_millis(&mut self, millis: u64) {
+        self.micros += Self::millis_to_micros(millis);
     }
 
-    /// Sets simulation time to `new_time`.
-    pub fn set_time(&mut self, new_time: u64) {
+    /// Sets simulation time.
+    pub fn set_millis(&mut self, new_time_millis: u64) {
+        let new_time_micros = Self::millis_to_micros(new_time_millis);
         // make sure time is monotonic
-        assert!(self.time <= new_time);
-        self.time = new_time;
+        assert!(self.micros <= new_time_micros);
+        self.micros = new_time_micros;
+    }
+
+    fn millis_to_micros(millis: u64) -> u64 {
+        millis * 1000
+    }
+
+    fn micros_to_millis(micros: u64) -> u64 {
+        micros / 1000
     }
 }
 
 impl SysTime for SimTime {
-    fn now(&self) -> u64 {
-        self.time
+    fn micros(&self) -> u64 {
+        self.micros
+    }
+
+    fn millis(&self) -> u64 {
+        Self::micros_to_millis(self.micros)
     }
 }
 
@@ -62,21 +77,21 @@ mod tests {
     fn sim_now() {
         // create new simulation time
         let mut time = SimTime::new();
-        assert_eq!(time.now(), 0);
+        assert_eq!(time.micros(), 0);
 
         // first tick
         let tick = 10;
-        time.tick(tick);
-        assert_eq!(time.now(), 10);
+        time.add_millis(tick);
+        assert_eq!(time.millis(), 10);
 
         // second tick
         let tick = 6;
-        time.tick(tick);
-        assert_eq!(time.now(), 16);
+        time.add_millis(tick);
+        assert_eq!(time.millis(), 16);
 
         // set time at 20
-        time.set_time(20);
-        assert_eq!(time.now(), 20);
+        time.set_millis(20);
+        assert_eq!(time.millis(), 20);
     }
 
     #[test]
@@ -86,11 +101,11 @@ mod tests {
         let mut time = SimTime::new();
 
         // set time at 20
-        time.set_time(20);
-        assert_eq!(time.now(), 20);
+        time.set_millis(20);
+        assert_eq!(time.micros(), 20);
 
         // set time at 19
         // should panic!
-        time.set_time(19);
+        time.set_millis(19);
     }
 }

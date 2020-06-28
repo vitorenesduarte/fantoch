@@ -17,7 +17,7 @@ impl<A> Schedule<A> {
     /// Schedule a new `ScheduleAction` at a certain `time`.
     pub fn schedule(&mut self, time: &SimTime, delay: u64, action: A) {
         // compute schedule time
-        let schedule_time = time.now() + delay;
+        let schedule_time = time.millis() + delay;
 
         // get already scheduled actions for this `time` and insert new `action`
         let actions =
@@ -30,7 +30,7 @@ impl<A> Schedule<A> {
         // get the next actions
         self.schedule.pop_first().map(|(min_time, actions)| {
             // advance simulation time
-            time.set_time(min_time);
+            time.set_millis(min_time);
             // return only the actions
             actions
         })
@@ -58,7 +58,7 @@ mod tests {
             .next_actions(&mut time)
             .expect("there should be next actions");
         assert_eq!(next, vec![String::from("a")]);
-        assert_eq!(time.now(), 10);
+        assert_eq!(time.millis(), 10);
         assert!(schedule.next_actions(&mut time).is_none());
 
         // schedule "b" with a delay 7, "c" with delay 2
@@ -70,7 +70,7 @@ mod tests {
             .next_actions(&mut time)
             .expect("there should be next actions");
         assert_eq!(next, vec![String::from("c")]);
-        assert_eq!(time.now(), 12);
+        assert_eq!(time.millis(), 12);
 
         // schedule "d" with a delay 2, "e" with delay 5
         schedule.schedule(&time, 2, String::from("d"));
@@ -81,13 +81,13 @@ mod tests {
             .next_actions(&mut time)
             .expect("there should be next actions");
         assert_eq!(next, vec![String::from("d")]);
-        assert_eq!(time.now(), 14);
+        assert_eq!(time.millis(), 14);
 
         // check "b" and "e" are the next actions, simulation time is now 17
         let next = schedule
             .next_actions(&mut time)
             .expect("there should be next actions");
         assert_eq!(next, vec![String::from("b"), String::from("e")]);
-        assert_eq!(time.now(), 17);
+        assert_eq!(time.millis(), 17);
     }
 }

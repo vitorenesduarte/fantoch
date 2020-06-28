@@ -251,7 +251,7 @@ fn increasing_load<P: Protocol>(
     // make sure stability is running
     config.set_gc_interval(100);
 
-    let cs = vec![4, 32, 256, 512, 1024];
+    let cs = vec![4, 32, 256, 512, 1024, 2048];
 
     // clients workload
     let conflict_rate = 10;

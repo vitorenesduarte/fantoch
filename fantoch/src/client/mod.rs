@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(process_id, 2);
 
         // handle result at time 10
-        time.tick(10);
+        time.add_millis(10);
         client.handle(fake_result(cmd), &time);
         let next = client.next_cmd(&time);
 
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(process_id, 2);
 
         // handle result at time 15
-        time.tick(5);
+        time.add_millis(5);
         client.handle(fake_result(cmd), &time);
         let next = client.next_cmd(&time);
 
