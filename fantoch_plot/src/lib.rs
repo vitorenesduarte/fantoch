@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn save_pdf_test() {
-        let path = "plot.pdf";
+        let path = ".test.pdf";
         if let Err(e) = save_pdf(path) {
             panic!("error while saving pdf: {:?}", e);
         }
