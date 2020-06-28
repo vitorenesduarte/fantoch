@@ -42,11 +42,15 @@ jobs:
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
         timeout-minutes: 20
 
+      - name: Test fantoch_plot
+        run: cd fantoch_plot/ && cargo test
+          QUICKCHECK_TESTS: '10000'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        timeout-minutes: 20
+
       - name: Check fantoch_exp
         run: cd fantoch_exp/ && cargo check
-
-      - name: Check fantoch_plot
-        run: cd fantoch_plot/ && cargo check
 
       - name: Coverage
         uses: actions-rs/grcov@v0.1

@@ -10,15 +10,15 @@ license = "MIT/Apache-2.0"
 timing = ["fantoch/timing"]
 
 [dependencies]
-ahash = "0.3.4"
-clap = "2.33.0"
-dashmap = "3.11.1"
+ahash = "0.3.8"
+clap = "2.33.1"
+dashmap = "3.11.4"
 futures = { version = "0.3.5", default-features = false, features = [] }
 rand = "0.7.3"
-serde = { version = "1.0.110", features = ["derive"] }
+serde = { version = "1.0.114", features = ["derive"] }
 threshold = "0.8.7"
 tokio = { version = "0.2.21", features = ["full", "parking_lot"] }
-tracing = "0.1.14"
+tracing = "0.1.15"
 parking_lot = "0.11.0"
 num_cpus = "1.13.0"
 
