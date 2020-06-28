@@ -1,4 +1,6 @@
 use pyo3::prelude::*;
+use pyo3::types::IntoPyDict;
+
 pub struct Matplotlib<'p> {
     plt: &'p PyModule,
 }
@@ -45,7 +47,10 @@ impl<'p> Matplotlib<'p> {
     }
 
     pub fn savefig(&self, path: &str) -> PyResult<()> {
-        self.plt.call1("savefig", (path,))?;
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let kwargs = [("format", "pdf")].into_py_dict(py);
+        self.plt.call("savefig", (path,), Some(kwargs))?;
         Ok(())
     }
 }
