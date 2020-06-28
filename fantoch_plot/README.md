@@ -5,7 +5,7 @@
 1. Install prerequisites
 
 ```bash
-sudo apt install python3-dev python-dev python3-venv python3-pip
+sudo apt install python3-dev python3-venv python3-pip
 ```
 
 2. Install `matplotlib`
