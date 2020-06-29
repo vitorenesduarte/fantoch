@@ -15,6 +15,7 @@ type Ips = HashMap<Region, String>;
 
 const LOG_FILE: &str = ".log";
 const DSTAT_FILE: &str = "dstat.csv";
+const METRICS_FILE: &str = ".metrics";
 
 pub async fn bench_experiment(
     machines: Machines<'_>,
@@ -106,13 +107,6 @@ async fn run_experiment(
         .wrap_err("stop_processes")?;
 
     Ok(())
-}
-
-fn bench_timestamp() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("we're way past epoch")
-        .as_micros()
 }
 
 async fn start_processes(
@@ -234,7 +228,8 @@ async fn run_clients(
         let ip = process_ips.get(region).expect("get process ip").clone();
 
         // create client config and generate args
-        let client_config = ClientConfig::new(id_start, id_end, ip);
+        let client_config =
+            ClientConfig::new(id_start, id_end, ip, METRICS_FILE);
         let args = client_config.to_args();
 
         let command = exp::fantoch_bin_script(
@@ -473,7 +468,7 @@ async fn save_exp_config(
     exp_config: ExperimentConfig,
     results_dir: impl AsRef<Path>,
 ) -> Result<String, Report> {
-    let timestamp = bench_timestamp();
+    let timestamp = exp_timestamp();
     let exp_dir = format!("{}/{}", results_dir.as_ref().display(), timestamp);
     tokio::fs::create_dir_all(&exp_dir)
         .await
@@ -484,6 +479,13 @@ async fn save_exp_config(
     Ok(exp_dir)
 }
 
+fn exp_timestamp() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("we're way past epoch")
+        .as_micros()
+}
+
 async fn pull_process_metrics(
     process_id: ProcessId,
     region: &Region,
@@ -491,11 +493,8 @@ async fn pull_process_metrics(
     run_mode: RunMode,
     exp_dir: &String,
 ) -> Result<(), Report> {
-    pull_log_and_dstat("server", region, vm, exp_dir).await?;
-    tracing::debug!("copied process {} log and dstat", process_id);
-
-    // copy flamegraph if in flamegraph mode
-    if run_mode == RunMode::Flamegraph {
+    // stop flamegraph if in flamegraph mode
+    let pull_flamegraph = if run_mode == RunMode::Flamegraph {
         // small delay between calls
         let delay = tokio::time::Duration::from_secs(2);
 
@@ -510,20 +509,22 @@ async fn pull_process_metrics(
             count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
         }
 
-        // copy `flamegraph.svg`
-        let remote_path = "flamegraph.svg";
-        let local_path =
-            format!("{}/server_{:?}_flamegraph.svg", exp_dir, region);
-        util::copy_from((remote_path, vm), local_path)
-            .await
-            .wrap_err("copy flamegraph")?;
+        true
+    } else {
+        false
+    };
 
-        tracing::debug!(
-            "copied process {} flamegraph log in region {:?}",
-            process_id,
-            region
-        );
-    }
+    let pull_metrics = false;
+    pull_metrics_files(
+        "server",
+        region,
+        vm,
+        exp_dir,
+        pull_metrics,
+        pull_flamegraph,
+    )
+    .await?;
+    tracing::debug!("copied process {} metrics files", process_id);
     Ok(())
 }
 
@@ -533,19 +534,28 @@ async fn pull_client_metrics(
     vm: &tsunami::Machine<'_>,
     exp_dir: &String,
 ) -> Result<(), Report> {
-    pull_log_and_dstat("client", region, vm, exp_dir).await?;
-    tracing::debug!("copied client {} log and dstat", process_id);
-
-    // pull metrics file
-
+    let pull_metrics = true;
+    let pull_flamegraph = false;
+    pull_metrics_files(
+        "client",
+        region,
+        vm,
+        exp_dir,
+        pull_metrics,
+        pull_flamegraph,
+    )
+    .await?;
+    tracing::debug!("copied client {} metrics files", process_id);
     Ok(())
 }
 
-async fn pull_log_and_dstat(
+async fn pull_metrics_files(
     tag: &str,
     region: &Region,
     vm: &tsunami::Machine<'_>,
     exp_dir: &String,
+    pull_metrics: bool,
+    pull_flamegraph: bool,
 ) -> Result<(), Report> {
     // pull log file
     let local_path = format!("{}/{}_{:?}.log", exp_dir, tag, region);
@@ -553,10 +563,28 @@ async fn pull_log_and_dstat(
         .await
         .wrap_err("copy log")?;
 
-    // pull dstat log
+    // pull dstat
     let local_path = format!("{}/{}_{:?}_dstat.csv", exp_dir, tag, region);
     util::copy_from((DSTAT_FILE, vm), local_path)
         .await
         .wrap_err("copy dstat")?;
+
+    // pull metrics
+    if pull_metrics {
+        let local_path =
+            format!("{}/{}_{:?}_metrics.bincode", exp_dir, tag, region);
+        util::copy_from((METRICS_FILE, vm), local_path)
+            .await
+            .wrap_err("copy metrics")?;
+    }
+
+    // pull flamegraph
+    if pull_flamegraph {
+        let local_path =
+            format!("{}/{}_{:?}_flamegraph.svg", exp_dir, tag, region);
+        util::copy_from(("flamegraph.svg", vm), local_path)
+            .await
+            .wrap_err("copy flamegraph")?;
+    }
     Ok(())
 }

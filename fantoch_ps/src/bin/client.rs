@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         workload,
         tcp_nodelay,
         channel_buffer_size,
-        metrics_log,
+        metrics_file,
     ) = parse_args();
 
     common::tokio_runtime().block_on(fantoch::run::client(
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         workload,
         tcp_nodelay,
         channel_buffer_size,
-        metrics_log,
+        metrics_file,
     ))
 }
 
@@ -104,10 +104,10 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("metrics_log")
-                .long("metrics_log")
-                .value_name("METRICS_LOG")
-                .help("log file in which metrics written to; by default metrics are not logged")
+            Arg::with_name("metrics_file")
+                .long("metrics_file")
+                .value_name("METRICS_FILE")
+                .help("file in which metrics written to; by default metrics are not logged")
                 .takes_value(true),
         )
         .get_matches();
@@ -126,7 +126,7 @@ fn parse_args() -> (
     let channel_buffer_size = common::parse_channel_buffer_size(
         matches.value_of("channel_buffer_size"),
     );
-    let metrics_log = parse_metrics_log(matches.value_of("metrics_log"));
+    let metrics_file = parse_metrics_file(matches.value_of("metrics_log"));
 
     println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
     println!("client number: {}", ids.len());
@@ -134,7 +134,7 @@ fn parse_args() -> (
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
-    println!("metrics log: {:?}", metrics_log);
+    println!("metrics log: {:?}", metrics_file);
 
     (
         ids,
@@ -143,7 +143,7 @@ fn parse_args() -> (
         workload,
         tcp_nodelay,
         channel_buffer_size,
-        metrics_log,
+        metrics_file,
     )
 }
 
@@ -220,6 +220,6 @@ fn parse_payload_size(number: Option<&str>) -> usize {
         .unwrap_or(DEFAULT_PAYLOAD_SIZE)
 }
 
-pub fn parse_metrics_log(metrics_log: Option<&str>) -> Option<String> {
-    metrics_log.map(String::from)
+pub fn parse_metrics_file(metrics_file: Option<&str>) -> Option<String> {
+    metrics_file.map(String::from)
 }

@@ -204,10 +204,16 @@ pub struct ClientConfig {
     payload_size: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    metrics_file: String,
 }
 
 impl ClientConfig {
-    pub fn new(id_start: usize, id_end: usize, ip: String) -> Self {
+    pub fn new(
+        id_start: usize,
+        id_end: usize,
+        ip: String,
+        metrics_file: &str,
+    ) -> Self {
         Self {
             id_start,
             id_end,
@@ -217,6 +223,7 @@ impl ClientConfig {
             payload_size: PAYLOAD_SIZE,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            metrics_file: metrics_file.to_string(),
         }
     }
 
@@ -236,6 +243,8 @@ impl ClientConfig {
             self.tcp_nodelay,
             "--channel_buffer_size",
             self.channel_buffer_size,
+            "--metrics_file",
+            self.metrics_file,
         ]
     }
 

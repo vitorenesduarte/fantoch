@@ -368,7 +368,7 @@ pub async fn client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
-    metrics_log: Option<String>,
+    metrics_file: Option<String>,
 ) -> RunResult<()>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -423,9 +423,9 @@ where
     // show global metrics
     println!("latency: {:?}", Histogram::from(data.latency_data()));
 
-    if let Some(metrics_log) = metrics_log {
-        println!("will write client data to {}", metrics_log);
-        serialize_client_data(data, metrics_log)?;
+    if let Some(file) = metrics_file {
+        println!("will write client data to {}", file);
+        serialize_client_data(data, file)?;
     }
 
     println!("all clients ended");
@@ -649,12 +649,9 @@ fn handle_cmd_result<'a>(
 }
 
 // TODO make this async
-fn serialize_client_data(
-    data: ClientData,
-    metrics_log: String,
-) -> RunResult<()> {
+fn serialize_client_data(data: ClientData, file: String) -> RunResult<()> {
     // if the file does not exist it will be created, otherwise truncated
-    std::fs::File::create(metrics_log)
+    std::fs::File::create(file)
         .ok()
         // create a buf writer
         .map(std::io::BufWriter::new)
@@ -944,7 +941,7 @@ pub mod tests {
                 };
 
                 // spawn client
-                let metrics_log = format!(".metrics_client_{}", process_id);
+                let metrics_file = format!(".metrics_client_{}", process_id);
                 tokio::task::spawn_local(client(
                     ids,
                     address,
@@ -952,7 +949,7 @@ pub mod tests {
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
-                    Some(metrics_log),
+                    Some(metrics_file),
                 ))
             })
             .collect();
