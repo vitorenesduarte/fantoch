@@ -61,20 +61,19 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
+        /*
         Region::CaCentral1,
         Region::SaEast1,
+        */
     ];
-    /*
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
-    */
     let n = regions.len();
-    let f = 2;
+    let f = 1;
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::FPaxos, config!(n, f, false, None, false)),
-        /*
         (Protocol::NewtAtomic, config!(n, f, false, None, false)),
+        /*
+        (Protocol::FPaxos, config!(n, f, false, None, false)),
         (Protocol::AtlasLocked, config!(n, f, false, None, false)),
         */
     ];

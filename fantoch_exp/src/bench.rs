@@ -413,7 +413,10 @@ async fn wait_client_ended(
 async fn start_dstat(
     machines: &Machines<'_>,
 ) -> Result<Vec<tokio::process::Child>, Report> {
-    let command = format!("dstat -t -T -cdnm --output {} 1", DSTAT_FILE);
+    let command = format!(
+        "dstat -t -T -cdnm --io --output {} 1 > /dev/null",
+        DSTAT_FILE
+    );
 
     let mut dstats = Vec::with_capacity(machines.vm_count());
     // start dstat in both server and client machines
@@ -521,26 +524,37 @@ async fn pull_metrics_files(
     exp_dir: &String,
     pull_metrics: bool,
 ) -> Result<(), Report> {
-    // pull log file
+    // pull log file and remove it
     let local_path = format!("{}/{}_{:?}.log", exp_dir, tag, region);
     util::copy_from((LOG_FILE, vm), local_path)
         .await
         .wrap_err("copy log")?;
 
-    // pull dstat
+    // pull dstat and remove it
     let local_path = format!("{}/{}_{:?}_dstat.csv", exp_dir, tag, region);
     util::copy_from((DSTAT_FILE, vm), local_path)
         .await
         .wrap_err("copy dstat")?;
 
-    // pull metrics
+    // files to be removed
+    let mut to_remove = format!("rm {} {}", LOG_FILE, DSTAT_FILE);
+
     if pull_metrics {
+        // pull metrics file and remove it
         let local_path =
             format!("{}/{}_{:?}_metrics.bincode", exp_dir, tag, region);
         util::copy_from((METRICS_FILE, vm), local_path)
             .await
             .wrap_err("copy metrics")?;
+
+        // also remove metrics file
+        to_remove = format!("{} {}", to_remove, METRICS_FILE);
     }
+
+    // remove files
+    util::vm_exec(vm, to_remove)
+        .await
+        .wrap_err("remove files")?;
 
     Ok(())
 }
