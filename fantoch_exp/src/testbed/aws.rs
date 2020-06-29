@@ -33,11 +33,8 @@ pub async fn setup(
     .await?;
     let servers = vms.remove(SERVER_TAG).expect("servers vms");
     let clients = vms.remove(CLIENT_TAG).expect("client vms");
-    Ok(Machines {
-        regions: super::to_regions(regions),
-        servers,
-        clients,
-    })
+    let machines = Machines::new(super::to_regions(regions), servers, clients);
+    Ok(machines)
 }
 
 async fn spawn_and_setup<'a>(

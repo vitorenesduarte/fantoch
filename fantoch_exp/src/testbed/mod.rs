@@ -1,6 +1,8 @@
 pub mod aws;
 pub mod baremetal;
 
+use std::collections::HashMap;
+
 const NICKNAME_SEP: &str = "_";
 const SERVER_TAG: &str = "server";
 const CLIENT_TAG: &str = "client";
@@ -17,13 +19,16 @@ pub fn from_nickname(nickname: String) -> (String, fantoch::planet::Region) {
 
 pub fn to_regions(
     regions: Vec<rusoto_core::Region>,
-) -> Vec<fantoch::planet::Region> {
+) -> HashMap<fantoch::planet::Region, fantoch::id::ProcessId> {
+    let n = regions.len();
     regions
         .into_iter()
-        .map(|region| {
+        .zip(fantoch::util::process_ids(n))
+        .map(|(region, process_id)| {
             let region_name = region.name();
             // create fantoch region
-            fantoch::planet::Region::new(region_name)
+            let region = fantoch::planet::Region::new(region_name);
+            (region, process_id)
         })
         .collect()
 }

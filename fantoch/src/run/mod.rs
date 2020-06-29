@@ -668,20 +668,6 @@ fn serialize_client_data(
     Ok(())
 }
 
-// TODO make this async
-pub fn deserialize_client_data(metrics_log: String) -> Option<ClientData> {
-    // open the file in read-only
-    std::fs::File::open(metrics_log)
-        .ok()
-        // create a buf reader
-        .map(std::io::BufReader::new)
-        // and try to deserialize
-        .map(|reader| {
-            bincode::deserialize_from(reader)
-                .expect("error deserializing client data")
-        })
-}
-
 // TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the
 // protocols implemented
 pub mod tests {

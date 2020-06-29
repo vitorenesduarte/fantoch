@@ -73,11 +73,8 @@ pub async fn setup<'a>(
     assert_eq!(servers.len(), servers_count, "not enough server vms");
     assert_eq!(clients.len(), clients_count, "not enough client vms");
 
-    Ok(Machines {
-        regions: super::to_regions(regions),
-        servers,
-        clients,
-    })
+    let machines = Machines::new(super::to_regions(regions), servers, clients);
+    Ok(machines)
 }
 
 async fn baremetal_setup(

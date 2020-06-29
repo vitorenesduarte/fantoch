@@ -1,6 +1,7 @@
 use crate::id::ProcessId;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Config {
     /// number of processes
     n: usize,
