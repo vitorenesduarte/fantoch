@@ -93,14 +93,14 @@ pub async fn copy_to(
     (remote_path, vm): (impl AsRef<Path>, &tsunami::Machine<'_>),
 ) -> Result<(), Report> {
     // get file contents
-    let mut contents = String::new();
+    let mut contents = Vec::new();
     tokio::fs::File::open(local_path)
         .await?
-        .read_to_string(&mut contents)
+        .read_to_end(&mut contents)
         .await?;
     // write them in remote machine
     let mut remote_file = vm.ssh.sftp().write_to(remote_path).await?;
-    remote_file.write_all(contents.as_bytes()).await?;
+    remote_file.write_all(&contents).await?;
     remote_file.close().await?;
     Ok(())
 }
@@ -110,14 +110,14 @@ pub async fn copy_from(
     local_path: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // get file contents from remote machine
-    let mut contents = String::new();
+    let mut contents = Vec::new();
     let mut remote_file = vm.ssh.sftp().read_from(remote_path).await?;
-    remote_file.read_to_string(&mut contents).await?;
+    remote_file.read_to_end(&mut contents).await?;
     remote_file.close().await?;
     // write them in file
     tokio::fs::File::create(local_path)
         .await?
-        .write_all(contents.as_bytes())
+        .write_all(&contents)
         .await?;
     Ok(())
 }

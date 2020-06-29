@@ -529,7 +529,7 @@ async fn pull_metrics(
 
     // pull all metrics in parallel
     for result in futures::future::join_all(pulls).await {
-        let _ = result.wrap_err("pull_process_metrics")?;
+        let _ = result.wrap_err("pull_metrics")?;
     }
 
     Ok(exp_dir)
