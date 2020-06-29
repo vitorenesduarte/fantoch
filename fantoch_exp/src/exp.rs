@@ -174,8 +174,8 @@ pub fn fantoch_setup(
                 )
                 .await?;
                 tracing::debug!("full output:\n{}", stdout);
-                // we're done if there was no warning about the packages we need
-                done = vec![
+                // check if there was no warning about the packages we need
+                let all_available = vec![
                     "build-essential",
                     "pkg-config",
                     "libssl-dev",
@@ -192,6 +192,19 @@ pub fn fantoch_setup(
                     let msg = format!("Package {} is not available", package);
                     !stdout.contains(&msg)
                 });
+                // check if commands we may need are actually installed
+                let all_found = vec![
+                    "Command 'dstat' not found",
+                    "Command 'lsof' not found",
+                    "flamegraph: command not found",
+                    "chrony: command not found",
+                ]
+                .into_iter()
+                .all(|msg| !stdout.contains(&msg));
+
+                // we're done if no warnings and all commands are actually
+                // installed
+                done = all_available && all_found;
                 if !done {
                     tracing::warn!(
                         "trying again since at least one package was not available"
