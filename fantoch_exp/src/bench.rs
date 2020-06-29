@@ -284,6 +284,7 @@ async fn stop_processes(
             util::vm_exec(vm, command).await.wrap_err("lsof | grep")?;
         let mut pids: Vec<_> = output
             .lines()
+            // take the second column (which contains the PID)
             .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
             .collect();
         pids.sort();
@@ -435,8 +436,47 @@ async fn stop_dstat(
     dstats: Vec<tokio::process::Child>,
 ) -> Result<(), Report> {
     for mut dstat in dstats {
+        // kill ssh process
         dstat.kill().wrap_err("dstat kill")?;
+        if let Err(e) = dstat.kill() {
+            tracing::warn!(
+                "error trying to kill ssh dstat {}: {:?}",
+                dstat.id(),
+                e
+            );
+        }
     }
+
+    for vm in machines.vms() {
+        // find dstat pid in remote vm
+        let command = "ps -aux | grep dstat | grep -v grep";
+        let output = util::vm_exec(vm, command).await.wrap_err("ps")?;
+        let mut pids: Vec<_> = output
+            .lines()
+            // take the second column (which contains the PID)
+            .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
+            .collect();
+        pids.sort();
+        pids.dedup();
+
+        // there should be at most one pid
+        match pids.len() {
+            0 => {
+                tracing::warn!("dstat already not running");
+            }
+            n => {
+                if n > 1 {
+                    tracing::warn!("found more that one dstat processes. killing all of them");
+                }
+                // kill dstat
+                let command = format!("kill {}", pids.join(" "));
+                let output =
+                    util::vm_exec(vm, command).await.wrap_err("kill")?;
+                tracing::debug!("{}", output);
+            }
+        }
+    }
+
     for vm in machines.vms() {
         check_no_dstat(vm).await.wrap_err("check_no_dstat")?;
     }

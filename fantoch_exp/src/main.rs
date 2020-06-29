@@ -93,9 +93,11 @@ async fn main() -> Result<(), Report> {
         1024 * 128,
     ];
 
-    baremetal_bench(regions, configs, clients_per_region).await
+    // baremetal_bench(regions, configs, clients_per_region).await
+    aws_bench(regions, configs, clients_per_region).await
 }
 
+#[allow(dead_code)]
 async fn baremetal_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
