@@ -325,12 +325,12 @@ async fn wait_process_started(
     process_id: ProcessId,
     vm: &tsunami::Machine<'_>,
 ) -> Result<(), Report> {
+    // small delay between calls
+    let duration = tokio::time::Duration::from_secs(2);
+
     let mut count = 0;
     while count != 1 {
-        // small delay between calls
-        let seconds = 2;
-        tokio::time::delay_for(tokio::time::Duration::from_secs(seconds)).await;
-
+        tokio::time::delay_for(duration).await;
         let command =
             format!("grep -c 'process {} started' {}", process_id, LOG_FILE);
         let stdout = util::vm_exec(vm, command).await.wrap_err("grep -c")?;
@@ -347,15 +347,16 @@ async fn wait_process_ended(
     exp_dir: &String,
 ) -> Result<(), Report> {
     // small delay between calls
-    let delay = tokio::time::Duration::from_secs(2);
+    let duration = tokio::time::Duration::from_secs(2);
 
     let mut count = 1;
     while count != 0 {
-        tokio::time::delay_for(delay).await;
+        tokio::time::delay_for(duration).await;
         let command = format!("lsof -i :{} -i :{} | wc -l", PORT, CLIENT_PORT);
         let stdout = util::vm_exec(vm, command).await.wrap_err("lsof | wc")?;
         count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
     }
+
     tracing::info!(
         "process {} in region {:?} terminated successfully",
         process_id,
@@ -364,13 +365,10 @@ async fn wait_process_ended(
 
     // pull flamegraph if in flamegraph mode
     if run_mode == RunMode::Flamegraph {
-        // small delay between calls
-        let delay = tokio::time::Duration::from_secs(2);
-
-        // wait for the flamegraph process to finish writing `flamegraph.svg`
+        // wait for the flamegraph process to finish writing the flamegraph file
         let mut count = 1;
         while count != 0 {
-            tokio::time::delay_for(delay).await;
+            tokio::time::delay_for(duration).await;
             let command =
                 format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
             let stdout =
@@ -378,6 +376,8 @@ async fn wait_process_ended(
             count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
         }
 
+        // once the flamegraph process is not running, we can grab the
+        // flamegraph file
         pull_flamegraph_file("server", &region, vm, exp_dir)
             .await
             .wrap_err("pull_flamegraph_file")?;
@@ -390,13 +390,12 @@ async fn wait_client_ended(
     region: Region,
     vm: &tsunami::Machine<'_>,
 ) -> Result<(), Report> {
-    // wait until all clients end
+    // small delay between calls
+    let duration = tokio::time::Duration::from_secs(10);
+
     let mut count = 0;
     while count != 1 {
-        // small delay between calls
-        let seconds = 10;
-        tokio::time::delay_for(tokio::time::Duration::from_secs(seconds)).await;
-
+        tokio::time::delay_for(duration).await;
         let command = format!("grep -c 'all clients ended' {}", LOG_FILE);
         let stdout = util::vm_exec(vm, command).await.wrap_err("grep -c")?;
         count = stdout.parse::<usize>().wrap_err("grep -c parse")?;

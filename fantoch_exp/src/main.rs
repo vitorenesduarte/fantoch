@@ -31,7 +31,7 @@ const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "client_connection_pool";
+const BRANCH: &str = "dstat";
 
 // ping-specific config
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
@@ -134,7 +134,6 @@ async fn baremetal_bench(
         planet,
         configs,
         clients_per_region,
-        RESULTS_DIR,
     )
     .await
     .wrap_err("run bench")?;
@@ -189,16 +188,9 @@ async fn do_aws_bench(
     let planet = None;
 
     // run benchmarks
-    run_bench(
-        machines,
-        Testbed::Aws,
-        planet,
-        configs,
-        clients_per_region,
-        RESULTS_DIR,
-    )
-    .await
-    .wrap_err("run bench")?;
+    run_bench(machines, Testbed::Aws, planet, configs, clients_per_region)
+        .await
+        .wrap_err("run bench")?;
 
     Ok(())
 }
@@ -209,7 +201,6 @@ async fn run_bench(
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    results_dir: impl AsRef<std::path::Path>,
 ) -> Result<(), Report> {
     bench::bench_experiment(
         machines,
@@ -219,7 +210,7 @@ async fn run_bench(
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,
-        results_dir,
+        RESULTS_DIR,
     )
     .await
 }

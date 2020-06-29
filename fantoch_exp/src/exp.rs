@@ -31,6 +31,7 @@ impl<'a> Machines<'a> {
             clients,
         }
     }
+
     pub fn regions(&self) -> &HashMap<Region, ProcessId> {
         &self.regions
     }
