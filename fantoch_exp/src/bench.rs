@@ -96,13 +96,13 @@ async fn run_experiment(
         config,
         clients_per_region,
     );
-    pull_metrics(machines, run_mode, exp_config, results_dir)
+    let exp_dir = pull_metrics(machines, exp_config, results_dir)
         .await
         .wrap_err("pull_metrics")?;
 
     // stop processes: should only be stopped after copying all the metrics to
     // avoid unnecessary noise in the logs
-    stop_processes(machines, processes)
+    stop_processes(machines, run_mode, exp_dir, processes)
         .await
         .wrap_err("stop_processes")?;
 
@@ -256,6 +256,8 @@ async fn run_clients(
 
 async fn stop_processes(
     machines: &Machines<'_>,
+    run_mode: RunMode,
+    exp_dir: String,
     processes: HashMap<Region, tokio::process::Child>,
 ) -> Result<(), Report> {
     let mut wait_processes = Vec::with_capacity(machines.server_count());
@@ -307,7 +309,9 @@ async fn stop_processes(
             n => panic!("there should be at most one pid and found {}", n),
         }
 
-        wait_processes.push(wait_process_ended(process_id, region, vm));
+        wait_processes.push(wait_process_ended(
+            process_id, region, vm, run_mode, &exp_dir,
+        ));
     }
 
     // wait all processse started
@@ -339,6 +343,8 @@ async fn wait_process_ended(
     process_id: ProcessId,
     region: Region,
     vm: &tsunami::Machine<'_>,
+    run_mode: RunMode,
+    exp_dir: &String,
 ) -> Result<(), Report> {
     // small delay between calls
     let delay = tokio::time::Duration::from_secs(2);
@@ -355,6 +361,27 @@ async fn wait_process_ended(
         process_id,
         region
     );
+
+    // pull flamegraph if in flamegraph mode
+    if run_mode == RunMode::Flamegraph {
+        // small delay between calls
+        let delay = tokio::time::Duration::from_secs(2);
+
+        // wait for the flamegraph process to finish writing `flamegraph.svg`
+        let mut count = 1;
+        while count != 0 {
+            tokio::time::delay_for(delay).await;
+            let command =
+                format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
+            let stdout =
+                util::vm_exec(vm, command).await.wrap_err("ps | wc")?;
+            count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+        }
+
+        pull_flamegraph_file("server", &region, vm, exp_dir)
+            .await
+            .wrap_err("pull_flamegraph_file")?;
+    }
     Ok(())
 }
 
@@ -427,41 +454,43 @@ async fn check_no_dstat(vm: &tsunami::Machine<'_>) -> Result<(), Report> {
 
 async fn pull_metrics(
     machines: &Machines<'_>,
-    run_mode: RunMode,
     exp_config: ExperimentConfig,
     results_dir: impl AsRef<Path>,
-) -> Result<(), Report> {
+) -> Result<String, Report> {
     // save experiment config, making sure experiment directory exists
     let exp_dir = save_exp_config(exp_config, results_dir)
         .await
         .wrap_err("save_exp_config")?;
     tracing::info!("experiment metrics will be saved in {}", exp_dir);
 
-    // pull processes metrics
     let mut pulls = Vec::with_capacity(machines.vm_count());
     for (region, vm) in machines.servers() {
-        // find process id
-        let process_id = machines.process_id(region);
-        pulls.push(pull_process_metrics(
-            process_id, region, vm, run_mode, &exp_dir,
+        let pull_metrics = false;
+        pulls.push(pull_metrics_files(
+            "server",
+            region,
+            vm,
+            &exp_dir,
+            pull_metrics,
         ));
     }
+    for (region, vm) in machines.clients() {
+        let pull_metrics = true;
+        pulls.push(pull_metrics_files(
+            "client",
+            region,
+            vm,
+            &exp_dir,
+            pull_metrics,
+        ));
+    }
+
+    // pull all metrics in parallel
     for result in futures::future::join_all(pulls).await {
         let _ = result.wrap_err("pull_process_metrics")?;
     }
 
-    // pull clients metrics
-    let mut pulls = Vec::with_capacity(machines.vm_count());
-    for (region, vm) in machines.clients() {
-        // find process id
-        let process_id = machines.process_id(region);
-        pulls.push(pull_client_metrics(process_id, region, vm, &exp_dir));
-    }
-    for result in futures::future::join_all(pulls).await {
-        let _ = result.wrap_err("pull_client_metrics")?;
-    }
-
-    Ok(())
+    Ok(exp_dir)
 }
 
 async fn save_exp_config(
@@ -486,76 +515,12 @@ fn exp_timestamp() -> u128 {
         .as_micros()
 }
 
-async fn pull_process_metrics(
-    process_id: ProcessId,
-    region: &Region,
-    vm: &tsunami::Machine<'_>,
-    run_mode: RunMode,
-    exp_dir: &String,
-) -> Result<(), Report> {
-    // stop flamegraph if in flamegraph mode
-    let pull_flamegraph = if run_mode == RunMode::Flamegraph {
-        // small delay between calls
-        let delay = tokio::time::Duration::from_secs(2);
-
-        // wait for the flamegraph process to finish writing `flamegraph.svg`
-        let mut count = 1;
-        while count != 0 {
-            tokio::time::delay_for(delay).await;
-            let command =
-                format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
-            let stdout =
-                util::vm_exec(vm, command).await.wrap_err("ps | wc")?;
-            count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
-        }
-
-        true
-    } else {
-        false
-    };
-
-    let pull_metrics = false;
-    pull_metrics_files(
-        "server",
-        region,
-        vm,
-        exp_dir,
-        pull_metrics,
-        pull_flamegraph,
-    )
-    .await?;
-    tracing::debug!("copied process {} metrics files", process_id);
-    Ok(())
-}
-
-async fn pull_client_metrics(
-    process_id: ProcessId,
-    region: &Region,
-    vm: &tsunami::Machine<'_>,
-    exp_dir: &String,
-) -> Result<(), Report> {
-    let pull_metrics = true;
-    let pull_flamegraph = false;
-    pull_metrics_files(
-        "client",
-        region,
-        vm,
-        exp_dir,
-        pull_metrics,
-        pull_flamegraph,
-    )
-    .await?;
-    tracing::debug!("copied client {} metrics files", process_id);
-    Ok(())
-}
-
 async fn pull_metrics_files(
     tag: &str,
     region: &Region,
     vm: &tsunami::Machine<'_>,
     exp_dir: &String,
     pull_metrics: bool,
-    pull_flamegraph: bool,
 ) -> Result<(), Report> {
     // pull log file
     let local_path = format!("{}/{}_{:?}.log", exp_dir, tag, region);
@@ -578,13 +543,18 @@ async fn pull_metrics_files(
             .wrap_err("copy metrics")?;
     }
 
-    // pull flamegraph
-    if pull_flamegraph {
-        let local_path =
-            format!("{}/{}_{:?}_flamegraph.svg", exp_dir, tag, region);
-        util::copy_from(("flamegraph.svg", vm), local_path)
-            .await
-            .wrap_err("copy flamegraph")?;
-    }
+    Ok(())
+}
+
+async fn pull_flamegraph_file(
+    tag: &str,
+    region: &Region,
+    vm: &tsunami::Machine<'_>,
+    exp_dir: &String,
+) -> Result<(), Report> {
+    let local_path = format!("{}/{}_{:?}_flamegraph.svg", exp_dir, tag, region);
+    util::copy_from(("flamegraph.svg", vm), local_path)
+        .await
+        .wrap_err("copy flamegraph")?;
     Ok(())
 }
