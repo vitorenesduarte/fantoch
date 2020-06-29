@@ -24,7 +24,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        timeout-minutes: 20
+        timeout-minutes: 30
 
       - name: Test fantoch_ps
         run: cd fantoch_ps/ && cargo test --features timing
@@ -32,7 +32,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        timeout-minutes: 20
+        timeout-minutes: 30
 
       - name: Test fantoch_bote
         run: cd fantoch_bote/ && cargo test
@@ -40,7 +40,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        timeout-minutes: 20
+        timeout-minutes: 30
 
       - name: Test fantoch_plot
         run: |
@@ -51,7 +51,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        timeout-minutes: 20
+        timeout-minutes: 30
 
       - name: Check fantoch_exp
         run: cd fantoch_exp/ && cargo check
