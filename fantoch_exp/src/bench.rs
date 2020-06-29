@@ -546,7 +546,7 @@ async fn save_exp_config(
         .wrap_err("create_dir_all")?;
 
     // save config file
-    util::serialize(exp_config, format!("{}/exp_config", exp_dir))?;
+    util::serialize(exp_config, format!("{}/exp_config.bincode", exp_dir))?;
     Ok(exp_dir)
 }
 

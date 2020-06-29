@@ -126,7 +126,7 @@ fn parse_args() -> (
     let channel_buffer_size = common::parse_channel_buffer_size(
         matches.value_of("channel_buffer_size"),
     );
-    let metrics_file = parse_metrics_file(matches.value_of("metrics_log"));
+    let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
 
     println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
     println!("client number: {}", ids.len());
@@ -134,7 +134,7 @@ fn parse_args() -> (
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
-    println!("metrics log: {:?}", metrics_file);
+    println!("metrics file: {:?}", metrics_file);
 
     (
         ids,
