@@ -293,7 +293,7 @@ mod tests {
     // global test config
     const COMMANDS_PER_CLIENT: usize = 100;
     const CLIENTS_PER_REGION: usize = 10;
-    const CONFLICT_RATE: usize = 100;
+    const CONFLICT_RATE: usize = 50;
 
     #[allow(dead_code)]
     fn metrics_inspect<P>(worker: &P) -> (usize, usize)
