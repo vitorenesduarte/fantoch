@@ -1,6 +1,6 @@
 use crate::{args, util};
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use eyre::WrapErr;
 use rusoto_core::Region;
 use std::time::Duration;
 use tokio::fs::File;

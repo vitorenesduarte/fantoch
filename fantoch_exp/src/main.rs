@@ -5,16 +5,16 @@ mod ping;
 mod testbed;
 mod util;
 
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use exp::{Machines, Protocol, RunMode, Testbed};
-use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use rusoto_core::Region;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results";
+pub const RESULTS_DIR: &str = "../results";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -61,40 +61,42 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
-        /*
         Region::CaCentral1,
         Region::SaEast1,
-        */
     ];
     let n = regions.len();
-    let f = 1;
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, f, false, None, false)),
-        /*
-        (Protocol::FPaxos, config!(n, f, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, f, false, None, false)),
-        */
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
         4,
+        8,
+        16,
         32,
+        64,
+        128,
         256,
         512,
         1024,
         1024 * 2,
         1024 * 4,
-        1024 * 8,
-        1024 * 16,
-        1024 * 32,
-        1024 * 64,
-        1024 * 128,
+        // 1024 * 8,
+        // 1024 * 16,
+        // 1024 * 32,
+        // 1024 * 64,
+        // 1024 * 128,
     ];
 
-    // baremetal_bench(regions, configs, clients_per_region).await
-    aws_bench(regions, configs, clients_per_region).await
+    baremetal_bench(regions, configs, clients_per_region).await
+    // aws_bench(regions, configs, clients_per_region).await
 }
 
 #[allow(dead_code)]

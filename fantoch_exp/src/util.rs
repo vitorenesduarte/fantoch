@@ -1,5 +1,5 @@
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use eyre::WrapErr;
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

@@ -1,8 +1,8 @@
 use super::{CLIENT_TAG, SERVER_TAG};
 use crate::exp::{self, Machines, RunMode, Testbed};
 use crate::util;
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use eyre::WrapErr;
 use std::collections::HashMap;
 
 const MACHINES: &str = "./../exp/files/machines";

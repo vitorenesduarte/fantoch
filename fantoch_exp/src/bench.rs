@@ -3,8 +3,8 @@ use crate::config::{
 };
 use crate::exp::{self, Machines, Protocol, RunMode, Testbed};
 use crate::util;
+use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
-use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
