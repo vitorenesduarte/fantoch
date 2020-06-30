@@ -1,15 +1,10 @@
-mod bench;
-mod config;
-mod exp;
 mod ping;
-mod testbed;
-mod util;
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use exp::{Machines, Protocol, RunMode, Testbed};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
+use fantoch_exp::exp::{Machines, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use tsunami::Tsunami;
 
@@ -116,7 +111,7 @@ async fn baremetal_bench(
         .collect();
 
     // setup baremetal machines
-    let machines = testbed::baremetal::setup(
+    let machines = fantoch_exp::testbed::baremetal::setup(
         &mut launchers,
         servers_count,
         clients_count,
@@ -174,7 +169,7 @@ async fn do_aws_bench(
     clients_per_region: Vec<usize>,
 ) -> Result<(), Report> {
     // setup aws machines
-    let machines = testbed::aws::setup(
+    let machines = fantoch_exp::testbed::aws::setup(
         launcher,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
@@ -205,7 +200,7 @@ async fn run_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
 ) -> Result<(), Report> {
-    bench::bench_experiment(
+    fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
         testbed,
