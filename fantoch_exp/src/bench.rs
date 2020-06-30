@@ -334,8 +334,12 @@ async fn wait_process_started(
         tokio::time::delay_for(duration).await;
         let command =
             format!("grep -c 'process {} started' {}", process_id, LOG_FILE);
-        let stdout = util::vm_exec(vm, command).await.wrap_err("grep -c")?;
-        count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+        let stdout = util::vm_exec(vm, &command).await.wrap_err("grep -c")?;
+        if stdout.is_empty() {
+            tracing::warn!("empty output from: {}", command);
+        } else {
+            count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+        }
     }
     Ok(())
 }
@@ -354,8 +358,12 @@ async fn wait_process_ended(
     while count != 0 {
         tokio::time::delay_for(duration).await;
         let command = format!("lsof -i :{} -i :{} | wc -l", PORT, CLIENT_PORT);
-        let stdout = util::vm_exec(vm, command).await.wrap_err("lsof | wc")?;
-        count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+        let stdout = util::vm_exec(vm, &command).await.wrap_err("lsof | wc")?;
+        if stdout.is_empty() {
+            tracing::warn!("empty output from: {}", command);
+        } else {
+            count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+        }
     }
 
     tracing::info!(
@@ -373,8 +381,12 @@ async fn wait_process_ended(
             let command =
                 format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
             let stdout =
-                util::vm_exec(vm, command).await.wrap_err("ps | wc")?;
-            count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+                util::vm_exec(vm, &command).await.wrap_err("ps | wc")?;
+            if stdout.is_empty() {
+                tracing::warn!("empty output from: {}", command);
+            } else {
+                count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+            }
         }
 
         // once the flamegraph process is not running, we can grab the
@@ -398,8 +410,12 @@ async fn wait_client_ended(
     while count != 1 {
         tokio::time::delay_for(duration).await;
         let command = format!("grep -c 'all clients ended' {}", LOG_FILE);
-        let stdout = util::vm_exec(vm, command).await.wrap_err("grep -c")?;
-        count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+        let stdout = util::vm_exec(vm, &command).await.wrap_err("grep -c")?;
+        if stdout.is_empty() {
+            tracing::warn!("empty output from: {}", command);
+        } else {
+            count = stdout.parse::<usize>().wrap_err("grep -c parse")?;
+        }
     }
 
     tracing::info!(
@@ -465,8 +481,13 @@ async fn stop_dstat(
                 tracing::warn!("dstat already not running");
             }
             n => {
-                if n > 1 {
-                    tracing::warn!("found more that one dstat processes. killing all of them");
+                if n > 2 {
+                    // there should be `bash -c dstat` and a `python2
+                    // /usr/bin/dstat`; if more than these two, then there's
+                    // more than one dstat running
+                    tracing::warn!(
+                        "found more that one dstat. killing all of them"
+                    );
                 }
                 // kill dstat
                 let command = format!("kill {}", pids.join(" "));
@@ -485,12 +506,20 @@ async fn stop_dstat(
 
 async fn check_no_dstat(vm: &tsunami::Machine<'_>) -> Result<(), Report> {
     let command = "ps -aux | grep dstat | grep -v grep | wc -l";
-    let output = util::vm_exec(vm, command).await?;
-    let count = output.parse::<usize>().wrap_err("wc -c parse")?;
-    if count != 0 {
-        eyre::bail!("dstat shouldn't be running")
-    } else {
-        Ok(())
+    loop {
+        let stdout = util::vm_exec(vm, &command).await?;
+        if stdout.is_empty() {
+            tracing::warn!("empty output from: {}", command);
+            // check again
+            continue;
+        } else {
+            let count = stdout.parse::<usize>().wrap_err("wc -c parse")?;
+            if count != 0 {
+                eyre::bail!("dstat shouldn't be running")
+            } else {
+                return Ok(());
+            }
+        }
     }
 }
 

@@ -169,7 +169,7 @@ pub fn fantoch_setup(
             while !done {
                 let stdout = util::vm_script_exec(
                     script_file,
-                    args![branch, flamegraph, aws],
+                    args![branch, flamegraph, aws, "2>&1"],
                     &vm,
                 )
                 .await?;
