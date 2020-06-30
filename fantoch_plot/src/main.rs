@@ -1,10 +1,14 @@
 use color_eyre::eyre;
 use color_eyre::Report;
 
+// folder where all results are stored
+const RESULTS_DIR: &str = "../results";
+
 fn main() -> Result<(), Report> {
-    if let Err(e) = fantoch_plot::plot() {
+    if let Err(e) = fantoch_plot::single_plot() {
         eyre::bail!("{:?}", e);
     }
+    fantoch_plot::plot(RESULTS_DIR)?;
     Ok(())
 }
 

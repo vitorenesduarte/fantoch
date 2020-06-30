@@ -15,6 +15,7 @@ pub use config::ExperimentConfig;
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 use std::path::Path;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -40,7 +41,7 @@ impl RunMode {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, Hash)]
 pub enum Protocol {
     AtlasLocked,
     EPaxosLocked,
