@@ -1,6 +1,7 @@
 use super::{CLIENT_TAG, SERVER_TAG};
-use crate::exp::{self, Machines, RunMode, Testbed};
+use crate::exp::{self, Machines};
 use crate::util;
+use crate::{RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use std::collections::HashMap;
@@ -109,7 +110,11 @@ async fn baremetal_setup(
     let setup =
         tsunami::providers::baremetal::Setup::new(addr, Some(username))?
             .key_path(PRIVATE_KEY)
-            .setup(exp::fantoch_setup(branch, run_mode, Testbed::Baremetal));
+            .setup(exp::fantoch_setup(
+                branch,
+                run_mode,
+                Testbed::Baremetal,
+            ));
     Ok(setup)
 }
 

@@ -1,15 +1,14 @@
-mod ping;
-
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
-use fantoch_exp::exp::{Machines, Protocol, RunMode, Testbed};
+use fantoch_exp::exp::Machines;
+use fantoch_exp::{Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-pub const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -29,7 +28,6 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 const BRANCH: &str = "dstat";
 
 // ping-specific config
-const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -49,6 +47,7 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    use rusoto_core::Region;
     // init logging
     tracing_subscriber::fmt::init();
 
@@ -209,42 +208,6 @@ async fn run_bench(
         TRACER_SHOW_INTERVAL,
         clients_per_region,
         RESULTS_DIR,
-    )
-    .await
-}
-
-#[allow(dead_code)]
-async fn ping(instance_type: &str) -> Result<(), Report> {
-    // all AWS regions
-    let regions = vec![
-        Region::AfSouth1,
-        Region::ApEast1,
-        Region::ApNortheast1,
-        // Region::ApNortheast2, special-region
-        Region::ApSouth1,
-        Region::ApSoutheast1,
-        Region::ApSoutheast2,
-        Region::CaCentral1,
-        Region::EuCentral1,
-        Region::EuNorth1,
-        Region::EuSouth1,
-        Region::EuWest1,
-        Region::EuWest2,
-        Region::EuWest3,
-        Region::MeSouth1,
-        Region::SaEast1,
-        Region::UsEast1,
-        Region::UsEast2,
-        Region::UsWest1,
-        Region::UsWest2,
-    ];
-
-    ping::ping_experiment(
-        regions,
-        instance_type,
-        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-        MAX_INSTANCE_DURATION_HOURS,
-        PING_DURATION_SECS,
     )
     .await
 }

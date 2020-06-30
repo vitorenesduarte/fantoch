@@ -1,6 +1,7 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch_exp::{args, util};
+use fantoch_exp::args;
+use fantoch_exp::util;
 use rusoto_core::Region;
 use std::time::Duration;
 use tokio::fs::File;
@@ -9,6 +10,12 @@ use tracing::instrument;
 use tracing_futures::Instrument;
 use tsunami::Tsunami;
 
+const INSTANCE_TYPE: &str = "m3.xlarge";
+const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
+const MAX_INSTANCE_DURATION_HOURS: usize = 1;
+
+const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
+
 /// This script should be called like: $ script hosts seconds output
 /// - hosts: file where each line looks like "region::ip"
 /// - seconds: number of seconds the ping will run
@@ -16,7 +23,43 @@ use tsunami::Tsunami;
 const SCRIPT: &str = "./../ping_exp_gcp/region_ping_loop.sh";
 const HOSTS: &str = "./hosts";
 
-pub async fn ping_experiment(
+#[tokio::main]
+async fn main() -> Result<(), Report> {
+    // all AWS regions
+    let regions = vec![
+        Region::AfSouth1,
+        Region::ApEast1,
+        Region::ApNortheast1,
+        // Region::ApNortheast2, special-region
+        Region::ApSouth1,
+        Region::ApSoutheast1,
+        Region::ApSoutheast2,
+        Region::CaCentral1,
+        Region::EuCentral1,
+        Region::EuNorth1,
+        Region::EuSouth1,
+        Region::EuWest1,
+        Region::EuWest2,
+        Region::EuWest3,
+        Region::MeSouth1,
+        Region::SaEast1,
+        Region::UsEast1,
+        Region::UsEast2,
+        Region::UsWest1,
+        Region::UsWest2,
+    ];
+
+    ping_experiment(
+        regions,
+        INSTANCE_TYPE,
+        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
+        MAX_INSTANCE_DURATION_HOURS,
+        PING_DURATION_SECS,
+    )
+    .await
+}
+
+async fn ping_experiment(
     regions: Vec<Region>,
     instance_type: impl ToString + Clone,
     max_spot_instance_request_wait_secs: u64,

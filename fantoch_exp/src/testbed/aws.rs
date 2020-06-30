@@ -1,5 +1,6 @@
 use super::{CLIENT_TAG, SERVER_TAG};
-use crate::exp::{self, Machines, RunMode, Testbed};
+use crate::exp::{self, Machines};
+use crate::{RunMode, Testbed};
 use color_eyre::Report;
 use std::collections::HashMap;
 use std::time::Duration;

@@ -1,8 +1,9 @@
 use crate::config::{
     ClientConfig, ExperimentConfig, ProtocolConfig, CLIENT_PORT, PORT,
 };
-use crate::exp::{self, Machines, Protocol, RunMode, Testbed};
+use crate::exp::{self, Machines};
 use crate::util;
+use crate::{Protocol, RunMode, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
 use fantoch::config::Config;
@@ -575,7 +576,7 @@ async fn save_exp_config(
         .wrap_err("create_dir_all")?;
 
     // save config file
-    util::serialize(exp_config, format!("{}/exp_config.bincode", exp_dir))?;
+    crate::serialize(exp_config, format!("{}/exp_config.bincode", exp_dir))?;
     Ok(exp_dir)
 }
 
