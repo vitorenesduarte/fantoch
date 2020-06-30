@@ -486,7 +486,7 @@ async fn stop_dstat(
                     // /usr/bin/dstat`; if more than these two, then there's
                     // more than one dstat running
                     tracing::warn!(
-                        "found more that one dstat. killing all of them"
+                        "found more than one dstat. killing all of them"
                     );
                 }
                 // kill dstat
