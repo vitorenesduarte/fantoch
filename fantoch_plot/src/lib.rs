@@ -3,31 +3,47 @@ mod results_db;
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch_exp::Protocol;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use results_db::ResultsDB;
 
-pub fn plot(results_dir: &str) -> Result<(), Report> {
+pub fn latency_plot(
+    n: usize,
+    clients_per_region: usize,
+    conflict_rate: usize,
+    payload_size: usize,
+    output_file: &str,
+    results_dir: &str,
+) -> Result<(), Report> {
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    for n in vec![3, 5] {
-        let max_f = if n == 3 { 1 } else { 2 };
+    let protocols = vec![
+        Protocol::NewtAtomic,
+        Protocol::AtlasLocked,
+        Protocol::FPaxos,
+    ];
+    let max_f = if n == 3 { 1 } else { 2 };
+
+    // compute all protocol combinations
+    let mut combinations = Vec::new();
+    for protocol in protocols {
         for f in 1..=max_f {
-            println!("n = {} | f = {}", n, f);
-            for clients_per_region in
-                vec![4, 8, 16, 32, 64, 128, 256, 512, 1024, 1024 * 2, 1024 * 4]
-            {
-                let protocols: Vec<_> = db
-                    .search()
-                    .n(n)
-                    .f(f)
-                    .clients_per_region(clients_per_region)
-                    .find()
-                    .map(|exp_config| exp_config.protocol)
-                    .collect();
-                println!("    c = {} | {:?}", clients_per_region, protocols);
-            }
+            combinations.push((protocol, n, f));
         }
+    }
+
+    for (protocol, n, f) in combinations {
+        let exp_data = db
+            .search()
+            .n(n)
+            .f(f)
+            .protocol(protocol)
+            .clients_per_region(clients_per_region)
+            .conflict_rate(conflict_rate)
+            .payload_size(payload_size)
+            .load()?;
+        assert_eq!(exp_data.len(), 1);
     }
     Ok(())
 }

@@ -46,6 +46,14 @@ impl ClientData {
             (**first, **last)
         })
     }
+
+    /// Prune events that are before `start` or after `end`.
+    pub fn prune(&mut self, start: u64, end: u64) {
+        self.data.retain(|&time, _| {
+            // retain if within the given bounds
+            time >= start && time <= end
+        })
+    }
 }
 
 pub fn data_merge(
@@ -103,5 +111,29 @@ mod tests {
         let mut throughput: Vec<_> = data.throughput_data().collect();
         throughput.sort();
         assert_eq!(throughput, vec![(2, 1), (10, 2), (11, 1)]);
+
+        // check prune: if all events are within bounds, then no pruning happens
+        data.prune(1, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(2, 1), (10, 2), (11, 1)]);
+
+        // prune event 2 out
+        data.prune(5, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(10, 2), (11, 1)]);
+
+        // prune event 10 out
+        data.prune(11, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(11, 1)]);
+
+        // prune event 11 out
+        data.prune(15, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![]);
     }
 }

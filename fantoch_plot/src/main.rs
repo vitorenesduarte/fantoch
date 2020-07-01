@@ -8,7 +8,23 @@ fn main() -> Result<(), Report> {
     if let Err(e) = fantoch_plot::single_plot() {
         eyre::bail!("{:?}", e);
     }
-    fantoch_plot::plot(RESULTS_DIR)?;
+
+    let conflict_rate = 10;
+    let payload_size = 4096;
+
+    for n in vec![3, 5] {
+        for clients in vec![128, 1024] {
+            let path = format!("latency_n{}_c{}.pdf", n, clients);
+            fantoch_plot::latency_plot(
+                n,
+                clients,
+                conflict_rate,
+                payload_size,
+                &path,
+                RESULTS_DIR,
+            )?;
+        }
+    }
     Ok(())
 }
 

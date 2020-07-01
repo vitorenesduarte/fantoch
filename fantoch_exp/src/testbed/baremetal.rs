@@ -110,11 +110,7 @@ async fn baremetal_setup(
     let setup =
         tsunami::providers::baremetal::Setup::new(addr, Some(username))?
             .key_path(PRIVATE_KEY)
-            .setup(exp::fantoch_setup(
-                branch,
-                run_mode,
-                Testbed::Baremetal,
-            ));
+            .setup(exp::fantoch_setup(branch, run_mode, Testbed::Baremetal));
     Ok(setup)
 }
 
