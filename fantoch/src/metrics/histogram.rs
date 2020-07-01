@@ -31,11 +31,10 @@ impl Histogram {
     }
 
     /// Create string with values in the histogram.
-    pub fn all_values(&self) -> String {
+    pub fn values(&self) -> impl Iterator<Item = u64> + '_ {
         self.values
             .iter()
-            .map(|(value, count)| format!("{} {}\n", value, count))
-            .collect()
+            .flat_map(|(value, count)| (0..*count).map(move |_| *value))
     }
 
     /// Merges two histograms.

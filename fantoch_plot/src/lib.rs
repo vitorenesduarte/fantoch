@@ -13,16 +13,12 @@ use plot::Matplotlib;
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashSet};
 
+const LEGEND_NCOL: usize = 3;
+
 pub enum ErrorBar {
     With(f64),
     Without,
 }
-
-const FULL_REGION_WIDTH: f64 = 10f64;
-const MAX_COMBINATIONS: usize = 6;
-// 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
-const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
-const LEGEND_NCOL: usize = 3;
 
 pub fn latency_plot(
     n: usize,
@@ -33,6 +29,11 @@ pub fn latency_plot(
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<BTreeMap<(Protocol, usize), Histogram>, Report> {
+    const FULL_REGION_WIDTH: f64 = 10f64;
+    const MAX_COMBINATIONS: usize = 6;
+    // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
+    const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
+
     let combinations = combinations(n);
     assert!(combinations.len() <= MAX_COMBINATIONS);
     let combination_count = combinations.len() as f64;
@@ -56,17 +57,17 @@ pub fn latency_plot(
                 (shift, combination)
             });
 
-    // start plot
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let plt = pytry!(py, Matplotlib::new(py));
-    let (fig, ax) = pytry!(py, plt.subplots());
-
     // keep track of all regions
     let mut all_regions = HashSet::new();
 
     // return global client metrics for each combination
     let mut global_metrics = BTreeMap::new();
+
+    // start plot
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = pytry!(py, Matplotlib::new(py));
+    let (fig, ax) = pytry!(py, plt.subplots());
 
     for (shift, (protocol, f)) in combinations {
         let mut exp_data = db
@@ -190,6 +191,76 @@ pub fn cdf_plot(
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
+    // start plot
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = pytry!(py, Matplotlib::new(py));
+    let (fig, ax) = pytry!(py, plt.subplots());
+
+    for (protocol, f) in combinations(n) {
+        let mut exp_data = db
+            .search()
+            .n(n)
+            .f(f)
+            .protocol(protocol)
+            .clients_per_region(clients_per_region)
+            .conflict_rate(conflict_rate)
+            .payload_size(payload_size)
+            .load()?;
+        match exp_data.len() {
+            0 => {
+                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
+                continue;
+            },
+            1 => (),
+            _ => panic!("found more than 1 matching experiment for this search criteria"),
+        };
+        let exp_data = exp_data.pop().unwrap();
+
+        // compute x: all values in the global histogram
+        let x: Vec<_> = exp_data.global_client_latency.values().collect();
+
+        // compute label
+        let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
+        let kwargs = pytry!(
+            py,
+            pydict!(
+                py,
+                // set style
+                ("label", label),
+                ("edgecolor", "black"),
+                ("linewidth", 1),
+                ("color", PlotFmt::color(protocol, f)),
+                ("hatch", PlotFmt::hatch(protocol, f)),
+            )
+        );
+
+        pytry!(py, ax.hist(x, Some(kwargs)));
+    }
+
+    // set labels
+    pytry!(py, ax.set_ylabel("latency (ms)"));
+
+    // add legend
+    let kwargs = pytry!(
+        py,
+        pydict!(
+            py,
+            ("loc", "upper center"),
+            ("bbox_to_anchor", (0.5, 1.15)),
+            // remove box around legend:
+            ("edgecolor", "white"),
+            ("ncol", LEGEND_NCOL),
+        )
+    );
+    pytry!(py, ax.legend(Some(kwargs)));
+
+    // save figure
+    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
+    pytry!(py, plt.savefig(output_file, Some(kwargs)));
+
+    // close the figure
+    pytry!(py, plt.close(fig));
     Ok(())
 }
 

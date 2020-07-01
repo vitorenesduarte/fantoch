@@ -70,11 +70,11 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
-    pub fn hist<X>(&self, x: Vec<X>) -> PyResult<()>
+    pub fn hist<X>(&self, x: Vec<X>, kwargs: Option<&PyDict>) -> PyResult<()>
     where
         X: IntoPy<PyObject>,
     {
-        self.ax.call_method1("hist", (x,))?;
+        self.ax.call_method("hist", (x,), kwargs)?;
         Ok(())
     }
 }
