@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::IntoPyDict;
+use pyo3::types::PyDict;
 
 pub struct Axes<'a> {
     ax: &'a PyAny,
@@ -29,14 +29,12 @@ impl<'a> Axes<'a> {
         &self,
         x: Vec<X>,
         height: Vec<H>,
-        kwargs: Option<impl IntoPyDict>,
-        py: Python<'_>,
+        kwargs: Option<&PyDict>,
     ) -> PyResult<()>
     where
         X: IntoPy<PyObject>,
         H: IntoPy<PyObject>,
     {
-        let kwargs = kwargs.map(|kwargs| kwargs.into_py_dict(py));
         self.ax.call_method("bar", (x, height), kwargs)?;
         Ok(())
     }

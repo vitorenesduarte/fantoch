@@ -4,7 +4,36 @@ pub mod figure;
 use axes::Axes;
 use figure::Figure;
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyTuple};
+use pyo3::types::{PyDict, PyTuple};
+
+#[macro_export]
+macro_rules! pytry {
+    ($py:expr, $e:expr) => {{
+        match $e {
+            Ok(v) => v,
+            Err(e) => color_eyre::eyre::bail!("{:?}", e.print($py)),
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! pydict {
+    ($py:expr, $($tup:expr),*) => {{
+        #[allow(unused_mut)]
+        let mut dict = pyo3::types::PyDict::new($py);
+        let mut res = Ok(dict);
+        $(
+            let (key, value) = $tup;
+            if let Err(e) = dict.set_item(key, value) {
+                res = Err(e);
+            }
+        )*
+        res
+    }};
+    ($py:expr, $($tup:expr,)*) => {{
+        $crate::pydict![$py, $($tup),*]
+    }};
+}
 
 pub struct Matplotlib<'p> {
     plt: &'p PyModule,
@@ -59,13 +88,7 @@ impl<'p> Matplotlib<'p> {
         Ok(())
     }
 
-    pub fn savefig(
-        &self,
-        path: &str,
-        kwargs: Option<impl IntoPyDict>,
-        py: Python<'p>,
-    ) -> PyResult<()> {
-        let kwargs = kwargs.map(|kwargs| kwargs.into_py_dict(py));
+    pub fn savefig(&self, path: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
         self.plt.call("savefig", (path,), kwargs)?;
         Ok(())
     }
@@ -106,8 +129,8 @@ mod tests {
         plt.xlabel("throughput (ops/s)")?;
         plt.ylabel("latency (ms)")?;
 
-        let kwargs = &[("format", "pdf")];
-        plt.savefig(path, Some(kwargs), py)?;
+        let kwargs = pydict!(py, ("format", "pdf"))?;
+        plt.savefig(path, Some(kwargs))?;
         Ok(())
     }
 }

@@ -1,22 +1,13 @@
 mod plot;
 mod results_db;
 
-use color_eyre::eyre::{self, WrapErr};
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch_exp::Protocol;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use results_db::ResultsDB;
 use std::collections::HashSet;
-
-macro_rules! pytry {
-    ($e:expr) => {{
-        match $e {
-            Ok(v) => v,
-            Err(e) => eyre::bail!("{:?}", e),
-        }
-    }};
-}
 
 pub fn latency_plot(
     n: usize,
@@ -43,19 +34,39 @@ pub fn latency_plot(
         }
     }
 
-    // compute x: we have as sites
-    let x: Vec<_> = (0..n).map(|i| i * 10).collect();
+    // compute x:
+    let full_region_width = 10f64;
+    let x: Vec<_> = (0..n).map(|i| i as f64 * full_region_width).collect();
+
+    // compute bar width: only occupy 80% of the given width
+    let bar_width = (full_region_width * 0.8) / combinations.len() as f64;
+
+    // we need to shift all to the left by half of the number of combinations
+    let shift_left = combinations.len() as f64 / 2f64;
+    // we also need to shift half bar to the right
+    let shift_right = 0.5;
+    let combinations =
+        combinations
+            .into_iter()
+            .enumerate()
+            .map(|(index, combination)| {
+                // compute index according to shifts
+                let index = index as f64 - shift_left + shift_right;
+                // compute combination's shift
+                let shift = index * bar_width;
+                (shift, combination)
+            });
 
     // start plot
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(Matplotlib::new(py));
-    let (fig, ax) = pytry!(plt.subplots());
+    let plt = pytry!(py, Matplotlib::new(py));
+    let (fig, ax) = pytry!(py, plt.subplots());
 
     // keep track of all regions
     let mut all_regions = HashSet::new();
 
-    for (protocol, n, f) in combinations {
+    for (shift, (protocol, n, f)) in combinations {
         let mut exp_data = db
             .search()
             .n(n)
@@ -88,27 +99,31 @@ pub fn latency_plot(
 
         // compute label
         let label = format!("{} f = {}", protocol, f);
-        let kwargs = &[("label", label)];
-        pytry!(ax.bar(x.clone(), y, Some(kwargs), py));
+        let kwargs =
+            pytry!(py, pydict!(py, ("label", label), ("width", bar_width)));
+
+        // compute x: shift all values by `shift`
+        let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
+        pytry!(py, ax.bar(x, y, Some(kwargs)));
     }
 
     // set labels
-    pytry!(ax.set_ylabel("latency (ms)"));
+    pytry!(py, ax.set_ylabel("latency (ms)"));
 
     // set xticks
-    pytry!(ax.set_xticks(x));
+    pytry!(py, ax.set_xticks(x));
 
     // set x labels:
     // - check the number of regions is correct
     assert_eq!(all_regions.len(), n);
     let labels: Vec<_> = all_regions.into_iter().collect();
-    pytry!(ax.set_xticklabels(labels));
+    pytry!(py, ax.set_xticklabels(labels));
 
     // add legend
-    pytry!(ax.legend());
+    pytry!(py, ax.legend());
 
-    let kwargs = &[("format", "pdf")];
-    pytry!(plt.savefig(output_file, Some(kwargs), py));
+    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
+    pytry!(py, plt.savefig(output_file, Some(kwargs)));
     Ok(())
 }
 
@@ -124,7 +139,7 @@ pub fn single_plot() -> PyResult<()> {
     plt.xlabel("regions")?;
     plt.ylabel("latency (ms)")?;
 
-    let kwargs = &[("format", "pdf")];
-    plt.savefig("plot.pdf", Some(kwargs), py)?;
+    let kwargs = pydict![py, ("format", "pdf")]?;
+    plt.savefig("plot.pdf", Some(kwargs))?;
     Ok(())
 }
