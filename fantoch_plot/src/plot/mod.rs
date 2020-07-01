@@ -1,5 +1,10 @@
+pub mod axes;
+pub mod figure;
+
+use axes::Axes;
+use figure::Figure;
 use pyo3::prelude::*;
-use pyo3::types::IntoPyDict;
+use pyo3::types::{IntoPyDict, PyTuple};
 
 pub struct Matplotlib<'p> {
     plt: &'p PyModule,
@@ -19,6 +24,14 @@ impl<'p> Matplotlib<'p> {
     ) -> PyResult<()> {
         self.plt.call1("subplot", (nrows, ncols, index))?;
         Ok(())
+    }
+
+    pub fn subplots(&self) -> PyResult<(Figure, Axes)> {
+        let result = self.plt.call0("subplots")?;
+        let tuple = result.downcast::<PyTuple>()?;
+        let fig = Figure::new(tuple.get_item(0));
+        let ax = Axes::new(tuple.get_item(1));
+        Ok((fig, ax))
     }
 
     // TODO maybe take an optional `Fmt` struct instead

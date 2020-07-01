@@ -27,8 +27,6 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 // bench-specific config
 const BRANCH: &str = "dstat";
 
-// ping-specific config
-
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
         let mut config = Config::new($n, $f);

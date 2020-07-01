@@ -12,6 +12,20 @@ fn main() -> Result<(), Report> {
     let conflict_rate = 10;
     let payload_size = 4096;
 
+    let n = 5;
+    let clients = 128;
+    let path = format!("latency_n{}_c{}.pdf", n, clients);
+    fantoch_plot::latency_plot(
+        n,
+        clients,
+        conflict_rate,
+        payload_size,
+        &path,
+        RESULTS_DIR,
+    )?;
+
+    /*
+
     for n in vec![3, 5] {
         for clients in vec![128, 1024] {
             let path = format!("latency_n{}_c{}.pdf", n, clients);
@@ -25,6 +39,7 @@ fn main() -> Result<(), Report> {
             )?;
         }
     }
+    */
     Ok(())
 }
 

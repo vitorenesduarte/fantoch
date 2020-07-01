@@ -1,15 +1,11 @@
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
 use fantoch::client::ClientData;
+use fantoch::metrics::Histogram;
 use fantoch::planet::Region;
 use fantoch_exp::{ExperimentConfig, Protocol};
 use std::collections::HashMap;
 use std::fs::DirEntry;
-
-pub struct ExperimentData {
-    client_metrics: HashMap<Region, ClientData>,
-    global_client_metrics: ClientData,
-}
 
 #[derive(Debug)]
 pub struct ResultsDB {
@@ -185,10 +181,9 @@ impl<'a> SearchBuilder<'a> {
             Self::global_client_metrics(&client_metrics);
 
         // return experiment data
-        Ok(ExperimentData {
-            client_metrics,
-            global_client_metrics,
-        })
+        let exp_data =
+            ExperimentData::new(client_metrics, global_client_metrics);
+        Ok(exp_data)
     }
 
     // Here we make sure that we will only consider that points in which all the
@@ -233,5 +228,37 @@ impl<'a> SearchBuilder<'a> {
             global.merge(client_data);
         }
         global
+    }
+}
+
+pub struct ExperimentData {
+    pub client_metrics: HashMap<Region, ClientData>,
+    pub global_client_metrics: ClientData,
+    pub client_latency: HashMap<Region, Histogram>,
+    pub global_client_latency: Histogram,
+}
+
+impl ExperimentData {
+    fn new(
+        client_metrics: HashMap<Region, ClientData>,
+        global_client_metrics: ClientData,
+    ) -> Self {
+        let client_latency = client_metrics
+            .clone()
+            .into_iter()
+            .map(|(region, client_data)| {
+                // create latency histogram
+                let histogram = Histogram::from(client_data.latency_data());
+                (region, histogram)
+            })
+            .collect();
+        let global_client_latency =
+            Histogram::from(global_client_metrics.latency_data());
+        Self {
+            client_metrics,
+            global_client_metrics,
+            client_latency,
+            global_client_latency,
+        }
     }
 }
