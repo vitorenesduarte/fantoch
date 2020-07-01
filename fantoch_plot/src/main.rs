@@ -1,21 +1,21 @@
-use color_eyre::eyre;
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch_plot::{ErrorBar, PlotFmt};
+use fantoch_plot::{ErrorBar, PlotFmt, ResultsDB};
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results";
 
 fn main() -> Result<(), Report> {
-    if let Err(e) = fantoch_plot::single_plot() {
-        eyre::bail!("{:?}", e);
-    }
-
     let conflict_rate = 10;
     let payload_size = 4096;
+
+    let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     for n in vec![3, 5] {
         for clients in vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] {
             println!("n = {} | c = {}", n, clients);
+
+            // generate latency plot
             let mut shown = false;
             for error_bar in vec![
                 ErrorBar::Without,
@@ -35,7 +35,7 @@ fn main() -> Result<(), Report> {
                     payload_size,
                     error_bar,
                     &path,
-                    RESULTS_DIR,
+                    &mut db,
                 )?;
 
                 if !shown {
@@ -51,6 +51,17 @@ fn main() -> Result<(), Report> {
                     shown = true;
                 }
             }
+
+            // generate cdf plot
+            let path = format!("cdf_n{}_c{}.pdf", n, clients);
+            fantoch_plot::cdf_plot(
+                n,
+                clients,
+                conflict_rate,
+                payload_size,
+                &path,
+                &mut db,
+            )?;
         }
     }
     Ok(())

@@ -9,7 +9,7 @@ use std::fs::DirEntry;
 
 #[derive(Debug)]
 pub struct ResultsDB {
-    results: Vec<(DirEntry, ExperimentConfig)>,
+    results: Vec<(DirEntry, ExperimentConfig, Option<ExperimentData>)>,
 }
 
 impl ResultsDB {
@@ -29,19 +29,21 @@ impl ResultsDB {
                 fantoch_exp::deserialize(exp_config_path)
                     .wrap_err("deserialize experiment config")?;
 
-            results.push((timestamp, exp_config));
+            // incrementally load data as it matched against some search
+            let exp_data = None;
+            results.push((timestamp, exp_config, exp_data));
         }
 
         Ok(Self { results })
     }
 
-    pub fn search(&self) -> SearchBuilder {
-        SearchBuilder::new(&self)
+    pub fn search(&mut self) -> SearchBuilder {
+        SearchBuilder::new(self)
     }
 }
 
 pub struct SearchBuilder<'a> {
-    db: &'a ResultsDB,
+    db: &'a mut ResultsDB,
     n: Option<usize>,
     f: Option<usize>,
     protocol: Option<Protocol>,
@@ -51,7 +53,7 @@ pub struct SearchBuilder<'a> {
 }
 
 impl<'a> SearchBuilder<'a> {
-    fn new(db: &'a ResultsDB) -> Self {
+    fn new(db: &'a mut ResultsDB) -> Self {
         Self {
             db,
             n: None,
@@ -96,7 +98,7 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn load(&self) -> Result<Vec<ExperimentData>, Report> {
+    pub fn load(&mut self) -> Result<Vec<ExperimentData>, Report> {
         let mut results = Vec::new();
         for data in self.find().map(Self::load_experiment_data) {
             let data = data.wrap_err("load experiment data")?;
@@ -105,85 +107,116 @@ impl<'a> SearchBuilder<'a> {
         Ok(results)
     }
 
-    fn find(&self) -> impl Iterator<Item = &(DirEntry, ExperimentConfig)> {
-        self.db.results.iter().filter(move |(_, exp_config)| {
-            // filter out configurations with different n (if set)
-            if let Some(n) = self.n {
-                if exp_config.config.n() != n {
-                    return false;
-                }
-            }
+    fn find(
+        &mut self,
+    ) -> impl Iterator<
+        Item = &mut (DirEntry, ExperimentConfig, Option<ExperimentData>),
+    > {
+        // let's make the borrow checker happy
+        let n = self.n;
+        let f = self.f;
+        let protocol = self.protocol;
+        let clients_per_region = self.clients_per_region;
+        let conflict_rate = self.conflict_rate;
+        let payload_size = self.payload_size;
 
-            // filter out configurations with different f (if set)
-            if let Some(f) = self.f {
-                if exp_config.config.f() != f {
-                    return false;
+        // do the search
+        self.db
+            .results
+            .iter_mut()
+            .filter(move |(_, exp_config, _)| {
+                // filter out configurations with different n (if set)
+                if let Some(n) = n {
+                    if exp_config.config.n() != n {
+                        return false;
+                    }
                 }
-            }
 
-            // filter out configurations with different protocol (if set)
-            if let Some(protocol) = self.protocol {
-                if exp_config.protocol != protocol {
-                    return false;
+                // filter out configurations with different f (if set)
+                if let Some(f) = f {
+                    if exp_config.config.f() != f {
+                        return false;
+                    }
                 }
-            }
 
-            // filter out configurations with different clients_per_region
-            // (if set)
-            if let Some(clients_per_region) = self.clients_per_region {
-                if exp_config.clients_per_region != clients_per_region {
-                    return false;
+                // filter out configurations with different protocol (if set)
+                if let Some(protocol) = protocol {
+                    if exp_config.protocol != protocol {
+                        return false;
+                    }
                 }
-            }
 
-            // filter out configurations with different conflict_rate (if set)
-            if let Some(conflict_rate) = self.conflict_rate {
-                if exp_config.conflict_rate != conflict_rate {
-                    return false;
+                // filter out configurations with different clients_per_region
+                // (if set)
+                if let Some(clients_per_region) = clients_per_region {
+                    if exp_config.clients_per_region != clients_per_region {
+                        return false;
+                    }
                 }
-            }
 
-            // filter out configurations with different payload_size (if set)
-            if let Some(payload_size) = self.payload_size {
-                if exp_config.payload_size != payload_size {
-                    return false;
+                // filter out configurations with different conflict_rate (if
+                // set)
+                if let Some(conflict_rate) = conflict_rate {
+                    if exp_config.conflict_rate != conflict_rate {
+                        return false;
+                    }
                 }
-            }
 
-            // if this exp config was not filtered-out until now, then
-            // return it
-            true
-        })
+                // filter out configurations with different payload_size (if
+                // set)
+                if let Some(payload_size) = payload_size {
+                    if exp_config.payload_size != payload_size {
+                        return false;
+                    }
+                }
+
+                // if this exp config was not filtered-out until now, then
+                // return it
+                true
+            })
     }
 
     fn load_experiment_data(
-        (timestamp, exp_config): &(DirEntry, ExperimentConfig),
+        (timestamp, exp_config, exp_data): &mut (
+            DirEntry,
+            ExperimentConfig,
+            Option<ExperimentData>,
+        ),
     ) -> Result<ExperimentData, Report> {
-        let mut client_metrics = HashMap::new();
+        // load data if `exp_data` is still `None`
+        if exp_data.is_none() {
+            let mut client_metrics = HashMap::new();
 
-        for region in exp_config.regions.keys() {
-            let path = format!(
-                "{}/client_{}_metrics.bincode",
-                timestamp.path().display(),
-                region.name()
-            );
-            let client_data: ClientData = fantoch_exp::deserialize(path)
-                .wrap_err("deserialize client data")?;
-            let res = client_metrics.insert(region.clone(), client_data);
-            assert!(res.is_none());
+            for region in exp_config.regions.keys() {
+                let path = format!(
+                    "{}/client_{}_metrics.bincode",
+                    timestamp.path().display(),
+                    region.name()
+                );
+                let client_data: ClientData = fantoch_exp::deserialize(path)
+                    .wrap_err("deserialize client data")?;
+                let res = client_metrics.insert(region.clone(), client_data);
+                assert!(res.is_none());
+            }
+
+            // clean-up client data
+            Self::prune_before_last_start_and_after_first_end(
+                &mut client_metrics,
+            )?;
+
+            // create global client data
+            let global_client_metrics =
+                Self::global_client_metrics(&client_metrics);
+
+            // return experiment data
+            *exp_data = Some(ExperimentData::new(
+                client_metrics,
+                global_client_metrics,
+            ));
         }
 
-        // clean-up client data
-        Self::prune_before_last_start_and_after_first_end(&mut client_metrics)?;
-
-        // create global client data
-        let global_client_metrics =
-            Self::global_client_metrics(&client_metrics);
-
-        // return experiment data
-        let exp_data =
-            ExperimentData::new(client_metrics, global_client_metrics);
-        Ok(exp_data)
+        // at this point `exp_data` must be `Some`
+        Ok(exp_data.clone().unwrap())
     }
 
     // Here we make sure that we will only consider that points in which all the
@@ -231,6 +264,7 @@ impl<'a> SearchBuilder<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExperimentData {
     pub client_metrics: HashMap<Region, ClientData>,
     pub global_client_metrics: ClientData,
