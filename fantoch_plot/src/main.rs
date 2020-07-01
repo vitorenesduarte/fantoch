@@ -1,5 +1,6 @@
 use color_eyre::eyre;
 use color_eyre::Report;
+use fantoch_plot::ErrorBar;
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results";
@@ -12,34 +13,29 @@ fn main() -> Result<(), Report> {
     let conflict_rate = 10;
     let payload_size = 4096;
 
-    let n = 5;
-    let clients = 128;
-    let path = format!("latency_n{}_c{}.pdf", n, clients);
-    fantoch_plot::latency_plot(
-        n,
-        clients,
-        conflict_rate,
-        payload_size,
-        &path,
-        RESULTS_DIR,
-    )?;
-
-    /*
-
     for n in vec![3, 5] {
         for clients in vec![128, 1024] {
-            let path = format!("latency_n{}_c{}.pdf", n, clients);
-            fantoch_plot::latency_plot(
-                n,
-                clients,
-                conflict_rate,
-                payload_size,
-                &path,
-                RESULTS_DIR,
-            )?;
+            for error_bar in vec![ErrorBar::Without, ErrorBar::With(0.99)] {
+                let suffix = if let ErrorBar::With(percentile) = error_bar {
+                    // pretty print percentile
+                    let percentile = (percentile * 100f64).round() as usize;
+                    format!("_p{}", percentile)
+                } else {
+                    String::from("")
+                };
+                let path = format!("latency_n{}_c{}{}.pdf", n, clients, suffix);
+                fantoch_plot::latency_plot(
+                    n,
+                    clients,
+                    conflict_rate,
+                    payload_size,
+                    error_bar,
+                    &path,
+                    RESULTS_DIR,
+                )?;
+            }
         }
     }
-    */
     Ok(())
 }
 

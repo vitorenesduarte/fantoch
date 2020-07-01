@@ -1,19 +1,27 @@
+mod fmt;
 mod plot;
 mod results_db;
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch_exp::Protocol;
+use fmt::PlotFmt;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use results_db::ResultsDB;
 use std::collections::HashSet;
+
+pub enum ErrorBar {
+    With(f64),
+    Without,
+}
 
 pub fn latency_plot(
     n: usize,
     clients_per_region: usize,
     conflict_rate: usize,
     payload_size: usize,
+    error_bar: ErrorBar,
     output_file: &str,
     results_dir: &str,
 ) -> Result<(), Report> {
@@ -30,19 +38,20 @@ pub fn latency_plot(
     let mut combinations = Vec::new();
     for protocol in protocols {
         for f in 1..=max_f {
-            combinations.push((protocol, n, f));
+            combinations.push((protocol, f));
         }
     }
+    let combination_count = combinations.len() as f64;
 
     // compute x:
     let full_region_width = 10f64;
     let x: Vec<_> = (0..n).map(|i| i as f64 * full_region_width).collect();
 
     // compute bar width: only occupy 80% of the given width
-    let bar_width = (full_region_width * 0.8) / combinations.len() as f64;
+    let bar_width = (full_region_width * 0.8) / combination_count;
 
     // we need to shift all to the left by half of the number of combinations
-    let shift_left = combinations.len() as f64 / 2f64;
+    let shift_left = combination_count / 2f64;
     // we also need to shift half bar to the right
     let shift_right = 0.5;
     let combinations =
@@ -66,7 +75,8 @@ pub fn latency_plot(
     // keep track of all regions
     let mut all_regions = HashSet::new();
 
-    for (shift, (protocol, n, f)) in combinations {
+    for (shift, (protocol, f)) in combinations {
+        println!("{} f = {}", PlotFmt::protocol_name(protocol), f);
         let mut exp_data = db
             .search()
             .n(n)
@@ -80,17 +90,24 @@ pub fn latency_plot(
         let exp_data = exp_data.pop().unwrap();
 
         // compute y: avg latencies sorted by region name
+        let mut err = Vec::new();
         let mut latencies: Vec<_> = exp_data
             .client_latency
             .into_iter()
             .map(|(region, histogram)| {
-                let region_name = region.name().to_string();
-                let avg_latency = histogram.mean().value().round() as usize;
-                (region_name, avg_latency)
+                let avg = histogram.mean().value().round() as usize;
+                if let ErrorBar::With(percentile) = error_bar {
+                    let p99_9 = histogram.percentile(percentile).value().round()
+                        as usize;
+                    let error_bar = (0, p99_9 - avg);
+                    err.push(error_bar);
+                }
+                (region, avg)
             })
             .collect();
         latencies.sort();
         let (regions, y): (HashSet<_>, Vec<_>) = latencies.into_iter().unzip();
+        let (from_err, to_err): (Vec<_>, Vec<_>) = err.into_iter().unzip();
 
         // update set of all regions
         for region in regions {
@@ -98,9 +115,24 @@ pub fn latency_plot(
         }
 
         // compute label
-        let label = format!("{} f = {}", protocol, f);
-        let kwargs =
-            pytry!(py, pydict!(py, ("label", label), ("width", bar_width)));
+        let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
+        let kwargs = pytry!(
+            py,
+            pydict!(
+                py,
+                // set style
+                ("label", label),
+                ("width", bar_width),
+                ("edgecolor", "black"),
+                ("linewidth", 1),
+                ("color", PlotFmt::color(protocol, f)),
+                ("hatch", PlotFmt::hatch(protocol, f)),
+            )
+        );
+        // maybe set error bars
+        if let ErrorBar::With(_) = error_bar {
+            pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
+        }
 
         // compute x: shift all values by `shift`
         let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
@@ -116,12 +148,31 @@ pub fn latency_plot(
     // set x labels:
     // - check the number of regions is correct
     assert_eq!(all_regions.len(), n);
-    let labels: Vec<_> = all_regions.into_iter().collect();
+    let mut regions: Vec<_> = all_regions.into_iter().collect();
+    regions.sort();
+    // map regions to their pretty name
+    let labels: Vec<_> = regions
+        .into_iter()
+        .map(|region| PlotFmt::region_name(region))
+        .collect();
     pytry!(py, ax.set_xticklabels(labels));
 
     // add legend
-    pytry!(py, ax.legend());
+    let kwargs = pytry!(
+        py,
+        pydict!(
+            py,
+            ("loc", "upper center"),
+            ("bbox_to_anchor", (0.5, 1.15)),
+            // remove box around legend:
+            ("edgecolor", "white"),
+            // 2 lines:
+            ("ncol", combination_count as u64 / 2),
+        )
+    );
+    pytry!(py, ax.legend(Some(kwargs)));
 
+    // save figure
     let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
     pytry!(py, plt.savefig(output_file, Some(kwargs)));
     Ok(())

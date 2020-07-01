@@ -55,8 +55,8 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
-    pub fn legend(&self) -> PyResult<()> {
-        self.ax.call_method0("legend")?;
+    pub fn legend(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
+        self.ax.call_method("legend", (), kwargs)?;
         Ok(())
     }
 }

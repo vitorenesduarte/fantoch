@@ -15,7 +15,6 @@ pub use config::ExperimentConfig;
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::hash::Hash;
 use std::path::Path;
 
@@ -58,18 +57,6 @@ impl Protocol {
             Protocol::FPaxos => "fpaxos",
             Protocol::NewtAtomic => "newt_atomic",
         }
-    }
-}
-
-impl fmt::Display for Protocol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let name = match self {
-            Protocol::AtlasLocked => "Atlas",
-            Protocol::EPaxosLocked => "EPaxos",
-            Protocol::FPaxos => "FPaxos",
-            Protocol::NewtAtomic => "Newt",
-        };
-        write!(f, "{}", name)
     }
 }
 
