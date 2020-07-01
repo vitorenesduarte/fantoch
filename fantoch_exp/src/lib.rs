@@ -41,7 +41,18 @@ impl RunMode {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Deserialize,
+    Serialize,
+    Hash,
+)]
 pub enum Protocol {
     AtlasLocked,
     EPaxosLocked,

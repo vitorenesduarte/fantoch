@@ -1,6 +1,6 @@
 use color_eyre::eyre;
 use color_eyre::Report;
-use fantoch_plot::ErrorBar;
+use fantoch_plot::{ErrorBar, PlotFmt};
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results";
@@ -14,17 +14,21 @@ fn main() -> Result<(), Report> {
     let payload_size = 4096;
 
     for n in vec![3, 5] {
-        for clients in vec![128, 1024] {
-            for error_bar in vec![ErrorBar::Without, ErrorBar::With(0.99)] {
+        for clients in vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] {
+            println!("n = {} | c = {}", n, clients);
+            let mut shown = false;
+            for error_bar in vec![
+                ErrorBar::Without,
+                ErrorBar::With(0.99),
+                ErrorBar::With(0.999),
+            ] {
                 let suffix = if let ErrorBar::With(percentile) = error_bar {
-                    // pretty print percentile
-                    let percentile = (percentile * 100f64).round() as usize;
-                    format!("_p{}", percentile)
+                    format!("_p{}", percentile * 100f64)
                 } else {
                     String::from("")
                 };
                 let path = format!("latency_n{}_c{}{}.pdf", n, clients, suffix);
-                fantoch_plot::latency_plot(
+                let global_metrics = fantoch_plot::latency_plot(
                     n,
                     clients,
                     conflict_rate,
@@ -33,6 +37,19 @@ fn main() -> Result<(), Report> {
                     &path,
                     RESULTS_DIR,
                 )?;
+
+                if !shown {
+                    // only show global metrics once
+                    for ((protocol, f), histogram) in global_metrics {
+                        println!(
+                            "{:<6} f = {} | {:?}",
+                            PlotFmt::protocol_name(protocol),
+                            f,
+                            histogram
+                        );
+                    }
+                    shown = true;
+                }
             }
         }
     }

@@ -2,19 +2,27 @@ mod fmt;
 mod plot;
 mod results_db;
 
+pub use fmt::PlotFmt;
+
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
-use fmt::PlotFmt;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use results_db::ResultsDB;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 pub enum ErrorBar {
     With(f64),
     Without,
 }
+
+const FULL_REGION_WIDTH: f64 = 10f64;
+const MAX_COMBINATIONS: usize = 6;
+// 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
+const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
+const LEGEND_NCOL: usize = 3;
 
 pub fn latency_plot(
     n: usize,
@@ -24,7 +32,7 @@ pub fn latency_plot(
     error_bar: ErrorBar,
     output_file: &str,
     results_dir: &str,
-) -> Result<(), Report> {
+) -> Result<BTreeMap<(Protocol, usize), Histogram>, Report> {
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
     let protocols = vec![
@@ -32,7 +40,11 @@ pub fn latency_plot(
         Protocol::AtlasLocked,
         Protocol::FPaxos,
     ];
-    let max_f = if n == 3 { 1 } else { 2 };
+    let max_f = match n {
+        3 => 1,
+        5 => 2,
+        _ => panic!("latency_plot: unsupported n = {}", n),
+    };
 
     // compute all protocol combinations
     let mut combinations = Vec::new();
@@ -41,14 +53,11 @@ pub fn latency_plot(
             combinations.push((protocol, f));
         }
     }
+    assert!(combinations.len() <= MAX_COMBINATIONS);
     let combination_count = combinations.len() as f64;
 
     // compute x:
-    let full_region_width = 10f64;
-    let x: Vec<_> = (0..n).map(|i| i as f64 * full_region_width).collect();
-
-    // compute bar width: only occupy 80% of the given width
-    let bar_width = (full_region_width * 0.8) / combination_count;
+    let x: Vec<_> = (0..n).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
 
     // we need to shift all to the left by half of the number of combinations
     let shift_left = combination_count / 2f64;
@@ -62,7 +71,7 @@ pub fn latency_plot(
                 // compute index according to shifts
                 let index = index as f64 - shift_left + shift_right;
                 // compute combination's shift
-                let shift = index * bar_width;
+                let shift = index * BAR_WIDTH;
                 (shift, combination)
             });
 
@@ -75,8 +84,10 @@ pub fn latency_plot(
     // keep track of all regions
     let mut all_regions = HashSet::new();
 
+    // return global client metrics for each combination
+    let mut global_metrics = BTreeMap::new();
+
     for (shift, (protocol, f)) in combinations {
-        println!("{} f = {}", PlotFmt::protocol_name(protocol), f);
         let mut exp_data = db
             .search()
             .n(n)
@@ -86,8 +97,18 @@ pub fn latency_plot(
             .conflict_rate(conflict_rate)
             .payload_size(payload_size)
             .load()?;
-        assert_eq!(exp_data.len(), 1);
+        match exp_data.len() {
+            0 => {
+                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
+                continue;
+            },
+            1 => (),
+            _ => panic!("found more than 1 matching experiment for this search criteria"),
+        };
         let exp_data = exp_data.pop().unwrap();
+
+        // save global client metrics
+        global_metrics.insert((protocol, f), exp_data.global_client_latency);
 
         // compute y: avg latencies sorted by region name
         let mut err = Vec::new();
@@ -122,7 +143,7 @@ pub fn latency_plot(
                 py,
                 // set style
                 ("label", label),
-                ("width", bar_width),
+                ("width", BAR_WIDTH),
                 ("edgecolor", "black"),
                 ("linewidth", 1),
                 ("color", PlotFmt::color(protocol, f)),
@@ -166,8 +187,7 @@ pub fn latency_plot(
             ("bbox_to_anchor", (0.5, 1.15)),
             // remove box around legend:
             ("edgecolor", "white"),
-            // 2 lines:
-            ("ncol", combination_count as u64 / 2),
+            ("ncol", LEGEND_NCOL),
         )
     );
     pytry!(py, ax.legend(Some(kwargs)));
@@ -175,7 +195,10 @@ pub fn latency_plot(
     // save figure
     let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
     pytry!(py, plt.savefig(output_file, Some(kwargs)));
-    Ok(())
+
+    // close the figure
+    pytry!(py, plt.close(fig));
+    Ok(global_metrics)
 }
 
 pub fn single_plot() -> PyResult<()> {

@@ -92,6 +92,11 @@ impl<'p> Matplotlib<'p> {
         self.plt.call("savefig", (path,), kwargs)?;
         Ok(())
     }
+
+    pub fn close(&self, figure: Figure) -> PyResult<()> {
+        self.plt.call1("close", (figure.fig(),))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
