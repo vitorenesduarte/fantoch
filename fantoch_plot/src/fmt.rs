@@ -61,4 +61,39 @@ impl PlotFmt {
             ),
         }
     }
+
+    // Possible values: https://matplotlib.org/3.1.1/api/markers_api.html#module-matplotlib.markers
+    pub fn marker(protocol: Protocol, f: usize) -> &'static str {
+        match (protocol, f) {
+            (Protocol::NewtAtomic, 1) => "v",
+            (Protocol::NewtAtomic, 2) => "^",
+            (Protocol::AtlasLocked, 1) => "s",
+            (Protocol::AtlasLocked, 2) => "D",
+            (Protocol::FPaxos, 1) => "+",
+            (Protocol::FPaxos, 2) => "x",
+            (Protocol::EPaxosLocked, _) => ".",
+            _ => panic!(
+                "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
+                protocol, f
+            ),
+        }
+    }
+
+    // Possible values:  {'-', '--', '-.', ':', ''}
+    pub fn linestyle(protocol: Protocol, f: usize) -> &'static str {
+        match (protocol, f) {
+            (Protocol::NewtAtomic, _) => "-",
+            (Protocol::AtlasLocked, _) => "--",
+            (Protocol::FPaxos, _) => "-.",
+            (Protocol::EPaxosLocked, _) => ":",
+        }
+    }
+
+    pub fn linewidth(f: usize) -> f64 {
+        match f {
+            1 => 1.5,
+            2 => 2.0,
+            _ => panic!("PlotFmt::linewidth: f = {} not supported!", f),
+        }
+    }
 }

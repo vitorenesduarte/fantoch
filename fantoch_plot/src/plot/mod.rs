@@ -97,7 +97,7 @@ mod tests {
         let x = vec!["us-east-1", "ca-central-1", "eu-west-2"];
         let y = vec![10, 20, 30];
         let (fig, ax) = plt.subplots()?;
-        ax.plot(x, y, "o-")?;
+        ax.plot(x, y, Some("o-"), None)?;
         ax.set_title("Latency per region")?;
         ax.set_xlabel("regions")?;
         ax.set_ylabel("latency (ms)")?;

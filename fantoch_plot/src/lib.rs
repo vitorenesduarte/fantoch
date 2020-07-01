@@ -9,6 +9,7 @@ pub use results_db::ResultsDB;
 use color_eyre::Report;
 use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
+use plot::axes::AxisFormatter;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashSet};
@@ -183,6 +184,7 @@ pub fn latency_plot(
     Ok(global_metrics)
 }
 
+// based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
 pub fn cdf_plot(
     n: usize,
     clients_per_region: usize,
@@ -196,6 +198,14 @@ pub fn cdf_plot(
     let py = gil.python();
     let plt = pytry!(py, Matplotlib::new(py));
     let (fig, ax) = pytry!(py, plt.subplots());
+
+    // percentiles of interest:
+    let percentiles: Vec<_> = (0..=60)
+        .step_by(10)
+        .chain((65..=95).step_by(5))
+        .map(|percentile| percentile as f64 / 100f64)
+        .chain(vec![0.97, 0.99, 0.999])
+        .collect();
 
     for (protocol, f) in combinations(n) {
         let mut exp_data = db
@@ -218,7 +228,16 @@ pub fn cdf_plot(
         let exp_data = exp_data.pop().unwrap();
 
         // compute x: all values in the global histogram
-        let x: Vec<_> = exp_data.global_client_latency.values().collect();
+        let x: Vec<_> = percentiles
+            .iter()
+            .map(|percentile| {
+                exp_data
+                    .global_client_latency
+                    .percentile(*percentile)
+                    .value()
+                    .round() as u64
+            })
+            .collect();
 
         // compute label
         let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
@@ -228,18 +247,38 @@ pub fn cdf_plot(
                 py,
                 // set style
                 ("label", label),
-                ("edgecolor", "black"),
-                ("linewidth", 1),
                 ("color", PlotFmt::color(protocol, f)),
-                ("hatch", PlotFmt::hatch(protocol, f)),
+                ("marker", PlotFmt::marker(protocol, f)),
+                ("linestyle", PlotFmt::linestyle(protocol, f)),
+                ("linewidth", PlotFmt::linewidth(f)),
             )
         );
 
-        pytry!(py, ax.hist(x, Some(kwargs)));
+        pytry!(py, ax.plot(x, percentiles.clone(), None, Some(kwargs)));
     }
 
+    // set log scale on x axis
+    pytry!(py, ax.set_xscale("log"));
+
+    // the following two lines are needed before setting the ticklabel format to
+    // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
+    pytry!(
+        py,
+        ax.axis_set_major_formatter(py, "xaxis", AxisFormatter::Scalar)
+    );
+    pytry!(
+        py,
+        ax.axis_set_minor_formatter(py, "xaxis", AxisFormatter::Scalar)
+    );
+
+    // prevent scientific notation on x axis
+    // - this could be avoided by using the `AxisFormatter::FormatStr`
+    let kwargs = pytry!(py, pydict!(py, ("axis", "x"), ("style", "plain")));
+    pytry!(py, ax.ticklabel_format(Some(kwargs)));
+
     // set labels
-    pytry!(py, ax.set_ylabel("latency (ms)"));
+    pytry!(py, ax.set_xlabel("latency (ms)"));
+    pytry!(py, ax.set_ylabel("CDF"));
 
     // add legend
     let kwargs = pytry!(
