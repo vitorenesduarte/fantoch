@@ -58,8 +58,9 @@ impl<'p> PyPlot<'p> {
         nrows: usize,
         ncols: usize,
         index: usize,
+        kwargs: Option<&PyDict>,
     ) -> PyResult<Axes> {
-        let result = self.plt.call1("subplot", (nrows, ncols, index))?;
+        let result = self.plt.call("subplot", (nrows, ncols, index), kwargs)?;
         let ax = Axes::new(result)?;
         Ok(ax)
     }

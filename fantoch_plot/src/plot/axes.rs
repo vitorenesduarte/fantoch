@@ -15,6 +15,10 @@ impl<'a> Axes<'a> {
         Ok(Self { ax, xaxis, yaxis })
     }
 
+    pub fn ax(&self) -> &PyAny {
+        self.ax
+    }
+
     pub fn set_xlabel(&self, label: &str) -> PyResult<()> {
         self.ax.call_method1("set_xlabel", (label,))?;
         Ok(())

@@ -156,9 +156,6 @@ pub fn latency_plot(
         }
     }
 
-    // set labels
-    pytry!(py, ax.set_ylabel("latency (ms)"));
-
     // set xticks
     pytry!(py, ax.set_xticks(x));
 
@@ -174,8 +171,14 @@ pub fn latency_plot(
         .collect();
     pytry!(py, ax.set_xticklabels(labels));
 
+    // set labels
+    pytry!(py, ax.set_ylabel("latency (ms)"));
+
+    // legend
+    add_legend(n, py, &ax)?;
+
     // end plot
-    end_plot(output_file, n, py, &plt, fig, ax)?;
+    end_plot(output_file, py, &plt, fig)?;
 
     Ok(global_metrics)
 }
@@ -249,8 +252,11 @@ pub fn cdf_plot(
     pytry!(py, ax.set_xlabel("latency (ms) [log-scale]"));
     pytry!(py, ax.set_ylabel("CDF"));
 
+    // legend
+    add_legend(n, py, &ax)?;
+
     // end plot
-    end_plot(output_file, n, py, &plt, fig, ax)?;
+    end_plot(output_file, py, &plt, fig)?;
 
     Ok(())
 }
@@ -335,8 +341,11 @@ pub fn throughput_latency_plot(
     pytry!(py, ax.set_xlabel("throughput (K ops/s)"));
     pytry!(py, ax.set_ylabel("latency (ms) [log-scale]"));
 
+    // legend
+    add_legend(n, py, &ax)?;
+
     // end plot
-    end_plot(output_file, n, py, &plt, fig, ax)?;
+    end_plot(output_file, py, &plt, fig)?;
 
     Ok(())
 }
@@ -393,12 +402,21 @@ fn start_plot<'a>(
 
 fn end_plot(
     output_file: &str,
-    n: usize,
     py: Python,
     plt: &PyPlot,
     fig: Figure,
-    ax: Axes,
 ) -> Result<(), Report> {
+    // save figure
+    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
+    pytry!(py, plt.savefig(output_file, Some(kwargs)));
+
+    // close the figure
+    pytry!(py, plt.close(fig));
+
+    Ok(())
+}
+
+fn add_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
     // pull legend up
     let y_bbox_to_anchor = match n {
         3 => 1.17,
@@ -419,13 +437,6 @@ fn end_plot(
         )
     );
     pytry!(py, ax.legend(Some(kwargs)));
-
-    // save figure
-    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
-    pytry!(py, plt.savefig(output_file, Some(kwargs)));
-
-    // close the figure
-    pytry!(py, plt.close(fig));
 
     Ok(())
 }

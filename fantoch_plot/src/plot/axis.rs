@@ -21,4 +21,9 @@ impl<'a> Axis<'a> {
             .call_method1("set_minor_formatter", (formatter,))?;
         Ok(())
     }
+
+    pub fn set_visible(&self, visible: bool) -> PyResult<()> {
+        self.axis.call_method1("set_visible", (visible,))?;
+        Ok(())
+    }
 }
