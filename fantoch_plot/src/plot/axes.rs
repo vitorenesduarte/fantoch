@@ -15,11 +15,6 @@ impl<'a> Axes<'a> {
         Ok(Self { ax, xaxis, yaxis })
     }
 
-    pub fn set_title(&self, title: &str) -> PyResult<()> {
-        self.ax.call_method1("set_title", (title,))?;
-        Ok(())
-    }
-
     pub fn set_xlabel(&self, label: &str) -> PyResult<()> {
         self.ax.call_method1("set_xlabel", (label,))?;
         Ok(())
