@@ -1,5 +1,7 @@
 pub mod axes;
+pub mod axis;
 pub mod figure;
+pub mod ticker;
 
 use axes::Axes;
 use figure::Figure;
@@ -35,11 +37,11 @@ macro_rules! pydict {
     }};
 }
 
-pub struct Matplotlib<'p> {
+pub struct PyPlot<'p> {
     plt: &'p PyModule,
 }
 
-impl<'p> Matplotlib<'p> {
+impl<'p> PyPlot<'p> {
     pub fn new(py: Python<'p>) -> PyResult<Self> {
         let plt = PyModule::import(py, "matplotlib.pyplot")?;
         Ok(Self { plt })
@@ -55,11 +57,14 @@ impl<'p> Matplotlib<'p> {
         Ok(())
     }
 
-    pub fn subplots(&self) -> PyResult<(Figure, Axes)> {
-        let result = self.plt.call0("subplots")?;
+    pub fn subplots(
+        &self,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<(Figure, Axes)> {
+        let result = self.plt.call("subplots", (), kwargs)?;
         let tuple = result.downcast::<PyTuple>()?;
         let fig = Figure::new(tuple.get_item(0));
-        let ax = Axes::new(tuple.get_item(1));
+        let ax = Axes::new(tuple.get_item(1))?;
         Ok((fig, ax))
     }
 
@@ -92,11 +97,11 @@ mod tests {
     fn save_pdf(path: &str) -> PyResult<()> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        let plt = Matplotlib::new(py)?;
+        let plt = PyPlot::new(py)?;
 
         let x = vec!["us-east-1", "ca-central-1", "eu-west-2"];
         let y = vec![10, 20, 30];
-        let (fig, ax) = plt.subplots()?;
+        let (fig, ax) = plt.subplots(None)?;
         ax.plot(x, y, Some("o-"), None)?;
         ax.set_title("Latency per region")?;
         ax.set_xlabel("regions")?;

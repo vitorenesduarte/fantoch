@@ -9,10 +9,20 @@ pub use results_db::ResultsDB;
 use color_eyre::Report;
 use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
-use plot::axes::AxisFormatter;
-use plot::Matplotlib;
+use plot::ticker::Ticker;
+use plot::PyPlot;
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashSet};
+
+// defaults: [6.4, 4.8]
+// copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
+const GOLDEN_RATIO: f64 = 1.61803f64;
+const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
+const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO);
+
+// space between axis and axis legend. valid range [0, 1]
+const XAXIS_MARGIN: f64 = 0.0;
+const YAXIS_MARGIN: f64 = 0.0;
 
 const LEGEND_NCOL: usize = 3;
 
@@ -67,8 +77,11 @@ pub fn latency_plot(
     // start plot
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(py, Matplotlib::new(py));
-    let (fig, ax) = pytry!(py, plt.subplots());
+    let plt = pytry!(py, PyPlot::new(py));
+
+    // adjust fig size
+    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
+    let (fig, ax) = pytry!(py, plt.subplots(Some(kwargs)));
 
     for (shift, (protocol, f)) in combinations {
         let mut exp_data = db
@@ -143,6 +156,11 @@ pub fn latency_plot(
         pytry!(py, ax.bar(x, y, Some(kwargs)));
     }
 
+    // set spacing between axis and axis label
+    let kwargs =
+        pytry!(py, pydict!(py, ("x", XAXIS_MARGIN), ("y", YAXIS_MARGIN)));
+    pytry!(py, ax.margins(Some(kwargs)));
+
     // set labels
     pytry!(py, ax.set_ylabel("latency (ms)"));
 
@@ -196,11 +214,15 @@ pub fn cdf_plot(
     // start plot
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(py, Matplotlib::new(py));
-    let (fig, ax) = pytry!(py, plt.subplots());
+    let plt = pytry!(py, PyPlot::new(py));
+    let ticker = pytry!(py, Ticker::new(py));
+
+    // adjust fig size
+    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
+    let (fig, ax) = pytry!(py, plt.subplots(Some(kwargs)));
 
     // percentiles of interest:
-    let percentiles: Vec<_> = (0..=60)
+    let percentiles: Vec<_> = (10..=60)
         .step_by(10)
         .chain((65..=95).step_by(5))
         .map(|percentile| percentile as f64 / 100f64)
@@ -257,22 +279,27 @@ pub fn cdf_plot(
         pytry!(py, ax.plot(x, percentiles.clone(), None, Some(kwargs)));
     }
 
+    // set spacing between axis and axis label
+    let kwargs =
+        pytry!(py, pydict!(py, ("x", XAXIS_MARGIN), ("y", YAXIS_MARGIN)));
+    pytry!(py, ax.margins(Some(kwargs)));
+
+    // set y limits
+    let kwargs = pytry!(py, pydict!(py, ("ymin", 0), ("ymax", 1)));
+    pytry!(py, ax.set_ylim(Some(kwargs)));
+
     // set log scale on x axis
     pytry!(py, ax.set_xscale("log"));
 
     // the following two lines are needed before setting the ticklabel format to
     // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
-    pytry!(
-        py,
-        ax.axis_set_major_formatter(py, "xaxis", AxisFormatter::Scalar)
-    );
-    pytry!(
-        py,
-        ax.axis_set_minor_formatter(py, "xaxis", AxisFormatter::Scalar)
-    );
+    let formatter = pytry!(py, ticker.scalar_formatter());
+    pytry!(py, ax.xaxis.set_major_formatter(formatter));
+    let formatter = pytry!(py, ticker.scalar_formatter());
+    pytry!(py, ax.xaxis.set_minor_formatter(formatter));
 
     // prevent scientific notation on x axis
-    // - this could be avoided by using the `AxisFormatter::FormatStr`
+    // - this could be avoided by using the `FormatStrFormatter`
     let kwargs = pytry!(py, pydict!(py, ("axis", "x"), ("style", "plain")));
     pytry!(py, ax.ticklabel_format(Some(kwargs)));
 
