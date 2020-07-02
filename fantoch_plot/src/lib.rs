@@ -33,6 +33,11 @@ pub enum ErrorBar {
     Without,
 }
 
+enum AxisToScale {
+    X,
+    Y,
+}
+
 pub fn latency_plot(
     n: usize,
     clients_per_region: usize,
@@ -194,7 +199,6 @@ pub fn cdf_plot(
     let gil = Python::acquire_gil();
     let py = gil.python();
     let plt = pytry!(py, PyPlot::new(py));
-    let ticker = pytry!(py, Ticker::new(py));
 
     // start plot
     let (fig, ax) = start_plot(py, &plt)?;
@@ -262,20 +266,7 @@ pub fn cdf_plot(
     pytry!(py, ax.set_ylim(Some(kwargs)));
 
     // set log scale on x axis
-    pytry!(py, ax.set_xscale("log"));
-
-    // the following two lines are needed before setting the ticklabel format to
-    // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
-    let formatter = pytry!(py, ticker.scalar_formatter());
-    pytry!(py, ax.xaxis.set_major_formatter(formatter));
-    let formatter = pytry!(py, ticker.scalar_formatter());
-    pytry!(py, ax.xaxis.set_minor_formatter(formatter));
-
-    // prevent scientific notation on x axis
-    // - this could be avoided by using the `FormatStrFormatter` instead of the
-    //   `ScalarFormatter`
-    let kwargs = pytry!(py, pydict!(py, ("axis", "x"), ("style", "plain")));
-    pytry!(py, ax.ticklabel_format(Some(kwargs)));
+    set_log_scale(py, &ax, AxisToScale::X)?;
 
     // set labels
     pytry!(py, ax.set_xlabel("latency (ms) [log-scale]"));
@@ -373,20 +364,7 @@ pub fn throughput_latency_plot(
     }
 
     // set log scale on y axis
-    pytry!(py, ax.set_yscale("log"));
-
-    // the following two lines are needed before setting the ticklabel format to
-    // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
-    let formatter = pytry!(py, ticker.scalar_formatter());
-    pytry!(py, ax.yaxis.set_major_formatter(formatter));
-    let formatter = pytry!(py, ticker.scalar_formatter());
-    pytry!(py, ax.yaxis.set_minor_formatter(formatter));
-
-    // prevent scientific notation on y axis
-    // - this could be avoided by using the `FormatStrFormatter` instead of the
-    //   `ScalarFormatter`
-    let kwargs = pytry!(py, pydict!(py, ("axis", "y"), ("style", "plain")));
-    pytry!(py, ax.ticklabel_format(Some(kwargs)));
+    set_log_scale(py, &ax, AxisToScale::Y)?;
 
     // set labels
     pytry!(py, ax.set_xlabel("throughput (K ops/s)"));
@@ -474,6 +452,51 @@ fn end_plot(
 
     // close the figure
     pytry!(py, plt.close(fig));
+
+    Ok(())
+}
+
+fn set_log_scale(
+    py: Python,
+    ax: &Axes,
+    axis_to_scale: AxisToScale,
+) -> Result<(), Report> {
+    let ticker = pytry!(py, Ticker::new(py));
+
+    // set log scale on axis
+    match axis_to_scale {
+        AxisToScale::X => {
+            pytry!(py, ax.set_xscale("log"));
+        }
+        AxisToScale::Y => {
+            pytry!(py, ax.set_yscale("log"));
+        }
+    }
+
+    // the following lines are needed before setting the ticklabel format to
+    // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
+    let major_formatter = pytry!(py, ticker.scalar_formatter());
+    let minor_formatter = pytry!(py, ticker.scalar_formatter());
+    match axis_to_scale {
+        AxisToScale::X => {
+            pytry!(py, ax.xaxis.set_major_formatter(major_formatter));
+            pytry!(py, ax.xaxis.set_minor_formatter(minor_formatter));
+        }
+        AxisToScale::Y => {
+            pytry!(py, ax.yaxis.set_major_formatter(major_formatter));
+            pytry!(py, ax.yaxis.set_minor_formatter(minor_formatter));
+        }
+    }
+
+    // prevent scientific notation on the axis
+    // - this could be avoided by using the `FormatStrFormatter` instead of the
+    //   `ScalarFormatter`
+    let axis = match axis_to_scale {
+        AxisToScale::X => "x",
+        AxisToScale::Y => "y",
+    };
+    let kwargs = pytry!(py, pydict!(py, ("axis", axis), ("style", "plain")));
+    pytry!(py, ax.ticklabel_format(Some(kwargs)));
 
     Ok(())
 }

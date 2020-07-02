@@ -47,6 +47,12 @@ impl<'p> PyPlot<'p> {
         Ok(Self { plt })
     }
 
+    // Get current figure.
+    pub fn gcf(&self) -> PyResult<Figure> {
+        let fig = self.plt.call0("gcf")?;
+        Ok(Figure::new(fig))
+    }
+
     pub fn subplot(
         &self,
         nrows: usize,
@@ -61,6 +67,19 @@ impl<'p> PyPlot<'p> {
         &self,
         kwargs: Option<&PyDict>,
     ) -> PyResult<(Figure, Axes)> {
+        // check that `ncols` and `nrows` was not set
+        if let Some(kwargs) = kwargs {
+            assert_eq!(
+                kwargs.get_item("ncols"),
+                None,
+                "ncols shouldn't be set here; use `PyPlo::subplot` instead"
+            );
+            assert_eq!(
+                kwargs.get_item("nrows"),
+                None,
+                "nrows shouldn't be set here; use `PyPlo::subplot` instead"
+            );
+        }
         let result = self.plt.call("subplots", (), kwargs)?;
         let tuple = result.downcast::<PyTuple>()?;
         let fig = Figure::new(tuple.get_item(0));
