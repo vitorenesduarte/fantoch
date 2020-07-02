@@ -33,6 +33,11 @@ pub enum ErrorBar {
     Without,
 }
 
+pub enum Latency {
+    Average,
+    Percentile(f64),
+}
+
 enum AxisToScale {
     X,
     Y,
@@ -80,7 +85,6 @@ pub fn latency_plot(
 
     let combinations = combinations(n);
     assert!(combinations.len() <= MAX_COMBINATIONS);
-    let mut combination_count = combinations.len();
 
     // compute x:
     let x: Vec<_> = (0..n).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
@@ -115,9 +119,13 @@ pub fn latency_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
     for (shift, (protocol, f)) in combinations {
-        let mut exp_data = db
-            .search()
+        // start search
+        let mut search = db.search();
+        let mut exp_data = search
             .n(n)
             .f(f)
             .protocol(protocol)
@@ -128,8 +136,6 @@ pub fn latency_plot(
         match exp_data.len() {
             0 => {
                 eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
-                // reduce the number of combinations
-                combination_count -= 1;
                 continue;
             },
             1 => (),
@@ -141,7 +147,7 @@ pub fn latency_plot(
         let mut err = Vec::new();
         let mut latencies: Vec<_> = exp_data
             .client_latency
-            .into_iter()
+            .iter()
             .map(|(region, histogram)| {
                 // compute average latency
                 let avg = histogram.mean().value().round() as usize;
@@ -154,7 +160,7 @@ pub fn latency_plot(
                     err.push(error_bar);
                 }
 
-                (region, avg)
+                (region.clone(), avg)
             })
             .collect();
         latencies.sort();
@@ -172,9 +178,11 @@ pub fn latency_plot(
         }
 
         pytry!(py, ax.bar(x, y, Some(kwargs)));
+        plotted += 1;
 
         // save global client metrics
-        global_metrics.insert((protocol, f), exp_data.global_client_latency);
+        global_metrics
+            .insert((protocol, f), exp_data.global_client_latency.clone());
 
         // update set of all regions
         for region in regions {
@@ -201,7 +209,7 @@ pub fn latency_plot(
     pytry!(py, ax.set_ylabel("latency (ms)"));
 
     // legend
-    add_legend(combination_count as usize, n, py, &ax)?;
+    add_legend(plotted, n, py, &ax)?;
 
     // end plot
     end_plot(output_file, py, &plt, fig)?;
@@ -226,9 +234,10 @@ pub fn cdf_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
-    let combinations = combinations(n);
-    let mut combination_count = combinations.len();
-    for (protocol, f) in combinations {
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    for (protocol, f) in combinations(n) {
         inner_cdf_plot(
             py,
             &ax,
@@ -238,7 +247,7 @@ pub fn cdf_plot(
             clients_per_region,
             conflict_rate,
             payload_size,
-            &mut combination_count,
+            &mut plotted,
             db,
         )?;
     }
@@ -247,7 +256,7 @@ pub fn cdf_plot(
     inner_cdf_plot_style(py, &ax)?;
 
     // legend
-    add_legend(combination_count, n, py, &ax)?;
+    add_legend(plotted, n, py, &ax)?;
 
     // end plot
     end_plot(output_file, py, &plt, fig)?;
@@ -289,7 +298,6 @@ pub fn cdf_plots(
     let mut previous_axis: Option<Axes> = None;
 
     for f in vec![2, 1] {
-        let mut combination_count = protocols.len();
         let mut hide_xticklabels = false;
 
         // create subplot (shared axis with the previous subplot (if any))
@@ -304,6 +312,9 @@ pub fn cdf_plots(
         };
         let ax = pytry!(py, plt.subplot(2, 1, f, kwargs));
 
+        // keep track of the number of plotted instances
+        let mut plotted = 0;
+
         for &protocol in protocols.iter() {
             inner_cdf_plot(
                 py,
@@ -314,7 +325,7 @@ pub fn cdf_plots(
                 clients_per_region,
                 conflict_rate,
                 payload_size,
-                &mut combination_count,
+                &mut plotted,
                 db,
             )?;
         }
@@ -328,7 +339,7 @@ pub fn cdf_plots(
         }
 
         // legend
-        add_subplot_legend(combination_count, n, py, &ax)?;
+        add_subplot_legend(plotted, n, py, &ax)?;
 
         // save axis
         previous_axis = Some(ax);
@@ -364,11 +375,12 @@ fn inner_cdf_plot(
     clients_per_region: usize,
     conflict_rate: usize,
     payload_size: usize,
-    combination_count: &mut usize,
+    plotted: &mut usize,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
-    let mut exp_data = db
-        .search()
+    // start search
+    let mut search = db.search();
+    let mut exp_data = search
         .n(n)
         .f(f)
         .protocol(protocol)
@@ -383,8 +395,6 @@ fn inner_cdf_plot(
                 PlotFmt::protocol_name(protocol),
                 f
             );
-            // reduce the number of combinations
-            *combination_count -= 1;
             return Ok(());
         }
         1 => (),
@@ -411,6 +421,7 @@ fn inner_cdf_plot(
     // plot it!
     let kwargs = line_style(py, protocol, f)?;
     pytry!(py, ax.plot(x, y, None, Some(kwargs)));
+    *plotted += 1;
 
     Ok(())
 }
@@ -420,6 +431,7 @@ pub fn throughput_latency_plot(
     clients_per_region: Vec<usize>,
     conflict_rate: usize,
     payload_size: usize,
+    latency: Latency,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -431,15 +443,19 @@ pub fn throughput_latency_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
-    let combinations = combinations(n);
-    let mut combination_count = combinations.len();
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
 
-    for (protocol, f) in combinations {
+    for (protocol, f) in combinations(n) {
+        // keep track of average latency that will be used to compute throughput
+        let mut avg_latency = Vec::with_capacity(clients_per_region.len());
+
         // compute y: latency values for each number of clients
         let mut y = Vec::with_capacity(clients_per_region.len());
         for &clients in clients_per_region.iter() {
-            let mut exp_data = db
-                .search()
+            // start search
+            let mut search = db.search();
+            let mut exp_data = search
                 .n(n)
                 .f(f)
                 .protocol(protocol)
@@ -450,9 +466,8 @@ pub fn throughput_latency_plot(
             match exp_data.len() {
                 0 => {
                     eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
+                    avg_latency.push(0f64);
                     y.push(0f64);
-                    // reduce the number of combinations
-                    combination_count -= 1;
                     continue;
                 },
                 1 => (),
@@ -461,24 +476,37 @@ pub fn throughput_latency_plot(
             let exp_data = exp_data.pop().unwrap();
 
             // get average latency
-            let latency = exp_data.global_client_latency.mean().value();
+            let avg = exp_data.global_client_latency.mean().value();
+            avg_latency.push(avg);
+
+            // compute latency to be plotted
+            let latency = match latency {
+                Latency::Average => avg,
+                Latency::Percentile(percentile) => exp_data
+                    .global_client_latency
+                    .percentile(percentile)
+                    .value(),
+            };
             y.push(latency);
         }
 
         // compute x: compute throughput given average latency and number of
         // clients
-        let (x, y): (Vec<_>, Vec<_>) = y
-            .iter()
+        let (x, y): (Vec<_>, Vec<_>) = avg_latency
+            .into_iter()
+            .zip(y.iter())
             .zip(clients_per_region.iter())
-            .filter_map(|(&latency, &clients)| {
+            .filter_map(|((avg_latency, &latency), &clients)| {
                 if latency == 0f64 {
                     None
                 } else {
-                    let per_second = 1000f64 / latency;
+                    // compute throughput using the average latency
+                    let per_second = 1000f64 / avg_latency;
                     let per_site = clients as f64 * per_second;
                     let throughput = n as f64 * per_site;
                     // compute K ops
                     let x = throughput / 1000f64;
+
                     // round y
                     let y = latency.round() as usize;
                     Some((x, y))
@@ -489,6 +517,7 @@ pub fn throughput_latency_plot(
         // plot it!
         let kwargs = line_style(py, protocol, f)?;
         pytry!(py, ax.plot(x, y, None, Some(kwargs)));
+        plotted += 1;
     }
 
     // set log scale on y axis
@@ -499,7 +528,7 @@ pub fn throughput_latency_plot(
     pytry!(py, ax.set_ylabel("latency (ms) [log-scale]"));
 
     // legend
-    add_legend(combination_count, n, py, &ax)?;
+    add_legend(plotted, n, py, &ax)?;
 
     // end plot
     end_plot(output_file, py, &plt, fig)?;
@@ -578,7 +607,7 @@ fn end_plot(
 }
 
 fn add_legend(
-    combination_count: usize,
+    plotted: usize,
     n: usize,
     py: Python,
     ax: &Axes,
@@ -590,11 +619,11 @@ fn add_legend(
         _ => panic!("add_legend: unsupported n: {}", n),
     };
 
-    do_add_legend(combination_count, y_bbox_to_anchor, py, ax)
+    do_add_legend(plotted, y_bbox_to_anchor, py, ax)
 }
 
 fn add_subplot_legend(
-    combination_count: usize,
+    plotted: usize,
     n: usize,
     py: Python,
     ax: &Axes,
@@ -606,23 +635,26 @@ fn add_subplot_legend(
         panic!("add_subplot_legend: unsupported n: {}", n)
     };
 
-    do_add_legend(combination_count, y_bbox_to_anchor, py, ax)
+    do_add_legend(plotted, y_bbox_to_anchor, py, ax)
 }
 
 fn do_add_legend(
-    combination_count: usize,
+    plotted: usize,
     y_bbox_to_anchor: f64,
     py: Python,
     ax: &Axes,
 ) -> Result<(), Report> {
-    let legend_ncol = match combination_count {
+    let legend_ncol = match plotted {
         1 => 1,
         2 => 2,
         3 => 3,
         4 => 2,
         5 => 3,
         6 => 3,
-        _ => panic!("do_add_legend: unsupported number of combinations"),
+        _ => panic!(
+            "do_add_legend: unsupported number of plotted instances: {}",
+            plotted
+        ),
     };
     // add legend
     let kwargs = pytry!(

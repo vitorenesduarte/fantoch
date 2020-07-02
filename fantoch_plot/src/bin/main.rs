@@ -1,7 +1,7 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::planet::{Planet, Region};
-use fantoch_plot::{ErrorBar, PlotFmt, ResultsDB};
+use fantoch_plot::{ErrorBar, Latency, PlotFmt, ResultsDB};
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results";
@@ -112,15 +112,28 @@ fn main() -> Result<(), Report> {
             1024 * 16,
             1024 * 32,
         ];
-        let path = format!("throughput_latency_n{}.pdf", n);
-        fantoch_plot::throughput_latency_plot(
-            n,
-            clients_per_region,
-            conflict_rate,
-            payload_size,
-            &path,
-            &mut db,
-        )?;
+
+        for latency in vec![
+            Latency::Average,
+            Latency::Percentile(0.99),
+            Latency::Percentile(0.999),
+        ] {
+            let suffix = if let Latency::Percentile(percentile) = latency {
+                format!("_p{}", percentile * 100f64)
+            } else {
+                String::from("")
+            };
+            let path = format!("throughput_latency_n{}{}.pdf", n, suffix);
+            fantoch_plot::throughput_latency_plot(
+                n,
+                clients_per_region.clone(),
+                conflict_rate,
+                payload_size,
+                latency,
+                &path,
+                &mut db,
+            )?;
+        }
     }
 
     // show distance matrix

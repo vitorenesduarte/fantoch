@@ -98,7 +98,7 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn load(&mut self) -> Result<Vec<ExperimentData>, Report> {
+    pub fn load(&mut self) -> Result<Vec<&ExperimentData>, Report> {
         let mut results = Vec::new();
         for data in self.find().map(Self::load_experiment_data) {
             let data = data.wrap_err("load experiment data")?;
@@ -182,7 +182,7 @@ impl<'a> SearchBuilder<'a> {
             ExperimentConfig,
             Option<ExperimentData>,
         ),
-    ) -> Result<ExperimentData, Report> {
+    ) -> Result<&ExperimentData, Report> {
         // load data if `exp_data` is still `None`
         if exp_data.is_none() {
             let mut client_metrics = HashMap::new();
@@ -216,7 +216,7 @@ impl<'a> SearchBuilder<'a> {
         }
 
         // at this point `exp_data` must be `Some`
-        Ok(exp_data.clone().unwrap())
+        Ok(exp_data.as_ref().unwrap())
     }
 
     // Here we make sure that we will only consider that points in which all the
