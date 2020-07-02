@@ -45,7 +45,6 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    use rusoto_core::Region;
     // init logging
     tracing_subscriber::fmt::init();
 
@@ -80,9 +79,9 @@ async fn main() -> Result<(), Report> {
         1024,
         1024 * 2,
         1024 * 4,
-        // 1024 * 8,
-        // 1024 * 16,
-        // 1024 * 32,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
         // 1024 * 64,
         // 1024 * 128,
     ];

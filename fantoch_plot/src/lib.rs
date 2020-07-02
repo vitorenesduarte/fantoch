@@ -272,13 +272,125 @@ pub fn cdf_plot(
     pytry!(py, ax.xaxis.set_minor_formatter(formatter));
 
     // prevent scientific notation on x axis
-    // - this could be avoided by using the `FormatStrFormatter`
+    // - this could be avoided by using the `FormatStrFormatter` instead of the
+    //   `ScalarFormatter`
     let kwargs = pytry!(py, pydict!(py, ("axis", "x"), ("style", "plain")));
     pytry!(py, ax.ticklabel_format(Some(kwargs)));
 
     // set labels
-    pytry!(py, ax.set_xlabel("latency (ms)"));
+    pytry!(py, ax.set_xlabel("latency (ms) [log-scale]"));
     pytry!(py, ax.set_ylabel("CDF"));
+
+    // end plot
+    end_plot(output_file, n, py, &plt, fig, ax)?;
+
+    Ok(())
+}
+
+pub fn throughput_latency_plot(
+    n: usize,
+    clients_per_region: Vec<usize>,
+    conflict_rate: usize,
+    payload_size: usize,
+    output_file: &str,
+    db: &mut ResultsDB,
+) -> Result<(), Report> {
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = pytry!(py, PyPlot::new(py));
+    let ticker = pytry!(py, Ticker::new(py));
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt)?;
+
+    for (protocol, f) in combinations(n) {
+        // compute y: latency values for each number of clients
+        let mut y = Vec::with_capacity(clients_per_region.len());
+        for &clients in clients_per_region.iter() {
+            let mut exp_data = db
+                .search()
+                .n(n)
+                .f(f)
+                .protocol(protocol)
+                .clients_per_region(clients)
+                .conflict_rate(conflict_rate)
+                .payload_size(payload_size)
+                .load()?;
+            match exp_data.len() {
+                0 => {
+                    eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
+                    y.push(0f64);
+                    continue;
+                },
+                1 => (),
+                _ => panic!("found more than 1 matching experiment for this search criteria"),
+            };
+            let exp_data = exp_data.pop().unwrap();
+
+            // get average latency
+            let latency = exp_data.global_client_latency.mean().value();
+            y.push(latency);
+        }
+
+        // compute label
+        let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
+        let kwargs = pytry!(
+            py,
+            pydict!(
+                py,
+                // set style
+                ("label", label),
+                ("color", PlotFmt::color(protocol, f)),
+                ("marker", PlotFmt::marker(protocol, f)),
+                ("linestyle", PlotFmt::linestyle(protocol, f)),
+                ("linewidth", PlotFmt::linewidth(f)),
+            )
+        );
+
+        // compute x: compute throughput given average latency and number of
+        // clients
+        let (x, y): (Vec<_>, Vec<_>) = y
+            .iter()
+            .zip(clients_per_region.iter())
+            .filter_map(|(&latency, &clients)| {
+                if latency == 0f64 {
+                    None
+                } else {
+                    let per_second = 1000f64 / latency;
+                    let per_site = clients as f64 * per_second;
+                    let throughput = n as f64 * per_site;
+                    // compute K ops
+                    let x = throughput / 1000f64;
+                    // round y
+                    let y = latency.round() as usize;
+                    Some((x, y))
+                }
+            })
+            .unzip();
+
+        pytry!(py, ax.plot(x, y, None, Some(kwargs)));
+    }
+
+    // set log scale on y axis
+    pytry!(py, ax.set_yscale("log"));
+
+    // the following two lines are needed before setting the ticklabel format to
+    // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
+    let formatter = pytry!(py, ticker.scalar_formatter());
+    pytry!(py, ax.yaxis.set_major_formatter(formatter));
+    let formatter = pytry!(py, ticker.scalar_formatter());
+    pytry!(py, ax.yaxis.set_minor_formatter(formatter));
+
+    // prevent scientific notation on y axis
+    // - this could be avoided by using the `FormatStrFormatter` instead of the
+    //   `ScalarFormatter`
+    let kwargs = pytry!(py, pydict!(py, ("axis", "y"), ("style", "plain")));
+    pytry!(py, ax.ticklabel_format(Some(kwargs)));
+
+    // set labels
+    pytry!(py, ax.set_xlabel("throughput (K ops/s)"));
+    pytry!(py, ax.set_ylabel("latency (ms) [log-scale]"));
 
     // end plot
     end_plot(output_file, n, py, &plt, fig, ax)?;
