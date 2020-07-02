@@ -137,14 +137,13 @@ pub fn latency_plot(
         // compute x: shift all values by `shift`
         let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
 
-        // compute bar arguments
+        // plot it:
+        // - maybe set error bars
         let kwargs = bar_style(py, protocol, f, BAR_WIDTH)?;
-        // maybe set error bars
         if let ErrorBar::With(_) = error_bar {
             pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
         }
 
-        // plot it!
         pytry!(py, ax.bar(x, y, Some(kwargs)));
 
         // save global client metrics
@@ -372,10 +371,8 @@ fn inner_cdf_plot(
     // compute y: percentiles!
     let y: Vec<_> = percentiles().collect();
 
-    // compute plot arguments
-    let kwargs = line_style(py, protocol, f)?;
-
     // plot it!
+    let kwargs = line_style(py, protocol, f)?;
     pytry!(py, ax.plot(x, y, None, Some(kwargs)));
 
     Ok(())
@@ -447,10 +444,8 @@ pub fn throughput_latency_plot(
             })
             .unzip();
 
-        // compute plot arguments
-        let kwargs = line_style(py, protocol, f)?;
-
         // plot it!
+        let kwargs = line_style(py, protocol, f)?;
         pytry!(py, ax.plot(x, y, None, Some(kwargs)));
     }
 
