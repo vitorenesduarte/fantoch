@@ -26,6 +26,10 @@ impl PlotFmt {
         }
     }
 
+    pub fn label(protocol: Protocol, f: usize) -> String {
+        format!("{} f = {}", Self::protocol_name(protocol), f)
+    }
+
     pub fn color(protocol: Protocol, f: usize) -> &'static str {
         match (protocol, f) {
             (Protocol::NewtAtomic, 1) => "#ffa726",

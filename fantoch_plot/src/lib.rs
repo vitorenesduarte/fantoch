@@ -14,6 +14,7 @@ use plot::figure::Figure;
 use plot::ticker::Ticker;
 use plot::PyPlot;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use std::collections::{BTreeMap, HashSet};
 
 // defaults: [6.4, 4.8]
@@ -109,22 +110,23 @@ pub fn latency_plot(
         };
         let exp_data = exp_data.pop().unwrap();
 
-        // save global client metrics
-        global_metrics.insert((protocol, f), exp_data.global_client_latency);
-
         // compute y: avg latencies sorted by region name
         let mut err = Vec::new();
         let mut latencies: Vec<_> = exp_data
             .client_latency
             .into_iter()
             .map(|(region, histogram)| {
+                // compute average latency
                 let avg = histogram.mean().value().round() as usize;
+
+                // maybe create error bar
                 if let ErrorBar::With(percentile) = error_bar {
                     let p99_9 = histogram.percentile(percentile).value().round()
                         as usize;
                     let error_bar = (0, p99_9 - avg);
                     err.push(error_bar);
                 }
+
                 (region, avg)
             })
             .collect();
@@ -132,34 +134,26 @@ pub fn latency_plot(
         let (regions, y): (HashSet<_>, Vec<_>) = latencies.into_iter().unzip();
         let (from_err, to_err): (Vec<_>, Vec<_>) = err.into_iter().unzip();
 
-        // update set of all regions
-        for region in regions {
-            all_regions.insert(region);
-        }
+        // compute x: shift all values by `shift`
+        let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
 
-        // compute label
-        let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
-        let kwargs = pytry!(
-            py,
-            pydict!(
-                py,
-                // set style
-                ("label", label),
-                ("width", BAR_WIDTH),
-                ("edgecolor", "black"),
-                ("linewidth", 1),
-                ("color", PlotFmt::color(protocol, f)),
-                ("hatch", PlotFmt::hatch(protocol, f)),
-            )
-        );
+        // compute bar arguments
+        let kwargs = bar_style(py, protocol, f, BAR_WIDTH)?;
         // maybe set error bars
         if let ErrorBar::With(_) = error_bar {
             pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
         }
 
-        // compute x: shift all values by `shift`
-        let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
+        // plot it!
         pytry!(py, ax.bar(x, y, Some(kwargs)));
+
+        // save global client metrics
+        global_metrics.insert((protocol, f), exp_data.global_client_latency);
+
+        // update set of all regions
+        for region in regions {
+            all_regions.insert(region);
+        }
     }
 
     // set labels
@@ -203,14 +197,6 @@ pub fn cdf_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt)?;
 
-    // percentiles of interest:
-    let percentiles: Vec<_> = (10..=60)
-        .step_by(10)
-        .chain((65..=95).step_by(5))
-        .map(|percentile| percentile as f64 / 100f64)
-        .chain(vec![0.97, 0.99, 0.999])
-        .collect();
-
     for (protocol, f) in combinations(n) {
         let mut exp_data = db
             .search()
@@ -232,33 +218,24 @@ pub fn cdf_plot(
         let exp_data = exp_data.pop().unwrap();
 
         // compute x: all values in the global histogram
-        let x: Vec<_> = percentiles
-            .iter()
+        let x: Vec<_> = percentiles()
             .map(|percentile| {
                 exp_data
                     .global_client_latency
-                    .percentile(*percentile)
+                    .percentile(percentile)
                     .value()
                     .round() as u64
             })
             .collect();
 
-        // compute label
-        let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
-        let kwargs = pytry!(
-            py,
-            pydict!(
-                py,
-                // set style
-                ("label", label),
-                ("color", PlotFmt::color(protocol, f)),
-                ("marker", PlotFmt::marker(protocol, f)),
-                ("linestyle", PlotFmt::linestyle(protocol, f)),
-                ("linewidth", PlotFmt::linewidth(f)),
-            )
-        );
+        // compute y: percentiles!
+        let y: Vec<_> = percentiles().collect();
 
-        pytry!(py, ax.plot(x, percentiles.clone(), None, Some(kwargs)));
+        // compute plot arguments
+        let kwargs = line_style(py, protocol, f)?;
+
+        // plot it!
+        pytry!(py, ax.plot(x, y, None, Some(kwargs)));
     }
 
     // set y limits
@@ -290,7 +267,6 @@ pub fn throughput_latency_plot(
     let gil = Python::acquire_gil();
     let py = gil.python();
     let plt = pytry!(py, PyPlot::new(py));
-    let ticker = pytry!(py, Ticker::new(py));
 
     // start plot
     let (fig, ax) = start_plot(py, &plt)?;
@@ -324,21 +300,6 @@ pub fn throughput_latency_plot(
             y.push(latency);
         }
 
-        // compute label
-        let label = format!("{} f = {}", PlotFmt::protocol_name(protocol), f);
-        let kwargs = pytry!(
-            py,
-            pydict!(
-                py,
-                // set style
-                ("label", label),
-                ("color", PlotFmt::color(protocol, f)),
-                ("marker", PlotFmt::marker(protocol, f)),
-                ("linestyle", PlotFmt::linestyle(protocol, f)),
-                ("linewidth", PlotFmt::linewidth(f)),
-            )
-        );
-
         // compute x: compute throughput given average latency and number of
         // clients
         let (x, y): (Vec<_>, Vec<_>) = y
@@ -360,6 +321,10 @@ pub fn throughput_latency_plot(
             })
             .unzip();
 
+        // compute plot arguments
+        let kwargs = line_style(py, protocol, f)?;
+
+        // plot it!
         pytry!(py, ax.plot(x, y, None, Some(kwargs)));
     }
 
@@ -397,6 +362,15 @@ fn combinations(n: usize) -> Vec<(Protocol, usize)> {
     }
 
     combinations
+}
+
+// percentiles of interest
+fn percentiles() -> impl Iterator<Item = f64> {
+    (10..=60)
+        .step_by(10)
+        .chain((65..=95).step_by(5))
+        .map(|percentile| percentile as f64 / 100f64)
+        .chain(vec![0.97, 0.99, 0.999])
 }
 
 fn start_plot<'a>(
@@ -499,4 +473,44 @@ fn set_log_scale(
     pytry!(py, ax.ticklabel_format(Some(kwargs)));
 
     Ok(())
+}
+
+fn bar_style(
+    py: Python,
+    protocol: Protocol,
+    f: usize,
+    bar_width: f64,
+) -> Result<&PyDict, Report> {
+    let kwargs = pytry!(
+        py,
+        pydict!(
+            py,
+            ("label", PlotFmt::label(protocol, f)),
+            ("width", bar_width),
+            ("edgecolor", "black"),
+            ("linewidth", 1),
+            ("color", PlotFmt::color(protocol, f)),
+            ("hatch", PlotFmt::hatch(protocol, f)),
+        )
+    );
+    Ok(kwargs)
+}
+
+fn line_style(
+    py: Python,
+    protocol: Protocol,
+    f: usize,
+) -> Result<&PyDict, Report> {
+    let kwargs = pytry!(
+        py,
+        pydict!(
+            py,
+            ("label", PlotFmt::label(protocol, f)),
+            ("color", PlotFmt::color(protocol, f)),
+            ("marker", PlotFmt::marker(protocol, f)),
+            ("linestyle", PlotFmt::linestyle(protocol, f)),
+            ("linewidth", PlotFmt::linewidth(f)),
+        )
+    );
+    Ok(kwargs)
 }

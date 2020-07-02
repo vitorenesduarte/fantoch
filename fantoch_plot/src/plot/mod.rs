@@ -58,9 +58,10 @@ impl<'p> PyPlot<'p> {
         nrows: usize,
         ncols: usize,
         index: usize,
-    ) -> PyResult<()> {
-        self.plt.call1("subplot", (nrows, ncols, index))?;
-        Ok(())
+    ) -> PyResult<Axes> {
+        let result = self.plt.call1("subplot", (nrows, ncols, index))?;
+        let ax = Axes::new(result)?;
+        Ok(ax)
     }
 
     pub fn subplots(
@@ -72,12 +73,12 @@ impl<'p> PyPlot<'p> {
             assert_eq!(
                 kwargs.get_item("ncols"),
                 None,
-                "ncols shouldn't be set here; use `PyPlo::subplot` instead"
+                "ncols shouldn't be set here; use `PyPlot::subplot` instead"
             );
             assert_eq!(
                 kwargs.get_item("nrows"),
                 None,
-                "nrows shouldn't be set here; use `PyPlo::subplot` instead"
+                "nrows shouldn't be set here; use `PyPlot::subplot` instead"
             );
         }
         let result = self.plt.call("subplots", (), kwargs)?;
