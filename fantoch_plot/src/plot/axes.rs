@@ -15,11 +15,6 @@ impl<'a> Axes<'a> {
         Ok(Self { ax, xaxis, yaxis })
     }
 
-    pub fn margins(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.ax.call_method("margins", (), kwargs)?;
-        Ok(())
-    }
-
     pub fn set_title(&self, title: &str) -> PyResult<()> {
         self.ax.call_method1("set_title", (title,))?;
         Ok(())
@@ -76,6 +71,8 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
+    // any questions about legend positioning should be answered here: https://stackoverflow.com/a/43439132/4262469
+    // - that's how great the answer is!
     pub fn legend(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
         self.ax.call_method("legend", (), kwargs)?;
         Ok(())

@@ -11,6 +11,34 @@ fn main() -> Result<(), Report> {
 
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
+    /*
+    let n = 3;
+    let clients = 512;
+    let path = format!("cdf_n{}_c{}.pdf", n, clients);
+    fantoch_plot::cdf_plot(
+        n,
+        clients,
+        conflict_rate,
+        payload_size,
+        &path,
+        &mut db,
+    )?;
+
+    let n = 5;
+    let clients = 512;
+    let path = format!("cdf_n{}_c{}.pdf", n, clients);
+    fantoch_plot::cdf_plot(
+        n,
+        clients,
+        conflict_rate,
+        payload_size,
+        &path,
+        &mut db,
+    )?;
+
+    return Ok(());
+    */
+
     for n in vec![3, 5] {
         for clients in vec![8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] {
             println!("n = {} | c = {}", n, clients);

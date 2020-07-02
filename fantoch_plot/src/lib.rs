@@ -9,6 +9,8 @@ pub use results_db::ResultsDB;
 use color_eyre::Report;
 use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
+use plot::axes::Axes;
+use plot::figure::Figure;
 use plot::ticker::Ticker;
 use plot::PyPlot;
 use pyo3::prelude::*;
@@ -20,9 +22,9 @@ const GOLDEN_RATIO: f64 = 1.61803f64;
 const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
 const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO);
 
-// space between axis and axis legend. valid range [0, 1]
-const XAXIS_MARGIN: f64 = 0.0;
-const YAXIS_MARGIN: f64 = 0.0;
+// margins
+const ADJUST_TOP: f64 = 0.85;
+const ADJUST_BOTTOM: f64 = 0.15;
 
 const LEGEND_NCOL: usize = 3;
 
@@ -74,14 +76,13 @@ pub fn latency_plot(
     // return global client metrics for each combination
     let mut global_metrics = BTreeMap::new();
 
-    // start plot
+    // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
     let plt = pytry!(py, PyPlot::new(py));
 
-    // adjust fig size
-    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
-    let (fig, ax) = pytry!(py, plt.subplots(Some(kwargs)));
+    // start plot
+    let (fig, ax) = start_plot(py, &plt)?;
 
     for (shift, (protocol, f)) in combinations {
         let mut exp_data = db
@@ -156,11 +157,6 @@ pub fn latency_plot(
         pytry!(py, ax.bar(x, y, Some(kwargs)));
     }
 
-    // set spacing between axis and axis label
-    let kwargs =
-        pytry!(py, pydict!(py, ("x", XAXIS_MARGIN), ("y", YAXIS_MARGIN)));
-    pytry!(py, ax.margins(Some(kwargs)));
-
     // set labels
     pytry!(py, ax.set_ylabel("latency (ms)"));
 
@@ -179,26 +175,9 @@ pub fn latency_plot(
         .collect();
     pytry!(py, ax.set_xticklabels(labels));
 
-    // add legend
-    let kwargs = pytry!(
-        py,
-        pydict!(
-            py,
-            ("loc", "upper center"),
-            ("bbox_to_anchor", (0.5, 1.15)),
-            // remove box around legend:
-            ("edgecolor", "white"),
-            ("ncol", LEGEND_NCOL),
-        )
-    );
-    pytry!(py, ax.legend(Some(kwargs)));
+    // end plot
+    end_plot(output_file, n, py, &plt, fig, ax)?;
 
-    // save figure
-    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
-    pytry!(py, plt.savefig(output_file, Some(kwargs)));
-
-    // close the figure
-    pytry!(py, plt.close(fig));
     Ok(global_metrics)
 }
 
@@ -211,15 +190,14 @@ pub fn cdf_plot(
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
-    // start plot
+    // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
     let plt = pytry!(py, PyPlot::new(py));
     let ticker = pytry!(py, Ticker::new(py));
 
-    // adjust fig size
-    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
-    let (fig, ax) = pytry!(py, plt.subplots(Some(kwargs)));
+    // start plot
+    let (fig, ax) = start_plot(py, &plt)?;
 
     // percentiles of interest:
     let percentiles: Vec<_> = (10..=60)
@@ -279,11 +257,6 @@ pub fn cdf_plot(
         pytry!(py, ax.plot(x, percentiles.clone(), None, Some(kwargs)));
     }
 
-    // set spacing between axis and axis label
-    let kwargs =
-        pytry!(py, pydict!(py, ("x", XAXIS_MARGIN), ("y", YAXIS_MARGIN)));
-    pytry!(py, ax.margins(Some(kwargs)));
-
     // set y limits
     let kwargs = pytry!(py, pydict!(py, ("ymin", 0), ("ymax", 1)));
     pytry!(py, ax.set_ylim(Some(kwargs)));
@@ -307,26 +280,9 @@ pub fn cdf_plot(
     pytry!(py, ax.set_xlabel("latency (ms)"));
     pytry!(py, ax.set_ylabel("CDF"));
 
-    // add legend
-    let kwargs = pytry!(
-        py,
-        pydict!(
-            py,
-            ("loc", "upper center"),
-            ("bbox_to_anchor", (0.5, 1.15)),
-            // remove box around legend:
-            ("edgecolor", "white"),
-            ("ncol", LEGEND_NCOL),
-        )
-    );
-    pytry!(py, ax.legend(Some(kwargs)));
+    // end plot
+    end_plot(output_file, n, py, &plt, fig, ax)?;
 
-    // save figure
-    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
-    pytry!(py, plt.savefig(output_file, Some(kwargs)));
-
-    // close the figure
-    pytry!(py, plt.close(fig));
     Ok(())
 }
 
@@ -351,4 +307,61 @@ fn combinations(n: usize) -> Vec<(Protocol, usize)> {
     }
 
     combinations
+}
+
+fn start_plot<'a>(
+    py: Python<'a>,
+    plt: &'a PyPlot<'a>,
+) -> Result<(Figure<'a>, Axes<'a>), Report> {
+    // adjust fig size
+    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
+    let (fig, ax) = pytry!(py, plt.subplots(Some(kwargs)));
+
+    // adjust fig margins
+    let kwargs = pytry!(
+        py,
+        pydict!(py, ("top", ADJUST_TOP), ("bottom", ADJUST_BOTTOM))
+    );
+    pytry!(py, fig.subplots_adjust(Some(kwargs)));
+
+    Ok((fig, ax))
+}
+
+fn end_plot(
+    output_file: &str,
+    n: usize,
+    py: Python,
+    plt: &PyPlot,
+    fig: Figure,
+    ax: Axes,
+) -> Result<(), Report> {
+    // pull legend up
+    let y_bbox_to_anchor = match n {
+        3 => 1.17,
+        5 => 1.24,
+        _ => panic!("cdf_plot: unsupported n: {}", n),
+    };
+
+    // add legend
+    let kwargs = pytry!(
+        py,
+        pydict!(
+            py,
+            ("loc", "upper center"),
+            ("bbox_to_anchor", (0.5, y_bbox_to_anchor)),
+            // remove box around legend:
+            ("edgecolor", "white"),
+            ("ncol", LEGEND_NCOL),
+        )
+    );
+    pytry!(py, ax.legend(Some(kwargs)));
+
+    // save figure
+    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
+    pytry!(py, plt.savefig(output_file, Some(kwargs)));
+
+    // close the figure
+    pytry!(py, plt.close(fig));
+
+    Ok(())
 }
