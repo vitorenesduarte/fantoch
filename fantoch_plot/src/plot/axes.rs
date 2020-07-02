@@ -60,11 +60,6 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
-    pub fn set_xlim(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.ax.call_method("set_xlim", (), kwargs)?;
-        Ok(())
-    }
-
     pub fn set_ylim(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
         self.ax.call_method("set_ylim", (), kwargs)?;
         Ok(())

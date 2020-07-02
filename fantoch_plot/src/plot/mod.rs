@@ -47,12 +47,6 @@ impl<'p> PyPlot<'p> {
         Ok(Self { plt })
     }
 
-    // Get current figure.
-    pub fn gcf(&self) -> PyResult<Figure> {
-        let fig = self.plt.call0("gcf")?;
-        Ok(Figure::new(fig))
-    }
-
     pub fn subplot(
         &self,
         nrows: usize,

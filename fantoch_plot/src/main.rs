@@ -82,6 +82,20 @@ fn main() -> Result<(), Report> {
                 &path,
                 &mut db,
             )?;
+
+            if n != 3 {
+                // generate cdf plot with subplots
+                let path =
+                    format!("cdf_one_per_f_n{}_c{}.pdf", n, clients_per_region);
+                fantoch_plot::cdf_plots(
+                    n,
+                    clients_per_region,
+                    conflict_rate,
+                    payload_size,
+                    &path,
+                    &mut db,
+                )?;
+            }
         }
 
         // generate throughput-latency plot

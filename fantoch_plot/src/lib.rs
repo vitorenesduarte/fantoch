@@ -88,7 +88,7 @@ pub fn latency_plot(
     let plt = pytry!(py, PyPlot::new(py));
 
     // start plot
-    let (fig, ax) = start_plot(py, &plt)?;
+    let (fig, ax) = start_plot(py, &plt, None)?;
 
     for (shift, (protocol, f)) in combinations {
         let mut exp_data = db
@@ -198,49 +198,116 @@ pub fn cdf_plot(
     let plt = pytry!(py, PyPlot::new(py));
 
     // start plot
-    let (fig, ax) = start_plot(py, &plt)?;
+    let (fig, ax) = start_plot(py, &plt, None)?;
 
     for (protocol, f) in combinations(n) {
-        let mut exp_data = db
-            .search()
-            .n(n)
-            .f(f)
-            .protocol(protocol)
-            .clients_per_region(clients_per_region)
-            .conflict_rate(conflict_rate)
-            .payload_size(payload_size)
-            .load()?;
-        match exp_data.len() {
-            0 => {
-                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
-                continue;
-            },
-            1 => (),
-            _ => panic!("found more than 1 matching experiment for this search criteria"),
-        };
-        let exp_data = exp_data.pop().unwrap();
-
-        // compute x: all values in the global histogram
-        let x: Vec<_> = percentiles()
-            .map(|percentile| {
-                exp_data
-                    .global_client_latency
-                    .percentile(percentile)
-                    .value()
-                    .round() as u64
-            })
-            .collect();
-
-        // compute y: percentiles!
-        let y: Vec<_> = percentiles().collect();
-
-        // compute plot arguments
-        let kwargs = line_style(py, protocol, f)?;
-
-        // plot it!
-        pytry!(py, ax.plot(x, y, None, Some(kwargs)));
+        inner_cdf_plot(
+            py,
+            &ax,
+            n,
+            f,
+            protocol,
+            clients_per_region,
+            conflict_rate,
+            payload_size,
+            db,
+        )?;
     }
 
+    // set cdf plot style
+    inner_cdf_plot_style(py, &ax)?;
+
+    // legend
+    add_legend(n, py, &ax)?;
+
+    // end plot
+    end_plot(output_file, py, &plt, fig)?;
+
+    Ok(())
+}
+
+pub fn cdf_plots(
+    n: usize,
+    clients_per_region: usize,
+    conflict_rate: usize,
+    payload_size: usize,
+    output_file: &str,
+    db: &mut ResultsDB,
+) -> Result<(), Report> {
+    let (protocols, mut fs): (HashSet<_>, Vec<_>) =
+        combinations(n).into_iter().unzip();
+    fs.sort();
+    fs.dedup();
+    match fs.as_slice() {
+        [1, 2] => (),
+        _ => panic!(
+            "cdf_plots: unsupported f values: {:?}; use cdf_plot instead",
+            fs
+        ),
+    };
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = pytry!(py, PyPlot::new(py));
+
+    // start plot
+    let height_between_subplots = Some(0.5);
+    let (fig, _) = start_plot(py, &plt, height_between_subplots)?;
+
+    let mut previous_axis: Option<Axes> = None;
+
+    for f in vec![2, 1] {
+        let mut hide_xticklabels = false;
+
+        // create subplot (shared axis with the previous subplot (if any))
+        let kwargs = match previous_axis {
+            None => None,
+            Some(previous_axis) => {
+                // share the axis with f = 2so that the plots have the same
+                // scale; also, hide the labels for f = 1
+                hide_xticklabels = true;
+                Some(pytry!(py, pydict!(py, ("sharex", previous_axis.ax()))))
+            }
+        };
+        let ax = pytry!(py, plt.subplot(2, 1, f, kwargs));
+
+        for &protocol in protocols.iter() {
+            inner_cdf_plot(
+                py,
+                &ax,
+                n,
+                f,
+                protocol,
+                clients_per_region,
+                conflict_rate,
+                payload_size,
+                db,
+            )?;
+        }
+
+        // set cdf plot style
+        inner_cdf_plot_style(py, &ax)?;
+
+        // additional style: maybe hide x-axis labels
+        if hide_xticklabels {
+            pytry!(py, ax.xaxis.set_visible(false));
+        }
+
+        // legend
+        add_subplot_legend(n, py, &ax)?;
+
+        // save axis
+        previous_axis = Some(ax);
+    }
+
+    // end plot
+    end_plot(output_file, py, &plt, fig)?;
+
+    Ok(())
+}
+
+fn inner_cdf_plot_style(py: Python, ax: &Axes) -> Result<(), Report> {
     // set y limits
     let kwargs = pytry!(py, pydict!(py, ("ymin", 0), ("ymax", 1)));
     pytry!(py, ax.set_ylim(Some(kwargs)));
@@ -252,11 +319,64 @@ pub fn cdf_plot(
     pytry!(py, ax.set_xlabel("latency (ms) [log-scale]"));
     pytry!(py, ax.set_ylabel("CDF"));
 
-    // legend
-    add_legend(n, py, &ax)?;
+    Ok(())
+}
 
-    // end plot
-    end_plot(output_file, py, &plt, fig)?;
+fn inner_cdf_plot(
+    py: Python,
+    ax: &Axes,
+    n: usize,
+    f: usize,
+    protocol: Protocol,
+    clients_per_region: usize,
+    conflict_rate: usize,
+    payload_size: usize,
+    db: &mut ResultsDB,
+) -> Result<(), Report> {
+    let mut exp_data = db
+        .search()
+        .n(n)
+        .f(f)
+        .protocol(protocol)
+        .clients_per_region(clients_per_region)
+        .conflict_rate(conflict_rate)
+        .payload_size(payload_size)
+        .load()?;
+    match exp_data.len() {
+        0 => {
+            eprintln!(
+                "missing data for {} f = {}",
+                PlotFmt::protocol_name(protocol),
+                f
+            );
+            return Ok(());
+        }
+        1 => (),
+        _ => panic!(
+            "found more than 1 matching experiment for this search criteria"
+        ),
+    };
+    let exp_data = exp_data.pop().unwrap();
+
+    // compute x: all values in the global histogram
+    let x: Vec<_> = percentiles()
+        .map(|percentile| {
+            exp_data
+                .global_client_latency
+                .percentile(percentile)
+                .value()
+                .round() as u64
+        })
+        .collect();
+
+    // compute y: percentiles!
+    let y: Vec<_> = percentiles().collect();
+
+    // compute plot arguments
+    let kwargs = line_style(py, protocol, f)?;
+
+    // plot it!
+    pytry!(py, ax.plot(x, y, None, Some(kwargs)));
 
     Ok(())
 }
@@ -275,7 +395,7 @@ pub fn throughput_latency_plot(
     let plt = pytry!(py, PyPlot::new(py));
 
     // start plot
-    let (fig, ax) = start_plot(py, &plt)?;
+    let (fig, ax) = start_plot(py, &plt, None)?;
 
     for (protocol, f) in combinations(n) {
         // compute y: latency values for each number of clients
@@ -385,6 +505,7 @@ fn percentiles() -> impl Iterator<Item = f64> {
 fn start_plot<'a>(
     py: Python<'a>,
     plt: &'a PyPlot<'a>,
+    height_between_subplots: Option<f64>,
 ) -> Result<(Figure<'a>, Axes<'a>), Report> {
     // adjust fig size
     let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
@@ -395,6 +516,10 @@ fn start_plot<'a>(
         py,
         pydict!(py, ("top", ADJUST_TOP), ("bottom", ADJUST_BOTTOM))
     );
+    // maybe also set `hspace`
+    if let Some(hspace) = height_between_subplots {
+        pytry!(py, kwargs.set_item("hspace", hspace));
+    }
     pytry!(py, fig.subplots_adjust(Some(kwargs)));
 
     Ok((fig, ax))
@@ -421,9 +546,28 @@ fn add_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
     let y_bbox_to_anchor = match n {
         3 => 1.17,
         5 => 1.24,
-        _ => panic!("cdf_plot: unsupported n: {}", n),
+        _ => panic!("add_legend: unsupported n: {}", n),
     };
 
+    do_add_legend(y_bbox_to_anchor, py, ax)
+}
+
+fn add_subplot_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
+    // pull legend up
+    let y_bbox_to_anchor = if n != 3 {
+        1.37
+    } else {
+        panic!("add_subplot_legend: unsupported n: {}", n)
+    };
+
+    do_add_legend(y_bbox_to_anchor, py, ax)
+}
+
+fn do_add_legend(
+    y_bbox_to_anchor: f64,
+    py: Python,
+    ax: &Axes,
+) -> Result<(), Report> {
     // add legend
     let kwargs = pytry!(
         py,
