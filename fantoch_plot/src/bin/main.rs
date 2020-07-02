@@ -7,6 +7,9 @@ use fantoch_plot::{ErrorBar, PlotFmt, ResultsDB};
 const RESULTS_DIR: &str = "../results";
 
 fn main() -> Result<(), Report> {
+    // set global style
+    fantoch_plot::set_global_style()?;
+
     // fixed parameters
     let conflict_rate = 10;
     let payload_size = 4096;

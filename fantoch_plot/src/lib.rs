@@ -11,11 +11,13 @@ use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
 use plot::axes::Axes;
 use plot::figure::Figure;
+use plot::pyplot::PyPlot;
+use plot::style::Style;
 use plot::ticker::Ticker;
-use plot::PyPlot;
+use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -37,6 +39,37 @@ pub enum ErrorBar {
 enum AxisToScale {
     X,
     Y,
+}
+
+pub fn set_global_style() -> Result<(), Report> {
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+
+    // set style
+    // TODO this doesn't seem to work (except for "ggplot")
+    // let style = pytry!(py, Style::new(py));
+    // pytry!(py, style.use_("tableau-colorblind10"));
+
+    let lib = pytry!(py, Matplotlib::new(py));
+    // need to load `PyPlot` for the following to work (which is just weird)
+    let _ = pytry!(py, PyPlot::new(py));
+
+    // adjust fig size
+    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
+    pytry!(py, lib.rc("figure", Some(kwargs)));
+
+    // adjust font size
+    let kwargs = pytry!(py, pydict!(py, ("size", 10)));
+    pytry!(py, lib.rc("font", Some(kwargs)));
+    let kwargs = pytry!(py, pydict!(py, ("fontsize", 10)));
+    pytry!(py, lib.rc("legend", Some(kwargs)));
+
+    // adjust axes linewidth
+    let kwargs = pytry!(py, pydict!(py, ("linewidth", 1)));
+    pytry!(py, lib.rc("axes", Some(kwargs)));
+
+    Ok(())
 }
 
 pub fn latency_plot(
@@ -233,7 +266,7 @@ pub fn cdf_plots(
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
-    let (protocols, mut fs): (HashSet<_>, Vec<_>) =
+    let (protocols, mut fs): (BTreeSet<_>, Vec<_>) =
         combinations(n).into_iter().unzip();
     fs.sort();
     fs.dedup();
@@ -466,11 +499,12 @@ pub fn throughput_latency_plot(
 }
 
 fn combinations(n: usize) -> Vec<(Protocol, usize)> {
-    let protocols = vec![
+    let mut protocols = vec![
         Protocol::NewtAtomic,
         Protocol::AtlasLocked,
         Protocol::FPaxos,
     ];
+    protocols.sort_by_key(|&protocol| PlotFmt::protocol_name(protocol));
     let max_f = match n {
         3 => 1,
         5 => 2,
@@ -502,9 +536,7 @@ fn start_plot<'a>(
     plt: &'a PyPlot<'a>,
     height_between_subplots: Option<f64>,
 ) -> Result<(Figure<'a>, Axes<'a>), Report> {
-    // adjust fig size
-    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
-    let (fig, ax) = pytry!(py, plt.subplots(Some(kwargs)));
+    let (fig, ax) = pytry!(py, plt.subplots(None));
 
     // adjust fig margins
     let kwargs = pytry!(
@@ -622,6 +654,17 @@ fn set_log_scale(
     let kwargs = pytry!(py, pydict!(py, ("axis", axis), ("style", "plain")));
     pytry!(py, ax.ticklabel_format(Some(kwargs)));
 
+    // prune minor ticks
+    prune_minor_ticks(py, ax, axis_to_scale)?;
+
+    Ok(())
+}
+
+fn prune_minor_ticks(
+    py: Python,
+    ax: &Axes,
+    axis_to_scale: AxisToScale,
+) -> Result<(), Report> {
     Ok(())
 }
 
