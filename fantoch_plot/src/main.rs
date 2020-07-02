@@ -1,14 +1,28 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch::planet::{Planet, Region};
 use fantoch_plot::{ErrorBar, PlotFmt, ResultsDB};
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results";
 
 fn main() -> Result<(), Report> {
+    // show distance matrix
+    let planet = Planet::from("../latency_aws/");
+    let regions = vec![
+        Region::new("eu-west-1"),
+        Region::new("us-west-1"),
+        Region::new("ap-southeast-1"),
+        Region::new("ca-central-1"),
+        Region::new("sa-east-1"),
+    ];
+    println!("{}", planet.distance_matrix(regions.clone()).unwrap());
+
+    // fixed parameters
     let conflict_rate = 10;
     let payload_size = 4096;
 
+    // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     for n in vec![3, 5] {

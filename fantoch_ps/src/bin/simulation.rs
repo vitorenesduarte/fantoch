@@ -1,12 +1,12 @@
 use fantoch::client::Workload;
 use fantoch::config::Config;
+use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
 use fantoch_ps::protocol::{
     AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
 };
-use std::collections::HashMap;
 use std::thread;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
@@ -384,7 +384,6 @@ fn run<P: Protocol>(
         );
     }
 
-    /*
     // compute clients stats
     let histogram = clients_latencies.into_iter().fold(
         Histogram::new(),
@@ -402,59 +401,6 @@ fn run<P: Protocol>(
         clients_per_region,
         histogram
     );
-    */
-
-    // do average of percentiles, instead of merging all histograms, as above.
-    // TODO: go back to the version above
-    let metrics = vec!["min", "max", "avg", "p95", "p99", "p99.9", "p99.99"];
-    let mut latencies_to_avg: HashMap<&str, Vec<_>> = Default::default();
-
-    clients_latencies.into_iter().for_each(
-        |(region, (_issued_commands, histogram))| {
-            println!("region = {:<14} | {:?}", region.name(), histogram);
-            latencies_to_avg
-                .entry("min")
-                .or_default()
-                .push(histogram.min().value().round());
-            latencies_to_avg
-                .entry("max")
-                .or_default()
-                .push(histogram.max().value().round());
-            latencies_to_avg
-                .entry("avg")
-                .or_default()
-                .push(histogram.mean().value().round());
-            latencies_to_avg
-                .entry("p95")
-                .or_default()
-                .push(histogram.percentile(0.95).value().round());
-            latencies_to_avg
-                .entry("p99")
-                .or_default()
-                .push(histogram.percentile(0.99).value().round());
-            latencies_to_avg
-                .entry("p99.9")
-                .or_default()
-                .push(histogram.percentile(0.999).value().round());
-            latencies_to_avg
-                .entry("p99.99")
-                .or_default()
-                .push(histogram.percentile(0.9999).value().round());
-        },
-    );
-
-    let mut line =
-        format!("n = {} AND c = {:<9} |", config.n(), clients_per_region);
-    for metric in metrics {
-        let latencies = latencies_to_avg
-            .remove(metric)
-            .expect("metric should exist");
-        // there should be as many latencies as regions
-        assert_eq!(latencies.len(), config.n());
-        let avg = latencies.into_iter().sum::<f64>() as usize / config.n();
-        line = format!("{} {}={:<6}", line, metric, avg);
-    }
-    println!("{}", line);
 }
 
 fn run_in_thread<F>(run: F)
