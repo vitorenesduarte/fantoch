@@ -2,7 +2,6 @@ pub mod axes;
 pub mod axis;
 pub mod figure;
 pub mod pyplot;
-pub mod style;
 pub mod ticker;
 
 use pyo3::prelude::*;
@@ -56,7 +55,6 @@ macro_rules! pydict {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pyo3::prelude::*;
     use pyplot::PyPlot;
 
     #[test]

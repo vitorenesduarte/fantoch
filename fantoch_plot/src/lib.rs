@@ -12,12 +12,11 @@ use fantoch_exp::Protocol;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
-use plot::style::Style;
 use plot::ticker::Ticker;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -28,8 +27,6 @@ const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO);
 // margins
 const ADJUST_TOP: f64 = 0.85;
 const ADJUST_BOTTOM: f64 = 0.15;
-
-const LEGEND_NCOL: usize = 3;
 
 pub enum ErrorBar {
     With(f64),
@@ -46,11 +43,6 @@ pub fn set_global_style() -> Result<(), Report> {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    // set style
-    // TODO this doesn't seem to work (except for "ggplot")
-    // let style = pytry!(py, Style::new(py));
-    // pytry!(py, style.use_("tableau-colorblind10"));
-
     let lib = pytry!(py, Matplotlib::new(py));
     // need to load `PyPlot` for the following to work (which is just weird)
     let _ = pytry!(py, PyPlot::new(py));
@@ -60,7 +52,7 @@ pub fn set_global_style() -> Result<(), Report> {
     pytry!(py, lib.rc("figure", Some(kwargs)));
 
     // adjust font size
-    let kwargs = pytry!(py, pydict!(py, ("size", 10)));
+    let kwargs = pytry!(py, pydict!(py, ("size", 9)));
     pytry!(py, lib.rc("font", Some(kwargs)));
     let kwargs = pytry!(py, pydict!(py, ("fontsize", 10)));
     pytry!(py, lib.rc("legend", Some(kwargs)));
@@ -88,13 +80,13 @@ pub fn latency_plot(
 
     let combinations = combinations(n);
     assert!(combinations.len() <= MAX_COMBINATIONS);
-    let combination_count = combinations.len() as f64;
+    let mut combination_count = combinations.len();
 
     // compute x:
     let x: Vec<_> = (0..n).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
 
     // we need to shift all to the left by half of the number of combinations
-    let shift_left = combination_count / 2f64;
+    let shift_left = combinations.len() as f64 / 2f64;
     // we also need to shift half bar to the right
     let shift_right = 0.5;
     let combinations =
@@ -136,6 +128,8 @@ pub fn latency_plot(
         match exp_data.len() {
             0 => {
                 eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
+                // reduce the number of combinations
+                combination_count -= 1;
                 continue;
             },
             1 => (),
@@ -207,7 +201,7 @@ pub fn latency_plot(
     pytry!(py, ax.set_ylabel("latency (ms)"));
 
     // legend
-    add_legend(n, py, &ax)?;
+    add_legend(combination_count as usize, n, py, &ax)?;
 
     // end plot
     end_plot(output_file, py, &plt, fig)?;
@@ -232,7 +226,9 @@ pub fn cdf_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
-    for (protocol, f) in combinations(n) {
+    let combinations = combinations(n);
+    let mut combination_count = combinations.len();
+    for (protocol, f) in combinations {
         inner_cdf_plot(
             py,
             &ax,
@@ -242,6 +238,7 @@ pub fn cdf_plot(
             clients_per_region,
             conflict_rate,
             payload_size,
+            &mut combination_count,
             db,
         )?;
     }
@@ -250,7 +247,7 @@ pub fn cdf_plot(
     inner_cdf_plot_style(py, &ax)?;
 
     // legend
-    add_legend(n, py, &ax)?;
+    add_legend(combination_count, n, py, &ax)?;
 
     // end plot
     end_plot(output_file, py, &plt, fig)?;
@@ -266,8 +263,10 @@ pub fn cdf_plots(
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
-    let (protocols, mut fs): (BTreeSet<_>, Vec<_>) =
+    let (mut protocols, mut fs): (Vec<_>, Vec<_>) =
         combinations(n).into_iter().unzip();
+    protocols.sort_by_key(|&protocol| PlotFmt::protocol_name(protocol));
+    protocols.dedup();
     fs.sort();
     fs.dedup();
     match fs.as_slice() {
@@ -290,6 +289,7 @@ pub fn cdf_plots(
     let mut previous_axis: Option<Axes> = None;
 
     for f in vec![2, 1] {
+        let mut combination_count = protocols.len();
         let mut hide_xticklabels = false;
 
         // create subplot (shared axis with the previous subplot (if any))
@@ -314,6 +314,7 @@ pub fn cdf_plots(
                 clients_per_region,
                 conflict_rate,
                 payload_size,
+                &mut combination_count,
                 db,
             )?;
         }
@@ -327,7 +328,7 @@ pub fn cdf_plots(
         }
 
         // legend
-        add_subplot_legend(n, py, &ax)?;
+        add_subplot_legend(combination_count, n, py, &ax)?;
 
         // save axis
         previous_axis = Some(ax);
@@ -363,6 +364,7 @@ fn inner_cdf_plot(
     clients_per_region: usize,
     conflict_rate: usize,
     payload_size: usize,
+    combination_count: &mut usize,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
     let mut exp_data = db
@@ -381,6 +383,8 @@ fn inner_cdf_plot(
                 PlotFmt::protocol_name(protocol),
                 f
             );
+            // reduce the number of combinations
+            *combination_count -= 1;
             return Ok(());
         }
         1 => (),
@@ -427,7 +431,10 @@ pub fn throughput_latency_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
-    for (protocol, f) in combinations(n) {
+    let combinations = combinations(n);
+    let mut combination_count = combinations.len();
+
+    for (protocol, f) in combinations {
         // compute y: latency values for each number of clients
         let mut y = Vec::with_capacity(clients_per_region.len());
         for &clients in clients_per_region.iter() {
@@ -444,6 +451,8 @@ pub fn throughput_latency_plot(
                 0 => {
                     eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
                     y.push(0f64);
+                    // reduce the number of combinations
+                    combination_count -= 1;
                     continue;
                 },
                 1 => (),
@@ -490,7 +499,7 @@ pub fn throughput_latency_plot(
     pytry!(py, ax.set_ylabel("latency (ms) [log-scale]"));
 
     // legend
-    add_legend(n, py, &ax)?;
+    add_legend(combination_count, n, py, &ax)?;
 
     // end plot
     end_plot(output_file, py, &plt, fig)?;
@@ -568,7 +577,12 @@ fn end_plot(
     Ok(())
 }
 
-fn add_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
+fn add_legend(
+    combination_count: usize,
+    n: usize,
+    py: Python,
+    ax: &Axes,
+) -> Result<(), Report> {
     // pull legend up
     let y_bbox_to_anchor = match n {
         3 => 1.17,
@@ -576,10 +590,15 @@ fn add_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
         _ => panic!("add_legend: unsupported n: {}", n),
     };
 
-    do_add_legend(y_bbox_to_anchor, py, ax)
+    do_add_legend(combination_count, y_bbox_to_anchor, py, ax)
 }
 
-fn add_subplot_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
+fn add_subplot_legend(
+    combination_count: usize,
+    n: usize,
+    py: Python,
+    ax: &Axes,
+) -> Result<(), Report> {
     // pull legend up
     let y_bbox_to_anchor = if n != 3 {
         1.37
@@ -587,14 +606,24 @@ fn add_subplot_legend(n: usize, py: Python, ax: &Axes) -> Result<(), Report> {
         panic!("add_subplot_legend: unsupported n: {}", n)
     };
 
-    do_add_legend(y_bbox_to_anchor, py, ax)
+    do_add_legend(combination_count, y_bbox_to_anchor, py, ax)
 }
 
 fn do_add_legend(
+    combination_count: usize,
     y_bbox_to_anchor: f64,
     py: Python,
     ax: &Axes,
 ) -> Result<(), Report> {
+    let legend_ncol = match combination_count {
+        1 => 1,
+        2 => 2,
+        3 => 3,
+        4 => 2,
+        5 => 3,
+        6 => 3,
+        _ => panic!("do_add_legend: unsupported number of combinations"),
+    };
     // add legend
     let kwargs = pytry!(
         py,
@@ -604,7 +633,7 @@ fn do_add_legend(
             ("bbox_to_anchor", (0.5, y_bbox_to_anchor)),
             // remove box around legend:
             ("edgecolor", "white"),
-            ("ncol", LEGEND_NCOL),
+            ("ncol", legend_ncol),
         )
     );
     pytry!(py, ax.legend(Some(kwargs)));
