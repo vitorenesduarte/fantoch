@@ -1,6 +1,6 @@
 use crate::plot::axis::Axis;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyFloat, PyTuple};
 
 pub struct Axes<'a> {
     ax: &'a PyAny,
@@ -29,19 +29,51 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
-    pub fn set_xticks<T>(&self, ticks: Vec<T>) -> PyResult<()>
+    pub fn set_xticks<T>(
+        &self,
+        ticks: Vec<T>,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<()>
     where
         T: IntoPy<PyObject>,
     {
-        self.ax.call_method1("set_xticks", (ticks,))?;
+        self.ax.call_method("set_xticks", (ticks,), kwargs)?;
         Ok(())
     }
 
-    pub fn set_xticklabels<L>(&self, labels: Vec<L>) -> PyResult<()>
+    pub fn set_yticks<T>(
+        &self,
+        ticks: Vec<T>,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<()>
+    where
+        T: IntoPy<PyObject>,
+    {
+        self.ax.call_method("set_yticks", (ticks,), kwargs)?;
+        Ok(())
+    }
+
+    pub fn set_xticklabels<L>(
+        &self,
+        labels: Vec<L>,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<()>
     where
         L: IntoPy<PyObject>,
     {
-        self.ax.call_method1("set_xticklabels", (labels,))?;
+        self.ax.call_method("set_xticklabels", (labels,), kwargs)?;
+        Ok(())
+    }
+
+    pub fn set_yticklabels<L>(
+        &self,
+        labels: Vec<L>,
+        kwargs: Option<&PyDict>,
+    ) -> PyResult<()>
+    where
+        L: IntoPy<PyObject>,
+    {
+        self.ax.call_method("set_yticklabels", (labels,), kwargs)?;
         Ok(())
     }
 
@@ -55,9 +87,20 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
-    pub fn ticklabel_format(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.ax.call_method("ticklabel_format", (), kwargs)?;
-        Ok(())
+    pub fn get_xlim(&self) -> PyResult<(f64, f64)> {
+        let xlim = self.ax.call_method0("get_xlim")?;
+        let xlim = xlim.downcast::<PyTuple>()?;
+        let left = xlim.get_item(0).downcast::<PyFloat>()?;
+        let right = xlim.get_item(1).downcast::<PyFloat>()?;
+        Ok((left.value(), right.value()))
+    }
+
+    pub fn get_ylim(&self) -> PyResult<(f64, f64)> {
+        let xlim = self.ax.call_method0("get_ylim")?;
+        let xlim = xlim.downcast::<PyTuple>()?;
+        let left = xlim.get_item(0).downcast::<PyFloat>()?;
+        let right = xlim.get_item(1).downcast::<PyFloat>()?;
+        Ok((left.value(), right.value()))
     }
 
     pub fn set_ylim(&self, kwargs: Option<&PyDict>) -> PyResult<()> {

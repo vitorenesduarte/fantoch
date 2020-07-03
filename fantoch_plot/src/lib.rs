@@ -12,7 +12,6 @@ use fantoch_exp::Protocol;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
-use plot::ticker::Ticker;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -191,7 +190,7 @@ pub fn latency_plot(
     }
 
     // set xticks
-    pytry!(py, ax.set_xticks(x));
+    pytry!(py, ax.set_xticks(x, None));
 
     // set x labels:
     // - check the number of regions is correct
@@ -203,7 +202,7 @@ pub fn latency_plot(
         .into_iter()
         .map(|region| PlotFmt::region_name(region))
         .collect();
-    pytry!(py, ax.set_xticklabels(labels));
+    pytry!(py, ax.set_xticklabels(labels, None));
 
     // set labels
     pytry!(py, ax.set_ylabel("latency (ms)"));
@@ -357,7 +356,7 @@ fn inner_cdf_plot_style(py: Python, ax: &Axes) -> Result<(), Report> {
     pytry!(py, ax.set_ylim(Some(kwargs)));
 
     // set log scale on x axis
-    set_log_scale(py, &ax, AxisToScale::X)?;
+    set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
     pytry!(py, ax.set_xlabel("latency (ms) [log-scale]"));
@@ -678,8 +677,6 @@ fn set_log_scale(
     ax: &Axes,
     axis_to_scale: AxisToScale,
 ) -> Result<(), Report> {
-    let ticker = pytry!(py, Ticker::new(py));
-
     // set log scale on axis
     match axis_to_scale {
         AxisToScale::X => {
@@ -690,42 +687,57 @@ fn set_log_scale(
         }
     }
 
-    // the following lines are needed before setting the ticklabel format to
-    // plain (as suggested here: https://stackoverflow.com/questions/49750107/how-to-remove-scientific-notation-on-a-matplotlib-log-log-plot)
-    let major_formatter = pytry!(py, ticker.scalar_formatter());
-    let minor_formatter = pytry!(py, ticker.scalar_formatter());
+    // control which labels get plotted (matplotlib doesn't do a very good job
+    // picking labels with a log scale)
+    const LABEL_COUNT: usize = 7;
+
+    // compute ticks given the limits
+    let (start, end) = match axis_to_scale {
+        AxisToScale::X => pytry!(py, ax.get_xlim()),
+        AxisToScale::Y => pytry!(py, ax.get_ylim()),
+    };
+
+    // compute `shift` when `start` and `end` are in `ln`-values. this ensures
+    // that we'll get roughly evenly-spaced ticks (after mapping them back to
+    // their original value with `exp`)
+    let start_log = start.ln();
+    let end_log = end.ln();
+    let shift = (end_log - start_log) / (LABEL_COUNT - 1) as f64;
+
+    let mut ticks: Vec<_> = (0..LABEL_COUNT)
+        .map(|i| {
+            let log = start_log + i as f64 * shift;
+            match log.exp().round() as u64 {
+                n if n <= 400 => (n as f64 / 10f64).round() as u64 * 10,
+                n if n <= 1000 => (n as f64 / 50f64).round() as u64 * 50,
+                n if n <= 10000 => (n as f64 / 100f64).round() as u64 * 100,
+                n => panic!("set_log_scale: unsupportted axis value: {}", n),
+            }
+        })
+        .collect();
+
+    // set major ticks with the `ticks` computed above; also remove minor ticks
+    let major = pytry!(py, pydict!(py, ("minor", false)));
+    let minor = pytry!(py, pydict!(py, ("minor", true)));
+
     match axis_to_scale {
         AxisToScale::X => {
-            pytry!(py, ax.xaxis.set_major_formatter(major_formatter));
-            pytry!(py, ax.xaxis.set_minor_formatter(minor_formatter));
+            pytry!(py, ax.set_xticks(ticks.clone(), Some(major)));
+            pytry!(py, ax.set_xticklabels(ticks.clone(), Some(major)));
+
+            ticks.clear();
+            pytry!(py, ax.set_xticks(ticks, Some(minor)));
         }
         AxisToScale::Y => {
-            pytry!(py, ax.yaxis.set_major_formatter(major_formatter));
-            pytry!(py, ax.yaxis.set_minor_formatter(minor_formatter));
+            // set major ticks
+            pytry!(py, ax.set_yticks(ticks.clone(), Some(major)));
+            pytry!(py, ax.set_yticklabels(ticks.clone(), Some(major)));
+
+            // remove minor ticks
+            ticks.clear();
+            pytry!(py, ax.set_yticks(ticks, Some(minor)));
         }
     }
-
-    // prevent scientific notation on the axis
-    // - this could be avoided by using the `FormatStrFormatter` instead of the
-    //   `ScalarFormatter`
-    let axis = match axis_to_scale {
-        AxisToScale::X => "x",
-        AxisToScale::Y => "y",
-    };
-    let kwargs = pytry!(py, pydict!(py, ("axis", axis), ("style", "plain")));
-    pytry!(py, ax.ticklabel_format(Some(kwargs)));
-
-    // prune minor ticks
-    prune_minor_ticks(py, ax, axis_to_scale)?;
-
-    Ok(())
-}
-
-fn prune_minor_ticks(
-    py: Python,
-    ax: &Axes,
-    axis_to_scale: AxisToScale,
-) -> Result<(), Report> {
     Ok(())
 }
 

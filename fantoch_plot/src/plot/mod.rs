@@ -2,7 +2,6 @@ pub mod axes;
 pub mod axis;
 pub mod figure;
 pub mod pyplot;
-pub mod ticker;
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
