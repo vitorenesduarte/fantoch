@@ -15,31 +15,28 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
+          toolchain: nightly-2020-06-10
           override: true
 
       - name: Test fantoch
         run: cd fantoch/ && cargo test --release --features timing
         env:
           QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
         timeout-minutes: 30
 
       - name: Test fantoch_ps
         run: cd fantoch_ps/ && cargo test --release --features timing
         env:
           QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
         timeout-minutes: 30
 
       - name: Test fantoch_bote
         run: cd fantoch_bote/ && cargo test --release
         env:
           QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
         timeout-minutes: 30
 
       - name: Test fantoch_plot
@@ -49,8 +46,7 @@ jobs:
           cd fantoch_plot/ && cargo test --release
         env:
           QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
         timeout-minutes: 30
 
       - name: Check fantoch_exp
