@@ -22,21 +22,27 @@ jobs:
         run: cd fantoch/ && cargo test --release --features timing
         env:
           QUICKCHECK_TESTS: '10000'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
         timeout-minutes: 30
 
       - name: Test fantoch_ps
         run: cd fantoch_ps/ && cargo test --release --features timing
         env:
           QUICKCHECK_TESTS: '10000'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
         timeout-minutes: 30
 
       - name: Test fantoch_bote
         run: cd fantoch_bote/ && cargo test --release
         env:
           QUICKCHECK_TESTS: '10000'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
         timeout-minutes: 30
 
       - name: Test fantoch_plot
@@ -46,7 +52,9 @@ jobs:
           cd fantoch_plot/ && cargo test --release
         env:
           QUICKCHECK_TESTS: '10000'
-          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-g -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
         timeout-minutes: 30
 
       - name: Check fantoch_exp
