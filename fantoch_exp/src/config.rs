@@ -1,6 +1,6 @@
 #[cfg(feature = "exp")]
 use crate::args;
-use crate::{Protocol, RunMode, Testbed};
+use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::planet::Region;
@@ -269,6 +269,7 @@ impl ClientConfig {
 pub struct ExperimentConfig {
     pub regions: HashMap<Region, ProcessId>,
     pub run_mode: RunMode,
+    pub features: Vec<FantochFeature>,
     pub testbed: Testbed,
     pub protocol: Protocol,
     pub config: Config,
@@ -291,6 +292,7 @@ impl ExperimentConfig {
     pub fn new(
         regions: HashMap<Region, ProcessId>,
         run_mode: RunMode,
+        features: Vec<FantochFeature>,
         testbed: Testbed,
         protocol: Protocol,
         mut config: Config,
@@ -302,6 +304,7 @@ impl ExperimentConfig {
         Self {
             regions,
             run_mode,
+            features,
             testbed,
             protocol,
             config,

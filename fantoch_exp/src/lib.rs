@@ -43,7 +43,7 @@ impl RunMode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum FantochFeature {
     Amortize,
     Timing,

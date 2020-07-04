@@ -3,7 +3,7 @@ use crate::config::{
 };
 use crate::exp::{self, Machines};
 use crate::util;
-use crate::{Protocol, RunMode, Testbed};
+use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
 use fantoch::config::Config;
@@ -21,6 +21,7 @@ const METRICS_FILE: &str = ".metrics";
 pub async fn bench_experiment(
     machines: Machines<'_>,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
     testbed: Testbed,
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
@@ -39,6 +40,7 @@ pub async fn bench_experiment(
             run_experiment(
                 &machines,
                 run_mode,
+                features.clone(),
                 testbed,
                 &planet,
                 protocol,
@@ -56,6 +58,7 @@ pub async fn bench_experiment(
 async fn run_experiment(
     machines: &Machines<'_>,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
     testbed: Testbed,
     planet: &Option<Planet>,
     protocol: Protocol,
@@ -92,6 +95,7 @@ async fn run_experiment(
     let exp_config = ExperimentConfig::new(
         machines.regions().clone(),
         run_mode,
+        features,
         testbed,
         protocol,
         config,

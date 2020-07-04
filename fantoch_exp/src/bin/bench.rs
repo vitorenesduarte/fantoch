@@ -109,6 +109,9 @@ async fn baremetal_bench(
         .map(|_| tsunami::providers::baremetal::Machine::default())
         .collect();
 
+    // compute features
+    let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
+
     // setup baremetal machines
     let machines = fantoch_exp::testbed::baremetal::setup(
         &mut launchers,
@@ -117,7 +120,7 @@ async fn baremetal_bench(
         regions,
         BRANCH.to_string(),
         RUN_MODE,
-        FEATURE.map(|feature| vec![feature]).unwrap_or_default(),
+        features.clone(),
     )
     .await
     .wrap_err("baremetal spawn")?;
@@ -128,6 +131,7 @@ async fn baremetal_bench(
     // run benchmarks
     run_bench(
         machines,
+        features,
         Testbed::Baremetal,
         planet,
         configs,
@@ -168,6 +172,9 @@ async fn do_aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
 ) -> Result<(), Report> {
+    // compute features
+    let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
+
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
@@ -178,7 +185,7 @@ async fn do_aws_bench(
         MAX_INSTANCE_DURATION_HOURS,
         BRANCH.to_string(),
         RUN_MODE,
-        FEATURE.map(|feature| vec![feature]).unwrap_or_default(),
+        features.clone(),
     )
     .await
     .wrap_err("aws spawn")?;
@@ -187,15 +194,23 @@ async fn do_aws_bench(
     let planet = None;
 
     // run benchmarks
-    run_bench(machines, Testbed::Aws, planet, configs, clients_per_region)
-        .await
-        .wrap_err("run bench")?;
+    run_bench(
+        machines,
+        features,
+        Testbed::Aws,
+        planet,
+        configs,
+        clients_per_region,
+    )
+    .await
+    .wrap_err("run bench")?;
 
     Ok(())
 }
 
 async fn run_bench(
     machines: Machines<'_>,
+    features: Vec<FantochFeature>,
     testbed: Testbed,
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
@@ -204,6 +219,7 @@ async fn run_bench(
     fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
+        features,
         testbed,
         planet,
         configs,
