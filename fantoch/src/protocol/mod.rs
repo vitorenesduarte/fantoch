@@ -32,6 +32,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
+use std::time::Duration;
 
 pub trait Protocol: Debug + Clone {
     type Message: Debug
@@ -45,12 +46,11 @@ pub trait Protocol: Debug + Clone {
     type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex;
     type Executor: Executor + Send;
 
-    /// Returns a new instance of the protocol and a list of periodic events
-    /// (intervals in milliseconds).
+    /// Returns a new instance of the protocol and a list of periodic events.
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>);
+    ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>);
 
     fn id(&self) -> ProcessId;
 

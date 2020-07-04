@@ -97,6 +97,7 @@ if [ "${flamegraph}" == "true" ]; then
 
     # install flamegraph
     cargo install flamegraph
+    flamegraph --help
 fi
 
 # increase maximum number of open files by changing "/etc/security/limits.conf"
@@ -120,6 +121,8 @@ sudo sysctl --system
 
 # install htop, dstat and lsof
 sudo apt-get install -y htop dstat lsof
+dstat --help
+lsof --help
 
 # clean up
 sudo apt-get autoremove -y

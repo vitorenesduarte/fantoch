@@ -17,6 +17,7 @@ use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::mem;
+use std::time::Duration;
 use threshold::VClock;
 use tracing::instrument;
 
@@ -42,7 +43,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) = config.atlas_quorum_sizes();
 
@@ -72,7 +73,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
 
         // create periodic events
         let events = if let Some(interval) = config.gc_interval() {
-            vec![(PeriodicEvent::GarbageCollection, interval as u64)]
+            vec![(PeriodicEvent::GarbageCollection, interval)]
         } else {
             vec![]
         };

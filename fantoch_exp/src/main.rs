@@ -11,7 +11,11 @@ use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use rusoto_core::Region;
+use std::time::Duration;
 use tsunami::Tsunami;
+
+// folder where all results will be stored
+const RESULTS_DIR: &str = "../results";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -23,13 +27,12 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
-const GC_INTERVAL: Option<usize> = Some(50); // every 50
+const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50)); // every 50
 const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "client_connection_pool";
-const OUTPUT_LOG: &str = ".tracer_log";
+const BRANCH: &str = "dstat";
 
 // ping-specific config
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
@@ -59,20 +62,19 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
+        /*
         Region::CaCentral1,
         Region::SaEast1,
+        */
     ];
-    /*
-    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
-    */
     let n = regions.len();
-    let f = 2;
+    let f = 1;
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::FPaxos, config!(n, f, false, None, false)),
-        /*
         (Protocol::NewtAtomic, config!(n, f, false, None, false)),
+        /*
+        (Protocol::FPaxos, config!(n, f, false, None, false)),
         (Protocol::AtlasLocked, config!(n, f, false, None, false)),
         */
     ];
@@ -92,21 +94,15 @@ async fn main() -> Result<(), Report> {
         1024 * 128,
     ];
 
-    let output_log = tokio::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(OUTPUT_LOG)
-        .await?;
-
-    baremetal_bench(regions, configs, clients_per_region, output_log).await
-    // aws_bench(regions, configs, clients_per_region, output_log).await
+    // baremetal_bench(regions, configs, clients_per_region).await
+    aws_bench(regions, configs, clients_per_region).await
 }
 
+#[allow(dead_code)]
 async fn baremetal_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let servers_count = regions.len();
     let clients_count = regions.len();
@@ -140,7 +136,6 @@ async fn baremetal_bench(
         planet,
         configs,
         clients_per_region,
-        output_log,
     )
     .await
     .wrap_err("run bench")?;
@@ -153,17 +148,10 @@ async fn aws_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
-    let res = do_aws_bench(
-        &mut launcher,
-        regions,
-        configs,
-        clients_per_region,
-        output_log,
-    )
-    .await;
+    let res =
+        do_aws_bench(&mut launcher, regions, configs, clients_per_region).await;
 
     // trap errors to make sure there's time for a debug
     if let Err(e) = &res {
@@ -183,7 +171,6 @@ async fn do_aws_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     // setup aws machines
     let machines = testbed::aws::setup(
@@ -203,16 +190,9 @@ async fn do_aws_bench(
     let planet = None;
 
     // run benchmarks
-    run_bench(
-        machines,
-        Testbed::Aws,
-        planet,
-        configs,
-        clients_per_region,
-        output_log,
-    )
-    .await
-    .wrap_err("run bench")?;
+    run_bench(machines, Testbed::Aws, planet, configs, clients_per_region)
+        .await
+        .wrap_err("run bench")?;
 
     Ok(())
 }
@@ -223,7 +203,6 @@ async fn run_bench(
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    output_log: tokio::fs::File,
 ) -> Result<(), Report> {
     bench::bench_experiment(
         machines,
@@ -233,7 +212,7 @@ async fn run_bench(
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,
-        output_log,
+        RESULTS_DIR,
     )
     .await
 }

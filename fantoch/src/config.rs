@@ -1,6 +1,8 @@
 use crate::id::ProcessId;
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Config {
     /// number of processes
     n: usize,
@@ -10,14 +12,14 @@ pub struct Config {
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
-    /// defines the interval between garbage collections (milliseconds)
-    gc_interval: Option<usize>,
+    /// defines the interval between garbage collections
+    gc_interval: Option<Duration>,
     // starting leader process
     leader: Option<ProcessId>,
     /// defines whether newt should employ tiny quorums or not
     newt_tiny_quorums: bool,
-    /// defines the interval between clock bumps (milliseconds), if any
-    newt_clock_bump_interval: Option<usize>,
+    /// defines the interval between clock bumps, if any
+    newt_clock_bump_interval: Option<Duration>,
     /// defines whether protocols should try to bypass the fast quorum process
     /// ack (which is only possible if the fast quorum size is 2)
     skip_fast_ack: bool,
@@ -90,12 +92,12 @@ impl Config {
     }
 
     /// Checks the garbage collection interval.
-    pub fn gc_interval(&self) -> Option<usize> {
+    pub fn gc_interval(&self) -> Option<Duration> {
         self.gc_interval
     }
 
     /// Sets the garbage collection interval.
-    pub fn set_gc_interval(&mut self, interval: usize) {
+    pub fn set_gc_interval(&mut self, interval: Duration) {
         self.gc_interval = Some(interval);
     }
 
@@ -120,12 +122,12 @@ impl Config {
     }
 
     /// Checks Newt clock bumpp interval.
-    pub fn newt_clock_bump_interval(&self) -> Option<usize> {
+    pub fn newt_clock_bump_interval(&self) -> Option<Duration> {
         self.newt_clock_bump_interval
     }
 
     /// Sets newt clock bump interval.
-    pub fn set_newt_clock_bump_interval(&mut self, interval: usize) {
+    pub fn set_newt_clock_bump_interval(&mut self, interval: Duration) {
         self.newt_clock_bump_interval = Some(interval);
     }
 
@@ -246,8 +248,9 @@ mod tests {
         assert_eq!(config.gc_interval(), None);
 
         // change its value and check it has changed
-        config.set_gc_interval(100);
-        assert_eq!(config.gc_interval(), Some(100));
+        let interval = Duration::from_millis(1);
+        config.set_gc_interval(interval);
+        assert_eq!(config.gc_interval(), Some(interval));
 
         // by default, there's no leader
         assert!(config.leader().is_none());
@@ -270,7 +273,7 @@ mod tests {
         // by default, there's no clock bump interval
         assert!(config.newt_clock_bump_interval().is_none());
         // but that can change
-        let interval = 1;
+        let interval = Duration::from_millis(1);
         config.set_newt_clock_bump_interval(interval);
         assert_eq!(config.newt_clock_bump_interval(), Some(interval));
 

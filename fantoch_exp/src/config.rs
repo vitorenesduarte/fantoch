@@ -1,7 +1,10 @@
 use crate::args;
-use crate::exp::Protocol;
+use crate::exp::{Protocol, RunMode, Testbed};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
+use fantoch::planet::Region;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // FIXED
 const IP: &str = "0.0.0.0";
@@ -68,17 +71,8 @@ impl ProtocolConfig {
         mut config: Config,
         ips: Vec<(String, Option<usize>)>,
     ) -> Self {
-        // for all protocol but newt, create a single executor
-        let (workers, executors) = match protocol {
-            Protocol::AtlasLocked => (WORKERS + EXECUTORS, 1),
-            Protocol::EPaxosLocked => (WORKERS + EXECUTORS, 1),
-            Protocol::FPaxos => {
-                // in the case of paxos, also set a leader
-                config.set_leader(LEADER);
-                (WORKERS + EXECUTORS, 1)
-            }
-            Protocol::NewtAtomic => (WORKERS, EXECUTORS),
-        };
+        let (workers, executors) =
+            workers_executors_and_leader(protocol, &mut config);
 
         Self {
             id,
@@ -123,7 +117,7 @@ impl ProtocolConfig {
             self.config.execute_at_commit(),
         ];
         if let Some(interval) = self.config.gc_interval() {
-            args.extend(args!["--gc_interval", interval]);
+            args.extend(args!["--gc_interval", interval.as_millis()]);
         }
         if let Some(leader) = self.config.leader() {
             args.extend(args!["--leader", leader]);
@@ -133,7 +127,10 @@ impl ProtocolConfig {
             self.config.newt_tiny_quorums()
         ]);
         if let Some(interval) = self.config.newt_clock_bump_interval() {
-            args.extend(args!["--newt_clock_bump_interval", interval]);
+            args.extend(args![
+                "--newt_clock_bump_interval",
+                interval.as_millis()
+            ]);
         }
         args.extend(args!["--skip_fast_ack", self.config.skip_fast_ack()]);
 
@@ -184,6 +181,23 @@ impl ProtocolConfig {
     }
 }
 
+fn workers_executors_and_leader(
+    protocol: Protocol,
+    config: &mut Config,
+) -> (usize, usize) {
+    // for all protocol but newt, create a single executor
+    match protocol {
+        Protocol::AtlasLocked => (WORKERS + EXECUTORS, 1),
+        Protocol::EPaxosLocked => (WORKERS + EXECUTORS, 1),
+        Protocol::FPaxos => {
+            // in the case of paxos, also set a leader
+            config.set_leader(LEADER);
+            (WORKERS + EXECUTORS, 1)
+        }
+        Protocol::NewtAtomic => (WORKERS, EXECUTORS),
+    }
+}
+
 pub struct ClientConfig {
     id_start: usize,
     id_end: usize,
@@ -193,10 +207,16 @@ pub struct ClientConfig {
     payload_size: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    metrics_file: String,
 }
 
 impl ClientConfig {
-    pub fn new(id_start: usize, id_end: usize, ip: String) -> Self {
+    pub fn new(
+        id_start: usize,
+        id_end: usize,
+        ip: String,
+        metrics_file: &str,
+    ) -> Self {
         Self {
             id_start,
             id_end,
@@ -206,6 +226,7 @@ impl ClientConfig {
             payload_size: PAYLOAD_SIZE,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            metrics_file: metrics_file.to_string(),
         }
     }
 
@@ -225,10 +246,69 @@ impl ClientConfig {
             self.tcp_nodelay,
             "--channel_buffer_size",
             self.channel_buffer_size,
+            "--metrics_file",
+            self.metrics_file,
         ]
     }
 
     fn ip_to_address(&self) -> String {
         format!("{}:{}", self.ip, CLIENT_PORT)
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ExperimentConfig {
+    regions: HashMap<Region, ProcessId>,
+    run_mode: RunMode,
+    testbed: Testbed,
+    protocol: Protocol,
+    config: Config,
+    clients_per_region: usize,
+    process_tcp_nodelay: bool,
+    tcp_buffer_size: usize,
+    tcp_flush_interval: Option<usize>,
+    process_channel_buffer_size: usize,
+    workers: usize,
+    executors: usize,
+    multiplexing: usize,
+    conflict_rate: usize,
+    commands_per_client: usize,
+    payload_size: usize,
+    client_tcp_nodelay: bool,
+    client_channel_buffer_size: usize,
+}
+
+impl ExperimentConfig {
+    pub fn new(
+        regions: HashMap<Region, ProcessId>,
+        run_mode: RunMode,
+        testbed: Testbed,
+        protocol: Protocol,
+        mut config: Config,
+        clients_per_region: usize,
+    ) -> Self {
+        let (workers, executors) =
+            workers_executors_and_leader(protocol, &mut config);
+
+        Self {
+            regions,
+            run_mode,
+            testbed,
+            protocol,
+            config,
+            clients_per_region,
+            process_tcp_nodelay: PROCESS_TCP_NODELAY,
+            tcp_buffer_size: PROCESS_TCP_BUFFER_SIZE,
+            tcp_flush_interval: PROCESS_TCP_FLUSH_INTERVAL,
+            process_channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            workers,
+            executors,
+            multiplexing: MULTIPLEXING,
+            conflict_rate: CONFLICT_RATE,
+            commands_per_client: COMMANDS_PER_CLIENT,
+            payload_size: PAYLOAD_SIZE,
+            client_tcp_nodelay: CLIENT_TCP_NODELAY,
+            client_channel_buffer_size: CHANNEL_BUFFER_SIZE,
+        }
     }
 }

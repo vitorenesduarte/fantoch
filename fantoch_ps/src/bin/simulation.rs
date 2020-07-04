@@ -1,6 +1,5 @@
 use fantoch::client::Workload;
 use fantoch::config::Config;
-use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::Protocol;
 use fantoch::sim::Runner;
@@ -9,6 +8,7 @@ use fantoch_ps::protocol::{
 };
 use std::collections::HashMap;
 use std::thread;
+use std::time::Duration;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
@@ -16,9 +16,9 @@ fn main() {
     let aws = true;
     newt_real_time(aws);
 
-    // aws_distance_matrix();
-    // epaxos_aws();
-    // newt_vs_spanner();
+    aws_distance_matrix();
+    epaxos_aws();
+    newt_vs_spanner();
 }
 
 fn aws_distance_matrix() {
@@ -49,7 +49,7 @@ fn epaxos_aws() {
     config.set_transitive_conflicts(transitive_conflicts);
 
     // make sure stability is running
-    config.set_gc_interval(100);
+    config.set_gc_interval(Duration::from_millis(100));
 
     // clients
     let client_regions = regions.clone();
@@ -109,7 +109,6 @@ fn newt_real_time(aws: bool) {
     for n in ns {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
 
-        /*
         println!(">running atlas n = {} | f = {}", n, f);
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(true);
@@ -133,7 +132,6 @@ fn newt_real_time(aws: bool) {
         run_in_thread(move || {
             increasing_load::<FPaxos>(planet_, regions_, config)
         });
-        */
 
         let configs = if n == 3 {
             // tiny quorums does nothing for n = 3
@@ -160,7 +158,9 @@ fn newt_real_time(aws: bool) {
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
             if let Some(interval) = clock_bump_interval {
-                config.set_newt_clock_bump_interval(interval);
+                config.set_newt_clock_bump_interval(Duration::from_millis(
+                    interval,
+                ));
             }
             config.set_skip_fast_ack(skip_fast_ack);
 
@@ -191,7 +191,7 @@ fn newt_vs_spanner() {
         );
         let mut config = Config::new(n, f);
         config.set_newt_tiny_quorums(true);
-        config.set_newt_clock_bump_interval(interval);
+        config.set_newt_clock_bump_interval(Duration::from_millis(interval));
         let planet = planet.clone();
         let regions = regions.clone();
         run_in_thread(move || {
@@ -249,7 +249,7 @@ fn increasing_load<P: Protocol>(
     mut config: Config,
 ) {
     // make sure stability is running
-    config.set_gc_interval(100);
+    config.set_gc_interval(Duration::from_millis(100));
 
     let cs = vec![4, 32, 256, 512, 1024, 2048];
 

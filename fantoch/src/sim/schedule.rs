@@ -1,5 +1,6 @@
 use crate::time::{SimTime, SysTime};
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 pub struct Schedule<A> {
     // mapping from scheduled time to list of scheduled actions
@@ -15,9 +16,9 @@ impl<A> Schedule<A> {
     }
 
     /// Schedule a new `ScheduleAction` at a certain `time`.
-    pub fn schedule(&mut self, time: &SimTime, delay: u64, action: A) {
+    pub fn schedule(&mut self, time: &SimTime, delay: Duration, action: A) {
         // compute schedule time
-        let schedule_time = time.millis() + delay;
+        let schedule_time = time.millis() + delay.as_millis() as u64;
 
         // get already scheduled actions for this `time` and insert new `action`
         let actions =
@@ -51,7 +52,7 @@ mod tests {
         assert!(schedule.next_actions(&mut time).is_none());
 
         // schedule "a" with a delay 10
-        schedule.schedule(&time, 10, String::from("a"));
+        schedule.schedule(&time, Duration::from_millis(10), String::from("a"));
 
         // check "a" is the next action, simulation time is now 10
         let next = schedule
@@ -62,8 +63,8 @@ mod tests {
         assert!(schedule.next_actions(&mut time).is_none());
 
         // schedule "b" with a delay 7, "c" with delay 2
-        schedule.schedule(&time, 7, String::from("b"));
-        schedule.schedule(&time, 2, String::from("c"));
+        schedule.schedule(&time, Duration::from_millis(7), String::from("b"));
+        schedule.schedule(&time, Duration::from_millis(2), String::from("c"));
 
         // check "c" is the next action, simulation time is now 12
         let next = schedule
@@ -73,8 +74,8 @@ mod tests {
         assert_eq!(time.millis(), 12);
 
         // schedule "d" with a delay 2, "e" with delay 5
-        schedule.schedule(&time, 2, String::from("d"));
-        schedule.schedule(&time, 5, String::from("e"));
+        schedule.schedule(&time, Duration::from_millis(2), String::from("d"));
+        schedule.schedule(&time, Duration::from_millis(5), String::from("e"));
 
         // check "d" is the next action, simulation time is now 14
         let next = schedule
