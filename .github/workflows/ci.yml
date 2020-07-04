@@ -60,6 +60,11 @@ jobs:
       - name: Check fantoch_exp
         run: cd fantoch_exp/ && cargo check
 
+      - name: Test feature combinations
+        run: |
+          cargo install cargo-hack
+          cargo hack check --feature-powerset --no-dev-deps
+
       - name: Coverage
         uses: actions-rs/grcov@v0.1
         with:
