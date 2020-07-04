@@ -1,7 +1,7 @@
 use crate::id::{Dot, ProcessId};
 use crate::protocol::gc::GCTrack;
 use crate::util;
-use std::collections::HashMap;
+use crate::HashMap;
 use threshold::VClock;
 
 pub trait Info {

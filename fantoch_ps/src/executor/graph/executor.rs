@@ -6,8 +6,8 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, Rifl};
 use fantoch::kvs::KVStore;
+use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use threshold::VClock;
 
 #[derive(Clone)]

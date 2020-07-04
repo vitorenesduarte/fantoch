@@ -3,8 +3,8 @@ use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Action, Protocol};
 use crate::time::SimTime;
+use crate::HashMap;
 use std::cell::Cell;
-use std::collections::HashMap;
 
 pub struct Simulation<P: Protocol> {
     time: SimTime,

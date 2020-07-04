@@ -1,6 +1,6 @@
 use fantoch::id::ProcessId;
 use fantoch::log;
-use std::collections::HashMap;
+use fantoch::HashMap;
 use threshold::{AboveExSet, EventSet};
 
 #[derive(Debug, Clone)]

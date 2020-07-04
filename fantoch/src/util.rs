@@ -1,7 +1,7 @@
 use crate::id::{Dot, ProcessId};
 use crate::kvs::Key;
 use crate::planet::{Planet, Region};
-use std::collections::HashMap;
+use crate::HashMap;
 use std::hash::{Hash, Hasher};
 
 /// create a singleton hash set

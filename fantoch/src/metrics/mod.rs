@@ -8,7 +8,7 @@ mod histogram;
 pub use float::F64;
 pub use histogram::{Histogram, Stats};
 
-use std::collections::HashMap;
+use crate::HashMap;
 use std::fmt;
 use std::hash::Hash;
 

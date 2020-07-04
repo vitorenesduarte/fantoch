@@ -2,7 +2,7 @@ use super::KeyClocks;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::kvs::Key;
-use std::collections::HashMap;
+use fantoch::HashMap;
 use threshold::VClock;
 
 #[derive(Debug, Clone)]

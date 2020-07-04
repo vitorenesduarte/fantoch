@@ -14,8 +14,8 @@ use fantoch::protocol::{
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{log, singleton};
+use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::time::Duration;
 use threshold::VClock;

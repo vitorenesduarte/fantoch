@@ -2,7 +2,7 @@ use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId};
 use crate::log;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
-use std::collections::HashSet;
+use crate::HashSet;
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...

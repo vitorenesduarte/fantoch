@@ -1,7 +1,7 @@
 use crate::id::{Dot, ProcessId};
 use crate::log;
 use crate::util;
-use std::collections::HashMap;
+use crate::HashMap;
 use threshold::{AEClock, EventSet, VClock};
 use tracing::instrument;
 

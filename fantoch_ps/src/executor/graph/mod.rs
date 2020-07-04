@@ -18,7 +18,7 @@ use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use fantoch::util;
-use std::collections::HashSet;
+use fantoch::HashSet;
 use std::fmt;
 use std::mem;
 use threshold::{AEClock, VClock};
@@ -268,9 +268,9 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::Rifl;
+    use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use std::cell::RefCell;
-    use std::collections::{HashMap, HashSet};
     use threshold::{AboveExSet, EventSet};
 
     #[test]

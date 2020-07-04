@@ -1,5 +1,5 @@
 use fantoch::id::ProcessId;
-use std::collections::HashSet;
+use fantoch::HashSet;
 use threshold::{MaxSet, TClock, VClock};
 
 type ThresholdClock = TClock<ProcessId, MaxSet>;

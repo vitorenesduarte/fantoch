@@ -1,7 +1,7 @@
+use crate::hash_map::{self, HashMap};
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::{self, HashMap};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
 

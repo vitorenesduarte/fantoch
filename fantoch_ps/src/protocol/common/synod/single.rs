@@ -1,5 +1,5 @@
 use fantoch::id::ProcessId;
-use std::collections::{HashMap, HashSet};
+use fantoch::{HashMap, HashSet};
 use std::mem;
 
 type Ballot = u64;

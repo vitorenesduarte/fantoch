@@ -1,6 +1,6 @@
 use fantoch::id::ProcessId;
+use fantoch::HashSet;
 use std::cmp::Ordering;
-use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct QuorumClocks {

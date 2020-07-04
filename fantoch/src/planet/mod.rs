@@ -8,7 +8,7 @@ pub mod region;
 pub use region::Region;
 
 use crate::planet::dat::Dat;
-use std::collections::HashMap;
+use crate::HashMap;
 use std::fmt::{self, Write};
 
 // directory that contains all dat files for GCP

@@ -1,6 +1,6 @@
+use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::ProcessId;
-use std::collections::hash_map::{Entry, HashMap};
-use std::collections::HashSet;
+use fantoch::HashSet;
 
 type Ballot = u64;
 type Slot = u64;

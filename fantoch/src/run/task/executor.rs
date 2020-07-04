@@ -5,7 +5,7 @@ use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
-use std::collections::HashMap;
+use crate::HashMap;
 
 /// Starts executors.
 pub fn start_executors<P>(

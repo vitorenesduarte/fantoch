@@ -313,8 +313,8 @@ pub fn histogram_merge<K>(
 mod proptests {
     use super::*;
     use crate::elapsed;
+    use crate::HashMap;
     use quickcheck_macros::quickcheck;
-    use std::collections::HashMap;
     use std::hash::Hash;
     use std::iter::FromIterator;
 
