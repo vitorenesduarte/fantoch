@@ -1,15 +1,9 @@
-mod bench;
-mod config;
-mod exp;
-mod ping;
-mod testbed;
-mod util;
-
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use exp::{Machines, Protocol, RunMode, Testbed};
-use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
+use fantoch_exp::exp::Machines;
+use fantoch_exp::{Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;
 use tsunami::Tsunami;
@@ -33,9 +27,6 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
 const BRANCH: &str = "dstat";
-
-// ping-specific config
-const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -62,26 +53,28 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
-        /*
         Region::CaCentral1,
         Region::SaEast1,
-        */
     ];
     let n = regions.len();
-    let f = 1;
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, f, false, None, false)),
-        /*
-        (Protocol::FPaxos, config!(n, f, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, f, false, None, false)),
-        */
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
         4,
+        8,
+        16,
         32,
+        64,
+        128,
         256,
         512,
         1024,
@@ -90,12 +83,12 @@ async fn main() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 32,
-        1024 * 64,
-        1024 * 128,
+        // 1024 * 64,
+        // 1024 * 128,
     ];
 
-    // baremetal_bench(regions, configs, clients_per_region).await
-    aws_bench(regions, configs, clients_per_region).await
+    baremetal_bench(regions, configs, clients_per_region).await
+    // aws_bench(regions, configs, clients_per_region).await
 }
 
 #[allow(dead_code)]
@@ -115,7 +108,7 @@ async fn baremetal_bench(
         .collect();
 
     // setup baremetal machines
-    let machines = testbed::baremetal::setup(
+    let machines = fantoch_exp::testbed::baremetal::setup(
         &mut launchers,
         servers_count,
         clients_count,
@@ -173,7 +166,7 @@ async fn do_aws_bench(
     clients_per_region: Vec<usize>,
 ) -> Result<(), Report> {
     // setup aws machines
-    let machines = testbed::aws::setup(
+    let machines = fantoch_exp::testbed::aws::setup(
         launcher,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
@@ -204,7 +197,7 @@ async fn run_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
 ) -> Result<(), Report> {
-    bench::bench_experiment(
+    fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
         testbed,
@@ -213,42 +206,6 @@ async fn run_bench(
         TRACER_SHOW_INTERVAL,
         clients_per_region,
         RESULTS_DIR,
-    )
-    .await
-}
-
-#[allow(dead_code)]
-async fn ping(instance_type: &str) -> Result<(), Report> {
-    // all AWS regions
-    let regions = vec![
-        Region::AfSouth1,
-        Region::ApEast1,
-        Region::ApNortheast1,
-        // Region::ApNortheast2, special-region
-        Region::ApSouth1,
-        Region::ApSoutheast1,
-        Region::ApSoutheast2,
-        Region::CaCentral1,
-        Region::EuCentral1,
-        Region::EuNorth1,
-        Region::EuSouth1,
-        Region::EuWest1,
-        Region::EuWest2,
-        Region::EuWest3,
-        Region::MeSouth1,
-        Region::SaEast1,
-        Region::UsEast1,
-        Region::UsEast2,
-        Region::UsWest1,
-        Region::UsWest2,
-    ];
-
-    ping::ping_experiment(
-        regions,
-        instance_type,
-        MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-        MAX_INSTANCE_DURATION_HOURS,
-        PING_DURATION_SECS,
     )
     .await
 }

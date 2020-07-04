@@ -1,10 +1,10 @@
 use crate::args;
 use crate::util;
+use crate::{RunMode, Testbed};
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use eyre::WrapErr;
 use fantoch::id::ProcessId;
 use fantoch::planet::Region;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -80,61 +80,6 @@ impl<'a> Machines<'a> {
 
     pub fn server(&self, region: &Region) -> &tsunami::Machine<'_> {
         self.servers.get(region).expect("server vm should exist")
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum RunMode {
-    Release,
-    Flamegraph,
-}
-
-impl RunMode {
-    pub fn binary(&self, binary: &str) -> String {
-        let binary = format!("./fantoch/target/release/{}", binary);
-        match self {
-            RunMode::Release => binary,
-            RunMode::Flamegraph => {
-                // `source` is needed in order for `flamegraph` to be found
-                format!("source ~/.cargo/env && flamegraph {}", binary)
-            }
-        }
-    }
-
-    pub fn is_flamegraph(&self) -> bool {
-        self == &RunMode::Flamegraph
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize, Serialize)]
-pub enum Protocol {
-    AtlasLocked,
-    EPaxosLocked,
-    FPaxos,
-    NewtAtomic,
-}
-
-impl Protocol {
-    pub fn binary(&self) -> &str {
-        match self {
-            Protocol::AtlasLocked => "atlas_locked",
-            Protocol::EPaxosLocked => "epaxos_locked",
-            Protocol::FPaxos => "fpaxos",
-            Protocol::NewtAtomic => "newt_atomic",
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum Testbed {
-    Aws,
-    Baremetal,
-}
-
-impl Testbed {
-    pub fn is_aws(&self) -> bool {
-        self == &Testbed::Aws
     }
 }
 

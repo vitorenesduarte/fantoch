@@ -4,6 +4,8 @@ use std::collections::HashMap;
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ClientData {
     // raw values: we have "100%" precision as all values are stored
+    // - mapping from operation end time to all latencies registered at that
+    //   end time
     data: HashMap<u64, Vec<u64>>,
 }
 
@@ -12,21 +14,6 @@ impl ClientData {
     pub fn new() -> Self {
         Self::default()
     }
-
-    // /// Creates an histogram from a list of values.
-    // pub fn from<T: IntoIterator<Item = u64>>(values: T) -> Self {
-    //     let mut stats = Self::new();
-    //     values.into_iter().for_each(|value| stats.increment(value));
-    //     stats
-    // }
-
-    // /// Create string with values in the histogram.
-    // pub fn all_values(&self) -> String {
-    //     self.values
-    //         .iter()
-    //         .map(|(value, count)| format!("{} {}\n", value, count))
-    //         .collect()
-    // }
 
     /// Merges two histograms.
     pub fn merge(&mut self, other: &Self) {
@@ -48,6 +35,25 @@ impl ClientData {
             .iter()
             .map(|(time, latencies)| (time.clone(), latencies.len()))
     }
+
+    /// Compute start and end times for this client.
+    pub fn start_and_end(&self) -> Option<(u64, u64)> {
+        let mut times: Vec<_> = self.data.keys().collect();
+        times.sort();
+        times.first().map(|first| {
+            // if there's a first, there's a last
+            let last = times.last().unwrap();
+            (**first, **last)
+        })
+    }
+
+    /// Prune events that are before `start` or after `end`.
+    pub fn prune(&mut self, start: u64, end: u64) {
+        self.data.retain(|&time, _| {
+            // retain if within the given bounds
+            time >= start && time <= end
+        })
+    }
 }
 
 pub fn data_merge(
@@ -62,4 +68,72 @@ pub fn data_merge(
             map.entry(k.clone()).or_insert(v2.clone());
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_data_test() {
+        let mut data = ClientData::new();
+        assert_eq!(data.start_and_end(), None);
+        // at time 10, an operation with latency 1 ended
+        data.record(1, 10);
+        assert_eq!(data.start_and_end(), Some((10, 10)));
+
+        // at time 10, another operation but with latency 2 ended
+        data.record(2, 10);
+        assert_eq!(data.start_and_end(), Some((10, 10)));
+
+        // at time 11, an operation with latency 5 ended
+        data.record(5, 11);
+        assert_eq!(data.start_and_end(), Some((10, 11)));
+
+        // check latency and throughput data
+        let mut latency: Vec<_> = data.latency_data().collect();
+        latency.sort();
+        assert_eq!(latency, vec![1, 2, 5]);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(10, 2), (11, 1)]);
+
+        // check merge
+        let mut other = ClientData::new();
+        // at time 2, an operation with latency 5 ended
+        other.record(5, 2);
+
+        data.merge(&other);
+        assert_eq!(data.start_and_end(), Some((2, 11)));
+        let mut latency: Vec<_> = data.latency_data().collect();
+        latency.sort();
+        assert_eq!(latency, vec![1, 2, 5, 5]);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(2, 1), (10, 2), (11, 1)]);
+
+        // check prune: if all events are within bounds, then no pruning happens
+        data.prune(1, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(2, 1), (10, 2), (11, 1)]);
+
+        // prune event 2 out
+        data.prune(5, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(10, 2), (11, 1)]);
+
+        // prune event 10 out
+        data.prune(11, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![(11, 1)]);
+
+        // prune event 11 out
+        data.prune(15, 20);
+        let mut throughput: Vec<_> = data.throughput_data().collect();
+        throughput.sort();
+        assert_eq!(throughput, vec![]);
+    }
 }

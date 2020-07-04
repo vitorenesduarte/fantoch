@@ -1,5 +1,6 @@
+#[cfg(feature = "exp")]
 use crate::args;
-use crate::exp::{Protocol, RunMode, Testbed};
+use crate::{Protocol, RunMode, Testbed};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::planet::Region;
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // FIXED
+#[cfg(feature = "exp")]
 const IP: &str = "0.0.0.0";
 pub const PORT: usize = 3000;
 pub const CLIENT_PORT: usize = 4000;
@@ -33,8 +35,11 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2); // millis
 //   to 100M (since 10M is also not enough)
 const CHANNEL_BUFFER_SIZE: usize = 100_000_000;
 
+#[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
+#[cfg(feature = "exp")]
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
+#[cfg(feature = "exp")]
 const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
 // if paxos, set process 1 as the leader
@@ -48,6 +53,7 @@ const PAYLOAD_SIZE: usize = 4 * 1024;
 // client tcp config
 const CLIENT_TCP_NODELAY: bool = true;
 
+#[cfg(feature = "exp")]
 pub struct ProtocolConfig {
     id: ProcessId,
     ips: Vec<(String, Option<usize>)>,
@@ -64,6 +70,7 @@ pub struct ProtocolConfig {
     ping_interval: Option<usize>,
 }
 
+#[cfg(feature = "exp")]
 impl ProtocolConfig {
     pub fn new(
         protocol: Protocol,
@@ -198,6 +205,7 @@ fn workers_executors_and_leader(
     }
 }
 
+#[cfg(feature = "exp")]
 pub struct ClientConfig {
     id_start: usize,
     id_end: usize,
@@ -210,6 +218,7 @@ pub struct ClientConfig {
     metrics_file: String,
 }
 
+#[cfg(feature = "exp")]
 impl ClientConfig {
     pub fn new(
         id_start: usize,
@@ -258,24 +267,24 @@ impl ClientConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ExperimentConfig {
-    regions: HashMap<Region, ProcessId>,
-    run_mode: RunMode,
-    testbed: Testbed,
-    protocol: Protocol,
-    config: Config,
-    clients_per_region: usize,
-    process_tcp_nodelay: bool,
-    tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
-    process_channel_buffer_size: usize,
-    workers: usize,
-    executors: usize,
-    multiplexing: usize,
-    conflict_rate: usize,
-    commands_per_client: usize,
-    payload_size: usize,
-    client_tcp_nodelay: bool,
-    client_channel_buffer_size: usize,
+    pub regions: HashMap<Region, ProcessId>,
+    pub run_mode: RunMode,
+    pub testbed: Testbed,
+    pub protocol: Protocol,
+    pub config: Config,
+    pub clients_per_region: usize,
+    pub process_tcp_nodelay: bool,
+    pub tcp_buffer_size: usize,
+    pub tcp_flush_interval: Option<usize>,
+    pub process_channel_buffer_size: usize,
+    pub workers: usize,
+    pub executors: usize,
+    pub multiplexing: usize,
+    pub conflict_rate: usize,
+    pub commands_per_client: usize,
+    pub payload_size: usize,
+    pub client_tcp_nodelay: bool,
+    pub client_channel_buffer_size: usize,
 }
 
 impl ExperimentConfig {

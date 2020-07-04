@@ -1,5 +1,5 @@
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use eyre::WrapErr;
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -124,32 +124,4 @@ pub async fn copy_from(
 
 fn escape(command: impl ToString) -> String {
     format!("\"{}\"", command.to_string())
-}
-
-// TODO make this async
-pub fn serialize<T>(data: T, file: impl AsRef<Path>) -> Result<(), Report>
-where
-    T: serde::Serialize,
-{
-    // if the file does not exist it will be created, otherwise truncated
-    let file = std::fs::File::create(file).wrap_err("serialize create file")?;
-    // create a buf writer
-    let buf = std::io::BufWriter::new(file);
-    // and try to serialize
-    bincode::serialize_into(buf, &data).wrap_err("serialize")?;
-    Ok(())
-}
-
-// TODO make this async
-pub fn deserialize<T>(file: impl AsRef<Path>) -> Result<T, Report>
-where
-    T: serde::de::DeserializeOwned,
-{
-    // open the file in read-only
-    let file = std::fs::File::open(file).wrap_err("deserialize open file")?;
-    // create a buf reader
-    let buf = std::io::BufReader::new(file);
-    // and try to deserialize
-    let data = bincode::deserialize_from(buf).wrap_err("deserialize")?;
-    Ok(data)
 }
