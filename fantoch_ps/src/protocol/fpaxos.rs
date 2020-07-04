@@ -13,8 +13,8 @@ use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
-use tracing::instrument;
 use std::time::Duration;
+use tracing::instrument;
 
 type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
 
@@ -69,7 +69,7 @@ impl Protocol for FPaxos {
 
         // create periodic events
         let events = if let Some(interval) = config.gc_interval() {
-            vec![(PeriodicEvent::GarbageCollection, interval )]
+            vec![(PeriodicEvent::GarbageCollection, interval)]
         } else {
             vec![]
         };

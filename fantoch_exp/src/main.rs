@@ -11,8 +11,8 @@ use eyre::WrapErr;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use rusoto_core::Region;
-use tsunami::Tsunami;
 use std::time::Duration;
+use tsunami::Tsunami;
 
 // folder where all results will be stored
 const RESULTS_DIR: &str = "../results";
