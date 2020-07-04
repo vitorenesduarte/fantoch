@@ -7,6 +7,7 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [features]
+amortize = ["fantoch/amortize"]
 timing = ["fantoch/timing"]
 
 [dependencies]

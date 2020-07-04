@@ -28,9 +28,9 @@ use crate::executor::Executor;
 use crate::id::{Dot, ProcessId};
 use crate::metrics::Metrics;
 use crate::time::SysTime;
+use crate::HashSet;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::collections::HashSet;
 use std::fmt::{self, Debug};
 use std::time::Duration;
 

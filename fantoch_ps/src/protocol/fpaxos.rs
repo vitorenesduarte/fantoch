@@ -9,9 +9,9 @@ use fantoch::protocol::{
     ProtocolMetrics,
 };
 use fantoch::time::SysTime;
+use fantoch::HashSet;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::mem;
 use std::time::Duration;
 use tracing::instrument;

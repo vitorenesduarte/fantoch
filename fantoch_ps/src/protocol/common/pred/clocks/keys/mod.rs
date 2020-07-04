@@ -6,7 +6,7 @@ pub use sequential::SequentialKeyClocks;
 
 use fantoch::command::Command;
 use fantoch::id::Dot;
-use std::collections::HashSet;
+use fantoch::HashSet;
 
 pub trait KeyClocks: Clone {
     /// Create a new `KeyClocks` instance.

@@ -168,7 +168,7 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::DotGen;
-    use std::collections::HashSet;
+    use fantoch::HashSet;
     use std::thread;
 
     #[test]

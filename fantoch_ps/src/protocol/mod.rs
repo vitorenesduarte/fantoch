@@ -33,7 +33,7 @@ mod tests {
     use fantoch::protocol::{Protocol, ProtocolMetricsKind};
     use fantoch::run::tests::run_test_with_inspect_fun;
     use fantoch::sim::Runner;
-    use std::collections::HashMap;
+    use fantoch::HashMap;
     use std::time::Duration;
 
     // global test config

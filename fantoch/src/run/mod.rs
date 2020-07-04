@@ -90,9 +90,9 @@ use crate::id::{AtomicDotGen, ClientId, ProcessId};
 use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
+use crate::{HashMap, HashSet};
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
-use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -672,7 +672,6 @@ pub mod tests {
     use crate::protocol::ProtocolMetricsKind;
     use crate::util;
     use rand::Rng;
-    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_semaphore() {

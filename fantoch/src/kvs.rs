@@ -1,5 +1,5 @@
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // Definition of `Key` and `Value` types.
 pub type Key = String;

@@ -4,7 +4,7 @@ use crate::log;
 use crate::metrics::Histogram;
 use crate::run::prelude::*;
 use crate::run::ConnectionDelay;
-use std::collections::HashMap;
+use crate::HashMap;
 use std::net::IpAddr;
 use tokio::time::{self, Duration};
 

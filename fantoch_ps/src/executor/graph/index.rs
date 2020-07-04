@@ -1,7 +1,7 @@
 use super::tarjan::Vertex;
 use fantoch::id::Dot;
+use fantoch::{HashMap, HashSet};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 
 #[derive(Default, Debug, Clone)]
 pub struct VertexIndex {

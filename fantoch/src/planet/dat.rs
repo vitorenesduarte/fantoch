@@ -1,5 +1,5 @@
 use crate::planet::Region;
-use std::collections::HashMap;
+use crate::HashMap;
 use std::str::FromStr;
 
 use std::io::{BufRead, BufReader};
@@ -111,7 +111,6 @@ impl From<&str> for Dat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     #[test]
     fn region() {

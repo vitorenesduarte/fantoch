@@ -2,7 +2,8 @@ use super::KeyClocks;
 use fantoch::command::Command;
 use fantoch::id::Dot;
 use fantoch::kvs::Key;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use fantoch::{HashMap, HashSet};
+use std::collections::BTreeMap;
 
 // timestamps are unique and thus it's enough to store one command `Dot` per
 // timestamp.

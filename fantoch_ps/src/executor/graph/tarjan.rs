@@ -2,9 +2,10 @@ use super::index::VertexIndex;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
+use fantoch::HashSet;
 use std::cell::RefCell;
 use std::cmp;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use threshold::{AEClock, EventSet, VClock};
 
 /// commands are sorted inside an SCC given their dot

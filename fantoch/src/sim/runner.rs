@@ -10,7 +10,7 @@ use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SysTime;
 use crate::util;
-use std::collections::HashMap;
+use crate::HashMap;
 use std::fmt;
 use std::time::Duration;
 

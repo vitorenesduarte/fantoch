@@ -1,6 +1,6 @@
 use crate::id::Rifl;
 use crate::time::SysTime;
-use std::collections::HashMap;
+use crate::HashMap;
 
 #[derive(Default)]
 pub struct Pending {

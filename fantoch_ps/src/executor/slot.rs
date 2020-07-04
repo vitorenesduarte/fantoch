@@ -5,8 +5,8 @@ use fantoch::executor::{
 };
 use fantoch::id::{ProcessId, Rifl};
 use fantoch::kvs::KVStore;
+use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 
 type Slot = u64;
 

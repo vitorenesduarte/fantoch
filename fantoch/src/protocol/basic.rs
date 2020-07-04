@@ -7,9 +7,9 @@ use crate::protocol::{
     Protocol, ProtocolMetrics,
 };
 use crate::time::SysTime;
+use crate::HashSet;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::mem;
 use std::time::Duration;
 use threshold::VClock;

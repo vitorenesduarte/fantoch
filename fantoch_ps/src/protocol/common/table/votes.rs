@@ -1,7 +1,7 @@
+use fantoch::hash_map::{self, HashMap};
 use fantoch::id::ProcessId;
 use fantoch::kvs::Key;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::{self, HashMap};
 use std::fmt;
 
 /// Votes are all Votes on some command.

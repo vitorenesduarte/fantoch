@@ -1,8 +1,8 @@
 use crate::command::Command;
 use crate::executor::ExecutorResult;
+use crate::hash_map::{Entry, HashMap};
 use crate::id::Rifl;
 use crate::kvs::{KVOpResult, Key};
-use std::collections::hash_map::{Entry, HashMap};
 
 /// Structure that tracks the progress of pending commands.
 #[derive(Default, Clone)]

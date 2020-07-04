@@ -1,5 +1,5 @@
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ClientData {
