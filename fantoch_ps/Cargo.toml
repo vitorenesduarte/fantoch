@@ -11,7 +11,7 @@ amortize = ["fantoch/amortize"]
 timing = ["fantoch/timing"]
 
 [dependencies]
-ahash = "0.3.8"
+ahash = "0.4.0"
 clap = "2.33.1"
 dashmap = "3.11.4"
 futures = { version = "0.3.5", default-features = false, features = [] }

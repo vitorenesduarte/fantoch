@@ -152,3 +152,4 @@ if [ "${features}" != "" ]; then
     features="--features ${features}"
 fi
 RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins "${features}"
+
