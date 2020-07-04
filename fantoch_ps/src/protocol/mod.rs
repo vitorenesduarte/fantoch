@@ -67,6 +67,7 @@ mod tests {
     fn sim_newt_3_1_test() {
         let slow_paths = sim_test::<NewtSequential>(
             config!(3, 1, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -79,6 +80,7 @@ mod tests {
         let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = sim_test::<NewtSequential>(
             config!(3, 1, false, clock_bump_interval),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -88,6 +90,7 @@ mod tests {
     fn sim_newt_5_1_test() {
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 1, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -98,6 +101,7 @@ mod tests {
         let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 1, false, clock_bump_interval),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -112,6 +116,7 @@ mod tests {
             config!(3, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -128,6 +133,7 @@ mod tests {
             config!(3, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -145,6 +151,7 @@ mod tests {
             config!(3, 1, false, clock_bump_interval),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             clients_per_region,
         )
         .await;
@@ -160,6 +167,7 @@ mod tests {
             config!(5, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -176,6 +184,7 @@ mod tests {
             config!(5, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -193,6 +202,7 @@ mod tests {
             config!(5, 1, false, clock_bump_interval),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             clients_per_region,
         )
         .await;
@@ -203,6 +213,7 @@ mod tests {
     fn sim_newt_5_2_test() {
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 2, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert!(slow_paths > 0);
@@ -212,6 +223,7 @@ mod tests {
     fn sim_atlas_3_1_test() {
         let slow_paths = sim_test::<AtlasSequential>(
             config!(3, 1, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -221,6 +233,7 @@ mod tests {
     fn sim_atlas_5_1_test() {
         let slow_paths = sim_test::<AtlasSequential>(
             config!(3, 1, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -230,6 +243,7 @@ mod tests {
     fn sim_atlas_5_2_test() {
         let slow_paths = sim_test::<AtlasSequential>(
             config!(5, 2, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert!(slow_paths > 0);
@@ -244,6 +258,7 @@ mod tests {
             config!(3, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -260,6 +275,7 @@ mod tests {
             config!(3, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -270,6 +286,7 @@ mod tests {
     fn sim_epaxos_3_1_test() {
         let slow_paths = sim_test::<EPaxosSequential>(
             config!(3, 1, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
@@ -279,6 +296,7 @@ mod tests {
     fn sim_epaxos_5_2_test() {
         let slow_paths = sim_test::<EPaxosSequential>(
             config!(5, 2, false),
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         );
         assert!(slow_paths > 0);
@@ -293,6 +311,7 @@ mod tests {
             config!(3, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -309,6 +328,7 @@ mod tests {
             config!(3, 1, false),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -317,12 +337,20 @@ mod tests {
 
     #[test]
     fn sim_fpaxos_3_1_test() {
-        sim_test::<FPaxos>(config!(3, 1, true), CLIENTS_PER_REGION);
+        sim_test::<FPaxos>(
+            config!(3, 1, true),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_REGION,
+        );
     }
 
     #[test]
     fn sim_fpaxos_5_2_test() {
-        sim_test::<FPaxos>(config!(5, 2, true), CLIENTS_PER_REGION);
+        sim_test::<FPaxos>(
+            config!(5, 2, true),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_REGION,
+        );
     }
 
     #[tokio::test]
@@ -334,6 +362,7 @@ mod tests {
             config!(3, 1, true),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -349,6 +378,7 @@ mod tests {
             config!(3, 1, true),
             workers,
             executors,
+            COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
         )
         .await;
@@ -376,6 +406,7 @@ mod tests {
         mut config: Config,
         workers: usize,
         executors: usize,
+        commands_per_client: usize,
         clients_per_region: usize,
     ) -> u64
     where
@@ -390,7 +421,7 @@ mod tests {
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             config,
             CONFLICT_RATE,
-            COMMANDS_PER_CLIENT,
+            commands_per_client,
             clients_per_region,
             workers,
             executors,
@@ -418,11 +449,12 @@ mod tests {
         })
         .collect();
 
-        check_metrics(config, clients_per_region, metrics)
+        check_metrics(config, commands_per_client, clients_per_region, metrics)
     }
 
     fn sim_test<P: Protocol>(
         mut config: Config,
+        commands_per_client: usize,
         clients_per_region: usize,
     ) -> u64 {
         // make sure stability is running
@@ -434,7 +466,7 @@ mod tests {
         // clients workload
         let payload_size = 1;
         let workload =
-            Workload::new(CONFLICT_RATE, COMMANDS_PER_CLIENT, payload_size);
+            Workload::new(CONFLICT_RATE, commands_per_client, payload_size);
 
         // process and client regions
         let mut regions = planet.regions();
@@ -476,11 +508,12 @@ mod tests {
             })
             .collect();
 
-        check_metrics(config, clients_per_region, metrics)
+        check_metrics(config, commands_per_client, clients_per_region, metrics)
     }
 
     fn check_metrics(
         config: Config,
+        commands_per_client: usize,
         clients_per_region: usize,
         metrics: HashMap<ProcessId, (u64, u64)>,
     ) -> u64 {
@@ -494,7 +527,7 @@ mod tests {
                 total_slow_paths += slow_paths;
                 // check if this process gc-ed all commands
                 *stable_count
-                    == (COMMANDS_PER_CLIENT * clients_per_region * config.n())
+                    == (commands_per_client * clients_per_region * config.n())
                         as u64
             })
             .count();
