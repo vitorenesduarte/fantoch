@@ -146,7 +146,7 @@ mod tests {
         let executors = 2;
         // run with less clients since these take too much time in CI
         let clients_per_region = 1;
-        let clock_bump_interval = Duration::from_millis(50);
+        let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
             config!(3, 1, false, clock_bump_interval),
             workers,
@@ -197,12 +197,14 @@ mod tests {
         let executors = 2;
         // run with less clients since these take too much time in CI
         let clients_per_region = 1;
-        let clock_bump_interval = Duration::from_millis(50);
+        // also less commands per client
+        let commands_per_client = 10;
+        let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
             config!(5, 1, false, clock_bump_interval),
             workers,
             executors,
-            COMMANDS_PER_CLIENT,
+            commands_per_client,
             clients_per_region,
         )
         .await;
