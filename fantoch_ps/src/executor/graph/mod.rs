@@ -253,7 +253,7 @@ impl DependencyGraph {
 }
 
 impl fmt::Debug for DependencyGraph {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "vertex index:")?;
         write!(f, "{:#?}", self.vertex_index)?;
         write!(f, "pending index:")?;

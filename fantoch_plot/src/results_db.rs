@@ -37,7 +37,7 @@ impl ResultsDB {
         Ok(Self { results })
     }
 
-    pub fn search(&mut self) -> SearchBuilder {
+    pub fn search(&mut self) -> SearchBuilder<'_> {
         SearchBuilder::new(self)
     }
 }

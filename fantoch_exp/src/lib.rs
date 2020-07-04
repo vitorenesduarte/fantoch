@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 #[cfg(feature = "exp")]
 pub mod bench;
 #[cfg(feature = "exp")]
@@ -38,6 +40,22 @@ impl RunMode {
 
     pub fn is_flamegraph(&self) -> bool {
         self == &RunMode::Flamegraph
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FantochFeature {
+    Amortize,
+    Timing,
+}
+
+impl FantochFeature {
+    pub fn name(&self) -> String {
+        match self {
+            FantochFeature::Amortize => "amortize",
+            FantochFeature::Timing => "timing",
+        }
+        .to_string()
     }
 }
 

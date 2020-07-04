@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 use dashmap::DashMap;
 use hdrhistogram::Histogram;
 use quanta::Clock;
@@ -62,21 +64,21 @@ impl TimingSubscriber {
 }
 
 impl Subscriber for TimingSubscriber {
-    fn enabled(&self, _metadata: &Metadata) -> bool {
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
         true
     }
 
-    fn new_span(&self, span: &Attributes) -> Id {
+    fn new_span(&self, span: &Attributes<'_>) -> Id {
         // getfunction name
         let function_name = span.metadata().name();
         self.new_span_from_function_name(function_name)
     }
 
-    fn record(&self, _span: &Id, _values: &Record) {}
+    fn record(&self, _span: &Id, _values: &Record<'_>) {}
 
     fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
 
-    fn event(&self, _event: &Event) {}
+    fn event(&self, _event: &Event<'_>) {}
 
     fn enter(&self, span: &Id) {
         let id = span.into_u64();

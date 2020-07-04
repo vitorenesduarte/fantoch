@@ -1,7 +1,7 @@
 use super::{CLIENT_TAG, SERVER_TAG};
 use crate::exp::{self, Machines};
 use crate::util;
-use crate::{RunMode, Testbed};
+use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use std::collections::HashMap;
@@ -16,6 +16,7 @@ pub async fn setup<'a>(
     regions: Vec<rusoto_core::Region>,
     branch: String,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
 ) -> Result<Machines<'a>, Report> {
     let machines_count = servers_count + clients_count;
 
@@ -37,9 +38,14 @@ pub async fn setup<'a>(
             let launcher = launcher_iter.next().unwrap();
 
             // create baremetal setup
-            let setup = baremetal_setup(machine, branch.clone(), run_mode)
-                .await
-                .wrap_err("baremetal setup")?;
+            let setup = baremetal_setup(
+                machine,
+                branch.clone(),
+                run_mode,
+                features.clone(),
+            )
+            .await
+            .wrap_err("baremetal setup")?;
 
             // save baremetal launch
             let launch = baremetal_launch(
@@ -82,6 +88,7 @@ async fn baremetal_setup(
     machine: &str,
     branch: String,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
 ) -> Result<tsunami::providers::baremetal::Setup, Report> {
     let parts: Vec<_> = machine.split("@").collect();
     assert_eq!(parts.len(), 2, "machine should have the form username@addr");
@@ -110,7 +117,12 @@ async fn baremetal_setup(
     let setup =
         tsunami::providers::baremetal::Setup::new(addr, Some(username))?
             .key_path(PRIVATE_KEY)
-            .setup(exp::fantoch_setup(branch, run_mode, Testbed::Baremetal));
+            .setup(exp::fantoch_setup(
+                branch,
+                run_mode,
+                features,
+                Testbed::Baremetal,
+            ));
     Ok(setup)
 }
 

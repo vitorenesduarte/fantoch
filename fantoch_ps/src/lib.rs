@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 // This module contains the implementation of several `Executor`'s.
 pub mod executor;
 

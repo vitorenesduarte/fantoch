@@ -1,6 +1,6 @@
 use crate::args;
 use crate::util;
-use crate::{RunMode, Testbed};
+use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::id::ProcessId;
@@ -86,6 +86,7 @@ impl<'a> Machines<'a> {
 pub fn fantoch_setup(
     branch: String,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
     testbed: Testbed,
 ) -> Box<
     dyn for<'r> Fn(
@@ -100,6 +101,12 @@ pub fn fantoch_setup(
         let branch = branch.clone();
         let flamegraph = run_mode.is_flamegraph();
         let aws = testbed.is_aws();
+        let features = features
+            .clone()
+            .into_iter()
+            .map(|feature| feature.name())
+            .collect::<Vec<_>>()
+            .join(",");
         Box::pin(async move {
             // files
             let script_file = "setup.sh";
@@ -114,7 +121,7 @@ pub fn fantoch_setup(
             while !done {
                 let stdout = util::vm_script_exec(
                     script_file,
-                    args![branch, flamegraph, aws, "2>&1"],
+                    args![branch, flamegraph, aws, features, "2>&1"],
                     &vm,
                 )
                 .await?;

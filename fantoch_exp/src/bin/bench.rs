@@ -3,7 +3,7 @@ use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::exp::Machines;
-use fantoch_exp::{Protocol, RunMode, Testbed};
+use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;
 use tsunami::Tsunami;
@@ -27,6 +27,8 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
 const BRANCH: &str = "dstat";
+// TODO allow more than one feature
+const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -115,6 +117,7 @@ async fn baremetal_bench(
         regions,
         BRANCH.to_string(),
         RUN_MODE,
+        FEATURE.map(|feature| vec![feature]).unwrap_or_default(),
     )
     .await
     .wrap_err("baremetal spawn")?;
@@ -175,6 +178,7 @@ async fn do_aws_bench(
         MAX_INSTANCE_DURATION_HOURS,
         BRANCH.to_string(),
         RUN_MODE,
+        FEATURE.map(|feature| vec![feature]).unwrap_or_default(),
     )
     .await
     .wrap_err("aws spawn")?;

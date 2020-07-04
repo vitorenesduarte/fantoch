@@ -101,7 +101,7 @@ pub enum ProtocolMetricsKind {
 }
 
 impl Debug for ProtocolMetricsKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProtocolMetricsKind::FastPath => write!(f, "fast_path"),
             ProtocolMetricsKind::SlowPath => write!(f, "slow_path"),

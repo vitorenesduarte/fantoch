@@ -518,7 +518,7 @@ where
 }
 
 impl<P: Protocol> fmt::Debug for ScheduleAction<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ScheduleAction::SubmitToProc(process_id, cmd) => {
                 write!(f, "SubmitToProc({}, {:?})", process_id, cmd)

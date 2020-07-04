@@ -52,7 +52,7 @@ pub enum ExecutorMetricsKind {
 }
 
 impl Debug for ExecutorMetricsKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
             ExecutorMetricsKind::ExecutionDelay => write!(f, "execution_delay"),

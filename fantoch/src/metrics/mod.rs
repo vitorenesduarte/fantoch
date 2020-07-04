@@ -64,7 +64,7 @@ where
     K: fmt::Debug,
     V: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (kind, histogram) in self.collected.iter() {
             writeln!(f, "{:?}: {:?}", kind, histogram)?;
         }

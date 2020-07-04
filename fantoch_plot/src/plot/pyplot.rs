@@ -19,7 +19,7 @@ impl<'p> PyPlot<'p> {
         ncols: usize,
         index: usize,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<Axes> {
+    ) -> PyResult<Axes<'_>> {
         let result = self.plt.call("subplot", (nrows, ncols, index), kwargs)?;
         let ax = Axes::new(result)?;
         Ok(ax)
@@ -28,7 +28,7 @@ impl<'p> PyPlot<'p> {
     pub fn subplots(
         &self,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<(Figure, Axes)> {
+    ) -> PyResult<(Figure<'_>, Axes<'_>)> {
         // check that `ncols` and `nrows` was not set
         if let Some(kwargs) = kwargs {
             assert_eq!(
@@ -54,7 +54,7 @@ impl<'p> PyPlot<'p> {
         Ok(())
     }
 
-    pub fn close(&self, figure: Figure) -> PyResult<()> {
+    pub fn close(&self, figure: Figure<'_>) -> PyResult<()> {
         self.plt.call1("close", (figure.fig(),))?;
         Ok(())
     }

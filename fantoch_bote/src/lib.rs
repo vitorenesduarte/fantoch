@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 // This module contains the definition of `Protocol`, `ClientPlacement` and
 // `ProtocolStats`.
 pub mod protocol;

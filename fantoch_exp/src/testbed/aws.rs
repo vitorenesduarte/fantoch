@@ -1,6 +1,6 @@
 use super::{CLIENT_TAG, SERVER_TAG};
 use crate::exp::{self, Machines};
-use crate::{RunMode, Testbed};
+use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::Report;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -17,6 +17,7 @@ pub async fn setup(
     max_instance_duration_hours: usize,
     branch: String,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
 ) -> Result<Machines<'_>, Report> {
     let tags = vec![
         (SERVER_TAG.to_string(), server_instance_type),
@@ -30,6 +31,7 @@ pub async fn setup(
         max_instance_duration_hours,
         branch,
         run_mode,
+        features,
     )
     .await?;
     let servers = vms.remove(SERVER_TAG).expect("servers vms");
@@ -48,6 +50,7 @@ async fn spawn_and_setup<'a>(
     max_instance_duration_hours: usize,
     branch: String,
     run_mode: RunMode,
+    features: Vec<FantochFeature>,
 ) -> Result<
     HashMap<String, HashMap<fantoch::planet::Region, tsunami::Machine<'a>>>,
     Report,
@@ -67,6 +70,7 @@ async fn spawn_and_setup<'a>(
                 .setup(exp::fantoch_setup(
                     branch.clone(),
                     run_mode,
+                    features.clone(),
                     Testbed::Aws,
                 ));
 

@@ -25,7 +25,7 @@ where
 
     // Tries to retrieve the current value associated with `key`. If there's no
     // associated value, an entry will be created.
-    pub fn get(&self, key: &Key) -> Ref<Key, V> {
+    pub fn get(&self, key: &Key) -> Ref<'_, Key, V> {
         match self.clocks.get(key) {
             Some(value) => value,
             None => {
@@ -35,7 +35,7 @@ where
         }
     }
 
-    pub fn iter(&self) -> SharedIter<V> {
+    pub fn iter(&self) -> SharedIter<'_, V> {
         self.clocks.iter()
     }
 

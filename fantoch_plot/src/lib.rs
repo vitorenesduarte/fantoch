@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 mod fmt;
 mod plot;
 mod results_db;
@@ -294,7 +296,7 @@ pub fn cdf_plots(
     let height_between_subplots = Some(0.5);
     let (fig, _) = start_plot(py, &plt, height_between_subplots)?;
 
-    let mut previous_axis: Option<Axes> = None;
+    let mut previous_axis: Option<Axes<'_>> = None;
 
     for f in vec![2, 1] {
         let mut hide_xticklabels = false;
@@ -350,7 +352,7 @@ pub fn cdf_plots(
     Ok(())
 }
 
-fn inner_cdf_plot_style(py: Python, ax: &Axes) -> Result<(), Report> {
+fn inner_cdf_plot_style(py: Python<'_>, ax: &Axes<'_>) -> Result<(), Report> {
     // set y limits
     let kwargs = pytry!(py, pydict!(py, ("ymin", 0), ("ymax", 1)));
     pytry!(py, ax.set_ylim(Some(kwargs)));
@@ -366,8 +368,8 @@ fn inner_cdf_plot_style(py: Python, ax: &Axes) -> Result<(), Report> {
 }
 
 fn inner_cdf_plot(
-    py: Python,
-    ax: &Axes,
+    py: Python<'_>,
+    ax: &Axes<'_>,
     n: usize,
     f: usize,
     protocol: Protocol,
@@ -591,9 +593,9 @@ fn start_plot<'a>(
 
 fn end_plot(
     output_file: &str,
-    py: Python,
-    plt: &PyPlot,
-    fig: Figure,
+    py: Python<'_>,
+    plt: &PyPlot<'_>,
+    fig: Figure<'_>,
 ) -> Result<(), Report> {
     // save figure
     let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
@@ -608,8 +610,8 @@ fn end_plot(
 fn add_legend(
     plotted: usize,
     n: usize,
-    py: Python,
-    ax: &Axes,
+    py: Python<'_>,
+    ax: &Axes<'_>,
 ) -> Result<(), Report> {
     // pull legend up
     let y_bbox_to_anchor = match n {
@@ -624,8 +626,8 @@ fn add_legend(
 fn add_subplot_legend(
     plotted: usize,
     n: usize,
-    py: Python,
-    ax: &Axes,
+    py: Python<'_>,
+    ax: &Axes<'_>,
 ) -> Result<(), Report> {
     // pull legend up
     let y_bbox_to_anchor = if n != 3 {
@@ -640,8 +642,8 @@ fn add_subplot_legend(
 fn do_add_legend(
     plotted: usize,
     y_bbox_to_anchor: f64,
-    py: Python,
-    ax: &Axes,
+    py: Python<'_>,
+    ax: &Axes<'_>,
 ) -> Result<(), Report> {
     let legend_ncol = match plotted {
         1 => 1,
@@ -673,8 +675,8 @@ fn do_add_legend(
 }
 
 fn set_log_scale(
-    py: Python,
-    ax: &Axes,
+    py: Python<'_>,
+    ax: &Axes<'_>,
     axis_to_scale: AxisToScale,
 ) -> Result<(), Report> {
     // set log scale on axis
@@ -742,7 +744,7 @@ fn set_log_scale(
 }
 
 fn bar_style(
-    py: Python,
+    py: Python<'_>,
     protocol: Protocol,
     f: usize,
     bar_width: f64,
@@ -763,7 +765,7 @@ fn bar_style(
 }
 
 fn line_style(
-    py: Python,
+    py: Python<'_>,
     protocol: Protocol,
     f: usize,
 ) -> Result<&PyDict, Report> {

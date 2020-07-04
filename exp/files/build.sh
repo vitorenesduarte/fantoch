@@ -30,6 +30,7 @@ fi
 branch=$1
 flamegraph=$2
 aws=$3
+features=$4 # comma-separated list of features
 
 # cargo/deps requirements
 sudo apt-get update
@@ -145,5 +146,9 @@ git stash
 git pull
 git checkout "${branch}"
 
-# build all the binaries in release mode for maximum performance
-RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins
+# build all the binaries in release mode for maximum performance:
+# - enable features if features were defined
+if [ "${features}" != "" ]; then
+    features="--features ${features}"
+fi
+RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins "${features}"
