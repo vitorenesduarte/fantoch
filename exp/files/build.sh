@@ -21,8 +21,8 @@ MAX_OPEN_FILES=100000
 MAX_SO_RCVBUF=$((10 * 1024 * 1024)) # 10mb
 MAX_SO_SNDBUF=$((10 * 1024 * 1024)) # 10mb
 
-if [ $# -ne 3 ]; then
-    echo "usage: build.sh branch flamegraph aws"
+if [ $# < 3 || $# > 4 ]; then
+    echo "usage: build.sh branch flamegraph aws (features)"
     exit 1
 fi
 
@@ -147,9 +147,11 @@ git pull
 git checkout "${branch}"
 
 # build all the binaries in release mode for maximum performance:
-# - enable features if features were defined
-if [ "${features}" != "" ]; then
-    features="--features ${features}"
+# - build if features enabled if any features were defined
+cd "${FANTOCH_PACKAGE}"
+if [ "${features}" == "" ]; then
+    RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins
+else
+    RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins --features ${features}
 fi
-RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release -p "${FANTOCH_PACKAGE}" --bins "${features}"
 

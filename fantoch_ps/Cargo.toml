@@ -13,7 +13,7 @@ timing = ["fantoch/timing"]
 [dependencies]
 ahash = "0.4.0"
 clap = "2.33.1"
-dashmap = "3.11.4"
+dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "b8d83eec3179cf849ad4f2038001b46545daed1e" }
 futures = { version = "0.3.5", default-features = false, features = [] }
 rand = "0.7.3"
 serde = { version = "1.0.114", features = ["derive"] }

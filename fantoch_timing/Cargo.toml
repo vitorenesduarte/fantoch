@@ -7,7 +7,7 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-dashmap = "3.11.4"
+dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "b8d83eec3179cf849ad4f2038001b46545daed1e" }
 quanta = "0.5.2"
 hdrhistogram = "7.1.0"
 tracing = "0.1.15"
