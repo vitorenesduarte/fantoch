@@ -13,6 +13,7 @@ use fantoch::protocol::{
 };
 use fantoch::time::SysTime;
 use fantoch::util;
+use std::time::Duration;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -42,7 +43,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) =
             config.epaxos_quorum_sizes();
@@ -70,7 +71,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
 
         // create periodic events
         let events = if let Some(interval) = config.gc_interval() {
-            vec![(PeriodicEvent::GarbageCollection, interval as u64)]
+            vec![(PeriodicEvent::GarbageCollection, interval)]
         } else {
             vec![]
         };

@@ -12,6 +12,7 @@ use fantoch::config::Config;
 use fantoch::planet::Planet;
 use rusoto_core::Region;
 use tsunami::Tsunami;
+use std::time::Duration;
 
 // folder where all results will be stored
 const RESULTS_DIR: &str = "../results";
@@ -26,7 +27,7 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
-const GC_INTERVAL: Option<usize> = Some(50); // every 50
+const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50)); // every 50
 const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 

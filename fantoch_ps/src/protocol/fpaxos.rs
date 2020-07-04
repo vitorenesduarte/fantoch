@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::mem;
 use tracing::instrument;
+use std::time::Duration;
 
 type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
 
@@ -35,7 +36,7 @@ impl Protocol for FPaxos {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
         let fast_quorum_size = 0; // there's no fast quorum as we don't have fast paths
         let write_quorum_size = config.fpaxos_quorum_size();
@@ -68,7 +69,7 @@ impl Protocol for FPaxos {
 
         // create periodic events
         let events = if let Some(interval) = config.gc_interval() {
-            vec![(PeriodicEvent::GarbageCollection, interval as u64)]
+            vec![(PeriodicEvent::GarbageCollection, interval )]
         } else {
             vec![]
         };

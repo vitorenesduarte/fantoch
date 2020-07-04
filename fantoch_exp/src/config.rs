@@ -117,7 +117,7 @@ impl ProtocolConfig {
             self.config.execute_at_commit(),
         ];
         if let Some(interval) = self.config.gc_interval() {
-            args.extend(args!["--gc_interval", interval]);
+            args.extend(args!["--gc_interval", interval.as_millis()]);
         }
         if let Some(leader) = self.config.leader() {
             args.extend(args!["--leader", leader]);
@@ -127,7 +127,10 @@ impl ProtocolConfig {
             self.config.newt_tiny_quorums()
         ]);
         if let Some(interval) = self.config.newt_clock_bump_interval() {
-            args.extend(args!["--newt_clock_bump_interval", interval]);
+            args.extend(args![
+                "--newt_clock_bump_interval",
+                interval.as_millis()
+            ]);
         }
         args.extend(args!["--skip_fast_ack", self.config.skip_fast_ack()]);
 

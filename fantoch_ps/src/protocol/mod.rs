@@ -34,6 +34,7 @@ mod tests {
     use fantoch::run::tests::run_test_with_inspect_fun;
     use fantoch::sim::Runner;
     use std::collections::HashMap;
+    use std::time::Duration;
 
     macro_rules! config {
         ($n:expr, $f:expr) => {
@@ -67,7 +68,7 @@ mod tests {
     fn sim_best_newt_3_1_test() {
         // NOTE: with n = 3 we don't really need real time clocks to get the
         // best results
-        let clock_bump_interval = 50;
+        let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = sim_test::<NewtSequential>(config!(
             3,
             1,
@@ -85,7 +86,7 @@ mod tests {
 
     #[test]
     fn sim_best_newt_5_1_test() {
-        let clock_bump_interval = 50;
+        let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = sim_test::<NewtSequential>(config!(
             5,
             1,
@@ -125,7 +126,7 @@ mod tests {
     async fn run_best_newt_3_1_test() {
         let workers = 2;
         let executors = 2;
-        let clock_bump_interval = 50;
+        let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = run_test::<NewtAtomic>(
             config!(3, 1, false, clock_bump_interval),
             workers,
@@ -165,7 +166,7 @@ mod tests {
     async fn run_best_newt_5_1_test() {
         let workers = 2;
         let executors = 2;
-        let clock_bump_interval = 50;
+        let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = run_test::<NewtAtomic>(
             config!(5, 1, false, clock_bump_interval),
             workers,
@@ -322,11 +323,11 @@ mod tests {
         P: Protocol + Send + 'static,
     {
         // make sure stability is running
-        config.set_gc_interval(100);
+        config.set_gc_interval(Duration::from_millis(100));
 
-        // run until the clients end + another 10 seconds (10000ms)
+        // run until the clients end + another 10 seconds
         let tracer_show_interval = None;
-        let extra_run_time = Some(10_000);
+        let extra_run_time = Some(Duration::from_secs(10));
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             config,
             CONFLICT_RATE,
@@ -363,7 +364,7 @@ mod tests {
 
     fn sim_test<P: Protocol>(mut config: Config) -> u64 {
         // make sure stability is running
-        config.set_gc_interval(100);
+        config.set_gc_interval(Duration::from_millis(100));
 
         // planet
         let planet = Planet::new();
@@ -389,8 +390,8 @@ mod tests {
             client_regions,
         );
 
-        // run simulation until the clients end + another 2 seconds (2000ms)
-        let extra_sim_time = Some(2000);
+        // run simulation until the clients end + another 2 seconds
+        let extra_sim_time = Some(Duration::from_secs(2));
         let (metrics, _) = runner.run(extra_sim_time);
 
         // fetch slow paths and stable count from metrics

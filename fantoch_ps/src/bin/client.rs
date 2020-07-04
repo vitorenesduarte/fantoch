@@ -4,6 +4,7 @@ use clap::{App, Arg};
 use fantoch::client::Workload;
 use fantoch::id::ClientId;
 use std::error::Error;
+use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
 const DEFAULT_CONFLICT_RATE: usize = 100;
@@ -35,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn parse_args() -> (
     Vec<ClientId>,
     String,
-    Option<u64>,
+    Option<Duration>,
     Workload,
     bool,
     usize,
@@ -171,11 +172,12 @@ fn parse_address(addresses: Option<&str>) -> String {
     addresses.expect("address should be set").to_string()
 }
 
-fn parse_interval(interval: Option<&str>) -> Option<u64> {
+fn parse_interval(interval: Option<&str>) -> Option<Duration> {
     interval.map(|interval| {
-        interval
+        let ms = interval
             .parse::<u64>()
-            .expect("interval should be a number")
+            .expect("interval should be a number");
+        Duration::from_millis(ms)
     })
 }
 
