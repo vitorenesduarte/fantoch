@@ -26,7 +26,7 @@ const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // bench-specific config
-const BRANCH: &str = "dstat";
+const BRANCH: &str = "master";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 
@@ -63,11 +63,11 @@ async fn main() -> Result<(), Report> {
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        /* (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+         * (Protocol::FPaxos, config!(n, 1, false, None, false)),
+         * (Protocol::FPaxos, config!(n, 2, false, None, false)),
+         * (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+         * (Protocol::AtlasLocked, config!(n, 2, false, None, false)), */
     ];
 
     let clients_per_region = vec![
