@@ -7,7 +7,7 @@ use tokio::time::{self, Duration, Instant, Interval};
 // https://github.com/DoumanAsh/async-timer/
 
 pub async fn periodic_task<P, R>(
-    events: Vec<(P::PeriodicEvent, u64)>,
+    events: Vec<(P::PeriodicEvent, Duration)>,
     periodic_to_workers: PeriodicToWorkers<P, R>,
     to_periodic_inspect: Option<InspectReceiver<P, R>>,
 ) where
@@ -34,21 +34,20 @@ pub async fn periodic_task<P, R>(
 }
 
 fn make_intervals<P, R>(
-    events: Vec<(P::PeriodicEvent, u64)>,
+    events: Vec<(P::PeriodicEvent, Duration)>,
 ) -> Vec<(FromPeriodicMessage<P, R>, Interval)>
 where
     P: Protocol + 'static,
 {
     events
         .into_iter()
-        .map(|(event, millis)| {
-            log!("[periodic] event: {:?} | interval {:?}", event, millis);
+        .map(|(event, duration)| {
+            log!("[periodic] event: {:?} | interval {:?}", event, duration);
 
             // create event msg
             let event_msg = FromPeriodicMessage::Event(event);
 
             // compute first tick
-            let duration = Duration::from_millis(millis as u64);
             let first_tick = Instant::now()
                 .checked_add(duration)
                 .expect("first tick in periodic task should exist");

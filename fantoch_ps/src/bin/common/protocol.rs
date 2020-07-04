@@ -4,6 +4,7 @@ use fantoch::id::ProcessId;
 use fantoch::protocol::Protocol;
 use std::error::Error;
 use std::net::IpAddr;
+use std::time::Duration;
 
 const LIST_SEP: &str = ",";
 const DEFAULT_IP: &str = "127.0.0.1";
@@ -429,10 +430,10 @@ pub fn build_config(
     f: usize,
     transitive_conflicts: bool,
     execute_at_commit: bool,
-    gc_interval: Option<usize>,
+    gc_interval: Option<Duration>,
     leader: Option<ProcessId>,
     newt_tiny_quorums: bool,
-    newt_clock_bump_interval: Option<usize>,
+    newt_clock_bump_interval: Option<Duration>,
     skip_fast_ack: bool,
 ) -> Config {
     // create config
@@ -488,11 +489,12 @@ pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT)
 }
 
-pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<usize> {
+pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<Duration> {
     gc_interval.map(|gc_interval| {
-        gc_interval
-            .parse::<usize>()
-            .expect("gc_interval should be a number")
+        let ms = gc_interval
+            .parse::<u64>()
+            .expect("gc_interval should be a number");
+        Duration::from_millis(ms)
     })
 }
 
@@ -512,11 +514,12 @@ fn parse_newt_tiny_quorums(newt_tiny_quorums: Option<&str>) -> bool {
 
 fn parse_newt_clock_bump_interval(
     newt_clock_bump_interval: Option<&str>,
-) -> Option<usize> {
+) -> Option<Duration> {
     newt_clock_bump_interval.map(|newt_clock_bump_interval| {
-        newt_clock_bump_interval
-            .parse::<usize>()
-            .expect("newt_clock_bump_interval should be a number")
+        let ms = newt_clock_bump_interval
+            .parse::<u64>()
+            .expect("newt_clock_bump_interval should be a number");
+        Duration::from_millis(ms)
     })
 }
 pub fn parse_skip_fast_ack(skip_fast_ack: Option<&str>) -> bool {

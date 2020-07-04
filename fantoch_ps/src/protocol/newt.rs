@@ -14,9 +14,9 @@ use fantoch::protocol::{
 use fantoch::time::SysTime;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::mem;
+use std::time::Duration;
 use threshold::VClock;
 use tracing::instrument;
 
@@ -52,7 +52,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     fn new(
         process_id: ProcessId,
         config: Config,
-    ) -> (Self, Vec<(Self::PeriodicEvent, u64)>) {
+    ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size, _) =
             config.newt_quorum_sizes();
@@ -90,7 +90,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
         // maybe create garbage collection periodic event
         let mut events = if let Some(interval) = config.gc_interval() {
-            vec![(PeriodicEvent::GarbageCollection, interval as u64)]
+            vec![(PeriodicEvent::GarbageCollection, interval)]
         } else {
             vec![]
         };
@@ -98,7 +98,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         // maybe create clock bump periodic event
         if let Some(interval) = config.newt_clock_bump_interval() {
             events.reserve_exact(1);
-            events.push((PeriodicEvent::ClockBump, interval as u64));
+            events.push((PeriodicEvent::ClockBump, interval));
         }
 
         // return both
@@ -1056,7 +1056,7 @@ mod tests {
         config.set_newt_tiny_quorums(false);
 
         // make sure stability is running
-        config.set_gc_interval(100);
+        config.set_gc_interval(Duration::from_millis(100));
 
         // executors
         let executors = 1;

@@ -12,12 +12,13 @@ use crate::time::SysTime;
 use crate::util;
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Duration;
 
 enum ScheduleAction<P: Protocol> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
-    PeriodicEvent(ProcessId, P::PeriodicEvent, u64),
+    PeriodicEvent(ProcessId, P::PeriodicEvent, Duration),
 }
 #[derive(Clone)]
 enum MessageRegion {
@@ -167,7 +168,7 @@ where
     /// the simulation run after clients are finished.
     pub fn run(
         &mut self,
-        extra_sim_time: Option<u64>,
+        extra_sim_time: Option<Duration>,
     ) -> (
         HashMap<ProcessId, ProtocolMetrics>,
         HashMap<Region, (usize, Histogram)>,
@@ -191,7 +192,7 @@ where
         (self.processes_metrics(), self.clients_latencies())
     }
 
-    fn simulation_loop(&mut self, extra_sim_time: Option<u64>) {
+    fn simulation_loop(&mut self, extra_sim_time: Option<Duration>) {
         let mut simulation_status = SimulationStatus::ClientsRunning;
         let mut clients_done = 0;
         let mut simulation_final_time = 0;
@@ -271,7 +272,7 @@ where
                                         // final simulation time
                                         simulation_final_time =
                                             self.simulation.time().millis()
-                                                + extra;
+                                                + extra.as_millis() as u64;
                                         SimulationStatus::ExtraSimulationTime
                                     }
                                     None => {
@@ -403,7 +404,7 @@ where
         &mut self,
         process_id: ProcessId,
         event: P::PeriodicEvent,
-        delay: u64,
+        delay: Duration,
     ) {
         // create action
         let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
@@ -427,7 +428,7 @@ where
 
     /// Computes the distance between two regions which is half the ping
     /// latency.
-    fn distance(&self, from: &Region, to: &Region) -> u64 {
+    fn distance(&self, from: &Region, to: &Region) -> Duration {
         let from_to = self
             .planet
             .ping_latency(from, to)
@@ -445,7 +446,8 @@ where
         };
 
         // distance is half the ping latency
-        ping / 2
+        let ms = ping / 2;
+        Duration::from_millis(ms)
     }
 
     /// Get processes' metrics.
@@ -529,7 +531,7 @@ impl<P: Protocol> fmt::Debug for ScheduleAction<P> {
             }
             ScheduleAction::PeriodicEvent(process_id, event, delay) => write!(
                 f,
-                "PeriodicEvent({}, {:?}, {})",
+                "PeriodicEvent({}, {:?}, {:?})",
                 process_id, event, delay
             ),
         }
@@ -551,7 +553,7 @@ mod tests {
         let mut config = Config::new(n, f);
 
         // make sure stability is running
-        config.set_gc_interval(100);
+        config.set_gc_interval(Duration::from_millis(100));
 
         // clients workload
         let conflict_rate = 100;
@@ -581,8 +583,9 @@ mod tests {
             client_regions,
         );
 
-        // run simulation until the clients end + another second (1000ms)
-        let (processes_metrics, mut clients_latencies) = runner.run(Some(1000));
+        // run simulation until the clients end + another second second
+        let (processes_metrics, mut clients_latencies) =
+            runner.run(Some(Duration::from_secs(1)));
 
         // check client stats
         let (us_west1_issued, us_west1) = clients_latencies

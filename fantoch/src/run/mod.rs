@@ -96,9 +96,9 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::Semaphore;
-use tokio::time::{self, Duration};
 
 pub async fn process<P, A>(
     process_id: ProcessId,
@@ -364,7 +364,7 @@ const MAX_CLIENT_CONNECTIONS: usize = 128;
 pub async fn client<A>(
     ids: Vec<ClientId>,
     address: A,
-    interval_ms: Option<u64>,
+    interval: Option<Duration>,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -387,11 +387,11 @@ where
     // start each client worker in pool
     let handles = pool.into_iter().map(|client_ids| {
         // start the open loop client if some interval was provided
-        if let Some(interval_ms) = interval_ms {
+        if let Some(interval) = interval {
             task::spawn(open_loop_client::<A>(
                 client_ids,
                 address.clone(),
-                interval_ms,
+                interval,
                 workload,
                 tcp_nodelay,
                 channel_buffer_size,
@@ -488,7 +488,7 @@ where
 async fn open_loop_client<A>(
     client_ids: Vec<ClientId>,
     address: A,
-    interval_ms: u64,
+    interval: Duration,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -510,7 +510,7 @@ where
     .await?;
 
     // create interval
-    let mut interval = time::interval(Duration::from_millis(interval_ms));
+    let mut interval = tokio::time::interval(interval);
 
     // track which clients are finished
     let mut finished = HashSet::new();
@@ -712,7 +712,7 @@ pub mod tests {
         let mut config = Config::new(n, f);
 
         // make sure stability is running
-        config.set_gc_interval(100);
+        config.set_gc_interval(Duration::from_millis(100));
 
         let conflict_rate = 100;
         let commands_per_client = 100;
@@ -720,7 +720,7 @@ pub mod tests {
         let workers = 2;
         let executors = 2;
         let tracer_show_interval = Some(3000);
-        let extra_run_time = Some(5000);
+        let extra_run_time = Some(Duration::from_secs(5));
 
         // run test and get total stable commands
         let total_stable_count =
@@ -755,7 +755,7 @@ pub mod tests {
         executors: usize,
         tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
-        extra_run_time: Option<u64>,
+        extra_run_time: Option<Duration>,
     ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
         P: Protocol + Send + 'static,
@@ -792,7 +792,7 @@ pub mod tests {
         executors: usize,
         tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
-        extra_run_time: Option<u64>,
+        extra_run_time: Option<Duration>,
     ) -> RunResult<HashMap<ProcessId, Vec<R>>>
     where
         P: Protocol + Send + 'static,
@@ -934,8 +934,8 @@ pub mod tests {
                 // compute interval:
                 // - if the process id is even, then issue a command every 2ms
                 // - otherwise, it's a closed-loop client
-                let interval_ms = match process_id % 2 {
-                    0 => Some(2),
+                let interval = match process_id % 2 {
+                    0 => Some(Duration::from_millis(2)),
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
@@ -945,7 +945,7 @@ pub mod tests {
                 tokio::task::spawn_local(client(
                     ids,
                     address,
-                    interval_ms,
+                    interval,
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
@@ -961,7 +961,7 @@ pub mod tests {
 
         // wait for the extra run time (if any)
         if let Some(extra_run_time) = extra_run_time {
-            tokio::time::delay_for(Duration::from_millis(extra_run_time)).await;
+            tokio::time::delay_for(extra_run_time).await;
         }
 
         // inspect all processes (if there's an inspect function)

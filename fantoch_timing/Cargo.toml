@@ -7,7 +7,7 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-dashmap = "3.11.4"
+dashmap = "3.11.5"
 quanta = "0.5.2"
 hdrhistogram = "7.1.0"
 tracing = "0.1.15"

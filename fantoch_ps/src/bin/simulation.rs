@@ -8,6 +8,7 @@ use fantoch_ps::protocol::{
     AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
 };
 use std::thread;
+use std::time::Duration;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
@@ -48,7 +49,7 @@ fn epaxos_aws() {
     config.set_transitive_conflicts(transitive_conflicts);
 
     // make sure stability is running
-    config.set_gc_interval(100);
+    config.set_gc_interval(Duration::from_millis(100));
 
     // clients
     let client_regions = regions.clone();
@@ -157,7 +158,9 @@ fn newt_real_time(aws: bool) {
             let mut config = Config::new(n, f);
             config.set_newt_tiny_quorums(tiny_quorums);
             if let Some(interval) = clock_bump_interval {
-                config.set_newt_clock_bump_interval(interval);
+                config.set_newt_clock_bump_interval(Duration::from_millis(
+                    interval,
+                ));
             }
             config.set_skip_fast_ack(skip_fast_ack);
 
@@ -188,7 +191,7 @@ fn newt_vs_spanner() {
         );
         let mut config = Config::new(n, f);
         config.set_newt_tiny_quorums(true);
-        config.set_newt_clock_bump_interval(interval);
+        config.set_newt_clock_bump_interval(Duration::from_millis(interval));
         let planet = planet.clone();
         let regions = regions.clone();
         run_in_thread(move || {
@@ -246,7 +249,7 @@ fn increasing_load<P: Protocol>(
     mut config: Config,
 ) {
     // make sure stability is running
-    config.set_gc_interval(100);
+    config.set_gc_interval(Duration::from_millis(100));
 
     let cs = vec![4, 32, 256, 512, 1024, 2048];
 
