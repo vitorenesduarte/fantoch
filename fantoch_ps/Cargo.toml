@@ -9,6 +9,7 @@ license = "MIT/Apache-2.0"
 [features]
 amortize = ["fantoch/amortize"]
 timing = ["fantoch/timing"]
+parallel-sim = ["rayon"]
 
 [dependencies]
 ahash = "0.4.0"
@@ -16,6 +17,7 @@ clap = "2.33.1"
 dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "b8d83eec3179cf849ad4f2038001b46545daed1e" }
 futures = { version = "0.3.5", default-features = false, features = [] }
 rand = "0.7.3"
+rayon = { version = "1.3.1", optional = true }
 serde = { version = "1.0.114", features = ["derive"] }
 threshold = "0.8.7"
 tokio = { version = "0.2.21", features = ["full", "parking_lot"] }
@@ -31,3 +33,7 @@ fantoch = { path = "../fantoch" }
 permutator = "0.4.0"
 quickcheck = "0.9.2"
 quickcheck_macros = "0.9.1"
+
+[[bin]]
+name = "simulation"
+required-features = ["parallel-sim"]

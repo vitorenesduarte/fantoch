@@ -1,24 +1,49 @@
 use fantoch::client::Workload;
 use fantoch::config::Config;
+use fantoch::id::ProcessId;
 use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
-use fantoch::protocol::Protocol;
+use fantoch::protocol::{Protocol, ProtocolMetrics};
 use fantoch::sim::Runner;
+use fantoch::HashMap;
 use fantoch_ps::protocol::{
     AtlasSequential, EPaxosSequential, FPaxos, NewtSequential,
 };
-use std::thread;
+use rayon::prelude::*;
 use std::time::Duration;
 
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
+macro_rules! config {
+    ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
+        let mut config = Config::new($n, $f);
+        config.set_newt_tiny_quorums($tiny_quorums);
+        if let Some(interval) = $clock_bump_interval {
+            config.set_newt_clock_bump_interval(interval);
+        }
+        // make sure stability is running
+        config.set_gc_interval(Duration::from_millis(1000));
+        config.set_skip_fast_ack($skip_fast_ack);
+        config.set_transitive_conflicts(true);
+        config
+    }};
+}
+
 fn main() {
+    aws_distance_matrix();
+
+    // build rayon thread pool:
+    // - give me two cpus to work
+    let spare = 2;
+    let threads = num_cpus::get() - spare;
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .stack_size(STACK_SIZE)
+        .build_global()
+        .unwrap();
+
     let aws = true;
     newt_real_time(aws);
-
-    aws_distance_matrix();
-    epaxos_aws();
-    newt_vs_spanner();
 }
 
 fn aws_distance_matrix() {
@@ -26,51 +51,6 @@ fn aws_distance_matrix() {
     let mut regions = planet.regions();
     regions.sort();
     println!("{}", planet.distance_matrix(regions).unwrap());
-}
-
-fn epaxos_aws() {
-    let planet = Planet::from("../latency_aws/");
-    let regions = vec![
-        Region::new("af-south-1"),
-        Region::new("ap-east-1"),
-        Region::new("eu-west-2"),
-        Region::new("me-south-1"),
-        Region::new("us-west-2"),
-    ];
-
-    println!("{}", planet.distance_matrix(regions.clone()).unwrap());
-
-    // processes
-    let process_regions = regions.clone();
-    let n = 5;
-    let f = 2;
-    let transitive_conflicts = true;
-    let mut config = Config::new(n, f);
-    config.set_transitive_conflicts(transitive_conflicts);
-
-    // make sure stability is running
-    config.set_gc_interval(Duration::from_millis(100));
-
-    // clients
-    let client_regions = regions.clone();
-    let conflict_rate = 100;
-    let total_commands = 1000;
-    let payload_size = 0;
-    let workload = Workload::new(conflict_rate, total_commands, payload_size);
-
-    for clients_per_region in vec![1] {
-        // for clients_per_region in vec![10, 20, 50, 100, 200] {
-        println!(">running epaxos n = {} | f = {}", n, f);
-
-        run::<EPaxosSequential>(
-            config,
-            workload,
-            clients_per_region,
-            process_regions.clone(),
-            client_regions.clone(),
-            planet.clone(),
-        );
-    }
 }
 
 fn newt_real_time_aws() -> (Planet, Vec<Region>) {
@@ -104,104 +84,110 @@ fn newt_real_time(aws: bool) {
         newt_real_time_gcp()
     };
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
-    let f = 1;
+
     let ns = vec![3, 5];
-    for n in ns {
+    let clients_per_region =
+        vec![4, 8, 16, 32, 64, 128, 256, 512, 1024, 1024 * 2, 1024 * 4];
+
+    ns.into_par_iter().for_each(|n| {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
 
-        println!(">running atlas n = {} | f = {}", n, f);
-        let mut config = Config::new(n, f);
-        config.set_transitive_conflicts(true);
-        let planet_ = planet.clone();
-        let regions_ = regions.clone();
-        run_in_thread(move || {
-            increasing_load::<AtlasSequential>(planet_, regions_, config)
-        });
-
-        let leader = 1;
-        println!(
-            ">running fpaxos n = {} | f = {} | leader = {:?}",
-            n,
-            f,
-            regions[leader - 1]
-        );
-        let mut config = Config::new(n, f);
-        config.set_leader(1);
-        let planet_ = planet.clone();
-        let regions_ = regions.clone();
-        run_in_thread(move || {
-            increasing_load::<FPaxos>(planet_, regions_, config)
-        });
-
         let configs = if n == 3 {
-            // tiny quorums does nothing for n = 3
             vec![
-                // tiny quorums, clock bump interval, skip fast ack
-                (false, None, false),
-                (false, Some(10), false),
+                // (protocol, (n, f, tiny quorums, clock bump interval, skip
+                // fast ack))
+                ("Atlas", config!(n, 1, false, None, false)),
+                ("EPaxos", config!(n, 1, false, None, false)),
+                ("FPaxos", config!(n, 1, false, None, false)),
+                ("Newt", config!(n, 1, false, None, false)),
+            ]
+        } else if n == 5 {
+            vec![
+                // (protocol, (n, f, tiny quorums, clock bump interval, skip
+                // fast ack))
+                ("Atlas", config!(n, 1, false, None, false)),
+                ("Atlas", config!(n, 2, false, None, false)),
+                ("EPaxos", config!(n, 0, false, None, false)),
+                ("FPaxos", config!(n, 1, false, None, false)),
+                ("FPaxos", config!(n, 2, false, None, false)),
+                ("Newt", config!(n, 1, false, None, false)),
+                ("Newt", config!(n, 2, false, None, false)),
             ]
         } else {
-            vec![
-                // tiny quorums, clock bump interval, skip fast ack
-                (false, None, false),
-                (false, Some(10), false),
-                (true, Some(10), false),
-                (true, Some(10), true),
-            ]
+            panic!("unsupported number of processes {}", n);
         };
 
-        for (tiny_quorums, clock_bump_interval, skip_fast_ack) in configs {
-            println!(
-                ">running newt n = {} | f = {} | tiny = {} | clock_bump_interval = {} | skip_fast_ack = {}",
-                n, f, tiny_quorums, clock_bump_interval.unwrap_or(0), skip_fast_ack
-            );
-            let mut config = Config::new(n, f);
-            config.set_newt_tiny_quorums(tiny_quorums);
-            if let Some(interval) = clock_bump_interval {
-                config.set_newt_clock_bump_interval(Duration::from_millis(
-                    interval,
-                ));
-            }
-            config.set_skip_fast_ack(skip_fast_ack);
+        clients_per_region.par_iter().for_each(|&clients| {
+            configs.par_iter().for_each(|&(protocol, mut config)| {
+                // TODO check if the protocol is leader-based, and if yes, run
+                // for all possible leader configurations
 
-            let planet_ = planet.clone();
-            let regions_ = regions.clone();
-            run_in_thread(move || {
-                increasing_load::<NewtSequential>(planet_, regions_, config)
-            });
-        }
-    }
-}
+                // set leader if FPaxos
+                if protocol == "FPaxos" {
+                    config.set_leader(1);
+                }
 
-fn newt_vs_spanner() {
-    let planet = Planet::new();
-    let regions: Vec<_> = planet
-        .regions()
-        .into_iter()
-        .filter(|region| region != &Region::new("us-east1"))
-        .collect();
+                // clients workload
+                let conflict_rate = 10;
+                let total_commands = 500;
+                let payload_size = 0;
+                let workload =
+                    Workload::new(conflict_rate, total_commands, payload_size);
 
-    let f = 1;
-    let n = 19;
+                // process regions, client regions and planet
+                let process_regions = regions.clone();
+                let client_regions = regions.clone();
+                let planet = planet.clone();
 
-    for interval in vec![5] {
-        println!(
-            ">running newt n = {} | f = {} | clock_bump_interval = {}ms",
-            n, f, interval
-        );
-        let mut config = Config::new(n, f);
-        config.set_newt_tiny_quorums(true);
-        config.set_newt_clock_bump_interval(Duration::from_millis(interval));
-        let planet = planet.clone();
-        let regions = regions.clone();
-        run_in_thread(move || {
-            increasing_load::<NewtSequential>(planet, regions, config)
-        });
-    }
+                let (process_metrics, client_latencies) = match protocol {
+                    "Atlas" => run::<AtlasSequential>(
+                        config,
+                        workload,
+                        clients,
+                        process_regions,
+                        client_regions,
+                        planet,
+                    ),
+                    "EPaxos" => run::<EPaxosSequential>(
+                        config,
+                        workload,
+                        clients,
+                        process_regions,
+                        client_regions,
+                        planet,
+                    ),
+                    "FPaxos" => run::<FPaxos>(
+                        config,
+                        workload,
+                        clients,
+                        process_regions,
+                        client_regions,
+                        planet,
+                    ),
+                    "Newt" => run::<NewtSequential>(
+                        config,
+                        workload,
+                        clients,
+                        process_regions,
+                        client_regions,
+                        planet,
+                    ),
+                    _ => panic!("unsupported protocol {:?}", protocol),
+                };
+                handle_run_result(
+                    protocol,
+                    config,
+                    clients,
+                    process_metrics,
+                    client_latencies,
+                );
+            })
+        })
+    });
 }
 
 #[allow(dead_code)]
-fn equidistant<P: Protocol>() {
+fn equidistant<P: Protocol>(protocol_name: &str) {
     // intra-region distance
     let distance = 200;
 
@@ -231,7 +217,7 @@ fn equidistant<P: Protocol>() {
         // config
         let config = Config::new(n, f);
 
-        run::<P>(
+        let (process_metrics, client_latencies) = run::<P>(
             config,
             workload,
             clients_per_region,
@@ -239,52 +225,18 @@ fn equidistant<P: Protocol>() {
             client_regions,
             planet,
         );
-    }
-}
-
-#[allow(dead_code)]
-fn increasing_load<P: Protocol>(
-    planet: Planet,
-    regions: Vec<Region>,
-    mut config: Config,
-) {
-    // make sure stability is running
-    config.set_gc_interval(Duration::from_millis(100));
-
-    let cs = vec![4, 32, 256, 512, 1024, 2048];
-
-    // clients workload
-    let conflict_rate = 10;
-    let total_commands = 500;
-    let payload_size = 0;
-    let workload = Workload::new(conflict_rate, total_commands, payload_size);
-
-    // TODO check if the protocol is leader-based, and if yes, run for all
-    // possible leader configurations
-
-    for &clients_per_region in &cs {
-        println!("running clients={}", clients_per_region);
-        println!();
-
-        // process regions
-        let process_regions = regions.clone();
-
-        // client regions
-        let client_regions = regions.clone();
-
-        run::<P>(
+        handle_run_result(
+            protocol_name,
             config,
-            workload,
             clients_per_region,
-            process_regions,
-            client_regions,
-            planet.clone(),
+            process_metrics,
+            client_latencies,
         );
     }
 }
 
 #[allow(dead_code)]
-fn increasing_regions<P: Protocol>() {
+fn increasing_regions<P: Protocol>(protocol_name: &str) {
     let planet = Planet::new();
     let regions13 = vec![
         Region::new("asia-southeast1"),
@@ -329,13 +281,20 @@ fn increasing_regions<P: Protocol>() {
         // client regions
         let client_regions = regions13.clone();
 
-        run::<P>(
+        let (process_metrics, client_latencies) = run::<P>(
             config,
             workload,
             clients_per_region,
             process_regions,
             client_regions,
             planet.clone(),
+        );
+        handle_run_result(
+            protocol_name,
+            config,
+            clients_per_region,
+            process_metrics,
+            client_latencies,
         );
     }
 }
@@ -347,6 +306,9 @@ fn run<P: Protocol>(
     process_regions: Vec<Region>,
     client_regions: Vec<Region>,
     planet: Planet,
+) -> (
+    HashMap<ProcessId, ProtocolMetrics>,
+    HashMap<Region, (usize, Histogram)>,
 ) {
     // compute number of regions and total number of expected commands per
     // region
@@ -363,19 +325,10 @@ fn run<P: Protocol>(
         process_regions,
         client_regions,
     );
-    let (processes_metrics, clients_latencies) = runner.run(None);
-    println!("simulation ended...");
-
-    // show processes stats
-    processes_metrics
-        .into_iter()
-        .for_each(|(process_id, metrics)| {
-            println!("process {} metrics:", process_id);
-            println!("{:?}", metrics);
-        });
+    let (process_metrics, client_latencies) = runner.run(None);
 
     // compute clients stats
-    let issued_commands = clients_latencies
+    let issued_commands = client_latencies
         .values()
         .map(|(issued_commands, _histogram)| issued_commands)
         .sum::<usize>();
@@ -387,8 +340,26 @@ fn run<P: Protocol>(
         );
     }
 
+    (process_metrics, client_latencies)
+}
+
+fn handle_run_result(
+    protocol_name: &str,
+    config: Config,
+    clients_per_region: usize,
+    process_metrics: HashMap<ProcessId, ProtocolMetrics>,
+    client_latencies: HashMap<Region, (usize, Histogram)>,
+) {
+    // show processes stats
+    process_metrics
+        .into_iter()
+        .for_each(|(process_id, metrics)| {
+            println!("process {} metrics:", process_id);
+            println!("{:?}", metrics);
+        });
+
     // compute clients stats
-    let histogram = clients_latencies.into_iter().fold(
+    let histogram = client_latencies.into_iter().fold(
         Histogram::new(),
         |mut histogram_acc, (region, (_issued_commands, histogram))| {
             println!("region = {:<14} | {:?}", region.name(), histogram);
@@ -399,26 +370,11 @@ fn run<P: Protocol>(
     );
 
     println!(
-        "n = {} AND c = {:<9} | {:?}",
+        "{} n = {} f = {} c = {:<9} | {:?}",
+        protocol_name,
         config.n(),
+        config.f(),
         clients_per_region,
         histogram
     );
-}
-
-fn run_in_thread<F>(run: F)
-where
-    F: FnOnce(),
-    F: Send + 'static,
-{
-    // Spawn thread with explicit stack size
-    let child = thread::Builder::new()
-        .stack_size(STACK_SIZE)
-        .spawn(run)
-        .unwrap();
-
-    // wait for thread to end
-    if let Err(e) = child.join() {
-        println!("error in thread: {:?}", e);
-    }
 }
