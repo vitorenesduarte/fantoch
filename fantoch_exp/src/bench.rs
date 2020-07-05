@@ -27,6 +27,7 @@ pub async fn bench_experiment(
     configs: Vec<(Protocol, Config)>,
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
+    skip: impl Fn(Protocol, Config, usize) -> bool,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     if tracer_show_interval.is_some() {
@@ -37,6 +38,10 @@ pub async fn bench_experiment(
         // check that we have the correct number of regions
         assert_eq!(machines.region_count(), config.n());
         for &clients in &clients_per_region {
+            // maybe skip configuration
+            if skip(protocol, config, clients) {
+                continue;
+            }
             run_experiment(
                 &machines,
                 run_mode,
