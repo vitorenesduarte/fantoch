@@ -1,15 +1,18 @@
 use crate::plot::axes::Axes;
 use crate::plot::figure::Figure;
+use crate::pytry;
+use color_eyre::Report;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
+use pyo3::PyNativeType;
 
 pub struct PyPlot<'p> {
     plt: &'p PyModule,
 }
 
 impl<'p> PyPlot<'p> {
-    pub fn new(py: Python<'p>) -> PyResult<Self> {
-        let plt = PyModule::import(py, "matplotlib.pyplot")?;
+    pub fn new(py: Python<'p>) -> Result<Self, Report> {
+        let plt = pytry!(py, PyModule::import(py, "matplotlib.pyplot"));
         Ok(Self { plt })
     }
 
@@ -19,8 +22,11 @@ impl<'p> PyPlot<'p> {
         ncols: usize,
         index: usize,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<Axes<'_>> {
-        let result = self.plt.call("subplot", (nrows, ncols, index), kwargs)?;
+    ) -> Result<Axes<'_>, Report> {
+        let result = pytry!(
+            self.py(),
+            self.plt.call("subplot", (nrows, ncols, index), kwargs)
+        );
         let ax = Axes::new(result)?;
         Ok(ax)
     }
@@ -28,7 +34,7 @@ impl<'p> PyPlot<'p> {
     pub fn subplots(
         &self,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<(Figure<'_>, Axes<'_>)> {
+    ) -> Result<(Figure<'_>, Axes<'_>), Report> {
         // check that `ncols` and `nrows` was not set
         if let Some(kwargs) = kwargs {
             assert_eq!(
@@ -42,20 +48,28 @@ impl<'p> PyPlot<'p> {
                 "nrows shouldn't be set here; use `PyPlot::subplot` instead"
             );
         }
-        let result = self.plt.call("subplots", (), kwargs)?;
-        let tuple = result.downcast::<PyTuple>()?;
+        let result = pytry!(self.py(), self.plt.call("subplots", (), kwargs));
+        let tuple = pytry!(self.py(), result.downcast::<PyTuple>());
         let fig = Figure::new(tuple.get_item(0));
         let ax = Axes::new(tuple.get_item(1))?;
         Ok((fig, ax))
     }
 
-    pub fn savefig(&self, path: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.plt.call("savefig", (path,), kwargs)?;
+    pub fn savefig(
+        &self,
+        path: &str,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call("savefig", (path,), kwargs));
         Ok(())
     }
 
-    pub fn close(&self, figure: Figure<'_>) -> PyResult<()> {
-        self.plt.call1("close", (figure.fig(),))?;
+    pub fn close(&self, figure: Figure<'_>) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call1("close", (figure.fig(),)));
         Ok(())
+    }
+
+    fn py(&self) -> Python<'_> {
+        self.plt.py()
     }
 }

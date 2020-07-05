@@ -49,23 +49,23 @@ pub fn set_global_style() -> Result<(), Report> {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let lib = pytry!(py, Matplotlib::new(py));
+    let lib = Matplotlib::new(py)?;
     // need to load `PyPlot` for the following to work (which is just weird)
-    let _ = pytry!(py, PyPlot::new(py));
+    let _ = PyPlot::new(py)?;
 
     // adjust fig size
-    let kwargs = pytry!(py, pydict!(py, ("figsize", FIGSIZE)));
-    pytry!(py, lib.rc("figure", Some(kwargs)));
+    let kwargs = pydict!(py, ("figsize", FIGSIZE));
+    lib.rc("figure", Some(kwargs))?;
 
     // adjust font size
-    let kwargs = pytry!(py, pydict!(py, ("size", 9)));
-    pytry!(py, lib.rc("font", Some(kwargs)));
-    let kwargs = pytry!(py, pydict!(py, ("fontsize", 10)));
-    pytry!(py, lib.rc("legend", Some(kwargs)));
+    let kwargs = pydict!(py, ("size", 9));
+    lib.rc("font", Some(kwargs))?;
+    let kwargs = pydict!(py, ("fontsize", 10));
+    lib.rc("legend", Some(kwargs))?;
 
     // adjust axes linewidth
-    let kwargs = pytry!(py, pydict!(py, ("linewidth", 1)));
-    pytry!(py, lib.rc("axes", Some(kwargs)));
+    let kwargs = pydict!(py, ("linewidth", 1));
+    lib.rc("axes", Some(kwargs))?;
 
     Ok(())
 }
@@ -115,7 +115,7 @@ pub fn latency_plot(
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(py, PyPlot::new(py));
+    let plt = PyPlot::new(py)?;
 
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
@@ -178,7 +178,7 @@ pub fn latency_plot(
             pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
         }
 
-        pytry!(py, ax.bar(x, y, Some(kwargs)));
+        ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
 
         // save global client metrics
@@ -192,7 +192,7 @@ pub fn latency_plot(
     }
 
     // set xticks
-    pytry!(py, ax.set_xticks(x, None));
+    ax.set_xticks(x, None)?;
 
     // set x labels:
     // - check the number of regions is correct
@@ -204,10 +204,10 @@ pub fn latency_plot(
         .into_iter()
         .map(|region| PlotFmt::region_name(region))
         .collect();
-    pytry!(py, ax.set_xticklabels(labels, None));
+    ax.set_xticklabels(labels, None)?;
 
     // set labels
-    pytry!(py, ax.set_ylabel("latency (ms)"));
+    ax.set_ylabel("latency (ms)")?;
 
     // legend
     add_legend(plotted, n, py, &ax)?;
@@ -230,7 +230,7 @@ pub fn cdf_plot(
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(py, PyPlot::new(py));
+    let plt = PyPlot::new(py)?;
 
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
@@ -290,7 +290,7 @@ pub fn cdf_plots(
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(py, PyPlot::new(py));
+    let plt = PyPlot::new(py)?;
 
     // start plot
     let height_between_subplots = Some(0.5);
@@ -308,10 +308,10 @@ pub fn cdf_plots(
                 // share the axis with f = 2so that the plots have the same
                 // scale; also, hide the labels for f = 1
                 hide_xticklabels = true;
-                Some(pytry!(py, pydict!(py, ("sharex", previous_axis.ax()))))
+                Some(pydict!(py, ("sharex", previous_axis.ax())))
             }
         };
-        let ax = pytry!(py, plt.subplot(2, 1, f, kwargs));
+        let ax = plt.subplot(2, 1, f, kwargs)?;
 
         // keep track of the number of plotted instances
         let mut plotted = 0;
@@ -336,7 +336,7 @@ pub fn cdf_plots(
 
         // additional style: maybe hide x-axis labels
         if hide_xticklabels {
-            pytry!(py, ax.xaxis.set_visible(false));
+            ax.xaxis.set_visible(false)?;
         }
 
         // legend
@@ -354,15 +354,15 @@ pub fn cdf_plots(
 
 fn inner_cdf_plot_style(py: Python<'_>, ax: &Axes<'_>) -> Result<(), Report> {
     // set y limits
-    let kwargs = pytry!(py, pydict!(py, ("ymin", 0), ("ymax", 1)));
-    pytry!(py, ax.set_ylim(Some(kwargs)));
+    let kwargs = pydict!(py, ("ymin", 0), ("ymax", 1));
+    ax.set_ylim(Some(kwargs))?;
 
     // set log scale on x axis
     set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
-    pytry!(py, ax.set_xlabel("latency (ms) [log-scale]"));
-    pytry!(py, ax.set_ylabel("CDF"));
+    ax.set_xlabel("latency (ms) [log-scale]")?;
+    ax.set_ylabel("CDF")?;
 
     Ok(())
 }
@@ -421,7 +421,7 @@ fn inner_cdf_plot(
 
     // plot it!
     let kwargs = line_style(py, protocol, f)?;
-    pytry!(py, ax.plot(x, y, None, Some(kwargs)));
+    ax.plot(x, y, None, Some(kwargs))?;
     *plotted += 1;
 
     Ok(())
@@ -439,7 +439,7 @@ pub fn throughput_latency_plot(
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let plt = pytry!(py, PyPlot::new(py));
+    let plt = PyPlot::new(py)?;
 
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
@@ -517,7 +517,7 @@ pub fn throughput_latency_plot(
 
         // plot it!
         let kwargs = line_style(py, protocol, f)?;
-        pytry!(py, ax.plot(x, y, None, Some(kwargs)));
+        ax.plot(x, y, None, Some(kwargs))?;
         plotted += 1;
     }
 
@@ -525,8 +525,8 @@ pub fn throughput_latency_plot(
     set_log_scale(py, &ax, AxisToScale::Y)?;
 
     // set labels
-    pytry!(py, ax.set_xlabel("throughput (K ops/s)"));
-    pytry!(py, ax.set_ylabel("latency (ms) [log-scale]"));
+    ax.set_xlabel("throughput (K ops/s)")?;
+    ax.set_ylabel("latency (ms) [log-scale]")?;
 
     // legend
     add_legend(plotted, n, py, &ax)?;
@@ -575,18 +575,20 @@ fn start_plot<'a>(
     plt: &'a PyPlot<'a>,
     height_between_subplots: Option<f64>,
 ) -> Result<(Figure<'a>, Axes<'a>), Report> {
-    let (fig, ax) = pytry!(py, plt.subplots(None));
+    let (fig, ax) = plt.subplots(None)?;
+
+    let top = ("top", ADJUST_TOP);
+    let bottom = ("bottom", ADJUST_BOTTOM);
 
     // adjust fig margins
-    let kwargs = pytry!(
-        py,
-        pydict!(py, ("top", ADJUST_TOP), ("bottom", ADJUST_BOTTOM))
-    );
-    // maybe also set `hspace`
-    if let Some(hspace) = height_between_subplots {
-        pytry!(py, kwargs.set_item("hspace", hspace));
-    }
-    pytry!(py, fig.subplots_adjust(Some(kwargs)));
+    let kwargs = if let Some(hspace) = height_between_subplots {
+        // also set `hspace`
+        let hspace = ("hspace", hspace);
+        pydict!(py, top, bottom, hspace)
+    } else {
+        pydict!(py, top, bottom)
+    };
+    fig.subplots_adjust(Some(kwargs))?;
 
     Ok((fig, ax))
 }
@@ -598,11 +600,11 @@ fn end_plot(
     fig: Figure<'_>,
 ) -> Result<(), Report> {
     // save figure
-    let kwargs = pytry!(py, pydict!(py, ("format", "pdf")));
-    pytry!(py, plt.savefig(output_file, Some(kwargs)));
+    let kwargs = pydict!(py, ("format", "pdf"));
+    plt.savefig(output_file, Some(kwargs))?;
 
     // close the figure
-    pytry!(py, plt.close(fig));
+    plt.close(fig)?;
 
     Ok(())
 }
@@ -658,18 +660,15 @@ fn do_add_legend(
         ),
     };
     // add legend
-    let kwargs = pytry!(
+    let kwargs = pydict!(
         py,
-        pydict!(
-            py,
-            ("loc", "upper center"),
-            ("bbox_to_anchor", (0.5, y_bbox_to_anchor)),
-            // remove box around legend:
-            ("edgecolor", "white"),
-            ("ncol", legend_ncol),
-        )
+        ("loc", "upper center"),
+        ("bbox_to_anchor", (0.5, y_bbox_to_anchor)),
+        // remove box around legend:
+        ("edgecolor", "white"),
+        ("ncol", legend_ncol),
     );
-    pytry!(py, ax.legend(Some(kwargs)));
+    ax.legend(Some(kwargs))?;
 
     Ok(())
 }
@@ -681,12 +680,8 @@ fn set_log_scale(
 ) -> Result<(), Report> {
     // set log scale on axis
     match axis_to_scale {
-        AxisToScale::X => {
-            pytry!(py, ax.set_xscale("log"));
-        }
-        AxisToScale::Y => {
-            pytry!(py, ax.set_yscale("log"));
-        }
+        AxisToScale::X => ax.set_xscale("log")?,
+        AxisToScale::Y => ax.set_yscale("log")?,
     }
 
     // control which labels get plotted (matplotlib doesn't do a very good job
@@ -695,8 +690,8 @@ fn set_log_scale(
 
     // compute ticks given the limits
     let (start, end) = match axis_to_scale {
-        AxisToScale::X => pytry!(py, ax.get_xlim()),
-        AxisToScale::Y => pytry!(py, ax.get_ylim()),
+        AxisToScale::X => ax.get_xlim()?,
+        AxisToScale::Y => ax.get_ylim()?,
     };
 
     // compute `shift` when `start` and `end` are in `ln`-values. this ensures
@@ -719,25 +714,25 @@ fn set_log_scale(
         .collect();
 
     // set major ticks with the `ticks` computed above; also remove minor ticks
-    let major = pytry!(py, pydict!(py, ("minor", false)));
-    let minor = pytry!(py, pydict!(py, ("minor", true)));
+    let major = pydict!(py, ("minor", false));
+    let minor = pydict!(py, ("minor", true));
 
     match axis_to_scale {
         AxisToScale::X => {
-            pytry!(py, ax.set_xticks(ticks.clone(), Some(major)));
-            pytry!(py, ax.set_xticklabels(ticks.clone(), Some(major)));
+            ax.set_xticks(ticks.clone(), Some(major))?;
+            ax.set_xticklabels(ticks.clone(), Some(major))?;
 
             ticks.clear();
-            pytry!(py, ax.set_xticks(ticks, Some(minor)));
+            ax.set_xticks(ticks, Some(minor))?;
         }
         AxisToScale::Y => {
             // set major ticks
-            pytry!(py, ax.set_yticks(ticks.clone(), Some(major)));
-            pytry!(py, ax.set_yticklabels(ticks.clone(), Some(major)));
+            ax.set_yticks(ticks.clone(), Some(major))?;
+            ax.set_yticklabels(ticks.clone(), Some(major))?;
 
             // remove minor ticks
             ticks.clear();
-            pytry!(py, ax.set_yticks(ticks, Some(minor)));
+            ax.set_yticks(ticks, Some(minor))?;
         }
     }
     Ok(())
@@ -749,17 +744,14 @@ fn bar_style(
     f: usize,
     bar_width: f64,
 ) -> Result<&PyDict, Report> {
-    let kwargs = pytry!(
+    let kwargs = pydict!(
         py,
-        pydict!(
-            py,
-            ("label", PlotFmt::label(protocol, f)),
-            ("width", bar_width),
-            ("edgecolor", "black"),
-            ("linewidth", 1),
-            ("color", PlotFmt::color(protocol, f)),
-            ("hatch", PlotFmt::hatch(protocol, f)),
-        )
+        ("label", PlotFmt::label(protocol, f)),
+        ("width", bar_width),
+        ("edgecolor", "black"),
+        ("linewidth", 1),
+        ("color", PlotFmt::color(protocol, f)),
+        ("hatch", PlotFmt::hatch(protocol, f)),
     );
     Ok(kwargs)
 }
@@ -769,16 +761,13 @@ fn line_style(
     protocol: Protocol,
     f: usize,
 ) -> Result<&PyDict, Report> {
-    let kwargs = pytry!(
+    let kwargs = pydict!(
         py,
-        pydict!(
-            py,
-            ("label", PlotFmt::label(protocol, f)),
-            ("color", PlotFmt::color(protocol, f)),
-            ("marker", PlotFmt::marker(protocol, f)),
-            ("linestyle", PlotFmt::linestyle(protocol, f)),
-            ("linewidth", PlotFmt::linewidth(f)),
-        )
+        ("label", PlotFmt::label(protocol, f)),
+        ("color", PlotFmt::color(protocol, f)),
+        ("marker", PlotFmt::marker(protocol, f)),
+        ("linestyle", PlotFmt::linestyle(protocol, f)),
+        ("linewidth", PlotFmt::linewidth(f)),
     );
     Ok(kwargs)
 }

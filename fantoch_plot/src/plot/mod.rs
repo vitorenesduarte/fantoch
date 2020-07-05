@@ -3,31 +3,20 @@ pub mod axis;
 pub mod figure;
 pub mod pyplot;
 
+use color_eyre::Report;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-
-pub struct Matplotlib<'p> {
-    lib: &'p PyModule,
-}
-
-impl<'p> Matplotlib<'p> {
-    pub fn new(py: Python<'p>) -> PyResult<Self> {
-        let lib = PyModule::import(py, "matplotlib")?;
-        Ok(Self { lib })
-    }
-
-    pub fn rc(&self, name: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.lib.call("rc", (name,), kwargs)?;
-        Ok(())
-    }
-}
+use pyo3::PyNativeType;
 
 #[macro_export]
 macro_rules! pytry {
     ($py:expr, $e:expr) => {{
         match $e {
             Ok(v) => v,
-            Err(e) => color_eyre::eyre::bail!("{:?}", e.print($py)),
+            Err(e) => {
+                let e: PyErr = e.into();
+                color_eyre::eyre::bail!("{:?}", e.print($py))
+            }
         }
     }};
 }
@@ -44,11 +33,31 @@ macro_rules! pydict {
                 res = Err(e);
             }
         )*
-        res
+        pytry!($py, res)
     }};
     ($py:expr, $($tup:expr,)*) => {{
         $crate::pydict![$py, $($tup),*]
     }};
+}
+
+pub struct Matplotlib<'p> {
+    lib: &'p PyModule,
+}
+
+impl<'p> Matplotlib<'p> {
+    pub fn new(py: Python<'p>) -> Result<Self, Report> {
+        let lib = pytry!(py, PyModule::import(py, "matplotlib"));
+        Ok(Self { lib })
+    }
+
+    pub fn rc(
+        &self,
+        name: &str,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        pytry!(self.lib.py(), self.lib.call("rc", (name,), kwargs));
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -67,7 +76,7 @@ mod tests {
         assert_eq!(std::path::Path::new(path).is_file(), true);
     }
 
-    fn save_pdf(path: &str) -> PyResult<()> {
+    fn save_pdf(path: &str) -> Result<(), Report> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         let plt = PyPlot::new(py)?;
@@ -79,7 +88,7 @@ mod tests {
         ax.set_xlabel("regions")?;
         ax.set_ylabel("latency (ms)")?;
 
-        let kwargs = pydict!(py, ("format", "pdf"))?;
+        let kwargs = pydict!(py, ("format", "pdf"));
         plt.savefig(path, Some(kwargs))?;
         plt.close(fig)?;
         Ok(())

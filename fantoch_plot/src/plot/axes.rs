@@ -1,6 +1,9 @@
 use crate::plot::axis::Axis;
+use crate::pytry;
+use color_eyre::Report;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFloat, PyTuple};
+use pyo3::PyNativeType;
 
 pub struct Axes<'a> {
     ax: &'a PyAny,
@@ -9,9 +12,9 @@ pub struct Axes<'a> {
 }
 
 impl<'a> Axes<'a> {
-    pub fn new(ax: &'a PyAny) -> PyResult<Self> {
-        let xaxis = Axis::new(ax.getattr("xaxis")?);
-        let yaxis = Axis::new(ax.getattr("yaxis")?);
+    pub fn new(ax: &'a PyAny) -> Result<Self, Report> {
+        let xaxis = Axis::new(pytry!(ax.py(), ax.getattr("xaxis")));
+        let yaxis = Axis::new(pytry!(ax.py(), ax.getattr("yaxis")));
         Ok(Self { ax, xaxis, yaxis })
     }
 
@@ -19,13 +22,13 @@ impl<'a> Axes<'a> {
         self.ax
     }
 
-    pub fn set_xlabel(&self, label: &str) -> PyResult<()> {
-        self.ax.call_method1("set_xlabel", (label,))?;
+    pub fn set_xlabel(&self, label: &str) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method1("set_xlabel", (label,)));
         Ok(())
     }
 
-    pub fn set_ylabel(&self, label: &str) -> PyResult<()> {
-        self.ax.call_method1("set_ylabel", (label,))?;
+    pub fn set_ylabel(&self, label: &str) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method1("set_ylabel", (label,)));
         Ok(())
     }
 
@@ -33,11 +36,14 @@ impl<'a> Axes<'a> {
         &self,
         ticks: Vec<T>,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<()>
+    ) -> Result<(), Report>
     where
         T: IntoPy<PyObject>,
     {
-        self.ax.call_method("set_xticks", (ticks,), kwargs)?;
+        pytry!(
+            self.py(),
+            self.ax.call_method("set_xticks", (ticks,), kwargs)
+        );
         Ok(())
     }
 
@@ -45,11 +51,14 @@ impl<'a> Axes<'a> {
         &self,
         ticks: Vec<T>,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<()>
+    ) -> Result<(), Report>
     where
         T: IntoPy<PyObject>,
     {
-        self.ax.call_method("set_yticks", (ticks,), kwargs)?;
+        pytry!(
+            self.py(),
+            self.ax.call_method("set_yticks", (ticks,), kwargs)
+        );
         Ok(())
     }
 
@@ -57,11 +66,14 @@ impl<'a> Axes<'a> {
         &self,
         labels: Vec<L>,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<()>
+    ) -> Result<(), Report>
     where
         L: IntoPy<PyObject>,
     {
-        self.ax.call_method("set_xticklabels", (labels,), kwargs)?;
+        pytry!(
+            self.py(),
+            self.ax.call_method("set_xticklabels", (labels,), kwargs)
+        );
         Ok(())
     }
 
@@ -69,49 +81,52 @@ impl<'a> Axes<'a> {
         &self,
         labels: Vec<L>,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<()>
+    ) -> Result<(), Report>
     where
         L: IntoPy<PyObject>,
     {
-        self.ax.call_method("set_yticklabels", (labels,), kwargs)?;
+        pytry!(
+            self.py(),
+            self.ax.call_method("set_yticklabels", (labels,), kwargs)
+        );
         Ok(())
     }
 
-    pub fn set_xscale(&self, value: &str) -> PyResult<()> {
-        self.ax.call_method1("set_xscale", (value,))?;
+    pub fn set_xscale(&self, value: &str) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method1("set_xscale", (value,)));
         Ok(())
     }
 
-    pub fn set_yscale(&self, value: &str) -> PyResult<()> {
-        self.ax.call_method1("set_yscale", (value,))?;
+    pub fn set_yscale(&self, value: &str) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method1("set_yscale", (value,)));
         Ok(())
     }
 
-    pub fn get_xlim(&self) -> PyResult<(f64, f64)> {
-        let xlim = self.ax.call_method0("get_xlim")?;
-        let xlim = xlim.downcast::<PyTuple>()?;
-        let left = xlim.get_item(0).downcast::<PyFloat>()?;
-        let right = xlim.get_item(1).downcast::<PyFloat>()?;
+    pub fn get_xlim(&self) -> Result<(f64, f64), Report> {
+        let xlim = pytry!(self.py(), self.ax.call_method0("get_xlim"));
+        let xlim = pytry!(self.py(), xlim.downcast::<PyTuple>());
+        let left = pytry!(self.py(), xlim.get_item(0).downcast::<PyFloat>());
+        let right = pytry!(self.py(), xlim.get_item(1).downcast::<PyFloat>());
         Ok((left.value(), right.value()))
     }
 
-    pub fn get_ylim(&self) -> PyResult<(f64, f64)> {
-        let xlim = self.ax.call_method0("get_ylim")?;
-        let xlim = xlim.downcast::<PyTuple>()?;
-        let left = xlim.get_item(0).downcast::<PyFloat>()?;
-        let right = xlim.get_item(1).downcast::<PyFloat>()?;
+    pub fn get_ylim(&self) -> Result<(f64, f64), Report> {
+        let xlim = pytry!(self.py(), self.ax.call_method0("get_ylim"));
+        let xlim = pytry!(self.py(), xlim.downcast::<PyTuple>());
+        let left = pytry!(self.py(), xlim.get_item(0).downcast::<PyFloat>());
+        let right = pytry!(self.py(), xlim.get_item(1).downcast::<PyFloat>());
         Ok((left.value(), right.value()))
     }
 
-    pub fn set_ylim(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.ax.call_method("set_ylim", (), kwargs)?;
+    pub fn set_ylim(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("set_ylim", (), kwargs));
         Ok(())
     }
 
     // any questions about legend positioning should be answered here: https://stackoverflow.com/a/43439132/4262469
     // - that's how great the answer is!
-    pub fn legend(&self, kwargs: Option<&PyDict>) -> PyResult<()> {
-        self.ax.call_method("legend", (), kwargs)?;
+    pub fn legend(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("legend", (), kwargs));
         Ok(())
     }
 
@@ -121,15 +136,15 @@ impl<'a> Axes<'a> {
         y: Vec<Y>,
         fmt: Option<&str>,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<()>
+    ) -> Result<(), Report>
     where
         X: IntoPy<PyObject>,
         Y: IntoPy<PyObject>,
     {
         if let Some(fmt) = fmt {
-            self.ax.call_method("plot", (x, y, fmt), kwargs)?;
+            pytry!(self.py(), self.ax.call_method("plot", (x, y, fmt), kwargs));
         } else {
-            self.ax.call_method("plot", (x, y), kwargs)?;
+            pytry!(self.py(), self.ax.call_method("plot", (x, y), kwargs));
         };
         Ok(())
     }
@@ -139,12 +154,16 @@ impl<'a> Axes<'a> {
         x: Vec<X>,
         height: Vec<H>,
         kwargs: Option<&PyDict>,
-    ) -> PyResult<()>
+    ) -> Result<(), Report>
     where
         X: IntoPy<PyObject>,
         H: IntoPy<PyObject>,
     {
-        self.ax.call_method("bar", (x, height), kwargs)?;
+        pytry!(self.py(), self.ax.call_method("bar", (x, height), kwargs));
         Ok(())
+    }
+
+    fn py(&self) -> Python<'_> {
+        self.ax.py()
     }
 }
