@@ -34,10 +34,10 @@ pub async fn bench_experiment(
         panic!("vitor: you should set the timing feature for this to work!");
     }
 
-    for (protocol, config) in configs {
-        // check that we have the correct number of regions
-        assert_eq!(machines.region_count(), config.n());
-        for &clients in &clients_per_region {
+    for &clients in &clients_per_region {
+        for &(protocol, config) in &configs {
+            // check that we have the correct number of regions
+            assert_eq!(machines.region_count(), config.n());
             // maybe skip configuration
             if skip(protocol, config, clients) {
                 continue;

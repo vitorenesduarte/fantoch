@@ -648,6 +648,7 @@ fn do_add_legend(
     ax: &Axes<'_>,
 ) -> Result<(), Report> {
     let legend_ncol = match plotted {
+        0 => 0,
         1 => 1,
         2 => 2,
         3 => 3,

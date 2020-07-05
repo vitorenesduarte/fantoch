@@ -28,7 +28,8 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 // bench-specific config
 const BRANCH: &str = "master";
 // TODO allow more than one feature
-const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
+// const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
+const FEATURE: Option<FantochFeature> = None;
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
