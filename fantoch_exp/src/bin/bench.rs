@@ -9,7 +9,7 @@ use std::time::Duration;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results_LAN";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -93,13 +93,18 @@ async fn main() -> Result<(), Report> {
         protocol == Protocol::AtlasLocked && clients > 1024 * 4
     };
 
-    baremetal_bench(regions, configs, clients_per_region, skip).await
+    // create AWS planet
+    // let planet = Some(Planet::from("../latency_aws"));
+    let planet = None;
+
+    baremetal_bench(regions, planet, configs, clients_per_region, skip).await
     // aws_bench(regions, configs, clients_per_region).await
 }
 
 #[allow(dead_code)]
 async fn baremetal_bench(
     regions: Vec<Region>,
+    planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
@@ -131,9 +136,6 @@ where
     )
     .await
     .wrap_err("baremetal spawn")?;
-
-    // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
 
     // run benchmarks
     run_bench(

@@ -79,7 +79,6 @@ async fn run_experiment(
     let (process_ips, processes) = start_processes(
         machines,
         run_mode,
-        testbed,
         planet,
         protocol,
         config,
@@ -99,6 +98,7 @@ async fn run_experiment(
     // create experiment config and pull metrics
     let exp_config = ExperimentConfig::new(
         machines.regions().clone(),
+        planet.clone(),
         run_mode,
         features,
         testbed,
@@ -122,7 +122,6 @@ async fn run_experiment(
 async fn start_processes(
     machines: &Machines<'_>,
     run_mode: RunMode,
-    testbed: Testbed,
     planet: &Option<Planet>,
     protocol: Protocol,
     config: Config,
@@ -155,8 +154,7 @@ async fn start_processes(
         let ips = all_but_self(from_region)
             .into_iter()
             .map(|(to_region, ip)| {
-                let delay =
-                    maybe_inject_delay(from_region, to_region, testbed, planet);
+                let delay = maybe_inject_delay(from_region, to_region, planet);
                 (ip.clone(), delay)
             })
             .collect();
@@ -194,26 +192,17 @@ async fn start_processes(
 fn maybe_inject_delay(
     from: &Region,
     to: &Region,
-    testbed: Testbed,
     planet: &Option<Planet>,
 ) -> Option<usize> {
-    match testbed {
-        Testbed::Aws => {
-            // do not inject delay in AWS
-            None
-        }
-        Testbed::Baremetal => {
-            // in this case, there should be a planet
-            let planet = planet.as_ref().expect("planet not found");
-            // find ping latency
-            let ping = planet
-                .ping_latency(from, to)
-                .expect("both regions should be part of the planet");
-            // the delay should be half the ping latency
-            let delay = (ping / 2) as usize;
-            Some(delay)
-        }
-    }
+    planet.as_ref().map(|planet| {
+        // find ping latency
+        let ping = planet
+            .ping_latency(from, to)
+            .expect("both regions should be part of the planet");
+        // the delay should be half the ping latency
+        let delay = (ping / 2) as usize;
+        delay
+    })
 }
 
 async fn run_clients(

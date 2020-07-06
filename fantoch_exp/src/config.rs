@@ -3,7 +3,7 @@ use crate::args;
 use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
-use fantoch::planet::Region;
+use fantoch::planet::{Planet, Region};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -268,6 +268,7 @@ impl ClientConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ExperimentConfig {
     pub regions: HashMap<Region, ProcessId>,
+    pub planet: Option<Planet>,
     pub run_mode: RunMode,
     pub features: Vec<FantochFeature>,
     pub testbed: Testbed,
@@ -291,6 +292,7 @@ pub struct ExperimentConfig {
 impl ExperimentConfig {
     pub fn new(
         regions: HashMap<Region, ProcessId>,
+        planet: Option<Planet>,
         run_mode: RunMode,
         features: Vec<FantochFeature>,
         testbed: Testbed,
@@ -303,6 +305,7 @@ impl ExperimentConfig {
 
         Self {
             regions,
+            planet,
             run_mode,
             features,
             testbed,

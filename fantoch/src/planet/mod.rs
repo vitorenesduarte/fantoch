@@ -9,6 +9,7 @@ pub use region::Region;
 
 use crate::planet::dat::Dat;
 use crate::HashMap;
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Write};
 
 // directory that contains all dat files for GCP
@@ -17,7 +18,7 @@ const GCP_LAT_DIR: &str = "../latency_gcp/";
 // assume that intra region latency is 0
 const INTRA_REGION_LATENCY: u64 = 0;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Planet {
     /// mapping from region A to a mapping from region B to the latency between
     /// A and B

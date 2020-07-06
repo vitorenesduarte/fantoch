@@ -19,6 +19,7 @@ fn main() -> Result<(), Report> {
 
     for n in vec![3, 5] {
         for clients_per_region in vec![
+            4,
             8,
             16,
             32,
