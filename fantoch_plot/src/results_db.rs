@@ -283,15 +283,19 @@ impl ExperimentData {
         global_client_metrics: ClientData,
     ) -> Self {
         // we should use milliseconds if: AWS or baremetal + injected latency
-        let ms_precision = match testbed {
+        let precision = match testbed {
             Testbed::Aws => {
-                // assert that not latency was injected
+                // assert that no latency was injected
                 assert!(planet.is_none());
-                true
+                LatencyPrecision::Millis
             }
             Testbed::Baremetal => {
-                // use ms if latency was injected
-                planet.is_some()
+                // use ms if latency was injected, otherwise micros
+                if planet.is_some() {
+                    LatencyPrecision::Millis
+                } else {
+                    LatencyPrecision::Micros
+                }
             }
         };
 
@@ -302,7 +306,7 @@ impl ExperimentData {
             .map(|(region, client_data)| {
                 // create latency histogram
                 let latency = Self::extract_latency(
-                    ms_precision,
+                    precision,
                     client_data.latency_data(),
                 );
                 let histogram = Histogram::from(latency);
@@ -310,7 +314,7 @@ impl ExperimentData {
             })
             .collect();
         let latency = Self::extract_latency(
-            ms_precision,
+            precision,
             global_client_metrics.latency_data(),
         );
 
@@ -326,16 +330,21 @@ impl ExperimentData {
     }
 
     fn extract_latency(
-        ms_precision: bool,
+        precision: LatencyPrecision,
         it: impl Iterator<Item = Duration>,
     ) -> impl Iterator<Item = u64> {
         it.map(move |duration| {
-            let latency = if ms_precision {
-                duration.as_millis()
-            } else {
-                duration.as_micros()
+            let latency = match precision {
+                LatencyPrecision::Micros => duration.as_micros(),
+                LatencyPrecision::Millis => duration.as_millis(),
             };
             latency as u64
         })
     }
+}
+
+#[derive(Clone, Copy)]
+enum LatencyPrecision {
+    Micros,
+    Millis,
 }

@@ -466,7 +466,7 @@ where
 
                 // update region's histogram with this client's histogram
                 for latency in client.data().latency_data() {
-                    // since the simulation assume WAN, use milliseconds for
+                    // since the simulation assumes WAN, use milliseconds for
                     // latency precision
                     let ms = latency.as_millis() as u64;
                     histogram.increment(ms);
