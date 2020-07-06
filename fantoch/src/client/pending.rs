@@ -40,7 +40,8 @@ impl Pending {
         // compute latency
         let latency = Duration::from_micros(end_time - start_time);
         use std::convert::TryFrom;
-        let end_time = u64::try_from(end_time)
+        // compute end time in milliseconds
+        let end_time = u64::try_from(end_time / 1000)
             .expect("operation end time doesn't fit in a u64");
         (latency, end_time)
     }
