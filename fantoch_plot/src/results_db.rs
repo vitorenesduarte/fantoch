@@ -269,8 +269,6 @@ impl<'a> SearchBuilder<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ExperimentData {
-    pub client_metrics: HashMap<Region, ClientData>,
-    pub global_client_metrics: ClientData,
     pub client_latency: HashMap<Region, Histogram>,
     pub global_client_latency: Histogram,
 }
@@ -322,8 +320,6 @@ impl ExperimentData {
         let global_client_latency = Histogram::from(latency);
 
         Self {
-            client_metrics,
-            global_client_metrics,
             client_latency,
             global_client_latency,
         }
