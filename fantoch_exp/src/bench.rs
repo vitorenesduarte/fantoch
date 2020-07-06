@@ -213,6 +213,7 @@ fn maybe_inject_delay(
     to: &Region,
     planet: &Option<Planet>,
 ) -> Option<usize> {
+    // inject delay if a planet was provided
     planet.as_ref().map(|planet| {
         // find ping latency
         let ping = planet
