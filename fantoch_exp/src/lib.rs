@@ -72,6 +72,7 @@ impl FantochFeature {
     Hash,
 )]
 pub enum Protocol {
+    Basic,
     AtlasLocked,
     EPaxosLocked,
     FPaxos,
@@ -85,6 +86,7 @@ impl Protocol {
             Protocol::EPaxosLocked => "epaxos_locked",
             Protocol::FPaxos => "fpaxos",
             Protocol::NewtAtomic => "newt_atomic",
+            Protocol::Basic => "basic",
         }
     }
 }
