@@ -87,7 +87,6 @@ use crate::command::CommandResult;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{AtomicDotGen, ClientId, ProcessId};
-use crate::metrics::Histogram;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use crate::{HashMap, HashSet};
@@ -419,9 +418,6 @@ where
             println!("metrics from {} collected", client.id());
         }
     }
-
-    // show global metrics
-    println!("latency: {:?}", Histogram::from(data.latency_data()));
 
     if let Some(file) = metrics_file {
         println!("will write client data to {}", file);

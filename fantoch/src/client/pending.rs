@@ -1,10 +1,11 @@
 use crate::id::Rifl;
 use crate::time::SysTime;
 use crate::HashMap;
+use std::time::Duration;
 
 #[derive(Default)]
 pub struct Pending {
-    /// mapping from Rifl to command start time
+    /// mapping from Rifl to command start time (in micros)
     pending: HashMap<Rifl, u64>,
 }
 
@@ -17,7 +18,7 @@ impl Pending {
     /// Start a command given its rifl.
     pub fn start(&mut self, rifl: Rifl, time: &dyn SysTime) {
         // compute start time
-        let start_time = time.millis();
+        let start_time = time.micros();
         // add to pending and check it has never been added before
         // TODO: replace with `.expect_none` once it's stabilized
         if self.pending.insert(rifl, start_time).is_some() {
@@ -26,20 +27,22 @@ impl Pending {
     }
 
     /// End a command returns command latency and the time it was returned.
-    pub fn end(&mut self, rifl: Rifl, time: &dyn SysTime) -> (u64, u64) {
+    pub fn end(&mut self, rifl: Rifl, time: &dyn SysTime) -> (Duration, u64) {
         // get start time
         let start_time = self
             .pending
             .remove(&rifl)
             .expect("can't end a command if a command has not started");
         // compute end time
-        let end_time = time.millis();
+        let end_time = time.micros();
         // make sure time is monotonic
         assert!(start_time <= end_time);
         // compute latency
-        let latency = end_time - start_time;
-        // (both should fit in u64)
-        (latency as u64, end_time as u64)
+        let latency = Duration::from_micros(end_time - start_time);
+        use std::convert::TryFrom;
+        let end_time = u64::try_from(end_time)
+            .expect("operation end time doesn't fit in a u64");
+        (latency, end_time)
     }
 
     /// Checks whether pending is empty.
@@ -88,7 +91,7 @@ mod tests {
         // end first rifl at time 11
         time.add_millis(1);
         let (latency, return_time) = pending.end(rifl1, &time);
-        assert_eq!(latency, 11);
+        assert_eq!(latency.as_millis(), 11);
         assert_eq!(return_time, 11);
 
         // pending is not empty
@@ -104,7 +107,7 @@ mod tests {
         // end third rifl at time 16
         time.add_millis(1);
         let (latency, return_time) = pending.end(rifl3, &time);
-        assert_eq!(latency, 1);
+        assert_eq!(latency.as_millis(), 1);
         assert_eq!(return_time, 16);
 
         // pending is not empty
@@ -113,7 +116,7 @@ mod tests {
         // end second rifl at time 20
         time.add_millis(4);
         let (latency, return_time) = pending.end(rifl2, &time);
-        assert_eq!(latency, 10);
+        assert_eq!(latency.as_millis(), 10);
         assert_eq!(return_time, 20);
 
         // pending is empty now

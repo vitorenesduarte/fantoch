@@ -233,13 +233,8 @@ async fn run_clients(
         let ip = process_ips.get(region).expect("get process ip").clone();
 
         // create client config and generate args
-        let client_config = ClientConfig::new(
-            id_start,
-            id_end,
-            ip,
-            workload,
-            METRICS_FILE,
-        );
+        let client_config =
+            ClientConfig::new(id_start, id_end, ip, workload, METRICS_FILE);
         let args = client_config.to_args();
 
         let command = exp::fantoch_bin_script(

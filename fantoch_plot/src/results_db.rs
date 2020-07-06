@@ -2,10 +2,11 @@ use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
 use fantoch::client::ClientData;
 use fantoch::metrics::Histogram;
-use fantoch::planet::Region;
-use fantoch_exp::{ExperimentConfig, Protocol};
+use fantoch::planet::{Planet, Region};
+use fantoch_exp::{ExperimentConfig, Protocol, Testbed};
 use std::collections::HashMap;
 use std::fs::DirEntry;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct ResultsDB {
@@ -210,6 +211,8 @@ impl<'a> SearchBuilder<'a> {
 
             // return experiment data
             *exp_data = Some(ExperimentData::new(
+                &exp_config.planet,
+                exp_config.testbed,
                 client_metrics,
                 global_client_metrics,
             ));
@@ -274,25 +277,65 @@ pub struct ExperimentData {
 
 impl ExperimentData {
     fn new(
+        planet: &Option<Planet>,
+        testbed: Testbed,
         client_metrics: HashMap<Region, ClientData>,
         global_client_metrics: ClientData,
     ) -> Self {
+        // we should use milliseconds if: AWS or baremetal + injected latency
+        let ms_precision = match testbed {
+            Testbed::Aws => {
+                // assert that not latency was injected
+                assert!(planet.is_none());
+                true
+            }
+            Testbed::Baremetal => {
+                // use ms if latency was injected
+                planet.is_some()
+            }
+        };
+
+        // create latency histogram per region
         let client_latency = client_metrics
             .clone()
             .into_iter()
             .map(|(region, client_data)| {
                 // create latency histogram
-                let histogram = Histogram::from(client_data.latency_data());
+                let latency = Self::extract_latency(
+                    ms_precision,
+                    client_data.latency_data(),
+                );
+                let histogram = Histogram::from(latency);
                 (region, histogram)
             })
             .collect();
-        let global_client_latency =
-            Histogram::from(global_client_metrics.latency_data());
+        let latency = Self::extract_latency(
+            ms_precision,
+            global_client_metrics.latency_data(),
+        );
+
+        // create global latency histogram
+        let global_client_latency = Histogram::from(latency);
+
         Self {
             client_metrics,
             global_client_metrics,
             client_latency,
             global_client_latency,
         }
+    }
+
+    fn extract_latency(
+        ms_precision: bool,
+        it: impl Iterator<Item = Duration>,
+    ) -> impl Iterator<Item = u64> {
+        it.map(move |duration| {
+            let latency = if ms_precision {
+                duration.as_millis()
+            } else {
+                duration.as_micros()
+            };
+            latency as u64
+        })
     }
 }

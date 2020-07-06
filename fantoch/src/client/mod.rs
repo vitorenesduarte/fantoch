@@ -87,9 +87,9 @@ impl Client {
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(cmd_result.rifl(), time);
         log!(
-            "rifl {:?} ended after {} at {}",
+            "rifl {:?} ended after {} micros at {}",
             cmd_result.rifl(),
-            latency,
+            latency.as_micros(),
             end_time
         );
         self.data.record(latency, end_time);
@@ -116,6 +116,7 @@ mod tests {
     use crate::planet::{Planet, Region};
     use crate::time::SimTime;
     use crate::util;
+    use std::time::Duration;
 
     // Generates some client.
     fn gen_client(total_commands: usize) -> Client {
@@ -216,7 +217,10 @@ mod tests {
         // check latency
         let mut latency: Vec<_> = client.data().latency_data().collect();
         latency.sort();
-        assert_eq!(latency, vec![5, 10]);
+        assert_eq!(
+            latency,
+            vec![Duration::from_millis(5), Duration::from_millis(10)]
+        );
 
         // check throughput
         let mut throughput: Vec<_> = client.data().throughput_data().collect();

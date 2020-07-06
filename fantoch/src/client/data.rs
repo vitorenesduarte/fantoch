@@ -1,12 +1,13 @@
 use crate::HashMap;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ClientData {
     // raw values: we have "100%" precision as all values are stored
     // - mapping from operation end time to all latencies registered at that
     //   end time
-    data: HashMap<u64, Vec<u64>>,
+    data: HashMap<u64, Vec<Duration>>,
 }
 
 impl ClientData {
@@ -21,12 +22,12 @@ impl ClientData {
     }
 
     /// Records a more mata.
-    pub fn record(&mut self, latency: u64, end_time: u64) {
+    pub fn record(&mut self, latency: Duration, end_time: u64) {
         let latencies = self.data.entry(end_time).or_insert_with(Vec::new);
         latencies.push(latency);
     }
 
-    pub fn latency_data(&self) -> impl Iterator<Item = u64> + '_ {
+    pub fn latency_data(&self) -> impl Iterator<Item = Duration> + '_ {
         self.data.values().flat_map(|v| v.into_iter()).cloned()
     }
 
@@ -56,16 +57,18 @@ impl ClientData {
     }
 }
 
-pub fn data_merge(
-    map: &mut HashMap<u64, Vec<u64>>,
-    other: &HashMap<u64, Vec<u64>>,
-) {
+pub fn data_merge<V>(
+    map: &mut HashMap<u64, Vec<V>>,
+    other: &HashMap<u64, Vec<V>>,
+) where
+    V: Clone,
+{
     other.into_iter().for_each(|(k, v2)| match map.get_mut(&k) {
         Some(v1) => {
-            v1.extend(v2);
+            v1.extend(v2.clone());
         }
         None => {
-            map.entry(k.clone()).or_insert(v2.clone());
+            map.entry(*k).or_insert(v2.clone());
         }
     });
 }
@@ -79,21 +82,28 @@ mod tests {
         let mut data = ClientData::new();
         assert_eq!(data.start_and_end(), None);
         // at time 10, an operation with latency 1 ended
-        data.record(1, 10);
+        data.record(Duration::from_millis(1), 10);
         assert_eq!(data.start_and_end(), Some((10, 10)));
 
         // at time 10, another operation but with latency 2 ended
-        data.record(2, 10);
+        data.record(Duration::from_millis(2), 10);
         assert_eq!(data.start_and_end(), Some((10, 10)));
 
         // at time 11, an operation with latency 5 ended
-        data.record(5, 11);
+        data.record(Duration::from_millis(5), 11);
         assert_eq!(data.start_and_end(), Some((10, 11)));
 
         // check latency and throughput data
         let mut latency: Vec<_> = data.latency_data().collect();
         latency.sort();
-        assert_eq!(latency, vec![1, 2, 5]);
+        assert_eq!(
+            latency,
+            vec![
+                Duration::from_millis(1),
+                Duration::from_millis(2),
+                Duration::from_millis(5),
+            ]
+        );
         let mut throughput: Vec<_> = data.throughput_data().collect();
         throughput.sort();
         assert_eq!(throughput, vec![(10, 2), (11, 1)]);
@@ -101,13 +111,21 @@ mod tests {
         // check merge
         let mut other = ClientData::new();
         // at time 2, an operation with latency 5 ended
-        other.record(5, 2);
+        other.record(Duration::from_millis(5), 2);
 
         data.merge(&other);
         assert_eq!(data.start_and_end(), Some((2, 11)));
         let mut latency: Vec<_> = data.latency_data().collect();
         latency.sort();
-        assert_eq!(latency, vec![1, 2, 5, 5]);
+        assert_eq!(
+            latency,
+            vec![
+                Duration::from_millis(1),
+                Duration::from_millis(2),
+                Duration::from_millis(5),
+                Duration::from_millis(5),
+            ]
+        );
         let mut throughput: Vec<_> = data.throughput_data().collect();
         throughput.sort();
         assert_eq!(throughput, vec![(2, 1), (10, 2), (11, 1)]);

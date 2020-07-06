@@ -4,7 +4,7 @@ use fantoch::planet::{Planet, Region};
 use fantoch_plot::{ErrorBar, Latency, PlotFmt, ResultsDB};
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results_LAN";
 
 fn main() -> Result<(), Report> {
     // set global style
@@ -12,7 +12,7 @@ fn main() -> Result<(), Report> {
 
     // fixed parameters
     let conflict_rate = 10;
-    let payload_size = 4096;
+    let payload_size = 0;
 
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
