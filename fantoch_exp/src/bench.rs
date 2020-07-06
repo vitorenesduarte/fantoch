@@ -83,6 +83,7 @@ async fn run_experiment(
     let (process_ips, processes) = start_processes(
         machines,
         run_mode,
+        testbed,
         planet,
         protocol,
         config,
@@ -127,6 +128,7 @@ async fn run_experiment(
 async fn start_processes(
     machines: &Machines<'_>,
     run_mode: RunMode,
+    testbed: Testbed,
     planet: &Option<Planet>,
     protocol: Protocol,
     config: Config,
@@ -155,6 +157,18 @@ async fn start_processes(
     for (from_region, &process_id) in machines.regions() {
         let vm = machines.server(from_region);
 
+        // set sorted if on baremetal and no delay will be injected
+        let set_sorted = testbed == Testbed::Baremetal && planet.is_none();
+        let sorted = if set_sorted {
+            Some(
+                (process_id..=(n as ProcessId))
+                    .chain(1..process_id)
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
         // get ips for this region
         let ips = all_but_self(from_region)
             .into_iter()
@@ -166,7 +180,7 @@ async fn start_processes(
 
         // create protocol config and generate args
         let mut protocol_config =
-            ProtocolConfig::new(protocol, process_id, config, ips);
+            ProtocolConfig::new(protocol, process_id, config, sorted, ips);
         if let Some(interval) = tracer_show_interval {
             protocol_config.set_tracer_show_interval(interval);
         }

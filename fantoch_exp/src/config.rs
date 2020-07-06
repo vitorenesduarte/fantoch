@@ -24,7 +24,7 @@ const PROCESS_TCP_NODELAY: bool = true;
 // by default, each socket stream is buffered (with a buffer of size 8KBs),
 // which should greatly reduce the number of syscalls for small-sized messages
 const PROCESS_TCP_BUFFER_SIZE: usize = 8 * 1024;
-const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2); // millis
+const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = None;
 
 // if this value is 100, the run doesn't finish, which probably means there's a
 // deadlock somewhere with 1000 we can see that channels fill up sometimes with
@@ -52,6 +52,7 @@ const CLIENT_TCP_NODELAY: bool = true;
 #[cfg(feature = "exp")]
 pub struct ProtocolConfig {
     id: ProcessId,
+    sorted: Option<Vec<ProcessId>>,
     ips: Vec<(String, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
@@ -72,6 +73,7 @@ impl ProtocolConfig {
         protocol: Protocol,
         id: ProcessId,
         mut config: Config,
+        sorted: Option<Vec<ProcessId>>,
         ips: Vec<(String, Option<usize>)>,
     ) -> Self {
         let (workers, executors) =
@@ -79,6 +81,7 @@ impl ProtocolConfig {
 
         Self {
             id,
+            sorted,
             ips,
             config,
             tcp_nodelay: PROCESS_TCP_NODELAY,
@@ -119,6 +122,15 @@ impl ProtocolConfig {
             "--execute_at_commit",
             self.config.execute_at_commit(),
         ];
+        if let Some(sorted) = self.sorted.as_ref() {
+            // make sorted ids comma-separted
+            let sorted = sorted
+                .into_iter()
+                .map(|process_id| process_id.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            args.extend(args!["--sorted", sorted]);
+        }
         if let Some(interval) = self.config.gc_interval() {
             args.extend(args!["--gc_interval", interval.as_millis()]);
         }
