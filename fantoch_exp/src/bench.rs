@@ -6,6 +6,7 @@ use crate::util;
 use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
+use fantoch::client::Workload;
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
@@ -27,6 +28,7 @@ pub async fn bench_experiment(
     configs: Vec<(Protocol, Config)>,
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
+    workload: Workload,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
@@ -52,6 +54,7 @@ pub async fn bench_experiment(
                 config,
                 tracer_show_interval,
                 clients,
+                workload,
                 &results_dir,
             )
             .await?;
@@ -70,6 +73,7 @@ async fn run_experiment(
     config: Config,
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
+    workload: Workload,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // start dstat in all machines
@@ -88,7 +92,7 @@ async fn run_experiment(
     .wrap_err("start_processes")?;
 
     // run clients
-    run_clients(clients_per_region, machines, process_ips)
+    run_clients(clients_per_region, workload, machines, process_ips)
         .await
         .wrap_err("run_clients")?;
 
@@ -105,6 +109,7 @@ async fn run_experiment(
         protocol,
         config,
         clients_per_region,
+        workload,
     );
     let exp_dir = pull_metrics(machines, exp_config, results_dir)
         .await
@@ -207,6 +212,7 @@ fn maybe_inject_delay(
 
 async fn run_clients(
     clients_per_region: usize,
+    workload: Workload,
     machines: &Machines<'_>,
     process_ips: Ips,
 ) -> Result<(), Report> {
@@ -227,8 +233,13 @@ async fn run_clients(
         let ip = process_ips.get(region).expect("get process ip").clone();
 
         // create client config and generate args
-        let client_config =
-            ClientConfig::new(id_start, id_end, ip, METRICS_FILE);
+        let client_config = ClientConfig::new(
+            id_start,
+            id_end,
+            ip,
+            workload,
+            METRICS_FILE,
+        );
         let args = client_config.to_args();
 
         let command = exp::fantoch_bin_script(

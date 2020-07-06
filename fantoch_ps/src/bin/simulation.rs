@@ -314,7 +314,7 @@ fn run<P: Protocol>(
     // region
     let region_count = client_regions.len();
     let expected_commands =
-        workload.total_commands() * clients_per_region * region_count;
+        workload.commands_per_client() * clients_per_region * region_count;
 
     // run simulation and get latencies
     let mut runner: Runner<P> = Runner::new(

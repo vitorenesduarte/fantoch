@@ -157,7 +157,7 @@ impl<'a> SearchBuilder<'a> {
                 // filter out configurations with different conflict_rate (if
                 // set)
                 if let Some(conflict_rate) = conflict_rate {
-                    if exp_config.conflict_rate != conflict_rate {
+                    if exp_config.workload.conflict_rate() != conflict_rate {
                         return false;
                     }
                 }
@@ -165,7 +165,7 @@ impl<'a> SearchBuilder<'a> {
                 // filter out configurations with different payload_size (if
                 // set)
                 if let Some(payload_size) = payload_size {
-                    if exp_config.payload_size != payload_size {
+                    if exp_config.workload.payload_size() != payload_size {
                         return false;
                     }
                 }

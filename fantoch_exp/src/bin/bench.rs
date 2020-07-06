@@ -1,5 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch::client::Workload;
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::exp::Machines;
@@ -24,6 +25,11 @@ const RUN_MODE: RunMode = RunMode::Release;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50)); // every 50
 const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
+
+// clients config
+const CONFLICT_RATE: usize = 10;
+const COMMANDS_PER_CLIENT: usize = 10000;
+const PAYLOAD_SIZE: usize = 0;
 
 // bench-specific config
 const BRANCH: &str = "master";
@@ -87,6 +93,8 @@ async fn main() -> Result<(), Report> {
         1024 * 16,
         1024 * 32,
     ];
+    let workload =
+        Workload::new(CONFLICT_RATE, COMMANDS_PER_CLIENT, PAYLOAD_SIZE);
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
@@ -97,7 +105,15 @@ async fn main() -> Result<(), Report> {
     // let planet = Some(Planet::from("../latency_aws"));
     let planet = None;
 
-    baremetal_bench(regions, planet, configs, clients_per_region, skip).await
+    baremetal_bench(
+        regions,
+        planet,
+        configs,
+        clients_per_region,
+        workload,
+        skip,
+    )
+    .await
     // aws_bench(regions, configs, clients_per_region).await
 }
 
@@ -107,6 +123,7 @@ async fn baremetal_bench(
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
+    workload: Workload,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report>
 where
@@ -145,6 +162,7 @@ where
         planet,
         configs,
         clients_per_region,
+        workload,
         skip,
     )
     .await
@@ -158,12 +176,19 @@ async fn aws_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
+    workload: Workload,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
-    let res =
-        do_aws_bench(&mut launcher, regions, configs, clients_per_region, skip)
-            .await;
+    let res = do_aws_bench(
+        &mut launcher,
+        regions,
+        configs,
+        clients_per_region,
+        workload,
+        skip,
+    )
+    .await;
 
     // trap errors to make sure there's time for a debug
     if let Err(e) = &res {
@@ -183,6 +208,7 @@ async fn do_aws_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
+    workload: Workload,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
     // compute features
@@ -214,6 +240,7 @@ async fn do_aws_bench(
         planet,
         configs,
         clients_per_region,
+        workload,
         skip,
     )
     .await
@@ -229,6 +256,7 @@ async fn run_bench(
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
+    workload: Workload,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
     fantoch_exp::bench::bench_experiment(
@@ -240,6 +268,7 @@ async fn run_bench(
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,
+        workload,
         skip,
         RESULTS_DIR,
     )
