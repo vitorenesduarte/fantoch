@@ -141,6 +141,8 @@ impl LockedKeyClocks {
             let current_clock = entry.value().read();
             // merge it with our clock
             clock.join(&current_clock);
+            // release the lock
+            drop(current_clock);
         });
     }
 
@@ -159,6 +161,8 @@ impl LockedKeyClocks {
             let current_clock = clock_entry.read();
             // merge it with our clock
             clock.join(&current_clock);
+            // release the lock
+            drop(current_clock);
         });
     }
 }

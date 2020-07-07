@@ -67,9 +67,12 @@ impl KeyClocks for LockedKeyClocks {
         for entry in locks.iter().zip(guards.iter_mut()) {
             // the following two lines are awkward but the compiler is
             // complaining if I try to match in the for loop
-            let key = (entry.0).0;
+            let (key, key_lock) = entry.0;
             let guard = entry.1;
             Self::maybe_bump(self.id, key, guard, up_to, &mut votes);
+            // release the lock
+            drop(guard);
+            drop(key_lock);
         }
         (up_to, votes)
     }
@@ -81,6 +84,9 @@ impl KeyClocks for LockedKeyClocks {
             let key_lock = self.clocks.get(key);
             let mut current = key_lock.lock();
             Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
+            // release the lock
+            drop(current);
+            drop(key_lock);
         }
         votes
     }
@@ -95,6 +101,9 @@ impl KeyClocks for LockedKeyClocks {
             let key_lock = entry.value();
             let mut current = key_lock.lock();
             Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
+            // release the lock
+            drop(current);
+            drop(key_lock);
         });
 
         votes
@@ -138,7 +147,7 @@ mod tests {
         let ops_number = 10000;
         let max_keys_per_command = 2;
         let keys_number = 4;
-        for _ in 0..100 {
+        for _ in 0..10 {
             test(nthreads, ops_number, max_keys_per_command, keys_number);
         }
     }
