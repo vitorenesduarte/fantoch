@@ -4,8 +4,12 @@ mod sequential;
 // This module contains the definition of `AtomicKeyClocks`.
 mod atomic;
 
+// This module contains the definition of `LockedKeyClocks`.
+mod locked;
+
 // Re-exports.
 pub use atomic::AtomicKeyClocks;
+pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::protocol::common::table::Votes;
