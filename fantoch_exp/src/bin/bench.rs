@@ -29,7 +29,7 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 // clients config
 const CONFLICT_RATE: usize = 10;
 // const COMMANDS_PER_CLIENT: usize = 500000; // if LAN
-const COMMANDS_PER_CLIENT: usize = 10000; // if WAN
+const COMMANDS_PER_CLIENT: usize = 500; // if WAN
 const PAYLOAD_SIZE: usize = 4096;
 
 // bench-specific config
