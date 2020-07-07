@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn concurrent_locked_key_clocks() {
         let nthreads = 2;
-        let ops_number = 10000;
+        let ops_number = 3000;
         let max_keys_per_command = 2;
         let keys_number = 4;
         for _ in 0..10 {
