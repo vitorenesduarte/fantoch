@@ -1,7 +1,8 @@
 use crate::executor::TableExecutor;
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::common::table::{
-    AtomicKeyClocks, KeyClocks, QuorumClocks, SequentialKeyClocks, Votes,
+    AtomicKeyClocks, KeyClocks, LockedKeyClocks, QuorumClocks,
+    SequentialKeyClocks, Votes,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -22,6 +23,7 @@ use tracing::instrument;
 
 pub type NewtSequential = Newt<SequentialKeyClocks>;
 pub type NewtAtomic = Newt<AtomicKeyClocks>;
+pub type NewtLocked = Newt<LockedKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
