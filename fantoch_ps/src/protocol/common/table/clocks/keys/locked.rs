@@ -4,12 +4,12 @@ use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
 use fantoch::id::ProcessId;
 use fantoch::kvs::Key;
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use std::cmp;
 use std::sync::Arc;
 
 // all clock's are protected by a rw-lock
-type Clock = RwLock<u64>;
+type Clock = Mutex<u64>;
 
 #[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
@@ -57,7 +57,7 @@ impl KeyClocks for LockedKeyClocks {
         //   that follows) that actually acquires the locks.
         let mut guards = Vec::with_capacity(cmd.key_count());
         for (_, key_lock) in &locks {
-            let guard = key_lock.write();
+            let guard = key_lock.lock();
             up_to = cmp::max(up_to, *guard + 1);
             guards.push(guard);
         }
@@ -79,7 +79,7 @@ impl KeyClocks for LockedKeyClocks {
         let mut votes = Votes::with_capacity(cmd.key_count());
         for key in cmd.keys() {
             let key_lock = self.clocks.get(key);
-            let mut current = key_lock.write();
+            let mut current = key_lock.lock();
             Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
         }
         votes
@@ -93,7 +93,7 @@ impl KeyClocks for LockedKeyClocks {
         self.clocks.iter().for_each(|entry| {
             let key = entry.key();
             let key_lock = entry.value();
-            let mut current = key_lock.write();
+            let mut current = key_lock.lock();
             Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
         });
 
