@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 use std::cmp;
 use std::sync::Arc;
 
-// all clock's are protected by a rw-lock
+// all clock's are protected by a mutex
 type Clock = Mutex<u64>;
 
 #[derive(Debug, Clone)]
