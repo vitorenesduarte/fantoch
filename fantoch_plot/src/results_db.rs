@@ -3,7 +3,7 @@ use color_eyre::Report;
 use fantoch::client::ClientData;
 use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
-use fantoch_exp::{ExperimentConfig, Protocol, Testbed};
+use fantoch_exp::{ExperimentConfig, Protocol, SerializationFormat, Testbed};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::time::Duration;
@@ -23,12 +23,14 @@ impl ResultsDB {
             let timestamp = timestamp.wrap_err("incorrect directory entry")?;
             // read the configuration of this experiment
             let exp_config_path = format!(
-                "{}/exp_config.bincode",
+                "{}/exp_config.json",
                 timestamp.path().as_path().display()
             );
-            let exp_config: ExperimentConfig =
-                fantoch_exp::deserialize(exp_config_path)
-                    .wrap_err("deserialize experiment config")?;
+            let exp_config: ExperimentConfig = fantoch_exp::deserialize(
+                exp_config_path,
+                SerializationFormat::Json,
+            )
+            .wrap_err("deserialize experiment config")?;
 
             // incrementally load data as it matched against some search
             let exp_data = None;
@@ -192,10 +194,13 @@ impl<'a> SearchBuilder<'a> {
                 let path = format!(
                     "{}/client_{}_metrics.bincode",
                     timestamp.path().display(),
-                    region.name()
+                    region.name(),
                 );
-                let client_data: ClientData = fantoch_exp::deserialize(path)
-                    .wrap_err("deserialize client data")?;
+                let client_data: ClientData = fantoch_exp::deserialize(
+                    path,
+                    SerializationFormat::Bincode,
+                )
+                .wrap_err("deserialize client data")?;
                 let res = client_metrics.insert(region.clone(), client_data);
                 assert!(res.is_none());
             }

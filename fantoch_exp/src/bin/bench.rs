@@ -10,7 +10,7 @@ use std::time::Duration;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_LAN";
+const RESULTS_DIR: &str = "../results";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -28,8 +28,9 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
 const CONFLICT_RATE: usize = 10;
-const COMMANDS_PER_CLIENT: usize = 10000;
-const PAYLOAD_SIZE: usize = 0;
+// const COMMANDS_PER_CLIENT: usize = 500000; // if LAN
+const COMMANDS_PER_CLIENT: usize = 10000; // if WAN
+const PAYLOAD_SIZE: usize = 4096;
 
 // bench-specific config
 const BRANCH: &str = "master";
@@ -102,8 +103,8 @@ async fn main() -> Result<(), Report> {
     };
 
     // create AWS planet
-    // let planet = Some(Planet::from("../latency_aws"));
-    let planet = None;
+    let planet = Some(Planet::from("../latency_aws"));
+    // let planet = None;
 
     baremetal_bench(
         regions,
