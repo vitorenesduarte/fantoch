@@ -1,9 +1,11 @@
 use super::KeyClocks;
 use crate::protocol::common::shared::Shared;
-use crate::protocol::common::table::Votes;
+use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
 use fantoch::id::ProcessId;
+use fantoch::kvs::Key;
 use parking_lot::RwLock;
+use std::cmp;
 use std::sync::Arc;
 
 // all clock's are protected by a rw-lock
@@ -35,19 +37,90 @@ impl KeyClocks for LockedKeyClocks {
     }
 
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
-        todo!()
+        // find all the locks
+        let mut locks = Vec::with_capacity(cmd.key_count());
+        for key in cmd.keys() {
+            let key_lock = self.clocks.get(key);
+            locks.push((key, key_lock));
+        }
+
+        // keep track of which clock we should bump to
+        let mut up_to = min_clock;
+
+        // acquire the lock on all keys (we won't deadlock since `cmd.keys()`
+        // will return them sorted)
+        // - NOTE that this loop and the above cannot be merged due to
+        //   lifetimes: `let guard = key_lock.write()` borrows `key_lock` and
+        //   the borrow checker doesn't not understand that it's fine to move
+        //   both the `guard` and `key_lock` into a `Vec`. For that reason, we
+        //   have two loops. One that fetches the locks and another one (the one
+        //   that follows) that actually acquires the locks.
+        let mut guards = Vec::with_capacity(cmd.key_count());
+        for (_, key_lock) in &locks {
+            let guard = key_lock.write();
+            up_to = cmp::max(up_to, *guard + 1);
+            guards.push(guard);
+        }
+
+        // create votes
+        let mut votes = Votes::with_capacity(cmd.key_count());
+        for entry in locks.iter().zip(guards.iter_mut()) {
+            // the following two lines are awkward but the compiler is
+            // complaining if I try to match in the for loop
+            let key = (entry.0).0;
+            let guard = entry.1;
+            Self::maybe_bump(self.id, key, guard, up_to, &mut votes);
+        }
+        (up_to, votes)
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        todo!()
+        // create votes
+        let mut votes = Votes::with_capacity(cmd.key_count());
+        for key in cmd.keys() {
+            let key_lock = self.clocks.get(key);
+            let mut current = key_lock.write();
+            Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
+        }
+        votes
     }
 
     fn vote_all(&mut self, up_to: u64) -> Votes {
-        todo!()
+        let key_count = self.clocks.len();
+        // create votes
+        let mut votes = Votes::with_capacity(key_count);
+
+        self.clocks.iter().for_each(|entry| {
+            let key = entry.key();
+            let key_lock = entry.value();
+            let mut current = key_lock.write();
+            Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
+        });
+
+        votes
     }
 
     fn parallel() -> bool {
         true
+    }
+}
+
+impl LockedKeyClocks {
+    fn maybe_bump(
+        id: ProcessId,
+        key: &Key,
+        current: &mut u64,
+        up_to: u64,
+        votes: &mut Votes,
+    ) {
+        // if we should vote
+        if *current < up_to {
+            // vote from the current clock value + 1 until `up_to`
+            let vr = VoteRange::new(id, *current + 1, up_to);
+            // update current clock to be `clock`
+            *current = up_to;
+            votes.set(key.clone(), vec![vr]);
+        }
     }
 }
 

@@ -56,6 +56,12 @@ mod tests {
         keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
+    #[test]
+    fn locked_key_clocks() {
+        keys_clocks_flow::<LockedKeyClocks>(true);
+        keys_clocks_no_double_votes::<LockedKeyClocks>();
+    }
+
     fn keys_clocks_flow<KC: KeyClocks>(all_clocks_match: bool) {
         // create key clocks
         let mut clocks = KC::new(1);
