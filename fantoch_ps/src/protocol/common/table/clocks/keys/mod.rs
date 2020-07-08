@@ -85,10 +85,10 @@ mod tests {
     #[test]
     fn concurrent_locked_key_clocks() {
         let nthreads = 2;
-        let ops_number = 1000;
+        let ops_number = 10000;
         let max_keys_per_command = 2;
         let keys_number = 4;
-        for _ in 0..10 {
+        for _ in 0..100 {
             concurrent_test::<LockedKeyClocks>(
                 nthreads,
                 ops_number,

@@ -6,6 +6,8 @@ use fantoch::id::ProcessId;
 use fantoch::kvs::Key;
 use parking_lot::Mutex;
 use std::cmp;
+use std::collections::BTreeSet;
+use std::iter::FromIterator;
 use std::sync::Arc;
 
 // all clock's are protected by a mutex
@@ -39,10 +41,8 @@ impl KeyClocks for LockedKeyClocks {
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // find all the locks
         let mut locks = Vec::with_capacity(cmd.key_count());
-        for key in cmd.keys() {
-            let key_lock = self.clocks.get(key);
-            locks.push((key, key_lock));
-        }
+        let keys = BTreeSet::from_iter(cmd.keys());
+        self.clocks.get_all(&keys, &mut locks);
 
         // keep track of which clock we should bump to
         let mut up_to = min_clock;
@@ -56,22 +56,20 @@ impl KeyClocks for LockedKeyClocks {
         //   have two loops. One that fetches the locks and another one (the one
         //   that follows) that actually acquires the locks.
         let mut guards = Vec::with_capacity(cmd.key_count());
-        for (_, key_lock) in &locks {
-            let guard = key_lock.lock();
-            up_to = cmp::max(up_to, *guard + 1);
-            guards.push(guard);
+        for (_key, key_lock) in &locks {
+            let current = key_lock.lock();
+            up_to = cmp::max(up_to, *current + 1);
+            guards.push(current);
         }
 
         // create votes
         let mut votes = Votes::with_capacity(cmd.key_count());
-        for entry in locks.iter().zip(guards.iter_mut()) {
-            // the following two lines are awkward but the compiler is
-            // complaining if I try to match in the for loop
-            let (key, key_lock) = entry.0;
-            let guard = entry.1;
-            Self::maybe_bump(self.id, key, guard, up_to, &mut votes);
+        for ((key, key_lock), ref mut current) in
+            locks.iter().zip(guards.iter_mut())
+        {
+            Self::maybe_bump(self.id, key, current, up_to, &mut votes);
             // release the lock
-            drop(guard);
+            drop(current);
             drop(key_lock);
         }
         (up_to, votes)
