@@ -31,7 +31,7 @@ where
             Some(value) => value,
             None => {
                 self.maybe_insert(key);
-                self.get(key)
+                return self.get(key);
             }
         }
     }
@@ -55,7 +55,7 @@ where
                     refs.clear();
                     // make sure key exits, and start again
                     self.maybe_insert(key);
-                    self.get_all(keys, refs);
+                    return self.get_all(keys, refs);
                 }
             }
         }
