@@ -4,8 +4,12 @@ mod sequential;
 // This module contains the definition of `AtomicKeyClocks`.
 mod atomic;
 
+// This module contains the definition of `LockedKeyClocks`.
+mod locked;
+
 // Re-exports.
 pub use atomic::AtomicKeyClocks;
+pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use crate::protocol::common::table::Votes;
@@ -37,8 +41,12 @@ pub trait KeyClocks: Debug + Clone {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util;
     use fantoch::id::Rifl;
     use fantoch::kvs::Key;
+    use std::collections::BTreeSet;
+    use std::iter::FromIterator;
+    use std::thread;
 
     #[test]
     fn sequential_key_clocks() {
@@ -50,6 +58,44 @@ mod tests {
     fn atomic_key_clocks() {
         keys_clocks_flow::<AtomicKeyClocks>(false);
         keys_clocks_no_double_votes::<AtomicKeyClocks>();
+    }
+
+    #[test]
+    fn locked_key_clocks() {
+        keys_clocks_flow::<LockedKeyClocks>(true);
+        keys_clocks_no_double_votes::<LockedKeyClocks>();
+    }
+
+    #[test]
+    fn concurrent_atomic_key_clocks() {
+        let nthreads = 2;
+        let ops_number = 10000;
+        let max_keys_per_command = 2;
+        let keys_number = 4;
+        for _ in 0..100 {
+            concurrent_test::<AtomicKeyClocks>(
+                nthreads,
+                ops_number,
+                max_keys_per_command,
+                keys_number,
+            );
+        }
+    }
+
+    #[test]
+    fn concurrent_locked_key_clocks() {
+        let nthreads = 2;
+        let ops_number = 10000;
+        let max_keys_per_command = 2;
+        let keys_number = 4;
+        for _ in 0..100 {
+            concurrent_test::<LockedKeyClocks>(
+                nthreads,
+                ops_number,
+                max_keys_per_command,
+                keys_number,
+            );
+        }
     }
 
     fn keys_clocks_flow<KC: KeyClocks>(all_clocks_match: bool) {
@@ -162,5 +208,93 @@ mod tests {
         let start = ranges[0].start();
         let end = ranges[0].end();
         (start..=end).collect()
+    }
+
+    fn concurrent_test<K: KeyClocks + Send + Sync + 'static>(
+        nthreads: usize,
+        ops_number: usize,
+        max_keys_per_command: usize,
+        keys_number: usize,
+    ) {
+        // create clocks
+        let process_id = 1;
+        let clocks = K::new(process_id);
+
+        // spawn workers
+        let handles: Vec<_> = (0..nthreads)
+            .map(|_| {
+                let clocks_clone = clocks.clone();
+                thread::spawn(move || {
+                    worker(
+                        clocks_clone,
+                        ops_number,
+                        max_keys_per_command,
+                        keys_number,
+                    )
+                })
+            })
+            .collect();
+
+        // wait for all workers and aggregate their votes
+        let mut all_votes = Votes::new();
+        for handle in handles {
+            let votes = handle.join().expect("worker should finish");
+            all_votes.merge(votes);
+        }
+
+        // verify votes
+        for (_, key_votes) in all_votes {
+            // create set will all votes expanded
+            let mut expanded = BTreeSet::new();
+            for vote_range in key_votes {
+                for vote in vote_range.votes() {
+                    // insert vote and check it hasn't been added before
+                    expanded.insert(vote);
+                }
+            }
+
+            // check that we have all votes (i.e. we don't have gaps that would
+            // prevent timestamp-stability)
+            let vote_count = expanded.len();
+            // we should have all votes from 1 to `vote_cound`
+            assert_eq!(
+                expanded,
+                BTreeSet::from_iter((1..=vote_count).map(|vote| vote as u64))
+            );
+        }
+    }
+
+    fn worker<K: KeyClocks>(
+        mut clocks: K,
+        ops_number: usize,
+        max_keys_per_command: usize,
+        keys_number: usize,
+    ) -> Votes {
+        // all votes worker has generated
+        let mut all_votes = Votes::new();
+
+        // highest clock seen
+        let mut highest = 0;
+
+        for _ in 0..ops_number {
+            // there are no noop's
+            let noop_probability = 0;
+            let cmd = util::gen_cmd(
+                max_keys_per_command,
+                keys_number,
+                noop_probability,
+            )
+            .expect(
+                "command shouldn't be a noop since the noop probability is 0",
+            );
+            // get votes
+            let (new_highest, votes) = clocks.bump_and_vote(&cmd, highest);
+            // update highest
+            highest = new_highest;
+            // save votes
+            all_votes.merge(votes);
+        }
+
+        all_votes
     }
 }

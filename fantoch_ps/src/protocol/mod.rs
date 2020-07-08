@@ -20,7 +20,7 @@ mod fpaxos;
 pub use atlas::{AtlasLocked, AtlasSequential};
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
-pub use newt::{NewtAtomic, NewtSequential};
+pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
 // pub use caesar::Caesar;
 
 #[cfg(test)]
@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    fn sim_best_newt_3_1_test() {
+    fn sim_real_time_newt_3_1_test() {
         // NOTE: with n = 3 we don't really need real time clocks to get the
         // best results
         let clock_bump_interval = Duration::from_millis(50);
@@ -97,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn sim_best_newt_5_1_test() {
+    fn sim_real_time_newt_5_1_test() {
         let clock_bump_interval = Duration::from_millis(50);
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 1, false, clock_bump_interval),
@@ -141,13 +141,48 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_best_newt_3_1_test() {
+    async fn run_newt_3_1_locked_test() {
+        // newt locked can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths = run_test::<NewtLocked>(
+            config!(3, 1, false),
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_REGION,
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_real_time_newt_3_1_atomic_test() {
         let workers = 2;
         let executors = 2;
         // run with less clients since these take too much time in CI
         let clients_per_region = 1;
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
+            config!(3, 1, false, clock_bump_interval),
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            clients_per_region,
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_real_time_newt_3_1_locked_test() {
+        let workers = 2;
+        let executors = 2;
+        // run with less clients since these take too much time in CI
+        let clients_per_region = 1;
+        let clock_bump_interval = Duration::from_millis(500);
+        let slow_paths = run_test::<NewtLocked>(
             config!(3, 1, false, clock_bump_interval),
             workers,
             executors,
@@ -192,7 +227,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_best_newt_5_1_test() {
+    async fn run_newt_5_1_locked_test() {
+        // newt locked can handle as many workers as we want but we may want to
+        // only have one executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths = run_test::<NewtLocked>(
+            config!(5, 1, false),
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_REGION,
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_real_time_newt_5_1_atomic_test() {
         let workers = 2;
         let executors = 2;
         // run with less clients since these take too much time in CI
@@ -201,6 +253,26 @@ mod tests {
         let commands_per_client = 10;
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
+            config!(5, 1, false, clock_bump_interval),
+            workers,
+            executors,
+            commands_per_client,
+            clients_per_region,
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_real_time_newt_5_1_locked_test() {
+        let workers = 2;
+        let executors = 2;
+        // run with less clients since these take too much time in CI
+        let clients_per_region = 1;
+        // also less commands per client
+        let commands_per_client = 10;
+        let clock_bump_interval = Duration::from_millis(500);
+        let slow_paths = run_test::<NewtLocked>(
             config!(5, 1, false, clock_bump_interval),
             workers,
             executors,

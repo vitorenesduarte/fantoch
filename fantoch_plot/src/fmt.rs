@@ -22,7 +22,8 @@ impl PlotFmt {
             Protocol::AtlasLocked => "Atlas",
             Protocol::EPaxosLocked => "EPaxos",
             Protocol::FPaxos => "FPaxos",
-            Protocol::NewtAtomic => "Newt",
+            Protocol::NewtAtomic => "Newt-A",
+            Protocol::NewtLocked => "Newt-L",
             Protocol::Basic => "Basic",
         }
     }
@@ -40,8 +41,9 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#ffa726",
             (Protocol::NewtAtomic, 2) => "#e65100",
-            (Protocol::Basic, 1) => "#3498db",
-            (Protocol::Basic, 2) => "#2980b9",
+            (Protocol::NewtLocked, 1) => "#3498db",
+            (Protocol::NewtLocked, 2) => "#2980b9",
+            (Protocol::Basic, _) => "",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -52,15 +54,17 @@ impl PlotFmt {
     // Possible values: {'/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*'}
     pub fn hatch(protocol: Protocol, f: usize) -> &'static str {
         match (protocol, f) {
-            (Protocol::AtlasLocked, 1) => "///",
-            (Protocol::AtlasLocked, 2) => "\\\\\\",
-            (Protocol::EPaxosLocked, _) => "/",
-            (Protocol::FPaxos, 1) => "//",
+            (Protocol::AtlasLocked, 1) => "/", // 1
+            (Protocol::AtlasLocked, 2) => "\\",
+            (Protocol::EPaxosLocked, _) => "///", // 3
+            (Protocol::FPaxos, 1) => "//", // 2
             (Protocol::FPaxos, 2) => "\\\\",
-            (Protocol::NewtAtomic, 1) => "////",
+            (Protocol::NewtAtomic, 1) => "////", // 4
             (Protocol::NewtAtomic, 2) => "\\\\\\\\",
-            (Protocol::Basic, 1) => "/////",
-            (Protocol::Basic, 2) => "\\\\\\\\\\",
+            (Protocol::NewtLocked, 1) => "/////", // 5
+            (Protocol::NewtLocked, 2) => "\\\\\\\\\\",
+            (Protocol::Basic, 1) => "//////", // 6 
+            (Protocol::Basic, 2) => "\\\\\\\\\\\\",
             _ => panic!(
                 "PlotFmt::hatch: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -78,8 +82,10 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "x",
             (Protocol::NewtAtomic, 1) => "v",
             (Protocol::NewtAtomic, 2) => "^",
-            (Protocol::Basic, 1) => ">",
-            (Protocol::Basic, 2) => "<",
+            (Protocol::NewtLocked, 1) => ">",
+            (Protocol::NewtLocked, 2) => "<",
+            (Protocol::Basic, 1) => "|",
+            (Protocol::Basic, 2) => "_",
             _ => panic!(
                 "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -94,6 +100,7 @@ impl PlotFmt {
             (Protocol::EPaxosLocked, _) => ":",
             (Protocol::FPaxos, _) => "-.",
             (Protocol::NewtAtomic, _) => "-",
+            (Protocol::NewtLocked, _) => "-",
             (Protocol::Basic, _) => "",
         }
     }
