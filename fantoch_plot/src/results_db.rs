@@ -304,7 +304,6 @@ impl ExperimentData {
 
         // create latency histogram per region
         let client_latency = client_metrics
-            .clone()
             .into_iter()
             .map(|(region, client_data)| {
                 // create latency histogram

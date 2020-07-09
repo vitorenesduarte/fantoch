@@ -224,7 +224,7 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                             coefficient, key_count
                         }
                 }
-                kgen => panic!("invalid key generator: {}", kgen),
+                kgen => panic!("invalid key generator type: {}", kgen),
             }
         })
         .unwrap_or(DEFAULT_KEY_GEN)

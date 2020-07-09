@@ -147,7 +147,7 @@ fn main() -> Result<(), Report> {
         Region::new("ca-central-1"),
         Region::new("sa-east-1"),
     ];
-    println!("{}", planet.distance_matrix(regions.clone()).unwrap());
+    println!("{}", planet.distance_matrix(regions).unwrap());
 
     Ok(())
 }

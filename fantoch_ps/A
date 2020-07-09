@@ -1,0 +1,4696 @@
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+
+running 1 test
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_atomic_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+
+warning: unused variable: `addr`
+   --> fantoch/src/run/task/mod.rs:180:25
+    |
+180 |             Ok((stream, addr)) => {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: 1 warning emitted
+
+warning: unused variable: `process_id`
+  --> fantoch_ps/src/executor/graph/tarjan.rs:49:13
+   |
+49 |         let process_id = self.process_id;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_process_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:221:9
+    |
+221 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:276:9
+    |
+276 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:350:9
+    |
+350 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:401:9
+    |
+401 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:450:9
+    |
+450 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:491:9
+    |
+491 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:509:9
+    |
+509 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:536:9
+    |
+536 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/atlas.rs:554:9
+    |
+554 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:225:9
+    |
+225 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:280:9
+    |
+280 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:359:9
+    |
+359 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:410:9
+    |
+410 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:459:9
+    |
+459 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:500:9
+    |
+500 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:518:9
+    |
+518 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:545:9
+    |
+545 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/epaxos.rs:563:9
+    |
+563 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:400:9
+    |
+400 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:501:9
+    |
+501 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:591:9
+    |
+591 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:612:9
+    |
+612 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:638:9
+    |
+638 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:689:9
+    |
+689 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:735:9
+    |
+735 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:753:9
+    |
+753 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:780:9
+    |
+780 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/newt.rs:798:9
+    |
+798 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:201:9
+    |
+201 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:243:9
+    |
+243 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:285:9
+    |
+285 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:325:9
+    |
+325 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:360:9
+    |
+360 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> fantoch_ps/src/protocol/fpaxos.rs:380:9
+    |
+380 |         time: &dyn SysTime,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: 35 warnings emitted
+
+    Finished release [optimized + debuginfo] target(s) in 0.05s
+     Running /home/vitor.enes/fantoch/target/release/deps/fantoch_ps-9cfde68706b13828
+
+running 1 test
+test protocol::common::table::clocks::keys::tests::concurrent_locked_key_clocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out
+

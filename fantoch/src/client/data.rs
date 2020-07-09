@@ -28,13 +28,13 @@ impl ClientData {
     }
 
     pub fn latency_data(&self) -> impl Iterator<Item = Duration> + '_ {
-        self.data.values().flat_map(|v| v.into_iter()).cloned()
+        self.data.values().flat_map(|v| v.iter()).cloned()
     }
 
     pub fn throughput_data(&self) -> impl Iterator<Item = (u64, usize)> + '_ {
         self.data
             .iter()
-            .map(|(time, latencies)| (time.clone(), latencies.len()))
+            .map(|(time, latencies)| (*time, latencies.len()))
     }
 
     /// Compute start and end times for this client.
