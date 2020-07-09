@@ -201,10 +201,8 @@ pub fn latency_plot(
     let mut regions: Vec<_> = all_regions.into_iter().collect();
     regions.sort();
     // map regions to their pretty name
-    let labels: Vec<_> = regions
-        .into_iter()
-        .map(PlotFmt::region_name)
-        .collect();
+    let labels: Vec<_> =
+        regions.into_iter().map(PlotFmt::region_name).collect();
     ax.set_xticklabels(labels, None)?;
 
     // set labels

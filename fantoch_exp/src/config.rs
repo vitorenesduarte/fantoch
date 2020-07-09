@@ -125,7 +125,7 @@ impl ProtocolConfig {
         if let Some(sorted) = self.sorted.as_ref() {
             // make sorted ids comma-separted
             let sorted = sorted
-                .into_iter()
+                .iter()
                 .map(|process_id| process_id.to_string())
                 .collect::<Vec<_>>()
                 .join(",");

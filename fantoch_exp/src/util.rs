@@ -52,8 +52,8 @@ pub fn vm_prepare_command(
 }
 
 pub async fn exec(
-    username: &String,
-    public_ip: &String,
+    username: &str,
+    public_ip: &str,
     private_key: &std::path::PathBuf,
     command: impl ToString,
 ) -> Result<String, Report> {
@@ -69,8 +69,8 @@ pub async fn exec(
 }
 
 pub fn prepare_command(
-    username: &String,
-    public_ip: &String,
+    username: &str,
+    public_ip: &str,
     private_key: &std::path::PathBuf,
     command: impl ToString,
 ) -> tokio::process::Command {

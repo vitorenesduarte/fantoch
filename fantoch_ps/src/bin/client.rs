@@ -195,7 +195,7 @@ fn parse_workload(
 fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
     key_gen
         .map(|key_gen| {
-            let parts: Vec<_>= key_gen.split(",").collect();
+            let parts: Vec<_>= key_gen.split(',').collect();
             match parts.len() {
                 2 | 3 => (),
                 _ => panic!("invalid specification of key generator: {:?}", key_gen)

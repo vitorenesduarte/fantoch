@@ -220,8 +220,7 @@ fn maybe_inject_delay(
             .ping_latency(from, to)
             .expect("both regions should be part of the planet");
         // the delay should be half the ping latency
-        let delay = (ping / 2) as usize;
-        delay
+        (ping / 2) as usize
     })
 }
 
@@ -369,7 +368,7 @@ async fn wait_process_ended(
     region: Region,
     vm: &tsunami::Machine<'_>,
     run_mode: RunMode,
-    exp_dir: &String,
+    exp_dir: &str,
 ) -> Result<(), Report> {
     // small delay between calls
     let duration = tokio::time::Duration::from_secs(2);
@@ -399,7 +398,7 @@ async fn wait_process_ended(
         while count != 0 {
             tokio::time::delay_for(duration).await;
             let command =
-                format!("ps -aux | grep flamegraph | grep -v grep | wc -l");
+                "ps -aux | grep flamegraph | grep -v grep | wc -l".to_string();
             let stdout =
                 util::vm_exec(vm, &command).await.wrap_err("ps | wc")?;
             if stdout.is_empty() {
@@ -614,7 +613,7 @@ async fn pull_metrics_files(
     tag: &str,
     region: &Region,
     vm: &tsunami::Machine<'_>,
-    exp_dir: &String,
+    exp_dir: &str,
     pull_metrics: bool,
 ) -> Result<(), Report> {
     // pull log file and remove it
@@ -656,7 +655,7 @@ async fn pull_flamegraph_file(
     tag: &str,
     region: &Region,
     vm: &tsunami::Machine<'_>,
-    exp_dir: &String,
+    exp_dir: &str,
 ) -> Result<(), Report> {
     let local_path = format!("{}/{}_{:?}_flamegraph.svg", exp_dir, tag, region);
     util::copy_from(("flamegraph.svg", vm), local_path)

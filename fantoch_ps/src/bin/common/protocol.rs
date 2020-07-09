@@ -404,7 +404,7 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
         .expect("addresses should be set")
         .split(LIST_SEP)
         .map(|address| {
-            let parts: Vec<_> = address.split("-").collect();
+            let parts: Vec<_> = address.split('-').collect();
             let address = parts[0].to_string();
             match parts.len() {
                 1 => {

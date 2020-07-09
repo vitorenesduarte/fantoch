@@ -90,7 +90,7 @@ async fn baremetal_setup(
     run_mode: RunMode,
     features: Vec<FantochFeature>,
 ) -> Result<tsunami::providers::baremetal::Setup, Report> {
-    let parts: Vec<_> = machine.split("@").collect();
+    let parts: Vec<_> = machine.split('@').collect();
     assert_eq!(parts.len(), 2, "machine should have the form username@addr");
     let username = parts[0].to_string();
     let hostname = parts[1].to_string();
@@ -107,7 +107,7 @@ async fn baremetal_setup(
     .wrap_err("hostname -I")?;
 
     // hostname should return at least one ip like so "10.10.5.61 172.17.0.1"
-    let parts: Vec<_> = ips.split(" ").collect();
+    let parts: Vec<_> = ips.split(' ').collect();
     let ip = parts[0];
 
     // append ssh port
