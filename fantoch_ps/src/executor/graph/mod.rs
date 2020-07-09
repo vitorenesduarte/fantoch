@@ -819,7 +819,7 @@ mod tests {
             let rifl = Rifl::new(dot.source(), dot.sequence());
 
             // create command
-            let key = String::from("black");
+            let key = String::from("CONF");
             let value = String::from("");
             let cmd = Command::put(rifl, key, value);
 
@@ -882,9 +882,9 @@ mod tests {
     }
 
     fn check_sccs_found_with_missing_dep() -> bool {
-        let black_command = || {
+        let conflicting_command = || {
             let rifl = Rifl::new(1, 1);
-            Command::put(rifl, String::from("black"), String::new())
+            Command::put(rifl, String::from("CONF"), String::new())
         };
 
         // create queue
@@ -905,68 +905,68 @@ mod tests {
         let root_dot = Dot::new(5, 70);
         queue.vertex_index.index(Vertex::new(
             root_dot,
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 40, 61]),
         ));
 
         // (4, 31)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 31),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 30, 60]),
         ));
         // (4, 32)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 32),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 31, 60]),
         ));
         // (4, 33)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 33),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 32, 60]),
         ));
         // (4, 34)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 34),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 33, 60]),
         ));
         // (4, 35)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 35),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 34, 60]),
         ));
         // (4, 36)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 36),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 35, 60]),
         ));
         // (4, 37)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 37),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 36, 60]),
         ));
         // (4, 38)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 38),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 37, 60]),
         ));
         // (4, 39)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 39),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 38, 60]),
         ));
         // (4, 40)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 40),
-            black_command(),
+            conflicting_command(),
             util::vclock(vec![60, 50, 50, 39, 60]),
         ));
 

@@ -544,6 +544,7 @@ impl<P: Protocol> fmt::Debug for ScheduleAction<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::KeyGen;
     use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
 
@@ -562,8 +563,8 @@ mod tests {
         let conflict_rate = 100;
         let total_commands = 1000;
         let payload_size = 100;
-        let workload =
-            Workload::new(conflict_rate, total_commands, payload_size);
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let workload = Workload::new(key_gen, total_commands, payload_size);
 
         // process regions
         let process_regions = vec![

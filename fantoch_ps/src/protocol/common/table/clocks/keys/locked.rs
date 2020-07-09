@@ -41,36 +41,36 @@ impl KeyClocks for LockedKeyClocks {
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // find all the locks
         let mut locks = Vec::with_capacity(cmd.key_count());
+        // make sure locks will be acquired in some pre-determined order to
+        // avoid deadlocks
         let keys = BTreeSet::from_iter(cmd.keys());
         self.clocks.get_all(&keys, &mut locks);
 
         // keep track of which clock we should bump to
         let mut up_to = min_clock;
 
-        // acquire the lock on all keys (we won't deadlock since `cmd.keys()`
-        // will return them sorted)
+        // acquire the lock on all keys
         // - NOTE that this loop and the above cannot be merged due to
-        //   lifetimes: `let guard = key_lock.write()` borrows `key_lock` and
-        //   the borrow checker doesn't not understand that it's fine to move
-        //   both the `guard` and `key_lock` into a `Vec`. For that reason, we
+        //   lifetimes: `let guard = key_lock.lock()` borrows `key_lock` and the
+        //   borrow checker doesn't not understand that it's fine to move both
+        //   the `guard` and `key_lock` into e.g. a `Vec`. For that reason, we
         //   have two loops. One that fetches the locks and another one (the one
         //   that follows) that actually acquires the locks.
         let mut guards = Vec::with_capacity(cmd.key_count());
         for (_key, key_lock) in &locks {
-            let current = key_lock.lock();
-            up_to = cmp::max(up_to, *current + 1);
-            guards.push(current);
+            let guard = key_lock.lock();
+            up_to = cmp::max(up_to, *guard + 1);
+            guards.push(guard);
         }
 
         // create votes
         let mut votes = Votes::with_capacity(cmd.key_count());
-        for ((key, key_lock), ref mut current) in
-            locks.iter().zip(guards.iter_mut())
-        {
-            Self::maybe_bump(self.id, key, current, up_to, &mut votes);
+        for entry in locks.iter().zip(guards.into_iter()) {
+            let (key, _key_lock) = entry.0;
+            let mut guard = entry.1;
+            Self::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
             // release the lock
-            drop(current);
-            drop(key_lock);
+            drop(guard);
         }
         (up_to, votes)
     }
@@ -80,11 +80,10 @@ impl KeyClocks for LockedKeyClocks {
         let mut votes = Votes::with_capacity(cmd.key_count());
         for key in cmd.keys() {
             let key_lock = self.clocks.get(key);
-            let mut current = key_lock.lock();
-            Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
+            let mut guard = key_lock.lock();
+            Self::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
             // release the lock
-            drop(current);
-            drop(key_lock);
+            drop(guard);
         }
         votes
     }
@@ -97,11 +96,10 @@ impl KeyClocks for LockedKeyClocks {
         self.clocks.iter().for_each(|entry| {
             let key = entry.key();
             let key_lock = entry.value();
-            let mut current = key_lock.lock();
-            Self::maybe_bump(self.id, key, &mut current, up_to, &mut votes);
+            let mut guard = key_lock.lock();
+            Self::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
             // release the lock
-            drop(current);
-            drop(key_lock);
+            drop(guard);
         });
 
         votes

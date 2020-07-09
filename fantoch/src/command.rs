@@ -1,19 +1,19 @@
+use crate::hash_map::{self, HashMap};
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
 use serde::{Deserialize, Serialize};
-use std::collections::btree_map::{self, BTreeMap};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Command {
     rifl: Rifl,
-    ops: BTreeMap<Key, KVOp>,
+    ops: HashMap<Key, KVOp>,
 }
 
 impl Command {
     /// Create a new `Command`.
-    pub fn new(rifl: Rifl, ops: BTreeMap<Key, KVOp>) -> Self {
+    pub fn new(rifl: Rifl, ops: HashMap<Key, KVOp>) -> Self {
         Self { rifl, ops }
     }
 
@@ -22,7 +22,7 @@ impl Command {
         rifl: Rifl,
         iter: I,
     ) -> Self {
-        Self::new(rifl, BTreeMap::from_iter(iter))
+        Self::new(rifl, HashMap::from_iter(iter))
     }
 
     /// Creates a get command.
@@ -77,7 +77,7 @@ impl Command {
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
     pub fn execute(self, store: &mut KVStore) -> CommandResult {
         let key_count = self.ops.len();
-        let mut results = BTreeMap::new();
+        let mut results = HashMap::new();
         for (key, op) in self.ops {
             let partial_result = store.execute(&key, op);
             results.insert(key, partial_result);
@@ -92,7 +92,7 @@ impl Command {
 
 impl IntoIterator for Command {
     type Item = (Key, KVOp);
-    type IntoIter = btree_map::IntoIter<Key, KVOp>;
+    type IntoIter = hash_map::IntoIter<Key, KVOp>;
 
     /// Returns a `Command` into-iterator.
     fn into_iter(self) -> Self::IntoIter {
@@ -111,7 +111,7 @@ impl fmt::Debug for Command {
 pub struct CommandResult {
     rifl: Rifl,
     key_count: usize,
-    results: BTreeMap<Key, KVOpResult>,
+    results: HashMap<Key, KVOpResult>,
 }
 
 impl CommandResult {
@@ -121,7 +121,7 @@ impl CommandResult {
         CommandResult {
             rifl,
             key_count,
-            results: BTreeMap::new(),
+            results: HashMap::new(),
         }
     }
 
@@ -148,7 +148,7 @@ impl CommandResult {
     }
 
     /// Returns the commands results.
-    pub fn results(&self) -> &BTreeMap<Key, KVOpResult> {
+    pub fn results(&self) -> &HashMap<Key, KVOpResult> {
         &self.results
     }
 }

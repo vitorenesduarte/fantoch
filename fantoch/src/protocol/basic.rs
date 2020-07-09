@@ -400,7 +400,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::{Client, Workload};
+    use crate::client::{Client, KeyGen, Workload};
     use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
@@ -479,8 +479,8 @@ mod tests {
         let conflict_rate = 100;
         let total_commands = 10;
         let payload_size = 100;
-        let workload =
-            Workload::new(conflict_rate, total_commands, payload_size);
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let workload = Workload::new(key_gen, total_commands, payload_size);
 
         // create client 1 that is connected to basic 1
         let client_id = 1;
