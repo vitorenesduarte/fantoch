@@ -27,8 +27,7 @@ const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
-const KEY_GENERATOR: KeyGen =
-    KeyGen::ConflictRate { conflict_rate: 10 };
+const KEY_GENERATOR: KeyGen = KeyGen::ConflictRate { conflict_rate: 10 };
 // const COMMANDS_PER_CLIENT: usize = 500000; // if LAN
 const COMMANDS_PER_CLIENT: usize = 500; // if WAN
 const PAYLOAD_SIZE: usize = 4096;

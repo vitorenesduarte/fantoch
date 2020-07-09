@@ -7,8 +7,7 @@ use std::error::Error;
 use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
-const DEFAULT_KEY_GEN: KeyGen =
-    KeyGen::ConflictRate { conflict_rate: 100 };
+const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictRate { conflict_rate: 100 };
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
@@ -225,8 +224,7 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                             coefficient, key_count
                         }
                 }
-                kgen => 
-                    panic!("invalid key generator: {}", kgen),
+                kgen => panic!("invalid key generator: {}", kgen),
             }
         })
         .unwrap_or(DEFAULT_KEY_GEN)
