@@ -665,6 +665,7 @@ fn serialize_client_data(data: ClientData, file: String) -> RunResult<()> {
 // protocols implemented
 pub mod tests {
     use super::*;
+    use crate::client::KeyGen;
     use crate::protocol::ProtocolMetricsKind;
     use crate::util;
     use rand::Rng;
@@ -908,8 +909,9 @@ pub mod tests {
 
         // create workload
         let payload_size = 100;
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
         let workload =
-            Workload::new(conflict_rate, commands_per_client, payload_size);
+            Workload::new(key_gen, commands_per_client, payload_size);
 
         let clients_per_region = clients_per_region as u64;
         let client_handles: Vec<_> = util::process_ids(n)

@@ -13,7 +13,7 @@ use tracing::span::{Attributes, Id, Record};
 use tracing::{Metadata, Subscriber};
 
 thread_local! {
-    static CLOCK: Clock = Clock::new();
+    static CLOCK: RefCell<Clock> = RefCell::new(Clock::new());
     static START_TIMES: RefCell<HashMap<u64, u64>> = RefCell::new(HashMap::new());
 }
 
@@ -22,7 +22,7 @@ const MAX_FUNCTION_EXECUTION_TIME: u64 = 100_000_000;
 
 /// Compute current time.
 fn now() -> u64 {
-    CLOCK.with(|clock| clock.now().as_u64())
+    CLOCK.with(|clock| clock.borrow_mut().now().as_u64())
 }
 
 /// Record function start time.

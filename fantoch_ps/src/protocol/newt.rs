@@ -1006,7 +1006,7 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{Client, Workload};
+    use fantoch::client::{Client, KeyGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
@@ -1100,8 +1100,8 @@ mod tests {
         let conflict_rate = 100;
         let total_commands = 10;
         let payload_size = 100;
-        let workload =
-            Workload::new(conflict_rate, total_commands, payload_size);
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let workload = Workload::new(key_gen, total_commands, payload_size);
 
         // create client 1 that is connected to newt 1
         let client_id = 1;

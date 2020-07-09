@@ -1,6 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::client::Workload;
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::exp::Machines;
@@ -27,7 +27,8 @@ const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
-const CONFLICT_RATE: usize = 10;
+const KEY_GENERATOR: KeyGen =
+    KeyGen::ConflictRate { conflict_rate: 10 };
 // const COMMANDS_PER_CLIENT: usize = 500000; // if LAN
 const COMMANDS_PER_CLIENT: usize = 500; // if WAN
 const PAYLOAD_SIZE: usize = 4096;
@@ -95,7 +96,7 @@ async fn main() -> Result<(), Report> {
         1024 * 32,
     ];
     let workload =
-        Workload::new(CONFLICT_RATE, COMMANDS_PER_CLIENT, PAYLOAD_SIZE);
+        Workload::new(KEY_GENERATOR, COMMANDS_PER_CLIENT, PAYLOAD_SIZE);
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients

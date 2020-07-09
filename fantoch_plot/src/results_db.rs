@@ -1,6 +1,6 @@
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
-use fantoch::client::ClientData;
+use fantoch::client::{ClientData, KeyGen};
 use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::{ExperimentConfig, Protocol, SerializationFormat, Testbed};
@@ -51,7 +51,7 @@ pub struct SearchBuilder<'a> {
     f: Option<usize>,
     protocol: Option<Protocol>,
     clients_per_region: Option<usize>,
-    conflict_rate: Option<usize>,
+    key_gen: Option<KeyGen>,
     payload_size: Option<usize>,
 }
 
@@ -63,7 +63,7 @@ impl<'a> SearchBuilder<'a> {
             f: None,
             protocol: None,
             clients_per_region: None,
-            conflict_rate: None,
+            key_gen: None,
             payload_size: None,
         }
     }
@@ -91,8 +91,8 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn conflict_rate(&mut self, conflict_rate: usize) -> &mut Self {
-        self.conflict_rate = Some(conflict_rate);
+    pub fn key_gen(&mut self, key_gen: KeyGen) -> &mut Self {
+        self.key_gen = Some(key_gen);
         self
     }
 
@@ -120,7 +120,7 @@ impl<'a> SearchBuilder<'a> {
         let f = self.f;
         let protocol = self.protocol;
         let clients_per_region = self.clients_per_region;
-        let conflict_rate = self.conflict_rate;
+        let key_gen = self.key_gen;
         let payload_size = self.payload_size;
 
         // do the search
@@ -157,10 +157,10 @@ impl<'a> SearchBuilder<'a> {
                     }
                 }
 
-                // filter out configurations with different conflict_rate (if
+                // filter out configurations with different key generator (if
                 // set)
-                if let Some(conflict_rate) = conflict_rate {
-                    if exp_config.workload.conflict_rate() != conflict_rate {
+                if let Some(key_gen) = key_gen {
+                    if exp_config.workload.key_gen() != key_gen {
                         return false;
                     }
                 }

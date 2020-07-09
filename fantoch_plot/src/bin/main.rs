@@ -1,5 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch::client::KeyGen;
 use fantoch::planet::{Planet, Region};
 use fantoch_plot::{ErrorBar, Latency, PlotFmt, ResultsDB};
 
@@ -11,7 +12,7 @@ fn main() -> Result<(), Report> {
     fantoch_plot::set_global_style()?;
 
     // fixed parameters
-    let conflict_rate = 10;
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
     let payload_size = 4096;
 
     // load results
@@ -55,7 +56,7 @@ fn main() -> Result<(), Report> {
                 let global_metrics = fantoch_plot::latency_plot(
                     n,
                     clients_per_region,
-                    conflict_rate,
+                    key_gen,
                     payload_size,
                     error_bar,
                     &path,
@@ -81,7 +82,7 @@ fn main() -> Result<(), Report> {
             fantoch_plot::cdf_plot(
                 n,
                 clients_per_region,
-                conflict_rate,
+                key_gen,
                 payload_size,
                 &path,
                 &mut db,
@@ -94,7 +95,7 @@ fn main() -> Result<(), Report> {
                 fantoch_plot::cdf_plots(
                     n,
                     clients_per_region,
-                    conflict_rate,
+                    key_gen,
                     payload_size,
                     &path,
                     &mut db,
@@ -128,7 +129,7 @@ fn main() -> Result<(), Report> {
             fantoch_plot::throughput_latency_plot(
                 n,
                 clients_per_region.clone(),
-                conflict_rate,
+                key_gen,
                 payload_size,
                 latency,
                 &path,

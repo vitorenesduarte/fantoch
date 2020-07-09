@@ -1,13 +1,14 @@
 mod common;
 
 use clap::{App, Arg};
-use fantoch::client::Workload;
+use fantoch::client::{KeyGen, Workload};
 use fantoch::id::ClientId;
 use std::error::Error;
 use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
-const DEFAULT_CONFLICT_RATE: usize = 100;
+const DEFAULT_KEY_GEN: KeyGen =
+    KeyGen::ConflictRate { conflict_rate: 100 };
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
@@ -70,10 +71,10 @@ fn parse_args() -> (
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("conflict_rate")
-                .long("conflict_rate")
-                .value_name("CONFLICT_RATE")
-                .help("number between 0 and 100 representing how contended the workload should be; default: 100")
+            Arg::with_name("key_gen")
+                .long("key_gen")
+                .value_name("KEY_GEN")
+                .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient and 10000 the number of keys in the distribution; default: 'conflict_rate,100'")
                 .takes_value(true),
         )
         .arg(
@@ -118,7 +119,7 @@ fn parse_args() -> (
     let address = parse_address(matches.value_of("address"));
     let interval = parse_interval(matches.value_of("interval"));
     let workload = parse_workload(
-        matches.value_of("conflict_rate"),
+        matches.value_of("key_gen"),
         matches.value_of("commands_per_client"),
         matches.value_of("payload_size"),
     );
@@ -182,24 +183,53 @@ fn parse_interval(interval: Option<&str>) -> Option<Duration> {
 }
 
 fn parse_workload(
-    conflict_rate: Option<&str>,
+    key_gen: Option<&str>,
     commands_per_client: Option<&str>,
     payload_size: Option<&str>,
 ) -> Workload {
-    let conflict_rate = parse_conflict_rate(conflict_rate);
+    let key_gen = parse_key_gen(key_gen);
     let commands_per_client = parse_commands_per_client(commands_per_client);
     let payload_size = parse_payload_size(payload_size);
-    Workload::new(conflict_rate, commands_per_client, payload_size)
+    Workload::new(key_gen, commands_per_client, payload_size)
 }
 
-fn parse_conflict_rate(number: Option<&str>) -> usize {
-    number
-        .map(|number| {
-            number
-                .parse::<usize>()
-                .expect("conflict rate should be a number")
+fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
+    key_gen
+        .map(|key_gen| {
+            let parts: Vec<_>= key_gen.split(",").collect();
+            match parts.len() {
+                2 | 3 => (),
+                _ => panic!("invalid specification of key generator: {:?}", key_gen)
+            };
+            match parts[0] {
+                "conflict_rate" => {
+                    if parts.len() != 2 {
+                        panic!("conflict_rate key generator takes a single argument");
+                    }
+                    let conflict_rate = parts[1]
+                        .parse::<usize>()
+                        .expect("conflict rate should be a number");
+                    KeyGen::ConflictRate { conflict_rate }
+                }
+                "zipf" => {
+                    if parts.len() != 3 {
+                        panic!("zipf key generator takes two arguments");
+                    }
+                    let coefficient = parts[1]
+                        .parse::<f64>()
+                        .expect("zipf coefficient should be a float");
+                    let key_count = parts[2]
+                        .parse::<usize>()
+                        .expect("number of keys in the zipf distribution should be a number");
+                        KeyGen::Zipf {
+                            coefficient, key_count
+                        }
+                }
+                kgen => 
+                    panic!("invalid key generator: {}", kgen),
+            }
         })
-        .unwrap_or(DEFAULT_CONFLICT_RATE)
+        .unwrap_or(DEFAULT_KEY_GEN)
 }
 
 fn parse_commands_per_client(number: Option<&str>) -> usize {

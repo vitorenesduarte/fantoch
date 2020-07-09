@@ -9,6 +9,7 @@ pub use fmt::PlotFmt;
 pub use results_db::ResultsDB;
 
 use color_eyre::Report;
+use fantoch::client::KeyGen;
 use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
 use plot::axes::Axes;
@@ -73,7 +74,7 @@ pub fn set_global_style() -> Result<(), Report> {
 pub fn latency_plot(
     n: usize,
     clients_per_region: usize,
-    conflict_rate: usize,
+    key_gen: KeyGen,
     payload_size: usize,
     error_bar: ErrorBar,
     output_file: &str,
@@ -131,7 +132,7 @@ pub fn latency_plot(
             .f(f)
             .protocol(protocol)
             .clients_per_region(clients_per_region)
-            .conflict_rate(conflict_rate)
+            .key_gen(key_gen)
             .payload_size(payload_size)
             .load()?;
         match exp_data.len() {
@@ -222,7 +223,7 @@ pub fn latency_plot(
 pub fn cdf_plot(
     n: usize,
     clients_per_region: usize,
-    conflict_rate: usize,
+    key_gen: KeyGen,
     payload_size: usize,
     output_file: &str,
     db: &mut ResultsDB,
@@ -246,7 +247,7 @@ pub fn cdf_plot(
             f,
             protocol,
             clients_per_region,
-            conflict_rate,
+            key_gen,
             payload_size,
             &mut plotted,
             db,
@@ -268,7 +269,7 @@ pub fn cdf_plot(
 pub fn cdf_plots(
     n: usize,
     clients_per_region: usize,
-    conflict_rate: usize,
+    key_gen: KeyGen,
     payload_size: usize,
     output_file: &str,
     db: &mut ResultsDB,
@@ -324,7 +325,7 @@ pub fn cdf_plots(
                 f,
                 protocol,
                 clients_per_region,
-                conflict_rate,
+                key_gen,
                 payload_size,
                 &mut plotted,
                 db,
@@ -374,7 +375,7 @@ fn inner_cdf_plot(
     f: usize,
     protocol: Protocol,
     clients_per_region: usize,
-    conflict_rate: usize,
+    key_gen: KeyGen,
     payload_size: usize,
     plotted: &mut usize,
     db: &mut ResultsDB,
@@ -386,7 +387,7 @@ fn inner_cdf_plot(
         .f(f)
         .protocol(protocol)
         .clients_per_region(clients_per_region)
-        .conflict_rate(conflict_rate)
+        .key_gen(key_gen)
         .payload_size(payload_size)
         .load()?;
     match exp_data.len() {
@@ -430,7 +431,7 @@ fn inner_cdf_plot(
 pub fn throughput_latency_plot(
     n: usize,
     clients_per_region: Vec<usize>,
-    conflict_rate: usize,
+    key_gen: KeyGen,
     payload_size: usize,
     latency: Latency,
     output_file: &str,
@@ -461,7 +462,7 @@ pub fn throughput_latency_plot(
                 .f(f)
                 .protocol(protocol)
                 .clients_per_region(clients)
-                .conflict_rate(conflict_rate)
+                .key_gen(key_gen)
                 .payload_size(payload_size)
                 .load()?;
             match exp_data.len() {

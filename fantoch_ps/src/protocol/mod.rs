@@ -26,7 +26,7 @@ pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::Workload;
+    use fantoch::client::{KeyGen, Workload};
     use fantoch::config::Config;
     use fantoch::id::ProcessId;
     use fantoch::planet::Planet;
@@ -539,8 +539,11 @@ mod tests {
 
         // clients workload
         let payload_size = 1;
+        let key_gen = KeyGen::ConflictRate {
+            conflict_rate: CONFLICT_RATE,
+        };
         let workload =
-            Workload::new(CONFLICT_RATE, commands_per_client, payload_size);
+            Workload::new(key_gen, commands_per_client, payload_size);
 
         // process and client regions
         let mut regions = planet.regions();

@@ -1,7 +1,7 @@
 #[cfg(feature = "exp")]
 use crate::args;
 use crate::{FantochFeature, Protocol, RunMode, Testbed};
-use fantoch::client::Workload;
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
@@ -247,13 +247,22 @@ impl ClientConfig {
     }
 
     pub fn to_args(&self) -> Vec<String> {
+        let key_gen = match self.workload.key_gen() {
+            KeyGen::ConflictRate { conflict_rate } => {
+                format!("conflict_rate,{}", conflict_rate)
+            }
+            KeyGen::Zipf {
+                coefficient,
+                key_count,
+            } => format!("zipf,{},{}", coefficient, key_count),
+        };
         args![
             "--ids",
             format!("{}-{}", self.id_start, self.id_end),
             "--address",
             self.ip_to_address(),
-            "--conflict_rate",
-            self.workload.conflict_rate(),
+            "--key_gen",
+            key_gen,
             "--commands_per_client",
             self.workload.commands_per_client(),
             "--payload_size",

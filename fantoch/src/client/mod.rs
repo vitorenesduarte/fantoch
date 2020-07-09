@@ -1,6 +1,10 @@
 // This module contains the definition of `Workload`
 pub mod workload;
 
+// This module contains the definition of `KeyGenerator` and
+// `KeyGeneratorState`.
+pub mod key_gen;
+
 // This module contains the definition of `Pending`
 pub mod pending;
 
@@ -9,6 +13,7 @@ pub mod data;
 
 // Re-exports.
 pub use data::ClientData;
+pub use key_gen::KeyGen;
 pub use pending::Pending;
 pub use workload::Workload;
 
@@ -17,6 +22,7 @@ use crate::id::ProcessId;
 use crate::id::{ClientId, RiflGen};
 use crate::log;
 use crate::time::SysTime;
+use key_gen::KeyGenState;
 
 pub struct Client {
     /// id of this client
@@ -27,6 +33,8 @@ pub struct Client {
     rifl_gen: RiflGen,
     /// workload configuration
     workload: Workload,
+    /// state kept by the key generator
+    key_gen_state: KeyGenState,
     /// map from pending command RIFL to its start time
     pending: Pending,
     /// mapping from
@@ -42,6 +50,7 @@ impl Client {
             process_id: None,
             rifl_gen: RiflGen::new(client_id),
             workload,
+            key_gen_state: workload.key_gen().initial_state(client_id),
             pending: Pending::new(),
             data: ClientData::new(),
         }
@@ -68,11 +77,13 @@ impl Client {
     ) -> Option<(ProcessId, Command)> {
         self.process_id.and_then(|process_id| {
             // generate next command in the workload if some process_id
-            self.workload.next_cmd(&mut self.rifl_gen).map(|cmd| {
-                // if a new command was generated, start it in pending
-                self.pending.start(cmd.rifl(), time);
-                (process_id, cmd)
-            })
+            self.workload
+                .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
+                .map(|cmd| {
+                    // if a new command was generated, start it in pending
+                    self.pending.start(cmd.rifl(), time);
+                    (process_id, cmd)
+                })
         })
     }
 
@@ -123,8 +134,8 @@ mod tests {
         // workload
         let conflict_rate = 100;
         let payload_size = 100;
-        let workload =
-            Workload::new(conflict_rate, total_commands, payload_size);
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let workload = Workload::new(key_gen, total_commands, payload_size);
 
         // client
         let id = 1;
