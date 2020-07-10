@@ -52,6 +52,7 @@ pub struct SearchBuilder<'a> {
     protocol: Option<Protocol>,
     clients_per_region: Option<usize>,
     key_gen: Option<KeyGen>,
+    keys_per_command: Option<usize>,
     payload_size: Option<usize>,
 }
 
@@ -64,6 +65,7 @@ impl<'a> SearchBuilder<'a> {
             protocol: None,
             clients_per_region: None,
             key_gen: None,
+            keys_per_command: None,
             payload_size: None,
         }
     }
@@ -96,6 +98,11 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
+    pub fn keys_per_command(&mut self, keys_per_command: usize) -> &mut Self {
+        self.keys_per_command = Some(keys_per_command);
+        self
+    }
+
     pub fn payload_size(&mut self, payload_size: usize) -> &mut Self {
         self.payload_size = Some(payload_size);
         self
@@ -121,6 +128,7 @@ impl<'a> SearchBuilder<'a> {
         let protocol = self.protocol;
         let clients_per_region = self.clients_per_region;
         let key_gen = self.key_gen;
+        let keys_per_command = self.keys_per_command;
         let payload_size = self.payload_size;
 
         // do the search
@@ -161,6 +169,16 @@ impl<'a> SearchBuilder<'a> {
                 // set)
                 if let Some(key_gen) = key_gen {
                     if exp_config.workload.key_gen() != key_gen {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different keys_per_command (if
+                // set)
+                if let Some(keys_per_command) = keys_per_command {
+                    if exp_config.workload.keys_per_command()
+                        != keys_per_command
+                    {
                         return false;
                     }
                 }

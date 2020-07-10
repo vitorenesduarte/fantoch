@@ -908,10 +908,15 @@ pub mod tests {
         println!("[main] processes are connected");
 
         // create workload
-        let payload_size = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let workload =
-            Workload::new(key_gen, commands_per_client, payload_size);
+        let keys_per_command = 2;
+        let payload_size = 100;
+        let workload = Workload::new(
+            key_gen,
+            keys_per_command,
+            commands_per_client,
+            payload_size,
+        );
 
         let clients_per_region = clients_per_region as u64;
         let client_handles: Vec<_> = util::process_ids(n)

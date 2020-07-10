@@ -542,8 +542,13 @@ mod tests {
         let key_gen = KeyGen::ConflictRate {
             conflict_rate: CONFLICT_RATE,
         };
-        let workload =
-            Workload::new(key_gen, commands_per_client, payload_size);
+        let keys_per_command = 1;
+        let workload = Workload::new(
+            key_gen,
+            keys_per_command,
+            commands_per_client,
+            payload_size,
+        );
 
         // process and client regions
         let mut regions = planet.regions();

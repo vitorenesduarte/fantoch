@@ -28,6 +28,7 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
 const KEY_GENERATOR: KeyGen = KeyGen::ConflictRate { conflict_rate: 10 };
+const KEYS_PER_COMMAND: usize = 1;
 // const COMMANDS_PER_CLIENT: usize = 500000; // if LAN
 const COMMANDS_PER_CLIENT: usize = 500; // if WAN
 const PAYLOAD_SIZE: usize = 4096;
@@ -94,8 +95,12 @@ async fn main() -> Result<(), Report> {
         1024 * 16,
         1024 * 32,
     ];
-    let workload =
-        Workload::new(KEY_GENERATOR, COMMANDS_PER_CLIENT, PAYLOAD_SIZE);
+    let workload = Workload::new(
+        KEY_GENERATOR,
+        KEYS_PER_COMMAND,
+        COMMANDS_PER_CLIENT,
+        PAYLOAD_SIZE,
+    );
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients

@@ -561,10 +561,16 @@ mod tests {
 
         // clients workload
         let conflict_rate = 100;
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let keys_per_command = 1;
         let total_commands = 1000;
         let payload_size = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let workload = Workload::new(key_gen, total_commands, payload_size);
+        let workload = Workload::new(
+            key_gen,
+            keys_per_command,
+            total_commands,
+            payload_size,
+        );
 
         // process regions
         let process_regions = vec![

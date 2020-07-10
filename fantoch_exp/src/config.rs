@@ -263,6 +263,8 @@ impl ClientConfig {
             self.ip_to_address(),
             "--key_gen",
             key_gen,
+            "--keys_per_command",
+            self.workload.keys_per_command(),
             "--commands_per_client",
             self.workload.commands_per_client(),
             "--payload_size",
