@@ -481,7 +481,12 @@ mod tests {
         let keys_per_command = 1;
         let total_commands = 10;
         let payload_size = 100;
-        let workload = Workload::new(key_gen, keys_per_command, total_commands, payload_size);
+        let workload = Workload::new(
+            key_gen,
+            keys_per_command,
+            total_commands,
+            payload_size,
+        );
 
         // create client 1 that is connected to basic 1
         let client_id = 1;
