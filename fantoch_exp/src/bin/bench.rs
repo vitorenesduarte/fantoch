@@ -10,7 +10,7 @@ use std::time::Duration;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results_multikey";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -27,17 +27,14 @@ const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
-const KEY_GENERATOR: KeyGen = KeyGen::ConflictRate { conflict_rate: 10 };
-const KEYS_PER_COMMAND: usize = 1;
-// const COMMANDS_PER_CLIENT: usize = 500000; // if LAN
-const COMMANDS_PER_CLIENT: usize = 500; // if WAN
-const PAYLOAD_SIZE: usize = 4096;
+const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
+const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
 const BRANCH: &str = "master";
 // TODO allow more than one feature
-// const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 const FEATURE: Option<FantochFeature> = None;
+// const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -73,6 +70,15 @@ async fn main() -> Result<(), Report> {
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::NewtLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtLocked, config!(n, 2, false, None, false)),
+    ];
+
+    /*
+    let configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
         (Protocol::FPaxos, config!(n, 1, false, None, false)),
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
@@ -95,17 +101,33 @@ async fn main() -> Result<(), Report> {
         1024 * 16,
         1024 * 32,
     ];
-    let workload = Workload::new(
-        KEY_GENERATOR,
-        KEYS_PER_COMMAND,
-        COMMANDS_PER_CLIENT,
-        PAYLOAD_SIZE,
-    );
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
         protocol == Protocol::AtlasLocked && clients > 1024 * 4
     };
+    */
+
+    let clients_per_region = vec![1024];
+
+    let zipf_key_count = 1_000_000;
+    let mut workloads = Vec::new();
+    for keys_per_command in vec![1, 2, 4, 8] {
+        for coefficient in vec![0.0, 0.5, 1.0] {
+            let workload = Workload::new(
+                KeyGen::Zipf {
+                    coefficient,
+                    key_count: zipf_key_count,
+                },
+                keys_per_command,
+                COMMANDS_PER_CLIENT,
+                PAYLOAD_SIZE,
+            );
+            workloads.push(workload);
+        }
+    }
+
+    let skip = |_, _, _| false;
 
     // create AWS planet
     let planet = Some(Planet::from("../latency_aws"));
@@ -116,7 +138,7 @@ async fn main() -> Result<(), Report> {
         planet,
         configs,
         clients_per_region,
-        workload,
+        workloads,
         skip,
     )
     .await
@@ -129,7 +151,7 @@ async fn baremetal_bench(
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    workload: Workload,
+    workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report>
 where
@@ -168,7 +190,7 @@ where
         planet,
         configs,
         clients_per_region,
-        workload,
+        workloads,
         skip,
     )
     .await
@@ -182,7 +204,7 @@ async fn aws_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    workload: Workload,
+    workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
@@ -191,7 +213,7 @@ async fn aws_bench(
         regions,
         configs,
         clients_per_region,
-        workload,
+        workloads,
         skip,
     )
     .await;
@@ -214,7 +236,7 @@ async fn do_aws_bench(
     regions: Vec<Region>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    workload: Workload,
+    workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
     // compute features
@@ -246,7 +268,7 @@ async fn do_aws_bench(
         planet,
         configs,
         clients_per_region,
-        workload,
+        workloads,
         skip,
     )
     .await
@@ -262,7 +284,7 @@ async fn run_bench(
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
-    workload: Workload,
+    workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
     fantoch_exp::bench::bench_experiment(
@@ -274,7 +296,7 @@ async fn run_bench(
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,
-        workload,
+        workloads,
         skip,
         RESULTS_DIR,
     )
