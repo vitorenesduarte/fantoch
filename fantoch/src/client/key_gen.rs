@@ -33,7 +33,7 @@ impl KeyGenState {
                 coefficient,
                 key_count,
             } => {
-                // initialize distribution if not yet initialized
+                // initialize zipf distribution
                 let zipf = ZipfDistribution::new(key_count, coefficient)
                     .expect(
                     "it should be possible to initialize the ZipfDistribution",

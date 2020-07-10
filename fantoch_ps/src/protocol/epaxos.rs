@@ -813,10 +813,16 @@ mod tests {
 
         // client workload
         let conflict_rate = 100;
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let keys_per_command = 1;
         let total_commands = 10;
         let payload_size = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let workload = Workload::new(key_gen, total_commands, payload_size);
+        let workload = Workload::new(
+            key_gen,
+            keys_per_command,
+            total_commands,
+            payload_size,
+        );
 
         // create client 1 that is connected to epaxos 1
         let client_id = 1;

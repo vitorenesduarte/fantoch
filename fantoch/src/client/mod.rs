@@ -33,7 +33,7 @@ pub struct Client {
     rifl_gen: RiflGen,
     /// workload configuration
     workload: Workload,
-    /// state kept by the key generator
+    /// state needed by key generator
     key_gen_state: KeyGenState,
     /// map from pending command RIFL to its start time
     pending: Pending,
@@ -133,9 +133,15 @@ mod tests {
     fn gen_client(total_commands: usize) -> Client {
         // workload
         let conflict_rate = 100;
-        let payload_size = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let workload = Workload::new(key_gen, total_commands, payload_size);
+        let keys_per_command = 1;
+        let payload_size = 100;
+        let workload = Workload::new(
+            key_gen,
+            keys_per_command,
+            total_commands,
+            payload_size,
+        );
 
         // client
         let id = 1;

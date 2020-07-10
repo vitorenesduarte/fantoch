@@ -28,7 +28,7 @@ pub async fn bench_experiment(
     configs: Vec<(Protocol, Config)>,
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
-    workload: Workload,
+    workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
@@ -36,28 +36,30 @@ pub async fn bench_experiment(
         panic!("vitor: you should set the timing feature for this to work!");
     }
 
-    for &clients in &clients_per_region {
-        for &(protocol, config) in &configs {
-            // check that we have the correct number of regions
-            assert_eq!(machines.region_count(), config.n());
-            // maybe skip configuration
-            if skip(protocol, config, clients) {
-                continue;
+    for workload in workloads {
+        for &clients in &clients_per_region {
+            for &(protocol, config) in &configs {
+                // check that we have the correct number of regions
+                assert_eq!(machines.region_count(), config.n());
+                // maybe skip configuration
+                if skip(protocol, config, clients) {
+                    continue;
+                }
+                run_experiment(
+                    &machines,
+                    run_mode,
+                    features.clone(),
+                    testbed,
+                    &planet,
+                    protocol,
+                    config,
+                    tracer_show_interval,
+                    clients,
+                    workload,
+                    &results_dir,
+                )
+                .await?;
             }
-            run_experiment(
-                &machines,
-                run_mode,
-                features.clone(),
-                testbed,
-                &planet,
-                protocol,
-                config,
-                tracer_show_interval,
-                clients,
-                workload,
-                &results_dir,
-            )
-            .await?;
         }
     }
     Ok(())

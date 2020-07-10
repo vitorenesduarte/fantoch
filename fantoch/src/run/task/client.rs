@@ -1,6 +1,7 @@
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
-use crate::id::{AtomicDotGen, ClientId, ProcessId};
+use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl};
+use crate::kvs::Key;
 use crate::log;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
@@ -176,41 +177,41 @@ async fn client_server_task_handle_cmd(
     pending: &mut Pending,
 ) -> bool {
     if let Some(cmd) = cmd {
-        // if there's more than one executor, then we'll receive partial
-        // results; in this case, register command in pending
+        // get command rifl
+        let rifl = cmd.rifl();
+
         if client_to_executors.pool_size() > 1 {
+            // if there's more than one executor, then we'll receive partial
+            // results; in this case, register command in pending
             pending.wait_for(&cmd);
-        }
 
-        // TODO can we make the following loop run in parallel?
-        // - I think that the main problem is that we need a reference to
-        //   `client_to_executors` and having different futures holding a
-        //   reference to it doesn't work
-        // - given this, I think that we need to add the parallelism inside
-        //   `Pool` and not here
-        for key in cmd.keys() {
-            if let Err(e) = client_to_executors
-                .forward_map((key, cmd.rifl()), |(_, rifl)| {
-                    FromClient::WaitForRifl(rifl)
-                })
-                .await
-            {
-                println!(
-                    "[client_server] error while registering new command in executor: {:?}",
-                    e
-                );
+            // TODO should we make the following two loops run in parallel?
+            for key in cmd.keys() {
+                client_server_task_register_rifl(
+                    key,
+                    rifl,
+                    client_to_executors,
+                )
+                .await;
             }
-        }
+            for _ in cmd.keys() {
+                client_server_task_wait_rifl_register_ack(rifl, rifl_acks)
+                    .await;
+            }
+        } else {
+            // if there's a single executor, send a single `WaitForRifl`
+            debug_assert!(client_to_executors.pool_size() == 1);
 
-        // TODO can we make the following loop run in parallel?
-        for _ in cmd.keys() {
-            if let Some(rifl) = rifl_acks.recv().await {
-                assert_eq!(rifl, cmd.rifl());
-            } else {
-                println!(
-                    "[client_server] couldn't receive rifl ack from executor"
-                );
-            }
+            // find any key
+            let key = cmd
+                .keys()
+                .next()
+                .expect("command should have at least one key");
+
+            // register rifl and wait for ack
+            client_server_task_register_rifl(key, rifl, client_to_executors)
+                .await;
+            client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
         }
 
         // create dot for this command
@@ -238,6 +239,29 @@ async fn client_server_task_handle_cmd(
             );
         }
         false
+    }
+}
+
+async fn client_server_task_register_rifl(
+    key: &Key,
+    rifl: Rifl,
+    client_to_executors: &mut ClientToExecutors,
+) {
+    let forward = client_to_executors
+        .forward_map((key, rifl), |(_, rifl)| FromClient::WaitForRifl(rifl));
+    if let Err(e) = forward.await {
+        println!("[client_server] error while registering new command in executor: {:?}", e);
+    }
+}
+
+async fn client_server_task_wait_rifl_register_ack(
+    rifl: Rifl,
+    rifl_acks: &mut RiflAckReceiver,
+) {
+    if let Some(r) = rifl_acks.recv().await {
+        assert_eq!(r, rifl);
+    } else {
+        println!("[client_server] couldn't receive rifl ack from executor");
     }
 }
 
