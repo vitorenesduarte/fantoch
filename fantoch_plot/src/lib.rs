@@ -18,6 +18,7 @@ use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use results_db::Search;
 use std::collections::{BTreeMap, HashSet};
 
 // defaults: [6.4, 4.8]
@@ -126,15 +127,15 @@ pub fn latency_plot(
 
     for (shift, (protocol, f)) in combinations {
         // start search
-        let mut search = db.search();
-        let mut exp_data = search
+        let mut search = Search::new();
+        search
             .n(n)
             .f(f)
             .protocol(protocol)
             .clients_per_region(clients_per_region)
             .key_gen(key_gen)
-            .payload_size(payload_size)
-            .load()?;
+            .payload_size(payload_size);
+        let mut exp_data = db.find(search)?;
         match exp_data.len() {
             0 => {
                 eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);
@@ -379,15 +380,15 @@ fn inner_cdf_plot(
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
     // start search
-    let mut search = db.search();
-    let mut exp_data = search
+    let mut search = Search::new();
+    search
         .n(n)
         .f(f)
         .protocol(protocol)
         .clients_per_region(clients_per_region)
         .key_gen(key_gen)
-        .payload_size(payload_size)
-        .load()?;
+        .payload_size(payload_size);
+    let mut exp_data = db.find(search)?;
     match exp_data.len() {
         0 => {
             eprintln!(
@@ -454,15 +455,15 @@ pub fn throughput_latency_plot(
         let mut y = Vec::with_capacity(clients_per_region.len());
         for &clients in clients_per_region.iter() {
             // start search
-            let mut search = db.search();
-            let mut exp_data = search
+            let mut search = Search::new();
+            search
                 .n(n)
                 .f(f)
                 .protocol(protocol)
                 .clients_per_region(clients)
                 .key_gen(key_gen)
-                .payload_size(payload_size)
-                .load()?;
+                .payload_size(payload_size);
+            let mut exp_data = db.find(search)?;
             match exp_data.len() {
                 0 => {
                     eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(protocol), f);

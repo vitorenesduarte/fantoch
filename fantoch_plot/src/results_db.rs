@@ -40,118 +40,29 @@ impl ResultsDB {
         Ok(Self { results })
     }
 
-    pub fn search(&mut self) -> SearchBuilder<'_> {
-        SearchBuilder::new(self)
-    }
-}
-
-pub struct SearchBuilder<'a> {
-    db: &'a mut ResultsDB,
-    n: Option<usize>,
-    f: Option<usize>,
-    protocol: Option<Protocol>,
-    clients_per_region: Option<usize>,
-    key_gen: Option<KeyGen>,
-    keys_per_command: Option<usize>,
-    payload_size: Option<usize>,
-}
-
-impl<'a> SearchBuilder<'a> {
-    fn new(db: &'a mut ResultsDB) -> Self {
-        Self {
-            db,
-            n: None,
-            f: None,
-            protocol: None,
-            clients_per_region: None,
-            key_gen: None,
-            keys_per_command: None,
-            payload_size: None,
-        }
-    }
-
-    pub fn n(&mut self, n: usize) -> &mut Self {
-        self.n = Some(n);
-        self
-    }
-
-    pub fn f(&mut self, f: usize) -> &mut Self {
-        self.f = Some(f);
-        self
-    }
-
-    pub fn protocol(&mut self, protocol: Protocol) -> &mut Self {
-        self.protocol = Some(protocol);
-        self
-    }
-
-    pub fn clients_per_region(
+    pub fn find(
         &mut self,
-        clients_per_region: usize,
-    ) -> &mut Self {
-        self.clients_per_region = Some(clients_per_region);
-        self
-    }
-
-    pub fn key_gen(&mut self, key_gen: KeyGen) -> &mut Self {
-        self.key_gen = Some(key_gen);
-        self
-    }
-
-    pub fn keys_per_command(&mut self, keys_per_command: usize) -> &mut Self {
-        self.keys_per_command = Some(keys_per_command);
-        self
-    }
-
-    pub fn payload_size(&mut self, payload_size: usize) -> &mut Self {
-        self.payload_size = Some(payload_size);
-        self
-    }
-
-    pub fn load(&mut self) -> Result<Vec<&ExperimentData>, Report> {
-        let mut results = Vec::new();
-        for data in self.find().map(Self::load_experiment_data) {
-            let data = data.wrap_err("load experiment data")?;
-            results.push(data);
-        }
-        Ok(results)
-    }
-
-    fn find(
-        &mut self,
-    ) -> impl Iterator<
-        Item = &mut (DirEntry, ExperimentConfig, Option<ExperimentData>),
-    > {
-        // let's make the borrow checker happy
-        let n = self.n;
-        let f = self.f;
-        let protocol = self.protocol;
-        let clients_per_region = self.clients_per_region;
-        let key_gen = self.key_gen;
-        let keys_per_command = self.keys_per_command;
-        let payload_size = self.payload_size;
-
+        search: Search,
+    ) -> Result<Vec<&ExperimentData>, Report> {
         // do the search
-        self.db
-            .results
-            .iter_mut()
-            .filter(move |(_, exp_config, _)| {
+        let filtered =
+            self.results.iter_mut().filter(move |(_, exp_config, _)| {
                 // filter out configurations with different n (if set)
-                if let Some(n) = n {
+                if let Some(n) = search.n {
                     if exp_config.config.n() != n {
                         return false;
                     }
                 }
 
                 // filter out configurations with different f (if set)
-                if let Some(f) = f {
+                if let Some(f) = search.f {
                     if exp_config.config.f() != f {
                         return false;
                     }
                 }
 
                 // filter out configurations with different protocol (if set)
-                if let Some(protocol) = protocol {
+                if let Some(protocol) = search.protocol {
                     if exp_config.protocol != protocol {
                         return false;
                     }
@@ -159,7 +70,7 @@ impl<'a> SearchBuilder<'a> {
 
                 // filter out configurations with different clients_per_region
                 // (if set)
-                if let Some(clients_per_region) = clients_per_region {
+                if let Some(clients_per_region) = search.clients_per_region {
                     if exp_config.clients_per_region != clients_per_region {
                         return false;
                     }
@@ -167,7 +78,7 @@ impl<'a> SearchBuilder<'a> {
 
                 // filter out configurations with different key generator (if
                 // set)
-                if let Some(key_gen) = key_gen {
+                if let Some(key_gen) = search.key_gen {
                     if exp_config.workload.key_gen() != key_gen {
                         return false;
                     }
@@ -175,7 +86,7 @@ impl<'a> SearchBuilder<'a> {
 
                 // filter out configurations with different keys_per_command (if
                 // set)
-                if let Some(keys_per_command) = keys_per_command {
+                if let Some(keys_per_command) = search.keys_per_command {
                     if exp_config.workload.keys_per_command()
                         != keys_per_command
                     {
@@ -185,7 +96,7 @@ impl<'a> SearchBuilder<'a> {
 
                 // filter out configurations with different payload_size (if
                 // set)
-                if let Some(payload_size) = payload_size {
+                if let Some(payload_size) = search.payload_size {
                     if exp_config.workload.payload_size() != payload_size {
                         return false;
                     }
@@ -194,7 +105,14 @@ impl<'a> SearchBuilder<'a> {
                 // if this exp config was not filtered-out until now, then
                 // return it
                 true
-            })
+            });
+
+        let mut results = Vec::new();
+        for data in filtered.map(Self::load_experiment_data) {
+            let data = data.wrap_err("load experiment data")?;
+            results.push(data);
+        }
+        Ok(results)
     }
 
     fn load_experiment_data(
@@ -287,6 +205,68 @@ impl<'a> SearchBuilder<'a> {
             global.merge(client_data);
         }
         global
+    }
+}
+
+pub struct Search {
+    n: Option<usize>,
+    f: Option<usize>,
+    protocol: Option<Protocol>,
+    clients_per_region: Option<usize>,
+    key_gen: Option<KeyGen>,
+    keys_per_command: Option<usize>,
+    payload_size: Option<usize>,
+}
+
+impl Search {
+    pub fn new() -> Self {
+        Self {
+            n: None,
+            f: None,
+            protocol: None,
+            clients_per_region: None,
+            key_gen: None,
+            keys_per_command: None,
+            payload_size: None,
+        }
+    }
+
+    pub fn n(&mut self, n: usize) -> &mut Self {
+        self.n = Some(n);
+        self
+    }
+
+    pub fn f(&mut self, f: usize) -> &mut Self {
+        self.f = Some(f);
+        self
+    }
+
+    pub fn protocol(&mut self, protocol: Protocol) -> &mut Self {
+        self.protocol = Some(protocol);
+        self
+    }
+
+    pub fn clients_per_region(
+        &mut self,
+        clients_per_region: usize,
+    ) -> &mut Self {
+        self.clients_per_region = Some(clients_per_region);
+        self
+    }
+
+    pub fn key_gen(&mut self, key_gen: KeyGen) -> &mut Self {
+        self.key_gen = Some(key_gen);
+        self
+    }
+
+    pub fn keys_per_command(&mut self, keys_per_command: usize) -> &mut Self {
+        self.keys_per_command = Some(keys_per_command);
+        self
+    }
+
+    pub fn payload_size(&mut self, payload_size: usize) -> &mut Self {
+        self.payload_size = Some(payload_size);
+        self
     }
 }
 
