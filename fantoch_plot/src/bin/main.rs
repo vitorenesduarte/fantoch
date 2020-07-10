@@ -10,11 +10,123 @@ const RESULTS_DIR: &str = "../results_multikey";
 
 fn main() -> Result<(), Report> {
     multi_key()?;
-    single_key()?;
+    // single_key()?;
+    // show_distance_matrix();
     Ok(())
 }
 
+#[allow(dead_code)]
 fn multi_key() -> Result<(), Report> {
+    // set global style
+    fantoch_plot::set_global_style()?;
+
+    // fixed parameters
+    let n = 5;
+    let zipf_key_count = 1_000_000;
+    // let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+    let payload_size = 0;
+    let protocols = vec![Protocol::NewtAtomic, Protocol::NewtLocked];
+
+    // load results
+    let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+
+    for clients_per_region in vec![1024, 1024 * 4] {
+        for keys_per_command in vec![1, 2, 4, 8] {
+            for zipf_coefficient in vec![0.25, 0.5, 1.0] {
+                println!(
+                    "n = {} | c = {} | k = {} | zipf = {}",
+                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                );
+
+                // create key generator
+                let key_gen = KeyGen::Zipf {
+                    coefficient: zipf_coefficient,
+                    key_count: zipf_key_count,
+                };
+
+                // create searches
+                let searches: Vec<_> =
+                    protocol_combinations(n, protocols.clone())
+                        .into_iter()
+                        .map(move |(protocol, f)| {
+                            let mut search = Search::new(n, f, protocol);
+                            search
+                                .clients_per_region(clients_per_region)
+                                .key_gen(key_gen)
+                                .keys_per_command(keys_per_command)
+                                .payload_size(payload_size);
+                            search
+                        })
+                        .collect();
+
+                // generate latency plot
+                let mut shown = false;
+                for error_bar in vec![
+                    ErrorBar::Without,
+                    ErrorBar::With(0.99),
+                    ErrorBar::With(0.999),
+                ] {
+                    let suffix = if let ErrorBar::With(percentile) = error_bar {
+                        format!("_p{}", percentile * 100f64)
+                    } else {
+                        String::from("")
+                    };
+                    let path = format!(
+                        "latency_n{}_c{}_k{}_zipf{}{}.pdf",
+                        n,
+                        clients_per_region,
+                        keys_per_command,
+                        zipf_coefficient,
+                        suffix
+                    );
+                    let global_metrics = fantoch_plot::latency_plot(
+                        searches.clone(),
+                        n,
+                        error_bar,
+                        &path,
+                        &mut db,
+                    )?;
+
+                    if !shown {
+                        // only show global metrics once
+                        for ((protocol, f), histogram) in global_metrics {
+                            println!(
+                                "{:<6} f = {} | {:?}",
+                                PlotFmt::protocol_name(protocol),
+                                f,
+                                histogram
+                            );
+                        }
+                        shown = true;
+                    }
+                }
+
+                // generate cdf plot
+                let path = format!(
+                    "cdf_n{}_c{}_k{}_zipf{}.pdf",
+                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                );
+                fantoch_plot::cdf_plot(searches.clone(), &path, &mut db)?;
+
+                if n > 3 {
+                    // generate cdf plot with subplots
+                    let path = format!(
+                        "cdf_one_per_f_n{}_c{}_k{}_zipf{}.pdf",
+                        n,
+                        clients_per_region,
+                        keys_per_command,
+                        zipf_coefficient
+                    );
+                    fantoch_plot::cdf_plot_per_f(
+                        searches.clone(),
+                        &path,
+                        &mut db,
+                    )?;
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -26,8 +138,6 @@ fn single_key() -> Result<(), Report> {
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
     let payload_size = 4096;
-
-    // create protocol combinations
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::AtlasLocked,
@@ -162,6 +272,11 @@ fn single_key() -> Result<(), Report> {
         }
     }
 
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn show_distance_matrix() {
     // show distance matrix
     let planet = Planet::from("../latency_aws/");
     let regions = vec![
@@ -172,8 +287,6 @@ fn single_key() -> Result<(), Report> {
         Region::new("sa-east-1"),
     ];
     println!("{}", planet.distance_matrix(regions).unwrap());
-
-    Ok(())
 }
 
 fn protocol_combinations(

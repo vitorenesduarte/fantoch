@@ -108,7 +108,7 @@ async fn main() -> Result<(), Report> {
         (Protocol::NewtLocked, config!(n, 2, false, None, false)),
     ];
 
-    let clients_per_region = vec![1024];
+    let clients_per_region = vec![1024, 1024 * 4];
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
