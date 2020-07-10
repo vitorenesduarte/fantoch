@@ -129,10 +129,15 @@ fn newt_real_time(aws: bool) {
 
                 // clients workload
                 let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+                let keys_per_command = 1;
                 let total_commands = 500;
                 let payload_size = 0;
-                let workload =
-                    Workload::new(key_gen, total_commands, payload_size);
+                let workload = Workload::new(
+                    key_gen,
+                    keys_per_command,
+                    total_commands,
+                    payload_size,
+                );
 
                 // process regions, client regions and planet
                 let process_regions = regions.clone();
@@ -199,9 +204,11 @@ fn equidistant<P: Protocol>(protocol_name: &str) {
 
     // clients workload
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let keys_per_command = 1;
     let total_commands = 500;
     let payload_size = 0;
-    let workload = Workload::new(key_gen, total_commands, payload_size);
+    let workload =
+        Workload::new(key_gen, keys_per_command, total_commands, payload_size);
 
     for &(n, f) in &configs {
         // create planet and regions
@@ -260,9 +267,11 @@ fn increasing_regions<P: Protocol>(protocol_name: &str) {
 
     // clients workload
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let keys_per_command = 1;
     let total_commands = 500;
     let payload_size = 0;
-    let workload = Workload::new(key_gen, total_commands, payload_size);
+    let workload =
+        Workload::new(key_gen, keys_per_command, total_commands, payload_size);
 
     // clients per region
     let clients_per_region = 1000 / 13;
