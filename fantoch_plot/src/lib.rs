@@ -208,10 +208,6 @@ pub fn latency_plot(
 
 // based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
 pub fn cdf_plot(
-    // n: usize,
-    // clients_per_region: usize,
-    // key_gen: KeyGen,
-    // payload_size: usize,
     searches: Vec<Search>,
     output_file: &str,
     db: &mut ResultsDB,
@@ -228,19 +224,7 @@ pub fn cdf_plot(
     let mut plotted = 0;
 
     for search in searches {
-        inner_cdf_plot(
-            py,
-            &ax,
-            search,
-            // n,
-            // f,
-            // protocol,
-            // clients_per_region,
-            // key_gen,
-            // payload_size,
-            &mut plotted,
-            db,
-        )?;
+        inner_cdf_plot(py, &ax, search, &mut plotted, db)?;
     }
 
     // set cdf plot style
@@ -346,12 +330,6 @@ fn inner_cdf_plot(
     py: Python<'_>,
     ax: &Axes<'_>,
     search: Search,
-    // n: usize,
-    // f: usize,
-    // protocol: Protocol,
-    // clients_per_region: usize,
-    // key_gen: KeyGen,
-    // payload_size: usize,
     plotted: &mut usize,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
