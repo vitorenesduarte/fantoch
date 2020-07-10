@@ -47,25 +47,19 @@ impl ResultsDB {
         // do the search
         let filtered =
             self.results.iter_mut().filter(move |(_, exp_config, _)| {
-                // filter out configurations with different n (if set)
-                if let Some(n) = search.n {
-                    if exp_config.config.n() != n {
-                        return false;
-                    }
+                // filter out configurations with different n
+                if exp_config.config.n() != search.n {
+                    return false;
                 }
 
-                // filter out configurations with different f (if set)
-                if let Some(f) = search.f {
-                    if exp_config.config.f() != f {
-                        return false;
-                    }
+                // filter out configurations with different f
+                if exp_config.config.f() != search.f {
+                    return false;
                 }
 
-                // filter out configurations with different protocol (if set)
-                if let Some(protocol) = search.protocol {
-                    if exp_config.protocol != protocol {
-                        return false;
-                    }
+                // filter out configurations with different protocol
+                if exp_config.protocol != search.protocol {
+                    return false;
                 }
 
                 // filter out configurations with different clients_per_region
@@ -207,11 +201,11 @@ impl ResultsDB {
         global
     }
 }
-
+#[derive(Clone, Copy)]
 pub struct Search {
-    n: Option<usize>,
-    f: Option<usize>,
-    protocol: Option<Protocol>,
+    pub n: usize,
+    pub f: usize,
+    pub protocol: Protocol,
     clients_per_region: Option<usize>,
     key_gen: Option<KeyGen>,
     keys_per_command: Option<usize>,
@@ -219,31 +213,16 @@ pub struct Search {
 }
 
 impl Search {
-    pub fn new() -> Self {
+    pub fn new(n: usize, f: usize, protocol: Protocol) -> Self {
         Self {
-            n: None,
-            f: None,
-            protocol: None,
+            n,
+            f,
+            protocol,
             clients_per_region: None,
             key_gen: None,
             keys_per_command: None,
             payload_size: None,
         }
-    }
-
-    pub fn n(&mut self, n: usize) -> &mut Self {
-        self.n = Some(n);
-        self
-    }
-
-    pub fn f(&mut self, f: usize) -> &mut Self {
-        self.f = Some(f);
-        self
-    }
-
-    pub fn protocol(&mut self, protocol: Protocol) -> &mut Self {
-        self.protocol = Some(protocol);
-        self
     }
 
     pub fn clients_per_region(
