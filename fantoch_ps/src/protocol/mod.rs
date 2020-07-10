@@ -542,7 +542,7 @@ mod tests {
         let key_gen = KeyGen::ConflictRate {
             conflict_rate: CONFLICT_RATE,
         };
-        let keys_per_command = 1;
+        let keys_per_command = 2;
         let workload = Workload::new(
             key_gen,
             keys_per_command,
