@@ -74,7 +74,7 @@ fn parse_args() -> (
             Arg::with_name("key_gen")
                 .long("key_gen")
                 .value_name("KEY_GEN")
-                .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient and 10000 the number of keys in the distribution; default: 'conflict_rate,100'")
+                .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys in the distribution; default: 'conflict_rate,100'")
                 .takes_value(true),
         )
         .arg(
