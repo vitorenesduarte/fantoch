@@ -535,7 +535,7 @@ fn add_legend(
 ) -> Result<(), Report> {
     // default values for `y_bbox_to_anchor`
     let one_row = 1.17;
-    let two_rows = 1.24;
+    let two_rows = 1.255;
 
     let (legend_ncol, y_bbox_to_anchor_default) = match plotted {
         0 => (0, 0.0),

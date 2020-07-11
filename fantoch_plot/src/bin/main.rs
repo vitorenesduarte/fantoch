@@ -34,12 +34,12 @@ fn multi_key() -> Result<(), Report> {
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for clients_per_region in vec![256, 1024, 1024 * 4] {
-        for keys_per_command in vec![1, 2, 4, 8] {
+    for keys_per_command in vec![1, 2, 4, 8] {
+        for clients_per_region in vec![256, 1024, 1024 * 4] {
             for zipf_coefficient in vec![0.25, 0.5, 1.0] {
                 println!(
-                    "n = {} | c = {} | k = {} | zipf = {}",
-                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                    "n = {} | k = {} | c = {} | zipf = {}",
+                    n, keys_per_command, clients_per_region, zipf_coefficient,
                 );
 
                 // create key generator
@@ -95,7 +95,7 @@ fn multi_key() -> Result<(), Report> {
                         // only show global metrics once
                         for ((protocol, f), histogram) in global_metrics {
                             println!(
-                                "{:<6} f = {} | {:?}",
+                                "{:<7} f = {} | {:?}",
                                 PlotFmt::protocol_name(protocol),
                                 f,
                                 histogram
@@ -211,7 +211,7 @@ fn single_key() -> Result<(), Report> {
                     // only show global metrics once
                     for ((protocol, f), histogram) in global_metrics {
                         println!(
-                            "{:<6} f = {} | {:?}",
+                            "{:<7} f = {} | {:?}",
                             PlotFmt::protocol_name(protocol),
                             f,
                             histogram
