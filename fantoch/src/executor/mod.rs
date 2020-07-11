@@ -15,7 +15,7 @@ use crate::id::{ClientId, ProcessId, Rifl};
 use crate::kvs::{KVOpResult, Key};
 use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 
 pub trait Executor: Clone {
@@ -45,7 +45,7 @@ pub trait Executor: Clone {
 
 pub type ExecutorMetrics = Metrics<ExecutorMetricsKind, u64>;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutorMetricsKind {
     ChainSize,
     ExecutionDelay,

@@ -30,7 +30,7 @@ use crate::metrics::Metrics;
 use crate::time::SysTime;
 use crate::HashSet;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::time::Duration;
 
@@ -93,7 +93,7 @@ pub trait Protocol: Debug + Clone {
 
 pub type ProtocolMetrics = Metrics<ProtocolMetricsKind, u64>;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolMetricsKind {
     FastPath,
     SlowPath,

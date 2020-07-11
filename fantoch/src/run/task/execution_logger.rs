@@ -5,12 +5,12 @@ use crate::run::rw::Rw;
 use tokio::fs::File;
 use tokio::time::{self, Duration};
 
-const EXECUTION_LOGGER_FLUSH_INTERVAL: u64 = 1000; // flush every second
+const EXECUTION_LOGGER_FLUSH_INTERVAL: Duration = Duration::from_secs(1); // flush every second
 const EXECUTION_LOGGER_BUFFER_SIZE: usize = 8 * 1024; // 8KB
 
 pub async fn execution_logger_task<P>(
     execution_log: String,
-    mut from_workers: ExecutionInfoReceiver<P>,
+    mut from_executors: ExecutionInfoReceiver<P>,
 ) where
     P: Protocol,
 {
@@ -29,12 +29,11 @@ pub async fn execution_logger_task<P>(
     );
 
     // create interval
-    let mut interval =
-        time::interval(Duration::from_millis(EXECUTION_LOGGER_FLUSH_INTERVAL));
+    let mut interval = time::interval(EXECUTION_LOGGER_FLUSH_INTERVAL);
 
     loop {
         tokio::select! {
-            execution_info = from_workers.recv() => {
+            execution_info = from_executors.recv() => {
                 log!("[executor_logger] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     // write execution info to file
