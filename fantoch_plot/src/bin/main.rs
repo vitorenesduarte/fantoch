@@ -25,7 +25,11 @@ fn multi_key() -> Result<(), Report> {
     let zipf_key_count = 1_000_000;
     // let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
     let payload_size = 0;
-    let protocols = vec![Protocol::NewtAtomic, Protocol::NewtLocked];
+    let protocols = vec![
+        Protocol::NewtAtomic,
+        Protocol::NewtLocked,
+        Protocol::NewtFineLocked,
+    ];
 
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;

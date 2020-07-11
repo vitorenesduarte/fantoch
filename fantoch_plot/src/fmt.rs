@@ -44,8 +44,8 @@ impl PlotFmt {
             (Protocol::NewtAtomic, 2) => "#e65100",
             (Protocol::NewtLocked, 1) => "#3498db",
             (Protocol::NewtLocked, 2) => "#2980b9",
-            (Protocol::NewtFineLocked, 1) => "",
-            (Protocol::NewtFineLocked, 2) => "",
+            (Protocol::NewtFineLocked, 1) => "#111111",
+            (Protocol::NewtFineLocked, 2) => "#333333",
             (Protocol::Basic, _) => "",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",

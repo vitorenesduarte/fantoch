@@ -297,7 +297,7 @@ pub fn cdf_plot_per_f(
         }
 
         // specific pull-up for this kind of plot
-        let y_bbox_to_anchor = Some(1.37);
+        let y_bbox_to_anchor = Some(1.41);
         // legend
         add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
 
