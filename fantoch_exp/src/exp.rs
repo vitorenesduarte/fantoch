@@ -11,7 +11,7 @@ use std::pin::Pin;
 
 /// This script should be called like: $ bash script branch
 /// - branch: which `fantoch` branch to build
-const SETUP_SCRIPT: &str = "./../exp/files/build.sh";
+const SETUP_SCRIPT: &str = "exp_files/build.sh";
 
 pub struct Machines<'a> {
     regions: HashMap<Region, ProcessId>,

@@ -6,7 +6,7 @@ use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use std::collections::HashMap;
 
-const MACHINES: &str = "./../exp/files/machines";
+const MACHINES: &str = "exp_files/machines";
 const PRIVATE_KEY: &str = "~/.ssh/id_rsa";
 
 pub async fn setup<'a>(
