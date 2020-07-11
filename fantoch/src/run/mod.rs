@@ -293,7 +293,7 @@ where
         executors,
     );
 
-    // start listener
+    // start client listener
     task::client::start_listener(
         process_id,
         client_listener,
@@ -303,6 +303,26 @@ where
         tcp_nodelay,
         channel_buffer_size,
     );
+
+    // maybe create metrics logger
+    let (worker_to_metrics_logger, executor_to_metrics_logger) =
+        if let Some(metrics_file) = metrics_file {
+            let (worker_to_metrics_logger, from_workers) =
+                task::channel(channel_buffer_size);
+            let (executor_to_metrics_logger, from_executors) =
+                task::channel(channel_buffer_size);
+            task::spawn(task::metrics_logger::metrics_logger_task(
+                metrics_file,
+                from_workers,
+                from_executors,
+            ));
+            (
+                Some(worker_to_metrics_logger),
+                Some(executor_to_metrics_logger),
+            )
+        } else {
+            (None, None)
+        };
 
     // create forward channels: worker -> executors
     let (worker_to_executors, worker_to_executors_rxs) =
@@ -319,6 +339,7 @@ where
         executors,
         worker_to_executors_rxs,
         client_to_executors_rxs,
+        executor_to_metrics_logger,
     );
 
     // start process workers
@@ -336,6 +357,7 @@ where
         worker_to_executors,
         channel_buffer_size,
         execution_log,
+        worker_to_metrics_logger,
     );
     println!("process {} started", process_id);
 

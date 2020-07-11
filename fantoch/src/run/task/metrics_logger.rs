@@ -1,6 +1,6 @@
 use crate::executor::ExecutorMetrics;
 use crate::log;
-use crate::protocol::{Protocol, ProtocolMetrics};
+use crate::protocol::ProtocolMetrics;
 use crate::run::prelude::*;
 use crate::run::rw::Rw;
 use crate::HashMap;
@@ -26,14 +26,12 @@ impl ProcessMetrics {
     }
 }
 
-pub async fn metrics_logger_task<P>(
-    metrics_log: String,
+pub async fn metrics_logger_task(
+    metrics_file: String,
     mut from_workers: ProtocolMetricsReceiver,
     mut from_executors: ExecutorMetricsReceiver,
-) where
-    P: Protocol,
-{
-    println!("[metrics_logger] started with log {}", metrics_log);
+) {
+    println!("[metrics_logger] started with log {}", metrics_file);
 
     // create metrics
     let mut global_metrics = ProcessMetrics::new();
@@ -63,9 +61,9 @@ pub async fn metrics_logger_task<P>(
             }
             _ = interval.tick()  => {
                 // create metrics log file (truncating it if already exists)
-                let file = File::create(&metrics_log)
+                let file = File::create(&metrics_file)
                     .await
-                    .expect("it should be possible to create execution log file");
+                    .expect("it should be possible to create metrics log file");
 
                 // create file logger
                 let mut logger =
