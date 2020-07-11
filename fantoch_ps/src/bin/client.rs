@@ -116,7 +116,7 @@ fn parse_args() -> (
             Arg::with_name("metrics_file")
                 .long("metrics_file")
                 .value_name("METRICS_FILE")
-                .help("file in which metrics written to; by default metrics are not logged")
+                .help("file in which metrics are written to; by default metrics are not logged")
                 .takes_value(true),
         )
         .get_matches();
