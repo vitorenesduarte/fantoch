@@ -38,26 +38,22 @@ impl KeyClocks for AtomicKeyClocks {
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
         //   necessarily end up with all key clocks equal
+        // OPTIMIZATION: keep track of the highest bumped-to value; if we have
+        // to iterate in a way that the highest clock is iterated first, this
+        // will be almost equivalent to `LockedKeyClocks`
         let mut votes = Votes::with_capacity(cmd.key_count());
-        let highest = cmd
-            .keys()
-            .map(|key| {
-                // bump the `key` clock
-                let clock = self.clocks.get(key);
-                let previous_value = Self::bump(&clock, min_clock);
+        let mut up_to = min_clock;
+        cmd.keys().for_each(|key| {
+            // bump the `key` clock
+            let clock = self.clocks.get(key);
+            let previous_value = Self::bump(&clock, up_to);
 
-                // create vote range and save it
-                let current_value = cmp::max(min_clock, previous_value + 1);
-                let vr =
-                    VoteRange::new(self.id, previous_value + 1, current_value);
-                votes.set(key.clone(), vec![vr]);
-
-                // return "current" clock value
-                current_value
-            })
-            .max()
-            .expect("there should be a maximum sequence");
-        (highest, votes)
+            // create vote range and save it
+            up_to = cmp::max(up_to, previous_value + 1);
+            let vr = VoteRange::new(self.id, previous_value + 1, up_to);
+            votes.set(key.clone(), vec![vr]);
+        });
+        (up_to, votes)
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
