@@ -24,6 +24,7 @@ impl PlotFmt {
             Protocol::FPaxos => "FPaxos",
             Protocol::NewtAtomic => "Newt-A",
             Protocol::NewtLocked => "Newt-L",
+            Protocol::NewtFineLocked => "Newt-AL",
             Protocol::Basic => "Basic",
         }
     }
@@ -43,6 +44,8 @@ impl PlotFmt {
             (Protocol::NewtAtomic, 2) => "#e65100",
             (Protocol::NewtLocked, 1) => "#3498db",
             (Protocol::NewtLocked, 2) => "#2980b9",
+            (Protocol::NewtFineLocked, 1) => "",
+            (Protocol::NewtFineLocked, 2) => "",
             (Protocol::Basic, _) => "",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
@@ -63,8 +66,10 @@ impl PlotFmt {
             (Protocol::NewtAtomic, 2) => "\\\\\\\\",
             (Protocol::NewtLocked, 1) => "/////", // 5
             (Protocol::NewtLocked, 2) => "\\\\\\\\\\",
-            (Protocol::Basic, 1) => "//////", // 6 
-            (Protocol::Basic, 2) => "\\\\\\\\\\\\",
+            (Protocol::NewtFineLocked, 1) => "//////", // 6
+            (Protocol::NewtFineLocked, 2) => "\\\\\\\\\\\\",
+            (Protocol::Basic, 1) => "///////", // 7
+            (Protocol::Basic, 2) => "\\\\\\\\\\\\\\",
             _ => panic!(
                 "PlotFmt::hatch: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -84,6 +89,8 @@ impl PlotFmt {
             (Protocol::NewtAtomic, 2) => "^",
             (Protocol::NewtLocked, 1) => ">",
             (Protocol::NewtLocked, 2) => "<",
+            (Protocol::NewtFineLocked, 1) => "p",
+            (Protocol::NewtFineLocked, 2) => "P",
             (Protocol::Basic, 1) => "|",
             (Protocol::Basic, 2) => "_",
             _ => panic!(
@@ -101,6 +108,7 @@ impl PlotFmt {
             (Protocol::FPaxos, _) => "-.",
             (Protocol::NewtAtomic, _) => "-",
             (Protocol::NewtLocked, _) => "-",
+            (Protocol::NewtFineLocked, _) => "-",
             (Protocol::Basic, _) => "",
         }
     }

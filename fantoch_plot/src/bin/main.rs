@@ -30,7 +30,7 @@ fn multi_key() -> Result<(), Report> {
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for clients_per_region in vec![1024, 1024 * 4] {
+    for clients_per_region in vec![256, 1024, 1024 * 4] {
         for keys_per_command in vec![1, 2, 4, 8] {
             for zipf_coefficient in vec![0.25, 0.5, 1.0] {
                 println!(

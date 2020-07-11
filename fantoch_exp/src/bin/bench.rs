@@ -31,7 +31,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "multi-put";
+const BRANCH: &str = "master";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
@@ -108,12 +108,12 @@ async fn main() -> Result<(), Report> {
         (Protocol::NewtLocked, config!(n, 2, false, None, false)),
     ];
 
-    let clients_per_region = vec![1024, 1024 * 4];
+    let clients_per_region = vec![256, 1024, 4 * 1024];
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
     for keys_per_command in vec![1, 2, 4, 8] {
-        for coefficient in vec![0.25, 0.5, 1.0] {
+        for coefficient in vec![0.75, 1.25] {
             let workload = Workload::new(
                 KeyGen::Zipf {
                     coefficient,

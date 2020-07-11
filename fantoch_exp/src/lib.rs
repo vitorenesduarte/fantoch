@@ -77,6 +77,7 @@ pub enum Protocol {
     FPaxos,
     NewtAtomic,
     NewtLocked,
+    NewtFineLocked,
     Basic,
 }
 
@@ -88,6 +89,7 @@ impl Protocol {
             Protocol::FPaxos => "fpaxos",
             Protocol::NewtAtomic => "newt_atomic",
             Protocol::NewtLocked => "newt_locked",
+            Protocol::NewtFineLocked => "newt_fine_locked",
             Protocol::Basic => "basic",
         }
     }
