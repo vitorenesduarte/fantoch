@@ -9,18 +9,19 @@ pub use float::F64;
 pub use histogram::{Histogram, Stats};
 
 use crate::HashMap;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::Hash;
 
-#[derive(Clone)]
-pub struct Metrics<K, V> {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Metrics<K: Eq + Hash, V> {
     collected: HashMap<K, Histogram>,
     aggregated: HashMap<K, V>,
 }
 
 impl<K, V> Metrics<K, V>
 where
-    K: Hash + Eq,
+    K: Eq + Hash,
     V: Default,
 {
     #[allow(clippy::new_without_default)]
@@ -61,7 +62,7 @@ where
 
 impl<K, V> fmt::Debug for Metrics<K, V>
 where
-    K: fmt::Debug,
+    K: Eq + Hash + fmt::Debug,
     V: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

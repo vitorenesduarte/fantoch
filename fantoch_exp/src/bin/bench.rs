@@ -102,10 +102,10 @@ async fn main() -> Result<(), Report> {
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::NewtLocked, config!(n, 1, false, None, false)),
-        // (Protocol::NewtLocked, config!(n, 2, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::NewtLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtLocked, config!(n, 2, false, None, false)),
         (Protocol::NewtFineLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtFineLocked, config!(n, 2, false, None, false)),
     ];

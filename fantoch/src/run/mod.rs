@@ -117,6 +117,7 @@ pub async fn process<P, A>(
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
     ping_interval: Option<usize>,
+    metrics_file: Option<String>,
 ) -> RunResult<()>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
@@ -143,6 +144,7 @@ where
         execution_log,
         tracer_show_interval,
         ping_interval,
+        metrics_file,
         semaphore,
         None,
     )
@@ -168,6 +170,7 @@ async fn process_with_notify_and_inspect<P, A, R>(
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
     ping_interval: Option<usize>,
+    metrics_file: Option<String>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
 ) -> RunResult<()>
@@ -290,7 +293,7 @@ where
         executors,
     );
 
-    // start listener
+    // start client listener
     task::client::start_listener(
         process_id,
         client_listener,
@@ -300,6 +303,26 @@ where
         tcp_nodelay,
         channel_buffer_size,
     );
+
+    // maybe create metrics logger
+    let (worker_to_metrics_logger, executor_to_metrics_logger) =
+        if let Some(metrics_file) = metrics_file {
+            let (worker_to_metrics_logger, from_workers) =
+                task::channel(channel_buffer_size);
+            let (executor_to_metrics_logger, from_executors) =
+                task::channel(channel_buffer_size);
+            task::spawn(task::metrics_logger::metrics_logger_task(
+                metrics_file,
+                from_workers,
+                from_executors,
+            ));
+            (
+                Some(worker_to_metrics_logger),
+                Some(executor_to_metrics_logger),
+            )
+        } else {
+            (None, None)
+        };
 
     // create forward channels: worker -> executors
     let (worker_to_executors, worker_to_executors_rxs) =
@@ -316,6 +339,7 @@ where
         executors,
         worker_to_executors_rxs,
         client_to_executors_rxs,
+        executor_to_metrics_logger,
     );
 
     // start process workers
@@ -333,6 +357,7 @@ where
         worker_to_executors,
         channel_buffer_size,
         execution_log,
+        worker_to_metrics_logger,
     );
     println!("process {} started", process_id);
 
@@ -873,6 +898,7 @@ pub mod tests {
             inspect_channels.insert(process_id, inspect_tx);
 
             // spawn processes
+            let metrics_file = format!(".metrics_process_{}", process_id);
             tokio::task::spawn_local(process_with_notify_and_inspect::<
                 P,
                 String,
@@ -895,6 +921,7 @@ pub mod tests {
                 execution_log,
                 tracer_show_interval,
                 ping_interval,
+                Some(metrics_file),
                 semaphore.clone(),
                 Some(inspect),
             ));

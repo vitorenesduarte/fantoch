@@ -65,6 +65,7 @@ pub struct ProtocolConfig {
     execution_log: Option<String>,
     tracer_show_interval: Option<usize>,
     ping_interval: Option<usize>,
+    metrics_file: String,
 }
 
 #[cfg(feature = "exp")]
@@ -75,6 +76,7 @@ impl ProtocolConfig {
         mut config: Config,
         sorted: Option<Vec<ProcessId>>,
         ips: Vec<(String, Option<usize>)>,
+        metrics_file: &str,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -94,6 +96,7 @@ impl ProtocolConfig {
             execution_log: EXECUTION_LOG,
             tracer_show_interval: TRACER_SHOW_INTERVAL,
             ping_interval: PING_INTERVAL,
+            metrics_file: metrics_file.to_string(),
         }
     }
 
@@ -177,6 +180,7 @@ impl ProtocolConfig {
         if let Some(interval) = self.ping_interval {
             args.extend(args!["--ping_interval", interval]);
         }
+        args.extend(args!["--metrics_file", self.metrics_file]);
         args
     }
 

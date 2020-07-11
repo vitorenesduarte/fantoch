@@ -337,6 +337,7 @@ pub fn start_processes<P, R>(
     worker_to_executors: WorkerToExecutors<P>,
     channel_buffer_size: usize,
     execution_log: Option<String>,
+    to_metrics_logger: Option<ProtocolMetricsSender>,
 ) -> Vec<JoinHandle<()>>
 where
     P: Protocol + Send + 'static,
@@ -387,6 +388,7 @@ where
                     reader_to_workers.clone(),
                     worker_to_executors.clone(),
                     to_execution_logger.clone(),
+                    to_metrics_logger.clone(),
                 );
                 task::spawn(task)
                 // // if this is a reserved worker, run it on its own runtime
@@ -423,12 +425,17 @@ async fn process_task<P, R>(
     mut reader_to_workers: ReaderToWorkers<P>,
     mut worker_to_executors: WorkerToExecutors<P>,
     mut to_execution_logger: Option<ExecutionInfoSender<P>>,
+    mut to_metrics_logger: Option<ProtocolMetricsSender>,
 ) where
     P: Protocol + 'static,
     R: Debug + 'static,
 {
     // create time
     let time = RunTime;
+
+    // create interval (for metrics notification)
+    let mut interval = time::interval(super::metrics_logger::METRICS_INTERVAL);
+
     loop {
         // TODO maybe used select_biased
         tokio::select! {
@@ -440,6 +447,15 @@ async fn process_task<P, R>(
             }
             cmd = from_clients.recv() => {
                 selected_from_client(worker_index, process_id, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &time).await
+            }
+            _ = interval.tick()  => {
+                if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
+                    // send metrics to logger (in case there's one)
+                    let protocol_metrics = process.metrics().clone();
+                    if let Err(e) = to_metrics_logger.send((worker_index, protocol_metrics)).await {
+                        println!("[server] error while sending metrics to metrics logger: {:?}", e);
+                    }
+                }
             }
         }
     }

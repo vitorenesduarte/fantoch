@@ -28,6 +28,27 @@ const DEFAULT_SKIP_FAST_ACK: bool = false;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+type ProtocolArgs = (
+    ProcessId,
+    Option<Vec<ProcessId>>,
+    IpAddr,
+    u16,
+    u16,
+    Vec<(String, Option<usize>)>,
+    Config,
+    bool,
+    usize,
+    Option<usize>,
+    usize,
+    usize,
+    usize,
+    usize,
+    Option<String>,
+    Option<usize>,
+    Option<usize>,
+    Option<String>,
+);
+
 #[allow(dead_code)]
 pub fn run<P>() -> Result<(), Box<dyn Error>>
 where
@@ -51,6 +72,7 @@ where
         execution_log,
         tracer_show_interval,
         ping_interval,
+        metrics_file,
     ) = parse_args();
 
     let process = fantoch::run::process::<P, String>(
@@ -71,29 +93,12 @@ where
         execution_log,
         tracer_show_interval,
         ping_interval,
+        metrics_file,
     );
     super::tokio_runtime().block_on(process)
 }
 
-fn parse_args() -> (
-    ProcessId,
-    Option<Vec<ProcessId>>,
-    IpAddr,
-    u16,
-    u16,
-    Vec<(String, Option<usize>)>,
-    Config,
-    bool,
-    usize,
-    Option<usize>,
-    usize,
-    usize,
-    usize,
-    usize,
-    Option<String>,
-    Option<usize>,
-    Option<usize>,
-) {
+fn parse_args() -> ProtocolArgs {
     let matches = App::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -279,6 +284,13 @@ fn parse_args() -> (
                 .help("number indicating the interval (in milliseconds) between pings between processes; by default there's no pinging; if set, this value should be > 0")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("metrics_file")
+                .long("metrics_file")
+                .value_name("METRICS_FILE")
+                .help("file in which metrics are (periodically, every 5s) written to; by default metrics are not logged")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -320,6 +332,7 @@ fn parse_args() -> (
     let tracer_show_interval =
         parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
     let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
+    let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
 
     println!("process id: {}", process_id);
     println!("sorted processes: {:?}", sorted_processes);
@@ -338,6 +351,7 @@ fn parse_args() -> (
     println!("execution log: {:?}", execution_log);
     println!("trace_show_interval: {:?}", tracer_show_interval);
     println!("ping_interval: {:?}", ping_interval);
+    println!("metrics file: {:?}", metrics_file);
 
     // check that the number of sorted processes equals `n` (if it was set)
     if let Some(sorted_processes) = &sorted_processes {
@@ -365,6 +379,7 @@ fn parse_args() -> (
         execution_log,
         tracer_show_interval,
         ping_interval,
+        metrics_file,
     )
 }
 
@@ -582,4 +597,8 @@ fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
             .parse::<usize>()
             .expect("ping_interval should be a number")
     })
+}
+
+pub fn parse_metrics_file(metrics_file: Option<&str>) -> Option<String> {
+    metrics_file.map(String::from)
 }

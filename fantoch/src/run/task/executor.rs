@@ -6,6 +6,7 @@ use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::HashMap;
+use tokio::time;
 
 /// Starts executors.
 pub fn start_executors<P>(
@@ -14,6 +15,7 @@ pub fn start_executors<P>(
     executors: usize,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientReceiver>,
+    to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
 {
@@ -23,23 +25,27 @@ pub fn start_executors<P>(
         .zip(client_to_executors_rxs.into_iter());
 
     // create executor workers
-    for (from_workers, from_clients) in incoming {
+    for (executor_index, (from_workers, from_clients)) in incoming.enumerate() {
         task::spawn(executor_task::<P>(
+            executor_index,
             process_id,
             config,
             executors,
             from_workers,
             from_clients,
+            to_metrics_logger.clone(),
         ));
     }
 }
 
 async fn executor_task<P>(
+    executor_index: usize,
     process_id: ProcessId,
     config: Config,
     executors: usize,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientReceiver,
+    mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol,
 {
@@ -50,6 +56,9 @@ async fn executor_task<P>(
     let mut client_rifl_acks = HashMap::new();
     // mapping from client id to its executor results channel
     let mut client_executor_results = HashMap::new();
+
+    // create interval (for metrics notification)
+    let mut interval = time::interval(super::metrics_logger::METRICS_INTERVAL);
 
     loop {
         tokio::select! {
@@ -67,6 +76,15 @@ async fn executor_task<P>(
                     handle_from_client::<P>(from_client, &mut executor, &mut client_rifl_acks, &mut client_executor_results).await;
                 } else {
                     println!("[executor] error while receiving new command from clients");
+                }
+            }
+            _ = interval.tick()  => {
+                if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
+                    // send metrics to logger (in case there's one)
+                    let executor_metrics = executor.metrics().clone();
+                    if let Err(e) = to_metrics_logger.send((executor_index, executor_metrics)).await {
+                        println!("[executor] error while sending metrics to metrics logger: {:?}", e);
+                    }
                 }
             }
         }

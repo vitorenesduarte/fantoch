@@ -126,12 +126,12 @@ async fn baremetal_setup(
     Ok(setup)
 }
 
-async fn baremetal_launch<'a>(
-    launcher: &'a mut tsunami::providers::baremetal::Machine,
+async fn baremetal_launch(
+    launcher: &mut tsunami::providers::baremetal::Machine,
     region: String,
     tag: String,
     setup: tsunami::providers::baremetal::Setup,
-) -> Result<tsunami::Machine<'a>, Report> {
+) -> Result<tsunami::Machine<'_>, Report> {
     // create launch descriptor
     let nickname = super::to_nickname(&tag, &region);
     let descriptor = tsunami::providers::LaunchDescriptor {

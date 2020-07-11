@@ -1,10 +1,12 @@
 use super::pool;
 use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
-use crate::executor::{Executor, ExecutorResult, MessageKey};
+use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
 use crate::id::{ClientId, Dot, ProcessId, Rifl};
 use crate::kvs::Key;
-use crate::protocol::{MessageIndex, PeriodicEventIndex, Protocol};
+use crate::protocol::{
+    MessageIndex, PeriodicEventIndex, Protocol, ProtocolMetrics,
+};
 use crate::util;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -81,6 +83,10 @@ pub type InspectReceiver<P, R> = ChannelReceiver<InspectFun<P, R>>;
 pub type SortedProcessesSender = ChannelSender<ChannelSender<Vec<ProcessId>>>;
 pub type SortedProcessesReceiver =
     ChannelReceiver<ChannelSender<Vec<ProcessId>>>;
+pub type ProtocolMetricsReceiver = ChannelReceiver<(usize, ProtocolMetrics)>;
+pub type ProtocolMetricsSender = ChannelSender<(usize, ProtocolMetrics)>;
+pub type ExecutorMetricsReceiver = ChannelReceiver<(usize, ExecutorMetrics)>;
+pub type ExecutorMetricsSender = ChannelSender<(usize, ExecutorMetrics)>;
 
 // 1. workers receive messages from clients
 pub type ClientToWorkers = pool::ToPool<(Option<Dot>, Command)>;
