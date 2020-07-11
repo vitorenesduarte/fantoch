@@ -181,8 +181,14 @@ async fn start_processes(
             .collect();
 
         // create protocol config and generate args
-        let mut protocol_config =
-            ProtocolConfig::new(protocol, process_id, config, sorted, ips);
+        let mut protocol_config = ProtocolConfig::new(
+            protocol,
+            process_id,
+            config,
+            sorted,
+            ips,
+            METRICS_FILE,
+        );
         if let Some(interval) = tracer_show_interval {
             protocol_config.set_tracer_show_interval(interval);
         }
@@ -557,24 +563,10 @@ async fn pull_metrics(
 
     let mut pulls = Vec::with_capacity(machines.vm_count());
     for (region, vm) in machines.servers() {
-        let pull_metrics = false;
-        pulls.push(pull_metrics_files(
-            "server",
-            region,
-            vm,
-            &exp_dir,
-            pull_metrics,
-        ));
+        pulls.push(pull_metrics_files("server", region, vm, &exp_dir));
     }
     for (region, vm) in machines.clients() {
-        let pull_metrics = true;
-        pulls.push(pull_metrics_files(
-            "client",
-            region,
-            vm,
-            &exp_dir,
-            pull_metrics,
-        ));
+        pulls.push(pull_metrics_files("client", region, vm, &exp_dir));
     }
 
     // pull all metrics in parallel
@@ -616,7 +608,6 @@ async fn pull_metrics_files(
     region: &Region,
     vm: &tsunami::Machine<'_>,
     exp_dir: &str,
-    pull_metrics: bool,
 ) -> Result<(), Report> {
     // pull log file and remove it
     let local_path = format!("{}/{}_{:?}.log", exp_dir, tag, region);
@@ -630,20 +621,15 @@ async fn pull_metrics_files(
         .await
         .wrap_err("copy dstat")?;
 
+    // pull metrics file and remove it
+    let local_path =
+        format!("{}/{}_{:?}_metrics.bincode", exp_dir, tag, region);
+    util::copy_from((METRICS_FILE, vm), local_path)
+        .await
+        .wrap_err("copy metrics")?;
+
     // files to be removed
-    let mut to_remove = format!("rm {} {}", LOG_FILE, DSTAT_FILE);
-
-    if pull_metrics {
-        // pull metrics file and remove it
-        let local_path =
-            format!("{}/{}_{:?}_metrics.bincode", exp_dir, tag, region);
-        util::copy_from((METRICS_FILE, vm), local_path)
-            .await
-            .wrap_err("copy metrics")?;
-
-        // also remove metrics file
-        to_remove = format!("{} {}", to_remove, METRICS_FILE);
-    }
+    let to_remove = format!("rm {} {} {}", LOG_FILE, DSTAT_FILE, METRICS_FILE);
 
     // remove files
     util::vm_exec(vm, to_remove)
