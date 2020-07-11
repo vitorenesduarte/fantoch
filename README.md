@@ -12,7 +12,6 @@
 
 Next:
 - Mencius: a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
-- Caesar
 
 #### What does it do?
 

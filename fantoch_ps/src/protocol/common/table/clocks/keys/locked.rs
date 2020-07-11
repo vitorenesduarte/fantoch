@@ -12,30 +12,33 @@ use std::sync::Arc;
 
 // all clock's are protected by a mutex
 type Clock = Mutex<u64>;
+type Clocks = Arc<Shared<Clock>>;
 
+/// `bump_and_vote` grabs all locks before any change
 #[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
     id: ProcessId,
-    clocks: Arc<Shared<Clock>>,
+    clocks: Clocks,
+}
+
+/// `bump_and_vote` grabs one lock at a time
+#[derive(Debug, Clone)]
+pub struct FineLockedKeyClocks {
+    id: ProcessId,
+    clocks: Clocks,
 }
 
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
     fn new(id: ProcessId) -> Self {
-        // create shared clocks
-        let clocks = Shared::new();
-        // wrap them in an arc
-        let clocks = Arc::new(clocks);
-
-        Self { id, clocks }
+        Self {
+            id,
+            clocks: common::new(),
+        }
     }
 
     fn init_clocks(&mut self, cmd: &Command) {
-        cmd.keys().for_each(|key| {
-            // get initializes the key to the default value, and that's exactly
-            // what we want
-            let _ = self.clocks.get(key);
-        })
+        common::init_clocks(&self.clocks, cmd)
     }
 
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
@@ -68,7 +71,7 @@ impl KeyClocks for LockedKeyClocks {
         for entry in locks.iter().zip(guards.into_iter()) {
             let (key, _key_lock) = entry.0;
             let mut guard = entry.1;
-            Self::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
+            common::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
             // release the lock
             drop(guard);
         }
@@ -76,33 +79,11 @@ impl KeyClocks for LockedKeyClocks {
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        // create votes
-        let mut votes = Votes::with_capacity(cmd.key_count());
-        for key in cmd.keys() {
-            let key_lock = self.clocks.get(key);
-            let mut guard = key_lock.lock();
-            Self::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
-            // release the lock
-            drop(guard);
-        }
-        votes
+        common::vote(self.id, &self.clocks, cmd, up_to)
     }
 
     fn vote_all(&mut self, up_to: u64) -> Votes {
-        let key_count = self.clocks.len();
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
-
-        self.clocks.iter().for_each(|entry| {
-            let key = entry.key();
-            let key_lock = entry.value();
-            let mut guard = key_lock.lock();
-            Self::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
-            // release the lock
-            drop(guard);
-        });
-
-        votes
+        common::vote_all(self.id, &self.clocks, up_to)
     }
 
     fn parallel() -> bool {
@@ -110,8 +91,120 @@ impl KeyClocks for LockedKeyClocks {
     }
 }
 
-impl LockedKeyClocks {
-    fn maybe_bump(
+impl KeyClocks for FineLockedKeyClocks {
+    /// Create a new `FineLockedKeyClocks` instance.
+    fn new(id: ProcessId) -> Self {
+        Self {
+            id,
+            clocks: common::new(),
+        }
+    }
+
+    fn init_clocks(&mut self, cmd: &Command) {
+        common::init_clocks(&self.clocks, cmd)
+    }
+
+    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+        // single round of votes:
+        // - vote on each key and compute the highest clock seen
+        // - this means that if we have more than one key, then we don't
+        //   necessarily end up with all key clocks equal
+        let mut votes = Votes::with_capacity(cmd.key_count());
+        let highest = cmd
+            .keys()
+            .map(|key| {
+                let key_lock = self.clocks.get(key);
+                let mut guard = key_lock.lock();
+                let previous_value = *guard;
+                let current_value = cmp::max(min_clock, previous_value + 1);
+                *guard = current_value;
+                // drop the lock
+                drop(guard);
+
+                // create vote range
+                let vr =
+                    VoteRange::new(self.id, previous_value + 1, current_value);
+                votes.set(key.clone(), vec![vr]);
+
+                // return "current" clock value
+                current_value
+            })
+            .max()
+            .expect("there should be a maximum sequence");
+        (highest, votes)
+    }
+
+    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
+        common::vote(self.id, &self.clocks, cmd, up_to)
+    }
+
+    fn vote_all(&mut self, up_to: u64) -> Votes {
+        common::vote_all(self.id, &self.clocks, up_to)
+    }
+
+    fn parallel() -> bool {
+        true
+    }
+}
+
+mod common {
+    use super::*;
+
+    pub(super) fn new() -> Clocks {
+        // create shared clocks
+        let clocks = Shared::new();
+        // wrap them in an arc
+        Arc::new(clocks)
+    }
+
+    pub(super) fn init_clocks(clocks: &Clocks, cmd: &Command) {
+        cmd.keys().for_each(|key| {
+            // get initializes the key to the default value, and that's exactly
+            // what we want
+            let _ = clocks.get(key);
+        })
+    }
+
+    pub(super) fn vote(
+        id: ProcessId,
+        clocks: &Clocks,
+        cmd: &Command,
+        up_to: u64,
+    ) -> Votes {
+        // create votes
+        let mut votes = Votes::with_capacity(cmd.key_count());
+        for key in cmd.keys() {
+            let key_lock = clocks.get(key);
+            let mut guard = key_lock.lock();
+            maybe_bump(id, key, &mut guard, up_to, &mut votes);
+            // release the lock
+            drop(guard);
+        }
+        votes
+    }
+
+    pub(super) fn vote_all(
+        id: ProcessId,
+        clocks: &Clocks,
+        up_to: u64,
+    ) -> Votes {
+        let key_count = clocks.len();
+        // create votes
+        let mut votes = Votes::with_capacity(key_count);
+
+        clocks.iter().for_each(|entry| {
+            let key = entry.key();
+            let key_lock = entry.value();
+            let mut guard = key_lock.lock();
+            maybe_bump(id, key, &mut guard, up_to, &mut votes);
+            // release the lock
+            drop(guard);
+        });
+
+        votes
+    }
+
+    pub(super) fn maybe_bump(
         id: ProcessId,
         key: &Key,
         current: &mut u64,

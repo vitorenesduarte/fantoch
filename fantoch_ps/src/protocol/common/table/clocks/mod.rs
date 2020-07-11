@@ -6,6 +6,7 @@ mod quorum;
 
 // Re-exports.
 pub use keys::{
-    AtomicKeyClocks, KeyClocks, LockedKeyClocks, SequentialKeyClocks,
+    AtomicKeyClocks, FineLockedKeyClocks, KeyClocks, LockedKeyClocks,
+    SequentialKeyClocks,
 };
 pub use quorum::QuorumClocks;
