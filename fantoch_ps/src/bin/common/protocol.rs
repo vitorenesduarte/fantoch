@@ -28,6 +28,27 @@ const DEFAULT_SKIP_FAST_ACK: bool = false;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+type ProtocolArgs = (
+    ProcessId,
+    Option<Vec<ProcessId>>,
+    IpAddr,
+    u16,
+    u16,
+    Vec<(String, Option<usize>)>,
+    Config,
+    bool,
+    usize,
+    Option<usize>,
+    usize,
+    usize,
+    usize,
+    usize,
+    Option<String>,
+    Option<usize>,
+    Option<usize>,
+    Option<String>,
+);
+
 #[allow(dead_code)]
 pub fn run<P>() -> Result<(), Box<dyn Error>>
 where
@@ -77,26 +98,7 @@ where
     super::tokio_runtime().block_on(process)
 }
 
-fn parse_args() -> (
-    ProcessId,
-    Option<Vec<ProcessId>>,
-    IpAddr,
-    u16,
-    u16,
-    Vec<(String, Option<usize>)>,
-    Config,
-    bool,
-    usize,
-    Option<usize>,
-    usize,
-    usize,
-    usize,
-    usize,
-    Option<String>,
-    Option<usize>,
-    Option<usize>,
-    Option<String>,
-) {
+fn parse_args() -> ProtocolArgs {
     let matches = App::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")

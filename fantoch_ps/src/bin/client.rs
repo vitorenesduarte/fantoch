@@ -12,6 +12,16 @@ const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
+type ClientArgs = (
+    Vec<ClientId>,
+    String,
+    Option<Duration>,
+    Workload,
+    bool,
+    usize,
+    Option<String>,
+);
+
 fn main() -> Result<(), Box<dyn Error>> {
     let (
         ids,
@@ -34,15 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ))
 }
 
-fn parse_args() -> (
-    Vec<ClientId>,
-    String,
-    Option<Duration>,
-    Workload,
-    bool,
-    usize,
-    Option<String>,
-) {
+fn parse_args() -> ClientArgs {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")

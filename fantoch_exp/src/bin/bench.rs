@@ -102,23 +102,20 @@ async fn main() -> Result<(), Report> {
 
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::NewtLocked, config!(n, 1, false, None, false)),
-        // (Protocol::NewtLocked, config!(n, 2, false, None, false)),
-        // (Protocol::NewtFineLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::NewtLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtLocked, config!(n, 2, false, None, false)),
+        (Protocol::NewtFineLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtFineLocked, config!(n, 2, false, None, false)),
     ];
 
-    // let clients_per_region = vec![256, 1024, 4 * 1024];
-    let clients_per_region = vec![4 * 1024];
+    let clients_per_region = vec![256, 1024, 4 * 1024];
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
-    // for keys_per_command in vec![1, 2, 4, 8] {
-    for keys_per_command in vec![1] {
-        // for coefficient in vec![1.25] {
-        for coefficient in vec![0.5] {
+    for keys_per_command in vec![1, 2, 4, 8] {
+        for coefficient in vec![0.25, 0.5, 1.0] {
             let workload = Workload::new(
                 KeyGen::Zipf {
                     coefficient,
