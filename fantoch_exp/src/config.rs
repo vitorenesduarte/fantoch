@@ -7,6 +7,7 @@ use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 
 // FIXED
 #[cfg(feature = "exp")]
@@ -289,7 +290,7 @@ impl ClientConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ExperimentConfig {
     pub regions: HashMap<Region, ProcessId>,
     pub planet: Option<Planet>,
@@ -346,5 +347,14 @@ impl ExperimentConfig {
             client_tcp_nodelay: CLIENT_TCP_NODELAY,
             client_channel_buffer_size: CHANNEL_BUFFER_SIZE,
         }
+    }
+}
+
+impl fmt::Debug for ExperimentConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "config = {:?}", self.config)?;
+        writeln!(f, "protocol = {:?}", self.protocol)?;
+        writeln!(f, "clients_per_region = {:?}", self.clients_per_region)?;
+        writeln!(f, "workload = {:?}", self.workload)
     }
 }

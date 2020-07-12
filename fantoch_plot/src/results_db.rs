@@ -31,6 +31,7 @@ impl ResultsDB {
                 SerializationFormat::Json,
             )
             .wrap_err("deserialize experiment config")?;
+            // println!("{:?}", exp_config);
 
             // incrementally load data as it matched against some search
             let exp_data = None;

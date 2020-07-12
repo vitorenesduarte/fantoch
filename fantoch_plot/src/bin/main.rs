@@ -34,8 +34,8 @@ fn multi_key() -> Result<(), Report> {
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for keys_per_command in vec![8, 4] {
-        for zipf_coefficient in vec![1.0, 0.5] {
+    for keys_per_command in vec![8] {
+        for zipf_coefficient in vec![1.0] {
             // create key generator
             let key_gen = KeyGen::Zipf {
                 coefficient: zipf_coefficient,
@@ -43,16 +43,8 @@ fn multi_key() -> Result<(), Report> {
             };
 
             // generate throughput-latency plot
-            let clients_per_region = vec![
-                32,
-                512,
-                1024,
-                1024 * 2,
-                1024 * 4,
-                1024 * 8,
-                1024 * 16,
-                1024 * 32,
-            ];
+            let clients_per_region =
+                vec![32, 512, 1024, 1024 * 2, 1024 * 4, 1024 * 8, 1024 * 16];
 
             for latency in vec![
                 Latency::Average,
@@ -64,13 +56,19 @@ fn multi_key() -> Result<(), Report> {
                 } else {
                     String::from("")
                 };
-                let path = format!("throughput_latency_n{}{}.pdf", n, suffix);
+                let path = format!(
+                    "throughput_latency_n{}_k{}_zipf{}{}.pdf",
+                    n, keys_per_command, zipf_coefficient, suffix
+                );
                 // create searches
                 let searches = protocol_combinations(n, protocols.clone())
                     .into_iter()
                     .map(|(protocol, f)| {
                         let mut search = Search::new(n, f, protocol);
-                        search.key_gen(key_gen).payload_size(payload_size);
+                        search
+                            .key_gen(key_gen)
+                            .keys_per_command(keys_per_command)
+                            .payload_size(payload_size);
                         search
                     })
                     .collect();
@@ -84,9 +82,11 @@ fn multi_key() -> Result<(), Report> {
                 )?;
             }
 
-            // generate latenc plots
+            /*
+
+            // generate latency plots
             for clients_per_region in
-                vec![32, 256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32]
+                vec![32, 256, 1024, 1024 * 4, 1024 * 8, 1024 * 16]
             {
                 println!(
                     "n = {} | k = {} | c = {} | zipf = {}",
@@ -173,6 +173,7 @@ fn multi_key() -> Result<(), Report> {
                     )?;
                 }
             }
+            */
         }
     }
 
