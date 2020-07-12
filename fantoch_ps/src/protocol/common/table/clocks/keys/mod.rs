@@ -146,10 +146,21 @@ mod tests {
         assert_eq!(clock, 3);
         assert_eq!(process_votes.len(), 2); // two keys
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![3]);
+        let key_votes = get_key_votes(&key_b, &process_votes);
+        let mut which = 0;
         if all_clocks_match {
-            assert_eq!(get_key_votes(&key_b, &process_votes), vec![1, 2, 3]);
+            assert_eq!(key_votes, vec![1, 2, 3]);
         } else {
-            assert_eq!(get_key_votes(&key_b, &process_votes), vec![1]);
+            // NOTE it's possible that, even though not all clocks values have
+            // to match, they may match; this happens when the highest clock (of
+            // all keys being accessed) happens to be the first one to be
+            // iterated; this is not deterministic since we iterate keys in
+            // their HashMap order, which is not a "stable"
+            match key_votes.as_slice() {
+                [1] => which = 1,
+                [1, 2, 3] => which = 123,
+                _ => panic!("unexpected key votes vote: {:?}", key_votes),
+            }
         }
 
         // -------------------------
@@ -158,13 +169,22 @@ mod tests {
         if all_clocks_match {
             assert_eq!(clock, 4);
         } else {
-            assert_eq!(clock, 2);
+            match which {
+                1 => assert_eq!(clock, 2),
+                123 => assert_eq!(clock, 4),
+                _ => unreachable!("impossible 'which' value: {}", which),
+            }
         }
         assert_eq!(process_votes.len(), 1); // single key
+        let key_votes = get_key_votes(&key_b, &process_votes);
         if all_clocks_match {
-            assert_eq!(get_key_votes(&key_b, &process_votes), vec![4]);
+            assert_eq!(key_votes, vec![4]);
         } else {
-            assert_eq!(get_key_votes(&key_b, &process_votes), vec![2]);
+            match which {
+                1 => assert_eq!(key_votes, vec![2]),
+                123 => assert_eq!(key_votes, vec![4]),
+                _ => unreachable!("impossible 'which' value: {}", which),
+            }
         }
     }
 

@@ -61,7 +61,7 @@ fn parse_args() -> ClientArgs {
             Arg::with_name("address")
                 .long("address")
                 .value_name("ADDR")
-                .help("address of the protocol instance to connect to")
+                .help("address of the protocol instance to connect to (in the form IP:PORT e.g. 127.0.0.1:3000)")
                 .required(true)
                 .takes_value(true),
         )
@@ -104,7 +104,7 @@ fn parse_args() -> ClientArgs {
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
-                .help("set TCP_NODELAY; defaul: true")
+                .help("set TCP_NODELAY; default: true")
                 .takes_value(true),
         )
         .arg(

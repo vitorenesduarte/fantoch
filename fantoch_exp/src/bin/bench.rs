@@ -112,11 +112,11 @@ async fn main() -> Result<(), Report> {
         */
     ];
 
-    let clients_per_region = vec![32, 256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
+    let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
-    for keys_per_command in vec![8] {
+    for keys_per_command in vec![16] {
         for coefficient in vec![1.0] {
             let workload = Workload::new(
                 KeyGen::Zipf {

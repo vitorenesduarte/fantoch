@@ -143,7 +143,7 @@ fn parse_args() -> ProtocolArgs {
             Arg::with_name("addresses")
                 .long("addresses")
                 .value_name("ADDR")
-                .help("comma-separated list of addresses to connect to; if a delay (in milliseconds) is to be injected, the address should be of the form ADDRESS-DELAY; for example, 127.0.0.1:300-120 injects a delay of 120 milliseconds before sending a message to the process at the 127.0.0.1:3000 address")
+                .help("comma-separated list of addresses to connect to; if a delay (in milliseconds) is to be injected, the address should be of the form IP:PORT-DELAY; for example, 127.0.0.1:3000-120 injects a delay of 120 milliseconds before sending a message to the process at the 127.0.0.1:3000 address")
                 .required(true)
                 .takes_value(true),
         )
@@ -216,14 +216,14 @@ fn parse_args() -> ProtocolArgs {
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
-                .help("TCP_NODELAY; defaul: true")
+                .help("TCP_NODELAY; default: true")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("tcp_buffer_size")
                 .long("tcp_buffer_size")
                 .value_name("TCP_BUFFER_SIZE")
-                .help("size of the TCP buffer; default: 8192 (8KBs)")
+                .help("size of the TCP buffer; default: 8192 (bytes)")
                 .takes_value(true),
         )
         .arg(

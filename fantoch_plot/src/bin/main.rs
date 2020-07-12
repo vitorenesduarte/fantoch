@@ -34,7 +34,7 @@ fn multi_key() -> Result<(), Report> {
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for keys_per_command in vec![8] {
+    for keys_per_command in vec![8, 16] {
         for zipf_coefficient in vec![1.0] {
             // create key generator
             let key_gen = KeyGen::Zipf {
@@ -44,7 +44,7 @@ fn multi_key() -> Result<(), Report> {
 
             // generate throughput-latency plot
             let clients_per_region =
-                vec![32, 512, 1024, 1024 * 2, 1024 * 4, 1024 * 8, 1024 * 16];
+                vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
 
             for latency in vec![
                 Latency::Average,
