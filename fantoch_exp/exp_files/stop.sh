@@ -8,6 +8,12 @@ SSH_ARGS="-oStrictHostKeyChecking=no"
 PORT=3000
 CLIENT_PORT=4000
 
+wait_jobs() {
+    for job in $(jobs -p); do
+        wait ${job}
+    done
+}
+
 stop_fantoch() {
     if [ $# -ne 1 ]; then
         echo "usage: stop_fantoch machine"

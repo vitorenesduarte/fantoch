@@ -5,7 +5,7 @@ DEBUG=false
 # flag indicating whether we should just remove previous installations
 RUST_TOOLCHAIN="nightly-2020-06-10"
 NUKE_RUST="false"
-NUKE_FANTOCH="true"
+NUKE_FANTOCH="false"
 FANTOCH_PACKAGE="fantoch_ps"
 
 # set the debug flag accordingly

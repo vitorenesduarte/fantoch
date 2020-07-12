@@ -6,7 +6,7 @@ use fantoch_exp::Protocol;
 use fantoch_plot::{ErrorBar, Latency, PlotFmt, ResultsDB, Search};
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results_multikey";
+const RESULTS_DIR: &str = "../results_multikey_maxtput";
 
 fn main() -> Result<(), Report> {
     multi_key()?;
@@ -28,25 +28,70 @@ fn multi_key() -> Result<(), Report> {
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::NewtLocked,
-        Protocol::NewtFineLocked,
+        // Protocol::NewtFineLocked,
     ];
 
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for keys_per_command in vec![1, 2, 4, 8] {
-        for clients_per_region in vec![256, 1024, 1024 * 4] {
-            for zipf_coefficient in vec![0.25, 0.5, 1.0] {
+    for keys_per_command in vec![8, 4] {
+        for zipf_coefficient in vec![1.0, 0.5] {
+            // create key generator
+            let key_gen = KeyGen::Zipf {
+                coefficient: zipf_coefficient,
+                key_count: zipf_key_count,
+            };
+
+            // generate throughput-latency plot
+            let clients_per_region = vec![
+                32,
+                512,
+                1024,
+                1024 * 2,
+                1024 * 4,
+                1024 * 8,
+                1024 * 16,
+                1024 * 32,
+            ];
+
+            for latency in vec![
+                Latency::Average,
+                Latency::Percentile(0.99),
+                Latency::Percentile(0.999),
+            ] {
+                let suffix = if let Latency::Percentile(percentile) = latency {
+                    format!("_p{}", percentile * 100f64)
+                } else {
+                    String::from("")
+                };
+                let path = format!("throughput_latency_n{}{}.pdf", n, suffix);
+                // create searches
+                let searches = protocol_combinations(n, protocols.clone())
+                    .into_iter()
+                    .map(|(protocol, f)| {
+                        let mut search = Search::new(n, f, protocol);
+                        search.key_gen(key_gen).payload_size(payload_size);
+                        search
+                    })
+                    .collect();
+                fantoch_plot::throughput_latency_plot(
+                    searches,
+                    n,
+                    clients_per_region.clone(),
+                    latency,
+                    &path,
+                    &mut db,
+                )?;
+            }
+
+            // generate latenc plots
+            for clients_per_region in
+                vec![32, 256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32]
+            {
                 println!(
                     "n = {} | k = {} | c = {} | zipf = {}",
                     n, keys_per_command, clients_per_region, zipf_coefficient,
                 );
-
-                // create key generator
-                let key_gen = KeyGen::Zipf {
-                    coefficient: zipf_coefficient,
-                    key_count: zipf_key_count,
-                };
 
                 // create searches
                 let searches: Vec<_> =
@@ -152,6 +197,49 @@ fn single_key() -> Result<(), Report> {
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     for n in vec![3, 5] {
+        // generate throughput-latency plot
+        let clients_per_region = vec![
+            32,
+            512,
+            1024,
+            1024 * 2,
+            1024 * 4,
+            1024 * 8,
+            1024 * 16,
+            1024 * 32,
+        ];
+
+        for latency in vec![
+            Latency::Average,
+            Latency::Percentile(0.99),
+            Latency::Percentile(0.999),
+        ] {
+            let suffix = if let Latency::Percentile(percentile) = latency {
+                format!("_p{}", percentile * 100f64)
+            } else {
+                String::from("")
+            };
+            let path = format!("throughput_latency_n{}{}.pdf", n, suffix);
+            // create searches
+            let searches = protocol_combinations(n, protocols.clone())
+                .into_iter()
+                .map(|(protocol, f)| {
+                    let mut search = Search::new(n, f, protocol);
+                    search.key_gen(key_gen).payload_size(payload_size);
+                    search
+                })
+                .collect();
+            fantoch_plot::throughput_latency_plot(
+                searches,
+                n,
+                clients_per_region.clone(),
+                latency,
+                &path,
+                &mut db,
+            )?;
+        }
+
+        // generate latency plots
         for clients_per_region in vec![
             4,
             8,
@@ -231,48 +319,6 @@ fn single_key() -> Result<(), Report> {
                     format!("cdf_one_per_f_n{}_c{}.pdf", n, clients_per_region);
                 fantoch_plot::cdf_plot_per_f(searches.clone(), &path, &mut db)?;
             }
-        }
-
-        // generate throughput-latency plot
-        let clients_per_region = vec![
-            32,
-            512,
-            1024,
-            1024 * 2,
-            1024 * 4,
-            1024 * 8,
-            1024 * 16,
-            1024 * 32,
-        ];
-
-        for latency in vec![
-            Latency::Average,
-            Latency::Percentile(0.99),
-            Latency::Percentile(0.999),
-        ] {
-            let suffix = if let Latency::Percentile(percentile) = latency {
-                format!("_p{}", percentile * 100f64)
-            } else {
-                String::from("")
-            };
-            let path = format!("throughput_latency_n{}{}.pdf", n, suffix);
-            // create searches
-            let searches = protocol_combinations(n, protocols.clone())
-                .into_iter()
-                .map(|(protocol, f)| {
-                    let mut search = Search::new(n, f, protocol);
-                    search.key_gen(key_gen).payload_size(payload_size);
-                    search
-                })
-                .collect();
-            fantoch_plot::throughput_latency_plot(
-                searches,
-                n,
-                clients_per_region.clone(),
-                latency,
-                &path,
-                &mut db,
-            )?;
         }
     }
 

@@ -10,7 +10,7 @@ use std::time::Duration;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_multikey";
+const RESULTS_DIR: &str = "../results_multikey_maxtput";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -106,16 +106,19 @@ async fn main() -> Result<(), Report> {
         (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
         (Protocol::NewtLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtLocked, config!(n, 2, false, None, false)),
+        /*
         (Protocol::NewtFineLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtFineLocked, config!(n, 2, false, None, false)),
+        */
     ];
 
-    let clients_per_region = vec![256, 1024, 4 * 1024];
+    let clients_per_region =
+        vec![32, 256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
-    for keys_per_command in vec![1, 2, 4, 8] {
-        for coefficient in vec![0.25, 0.5, 1.0] {
+    for keys_per_command in vec![8, 4] {
+        for coefficient in vec![1.0, 0.5] {
             let workload = Workload::new(
                 KeyGen::Zipf {
                     coefficient,
