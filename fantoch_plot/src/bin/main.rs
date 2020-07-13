@@ -1,9 +1,12 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::KeyGen;
+use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
-use fantoch_plot::{ErrorBar, Latency, PlotFmt, ResultsDB, Search};
+use fantoch_plot::{
+    ErrorBar, ExperimentData, LatencyMetric, PlotFmt, ResultsDB, Search,
+};
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results_multikey_maxtput";
@@ -47,15 +50,16 @@ fn multi_key() -> Result<(), Report> {
                 vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
 
             for latency in vec![
-                Latency::Average,
-                Latency::Percentile(0.99),
-                Latency::Percentile(0.999),
+                LatencyMetric::Average,
+                LatencyMetric::Percentile(0.99),
+                LatencyMetric::Percentile(0.999),
             ] {
-                let suffix = if let Latency::Percentile(percentile) = latency {
-                    format!("_p{}", percentile * 100f64)
-                } else {
-                    String::from("")
-                };
+                let suffix =
+                    if let LatencyMetric::Percentile(percentile) = latency {
+                        format!("_p{}", percentile * 100f64)
+                    } else {
+                        String::from("")
+                    };
                 let path = format!(
                     "throughput_latency_n{}_k{}_zipf{}{}.pdf",
                     n, keys_per_command, zipf_coefficient, suffix
@@ -81,8 +85,6 @@ fn multi_key() -> Result<(), Report> {
                     &mut db,
                 )?;
             }
-
-            /*
 
             // generate latency plots
             for clients_per_region in
@@ -128,21 +130,22 @@ fn multi_key() -> Result<(), Report> {
                         zipf_coefficient,
                         suffix
                     );
-                    let global_metrics = fantoch_plot::latency_plot(
+                    let results = fantoch_plot::latency_plot(
                         searches.clone(),
                         n,
                         error_bar,
                         &path,
                         &mut db,
+                        extract_from_exp_data,
                     )?;
 
                     if !shown {
-                        // only show global metrics once
-                        for ((protocol, f), histogram) in global_metrics {
+                        // only show results once
+                        for (search, histogram) in results {
                             println!(
                                 "{:<7} f = {} | {:?}",
-                                PlotFmt::protocol_name(protocol),
-                                f,
+                                PlotFmt::protocol_name(search.protocol),
+                                search.f,
                                 histogram
                             );
                         }
@@ -173,7 +176,6 @@ fn multi_key() -> Result<(), Report> {
                     )?;
                 }
             }
-            */
         }
     }
 
@@ -211,11 +213,12 @@ fn single_key() -> Result<(), Report> {
         ];
 
         for latency in vec![
-            Latency::Average,
-            Latency::Percentile(0.99),
-            Latency::Percentile(0.999),
+            LatencyMetric::Average,
+            LatencyMetric::Percentile(0.99),
+            LatencyMetric::Percentile(0.999),
         ] {
-            let suffix = if let Latency::Percentile(percentile) = latency {
+            let suffix = if let LatencyMetric::Percentile(percentile) = latency
+            {
                 format!("_p{}", percentile * 100f64)
             } else {
                 String::from("")
@@ -288,21 +291,22 @@ fn single_key() -> Result<(), Report> {
                     "latency_n{}_c{}{}.pdf",
                     n, clients_per_region, suffix
                 );
-                let global_metrics = fantoch_plot::latency_plot(
+                let results = fantoch_plot::latency_plot(
                     searches.clone(),
                     n,
                     error_bar,
                     &path,
                     &mut db,
+                    extract_from_exp_data,
                 )?;
 
                 if !shown {
-                    // only show global metrics once
-                    for ((protocol, f), histogram) in global_metrics {
+                    // only show results once
+                    for (search, histogram) in results {
                         println!(
                             "{:<7} f = {} | {:?}",
-                            PlotFmt::protocol_name(protocol),
-                            f,
+                            PlotFmt::protocol_name(search.protocol),
+                            search.f,
                             histogram
                         );
                     }
@@ -360,4 +364,8 @@ fn protocol_combinations(
     }
 
     combinations
+}
+
+fn extract_from_exp_data(exp_data: &ExperimentData) -> Histogram {
+    exp_data.global_client_latency.clone()
 }

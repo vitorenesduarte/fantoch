@@ -4,6 +4,7 @@ mod results_db;
 
 // Re-exports.
 pub use dstat::Dstat;
+pub use exp_data::ExperimentData;
 pub use results_db::ResultsDB;
 
 use fantoch::client::KeyGen;

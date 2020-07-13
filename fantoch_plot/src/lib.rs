@@ -1,15 +1,14 @@
 #![deny(rust_2018_idioms)]
 
+mod db;
 mod fmt;
 mod plot;
-mod db;
 
 // Re-exports.
+pub use db::{ExperimentData, ResultsDB, Search};
 pub use fmt::PlotFmt;
-pub use db::{ResultsDB, Search};
 
 use color_eyre::Report;
-use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
 use plot::axes::Axes;
 use plot::figure::Figure;
@@ -17,8 +16,7 @@ use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::BTreeSet;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -35,7 +33,7 @@ pub enum ErrorBar {
     Without,
 }
 
-pub enum Latency {
+pub enum LatencyMetric {
     Average,
     Percentile(f64),
 }
@@ -71,13 +69,14 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
-pub fn latency_plot(
+pub fn latency_plot<R>(
     searches: Vec<Search>,
     n: usize,
     error_bar: ErrorBar,
     output_file: &str,
     db: &mut ResultsDB,
-) -> Result<BTreeMap<(Protocol, usize), Histogram>, Report> {
+    f: impl Fn(&ExperimentData) -> R,
+) -> Result<Vec<(Search, R)>, Report> {
     const FULL_REGION_WIDTH: f64 = 10f64;
     const MAX_COMBINATIONS: usize = 6;
     // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
@@ -104,8 +103,8 @@ pub fn latency_plot(
     // keep track of all regions
     let mut all_regions = HashSet::new();
 
-    // return global client metrics for each combination
-    let mut global_metrics = BTreeMap::new();
+    // aggregate the output of `f` for each search
+    let mut results = Vec::new();
 
     // start python
     let gil = Python::acquire_gil();
@@ -169,11 +168,8 @@ pub fn latency_plot(
         ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
 
-        // save global client metrics
-        global_metrics.insert(
-            (search.protocol, search.f),
-            exp_data.global_client_latency.clone(),
-        );
+        // save new result
+        results.push((search, f(exp_data)));
 
         // update set of all regions
         for region in regions {
@@ -203,7 +199,7 @@ pub fn latency_plot(
     // end plot
     end_plot(output_file, py, &plt, fig)?;
 
-    Ok(global_metrics)
+    Ok(results)
 }
 
 // based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
@@ -376,7 +372,7 @@ pub fn throughput_latency_plot(
     searches: Vec<Search>,
     n: usize,
     clients_per_region: Vec<usize>,
-    latency: Latency,
+    latency: LatencyMetric,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -424,8 +420,8 @@ pub fn throughput_latency_plot(
 
             // compute latency to be plotted
             let latency = match latency {
-                Latency::Average => avg,
-                Latency::Percentile(percentile) => exp_data
+                LatencyMetric::Average => avg,
+                LatencyMetric::Percentile(percentile) => exp_data
                     .global_client_latency
                     .percentile(percentile)
                     .value(),
