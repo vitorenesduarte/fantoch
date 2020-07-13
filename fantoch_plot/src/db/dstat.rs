@@ -1,5 +1,6 @@
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use csv::Reader;
+use csv::ReaderBuilder;
 use fantoch::metrics::Histogram;
 use serde::{Deserialize, Deserializer};
 use std::fmt;
@@ -37,7 +38,7 @@ impl Dstat {
         self.mem_used.merge(&other.mem_used);
     }
 
-    pub fn from(start: u64, end: u64, path: String) -> Result<Self, Report> {
+    pub fn from(start: u64, end: u64, path: &String) -> Result<Self, Report> {
         // create all histograms
         let mut cpu_usr = Histogram::new();
         let mut cpu_sys = Histogram::new();
@@ -56,19 +57,34 @@ impl Dstat {
             buf.read_line(&mut s)?;
         }
 
-        // parse csv
-        let mut reader = Reader::from_reader(buf);
-        for record in reader.deserialize() {
+        // create csv reader:
+        // - `flexible(true)` makes `reader.records()` not throw a error in case
+        //   there's a row with not enough fields
+        let mut reader = ReaderBuilder::new().flexible(true).from_reader(buf);
+
+        // get dstat headers
+        let headers = reader.headers().wrap_err("csv headers")?.clone();
+
+        for row in reader.records() {
+            // fetch row
+            let row = row.wrap_err("csv record")?;
+
+            // skip row if doesn't have enough fields/columns
+            if row.len() < headers.len() {
+                continue;
+            }
+
             // parse csv row
-            let record: DstatRow = record?;
+            let row: DstatRow = row.deserialize(Some(&headers))?;
+
             // only consider the record if within bounds
-            if record.epoch >= start && record.epoch <= end {
-                cpu_usr.increment(record.cpu_usr);
-                cpu_sys.increment(record.cpu_sys);
-                cpu_wait.increment(record.cpu_wait);
-                net_receive.increment(record.net_receive);
-                net_send.increment(record.net_send);
-                mem_used.increment(record.mem_used);
+            if row.epoch >= start && row.epoch <= end {
+                cpu_usr.increment(row.cpu_usr);
+                cpu_sys.increment(row.cpu_sys);
+                cpu_wait.increment(row.cpu_wait);
+                net_receive.increment(row.net_receive);
+                net_send.increment(row.net_send);
+                mem_used.increment(row.mem_used);
             }
         }
 
@@ -108,7 +124,7 @@ impl Dstat {
         Self::mad(&self.mem_used, Some(1_000_000f64))
     }
 
-    // mad: Mean and Standard-deviation.
+    // mad: mean and standard-deviation.
     fn mad(hist: &Histogram, norm: Option<f64>) -> (u64, u64) {
         let mut mean = hist.mean().value();
         let mut stddev = hist.stddev().value();
@@ -141,7 +157,7 @@ impl fmt::Debug for Dstat {
     }
 }
 
-// All fields:
+// Fields we're generating:
 // "time","epoch","usr","sys","idl","wai","stl","read","writ","recv","send"
 // ,"used","free","buff","cach","read","writ"
 #[derive(Debug, Deserialize)]
@@ -179,8 +195,8 @@ where
     D: Deserializer<'de>,
 {
     let epoch = String::deserialize(de)?;
-    let epoch = epoch.parse::<f64>().expect("dstat value should be a float");
-    // covert epoch to milliseconds
+    let epoch = epoch.parse::<f64>().expect("epoch should be a float");
+    // convert epoch to milliseconds
     let epoch = epoch * 1000f64;
     let epoch = epoch.round() as u64;
     Ok(epoch)

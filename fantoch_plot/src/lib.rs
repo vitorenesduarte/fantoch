@@ -496,6 +496,7 @@ pub fn dstat_table(
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
 
+    let mut has_data = false;
     for search in searches {
         let mut exp_data = db.find(search)?;
         match exp_data.len() {
@@ -524,44 +525,45 @@ pub fn dstat_table(
         let net_send = exp_data.global_process_dstats.net_send_mad();
         let mem_used = exp_data.global_process_dstats.mem_used_mad();
 
-        let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
-
         // create cell
-        let mut cell = Vec::with_capacity(col_labels.len());
-        cell.push(fmt_cell_data(cpu_usr));
-        cell.push(fmt_cell_data(cpu_sys));
-        cell.push(fmt_cell_data(cpu_wait));
-        cell.push(fmt_cell_data(net_receive));
-        cell.push(fmt_cell_data(net_send));
-        cell.push(fmt_cell_data(mem_used));
+        let cell =
+            vec![cpu_usr, cpu_sys, cpu_wait, net_receive, net_send, mem_used];
+        let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
+        let cell: Vec<_> = cell.into_iter().map(fmt_cell_data).collect();
 
         // save cell
         cells.push(cell);
+
+        // mark that there's data to be plotted
+        has_data = true
     }
 
-    // start python
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let plt = PyPlot::new(py)?;
+    // only try to plot if there's any data
+    if has_data {
+        // start python
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let plt = PyPlot::new(py)?;
 
-    // create table arguments
-    let kwargs = pydict!(
-        py,
-        ("colLabels", col_labels),
-        ("colWidths", col_widths),
-        ("rowLabels", row_labels),
-        ("cellText", cells),
-        ("colLoc", "center"),
-        ("cellLoc", "center"),
-        ("rowLoc", "right"),
-        ("loc", "center"),
-    );
+        // create table arguments
+        let kwargs = pydict!(
+            py,
+            ("colLabels", col_labels),
+            ("colWidths", col_widths),
+            ("rowLabels", row_labels),
+            ("cellText", cells),
+            ("colLoc", "center"),
+            ("cellLoc", "center"),
+            ("rowLoc", "right"),
+            ("loc", "center"),
+        );
 
-    plt.table(Some(kwargs))?;
-    plt.axis("off")?;
+        plt.table(Some(kwargs))?;
+        plt.axis("off")?;
 
-    // end plot
-    end_plot(output_file, py, &plt, None)?;
+        // end plot
+        end_plot(output_file, py, &plt, None)?;
+    }
     Ok(())
 }
 

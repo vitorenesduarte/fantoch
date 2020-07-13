@@ -8,7 +8,7 @@ use fantoch_plot::{
 };
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results_multikey_maxtput";
+const RESULTS_DIR: &str = "../results_multikey_2_passes";
 
 fn main() -> Result<(), Report> {
     multi_key()?;
@@ -30,7 +30,7 @@ fn multi_key() -> Result<(), Report> {
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::NewtLocked,
-        // Protocol::NewtFineLocked,
+        Protocol::NewtFineLocked,
     ];
 
     // load results
@@ -38,7 +38,7 @@ fn multi_key() -> Result<(), Report> {
 
     let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
 
-    for keys_per_command in vec![8, 16, 32] {
+    for keys_per_command in vec![8] {
         for zipf_coefficient in vec![1.0] {
             // create key generator
             let key_gen = KeyGen::Zipf {
@@ -87,8 +87,8 @@ fn multi_key() -> Result<(), Report> {
             // generate dstat, latency and cdf plots
             for clients_per_region in clients_per_region.clone() {
                 println!(
-                    "n = {} | k = {} | c = {} | zipf = {}",
-                    n, keys_per_command, clients_per_region, zipf_coefficient,
+                    "n = {} | k = {} | zipf = {} | c = {}",
+                    n, keys_per_command, zipf_coefficient, clients_per_region,
                 );
 
                 // create searches
@@ -108,8 +108,8 @@ fn multi_key() -> Result<(), Report> {
 
                 // generate dstat table
                 let path = format!(
-                    "dstat_n{}_c{}_k{}_zipf{}.pdf",
-                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                    "dstat_n{}_k{}_c{}_zipf{}.pdf",
+                    n, keys_per_command, clients_per_region, zipf_coefficient,
                 );
                 fantoch_plot::dstat_table(searches.clone(), &path, &mut db)?;
 
@@ -126,11 +126,11 @@ fn multi_key() -> Result<(), Report> {
                         String::from("")
                     };
                     let path = format!(
-                        "latency_n{}_c{}_k{}_zipf{}{}.pdf",
+                        "latency_n{}_k{}_zipf{}_c{}{}.pdf",
                         n,
-                        clients_per_region,
                         keys_per_command,
                         zipf_coefficient,
+                        clients_per_region,
                         suffix
                     );
                     let results = fantoch_plot::latency_plot(
@@ -158,19 +158,19 @@ fn multi_key() -> Result<(), Report> {
 
                 // generate cdf plot
                 let path = format!(
-                    "cdf_n{}_c{}_k{}_zipf{}.pdf",
-                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                    "cdf_n{}_k{}_zipf{}_c{}.pdf",
+                    n, keys_per_command, zipf_coefficient, clients_per_region
                 );
                 fantoch_plot::cdf_plot(searches.clone(), &path, &mut db)?;
 
                 if n > 3 {
                     // generate cdf plot with subplots
                     let path = format!(
-                        "cdf_one_per_f_n{}_c{}_k{}_zipf{}.pdf",
+                        "cdf_one_per_f_n{}_k{}_zipf{}_c{}.pdf",
                         n,
-                        clients_per_region,
                         keys_per_command,
-                        zipf_coefficient
+                        zipf_coefficient,
+                        clients_per_region,
                     );
                     fantoch_plot::cdf_plot_per_f(
                         searches.clone(),

@@ -129,9 +129,9 @@ impl ResultsDB {
 
             for region in exp_config.regions.keys() {
                 // load metrics
-                // let process: ProcessMetrics =
-                //     Self::load_metrics("server", &timestamp, region)?;
-                // process_metrics.insert(region.clone(), process);
+                let process: ProcessMetrics =
+                    Self::load_metrics("server", &timestamp, region)?;
+                process_metrics.insert(region.clone(), process);
 
                 let client: ClientData =
                     Self::load_metrics("client", &timestamp, region)?;
@@ -188,8 +188,8 @@ impl ResultsDB {
             region.name(),
         );
         let metrics =
-            fantoch_exp::deserialize(path, SerializationFormat::Bincode)
-                .wrap_err("deserialize metrics data")?;
+            fantoch_exp::deserialize(&path, SerializationFormat::Bincode)
+                .wrap_err_with(|| format!("deserialize metrics {}", path))?;
         Ok(metrics)
     }
 
@@ -206,7 +206,8 @@ impl ResultsDB {
             tag,
             region.name(),
         );
-        Dstat::from(start, end, path)
+        Dstat::from(start, end, &path)
+            .wrap_err_with(|| format!("deserialize dstat {}", path))
     }
 
     // Here we make sure that we will only consider that points in which all the
