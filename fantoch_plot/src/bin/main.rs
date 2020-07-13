@@ -34,7 +34,7 @@ fn multi_key() -> Result<(), Report> {
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for keys_per_command in vec![8, 16] {
+    for keys_per_command in vec![8, 16, 32] {
         for zipf_coefficient in vec![1.0] {
             // create key generator
             let key_gen = KeyGen::Zipf {

@@ -2,11 +2,11 @@
 
 mod fmt;
 mod plot;
-mod results_db;
+mod db;
 
 // Re-exports.
 pub use fmt::PlotFmt;
-pub use results_db::{ResultsDB, Search};
+pub use db::{ResultsDB, Search};
 
 use color_eyre::Report;
 use fantoch::metrics::Histogram;
