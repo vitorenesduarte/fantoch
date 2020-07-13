@@ -55,6 +55,16 @@ impl<'p> PyPlot<'p> {
         Ok((fig, ax))
     }
 
+    pub fn table(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call("table", (), kwargs));
+        Ok(())
+    }
+
+    pub fn axis(&self, option: &str) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call1("axis", (option,)));
+        Ok(())
+    }
+
     pub fn savefig(
         &self,
         path: &str,

@@ -1,15 +1,14 @@
 #![deny(rust_2018_idioms)]
 
+mod db;
 mod fmt;
 mod plot;
-mod results_db;
 
 // Re-exports.
+pub use db::{ExperimentData, ResultsDB, Search};
 pub use fmt::PlotFmt;
-pub use results_db::{ResultsDB, Search};
 
 use color_eyre::Report;
-use fantoch::metrics::Histogram;
 use fantoch_exp::Protocol;
 use plot::axes::Axes;
 use plot::figure::Figure;
@@ -17,8 +16,7 @@ use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::BTreeSet;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -35,7 +33,7 @@ pub enum ErrorBar {
     Without,
 }
 
-pub enum Latency {
+pub enum LatencyMetric {
     Average,
     Percentile(f64),
 }
@@ -71,13 +69,14 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
-pub fn latency_plot(
+pub fn latency_plot<R>(
     searches: Vec<Search>,
     n: usize,
     error_bar: ErrorBar,
     output_file: &str,
     db: &mut ResultsDB,
-) -> Result<BTreeMap<(Protocol, usize), Histogram>, Report> {
+    f: impl Fn(&ExperimentData) -> R,
+) -> Result<Vec<(Search, R)>, Report> {
     const FULL_REGION_WIDTH: f64 = 10f64;
     const MAX_COMBINATIONS: usize = 6;
     // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
@@ -104,8 +103,8 @@ pub fn latency_plot(
     // keep track of all regions
     let mut all_regions = HashSet::new();
 
-    // return global client metrics for each combination
-    let mut global_metrics = BTreeMap::new();
+    // aggregate the output of `f` for each search
+    let mut results = Vec::new();
 
     // start python
     let gil = Python::acquire_gil();
@@ -169,11 +168,8 @@ pub fn latency_plot(
         ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
 
-        // save global client metrics
-        global_metrics.insert(
-            (search.protocol, search.f),
-            exp_data.global_client_latency.clone(),
-        );
+        // save new result
+        results.push((search, f(exp_data)));
 
         // update set of all regions
         for region in regions {
@@ -201,9 +197,9 @@ pub fn latency_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
-    Ok(global_metrics)
+    Ok(results)
 }
 
 // based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
@@ -234,7 +230,7 @@ pub fn cdf_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -306,7 +302,7 @@ pub fn cdf_plot_per_f(
     }
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -376,7 +372,7 @@ pub fn throughput_latency_plot(
     searches: Vec<Search>,
     n: usize,
     clients_per_region: Vec<usize>,
-    latency: Latency,
+    latency: LatencyMetric,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -424,8 +420,8 @@ pub fn throughput_latency_plot(
 
             // compute latency to be plotted
             let latency = match latency {
-                Latency::Average => avg,
-                Latency::Percentile(percentile) => exp_data
+                LatencyMetric::Average => avg,
+                LatencyMetric::Percentile(percentile) => exp_data
                     .global_client_latency
                     .percentile(percentile)
                     .value(),
@@ -474,8 +470,98 @@ pub fn throughput_latency_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
+    Ok(())
+}
+
+pub fn dstat_table(
+    searches: Vec<Search>,
+    output_file: &str,
+    db: &mut ResultsDB,
+) -> Result<(), Report> {
+    let col_labels = vec![
+        "cpu_usr",
+        "cpu_sys",
+        "cpu_wait",
+        "net_receive (MB/s)",
+        "net_send (MB/s)",
+        "mem_used (MB)",
+    ];
+    let col_widths = vec![0.12, 0.12, 0.12, 0.14, 0.14, 0.15];
+
+    // protocol labels
+    let mut row_labels = Vec::with_capacity(searches.len());
+
+    // actual data
+    let mut cells = Vec::with_capacity(searches.len());
+
+    for search in searches {
+        let mut exp_data = db.find(search)?;
+        match exp_data.len() {
+            0 => {
+                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(search.protocol), search.f);
+                continue;
+            },
+            1 => (),
+            _ => panic!("found more than 1 matching experiment for this search criteria"),
+        };
+        let exp_data = exp_data.pop().unwrap();
+
+        // create row label
+        let row_label = format!(
+            "{} f = {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f
+        );
+        row_labels.push(row_label);
+
+        // fetch all cell data
+        let cpu_usr = exp_data.global_process_dstats.cpu_usr_mad();
+        let cpu_sys = exp_data.global_process_dstats.cpu_sys_mad();
+        let cpu_wait = exp_data.global_process_dstats.cpu_wait_mad();
+        let net_receive = exp_data.global_process_dstats.net_receive_mad();
+        let net_send = exp_data.global_process_dstats.net_send_mad();
+        let mem_used = exp_data.global_process_dstats.mem_used_mad();
+
+        let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
+
+        // create cell
+        let mut cell = Vec::with_capacity(col_labels.len());
+        cell.push(fmt_cell_data(cpu_usr));
+        cell.push(fmt_cell_data(cpu_sys));
+        cell.push(fmt_cell_data(cpu_wait));
+        cell.push(fmt_cell_data(net_receive));
+        cell.push(fmt_cell_data(net_send));
+        cell.push(fmt_cell_data(mem_used));
+
+        // save cell
+        cells.push(cell);
+    }
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // create table arguments
+    let kwargs = pydict!(
+        py,
+        ("colLabels", col_labels),
+        ("colWidths", col_widths),
+        ("rowLabels", row_labels),
+        ("cellText", cells),
+        ("colLoc", "center"),
+        ("cellLoc", "center"),
+        ("rowLoc", "right"),
+        ("loc", "center"),
+    );
+
+    plt.table(Some(kwargs))?;
+    plt.axis("off")?;
+
+    // end plot
+    end_plot(output_file, py, &plt, None)?;
     Ok(())
 }
 
@@ -515,14 +601,16 @@ fn end_plot(
     output_file: &str,
     py: Python<'_>,
     plt: &PyPlot<'_>,
-    fig: Figure<'_>,
+    fig: Option<Figure<'_>>,
 ) -> Result<(), Report> {
     // save figure
     let kwargs = pydict!(py, ("format", "pdf"));
     plt.savefig(output_file, Some(kwargs))?;
 
     // close the figure
-    plt.close(fig)?;
+    if let Some(fig) = fig {
+        plt.close(fig)?;
+    }
 
     Ok(())
 }

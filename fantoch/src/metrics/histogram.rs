@@ -54,6 +54,12 @@ impl Histogram {
         F64::new(mean)
     }
 
+    pub fn stddev(&self) -> F64 {
+        let (mean, count) = self.compute_mean_and_count();
+        let stddev = self.compute_stddev(mean, count);
+        F64::new(stddev)
+    }
+
     pub fn cov(&self) -> F64 {
         let cov = self.compute_cov();
         F64::new(cov)

@@ -11,7 +11,7 @@ use tokio::time::{self, Duration};
 pub const METRICS_INTERVAL: Duration = Duration::from_secs(5); // notify/flush every 5 seconds
 const METRICS_LOGGER_BUFFER_SIZE: usize = 8 * 1024; // 8KB
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessMetrics {
     workers: HashMap<usize, ProtocolMetrics>,
     executors: HashMap<usize, ExecutorMetrics>,

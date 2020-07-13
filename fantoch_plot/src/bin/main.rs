@@ -3,7 +3,9 @@ use color_eyre::Report;
 use fantoch::client::KeyGen;
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
-use fantoch_plot::{ErrorBar, Latency, PlotFmt, ResultsDB, Search};
+use fantoch_plot::{
+    ErrorBar, ExperimentData, LatencyMetric, PlotFmt, ResultsDB, Search,
+};
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../results_multikey_maxtput";
@@ -34,7 +36,9 @@ fn multi_key() -> Result<(), Report> {
     // load results
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    for keys_per_command in vec![8, 16] {
+    let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
+
+    for keys_per_command in vec![8, 16, 32] {
         for zipf_coefficient in vec![1.0] {
             // create key generator
             let key_gen = KeyGen::Zipf {
@@ -43,19 +47,17 @@ fn multi_key() -> Result<(), Report> {
             };
 
             // generate throughput-latency plot
-            let clients_per_region =
-                vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
-
             for latency in vec![
-                Latency::Average,
-                Latency::Percentile(0.99),
-                Latency::Percentile(0.999),
+                LatencyMetric::Average,
+                LatencyMetric::Percentile(0.99),
+                LatencyMetric::Percentile(0.999),
             ] {
-                let suffix = if let Latency::Percentile(percentile) = latency {
-                    format!("_p{}", percentile * 100f64)
-                } else {
-                    String::from("")
-                };
+                let suffix =
+                    if let LatencyMetric::Percentile(percentile) = latency {
+                        format!("_p{}", percentile * 100f64)
+                    } else {
+                        String::from("")
+                    };
                 let path = format!(
                     "throughput_latency_n{}_k{}_zipf{}{}.pdf",
                     n, keys_per_command, zipf_coefficient, suffix
@@ -82,12 +84,8 @@ fn multi_key() -> Result<(), Report> {
                 )?;
             }
 
-            /*
-
-            // generate latency plots
-            for clients_per_region in
-                vec![32, 256, 1024, 1024 * 4, 1024 * 8, 1024 * 16]
-            {
+            // generate dstat, latency and cdf plots
+            for clients_per_region in clients_per_region.clone() {
                 println!(
                     "n = {} | k = {} | c = {} | zipf = {}",
                     n, keys_per_command, clients_per_region, zipf_coefficient,
@@ -107,6 +105,13 @@ fn multi_key() -> Result<(), Report> {
                             search
                         })
                         .collect();
+
+                // generate dstat table
+                let path = format!(
+                    "dstat_n{}_c{}_k{}_zipf{}.pdf",
+                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                );
+                fantoch_plot::dstat_table(searches.clone(), &path, &mut db)?;
 
                 // generate latency plot
                 let mut shown = false;
@@ -128,22 +133,23 @@ fn multi_key() -> Result<(), Report> {
                         zipf_coefficient,
                         suffix
                     );
-                    let global_metrics = fantoch_plot::latency_plot(
+                    let results = fantoch_plot::latency_plot(
                         searches.clone(),
                         n,
                         error_bar,
                         &path,
                         &mut db,
+                        fmt_exp_data,
                     )?;
 
                     if !shown {
-                        // only show global metrics once
-                        for ((protocol, f), histogram) in global_metrics {
+                        // only show results once
+                        for (search, histogram_fmt) in results {
                             println!(
-                                "{:<7} f = {} | {:?}",
-                                PlotFmt::protocol_name(protocol),
-                                f,
-                                histogram
+                                "{:<7} f = {} | {}",
+                                PlotFmt::protocol_name(search.protocol),
+                                search.f,
+                                histogram_fmt,
                             );
                         }
                         shown = true;
@@ -173,7 +179,6 @@ fn multi_key() -> Result<(), Report> {
                     )?;
                 }
             }
-            */
         }
     }
 
@@ -211,11 +216,12 @@ fn single_key() -> Result<(), Report> {
         ];
 
         for latency in vec![
-            Latency::Average,
-            Latency::Percentile(0.99),
-            Latency::Percentile(0.999),
+            LatencyMetric::Average,
+            LatencyMetric::Percentile(0.99),
+            LatencyMetric::Percentile(0.999),
         ] {
-            let suffix = if let Latency::Percentile(percentile) = latency {
+            let suffix = if let LatencyMetric::Percentile(percentile) = latency
+            {
                 format!("_p{}", percentile * 100f64)
             } else {
                 String::from("")
@@ -288,22 +294,23 @@ fn single_key() -> Result<(), Report> {
                     "latency_n{}_c{}{}.pdf",
                     n, clients_per_region, suffix
                 );
-                let global_metrics = fantoch_plot::latency_plot(
+                let results = fantoch_plot::latency_plot(
                     searches.clone(),
                     n,
                     error_bar,
                     &path,
                     &mut db,
+                    fmt_exp_data,
                 )?;
 
                 if !shown {
-                    // only show global metrics once
-                    for ((protocol, f), histogram) in global_metrics {
+                    // only show results once
+                    for (search, histogram_fmt) in results {
                         println!(
-                            "{:<7} f = {} | {:?}",
-                            PlotFmt::protocol_name(protocol),
-                            f,
-                            histogram
+                            "{:<7} f = {} | {}",
+                            PlotFmt::protocol_name(search.protocol),
+                            search.f,
+                            histogram_fmt,
                         );
                     }
                     shown = true;
@@ -360,4 +367,8 @@ fn protocol_combinations(
     }
 
     combinations
+}
+
+fn fmt_exp_data(exp_data: &ExperimentData) -> String {
+    format!("{:?}", exp_data.global_client_latency)
 }
