@@ -184,8 +184,8 @@ impl ResultsDB {
     {
         let path = format!(
             "{}/{}_{}_metrics.bincode",
-            tag,
             timestamp.path().display(),
+            tag,
             region.name(),
         );
         let metrics =
@@ -203,8 +203,8 @@ impl ResultsDB {
     ) -> Result<Dstat, Report> {
         let path = format!(
             "{}/{}_{}_dstat.csv",
-            tag,
             timestamp.path().display(),
+            tag,
             region.name(),
         );
         Dstat::new(start, end, path)

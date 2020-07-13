@@ -3,16 +3,62 @@ use color_eyre::Report;
 use csv::Reader;
 use fantoch::metrics::Histogram;
 use serde::{Deserialize, Deserializer};
+use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Dstat {
     pub cpu_usr: Histogram,
     pub cpu_sys: Histogram,
-    pub cpu_idle: Histogram,
     pub cpu_wait: Histogram,
     pub net_receive: Histogram,
     pub net_send: Histogram,
     pub memory_used: Histogram,
+}
+
+impl fmt::Debug for Dstat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "cpu:")?;
+        writeln!(
+            f,
+            "  usr: {} stddev={}",
+            self.cpu_usr.mean().value().round() as u64,
+            self.cpu_usr.stddev().value().round() as u64,
+        )?;
+        writeln!(
+            f,
+            "  sys: {} stddev={}",
+            self.cpu_sys.mean().value().round() as u64,
+            self.cpu_sys.stddev().value().round() as u64,
+        )?;
+        writeln!(
+            f,
+            "  wait: {} stddev={}",
+            self.cpu_wait.mean().value().round() as u64,
+            self.cpu_wait.stddev().value().round() as u64,
+        )?;
+
+        writeln!(f, "net:")?;
+        writeln!(
+            f,
+            "  receive: {}MB stddev={}",
+            (self.net_receive.mean().value() / 1_000_000f64).round() as u64,
+            self.net_receive.stddev().value().round() as u64,
+        )?;
+        writeln!(
+            f,
+            "  send: {}MB stddev={}",
+            (self.net_receive.mean().value() / 1_000_000f64).round() as u64,
+            self.net_send.stddev().value().round() as u64,
+        )?;
+
+        writeln!(
+            f,
+            "mem: {}MB stddev={}",
+            (self.memory_used.mean().value() / 1_000_000f64).round() as u64,
+            self.memory_used.stddev().value().round() as u64,
+        )?;
+        Ok(())
+    }
 }
 
 impl Dstat {
@@ -20,7 +66,6 @@ impl Dstat {
         // create all histograms
         let mut cpu_usr = Histogram::new();
         let mut cpu_sys = Histogram::new();
-        let mut cpu_idle = Histogram::new();
         let mut cpu_wait = Histogram::new();
         let mut net_receive = Histogram::new();
         let mut net_send = Histogram::new();
@@ -36,7 +81,6 @@ impl Dstat {
             if record.epoch >= start && record.epoch <= end {
                 cpu_usr.increment(record.cpu_usr);
                 cpu_sys.increment(record.cpu_sys);
-                cpu_idle.increment(record.cpu_idle);
                 cpu_wait.increment(record.cpu_wait);
                 net_receive.increment(record.net_receive);
                 net_send.increment(record.net_send);
@@ -48,7 +92,6 @@ impl Dstat {
         let dstat = Self {
             cpu_usr,
             cpu_sys,
-            cpu_idle,
             cpu_wait,
             net_receive,
             net_send,
@@ -71,8 +114,10 @@ struct DstatRow {
     cpu_usr: u64,
     #[serde(rename = "sys")]
     cpu_sys: u64,
+    /*
     #[serde(rename = "idl")]
     cpu_idle: u64,
+    */
     #[serde(rename = "wai")]
     cpu_wait: u64,
 
