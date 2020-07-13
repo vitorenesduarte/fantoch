@@ -2,14 +2,11 @@ use crate::executor::ExecutorMetrics;
 use crate::log;
 use crate::protocol::ProtocolMetrics;
 use crate::run::prelude::*;
-use crate::run::rw::Rw;
 use crate::HashMap;
 use serde::{Deserialize, Serialize};
-use tokio::fs::File;
 use tokio::time::{self, Duration};
 
 pub const METRICS_INTERVAL: Duration = Duration::from_secs(5); // notify/flush every 5 seconds
-const METRICS_LOGGER_BUFFER_SIZE: usize = 8 * 1024; // 8KB
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessMetrics {
@@ -60,18 +57,23 @@ pub async fn metrics_logger_task(
                 }
             }
             _ = interval.tick()  => {
-                // create metrics log file (truncating it if already exists)
-                let file = File::create(&metrics_file)
-                    .await
-                    .expect("it should be possible to create metrics log file");
-
-                // create file logger
-                let mut logger =
-                    Rw::from(METRICS_LOGGER_BUFFER_SIZE, METRICS_LOGGER_BUFFER_SIZE, file);
-
-                logger.write(&global_metrics).await;
-                logger.flush().await
+                serialize_process_metrics(&global_metrics, &metrics_file);
             }
         }
     }
+}
+
+// TODO make this async
+fn serialize_process_metrics(data: &ProcessMetrics, file: &String) {
+    // if the file does not exist it will be created, otherwise truncated
+    std::fs::File::create(file)
+        .ok()
+        // create a buf writer
+        .map(std::io::BufWriter::new)
+        // and try to serialize
+        .map(|writer| {
+            bincode::serialize_into(writer, &data)
+                .expect("error serializing process metrics")
+        })
+        .unwrap_or_else(|| panic!("couldn't save process metrics"));
 }
