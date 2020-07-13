@@ -12,7 +12,7 @@ pub struct Dstat {
     pub cpu_usr: Histogram,
     pub cpu_sys: Histogram,
     pub cpu_wait: Histogram,
-    pub net_receive: Histogram,
+    pub net_recv: Histogram,
     pub net_send: Histogram,
     pub mem_used: Histogram,
 }
@@ -23,7 +23,7 @@ impl Dstat {
             cpu_usr: Histogram::new(),
             cpu_sys: Histogram::new(),
             cpu_wait: Histogram::new(),
-            net_receive: Histogram::new(),
+            net_recv: Histogram::new(),
             net_send: Histogram::new(),
             mem_used: Histogram::new(),
         }
@@ -33,7 +33,7 @@ impl Dstat {
         self.cpu_usr.merge(&other.cpu_usr);
         self.cpu_sys.merge(&other.cpu_sys);
         self.cpu_wait.merge(&other.cpu_wait);
-        self.net_receive.merge(&other.net_receive);
+        self.net_recv.merge(&other.net_recv);
         self.net_send.merge(&other.net_send);
         self.mem_used.merge(&other.mem_used);
     }
@@ -43,7 +43,7 @@ impl Dstat {
         let mut cpu_usr = Histogram::new();
         let mut cpu_sys = Histogram::new();
         let mut cpu_wait = Histogram::new();
-        let mut net_receive = Histogram::new();
+        let mut net_recv = Histogram::new();
         let mut net_send = Histogram::new();
         let mut mem_used = Histogram::new();
 
@@ -82,7 +82,7 @@ impl Dstat {
                 cpu_usr.increment(row.cpu_usr);
                 cpu_sys.increment(row.cpu_sys);
                 cpu_wait.increment(row.cpu_wait);
-                net_receive.increment(row.net_receive);
+                net_recv.increment(row.net_recv);
                 net_send.increment(row.net_send);
                 mem_used.increment(row.mem_used);
             }
@@ -93,7 +93,7 @@ impl Dstat {
             cpu_usr,
             cpu_sys,
             cpu_wait,
-            net_receive,
+            net_recv,
             net_send,
             mem_used,
         };
@@ -112,8 +112,8 @@ impl Dstat {
         Self::mad(&self.cpu_wait, None)
     }
 
-    pub fn net_receive_mad(&self) -> (u64, u64) {
-        Self::mad(&self.net_receive, Some(1_000_000f64))
+    pub fn net_recv(&self) -> (u64, u64) {
+        Self::mad(&self.net_recv, Some(1_000_000f64))
     }
 
     pub fn net_send_mad(&self) -> (u64, u64) {
@@ -141,7 +141,7 @@ impl fmt::Debug for Dstat {
         let usr = self.cpu_usr_mad();
         let sys = self.cpu_sys_mad();
         let wait = self.cpu_wait_mad();
-        let recv = self.net_receive_mad();
+        let recv = self.net_recv();
         let send = self.net_send_mad();
         let used = self.mem_used_mad();
         writeln!(f, "cpu:")?;
@@ -179,7 +179,7 @@ struct DstatRow {
     // net metrics
     #[serde(rename = "recv")]
     #[serde(deserialize_with = "f64_to_u64")]
-    net_receive: u64,
+    net_recv: u64,
     #[serde(rename = "send")]
     #[serde(deserialize_with = "f64_to_u64")]
     net_send: u64,

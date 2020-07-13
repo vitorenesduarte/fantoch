@@ -1,5 +1,6 @@
 use crate::plot::axes::Axes;
 use crate::plot::figure::Figure;
+use crate::plot::table::Table;
 use crate::pytry;
 use color_eyre::Report;
 use pyo3::prelude::*;
@@ -55,9 +56,10 @@ impl<'p> PyPlot<'p> {
         Ok((fig, ax))
     }
 
-    pub fn table(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call("table", (), kwargs));
-        Ok(())
+    pub fn table(&self, kwargs: Option<&PyDict>) -> Result<Table<'_>, Report> {
+        let result = pytry!(self.py(), self.plt.call("table", (), kwargs));
+        let table = Table::new(result);
+        Ok(table)
     }
 
     pub fn axis(&self, option: &str) -> Result<(), Report> {
@@ -74,8 +76,13 @@ impl<'p> PyPlot<'p> {
         Ok(())
     }
 
-    pub fn close(&self, figure: Figure<'_>) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call1("close", (figure.fig(),)));
+    pub fn close(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call("close", (), kwargs));
+        Ok(())
+    }
+
+    pub fn tight_layout(&self) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call0("tight_layout"));
         Ok(())
     }
 

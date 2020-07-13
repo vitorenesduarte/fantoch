@@ -1,6 +1,7 @@
 pub mod axes;
 pub mod axis;
 pub mod figure;
+pub mod table;
 pub mod pyplot;
 
 use color_eyre::Report;
@@ -90,7 +91,9 @@ mod tests {
 
         let kwargs = pydict!(py, ("format", "pdf"));
         plt.savefig(path, Some(kwargs))?;
-        plt.close(fig)?;
+
+        let kwargs = pydict!(py, ("fig", fig.fig()));
+        plt.close(Some(kwargs))?;
         Ok(())
     }
 }

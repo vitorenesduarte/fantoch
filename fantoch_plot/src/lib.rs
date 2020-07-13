@@ -484,11 +484,11 @@ pub fn dstat_table(
         "cpu_usr",
         "cpu_sys",
         "cpu_wait",
-        "net_receive (MB/s)",
+        "net_recv (MB/s)",
         "net_send (MB/s)",
         "mem_used (MB)",
     ];
-    let col_widths = vec![0.12, 0.12, 0.12, 0.14, 0.14, 0.15];
+    let col_widths = vec![0.13, 0.13, 0.13, 0.20, 0.20, 0.20];
 
     // protocol labels
     let mut row_labels = Vec::with_capacity(searches.len());
@@ -521,13 +521,13 @@ pub fn dstat_table(
         let cpu_usr = exp_data.global_process_dstats.cpu_usr_mad();
         let cpu_sys = exp_data.global_process_dstats.cpu_sys_mad();
         let cpu_wait = exp_data.global_process_dstats.cpu_wait_mad();
-        let net_receive = exp_data.global_process_dstats.net_receive_mad();
+        let net_recv = exp_data.global_process_dstats.net_recv();
         let net_send = exp_data.global_process_dstats.net_send_mad();
         let mem_used = exp_data.global_process_dstats.mem_used_mad();
 
         // create cell
         let cell =
-            vec![cpu_usr, cpu_sys, cpu_wait, net_receive, net_send, mem_used];
+            vec![cpu_usr, cpu_sys, cpu_wait, net_recv, net_send, mem_used];
         let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
         let cell: Vec<_> = cell.into_iter().map(fmt_cell_data).collect();
 
@@ -558,8 +558,15 @@ pub fn dstat_table(
             ("loc", "center"),
         );
 
-        plt.table(Some(kwargs))?;
+        let table = plt.table(Some(kwargs))?;
         plt.axis("off")?;
+
+        // create font size font
+        table.auto_set_font_size(false)?;
+        table.set_fontsize(6.5)?;
+
+        // row labels are too wide without this
+        plt.tight_layout()?;
 
         // end plot
         end_plot(output_file, py, &plt, None)?;
@@ -609,10 +616,14 @@ fn end_plot(
     let kwargs = pydict!(py, ("format", "pdf"));
     plt.savefig(output_file, Some(kwargs))?;
 
-    // close the figure
-    if let Some(fig) = fig {
-        plt.close(fig)?;
-    }
+    let kwargs = if let Some(fig) = fig {
+        // close the figure passed as argument
+        Some(pydict!(py, ("fig", fig.fig())))
+    } else {
+        // close the current figure
+        None
+    };
+    plt.close(kwargs)?;
 
     Ok(())
 }
