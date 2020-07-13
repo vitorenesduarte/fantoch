@@ -38,6 +38,7 @@ fn multi_key() -> Result<(), Report> {
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
+    let clients_per_region = vec![1024 * 4, 1024 * 8];
 
     for keys_per_command in vec![8, 16, 32] {
         for zipf_coefficient in vec![1.0] {
@@ -47,6 +48,7 @@ fn multi_key() -> Result<(), Report> {
                 key_count: zipf_key_count,
             };
 
+            /*
             // generate throughput-latency plot
             for latency in vec![
                 LatencyMetric::Average,
@@ -84,6 +86,7 @@ fn multi_key() -> Result<(), Report> {
                     &mut db,
                 )?;
             }
+            */
 
             // generate latency plots
             for clients_per_region in clients_per_region.clone() {

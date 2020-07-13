@@ -70,19 +70,19 @@ impl fmt::Debug for Dstat {
         writeln!(f, "cpu:")?;
         writeln!(
             f,
-            "  usr: {} stddev={}",
+            "  usr:          {:>4} stddev={}",
             self.cpu_usr.mean().value().round() as u64,
             self.cpu_usr.stddev().value().round() as u64,
         )?;
         writeln!(
             f,
-            "  sys: {} stddev={}",
+            "  sys:          {:>4} stddev={}",
             self.cpu_sys.mean().value().round() as u64,
             self.cpu_sys.stddev().value().round() as u64,
         )?;
         writeln!(
             f,
-            "  wait: {} stddev={}",
+            "  wait:         {:>4} stddev={}",
             self.cpu_wait.mean().value().round() as u64,
             self.cpu_wait.stddev().value().round() as u64,
         )?;
@@ -90,22 +90,23 @@ impl fmt::Debug for Dstat {
         writeln!(f, "net:")?;
         writeln!(
             f,
-            "  receive: {}MB stddev={}",
+            "  receive (MB): {:>4} stddev={}",
             (self.net_receive.mean().value() / 1_000_000f64).round() as u64,
-            self.net_receive.stddev().value().round() as u64,
+            (self.net_receive.stddev().value() / 1_000_000f64).round() as u64,
         )?;
         writeln!(
             f,
-            "  send: {}MB stddev={}",
-            (self.net_receive.mean().value() / 1_000_000f64).round() as u64,
-            self.net_send.stddev().value().round() as u64,
+            "  send (MB):    {:>4} stddev={}",
+            (self.net_send.mean().value() / 1_000_000f64).round() as u64,
+            (self.net_send.stddev().value() / 1_000_000f64).round() as u64,
         )?;
 
+        writeln!(f, "mem:")?;
         writeln!(
             f,
-            "mem: {}MB stddev={}",
+            "  used(MB):     {:>4} stddev={}",
             (self.memory_used.mean().value() / 1_000_000f64).round() as u64,
-            self.memory_used.stddev().value().round() as u64,
+            (self.memory_used.stddev().value() / 1_000_000f64).round() as u64,
         )?;
         Ok(())
     }
@@ -116,7 +117,7 @@ impl fmt::Debug for Dstat {
 // ,"used","free","buff","cach","read","writ"
 #[derive(Debug, Deserialize)]
 struct DstatRow {
-    #[serde(deserialize_with = "f64_to_u64")]
+    #[serde(deserialize_with = "parse_epoch")]
     epoch: u64,
 
     // cpu metrics
@@ -142,6 +143,18 @@ struct DstatRow {
     #[serde(rename = "used")]
     #[serde(deserialize_with = "f64_to_u64")]
     memory_used: u64,
+}
+
+fn parse_epoch<'de, D>(de: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let epoch = String::deserialize(de)?;
+    let epoch = epoch.parse::<f64>().expect("dstat value should be a float");
+    // covert epoch to milliseconds
+    let epoch = epoch * 1000f64;
+    let epoch = epoch.round() as u64;
+    Ok(epoch)
 }
 
 fn f64_to_u64<'de, D>(de: D) -> Result<u64, D::Error>
