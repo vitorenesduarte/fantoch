@@ -17,7 +17,27 @@ pub struct Dstat {
 }
 
 impl Dstat {
-    pub fn new(start: u64, end: u64, path: String) -> Result<Self, Report> {
+    pub fn new() -> Self {
+        Self {
+            cpu_usr: Histogram::new(),
+            cpu_sys: Histogram::new(),
+            cpu_wait: Histogram::new(),
+            net_receive: Histogram::new(),
+            net_send: Histogram::new(),
+            memory_used: Histogram::new(),
+        }
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        self.cpu_usr.merge(&other.cpu_usr);
+        self.cpu_sys.merge(&other.cpu_sys);
+        self.cpu_wait.merge(&other.cpu_wait);
+        self.net_receive.merge(&other.net_receive);
+        self.net_send.merge(&other.net_send);
+        self.memory_used.merge(&other.memory_used);
+    }
+
+    pub fn from(start: u64, end: u64, path: String) -> Result<Self, Report> {
         // create all histograms
         let mut cpu_usr = Histogram::new();
         let mut cpu_sys = Histogram::new();
@@ -70,19 +90,19 @@ impl fmt::Debug for Dstat {
         writeln!(f, "cpu:")?;
         writeln!(
             f,
-            "  usr:          {:>4} stddev={}",
+            "  usr              {:>4}   stddev={}",
             self.cpu_usr.mean().value().round() as u64,
             self.cpu_usr.stddev().value().round() as u64,
         )?;
         writeln!(
             f,
-            "  sys:          {:>4} stddev={}",
+            "  sys              {:>4}   stddev={}",
             self.cpu_sys.mean().value().round() as u64,
             self.cpu_sys.stddev().value().round() as u64,
         )?;
         writeln!(
             f,
-            "  wait:         {:>4} stddev={}",
+            "  wait             {:>4}   stddev={}",
             self.cpu_wait.mean().value().round() as u64,
             self.cpu_wait.stddev().value().round() as u64,
         )?;
@@ -90,13 +110,13 @@ impl fmt::Debug for Dstat {
         writeln!(f, "net:")?;
         writeln!(
             f,
-            "  receive (MB): {:>4} stddev={}",
+            "  (MB/s) receive   {:>4}   stddev={}",
             (self.net_receive.mean().value() / 1_000_000f64).round() as u64,
             (self.net_receive.stddev().value() / 1_000_000f64).round() as u64,
         )?;
         writeln!(
             f,
-            "  send (MB):    {:>4} stddev={}",
+            "  (MB/s) send      {:>4}   stddev={}",
             (self.net_send.mean().value() / 1_000_000f64).round() as u64,
             (self.net_send.stddev().value() / 1_000_000f64).round() as u64,
         )?;
@@ -104,7 +124,7 @@ impl fmt::Debug for Dstat {
         writeln!(f, "mem:")?;
         writeln!(
             f,
-            "  used(MB):     {:>4} stddev={}",
+            "  (MB) used        {:>4}   stddev={}",
             (self.memory_used.mean().value() / 1_000_000f64).round() as u64,
             (self.memory_used.stddev().value() / 1_000_000f64).round() as u64,
         )?;

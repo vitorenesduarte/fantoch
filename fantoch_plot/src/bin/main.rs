@@ -1,7 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::KeyGen;
-use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
@@ -136,17 +135,17 @@ fn multi_key() -> Result<(), Report> {
                         error_bar,
                         &path,
                         &mut db,
-                        extract_from_exp_data,
+                        fmt_exp_data,
                     )?;
 
                     if !shown {
                         // only show results once
-                        for (search, (histogram, dstat_fmt)) in results {
+                        for (search, (histogram_fmt, dstat_fmt)) in results {
                             println!(
-                                "{:<7} f = {} | {:?}",
+                                "{:<7} f = {} | {}",
                                 PlotFmt::protocol_name(search.protocol),
                                 search.f,
-                                histogram
+                                histogram_fmt,
                             );
                             println!("{}", dstat_fmt);
                         }
@@ -298,17 +297,17 @@ fn single_key() -> Result<(), Report> {
                     error_bar,
                     &path,
                     &mut db,
-                    extract_from_exp_data,
+                    fmt_exp_data,
                 )?;
 
                 if !shown {
                     // only show results once
-                    for (search, (histogram, dstat_fmt)) in results {
+                    for (search, (histogram_fmt, dstat_fmt)) in results {
                         println!(
-                            "{:<7} f = {} | {:?}",
+                            "{:<7} f = {} | {}",
                             PlotFmt::protocol_name(search.protocol),
                             search.f,
-                            histogram
+                            histogram_fmt,
                         );
                         println!("{}", dstat_fmt);
                     }
@@ -368,10 +367,8 @@ fn protocol_combinations(
     combinations
 }
 
-fn extract_from_exp_data(exp_data: &ExperimentData) -> (Histogram, String) {
-    let mut dstat_fmt = String::new();
-    for (region, dstat) in &exp_data.process_dstats {
-        dstat_fmt = format!("{}\n{:?}:\n{:?}", dstat_fmt, region, dstat);
-    }
-    (exp_data.global_client_latency.clone(), dstat_fmt)
+fn fmt_exp_data(exp_data: &ExperimentData) -> (String, String) {
+    let latency_fmt = format!("{:?}", exp_data.global_client_latency);
+    let dstat_fmt = format!("{:?}", exp_data.global_process_dstats);
+    (latency_fmt, dstat_fmt)
 }

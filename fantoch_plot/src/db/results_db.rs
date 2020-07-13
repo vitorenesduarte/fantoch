@@ -206,7 +206,7 @@ impl ResultsDB {
             tag,
             region.name(),
         );
-        Dstat::new(start, end, path)
+        Dstat::from(start, end, path)
     }
 
     // Here we make sure that we will only consider that points in which all the

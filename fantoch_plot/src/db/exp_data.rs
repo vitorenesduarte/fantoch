@@ -10,7 +10,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct ExperimentData {
     pub process_metrics: HashMap<Region, ProcessMetrics>,
-    pub process_dstats: HashMap<Region, Dstat>,
+    pub global_process_dstats: Dstat,
     pub client_latency: HashMap<Region, Histogram>,
     pub global_client_latency: Histogram,
 }
@@ -24,6 +24,12 @@ impl ExperimentData {
         client_metrics: HashMap<Region, ClientData>,
         global_client_metrics: ClientData,
     ) -> Self {
+        // merge all process dstats
+        let mut global_process_dstats = Dstat::new();
+        for (_, process_dstat) in process_dstats {
+            global_process_dstats.merge(&process_dstat);
+        }
+
         // we should use milliseconds if: AWS or (baremetal + injected latency)
         let precision = match testbed {
             Testbed::Aws => {
@@ -64,7 +70,7 @@ impl ExperimentData {
 
         Self {
             process_metrics,
-            process_dstats,
+            global_process_dstats,
             client_latency,
             global_client_latency,
         }
