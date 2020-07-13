@@ -197,7 +197,7 @@ pub fn latency_plot<R>(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
     Ok(results)
 }
@@ -230,7 +230,7 @@ pub fn cdf_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -302,7 +302,7 @@ pub fn cdf_plot_per_f(
     }
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -470,8 +470,98 @@ pub fn throughput_latency_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_file, py, &plt, fig)?;
+    end_plot(output_file, py, &plt, Some(fig))?;
 
+    Ok(())
+}
+
+pub fn dstat_table(
+    searches: Vec<Search>,
+    output_file: &str,
+    db: &mut ResultsDB,
+) -> Result<(), Report> {
+    let col_labels = vec![
+        "cpu_usr",
+        "cpu_sys",
+        "cpu_wait",
+        "net_receive (MB/s)",
+        "net_send (MB/s)",
+        "mem_used (MB)",
+    ];
+    let col_widths = vec![0.12, 0.12, 0.12, 0.14, 0.14, 0.15];
+
+    // protocol labels
+    let mut row_labels = Vec::with_capacity(searches.len());
+
+    // actual data
+    let mut cells = Vec::with_capacity(searches.len());
+
+    for search in searches {
+        let mut exp_data = db.find(search)?;
+        match exp_data.len() {
+            0 => {
+                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(search.protocol), search.f);
+                continue;
+            },
+            1 => (),
+            _ => panic!("found more than 1 matching experiment for this search criteria"),
+        };
+        let exp_data = exp_data.pop().unwrap();
+
+        // create row label
+        let row_label = format!(
+            "{} f = {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f
+        );
+        row_labels.push(row_label);
+
+        // fetch all cell data
+        let cpu_usr = exp_data.global_process_dstats.cpu_usr_mad();
+        let cpu_sys = exp_data.global_process_dstats.cpu_sys_mad();
+        let cpu_wait = exp_data.global_process_dstats.cpu_wait_mad();
+        let net_receive = exp_data.global_process_dstats.net_receive_mad();
+        let net_send = exp_data.global_process_dstats.net_send_mad();
+        let mem_used = exp_data.global_process_dstats.mem_used_mad();
+
+        let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
+
+        // create cell
+        let mut cell = Vec::with_capacity(col_labels.len());
+        cell.push(fmt_cell_data(cpu_usr));
+        cell.push(fmt_cell_data(cpu_sys));
+        cell.push(fmt_cell_data(cpu_wait));
+        cell.push(fmt_cell_data(net_receive));
+        cell.push(fmt_cell_data(net_send));
+        cell.push(fmt_cell_data(mem_used));
+
+        // save cell
+        cells.push(cell);
+    }
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // create table arguments
+    let kwargs = pydict!(
+        py,
+        ("colLabels", col_labels),
+        ("colWidths", col_widths),
+        ("rowLabels", row_labels),
+        ("cellText", cells),
+        ("colLoc", "center"),
+        ("cellLoc", "center"),
+        ("rowLoc", "right"),
+        ("loc", "center"),
+    );
+
+    plt.table(Some(kwargs))?;
+    plt.axis("off")?;
+
+    // end plot
+    end_plot(output_file, py, &plt, None)?;
     Ok(())
 }
 
@@ -511,14 +601,16 @@ fn end_plot(
     output_file: &str,
     py: Python<'_>,
     plt: &PyPlot<'_>,
-    fig: Figure<'_>,
+    fig: Option<Figure<'_>>,
 ) -> Result<(), Report> {
     // save figure
     let kwargs = pydict!(py, ("format", "pdf"));
     plt.savefig(output_file, Some(kwargs))?;
 
     // close the figure
-    plt.close(fig)?;
+    if let Some(fig) = fig {
+        plt.close(fig)?;
+    }
 
     Ok(())
 }

@@ -37,7 +37,6 @@ fn multi_key() -> Result<(), Report> {
     let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
-    let clients_per_region = vec![1024 * 4, 1024 * 8];
 
     for keys_per_command in vec![8, 16, 32] {
         for zipf_coefficient in vec![1.0] {
@@ -47,7 +46,6 @@ fn multi_key() -> Result<(), Report> {
                 key_count: zipf_key_count,
             };
 
-            /*
             // generate throughput-latency plot
             for latency in vec![
                 LatencyMetric::Average,
@@ -85,9 +83,8 @@ fn multi_key() -> Result<(), Report> {
                     &mut db,
                 )?;
             }
-            */
 
-            // generate latency plots
+            // generate dstat, latency and cdf plots
             for clients_per_region in clients_per_region.clone() {
                 println!(
                     "n = {} | k = {} | c = {} | zipf = {}",
@@ -108,6 +105,13 @@ fn multi_key() -> Result<(), Report> {
                             search
                         })
                         .collect();
+
+                // generate dstat table
+                let path = format!(
+                    "dstat_n{}_c{}_k{}_zipf{}.pdf",
+                    n, clients_per_region, keys_per_command, zipf_coefficient,
+                );
+                fantoch_plot::dstat_table(searches.clone(), &path, &mut db)?;
 
                 // generate latency plot
                 let mut shown = false;
@@ -140,14 +144,13 @@ fn multi_key() -> Result<(), Report> {
 
                     if !shown {
                         // only show results once
-                        for (search, (histogram_fmt, dstat_fmt)) in results {
+                        for (search, histogram_fmt) in results {
                             println!(
                                 "{:<7} f = {} | {}",
                                 PlotFmt::protocol_name(search.protocol),
                                 search.f,
                                 histogram_fmt,
                             );
-                            println!("{}", dstat_fmt);
                         }
                         shown = true;
                     }
@@ -302,14 +305,13 @@ fn single_key() -> Result<(), Report> {
 
                 if !shown {
                     // only show results once
-                    for (search, (histogram_fmt, dstat_fmt)) in results {
+                    for (search, histogram_fmt) in results {
                         println!(
                             "{:<7} f = {} | {}",
                             PlotFmt::protocol_name(search.protocol),
                             search.f,
                             histogram_fmt,
                         );
-                        println!("{}", dstat_fmt);
                     }
                     shown = true;
                 }
@@ -367,8 +369,6 @@ fn protocol_combinations(
     combinations
 }
 
-fn fmt_exp_data(exp_data: &ExperimentData) -> (String, String) {
-    let latency_fmt = format!("{:?}", exp_data.global_client_latency);
-    let dstat_fmt = format!("{:?}", exp_data.global_process_dstats);
-    (latency_fmt, dstat_fmt)
+fn fmt_exp_data(exp_data: &ExperimentData) -> String {
+    format!("{:?}", exp_data.global_client_latency)
 }

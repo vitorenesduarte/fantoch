@@ -13,7 +13,7 @@ pub struct Dstat {
     pub cpu_wait: Histogram,
     pub net_receive: Histogram,
     pub net_send: Histogram,
-    pub memory_used: Histogram,
+    pub mem_used: Histogram,
 }
 
 impl Dstat {
@@ -24,7 +24,7 @@ impl Dstat {
             cpu_wait: Histogram::new(),
             net_receive: Histogram::new(),
             net_send: Histogram::new(),
-            memory_used: Histogram::new(),
+            mem_used: Histogram::new(),
         }
     }
 
@@ -34,7 +34,7 @@ impl Dstat {
         self.cpu_wait.merge(&other.cpu_wait);
         self.net_receive.merge(&other.net_receive);
         self.net_send.merge(&other.net_send);
-        self.memory_used.merge(&other.memory_used);
+        self.mem_used.merge(&other.mem_used);
     }
 
     pub fn from(start: u64, end: u64, path: String) -> Result<Self, Report> {
@@ -44,7 +44,7 @@ impl Dstat {
         let mut cpu_wait = Histogram::new();
         let mut net_receive = Histogram::new();
         let mut net_send = Histogram::new();
-        let mut memory_used = Histogram::new();
+        let mut mem_used = Histogram::new();
 
         // open csv file
         let file = File::open(path)?;
@@ -68,7 +68,7 @@ impl Dstat {
                 cpu_wait.increment(record.cpu_wait);
                 net_receive.increment(record.net_receive);
                 net_send.increment(record.net_send);
-                memory_used.increment(record.memory_used);
+                mem_used.increment(record.mem_used);
             }
         }
 
@@ -79,55 +79,64 @@ impl Dstat {
             cpu_wait,
             net_receive,
             net_send,
-            memory_used,
+            mem_used,
         };
         Ok(dstat)
+    }
+
+    pub fn cpu_usr_mad(&self) -> (u64, u64) {
+        Self::mad(&self.cpu_usr, None)
+    }
+
+    pub fn cpu_sys_mad(&self) -> (u64, u64) {
+        Self::mad(&self.cpu_sys, None)
+    }
+
+    pub fn cpu_wait_mad(&self) -> (u64, u64) {
+        Self::mad(&self.cpu_wait, None)
+    }
+
+    pub fn net_receive_mad(&self) -> (u64, u64) {
+        Self::mad(&self.net_receive, Some(1_000_000f64))
+    }
+
+    pub fn net_send_mad(&self) -> (u64, u64) {
+        Self::mad(&self.net_send, Some(1_000_000f64))
+    }
+
+    pub fn mem_used_mad(&self) -> (u64, u64) {
+        Self::mad(&self.mem_used, Some(1_000_000f64))
+    }
+
+    // mad: Mean and Standard-deviation.
+    fn mad(hist: &Histogram, norm: Option<f64>) -> (u64, u64) {
+        let mut mean = hist.mean().value();
+        let mut stddev = hist.stddev().value();
+        if let Some(norm) = norm {
+            mean = mean / norm;
+            stddev = stddev / norm;
+        }
+        (mean.round() as u64, stddev.round() as u64)
     }
 }
 
 impl fmt::Debug for Dstat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let usr = self.cpu_usr_mad();
+        let sys = self.cpu_sys_mad();
+        let wait = self.cpu_wait_mad();
+        let recv = self.net_receive_mad();
+        let send = self.net_send_mad();
+        let used = self.mem_used_mad();
         writeln!(f, "cpu:")?;
-        writeln!(
-            f,
-            "  usr              {:>4}   stddev={}",
-            self.cpu_usr.mean().value().round() as u64,
-            self.cpu_usr.stddev().value().round() as u64,
-        )?;
-        writeln!(
-            f,
-            "  sys              {:>4}   stddev={}",
-            self.cpu_sys.mean().value().round() as u64,
-            self.cpu_sys.stddev().value().round() as u64,
-        )?;
-        writeln!(
-            f,
-            "  wait             {:>4}   stddev={}",
-            self.cpu_wait.mean().value().round() as u64,
-            self.cpu_wait.stddev().value().round() as u64,
-        )?;
-
+        writeln!(f, "  usr              {:>4}   stddev={}", usr.0, usr.1)?;
+        writeln!(f, "  sys              {:>4}   stddev={}", sys.0, sys.1)?;
+        writeln!(f, "  wait             {:>4}   stddev={}", wait.0, wait.1)?;
         writeln!(f, "net:")?;
-        writeln!(
-            f,
-            "  (MB/s) receive   {:>4}   stddev={}",
-            (self.net_receive.mean().value() / 1_000_000f64).round() as u64,
-            (self.net_receive.stddev().value() / 1_000_000f64).round() as u64,
-        )?;
-        writeln!(
-            f,
-            "  (MB/s) send      {:>4}   stddev={}",
-            (self.net_send.mean().value() / 1_000_000f64).round() as u64,
-            (self.net_send.stddev().value() / 1_000_000f64).round() as u64,
-        )?;
-
+        writeln!(f, "  (MB/s) receive   {:>4}   stddev={}", recv.0, recv.1)?;
+        writeln!(f, "  (MB/s) send      {:>4}   stddev={}", send.0, send.1)?;
         writeln!(f, "mem:")?;
-        writeln!(
-            f,
-            "  (MB) used        {:>4}   stddev={}",
-            (self.memory_used.mean().value() / 1_000_000f64).round() as u64,
-            (self.memory_used.stddev().value() / 1_000_000f64).round() as u64,
-        )?;
+        writeln!(f, "  (MB) used        {:>4}   stddev={}", used.0, used.1)?;
         Ok(())
     }
 }
@@ -162,7 +171,7 @@ struct DstatRow {
     // memory metrics
     #[serde(rename = "used")]
     #[serde(deserialize_with = "f64_to_u64")]
-    memory_used: u64,
+    mem_used: u64,
 }
 
 fn parse_epoch<'de, D>(de: D) -> Result<u64, D::Error>
