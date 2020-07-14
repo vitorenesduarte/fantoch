@@ -63,17 +63,21 @@ pub async fn metrics_logger_task(
     }
 }
 
+/// First serialize to a temporary file, and then rename it. This makes it more
+/// likely we won't end up with a corrupted file if we're shutdown in the middle
+/// of this.
 // TODO make this async
-fn serialize_process_metrics(data: &ProcessMetrics, file: &String) {
+fn serialize_process_metrics(data: &ProcessMetrics, path: &String) {
     // if the file does not exist it will be created, otherwise truncated
-    std::fs::File::create(file)
-        .ok()
-        // create a buf writer
-        .map(std::io::BufWriter::new)
-        // and try to serialize
-        .map(|writer| {
-            bincode::serialize_into(writer, &data)
-                .expect("error serializing process metrics")
-        })
-        .unwrap_or_else(|| panic!("couldn't save process metrics"));
+    let tmp = format!("{}_tmp", path);
+    let file = std::fs::File::create(&tmp)
+        .expect("couldn't create temporary metrics file");
+    // create a buf writer
+    let writer = std::io::BufWriter::new(file);
+    // and try to serialize
+    bincode::serialize_into(writer, &data)
+        .expect("error serializing process metrics");
+
+    // finally, rename temporary file
+    std::fs::rename(tmp, path).expect("couldn't rename temporary metrics file");
 }
