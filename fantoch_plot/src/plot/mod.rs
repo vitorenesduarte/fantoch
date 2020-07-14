@@ -1,8 +1,8 @@
 pub mod axes;
 pub mod axis;
 pub mod figure;
-pub mod table;
 pub mod pyplot;
+pub mod table;
 
 use color_eyre::Report;
 use pyo3::prelude::*;

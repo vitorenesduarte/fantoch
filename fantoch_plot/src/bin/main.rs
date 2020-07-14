@@ -30,7 +30,7 @@ fn multi_key() -> Result<(), Report> {
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::NewtLocked,
-        Protocol::NewtFineLocked,
+        // Protocol::NewtFineLocked,
     ];
 
     // load results
@@ -38,7 +38,7 @@ fn multi_key() -> Result<(), Report> {
 
     let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
 
-    for keys_per_command in vec![8] {
+    for keys_per_command in vec![8, 64] {
         for zipf_coefficient in vec![1.0] {
             // create key generator
             let key_gen = KeyGen::Zipf {
