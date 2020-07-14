@@ -33,7 +33,16 @@ impl Votes {
             Some(current_votes) => current_votes,
             None => self.votes.entry(key.clone()).or_insert_with(Vec::new),
         };
-        current_votes.push(vote);
+
+        // if there's a last vote, try to compress with that one
+        if let Some(last) = current_votes.last_mut() {
+            if let Some(vote) = last.try_compress(vote) {
+                // if here, then we couldn't compress
+                current_votes.push(vote);
+            }
+        } else {
+            current_votes.push(vote);
+        }
     }
 
     /// Sets the votes on some `Key`.
@@ -118,22 +127,22 @@ impl VoteRange {
         self.end
     }
 
-    /// Compress two `VoteRange` if they form a contiguous sequenece of votes.
-    /// This functions that ranges are sorted, i.e. if `try_compress(a, b)`
-    /// compresses, then `try_compress(b, a)` won't.
-    pub fn try_compress(a: Self, b: Self) -> Vec<Self> {
+    /// Compress the `VoteRange` passed as argument into self if both form a
+    /// contiguous sequence of votes.
+    #[must_use]
+    pub fn try_compress(&mut self, other: Self) -> Option<Self> {
         // check that we have the same voters
-        assert_eq!(a.voter(), b.voter());
+        assert_eq!(self.by, other.by);
 
         // check if we can compress
-        if a.end() + 1 == b.start() {
-            // in this case we can
-            // - create new vote range that represents both
-            let vr = VoteRange::new(a.voter(), a.start(), b.end());
-            vec![vr]
+        if self.end + 1 == other.start {
+            // in this case we can:
+            // - update `self.end` to be `other.end`
+            self.end = other.end;
+            None
         } else {
             // in this case we can't
-            vec![a, b]
+            Some(other)
         }
     }
 
@@ -166,24 +175,21 @@ mod tests {
         let b = VoteRange::new(1, 2, 2);
         let c = VoteRange::new(1, 3, 6);
         let d = VoteRange::new(1, 7, 8);
-        assert_eq!(
-            VoteRange::try_compress(a.clone(), b.clone()),
-            vec![VoteRange::new(1, 1, 2)]
-        );
-        // try compress assumes that ranges are ordered and it won't try to
-        // compress in this case although it could
-        assert_eq!(
-            VoteRange::try_compress(b.clone(), a.clone()),
-            vec![b.clone(), a.clone()]
-        );
-        assert_eq!(
-            VoteRange::try_compress(a.clone(), c.clone()),
-            vec![a.clone(), c.clone()]
-        );
-        assert_eq!(
-            VoteRange::try_compress(c.clone(), d.clone()),
-            vec![VoteRange::new(1, 3, 8)]
-        );
+
+        let mut a_with_b = a.clone();
+        let res = a_with_b.try_compress(b.clone());
+        assert_eq!(a_with_b, VoteRange::new(1, 1, 2),);
+        assert_eq!(res, None);
+
+        let mut a_with_c = a.clone();
+        let res = a_with_c.try_compress(c.clone());
+        assert_eq!(a_with_c, a);
+        assert_eq!(res, Some(c.clone()));
+
+        let mut c_with_d = c.clone();
+        let res = c_with_d.try_compress(d.clone());
+        assert_eq!(c_with_d, VoteRange::new(1, 3, 8));
+        assert_eq!(res, None);
     }
 
     #[test]

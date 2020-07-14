@@ -230,10 +230,13 @@ mod tests {
         let ranges = votes
             .get(key)
             .expect("process should have voted on this key");
-        ranges
-            .into_iter()
-            .flat_map(|range| range.start()..=range.end())
-            .collect()
+        // check that there's only one vote:
+        // - this is only try for `AtomicKeyClocks` because `Votes.add` tries to
+        //   compress with the last added vote
+        assert_eq!(ranges.len(), 1);
+        let start = ranges[0].start();
+        let end = ranges[0].end();
+        (start..=end).collect()
     }
 
     fn concurrent_test<K: KeyClocks + Send + Sync + 'static>(
