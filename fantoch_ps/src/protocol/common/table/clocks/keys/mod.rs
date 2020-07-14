@@ -57,7 +57,7 @@ mod tests {
 
     #[test]
     fn atomic_key_clocks() {
-        keys_clocks_flow::<AtomicKeyClocks>(false);
+        keys_clocks_flow::<AtomicKeyClocks>(true);
         keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
@@ -230,11 +230,10 @@ mod tests {
         let ranges = votes
             .get(key)
             .expect("process should have voted on this key");
-        // check that there's only one vote
-        assert_eq!(ranges.len(), 1);
-        let start = ranges[0].start();
-        let end = ranges[0].end();
-        (start..=end).collect()
+        ranges
+            .into_iter()
+            .flat_map(|range| range.start()..=range.end())
+            .collect()
     }
 
     fn concurrent_test<K: KeyClocks + Send + Sync + 'static>(
