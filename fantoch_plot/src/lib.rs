@@ -484,11 +484,11 @@ pub fn dstat_table(
         "cpu_usr",
         "cpu_sys",
         "cpu_wait",
-        "net_receive (MB/s)",
+        "net_recv (MB/s)",
         "net_send (MB/s)",
         "mem_used (MB)",
     ];
-    let col_widths = vec![0.12, 0.12, 0.12, 0.14, 0.14, 0.15];
+    let col_widths = vec![0.13, 0.13, 0.13, 0.20, 0.20, 0.20];
 
     // protocol labels
     let mut row_labels = Vec::with_capacity(searches.len());
@@ -496,6 +496,7 @@ pub fn dstat_table(
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
 
+    let mut has_data = false;
     for search in searches {
         let mut exp_data = db.find(search)?;
         match exp_data.len() {
@@ -520,48 +521,56 @@ pub fn dstat_table(
         let cpu_usr = exp_data.global_process_dstats.cpu_usr_mad();
         let cpu_sys = exp_data.global_process_dstats.cpu_sys_mad();
         let cpu_wait = exp_data.global_process_dstats.cpu_wait_mad();
-        let net_receive = exp_data.global_process_dstats.net_receive_mad();
+        let net_recv = exp_data.global_process_dstats.net_recv();
         let net_send = exp_data.global_process_dstats.net_send_mad();
         let mem_used = exp_data.global_process_dstats.mem_used_mad();
 
-        let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
-
         // create cell
-        let mut cell = Vec::with_capacity(col_labels.len());
-        cell.push(fmt_cell_data(cpu_usr));
-        cell.push(fmt_cell_data(cpu_sys));
-        cell.push(fmt_cell_data(cpu_wait));
-        cell.push(fmt_cell_data(net_receive));
-        cell.push(fmt_cell_data(net_send));
-        cell.push(fmt_cell_data(mem_used));
+        let cell =
+            vec![cpu_usr, cpu_sys, cpu_wait, net_recv, net_send, mem_used];
+        let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
+        let cell: Vec<_> = cell.into_iter().map(fmt_cell_data).collect();
 
         // save cell
         cells.push(cell);
+
+        // mark that there's data to be plotted
+        has_data = true
     }
 
-    // start python
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let plt = PyPlot::new(py)?;
+    // only try to plot if there's any data
+    if has_data {
+        // start python
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let plt = PyPlot::new(py)?;
 
-    // create table arguments
-    let kwargs = pydict!(
-        py,
-        ("colLabels", col_labels),
-        ("colWidths", col_widths),
-        ("rowLabels", row_labels),
-        ("cellText", cells),
-        ("colLoc", "center"),
-        ("cellLoc", "center"),
-        ("rowLoc", "right"),
-        ("loc", "center"),
-    );
+        // create table arguments
+        let kwargs = pydict!(
+            py,
+            ("colLabels", col_labels),
+            ("colWidths", col_widths),
+            ("rowLabels", row_labels),
+            ("cellText", cells),
+            ("colLoc", "center"),
+            ("cellLoc", "center"),
+            ("rowLoc", "right"),
+            ("loc", "center"),
+        );
 
-    plt.table(Some(kwargs))?;
-    plt.axis("off")?;
+        let table = plt.table(Some(kwargs))?;
+        plt.axis("off")?;
 
-    // end plot
-    end_plot(output_file, py, &plt, None)?;
+        // create font size font
+        table.auto_set_font_size(false)?;
+        table.set_fontsize(6.5)?;
+
+        // row labels are too wide without this
+        plt.tight_layout()?;
+
+        // end plot
+        end_plot(output_file, py, &plt, None)?;
+    }
     Ok(())
 }
 
@@ -607,10 +616,14 @@ fn end_plot(
     let kwargs = pydict!(py, ("format", "pdf"));
     plt.savefig(output_file, Some(kwargs))?;
 
-    // close the figure
-    if let Some(fig) = fig {
-        plt.close(fig)?;
-    }
+    let kwargs = if let Some(fig) = fig {
+        // close the figure passed as argument
+        Some(pydict!(py, ("fig", fig.fig())))
+    } else {
+        // close the current figure
+        None
+    };
+    plt.close(kwargs)?;
 
     Ok(())
 }

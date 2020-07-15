@@ -3,7 +3,7 @@ use crate::protocol::common::shared::Shared;
 use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
 use fantoch::id::ProcessId;
-use fantoch::kvs::Key;
+use fantoch::HashSet;
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -34,13 +34,15 @@ impl KeyClocks for AtomicKeyClocks {
     }
 
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
-        // single round of votes:
+        // first round of votes:
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
         //   necessarily end up with all key clocks equal
         // OPTIMIZATION: keep track of the highest bumped-to value; if we have
         // to iterate in a way that the highest clock is iterated first, this
         // will be almost equivalent to `LockedKeyClocks`
+
+        let mut clocks = HashSet::with_capacity(cmd.key_count());
         let mut votes = Votes::with_capacity(cmd.key_count());
         let mut up_to = min_clock;
         cmd.keys().for_each(|key| {
@@ -52,7 +54,23 @@ impl KeyClocks for AtomicKeyClocks {
             up_to = cmp::max(up_to, previous_value + 1);
             let vr = VoteRange::new(self.id, previous_value + 1, up_to);
             votes.set(key.clone(), vec![vr]);
+
+            // save final clock value
+            clocks.insert(up_to);
         });
+
+        // second round of votes:
+        // - if not all clocks match (i.e. we didn't get a result equivalent to
+        //   `LockedKeyClocks`), try to make them match
+        if clocks.len() > 1 {
+            cmd.keys().for_each(|key| {
+                let clock = self.clocks.get(key);
+                if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
+                    votes.add(key, vr);
+                }
+            })
+        }
+
         (up_to, votes)
     }
 
@@ -61,7 +79,9 @@ impl KeyClocks for AtomicKeyClocks {
         let mut votes = Votes::with_capacity(cmd.key_count());
         for key in cmd.keys() {
             let clock = self.clocks.get(key);
-            Self::maybe_bump(self.id, key, &clock, up_to, &mut votes);
+            if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
+                votes.set(key.clone(), vec![vr]);
+            }
         }
         votes
     }
@@ -74,7 +94,9 @@ impl KeyClocks for AtomicKeyClocks {
         self.clocks.iter().for_each(|entry| {
             let key = entry.key();
             let clock = entry.value();
-            Self::maybe_bump(self.id, key, &clock, up_to, &mut votes);
+            if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
+                votes.set(key.clone(), vec![vr]);
+            }
         });
 
         votes
@@ -103,11 +125,9 @@ impl AtomicKeyClocks {
     // Bump the clock to `up_to` if lower than `up_to`.
     fn maybe_bump(
         id: ProcessId,
-        key: &Key,
         clock: &AtomicU64,
         up_to: u64,
-        votes: &mut Votes,
-    ) {
+    ) -> Option<VoteRange> {
         let fetch_update =
             clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                 if value < up_to {
@@ -116,9 +136,8 @@ impl AtomicKeyClocks {
                     None
                 }
             });
-        if let Ok(previous_value) = fetch_update {
-            let vr = VoteRange::new(id, previous_value + 1, up_to);
-            votes.set(key.clone(), vec![vr]);
-        }
+        fetch_update
+            .ok()
+            .map(|previous_value| VoteRange::new(id, previous_value + 1, up_to))
     }
 }

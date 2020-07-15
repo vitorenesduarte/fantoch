@@ -10,7 +10,7 @@ use std::time::Duration;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_multikey_maxtput";
+const RESULTS_DIR: &str = "../results_multikey_2_passes";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -31,7 +31,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "master";
+const BRANCH: &str = "atomic_2_passes";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
@@ -106,17 +106,16 @@ async fn main() -> Result<(), Report> {
         (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
         (Protocol::NewtLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtLocked, config!(n, 2, false, None, false)),
-        /*
         (Protocol::NewtFineLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtFineLocked, config!(n, 2, false, None, false)),
-        */
     ];
 
-    let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
+    let clients_per_region =
+        vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
-    for keys_per_command in vec![16] {
+    for keys_per_command in vec![8] {
         for coefficient in vec![1.0] {
             let workload = Workload::new(
                 KeyGen::Zipf {

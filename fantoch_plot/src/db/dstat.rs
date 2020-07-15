@@ -1,5 +1,6 @@
+use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use csv::Reader;
+use csv::ReaderBuilder;
 use fantoch::metrics::Histogram;
 use serde::{Deserialize, Deserializer};
 use std::fmt;
@@ -11,7 +12,7 @@ pub struct Dstat {
     pub cpu_usr: Histogram,
     pub cpu_sys: Histogram,
     pub cpu_wait: Histogram,
-    pub net_receive: Histogram,
+    pub net_recv: Histogram,
     pub net_send: Histogram,
     pub mem_used: Histogram,
 }
@@ -22,7 +23,7 @@ impl Dstat {
             cpu_usr: Histogram::new(),
             cpu_sys: Histogram::new(),
             cpu_wait: Histogram::new(),
-            net_receive: Histogram::new(),
+            net_recv: Histogram::new(),
             net_send: Histogram::new(),
             mem_used: Histogram::new(),
         }
@@ -32,17 +33,17 @@ impl Dstat {
         self.cpu_usr.merge(&other.cpu_usr);
         self.cpu_sys.merge(&other.cpu_sys);
         self.cpu_wait.merge(&other.cpu_wait);
-        self.net_receive.merge(&other.net_receive);
+        self.net_recv.merge(&other.net_recv);
         self.net_send.merge(&other.net_send);
         self.mem_used.merge(&other.mem_used);
     }
 
-    pub fn from(start: u64, end: u64, path: String) -> Result<Self, Report> {
+    pub fn from(start: u64, end: u64, path: &String) -> Result<Self, Report> {
         // create all histograms
         let mut cpu_usr = Histogram::new();
         let mut cpu_sys = Histogram::new();
         let mut cpu_wait = Histogram::new();
-        let mut net_receive = Histogram::new();
+        let mut net_recv = Histogram::new();
         let mut net_send = Histogram::new();
         let mut mem_used = Histogram::new();
 
@@ -56,19 +57,34 @@ impl Dstat {
             buf.read_line(&mut s)?;
         }
 
-        // parse csv
-        let mut reader = Reader::from_reader(buf);
-        for record in reader.deserialize() {
+        // create csv reader:
+        // - `flexible(true)` makes `reader.records()` not throw a error in case
+        //   there's a row with not enough fields
+        let mut reader = ReaderBuilder::new().flexible(true).from_reader(buf);
+
+        // get dstat headers
+        let headers = reader.headers().wrap_err("csv headers")?.clone();
+
+        for row in reader.records() {
+            // fetch row
+            let row = row.wrap_err("csv record")?;
+
+            // skip row if doesn't have enough fields/columns
+            if row.len() < headers.len() {
+                continue;
+            }
+
             // parse csv row
-            let record: DstatRow = record?;
+            let row: DstatRow = row.deserialize(Some(&headers))?;
+
             // only consider the record if within bounds
-            if record.epoch >= start && record.epoch <= end {
-                cpu_usr.increment(record.cpu_usr);
-                cpu_sys.increment(record.cpu_sys);
-                cpu_wait.increment(record.cpu_wait);
-                net_receive.increment(record.net_receive);
-                net_send.increment(record.net_send);
-                mem_used.increment(record.mem_used);
+            if row.epoch >= start && row.epoch <= end {
+                cpu_usr.increment(row.cpu_usr);
+                cpu_sys.increment(row.cpu_sys);
+                cpu_wait.increment(row.cpu_wait);
+                net_recv.increment(row.net_recv);
+                net_send.increment(row.net_send);
+                mem_used.increment(row.mem_used);
             }
         }
 
@@ -77,7 +93,7 @@ impl Dstat {
             cpu_usr,
             cpu_sys,
             cpu_wait,
-            net_receive,
+            net_recv,
             net_send,
             mem_used,
         };
@@ -96,8 +112,8 @@ impl Dstat {
         Self::mad(&self.cpu_wait, None)
     }
 
-    pub fn net_receive_mad(&self) -> (u64, u64) {
-        Self::mad(&self.net_receive, Some(1_000_000f64))
+    pub fn net_recv(&self) -> (u64, u64) {
+        Self::mad(&self.net_recv, Some(1_000_000f64))
     }
 
     pub fn net_send_mad(&self) -> (u64, u64) {
@@ -108,7 +124,7 @@ impl Dstat {
         Self::mad(&self.mem_used, Some(1_000_000f64))
     }
 
-    // mad: Mean and Standard-deviation.
+    // mad: mean and standard-deviation.
     fn mad(hist: &Histogram, norm: Option<f64>) -> (u64, u64) {
         let mut mean = hist.mean().value();
         let mut stddev = hist.stddev().value();
@@ -125,7 +141,7 @@ impl fmt::Debug for Dstat {
         let usr = self.cpu_usr_mad();
         let sys = self.cpu_sys_mad();
         let wait = self.cpu_wait_mad();
-        let recv = self.net_receive_mad();
+        let recv = self.net_recv();
         let send = self.net_send_mad();
         let used = self.mem_used_mad();
         writeln!(f, "cpu:")?;
@@ -141,7 +157,7 @@ impl fmt::Debug for Dstat {
     }
 }
 
-// All fields:
+// Fields we're generating:
 // "time","epoch","usr","sys","idl","wai","stl","read","writ","recv","send"
 // ,"used","free","buff","cach","read","writ"
 #[derive(Debug, Deserialize)]
@@ -163,7 +179,7 @@ struct DstatRow {
     // net metrics
     #[serde(rename = "recv")]
     #[serde(deserialize_with = "f64_to_u64")]
-    net_receive: u64,
+    net_recv: u64,
     #[serde(rename = "send")]
     #[serde(deserialize_with = "f64_to_u64")]
     net_send: u64,
@@ -179,8 +195,8 @@ where
     D: Deserializer<'de>,
 {
     let epoch = String::deserialize(de)?;
-    let epoch = epoch.parse::<f64>().expect("dstat value should be a float");
-    // covert epoch to milliseconds
+    let epoch = epoch.parse::<f64>().expect("epoch should be a float");
+    // convert epoch to milliseconds
     let epoch = epoch * 1000f64;
     let epoch = epoch.round() as u64;
     Ok(epoch)
