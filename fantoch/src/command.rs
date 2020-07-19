@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
     ops: HashMap<Key, KVOp>,
@@ -107,7 +107,7 @@ impl fmt::Debug for Command {
 }
 
 /// Structure that aggregates partial results of multi-key commands.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommandResult {
     rifl: Rifl,
     key_count: usize,

@@ -18,7 +18,7 @@ use tracing::instrument;
 
 type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FPaxos {
     bp: BaseProcess,
     leader: ProcessId,
@@ -397,7 +397,7 @@ impl FPaxos {
 }
 
 // `FPaxos` protocol messages
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
     MForwardSubmit {
         cmd: Command,
@@ -466,7 +466,7 @@ impl MessageIndex for Message {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeriodicEvent {
     GarbageCollection,
 }

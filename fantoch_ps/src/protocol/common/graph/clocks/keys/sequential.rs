@@ -5,7 +5,7 @@ use fantoch::kvs::Key;
 use fantoch::HashMap;
 use threshold::VClock;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyClocks {
     n: usize, // number of processes
     clocks: HashMap<Key, VClock<ProcessId>>,

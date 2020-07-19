@@ -11,7 +11,7 @@ pub enum Stats {
 }
 
 // TODO maybe use https://docs.rs/hdrhistogram/7.0.0/hdrhistogram/
-#[derive(Default, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Histogram {
     // raw values: we have "100%" precision as all values are stored
     values: BTreeMap<u64, usize>,

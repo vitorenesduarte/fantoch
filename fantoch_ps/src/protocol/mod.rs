@@ -522,7 +522,7 @@ mod tests {
         check_metrics(config, commands_per_client, clients_per_region, metrics)
     }
 
-    fn sim_test<P: Protocol>(
+    fn sim_test<P: Protocol + Eq>(
         mut config: Config,
         commands_per_client: usize,
         clients_per_region: usize,

@@ -192,7 +192,7 @@ fn newt_real_time(aws: bool) {
 }
 
 #[allow(dead_code)]
-fn equidistant<P: Protocol>(protocol_name: &str) {
+fn equidistant<P: Protocol + Eq>(protocol_name: &str) {
     // intra-region distance
     let distance = 200;
 
@@ -243,7 +243,7 @@ fn equidistant<P: Protocol>(protocol_name: &str) {
 }
 
 #[allow(dead_code)]
-fn increasing_regions<P: Protocol>(protocol_name: &str) {
+fn increasing_regions<P: Protocol + Eq>(protocol_name: &str) {
     let planet = Planet::new();
     let regions13 = vec![
         Region::new("asia-southeast1"),
@@ -308,7 +308,7 @@ fn increasing_regions<P: Protocol>(protocol_name: &str) {
     }
 }
 
-fn run<P: Protocol>(
+fn run<P: Protocol + Eq>(
     config: Config,
     workload: Workload,
     clients_per_region: usize,

@@ -14,7 +14,7 @@ pub trait Info {
 }
 
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandsInfo<I> {
     process_id: ProcessId,
     n: usize,

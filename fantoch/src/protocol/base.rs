@@ -6,7 +6,7 @@ use crate::HashSet;
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseProcess {
     pub process_id: ProcessId,
     pub config: Config,

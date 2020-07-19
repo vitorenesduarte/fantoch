@@ -108,7 +108,7 @@ impl TableExecutor {
             .collect()
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TableExecutionInfo {
     Votes {
         dot: Dot,

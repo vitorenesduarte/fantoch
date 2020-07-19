@@ -14,7 +14,8 @@ use crate::HashMap;
 use std::fmt;
 use std::time::Duration;
 
-enum ScheduleAction<P: Protocol> {
+#[derive(PartialEq, Eq)]
+enum ScheduleAction<P: Protocol + Eq> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
@@ -26,7 +27,7 @@ enum MessageRegion {
     Client(ClientId),
 }
 
-pub struct Runner<P: Protocol> {
+pub struct Runner<P: Protocol + Eq> {
     planet: Planet,
     simulation: Simulation<P>,
     schedule: Schedule<ScheduleAction<P>>,
@@ -50,7 +51,7 @@ enum SimulationStatus {
 
 impl<P> Runner<P>
 where
-    P: Protocol,
+    P: Protocol + Eq,
 {
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of
     /// regions:
@@ -198,110 +199,106 @@ where
         let mut simulation_final_time = 0;
 
         while simulation_status != SimulationStatus::Done {
-            let actions = self.schedule
-                .next_actions(self.simulation.time())
-                .expect("there should be more actions since stability is always running");
+            let action = self.schedule
+                .next_action(self.simulation.time())
+                .expect("there should be a new action since stability is always running");
 
-            // for each scheduled action
-            actions.into_iter().for_each(|action| {
-                match action {
-                    ScheduleAction::SubmitToProc(process_id, cmd) => {
-                        // get process and executor
-                        let (process, executor, time) =
-                            self.simulation.get_process(process_id);
+            match action {
+                ScheduleAction::SubmitToProc(process_id, cmd) => {
+                    // get process and executor
+                    let (process, executor, time) =
+                        self.simulation.get_process(process_id);
 
-                        // register command in the executor
-                        executor.wait_for(&cmd);
+                    // register command in the executor
+                    executor.wait_for(&cmd);
 
-                        // submit to process and schedule output messages
-                        let protocol_actions = process.submit(None, cmd, time);
-                        self.schedule_protocol_actions(
-                            process_id,
+                    // submit to process and schedule output messages
+                    let protocol_actions = process.submit(None, cmd, time);
+                    self.schedule_protocol_actions(
+                        process_id,
+                        MessageRegion::Process(process_id),
+                        protocol_actions,
+                    );
+                }
+                ScheduleAction::SendToProc(from, process_id, msg) => {
+                    // get process and executor
+                    let (process, executor, time) =
+                        self.simulation.get_process(process_id);
+
+                    // handle message and get ready commands
+                    let protocol_actions = process.handle(from, msg, time);
+
+                    // handle new execution info in the executor
+                    let to_executor = process.to_executor();
+                    let ready: Vec<_> = to_executor
+                        .into_iter()
+                        .flat_map(|info| executor.handle(info))
+                        .map(|result| result.unwrap_ready())
+                        .collect();
+
+                    // schedule new messages
+                    self.schedule_protocol_actions(
+                        process_id,
+                        MessageRegion::Process(process_id),
+                        protocol_actions,
+                    );
+
+                    // schedule new command results
+                    ready.into_iter().for_each(|cmd_result| {
+                        self.schedule_to_client(
                             MessageRegion::Process(process_id),
-                            protocol_actions,
-                        );
-                    }
-                    ScheduleAction::SendToProc(from, process_id, msg) => {
-                        // get process and executor
-                        let (process, executor, time) =
-                            self.simulation.get_process(process_id);
-
-                        // handle message and get ready commands
-                        let protocol_actions = process.handle(from, msg, time);
-
-                        // handle new execution info in the executor
-                        let to_executor = process.to_executor();
-                        let ready: Vec<_> = to_executor
-                            .into_iter()
-                            .flat_map(|info| executor.handle(info))
-                            .map(|result| result.unwrap_ready())
-                            .collect();
-
-                        // schedule new messages
-                        self.schedule_protocol_actions(
+                            cmd_result,
+                        )
+                    });
+                }
+                ScheduleAction::SendToClient(client_id, cmd_result) => {
+                    // handle new command result in client
+                    let submit = self.simulation.forward_to_client(cmd_result);
+                    if let Some((process_id, cmd)) = submit {
+                        self.schedule_submit(
+                            MessageRegion::Client(client_id),
                             process_id,
-                            MessageRegion::Process(process_id),
-                            protocol_actions,
+                            cmd,
                         );
-
-                        // schedule new command results
-                        ready.into_iter().for_each(|cmd_result| {
-                            self.schedule_to_client(
-                                MessageRegion::Process(process_id),
-                                cmd_result,
-                            )
-                        });
-                    }
-                    ScheduleAction::SendToClient(client_id, cmd_result) => {
-                        // handle new command result in client
-                        let submit =
-                            self.simulation.forward_to_client(cmd_result);
-                        if let Some((process_id, cmd)) = submit {
-                            self.schedule_submit(
-                                MessageRegion::Client(client_id),
-                                process_id,
-                                cmd,
-                            );
-                        } else {
-                            clients_done += 1;
-                            // if all clients are done, enter the next phase
-                            if clients_done == self.client_count {
-                                simulation_status = match extra_sim_time {
-                                    Some(extra) => {
-                                        // if there's extra time, compute the
-                                        // final simulation time
-                                        simulation_final_time =
-                                            self.simulation.time().millis()
-                                                + extra.as_millis() as u64;
-                                        SimulationStatus::ExtraSimulationTime
-                                    }
-                                    None => {
-                                        // otherwise, end the simulation
-                                        SimulationStatus::Done
-                                    }
+                    } else {
+                        clients_done += 1;
+                        // if all clients are done, enter the next phase
+                        if clients_done == self.client_count {
+                            simulation_status = match extra_sim_time {
+                                Some(extra) => {
+                                    // if there's extra time, compute the
+                                    // final simulation time
+                                    simulation_final_time =
+                                        self.simulation.time().millis()
+                                            + extra.as_millis() as u64;
+                                    SimulationStatus::ExtraSimulationTime
+                                }
+                                None => {
+                                    // otherwise, end the simulation
+                                    SimulationStatus::Done
                                 }
                             }
                         }
                     }
-                    ScheduleAction::PeriodicEvent(process_id, event, delay) => {
-                        // get process
-                        let (process, _, time) =
-                            self.simulation.get_process(process_id);
-
-                        // handle event
-                        let protocol_actions =
-                            process.handle_event(event.clone(), time);
-                        self.schedule_protocol_actions(
-                            process_id,
-                            MessageRegion::Process(process_id),
-                            protocol_actions,
-                        );
-
-                        // schedule the next periodic event
-                        self.schedule_event(process_id, event, delay);
-                    }
                 }
-            });
+                ScheduleAction::PeriodicEvent(process_id, event, delay) => {
+                    // get process
+                    let (process, _, time) =
+                        self.simulation.get_process(process_id);
+
+                    // handle event
+                    let protocol_actions =
+                        process.handle_event(event.clone(), time);
+                    self.schedule_protocol_actions(
+                        process_id,
+                        MessageRegion::Process(process_id),
+                        protocol_actions,
+                    );
+
+                    // schedule the next periodic event
+                    self.schedule_event(process_id, event, delay);
+                }
+            }
 
             // check if we're in extra simulation time; if yes, finish the
             // simulation if we're past the final simulation time
@@ -520,7 +517,7 @@ where
     }
 }
 
-impl<P: Protocol> fmt::Debug for ScheduleAction<P> {
+impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ScheduleAction::SubmitToProc(process_id, cmd) => {
