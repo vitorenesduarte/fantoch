@@ -92,7 +92,7 @@ impl GraphExecutor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphExecutionInfo {
     dot: Dot,
     cmd: Command,

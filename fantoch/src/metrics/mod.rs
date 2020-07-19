@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::Hash;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Metrics<K: Eq + Hash, V> {
     collected: HashMap<K, Histogram>,
     aggregated: HashMap<K, V>,

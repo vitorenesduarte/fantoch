@@ -26,7 +26,7 @@ pub type AtlasLocked = Atlas<LockedKeyClocks>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Atlas<KC> {
     bp: BaseProcess,
     keys_clocks: KC,
@@ -577,7 +577,7 @@ impl<KC: KeyClocks> Atlas<KC> {
 // consensus value is a pair where the first component is the command (noop if
 // `None`) and the second component its dependencies represented as a vector
 // clock.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     cmd: Option<Command>,
     clock: VClock<ProcessId>,
@@ -601,7 +601,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `AtlasInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct AtlasInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
@@ -630,7 +630,7 @@ impl Info for AtlasInfo {
 }
 
 // `Atlas` protocol messages
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
     MCollect {
         dot: Dot,
@@ -688,7 +688,7 @@ impl MessageIndex for Message {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeriodicEvent {
     GarbageCollection,
 }
@@ -703,7 +703,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 }
 
 /// `Status` of commands.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
     COLLECT,

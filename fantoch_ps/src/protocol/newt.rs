@@ -28,7 +28,7 @@ pub type NewtFineLocked = Newt<FineLockedKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Newt<KC> {
     bp: BaseProcess,
     key_clocks: KC,
@@ -863,7 +863,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `NewtInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct NewtInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
@@ -899,7 +899,7 @@ impl Info for NewtInfo {
 }
 
 // `Newt` protocol messages
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
     MCollect {
         dot: Dot,
@@ -977,7 +977,7 @@ impl MessageIndex for Message {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeriodicEvent {
     GarbageCollection,
     ClockBump,
@@ -996,7 +996,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 }
 
 /// `Status` of commands.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
     PENDING,

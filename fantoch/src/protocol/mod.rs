@@ -37,13 +37,14 @@ use std::time::Duration;
 pub trait Protocol: Debug + Clone {
     type Message: Debug
         + Clone
+        + Eq
         + PartialEq
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
         + MessageIndex; // TODO why is Sync needed??
-    type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex;
+    type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex + Eq;
     type Executor: Executor + Send;
 
     /// Returns a new instance of the protocol and a list of periodic events.

@@ -17,7 +17,7 @@ use tracing::instrument;
 
 type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Basic {
     bp: BaseProcess,
     cmds: CommandsInfo<BasicInfo>,
@@ -331,7 +331,7 @@ impl Basic {
 
 // `BasicInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BasicInfo {
     cmd: Option<Command>,
     acks: HashSet<ProcessId>,
@@ -353,7 +353,7 @@ impl Info for BasicInfo {
 }
 
 // `Basic` protocol messages
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Message {
     MStore { dot: Dot, cmd: Command },
     MStoreAck { dot: Dot },
@@ -383,7 +383,7 @@ impl MessageIndex for Message {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeriodicEvent {
     GarbageCollection,
 }

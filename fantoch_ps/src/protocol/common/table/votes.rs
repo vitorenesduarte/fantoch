@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Votes are all Votes on some command.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Votes {
     votes: HashMap<Key, Vec<VoteRange>>,
 }

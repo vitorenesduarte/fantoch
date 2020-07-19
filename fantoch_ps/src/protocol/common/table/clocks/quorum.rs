@@ -2,7 +2,7 @@ use fantoch::id::ProcessId;
 use fantoch::HashSet;
 use std::cmp::Ordering;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuorumClocks {
     // fast quorum size
     q: usize,

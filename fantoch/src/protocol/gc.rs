@@ -5,7 +5,7 @@ use crate::HashMap;
 use threshold::{AEClock, EventSet, VClock};
 use tracing::instrument;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GCTrack {
     process_id: ProcessId,
     n: usize,

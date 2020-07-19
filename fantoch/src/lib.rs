@@ -1,5 +1,4 @@
 #![deny(rust_2018_idioms)]
-#![feature(map_first_last)]
 
 // This module contains the definition of `Region` and `Planet`.
 pub mod planet;
