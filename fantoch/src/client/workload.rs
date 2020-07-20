@@ -3,6 +3,7 @@ use crate::command::Command;
 use crate::id::RiflGen;
 use crate::kvs::{KVOp, Value};
 use crate::log;
+use crate::HashMap;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use std::iter;
@@ -115,14 +116,17 @@ impl Workload {
         let rifl = rifl_gen.next_id();
 
         // generate all the key-value pairs
-        let iter = (0..self.keys_per_shard).map(|_| {
-            let key = key_gen_state.gen_cmd_key();
-            let value = self.gen_cmd_value();
-            (key, KVOp::Put(value))
-        });
+        let mut ops = HashMap::new();
+        for shard in 0..self.shards_per_command {
+            for _ in 0..self.keys_per_shard {
+                let key = key_gen_state.gen_cmd_key();
+                let value = self.gen_cmd_value();
+                ops.insert(key, (KVOp::Put(value), shard));
+            }
+        }
 
         // create commadn
-        Command::from(rifl, iter)
+        Command::new(rifl, ops)
     }
 
     /// Generate a command payload with the payload size provided.
