@@ -12,7 +12,7 @@ type Slot = u64;
 
 #[derive(Clone)]
 pub struct SlotExecutor {
-    execute_at_commit: bool,
+    config: Config,
     store: KVStore,
     pending: HashSet<Rifl>,
     next_slot: Slot,
@@ -33,7 +33,7 @@ impl Executor for SlotExecutor {
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
         Self {
-            execute_at_commit: config.execute_at_commit(),
+            config,
             store,
             pending,
             next_slot,
@@ -58,7 +58,7 @@ impl Executor for SlotExecutor {
         // necessarily true
         assert!(slot >= self.next_slot);
 
-        if self.execute_at_commit {
+        if self.config.execute_at_commit() {
             self.execute(cmd)
         } else {
             // add received command to the commands to be executed and try to
@@ -97,7 +97,7 @@ impl SlotExecutor {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(&mut self.store);
+        let result = cmd.execute(self.config.shard(), &mut self.store);
         // update results if this rifl is pending
         if self.pending.remove(&rifl) {
             vec![ExecutorResult::Ready(result)]

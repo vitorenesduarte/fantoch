@@ -12,7 +12,7 @@ use threshold::VClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
-    execute_at_commit: bool,
+    config: Config,
     graph: DependencyGraph,
     store: KVStore,
     pending: HashSet<Rifl>,
@@ -28,7 +28,7 @@ impl Executor for GraphExecutor {
         let pending = HashSet::new();
         let metrics = ExecutorMetrics::new();
         Self {
-            execute_at_commit: config.execute_at_commit(),
+            config,
             graph,
             store,
             pending,
@@ -46,7 +46,7 @@ impl Executor for GraphExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
-        let to_execute = if self.execute_at_commit {
+        let to_execute = if self.config.execute_at_commit() {
             vec![info.cmd]
         } else {
             // handle each new info
@@ -76,7 +76,7 @@ impl GraphExecutor {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(&mut self.store);
+        let result = cmd.execute(self.config.shard(), &mut self.store);
 
         // if it was pending locally, then it's from a client of this
         // process

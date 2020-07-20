@@ -244,7 +244,7 @@ impl Basic {
         //   basic executor to run in parallel
         let rifl = cmd.rifl();
         let execution_info = cmd
-            .into_iter()
+            .into_iter(self.bp.config.shard())
             .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
         self.to_executor.extend(execution_info);
 
@@ -476,14 +476,16 @@ mod tests {
         simulation.register_process(basic_3, executor_3);
 
         // client workload
+        let shards_per_command = 1;
+        let keys_per_shard = 1;
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
         let total_commands = 10;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );

@@ -2,12 +2,16 @@ use crate::id::ProcessId;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+pub const DEFAULT_SHARD: usize = 0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// number of processes
     n: usize,
     /// number of tolerated faults
     f: usize,
+    /// which shard this process belongs to
+    shard: usize,
     /// defines whether we can assume if the conflict relation is transitive
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
@@ -51,6 +55,7 @@ impl Config {
         Self {
             n,
             f,
+            shard: DEFAULT_SHARD,
             transitive_conflicts,
             execute_at_commit,
             gc_interval,
@@ -69,6 +74,16 @@ impl Config {
     /// Retrieve the number of faults tolerated.
     pub fn f(&self) -> usize {
         self.f
+    }
+
+    /// Retrieve the shard number.
+    pub fn shard(&self) -> usize {
+        self.shard
+    }
+
+    /// Changes the shard number.
+    pub fn set_shard(&mut self, shard: usize) {
+        self.shard = shard;
     }
 
     /// Checks whether we can assume that conflicts are transitive.
@@ -226,6 +241,14 @@ mod tests {
 
         assert_eq!(config.n(), n);
         assert_eq!(config.f(), f);
+
+        // by default, shard is `DEFAULT_SHARD`
+        assert_eq!(config.shard(), DEFAULT_SHARD);
+
+        // but that can change
+        let new_shard = 10;
+        config.set_shard(new_shard);
+        assert_eq!(config.shard(), new_shard);
 
         // by default, transitive conflicts is false
         assert!(!config.transitive_conflicts());

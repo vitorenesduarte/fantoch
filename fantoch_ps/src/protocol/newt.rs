@@ -539,13 +539,14 @@ impl<KC: KeyClocks> Newt<KC> {
         let cmd = info.cmd.clone().expect("there should be a command payload");
         // create execution info
         let rifl = cmd.rifl();
-        let execution_info = cmd.into_iter().map(|(key, op)| {
-            // find votes on this key
-            let key_votes = votes
-                .remove(&key)
-                .expect("there should be votes on all command keys");
-            ExecutionInfo::votes(dot, clock, rifl, key, op, key_votes)
-        });
+        let execution_info =
+            cmd.into_iter(self.bp.config.shard()).map(|(key, op)| {
+                // find votes on this key
+                let key_votes = votes
+                    .remove(&key)
+                    .expect("there should be votes on all command keys");
+                ExecutionInfo::votes(dot, clock, rifl, key, op, key_votes)
+            });
         self.to_executor.extend(execution_info);
 
         // don't try to generate detached votes if configured with real time
@@ -1098,14 +1099,16 @@ mod tests {
         simulation.register_process(newt_3, executor_3);
 
         // client workload
+        let shards_per_command = 1;
+        let keys_per_shard = 1;
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
         let total_commands = 10;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );

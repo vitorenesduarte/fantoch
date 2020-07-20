@@ -7,8 +7,9 @@ use std::error::Error;
 use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
+const DEFAULT_SHARDS_PER_COMMAND: usize = 1;
+const DEFAULT_KEYS_PER_SHARD: usize = 1;
 const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictRate { conflict_rate: 100 };
-const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
@@ -73,17 +74,24 @@ fn parse_args() -> ClientArgs {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("shards_per_command")
+                .long("shards_per_command")
+                .value_name("SHARDS_PER_COMMAND")
+                .help("number of shards accessed by commands to be issued by each client; default: 1")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("keys_per_shard")
+                .long("keys_per_shard")
+                .value_name("KEYS_PER_SHARD")
+                .help("number of keys per shard accessed commands to be issued by each client; default: 1")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("key_gen")
                 .long("key_gen")
                 .value_name("KEY_GEN")
                 .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys in the distribution; default: 'conflict_rate,100'")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("keys_per_command")
-                .long("keys_per_command")
-                .value_name("KEYS_PER_COMMAND")
-                .help("number of keys in each command to be issued by each client; default: 1")
                 .takes_value(true),
         )
         .arg(
@@ -128,8 +136,9 @@ fn parse_args() -> ClientArgs {
     let address = parse_address(matches.value_of("address"));
     let interval = parse_interval(matches.value_of("interval"));
     let workload = parse_workload(
+        matches.value_of("shards_per_command"),
+        matches.value_of("keys_per_shards"),
         matches.value_of("key_gen"),
-        matches.value_of("keys_per_command"),
         matches.value_of("commands_per_client"),
         matches.value_of("payload_size"),
     );
@@ -193,16 +202,44 @@ fn parse_interval(interval: Option<&str>) -> Option<Duration> {
 }
 
 fn parse_workload(
+    shards_per_command: Option<&str>,
+    keys_per_shard: Option<&str>,
     key_gen: Option<&str>,
-    keys_per_command: Option<&str>,
     commands_per_client: Option<&str>,
     payload_size: Option<&str>,
 ) -> Workload {
+    let shards_per_command = parse_shards_per_command(shards_per_command);
+    let keys_per_shard = parse_keys_per_shard(keys_per_shard);
     let key_gen = parse_key_gen(key_gen);
-    let keys_per_command = parse_keys_per_command(keys_per_command);
     let commands_per_client = parse_commands_per_client(commands_per_client);
     let payload_size = parse_payload_size(payload_size);
-    Workload::new(key_gen, keys_per_command, commands_per_client, payload_size)
+    Workload::new(
+        shards_per_command,
+        keys_per_shard,
+        key_gen,
+        commands_per_client,
+        payload_size,
+    )
+}
+
+fn parse_shards_per_command(number: Option<&str>) -> usize {
+    number
+        .map(|number| {
+            number
+                .parse::<usize>()
+                .expect("shards per command should be a number")
+        })
+        .unwrap_or(DEFAULT_SHARDS_PER_COMMAND)
+}
+
+fn parse_keys_per_shard(number: Option<&str>) -> usize {
+    number
+        .map(|number| {
+            number
+                .parse::<usize>()
+                .expect("keys per shard should be a number")
+        })
+        .unwrap_or(DEFAULT_KEYS_PER_SHARD)
 }
 
 fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
@@ -241,16 +278,6 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
             }
         })
         .unwrap_or(DEFAULT_KEY_GEN)
-}
-
-fn parse_keys_per_command(number: Option<&str>) -> usize {
-    number
-        .map(|number| {
-            number
-                .parse::<usize>()
-                .expect("keys per command should be a number")
-        })
-        .unwrap_or(DEFAULT_KEYS_PER_COMMAND)
 }
 
 fn parse_commands_per_client(number: Option<&str>) -> usize {

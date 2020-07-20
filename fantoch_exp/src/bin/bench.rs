@@ -115,18 +115,21 @@ async fn main() -> Result<(), Report> {
 
     let zipf_key_count = 1_000_000;
     let mut workloads = Vec::new();
-    for keys_per_command in vec![8] {
-        for coefficient in vec![1.0] {
-            let workload = Workload::new(
-                KeyGen::Zipf {
-                    coefficient,
-                    key_count: zipf_key_count,
-                },
-                keys_per_command,
-                COMMANDS_PER_CLIENT,
-                PAYLOAD_SIZE,
-            );
-            workloads.push(workload);
+    for shards_per_command in vec![1] {
+        for keys_per_shard in vec![8] {
+            for coefficient in vec![1.0] {
+                let workload = Workload::new(
+                    shards_per_command,
+                    keys_per_shard,
+                    KeyGen::Zipf {
+                        coefficient,
+                        key_count: zipf_key_count,
+                    },
+                    COMMANDS_PER_CLIENT,
+                    PAYLOAD_SIZE,
+                );
+                workloads.push(workload);
+            }
         }
     }
     let skip = |_, _, _| false;

@@ -935,12 +935,14 @@ pub mod tests {
         println!("[main] processes are connected");
 
         // create workload
+        let shards_per_command = 1;
+        let keys_per_shard = 2;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 2;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             commands_per_client,
             payload_size,
         );

@@ -1,6 +1,7 @@
-use crate::hash_map::{self, HashMap};
+use crate::config::DEFAULT_SHARD;
 use crate::id::Rifl;
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
@@ -8,12 +9,12 @@ use std::iter::{self, FromIterator};
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
-    ops: HashMap<Key, KVOp>,
+    ops: HashMap<Key, (KVOp, usize)>,
 }
 
 impl Command {
     /// Create a new `Command`.
-    pub fn new(rifl: Rifl, ops: HashMap<Key, KVOp>) -> Self {
+    pub fn new(rifl: Rifl, ops: HashMap<Key, (KVOp, usize)>) -> Self {
         Self { rifl, ops }
     }
 
@@ -22,6 +23,8 @@ impl Command {
         rifl: Rifl,
         iter: I,
     ) -> Self {
+        // store all keys in the default shard
+        let iter = iter.into_iter().map(|(key, op)| (key, (op, DEFAULT_SHARD)));
         Self::new(rifl, HashMap::from_iter(iter))
     }
 
@@ -75,28 +78,34 @@ impl Command {
     }
 
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
-    pub fn execute(self, store: &mut KVStore) -> CommandResult {
+    pub fn execute(self, shard: usize, store: &mut KVStore) -> CommandResult {
+        let rifl = self.rifl;
         let key_count = self.ops.len();
-        let mut results = HashMap::new();
-        for (key, op) in self.ops {
-            let partial_result = store.execute(&key, op);
-            results.insert(key, partial_result);
-        }
+        let results = self
+            .into_iter(shard)
+            .map(|(key, op)| {
+                let partial_result = store.execute(&key, op);
+                (key, partial_result)
+            })
+            .collect();
         CommandResult {
-            rifl: self.rifl,
+            rifl,
             key_count,
             results,
         }
     }
-}
 
-impl IntoIterator for Command {
-    type Item = (Key, KVOp);
-    type IntoIter = hash_map::IntoIter<Key, KVOp>;
-
-    /// Returns a `Command` into-iterator.
-    fn into_iter(self) -> Self::IntoIter {
-        self.ops.into_iter()
+    // Creates an iterator without ops on keys that do not belong to `shard`.
+    pub fn into_iter(self, shard: usize) -> impl Iterator<Item = (Key, KVOp)> {
+        self.ops
+            .into_iter()
+            .filter_map(move |(key, (op, op_shard))| {
+                if op_shard == shard {
+                    Some((key, op))
+                } else {
+                    None
+                }
+            })
     }
 }
 

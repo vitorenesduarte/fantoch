@@ -534,14 +534,16 @@ mod tests {
         let planet = Planet::new();
 
         // clients workload
+        let shards_per_command = 1;
+        let keys_per_shard = 2;
         let payload_size = 1;
         let key_gen = KeyGen::ConflictRate {
             conflict_rate: CONFLICT_RATE,
         };
-        let keys_per_command = 2;
         let workload = Workload::new(
+            shards_per_command,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             commands_per_client,
             payload_size,
         );

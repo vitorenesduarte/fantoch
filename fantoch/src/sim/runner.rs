@@ -557,14 +557,16 @@ mod tests {
         config.set_gc_interval(Duration::from_millis(100));
 
         // clients workload
+        let shards_per_command = 1;
+        let keys_per_shard = 1;
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
         let total_commands = 1000;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );
