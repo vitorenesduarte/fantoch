@@ -3,7 +3,7 @@ use fantoch::config::Config;
 use fantoch::executor::{
     Executor, ExecutorMetrics, ExecutorResult, MessageKey,
 };
-use fantoch::id::{ProcessId, Rifl};
+use fantoch::id::{ProcessId, Rifl, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ type Slot = u64;
 
 #[derive(Clone)]
 pub struct SlotExecutor {
+    shard_id: ShardId,
     config: Config,
     store: KVStore,
     pending: HashSet<Rifl>,
@@ -24,7 +25,12 @@ pub struct SlotExecutor {
 impl Executor for SlotExecutor {
     type ExecutionInfo = SlotExecutionInfo;
 
-    fn new(_process_id: ProcessId, config: Config, _executors: usize) -> Self {
+    fn new(
+        _process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        _executors: usize,
+    ) -> Self {
         let store = KVStore::new();
         let pending = HashSet::new();
         // the next slot to be executed is 1
@@ -33,6 +39,7 @@ impl Executor for SlotExecutor {
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
         Self {
+            shard_id,
             config,
             store,
             pending,
@@ -97,7 +104,7 @@ impl SlotExecutor {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(self.config.shard(), &mut self.store);
+        let result = cmd.execute(self.shard_id, &mut self.store);
         // update results if this rifl is pending
         if self.pending.remove(&rifl) {
             vec![ExecutorResult::Ready(result)]
@@ -160,8 +167,11 @@ mod tests {
             // create config (that will not be used)
             let process_id = 1;
             let config = Config::new(0, 0);
+            // there's a single shard
+            let shard_id = 0;
             // create slot executor
-            let mut executor = SlotExecutor::new(process_id, config, 0);
+            let mut executor =
+                SlotExecutor::new(process_id, shard_id, config, 0);
             // wait for all rifls with the exception of rifl 1
             executor.wait_for_rifl(rifl_2);
             executor.wait_for_rifl(rifl_3);

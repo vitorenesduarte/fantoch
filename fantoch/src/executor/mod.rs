@@ -11,7 +11,7 @@ pub use pending::Pending;
 
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::id::{ClientId, ProcessId, Rifl};
+use crate::id::{ClientId, ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
@@ -30,7 +30,12 @@ pub trait Executor: Clone {
         + Sync
         + MessageKey; // TODO why is Sync needed??
 
-    fn new(process_id: ProcessId, config: Config, executors: usize) -> Self;
+    fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        executors: usize,
+    ) -> Self;
 
     fn wait_for(&mut self, cmd: &Command);
 

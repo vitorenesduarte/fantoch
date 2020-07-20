@@ -1,20 +1,21 @@
-use crate::config::DEFAULT_SHARD;
-use crate::id::Rifl;
+use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
 use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
 
+const DEFAULT_SHARD_ID: ShardId = 0;
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
-    ops: HashMap<Key, (KVOp, usize)>,
+    ops: HashMap<Key, (KVOp, ShardId)>,
 }
 
 impl Command {
     /// Create a new `Command`.
-    pub fn new(rifl: Rifl, ops: HashMap<Key, (KVOp, usize)>) -> Self {
+    pub fn new(rifl: Rifl, ops: HashMap<Key, (KVOp, ShardId)>) -> Self {
         Self { rifl, ops }
     }
 
@@ -24,7 +25,9 @@ impl Command {
         iter: I,
     ) -> Self {
         // store all keys in the default shard
-        let iter = iter.into_iter().map(|(key, op)| (key, (op, DEFAULT_SHARD)));
+        let iter = iter
+            .into_iter()
+            .map(|(key, op)| (key, (op, DEFAULT_SHARD_ID)));
         Self::new(rifl, HashMap::from_iter(iter))
     }
 
@@ -78,11 +81,15 @@ impl Command {
     }
 
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
-    pub fn execute(self, shard: usize, store: &mut KVStore) -> CommandResult {
+    pub fn execute(
+        self,
+        shard_id: ShardId,
+        store: &mut KVStore,
+    ) -> CommandResult {
         let rifl = self.rifl;
         let key_count = self.ops.len();
         let results = self
-            .into_iter(shard)
+            .into_iter(shard_id)
             .map(|(key, op)| {
                 let partial_result = store.execute(&key, op);
                 (key, partial_result)
@@ -96,11 +103,14 @@ impl Command {
     }
 
     // Creates an iterator without ops on keys that do not belong to `shard`.
-    pub fn into_iter(self, shard: usize) -> impl Iterator<Item = (Key, KVOp)> {
+    pub fn into_iter(
+        self,
+        shard_id: ShardId,
+    ) -> impl Iterator<Item = (Key, KVOp)> {
         self.ops
             .into_iter()
-            .filter_map(move |(key, (op, op_shard))| {
-                if op_shard == shard {
+            .filter_map(move |(key, (op, op_shard_id))| {
+                if op_shard_id == shard_id {
                     Some((key, op))
                 } else {
                     None

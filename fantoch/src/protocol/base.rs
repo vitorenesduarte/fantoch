@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::id::{Dot, DotGen, ProcessId};
+use crate::id::{Dot, DotGen, ProcessId, ShardId};
 use crate::log;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
 use crate::HashSet;
@@ -9,6 +9,7 @@ use std::iter::FromIterator;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseProcess {
     pub process_id: ProcessId,
+    pub shard_id: ShardId,
     pub config: Config,
     all: Option<HashSet<ProcessId>>,
     all_but_me: Option<HashSet<ProcessId>>,
@@ -24,6 +25,7 @@ impl BaseProcess {
     /// Creates a new `BaseProcess`.
     pub fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
         fast_quorum_size: usize,
         write_quorum_size: usize,
@@ -35,6 +37,7 @@ impl BaseProcess {
 
         Self {
             process_id,
+            shard_id,
             config,
             all: None,
             all_but_me: None,
@@ -196,12 +199,18 @@ mod tests {
 
         // bp
         let id = 8;
+        let shard_id = 0;
         let region = Region::new("europe-west3");
         let planet = Planet::new();
         let fast_quorum_size = 6;
         let write_quorum_size = 4;
-        let mut bp =
-            BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
+        let mut bp = BaseProcess::new(
+            id,
+            shard_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
 
         // no quorum is set yet
         assert_eq!(bp.fast_quorum, None);
@@ -259,12 +268,18 @@ mod tests {
 
         // bp
         let id = 2;
+        let shard_id = 0;
         let region = Region::new("europe-north1");
         let planet = Planet::new();
         let fast_quorum_size = 3;
         let write_quorum_size = 4;
-        let mut bp =
-            BaseProcess::new(id, config, fast_quorum_size, write_quorum_size);
+        let mut bp = BaseProcess::new(
+            id,
+            shard_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
 
         // discover processes and check we're connected
         let sorted =

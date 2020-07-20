@@ -12,9 +12,10 @@ const BUFFER_SIZE: usize = 8 * 1024; // 8KB
 #[tokio::main]
 async fn main() {
     let process_id = 1;
+    let shard_id = 0;
     let (config, execution_log) = parse_args();
     // create graph executor
-    let mut executor = GraphExecutor::new(process_id, config, 0);
+    let mut executor = GraphExecutor::new(process_id, shard_id, config, 0);
 
     // open execution log file
     let file = File::open(execution_log)

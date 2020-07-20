@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{ClientId, ProcessId};
+use crate::id::{ClientId, ProcessId, ShardId};
 use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
@@ -11,6 +11,7 @@ use tokio::time;
 /// Starts executors.
 pub fn start_executors<P>(
     process_id: ProcessId,
+    shard_id: ShardId,
     config: Config,
     executors: usize,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
@@ -29,6 +30,7 @@ pub fn start_executors<P>(
         task::spawn(executor_task::<P>(
             executor_index,
             process_id,
+            shard_id,
             config,
             executors,
             from_workers,
@@ -41,6 +43,7 @@ pub fn start_executors<P>(
 async fn executor_task<P>(
     executor_index: usize,
     process_id: ProcessId,
+    shard_id: ShardId,
     config: Config,
     executors: usize,
     mut from_workers: ExecutionInfoReceiver<P>,
@@ -50,7 +53,8 @@ async fn executor_task<P>(
     P: Protocol,
 {
     // create executor
-    let mut executor = P::Executor::new(process_id, config, executors);
+    let mut executor =
+        P::Executor::new(process_id, shard_id, config, executors);
 
     // mapping from client id to its rifl acks channel
     let mut client_rifl_acks = HashMap::new();

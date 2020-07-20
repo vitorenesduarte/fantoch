@@ -98,8 +98,7 @@ impl ResultsDB {
                 // filter out configurations with different keys_per_command (if
                 // set)
                 if let Some(keys_per_command) = search.keys_per_command {
-                    if exp_config.workload.keys_per_shard()
-                        != keys_per_command
+                    if exp_config.workload.keys_per_shard() != keys_per_command
                     {
                         return false;
                     }

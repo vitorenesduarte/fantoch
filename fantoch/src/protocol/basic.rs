@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
     Protocol, ProtocolMetrics,
@@ -32,6 +32,7 @@ impl Protocol for Basic {
     /// Creates a new `Basic` process.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
@@ -41,6 +42,7 @@ impl Protocol for Basic {
         // create protocol data-structures
         let bp = BaseProcess::new(
             process_id,
+            shard_id,
             config,
             fast_quorum_size,
             write_quorum_size,
@@ -74,6 +76,11 @@ impl Protocol for Basic {
     /// Returns the process identifier.
     fn id(&self) -> ProcessId {
         self.bp.process_id
+    }
+
+    /// Returns the shard identifier.
+    fn shard_id(&self) -> ShardId {
+        self.bp.shard_id
     }
 
     /// Updates the processes known by this process.
@@ -244,7 +251,7 @@ impl Basic {
         //   basic executor to run in parallel
         let rifl = cmd.rifl();
         let execution_info = cmd
-            .into_iter(self.bp.config.shard())
+            .into_iter(self.bp.shard_id)
             .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
         self.to_executor.extend(execution_info);
 
@@ -434,6 +441,9 @@ mod tests {
         // create system time
         let time = SimTime::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         // n and f
         let n = 3;
         let f = 1;
@@ -441,14 +451,17 @@ mod tests {
 
         // executors
         let executors = 1;
-        let executor_1 = BasicExecutor::new(process_id_1, config, executors);
-        let executor_2 = BasicExecutor::new(process_id_2, config, executors);
-        let executor_3 = BasicExecutor::new(process_id_3, config, executors);
+        let executor_1 =
+            BasicExecutor::new(process_id_1, shard_id, config, executors);
+        let executor_2 =
+            BasicExecutor::new(process_id_2, shard_id, config, executors);
+        let executor_3 =
+            BasicExecutor::new(process_id_3, shard_id, config, executors);
 
         // basic
-        let (mut basic_1, _) = Basic::new(process_id_1, config);
-        let (mut basic_2, _) = Basic::new(process_id_2, config);
-        let (mut basic_3, _) = Basic::new(process_id_3, config);
+        let (mut basic_1, _) = Basic::new(process_id_1, shard_id, config);
+        let (mut basic_2, _) = Basic::new(process_id_2, shard_id, config);
+        let (mut basic_3, _) = Basic::new(process_id_3, shard_id, config);
 
         // discover processes in all basic
         let sorted = util::sort_processes_by_distance(

@@ -76,13 +76,17 @@ where
         let mut processes = Vec::with_capacity(config.n());
         let mut periodic_actions = Vec::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         process_regions.sort();
         let to_discover: Vec<_> = process_regions
             .into_iter()
             .zip(util::process_ids(config.n()))
             .map(|(region, process_id)| {
                 // create process and save it
-                let (process, process_events) = P::new(process_id, config);
+                let (process, process_events) =
+                    P::new(process_id, shard_id, config);
                 processes.push((region.clone(), process));
 
                 // save periodic actions
@@ -112,8 +116,12 @@ where
 
             // create executor for this process
             let executors = 1;
-            let executor =
-                <P::Executor as Executor>::new(process.id(), config, executors);
+            let executor = <P::Executor as Executor>::new(
+                process.id(),
+                process.shard_id(),
+                config,
+                executors,
+            );
 
             // and register both
             simulation.register_process(process, executor);

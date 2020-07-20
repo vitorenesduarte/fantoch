@@ -3,7 +3,7 @@ use crate::protocol::common::synod::{GCTrack, MultiSynod, MultiSynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
     ProtocolMetrics,
@@ -35,6 +35,7 @@ impl Protocol for FPaxos {
     /// Creates a new `FPaxos` process.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
@@ -44,6 +45,7 @@ impl Protocol for FPaxos {
         // create protocol data-structures
         let bp = BaseProcess::new(
             process_id,
+            shard_id,
             config,
             fast_quorum_size,
             write_quorum_size,
@@ -81,6 +83,11 @@ impl Protocol for FPaxos {
     /// Returns the process identifier.
     fn id(&self) -> ProcessId {
         self.bp.process_id
+    }
+
+    /// Returns the shard identifier.
+    fn shard_id(&self) -> ShardId {
+        self.bp.shard_id
     }
 
     /// Updates the processes known by this process.
@@ -519,6 +526,9 @@ mod tests {
         // create system time
         let time = SimTime::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         // n and f
         let n = 3;
         let f = 1;
@@ -528,14 +538,14 @@ mod tests {
         config.set_leader(process_id_1);
 
         // executors
-        let executor_1 = SlotExecutor::new(process_id_1, config, 0);
-        let executor_2 = SlotExecutor::new(process_id_2, config, 0);
-        let executor_3 = SlotExecutor::new(process_id_3, config, 0);
+        let executor_1 = SlotExecutor::new(process_id_1, shard_id, config, 0);
+        let executor_2 = SlotExecutor::new(process_id_2, shard_id, config, 0);
+        let executor_3 = SlotExecutor::new(process_id_3, shard_id, config, 0);
 
         // fpaxos
-        let (mut fpaxos_1, _) = FPaxos::new(process_id_1, config);
-        let (mut fpaxos_2, _) = FPaxos::new(process_id_2, config);
-        let (mut fpaxos_3, _) = FPaxos::new(process_id_3, config);
+        let (mut fpaxos_1, _) = FPaxos::new(process_id_1, shard_id, config);
+        let (mut fpaxos_2, _) = FPaxos::new(process_id_2, shard_id, config);
+        let (mut fpaxos_3, _) = FPaxos::new(process_id_3, shard_id, config);
 
         // discover processes in all fpaxos
         let sorted = util::sort_processes_by_distance(

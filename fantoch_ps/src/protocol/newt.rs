@@ -7,7 +7,7 @@ use crate::protocol::common::table::{
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
     Protocol, ProtocolMetrics,
@@ -54,6 +54,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     /// Creates a new `Newt` process.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
@@ -63,6 +64,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         // create protocol data-structures
         let bp = BaseProcess::new(
             process_id,
+            shard_id,
             config,
             fast_quorum_size,
             write_quorum_size,
@@ -111,6 +113,11 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     /// Returns the process identifier.
     fn id(&self) -> ProcessId {
         self.bp.process_id
+    }
+
+    /// Returns the shard identifier.
+    fn shard_id(&self) -> ShardId {
+        self.bp.shard_id
     }
 
     /// Updates the processes known by this process.
@@ -540,7 +547,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // create execution info
         let rifl = cmd.rifl();
         let execution_info =
-            cmd.into_iter(self.bp.config.shard()).map(|(key, op)| {
+            cmd.into_iter(self.bp.shard_id).map(|(key, op)| {
                 // find votes on this key
                 let key_votes = votes
                     .remove(&key)
@@ -1051,6 +1058,9 @@ mod tests {
         // create system time
         let time = SimTime::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         // n and f
         let n = 3;
         let f = 1;
@@ -1064,14 +1074,17 @@ mod tests {
 
         // executors
         let executors = 1;
-        let executor_1 = TableExecutor::new(process_id_1, config, executors);
-        let executor_2 = TableExecutor::new(process_id_2, config, executors);
-        let executor_3 = TableExecutor::new(process_id_3, config, executors);
+        let executor_1 =
+            TableExecutor::new(process_id_1, shard_id, config, executors);
+        let executor_2 =
+            TableExecutor::new(process_id_2, shard_id, config, executors);
+        let executor_3 =
+            TableExecutor::new(process_id_3, shard_id, config, executors);
 
         // newts
-        let (mut newt_1, _) = Newt::<KC>::new(process_id_1, config);
-        let (mut newt_2, _) = Newt::<KC>::new(process_id_2, config);
-        let (mut newt_3, _) = Newt::<KC>::new(process_id_3, config);
+        let (mut newt_1, _) = Newt::<KC>::new(process_id_1, shard_id, config);
+        let (mut newt_2, _) = Newt::<KC>::new(process_id_2, shard_id, config);
+        let (mut newt_3, _) = Newt::<KC>::new(process_id_3, shard_id, config);
 
         // discover processes in all newts
         let sorted = util::sort_processes_by_distance(

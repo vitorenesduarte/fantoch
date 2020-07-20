@@ -2,7 +2,7 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::pending::Pending;
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
-use crate::id::{ProcessId, Rifl};
+use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +16,12 @@ pub struct BasicExecutor {
 impl Executor for BasicExecutor {
     type ExecutionInfo = BasicExecutionInfo;
 
-    fn new(_process_id: ProcessId, _config: Config, executors: usize) -> Self {
+    fn new(
+        _process_id: ProcessId,
+        _shard_id: ShardId,
+        _config: Config,
+        executors: usize,
+    ) -> Self {
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = executors == 1;

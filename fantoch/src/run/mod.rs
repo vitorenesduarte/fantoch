@@ -86,7 +86,7 @@ use crate::client::{Client, ClientData, Workload};
 use crate::command::CommandResult;
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{AtomicDotGen, ClientId, ProcessId};
+use crate::id::{AtomicDotGen, ClientId, ProcessId, ShardId};
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use crate::{HashMap, HashSet};
@@ -101,6 +101,7 @@ use tokio::sync::Semaphore;
 
 pub async fn process<P, A>(
     process_id: ProcessId,
+    shard_id: ShardId,
     sorted_processes: Option<Vec<ProcessId>>,
     ip: IpAddr,
     port: u16,
@@ -128,6 +129,7 @@ where
     let semaphore = Arc::new(Semaphore::new(0));
     process_with_notify_and_inspect::<P, A, ()>(
         process_id,
+        shard_id,
         sorted_processes,
         ip,
         port,
@@ -154,6 +156,7 @@ where
 #[allow(clippy::too_many_arguments)]
 async fn process_with_notify_and_inspect<P, A, R>(
     process_id: ProcessId,
+    shard_id: ShardId,
     sorted_processes: Option<Vec<ProcessId>>,
     ip: IpAddr,
     port: u16,
@@ -335,6 +338,7 @@ where
     // start executors
     task::executor::start_executors::<P>(
         process_id,
+        shard_id,
         config,
         executors,
         worker_to_executors_rxs,
@@ -345,6 +349,7 @@ where
     // start process workers
     let handles = task::process::start_processes::<P, R>(
         process_id,
+        shard_id,
         config,
         sorted_processes,
         reader_to_workers_rxs,
@@ -852,6 +857,9 @@ pub mod tests {
             })
             .collect();
 
+        // there's a single shard
+        let shard_id = 0;
+
         let mut inspect_channels = HashMap::new();
 
         for process_id in util::process_ids(n) {
@@ -905,6 +913,7 @@ pub mod tests {
                 R,
             >(
                 process_id,
+                shard_id,
                 sorted_processes,
                 localhost,
                 port,

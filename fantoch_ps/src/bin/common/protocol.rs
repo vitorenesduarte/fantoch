@@ -1,12 +1,16 @@
 use clap::{App, Arg};
 use fantoch::config::Config;
-use fantoch::id::ProcessId;
+use fantoch::id::{ProcessId, ShardId};
 use fantoch::protocol::Protocol;
 use std::error::Error;
 use std::net::IpAddr;
 use std::time::Duration;
 
 const LIST_SEP: &str = ",";
+
+const DEFAULT_SHARD_ID: ShardId = 0;
+const DEFAULT_SHARDS: usize = 1;
+
 const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_CLIENT_PORT: u16 = 4000;
@@ -30,6 +34,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 type ProtocolArgs = (
     ProcessId,
+    ShardId,
     Option<Vec<ProcessId>>,
     IpAddr,
     u16,
@@ -56,6 +61,7 @@ where
 {
     let (
         process_id,
+        shard_id,
         sorted_processes,
         ip,
         port,
@@ -77,6 +83,7 @@ where
 
     let process = fantoch::run::process::<P, String>(
         process_id,
+        shard_id,
         sorted_processes,
         ip,
         port,
@@ -108,6 +115,14 @@ fn parse_args() -> ProtocolArgs {
                 .long("id")
                 .value_name("ID")
                 .help("process identifier")
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("shard_id")
+                .long("shard_id")
+                .value_name("SHARD_ID")
+                .help("shard identifier; default: 0")
                 .required(true)
                 .takes_value(true),
         )
@@ -151,7 +166,7 @@ fn parse_args() -> ProtocolArgs {
             Arg::with_name("n")
                 .long("processes")
                 .value_name("PROCESS_NUMBER")
-                .help("total number of processes")
+                .help("number of processes")
                 .required(true)
                 .takes_value(true),
         )
@@ -159,7 +174,15 @@ fn parse_args() -> ProtocolArgs {
             Arg::with_name("f")
                 .long("faults")
                 .value_name("FAULT_NUMBER")
-                .help("total number of allowed faults")
+                .help("number of allowed faults")
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("shards")
+                .long("shards")
+                .value_name("SHARDS_NUMBER")
+                .help("number of shards; default: 1")
                 .required(true)
                 .takes_value(true),
         )
@@ -295,6 +318,7 @@ fn parse_args() -> ProtocolArgs {
 
     // parse arguments
     let process_id = parse_process_id(matches.value_of("id"));
+    let shard_id = parse_shard_id(matches.value_of("shard_id"));
     let sorted_processes =
         parse_sorted_processes(matches.value_of("sorted_processes"));
     let ip = parse_ip(matches.value_of("ip"));
@@ -305,6 +329,7 @@ fn parse_args() -> ProtocolArgs {
     let config = build_config(
         parse_n(matches.value_of("n")),
         parse_f(matches.value_of("f")),
+        parse_shards(matches.value_of("shards")),
         parse_transitive_conflicts(matches.value_of("transitive_conflicts")),
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
         parse_gc_interval(matches.value_of("gc_interval")),
@@ -363,6 +388,7 @@ fn parse_args() -> ProtocolArgs {
 
     (
         process_id,
+        shard_id,
         sorted_processes,
         ip,
         port,
@@ -385,6 +411,10 @@ fn parse_args() -> ProtocolArgs {
 
 fn parse_process_id(id: Option<&str>) -> ProcessId {
     parse_id(id.expect("process id should be set"))
+}
+
+fn parse_shard_id(shard_id: Option<&str>) -> ShardId {
+    shard_id.map(|id| parse_id(id)).unwrap_or(DEFAULT_SHARD_ID)
 }
 
 fn parse_id(id: &str) -> ProcessId {
@@ -443,6 +473,7 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
 pub fn build_config(
     n: usize,
     f: usize,
+    shards: usize,
     transitive_conflicts: bool,
     execute_at_commit: bool,
     gc_interval: Option<Duration>,
@@ -453,6 +484,7 @@ pub fn build_config(
 ) -> Config {
     // create config
     let mut config = Config::new(n, f);
+    config.set_shards(shards);
     config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
     if let Some(gc_interval) = gc_interval {
@@ -482,6 +514,14 @@ pub fn parse_f(f: Option<&str>) -> usize {
     f.expect("f should be set")
         .parse::<usize>()
         .expect("f should be a number")
+}
+
+pub fn parse_shards(shards: Option<&str>) -> usize {
+    shards
+        .map(|shards| {
+            shards.parse::<usize>().expect("shards should be a number")
+        })
+        .unwrap_or(DEFAULT_SHARDS)
 }
 
 pub fn parse_transitive_conflicts(transitive_conflicts: Option<&str>) -> bool {

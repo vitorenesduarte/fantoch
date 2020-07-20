@@ -4,7 +4,7 @@ use fantoch::config::Config;
 use fantoch::executor::{
     Executor, ExecutorMetrics, ExecutorResult, MessageKey,
 };
-use fantoch::id::{Dot, ProcessId, Rifl};
+use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ use threshold::VClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
+    shard_id: ShardId,
     config: Config,
     graph: DependencyGraph,
     store: KVStore,
@@ -22,12 +23,18 @@ pub struct GraphExecutor {
 impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
-    fn new(process_id: ProcessId, config: Config, _executors: usize) -> Self {
+    fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        _executors: usize,
+    ) -> Self {
         let graph = DependencyGraph::new(process_id, &config);
         let store = KVStore::new();
         let pending = HashSet::new();
         let metrics = ExecutorMetrics::new();
         Self {
+            shard_id,
             config,
             graph,
             store,
@@ -76,7 +83,7 @@ impl GraphExecutor {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(self.config.shard(), &mut self.store);
+        let result = cmd.execute(self.shard_id, &mut self.store);
 
         // if it was pending locally, then it's from a client of this
         // process

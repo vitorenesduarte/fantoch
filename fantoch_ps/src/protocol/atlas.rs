@@ -7,7 +7,7 @@ use crate::util;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
     Protocol, ProtocolMetrics,
@@ -42,6 +42,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     /// Creates a new `Atlas` process.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
@@ -50,6 +51,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         // create protocol data-structures
         let bp = BaseProcess::new(
             process_id,
+            shard_id,
             config,
             fast_quorum_size,
             write_quorum_size,
@@ -85,6 +87,11 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     /// Returns the process identifier.
     fn id(&self) -> ProcessId {
         self.bp.process_id
+    }
+
+    /// Returns the shard identifier.
+    fn shard_id(&self) -> ShardId {
+        self.bp.shard_id
     }
 
     /// Updates the processes known by this process.
@@ -755,20 +762,23 @@ mod tests {
         // create system time
         let time = SimTime::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         // n and f
         let n = 3;
         let f = 1;
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(process_id_1, config, 0);
-        let executor_2 = GraphExecutor::new(process_id_2, config, 0);
-        let executor_3 = GraphExecutor::new(process_id_3, config, 0);
+        let executor_1 = GraphExecutor::new(process_id_1, shard_id, config, 0);
+        let executor_2 = GraphExecutor::new(process_id_2, shard_id, config, 0);
+        let executor_3 = GraphExecutor::new(process_id_3, shard_id, config, 0);
 
         // atlas
-        let (mut atlas_1, _) = Atlas::<KC>::new(process_id_1, config);
-        let (mut atlas_2, _) = Atlas::<KC>::new(process_id_2, config);
-        let (mut atlas_3, _) = Atlas::<KC>::new(process_id_3, config);
+        let (mut atlas_1, _) = Atlas::<KC>::new(process_id_1, shard_id, config);
+        let (mut atlas_2, _) = Atlas::<KC>::new(process_id_2, shard_id, config);
+        let (mut atlas_3, _) = Atlas::<KC>::new(process_id_3, shard_id, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(

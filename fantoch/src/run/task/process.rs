@@ -1,7 +1,7 @@
 use super::execution_logger;
 use crate::command::Command;
 use crate::config::Config;
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::log;
 use crate::protocol::{Action, Protocol};
 use crate::run::prelude::*;
@@ -325,6 +325,7 @@ async fn writer_task<P>(
 /// Starts process workers.
 pub fn start_processes<P, R>(
     process_id: ProcessId,
+    shard_id: ShardId,
     config: Config,
     sorted_processes: Vec<ProcessId>,
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
@@ -344,7 +345,7 @@ where
     R: Debug + Clone + Send + 'static,
 {
     // create process
-    let (mut process, process_events) = P::new(process_id, config);
+    let (mut process, process_events) = P::new(process_id, shard_id, config);
 
     // discover processes
     process.discover(sorted_processes);

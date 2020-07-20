@@ -15,6 +15,9 @@ pub type ClientId = u64;
 pub type Rifl = Id<ClientId>;
 pub type RiflGen = IdGen<ClientId>;
 
+// shard ids
+pub type ShardId = u64;
+
 #[derive(
     Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
