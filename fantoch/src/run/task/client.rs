@@ -308,7 +308,7 @@ pub async fn client_say_hi(
 ) -> Option<(ProcessId, ShardId)> {
     log!("[client] will say hi with ids {:?}", client_ids);
     // say hi
-    let hi = ClientHi(client_ids);
+    let hi = ClientHi(client_ids.clone());
     connection.send(&hi).await;
 
     // receive hi back
@@ -318,13 +318,14 @@ pub async fn client_say_hi(
     }) = connection.recv().await
     {
         log!(
-            "[client] received hi from process {} with shard id {}",
+            "[client] clients {:?} received hi from process {} with shard id {}",
+            client_ids,
             process_id,
             shard_id
         );
         Some((process_id, shard_id))
     } else {
-        println!("[client] couldn't receive process id from connected process");
+        println!("[client] clients {:?} couldn't receive process id from connected process", client_ids);
         None
     }
 }

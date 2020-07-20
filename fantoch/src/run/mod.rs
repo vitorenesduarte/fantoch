@@ -424,7 +424,8 @@ where
 
     // start each client worker in pool
     let handles = pool.into_iter().filter_map(|client_ids| {
-        // only start a client for this pool index if any client id was assigned to it
+        // only start a client for this pool index if any client id was assigned
+        // to it
         if !client_ids.is_empty() {
             // start the open loop client if some interval was provided
             let handle = if let Some(interval) = interval {
@@ -755,7 +756,7 @@ pub mod tests {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
-        let conflict_rate = 100;
+        let conflict_rate = 50;
         let commands_per_client = 100;
         let clients_per_region = 3;
         let workers = 2;

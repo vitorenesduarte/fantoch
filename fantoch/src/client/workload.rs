@@ -37,6 +37,18 @@ impl Workload {
         commands_per_client: usize,
         payload_size: usize,
     ) -> Self {
+        // check for valid workloads
+        match key_gen {
+            KeyGen::ConflictRate { conflict_rate } => {
+                if conflict_rate == 100 && keys_per_shard > 1 {
+                    panic!("invalid workload; can't generate more than one key per shard when the conflict_rate is 100");
+                }
+                if keys_per_shard > 2 {
+                    panic!("invalid workload; can't generate more than two keys per shard with the conflict_rate key generator");
+                }
+            }
+            _ => (),
+        }
         Self {
             shards_per_command,
             shard_gen,

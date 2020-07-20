@@ -70,7 +70,8 @@ impl Client {
     pub fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) {
         self.connected = HashMap::new();
         for (process_id, shard_id) in processes {
-            // only insert the first entry for each shard id (which will be the closest)
+            // only insert the first entry for each shard id (which will be the
+            // closest)
             if !self.connected.contains_key(&shard_id) {
                 self.connected.insert(shard_id, process_id);
             }
