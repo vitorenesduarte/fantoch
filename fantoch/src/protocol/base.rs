@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId, ShardId};
 use crate::log;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
+use crate::HashMap;
 use crate::HashSet;
 use std::iter::FromIterator;
 
@@ -15,6 +16,9 @@ pub struct BaseProcess {
     all_but_me: Option<HashSet<ProcessId>>,
     fast_quorum: Option<HashSet<ProcessId>>,
     write_quorum: Option<HashSet<ProcessId>>,
+    // mapping from shard id (that are not the same as mine) to the closest
+    // process from that shard
+    closest_shard_process: HashMap<ShardId, ProcessId>,
     fast_quorum_size: usize,
     write_quorum_size: usize,
     dot_gen: DotGen,
@@ -43,6 +47,7 @@ impl BaseProcess {
             all_but_me: None,
             fast_quorum: None,
             write_quorum: None,
+            closest_shard_process: HashMap::new(),
             fast_quorum_size,
             write_quorum_size,
             dot_gen: DotGen::new(process_id),
@@ -52,7 +57,37 @@ impl BaseProcess {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    pub fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
+    pub fn discover(
+        &mut self,
+        all_processes: Vec<(ProcessId, ShardId)>,
+    ) -> bool {
+        // reset closest shard process
+        self.closest_shard_process =
+            HashMap::with_capacity(self.config.shards() - 1);
+
+        // select processes from my shard and compute `closest_shard_process`
+        let processes: Vec<_> = all_processes
+            .into_iter()
+            .filter_map(|(process_id, shard_id)| {
+                // check if process belongs to my shard
+                if self.shard_id == shard_id {
+                    // if yes, keep process id
+                    Some(process_id)
+                } else {
+                    // if not, maybe it's the closest process from that shard,
+                    // in that case, store it in `closest_shard_process`:
+                    // - it will be the closest process from that shard if
+                    //   there's no entry for that shard in
+                    //   `closest_shard_process` (since we're travessing
+                    //   processes by proximity (closest ones first))
+                    if !self.closest_shard_process.contains_key(&shard_id) {
+                        self.closest_shard_process.insert(shard_id, process_id);
+                    }
+                    None
+                }
+            })
+            .collect();
+
         // create fast quorum by taking the first `fast_quorum_size` elements
         let fast_quorum: HashSet<_> = processes
             .clone()
@@ -172,24 +207,25 @@ mod tests {
     #[test]
     fn discover() {
         // processes
+        let shard_id = 0;
         let processes = vec![
-            (0, Region::new("asia-east1")),
-            (1, Region::new("asia-northeast1")),
-            (2, Region::new("asia-south1")),
-            (3, Region::new("asia-southeast1")),
-            (4, Region::new("australia-southeast1")),
-            (5, Region::new("europe-north1")),
-            (6, Region::new("europe-west1")),
-            (7, Region::new("europe-west2")),
-            (8, Region::new("europe-west3")),
-            (9, Region::new("europe-west4")),
-            (10, Region::new("northamerica-northeast1")),
-            (11, Region::new("southamerica-east1")),
-            (12, Region::new("us-central1")),
-            (13, Region::new("us-east1")),
-            (14, Region::new("us-east4")),
-            (15, Region::new("us-west1")),
-            (16, Region::new("us-west2")),
+            (0, shard_id, Region::new("asia-east1")),
+            (1, shard_id, Region::new("asia-northeast1")),
+            (2, shard_id, Region::new("asia-south1")),
+            (3, shard_id, Region::new("asia-southeast1")),
+            (4, shard_id, Region::new("australia-southeast1")),
+            (5, shard_id, Region::new("europe-north1")),
+            (6, shard_id, Region::new("europe-west1")),
+            (7, shard_id, Region::new("europe-west2")),
+            (8, shard_id, Region::new("europe-west3")),
+            (9, shard_id, Region::new("europe-west4")),
+            (10, shard_id, Region::new("northamerica-northeast1")),
+            (11, shard_id, Region::new("southamerica-east1")),
+            (12, shard_id, Region::new("us-central1")),
+            (13, shard_id, Region::new("us-east1")),
+            (14, shard_id, Region::new("us-east4")),
+            (15, shard_id, Region::new("us-west1")),
+            (16, shard_id, Region::new("us-west2")),
         ];
 
         // config
@@ -199,7 +235,6 @@ mod tests {
 
         // bp
         let id = 8;
-        let shard_id = 0;
         let region = Region::new("europe-west3");
         let planet = Planet::new();
         let fast_quorum_size = 6;
@@ -253,12 +288,13 @@ mod tests {
     #[test]
     fn discover_same_region() {
         // processes
+        let shard_id = 0;
         let processes = vec![
-            (0, Region::new("asia-east1")),
-            (1, Region::new("asia-east1")),
-            (2, Region::new("europe-north1")),
-            (3, Region::new("europe-north1")),
-            (4, Region::new("europe-west1")),
+            (0, shard_id, Region::new("asia-east1")),
+            (1, shard_id, Region::new("asia-east1")),
+            (2, shard_id, Region::new("europe-north1")),
+            (3, shard_id, Region::new("europe-north1")),
+            (4, shard_id, Region::new("europe-west1")),
         ];
 
         // config
@@ -309,5 +345,10 @@ mod tests {
             BTreeSet::from_iter(bp.write_quorum()),
             BTreeSet::from_iter(vec![2, 3, 4, 0])
         );
+    }
+
+    #[test]
+    fn discover_two_shards() {
+        todo!()
     }
 }

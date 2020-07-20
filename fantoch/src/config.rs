@@ -83,6 +83,7 @@ impl Config {
 
     /// Changes the number of sahrds.
     pub fn set_shards(&mut self, shards: usize) {
+        assert!(shards >= 1);
         self.shards = shards;
     }
 

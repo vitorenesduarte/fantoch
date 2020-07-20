@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 // process ids
-pub type ProcessId = u64;
+pub type ProcessId = u8;
 pub type Dot = Id<ProcessId>;
 pub type DotGen = IdGen<ProcessId>;
 pub type AtomicDotGen = AtomicIdGen<ProcessId>;

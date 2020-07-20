@@ -1,6 +1,6 @@
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
-use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl};
+use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
 use crate::kvs::Key;
 use crate::log;
 use crate::run::prelude::*;
@@ -9,6 +9,7 @@ use tokio::net::TcpListener;
 
 pub fn start_listener(
     process_id: ProcessId,
+    shard_id: ShardId,
     listener: TcpListener,
     atomic_dot_gen: Option<AtomicDotGen>,
     client_to_workers: ClientToWorkers,
@@ -18,6 +19,7 @@ pub fn start_listener(
 ) {
     super::spawn(client_listener_task(
         process_id,
+        shard_id,
         listener,
         atomic_dot_gen,
         client_to_workers,
@@ -31,6 +33,7 @@ pub fn start_listener(
 /// connection.
 async fn client_listener_task(
     process_id: ProcessId,
+    shard_id: ShardId,
     listener: TcpListener,
     atomic_dot_gen: Option<AtomicDotGen>,
     client_to_workers: ClientToWorkers,
@@ -54,6 +57,7 @@ async fn client_listener_task(
                 // parent
                 super::spawn(client_server_task(
                     process_id,
+                    shard_id,
                     atomic_dot_gen.clone(),
                     client_to_workers.clone(),
                     client_to_executors.clone(),
@@ -74,6 +78,7 @@ async fn client_listener_task(
 /// (new commands) and parent (new command results).
 async fn client_server_task(
     process_id: ProcessId,
+    shard_id: ShardId,
     atomic_dot_gen: Option<AtomicDotGen>,
     mut client_to_workers: ClientToWorkers,
     mut client_to_executors: ClientToExecutors,
@@ -82,6 +87,7 @@ async fn client_server_task(
 ) {
     let client = server_receive_hi(
         process_id,
+        shard_id,
         channel_buffer_size,
         &mut connection,
         &mut client_to_executors,
@@ -115,6 +121,7 @@ async fn client_server_task(
 
 async fn server_receive_hi(
     process_id: ProcessId,
+    shard_id: ShardId,
     channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
@@ -160,7 +167,10 @@ async fn server_receive_hi(
     }
 
     // say hi back
-    let hi = ProcessHi(process_id);
+    let hi = ProcessHi {
+        process_id,
+        shard_id,
+    };
     connection.send(&hi).await;
 
     // return client id and channel where client should read executor results
@@ -295,15 +305,23 @@ async fn client_server_task_handle_executor_result(
 pub async fn client_say_hi(
     client_ids: Vec<ClientId>,
     connection: &mut Connection,
-) -> Option<ProcessId> {
+) -> Option<(ProcessId, ShardId)> {
     // say hi
     let hi = ClientHi(client_ids);
     connection.send(&hi).await;
 
     // receive hi back
-    if let Some(ProcessHi(process_id)) = connection.recv().await {
-        log!("[client] received hi from process {}", process_id);
-        Some(process_id)
+    if let Some(ProcessHi {
+        process_id,
+        shard_id,
+    }) = connection.recv().await
+    {
+        log!(
+            "[client] received hi from process {} with shard id {}",
+            process_id,
+            shard_id
+        );
+        Some((process_id, shard_id))
     } else {
         println!("[client] couldn't receive process id from connected process");
         None

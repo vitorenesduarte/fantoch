@@ -232,6 +232,7 @@ impl VotesTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fantoch::id::ClientId;
     use permutator::Permutation;
 
     #[test]
@@ -259,7 +260,7 @@ mod tests {
         // p1, final clock = 1
         let a1_dot = Dot::new(process_id_1, 1);
         let a1_clock = 1;
-        let a1_rifl = Rifl::new(process_id_1, 1);
+        let a1_rifl = Rifl::new(process_id_1 as ClientId, 1);
         // p1, p2 and p3 voted with 1
         let a1_votes = vec![
             VoteRange::new(process_id_1, 1, 1),
@@ -272,7 +273,7 @@ mod tests {
         // p3, final clock = 3
         let c1_dot = Dot::new(process_id_3, 1);
         let c1_clock = 3;
-        let c1_rifl = Rifl::new(process_id_3, 1);
+        let c1_rifl = Rifl::new(process_id_3 as ClientId, 1);
         // p1 voted with 2, p2 voted with 3 and p3 voted with 2
         let c1_votes = vec![
             VoteRange::new(process_id_1, 2, 2),
@@ -285,7 +286,7 @@ mod tests {
         // p4, final clock = 3
         let d1_dot = Dot::new(process_id_4, 1);
         let d1_clock = 3;
-        let d1_rifl = Rifl::new(process_id_4, 1);
+        let d1_rifl = Rifl::new(process_id_4 as ClientId, 1);
         // p2 voted with 2, p3 voted with 3 and p4 voted with 1-3
         let d1_votes = vec![
             VoteRange::new(process_id_2, 2, 2),
@@ -298,7 +299,7 @@ mod tests {
         // p5, final clock = 4
         let e1_dot = Dot::new(process_id_5, 1);
         let e1_clock = 4;
-        let e1_rifl = Rifl::new(process_id_5, 1);
+        let e1_rifl = Rifl::new(process_id_5 as ClientId, 1);
         // p1 voted with 3, p4 voted with 4 and p5 voted with 1-4
         let e1_votes = vec![
             VoteRange::new(process_id_1, 3, 3),
@@ -311,7 +312,7 @@ mod tests {
         // p5, final clock = 5
         let e2_dot = Dot::new(process_id_5, 2);
         let e2_clock = 5;
-        let e2_rifl = Rifl::new(process_id_5, 2);
+        let e2_rifl = Rifl::new(process_id_5 as ClientId, 2);
         // p1 voted with 4-5, p4 voted with 5 and p5 voted with 5
         let e2_votes = vec![
             VoteRange::new(process_id_1, 4, 5),
@@ -404,7 +405,7 @@ mod tests {
         // p1, final clock = 1
         let a1_dot = Dot::new(process_id_1, 1);
         let a1_clock = 1;
-        let a1_rifl = Rifl::new(process_id_1, 1);
+        let a1_rifl = Rifl::new(process_id_1 as ClientId, 1);
         // p1, p2 voted with  1
         let a1_votes = vec![
             VoteRange::new(process_id_1, 1, 1),
@@ -422,7 +423,7 @@ mod tests {
         // p3, final clock = 2
         let c1_dot = Dot::new(process_id_3, 1);
         let c1_clock = 2;
-        let c1_rifl = Rifl::new(process_id_3, 1);
+        let c1_rifl = Rifl::new(process_id_3 as ClientId, 1);
         // p2 voted with 2, p3 voted with 1-2
         let c1_votes = vec![
             VoteRange::new(process_id_3, 1, 1),
@@ -441,7 +442,7 @@ mod tests {
         // p5, final clock = 1
         let e1_dot = Dot::new(process_id_5, 1);
         let e1_clock = 1;
-        let e1_rifl = Rifl::new(process_id_5, 1);
+        let e1_rifl = Rifl::new(process_id_5 as ClientId, 1);
         // p5 and p4 voted with 1
         let e1_votes = vec![
             VoteRange::new(process_id_5, 1, 1),
@@ -459,7 +460,7 @@ mod tests {
         // p1, final clock = 3
         let a2_dot = Dot::new(process_id_1, 2);
         let a2_clock = 3;
-        let a2_rifl = Rifl::new(process_id_1, 2);
+        let a2_rifl = Rifl::new(process_id_1 as ClientId, 2);
         // p1 voted with 2-3 and p2 voted with 3
         let a2_votes = vec![
             VoteRange::new(process_id_1, 2, 2),
@@ -478,7 +479,7 @@ mod tests {
         // p4, final clock = 3
         let d1_dot = Dot::new(process_id_4, 1);
         let d1_clock = 3;
-        let d1_rifl = Rifl::new(process_id_4, 1);
+        let d1_rifl = Rifl::new(process_id_4 as ClientId, 1);
         // p4 voted with 2-3 and p3 voted with 3
         let d1_votes = vec![
             VoteRange::new(process_id_4, 2, 2),

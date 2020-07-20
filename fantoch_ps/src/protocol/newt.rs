@@ -122,7 +122,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
+    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
         self.bp.discover(processes)
     }
 
@@ -1015,7 +1015,7 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::client::{Client, KeyGen, ShardGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
@@ -1045,11 +1045,14 @@ mod tests {
         let europe_west3 = Region::new("europe-west2");
         let us_west1 = Region::new("europe-west2");
 
+        // there's a single shard
+        let shard_id = 0;
+
         // processes
         let processes = vec![
-            (process_id_1, europe_west2.clone()),
-            (process_id_2, europe_west3.clone()),
-            (process_id_3, us_west1.clone()),
+            (process_id_1, shard_id, europe_west2.clone()),
+            (process_id_2, shard_id, europe_west3.clone()),
+            (process_id_3, shard_id, us_west1.clone()),
         ];
 
         // planet
@@ -1057,9 +1060,6 @@ mod tests {
 
         // create system time
         let time = SimTime::new();
-
-        // there's a single shard
-        let shard_id = 0;
 
         // n and f
         let n = 3;
@@ -1113,13 +1113,14 @@ mod tests {
 
         // client workload
         let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
         let keys_per_shard = 1;
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
         let total_commands = 10;
         let payload_size = 100;
         let workload = Workload::new(
             shards_per_command,
+            shard_gen,
             keys_per_shard,
             key_gen,
             total_commands,
@@ -1137,7 +1138,7 @@ mod tests {
             &planet,
             processes,
         );
-        assert!(client_1.discover(sorted));
+        client_1.discover(sorted);
 
         // start client
         let (target, cmd) = client_1
@@ -1159,7 +1160,7 @@ mod tests {
         let mcollect = actions.pop().unwrap();
 
         // check that the mcollect is being sent to *all* processes
-        let check_target = |target: &HashSet<u64>| target.len() == n;
+        let check_target = |target: &HashSet<ProcessId>| target.len() == n;
         assert!(
             matches!(mcollect.clone(), Action::ToSend{target, ..} if check_target(&target))
         );
@@ -1187,7 +1188,7 @@ mod tests {
 
         // check that the mcommit is sent to everyone
         let mcommit = mcommits.pop().expect("there should be an mcommit");
-        let check_target = |target: &HashSet<u64>| target.len() == n;
+        let check_target = |target: &HashSet<ProcessId>| target.len() == n;
         assert!(
             matches!(mcommit.clone(), (_, Action::ToSend { target, .. }) if check_target(&target))
         );

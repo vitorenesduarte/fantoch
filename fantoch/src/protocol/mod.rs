@@ -58,7 +58,7 @@ pub trait Protocol: Debug + Clone {
 
     fn shard_id(&self) -> ShardId;
 
-    fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
+    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool;
 
     #[must_use]
     fn submit(

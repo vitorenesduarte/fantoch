@@ -8,8 +8,8 @@ use std::time::Duration;
 
 const LIST_SEP: &str = ",";
 
-const DEFAULT_SHARD_ID: ShardId = 0;
 const DEFAULT_SHARDS: usize = 1;
+const DEFAULT_SHARD_ID: ShardId = 0;
 
 const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
@@ -35,7 +35,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 type ProtocolArgs = (
     ProcessId,
     ShardId,
-    Option<Vec<ProcessId>>,
+    Option<Vec<(ProcessId, ShardId)>>,
     IpAddr,
     u16,
     u16,
@@ -130,7 +130,7 @@ fn parse_args() -> ProtocolArgs {
             Arg::with_name("sorted_processes")
                 .long("sorted")
                 .value_name("SORTED_PROCESSES")
-                .help("comma-separated list of process identifiers sorted by distance; if not set, processes will ping each other and try to figure out this list from ping latency; for this, 'ping_interval' should be set")
+                .help("comma-separated list of 'ID-SHARD_ID', where ID is the process id and SHARD-ID the identifier of the shard it belongs to, sorted by distance; if not set, processes will ping each other and try to figure out this list from ping latency; for this, 'ping_interval' should be set")
                 .takes_value(true),
         )
         .arg(
@@ -326,6 +326,7 @@ fn parse_args() -> ProtocolArgs {
     let client_port = parse_client_port(matches.value_of("client_port"));
     let addresses = parse_addresses(matches.value_of("addresses"));
 
+    // parse config
     let config = build_config(
         parse_n(matches.value_of("n")),
         parse_f(matches.value_of("f")),
@@ -410,20 +411,37 @@ fn parse_args() -> ProtocolArgs {
 }
 
 fn parse_process_id(id: Option<&str>) -> ProcessId {
-    parse_id(id.expect("process id should be set"))
+    parse_id::<ProcessId>(id.expect("process id should be set"))
 }
 
 fn parse_shard_id(shard_id: Option<&str>) -> ShardId {
-    shard_id.map(|id| parse_id(id)).unwrap_or(DEFAULT_SHARD_ID)
+    shard_id
+        .map(|id| parse_id::<ShardId>(id))
+        .unwrap_or(DEFAULT_SHARD_ID)
 }
 
-fn parse_id(id: &str) -> ProcessId {
-    id.parse::<ProcessId>()
-        .expect("process id should be a number")
+fn parse_id<I>(id: &str) -> I
+where
+    I: std::str::FromStr,
+    <I as std::str::FromStr>::Err: std::fmt::Debug,
+{
+    id.parse::<I>().expect("id should be a number")
 }
 
-fn parse_sorted_processes(ids: Option<&str>) -> Option<Vec<ProcessId>> {
-    ids.map(|ids| ids.split(LIST_SEP).map(|id| parse_id(id)).collect())
+fn parse_sorted_processes(
+    ids: Option<&str>,
+) -> Option<Vec<(ProcessId, ShardId)>> {
+    ids.map(|ids| {
+        ids.split(LIST_SEP)
+            .map(|entry| {
+                let parts: Vec<_> = entry.split('-').collect();
+                assert_eq!(parts.len(), 2, "each sorted process entry should have the form 'ID-SHARD_ID'");
+                let id = parse_id::<ProcessId>(parts[0]);
+                let shard_id = parse_id::<ShardId>(parts[1]);
+                (id, shard_id)
+            })
+            .collect()
+    })
 }
 
 fn parse_ip(ip: Option<&str>) -> IpAddr {

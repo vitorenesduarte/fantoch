@@ -2,7 +2,7 @@ use super::pool;
 use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
-use crate::id::{ClientId, Dot, ProcessId, Rifl};
+use crate::id::{ClientId, Dot, ProcessId, Rifl, ShardId};
 use crate::kvs::Key;
 use crate::protocol::{
     MessageIndex, PeriodicEventIndex, Protocol, ProtocolMetrics,
@@ -43,7 +43,11 @@ pub fn worker_dot_index_shift(dot: &Dot) -> Option<(usize, usize)> {
 pub type RunResult<V> = Result<V, Box<dyn Error>>;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ProcessHi(pub ProcessId);
+pub struct ProcessHi {
+    pub process_id: ProcessId,
+    pub shard_id: ShardId,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientHi(pub Vec<ClientId>);
 
@@ -61,7 +65,7 @@ pub enum FromClient {
 pub type RiflAckReceiver = ChannelReceiver<Rifl>;
 pub type RiflAckSender = ChannelSender<Rifl>;
 pub type ReaderReceiver<P> =
-    ChannelReceiver<(ProcessId, <P as Protocol>::Message)>;
+    ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
 pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
 pub type ClientReceiver = ChannelReceiver<FromClient>;
@@ -80,9 +84,10 @@ pub type PeriodicEventReceiver<P, R> =
     ChannelReceiver<FromPeriodicMessage<P, R>>;
 pub type InspectFun<P, R> = (fn(&P) -> R, ChannelSender<R>);
 pub type InspectReceiver<P, R> = ChannelReceiver<InspectFun<P, R>>;
-pub type SortedProcessesSender = ChannelSender<ChannelSender<Vec<ProcessId>>>;
+pub type SortedProcessesSender =
+    ChannelSender<ChannelSender<Vec<(ProcessId, ShardId)>>>;
 pub type SortedProcessesReceiver =
-    ChannelReceiver<ChannelSender<Vec<ProcessId>>>;
+    ChannelReceiver<ChannelSender<Vec<(ProcessId, ShardId)>>>;
 pub type ProtocolMetricsReceiver = ChannelReceiver<(usize, ProtocolMetrics)>;
 pub type ProtocolMetricsSender = ChannelSender<(usize, ProtocolMetrics)>;
 pub type ExecutorMetricsReceiver = ChannelReceiver<(usize, ExecutorMetrics)>;
@@ -105,15 +110,15 @@ impl pool::PoolIndex for (Option<Dot>, Command) {
 
 // 2. workers receive messages from readers
 pub type ReaderToWorkers<P> =
-    pool::ToPool<(ProcessId, <P as Protocol>::Message)>;
-// The following allows e.g. (ProcessId, <P as Protocol>::Message) to be
-// `ToPool::forward`
-impl<A> pool::PoolIndex for (ProcessId, A)
+    pool::ToPool<(ProcessId, ShardId, <P as Protocol>::Message)>;
+// The following allows e.g. (ProcessId, ShardId, <P as Protocol>::Message) to
+// be `ToPool::forward`
+impl<A> pool::PoolIndex for (ProcessId, ShardId, A)
 where
     A: MessageIndex,
 {
     fn index(&self) -> Option<(usize, usize)> {
-        self.1.index()
+        self.2.index()
     }
 }
 

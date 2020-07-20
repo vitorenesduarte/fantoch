@@ -253,7 +253,10 @@ impl ClientConfig {
     }
 
     pub fn to_args(&self) -> Vec<String> {
-        use fantoch::client::KeyGen;
+        use fantoch::client::{KeyGen, ShardGen};
+        let shard_gen = match self.workload.shard_gen() {
+            ShardGen::Random { shards } => format!("random,{}", shards),
+        };
         let key_gen = match self.workload.key_gen() {
             KeyGen::ConflictRate { conflict_rate } => {
                 format!("conflict_rate,{}", conflict_rate)
@@ -270,6 +273,8 @@ impl ClientConfig {
             self.ip_to_address(),
             "--shards_per_command",
             self.workload.shards_per_command(),
+            "--shard_gen",
+            shard_gen,
             "--keys_per_shard",
             self.workload.keys_per_shard(),
             "--key_gen",

@@ -1,4 +1,4 @@
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::kvs::Key;
 use crate::planet::{Planet, Region};
 use crate::HashMap;
@@ -69,8 +69,8 @@ pub fn dots(repr: Vec<(ProcessId, u64, u64)>) -> impl Iterator<Item = Dot> {
 pub fn sort_processes_by_distance(
     region: &Region,
     planet: &Planet,
-    mut processes: Vec<(ProcessId, Region)>,
-) -> Vec<ProcessId> {
+    mut processes: Vec<(ProcessId, ShardId, Region)>,
+) -> Vec<(ProcessId, ShardId)> {
     // TODO the following computation could be cached on `planet`
     let indexes: HashMap<_, _> = planet
         // get all regions sorted by distance from `region`
@@ -84,7 +84,7 @@ pub fn sort_processes_by_distance(
 
     // use the region order index (based on distance) to order `processes`
     // - if two `processes` are from the same region, they're sorted by id
-    processes.sort_unstable_by(|(id_a, a), (id_b, b)| {
+    processes.sort_unstable_by(|(id_a, _, a), (id_b, _, b)| {
         if a == b {
             id_a.cmp(id_b)
         } else {
@@ -94,7 +94,10 @@ pub fn sort_processes_by_distance(
         }
     });
 
-    processes.into_iter().map(|(id, _)| id).collect()
+    processes
+        .into_iter()
+        .map(|(id, shard_id, _)| (id, shard_id))
+        .collect()
 }
 
 #[cfg(test)]
@@ -133,14 +136,26 @@ pub mod tests {
             (16, Region::new("us-west2")),
         ];
 
+        let shard_id = 0;
+        // map them all to the same shard
+        let processes = processes
+            .into_iter()
+            .map(|(process_id, region)| (process_id, shard_id, region))
+            .collect();
+
         // sort processes
         let region = Region::new("europe-west3");
         let planet = Planet::new();
         let sorted = sort_processes_by_distance(&region, &planet, processes);
 
-        assert_eq!(
-            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2],
-            sorted
-        );
+        let expected =
+            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2];
+        // map them all to the same shard
+        let expected: Vec<_> = expected
+            .into_iter()
+            .map(|process_id| (process_id, shard_id))
+            .collect();
+
+        assert_eq!(expected, sorted);
     }
 }

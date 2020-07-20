@@ -5,6 +5,9 @@ pub mod workload;
 // `KeyGeneratorState`.
 pub mod key_gen;
 
+// This module contains the definition of `ShardGen`.
+pub mod shard_gen;
+
 // This module contains the definition of `Pending`
 pub mod pending;
 
@@ -15,20 +18,22 @@ pub mod data;
 pub use data::ClientData;
 pub use key_gen::KeyGen;
 pub use pending::Pending;
+pub use shard_gen::ShardGen;
 pub use workload::Workload;
 
 use crate::command::{Command, CommandResult};
-use crate::id::ProcessId;
-use crate::id::{ClientId, RiflGen};
+use crate::id::{ClientId, ProcessId, RiflGen, ShardId};
 use crate::log;
 use crate::time::SysTime;
+use crate::HashMap;
 use key_gen::KeyGenState;
 
 pub struct Client {
     /// id of this client
     client_id: ClientId,
-    /// id of the process this client is connected to
-    process_id: Option<ProcessId>,
+    /// mapping from shard id to the process id of that shard this client is
+    /// connected to
+    connected: HashMap<ShardId, ProcessId>,
     /// rifl id generator
     rifl_gen: RiflGen,
     /// workload configuration
@@ -47,7 +52,7 @@ impl Client {
         // create client
         Self {
             client_id,
-            process_id: None,
+            connected: HashMap::new(),
             rifl_gen: RiflGen::new(client_id),
             workload,
             key_gen_state: workload.key_gen().initial_state(client_id),
@@ -62,12 +67,10 @@ impl Client {
     }
 
     /// "Connect" to the closest process.
-    pub fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
-        // set the closest process
-        self.process_id = processes.into_iter().next();
-
-        // check if we have a closest process
-        self.process_id.is_some()
+    pub fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) {
+        for (process_id, shard_id) in processes {
+            self.connected.insert(shard_id, process_id);
+        }
     }
 
     /// Generates the next command in this client's workload.
@@ -75,16 +78,19 @@ impl Client {
         &mut self,
         time: &dyn SysTime,
     ) -> Option<(ProcessId, Command)> {
-        self.process_id.and_then(|process_id| {
-            // generate next command in the workload if some process_id
-            self.workload
-                .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
-                .map(|cmd| {
-                    // if a new command was generated, start it in pending
-                    self.pending.start(cmd.rifl(), time);
-                    (process_id, cmd)
-                })
-        })
+        // generate next command in the workload if some process_id
+        self.workload
+            .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
+            .map(|(target_shard, cmd)| {
+                // select the process id
+                let process_id = self
+                    .connected
+                    .get(&target_shard)
+                    .expect("client should be connected to all shards");
+                // if a new command was generated, start it in pending
+                self.pending.start(cmd.rifl(), time);
+                (*process_id, cmd)
+            })
     }
 
     /// Handle executed command and return a boolean indicating whether we have
@@ -127,18 +133,21 @@ mod tests {
     use crate::planet::{Planet, Region};
     use crate::time::SimTime;
     use crate::util;
+    use std::iter::FromIterator;
     use std::time::Duration;
 
     // Generates some client.
     fn gen_client(total_commands: usize) -> Client {
         // workload
         let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
         let keys_per_shard = 1;
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
         let payload_size = 100;
         let workload = Workload::new(
             shards_per_command,
+            shard_gen,
             keys_per_shard,
             key_gen,
             total_commands,
@@ -155,11 +164,16 @@ mod tests {
         // create planet
         let planet = Planet::new();
 
+        // there are two shards
+        let shard_0_id = 0;
+        let shard_1_id = 0;
+
         // processes
         let processes = vec![
-            (0, Region::new("asia-east1")),
-            (1, Region::new("australia-southeast1")),
-            (2, Region::new("europe-west1")),
+            (0, shard_0_id, Region::new("asia-east1")),
+            (1, shard_0_id, Region::new("australia-southeast1")),
+            (2, shard_0_id, Region::new("europe-west1")),
+            (3, shard_1_id, Region::new("europe-west2")),
         ];
 
         // client
@@ -169,14 +183,18 @@ mod tests {
 
         // check discover with empty vec
         let sorted = util::sort_processes_by_distance(&region, &planet, vec![]);
-        assert!(!client.discover(sorted));
-        assert_eq!(client.process_id, None);
+        client.discover(sorted);
+        assert!(client.connected.is_empty());
 
         // check discover with processes
         let sorted =
             util::sort_processes_by_distance(&region, &planet, processes);
-        assert!(client.discover(sorted));
-        assert_eq!(client.process_id, Some(2));
+        client.discover(sorted);
+        assert_eq!(
+            client.connected,
+            // connected to process 2 on shard 0 and process 3 on shard 1
+            HashMap::from_iter(vec![(shard_0_id, 2), (shard_1_id, 3)])
+        );
     }
 
     #[test]
@@ -184,11 +202,14 @@ mod tests {
         // create planet
         let planet = Planet::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         // processes
         let processes = vec![
-            (0, Region::new("asia-east1")),
-            (1, Region::new("australia-southeast1")),
-            (2, Region::new("europe-west1")),
+            (0, shard_id, Region::new("asia-east1")),
+            (1, shard_id, Region::new("australia-southeast1")),
+            (2, shard_id, Region::new("europe-west1")),
         ];
 
         // client

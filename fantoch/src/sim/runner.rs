@@ -97,12 +97,16 @@ where
                 );
 
                 log!("id {} for region {:?}", process_id, region);
-                (process_id, region)
+                (process_id, shard_id, region)
             })
             .collect();
 
         // create processs to region mapping
-        let process_to_region = to_discover.clone().into_iter().collect();
+        let process_to_region = to_discover
+            .clone()
+            .into_iter()
+            .map(|(process_id, _, region)| (process_id, region))
+            .collect();
 
         // register processes
         processes.into_iter().for_each(|(region, mut process)| {
@@ -141,7 +145,7 @@ where
                     &planet,
                     to_discover.clone(),
                 );
-                assert!(client.discover(sorted));
+                client.discover(sorted);
                 // and register it
                 simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
@@ -549,7 +553,7 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::KeyGen;
+    use crate::client::{KeyGen, ShardGen};
     use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
 
@@ -566,13 +570,14 @@ mod tests {
 
         // clients workload
         let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
         let keys_per_shard = 1;
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
         let total_commands = 1000;
         let payload_size = 100;
         let workload = Workload::new(
             shards_per_command,
+            shard_gen,
             keys_per_shard,
             key_gen,
             total_commands,

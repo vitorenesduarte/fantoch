@@ -208,7 +208,7 @@ where
     /// Skips prepare phase. See top-level docs (in `Synod`) for more info.
     fn skip_prepare(&mut self, acceptor: &Acceptor<V>) -> Ballot {
         assert_eq!(acceptor.ballot(), 0);
-        self.ballot = self.process_id;
+        self.ballot = self.process_id as Ballot;
         self.ballot
     }
 
@@ -224,7 +224,7 @@ where
         // compute the next "round"
         let next_round = round + 1;
         // compute ballot owned by this process in the next round
-        self.ballot = self.process_id + n * next_round;
+        self.ballot = self.process_id as Ballot + n * next_round;
     }
 
     /// Resets the local (paper-slip) state (promises received, accepts
@@ -344,7 +344,7 @@ where
                     // otherwise, check if we're still at the first ballot (that
                     // doesn't need to be prepared)
                     match &acceptor.accepted {
-                        (ballot, value) if *ballot == self.process_id => value.clone(),
+                        (ballot, value) if *ballot == self.process_id as Ballot => value.clone(),
                         _ => panic!("there should have been proposal before a value can be chosen (or we should still be at the first ballot)"),
                     }
                 };
@@ -734,7 +734,7 @@ mod proptests {
 
     fn bound_id(id: ProcessId, bound: usize) -> ProcessId {
         // make sure ids are between 1 and `bound`
-        id % (bound as u64) + 1
+        id % (bound as ProcessId) + 1
     }
 
     impl Arbitrary for Action {
@@ -808,7 +808,7 @@ mod proptests {
         data.into_iter()
             .map(|(id, initial_value)| {
                 // get id
-                let id = id as u64;
+                let id = id as ProcessId;
                 // create synod
                 let synod = Synod::new(id, N, F, proposal_gen, initial_value);
                 (id, RefCell::new(synod))

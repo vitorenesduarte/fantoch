@@ -1,6 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::client::{KeyGen, Workload};
+use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::exp::Machines;
@@ -65,6 +65,7 @@ async fn main() -> Result<(), Report> {
         Region::SaEast1,
     ];
     let n = regions.len();
+    let shards = 1;
 
     /*
     let configs = vec![
@@ -120,6 +121,7 @@ async fn main() -> Result<(), Report> {
             for coefficient in vec![1.0] {
                 let workload = Workload::new(
                     shards_per_command,
+                    ShardGen::Random { shards },
                     keys_per_shard,
                     KeyGen::Zipf {
                         coefficient,

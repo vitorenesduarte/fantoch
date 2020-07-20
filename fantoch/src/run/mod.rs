@@ -102,7 +102,7 @@ use tokio::sync::Semaphore;
 pub async fn process<P, A>(
     process_id: ProcessId,
     shard_id: ShardId,
-    sorted_processes: Option<Vec<ProcessId>>,
+    sorted_processes: Option<Vec<(ProcessId, ShardId)>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -157,7 +157,7 @@ where
 async fn process_with_notify_and_inspect<P, A, R>(
     process_id: ProcessId,
     shard_id: ShardId,
-    sorted_processes: Option<Vec<ProcessId>>,
+    sorted_processes: Option<Vec<(ProcessId, ShardId)>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -208,9 +208,6 @@ where
     // check ports are different
     assert!(port != client_port);
 
-    // check that n - 1 addresses were set
-    assert_eq!(addresses.len(), config.n() - 1);
-
     // ---------------------
     // start process listener
     let listener = task::listen((ip, port)).await?;
@@ -225,6 +222,8 @@ where
     // connect to all processes
     let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
+        shard_id,
+        config,
         listener,
         addresses,
         reader_to_workers.clone(),
@@ -244,6 +243,7 @@ where
         task::spawn(task::ping::ping_task(
             ping_interval,
             process_id,
+            shard_id,
             ips,
             None,
         ));
@@ -253,13 +253,19 @@ where
         // it for the sorted processes
         let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
             let parent = Some(rx);
-            task::ping::ping_task(ping_interval, process_id, ips, parent)
+            task::ping::ping_task(
+                ping_interval,
+                process_id,
+                shard_id,
+                ips,
+                parent,
+            )
         });
         ask_ping_task(to_ping).await
     };
 
     // check that we have n processes
-    assert_eq!(sorted_processes.len(), config.n());
+    assert_eq!(sorted_processes.len(), config.n() * config.shards());
 
     // ---------------------
     // start client listener
@@ -299,6 +305,7 @@ where
     // start client listener
     task::client::start_listener(
         process_id,
+        shard_id,
         client_listener,
         atomic_dot_gen,
         client_to_workers,
@@ -376,7 +383,9 @@ where
     Ok(())
 }
 
-async fn ask_ping_task(mut to_ping: SortedProcessesSender) -> Vec<ProcessId> {
+async fn ask_ping_task(
+    mut to_ping: SortedProcessesSender,
+) -> Vec<(ProcessId, ShardId)> {
     let (tx, mut rx) = task::channel(1);
     if let Err(e) = to_ping.send(tx).await {
         panic!("error sending request to ping task: {:?}", e);
@@ -695,7 +704,7 @@ fn serialize_client_data(data: ClientData, file: String) -> RunResult<()> {
 // protocols implemented
 pub mod tests {
     use super::*;
-    use crate::client::KeyGen;
+    use crate::client::{KeyGen, ShardGen};
     use crate::protocol::ProtocolMetricsKind;
     use crate::util;
     use rand::Rng;
@@ -872,6 +881,8 @@ pub mod tests {
                 Some(
                     (process_id..=(n as ProcessId))
                         .chain(1..process_id)
+                        // map them all to the single existing shard
+                        .map(|id| (id, shard_id))
                         .collect(),
                 )
             } else {
@@ -945,11 +956,13 @@ pub mod tests {
 
         // create workload
         let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
         let keys_per_shard = 2;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
         let payload_size = 100;
         let workload = Workload::new(
             shards_per_command,
+            shard_gen,
             keys_per_shard,
             key_gen,
             commands_per_client,
@@ -963,8 +976,9 @@ pub mod tests {
                 // id = 1: [1, 2, 3, 4]
                 // id = 2: [5, 6, 7, 8]
                 // id = 3: [9, 10, 11, 12]
-                let id_start = ((process_id - 1) * clients_per_region) + 1;
-                let id_end = process_id * clients_per_region;
+                let id_start =
+                    ((process_id - 1) as u64 * clients_per_region) + 1;
+                let id_end = process_id as u64 * clients_per_region;
                 let ids = (id_start..=id_end).collect();
 
                 // get port

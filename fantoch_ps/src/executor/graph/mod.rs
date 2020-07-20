@@ -267,7 +267,7 @@ impl fmt::Debug for DependencyGraph {
 mod tests {
     use super::*;
     use crate::util;
-    use fantoch::id::Rifl;
+    use fantoch::id::{ClientId, Rifl};
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use std::cell::RefCell;
@@ -816,7 +816,7 @@ mod tests {
 
         args.into_iter().for_each(|(dot, clock)| {
             // create command rifl from its dot
-            let rifl = Rifl::new(dot.source(), dot.sequence());
+            let rifl = Rifl::new(dot.source() as ClientId, dot.sequence());
 
             // create command
             let key = String::from("CONF");

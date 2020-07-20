@@ -22,7 +22,7 @@ pub use newt::{NewtAtomic, NewtFineLocked, NewtLocked, NewtSequential};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{KeyGen, Workload};
+    use fantoch::client::{KeyGen, ShardGen, Workload};
     use fantoch::config::Config;
     use fantoch::id::ProcessId;
     use fantoch::planet::Planet;
@@ -535,6 +535,7 @@ mod tests {
 
         // clients workload
         let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
         let keys_per_shard = 2;
         let payload_size = 1;
         let key_gen = KeyGen::ConflictRate {
@@ -542,6 +543,7 @@ mod tests {
         };
         let workload = Workload::new(
             shards_per_command,
+            shard_gen,
             keys_per_shard,
             key_gen,
             commands_per_client,
