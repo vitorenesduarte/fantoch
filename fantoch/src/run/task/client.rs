@@ -306,6 +306,7 @@ pub async fn client_say_hi(
     client_ids: Vec<ClientId>,
     connection: &mut Connection,
 ) -> Option<(ProcessId, ShardId)> {
+    log!("[client] will say hi with ids {:?}", client_ids);
     // say hi
     let hi = ClientHi(client_ids);
     connection.send(&hi).await;

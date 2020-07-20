@@ -423,25 +423,31 @@ where
     });
 
     // start each client worker in pool
-    let handles = pool.into_iter().map(|client_ids| {
-        // start the open loop client if some interval was provided
-        if let Some(interval) = interval {
-            task::spawn(open_loop_client::<A>(
-                client_ids,
-                address.clone(),
-                interval,
-                workload,
-                tcp_nodelay,
-                channel_buffer_size,
-            ))
+    let handles = pool.into_iter().filter_map(|client_ids| {
+        // only start a client for this pool index if any client id was assigned to it
+        if !client_ids.is_empty() {
+            // start the open loop client if some interval was provided
+            let handle = if let Some(interval) = interval {
+                task::spawn(open_loop_client::<A>(
+                    client_ids,
+                    address.clone(),
+                    interval,
+                    workload,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                ))
+            } else {
+                task::spawn(closed_loop_client::<A>(
+                    client_ids,
+                    address.clone(),
+                    workload,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                ))
+            };
+            Some(handle)
         } else {
-            task::spawn(closed_loop_client::<A>(
-                client_ids,
-                address.clone(),
-                workload,
-                tcp_nodelay,
-                channel_buffer_size,
-            ))
+            None
         }
     });
 
