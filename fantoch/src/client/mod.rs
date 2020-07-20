@@ -68,8 +68,12 @@ impl Client {
 
     /// "Connect" to the closest process.
     pub fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) {
+        self.connected = HashMap::new();
         for (process_id, shard_id) in processes {
-            self.connected.insert(shard_id, process_id);
+            // only insert the first entry for each shard id (which will be the closest)
+            if !self.connected.contains_key(&shard_id) {
+                self.connected.insert(shard_id, process_id);
+            }
         }
     }
 
@@ -133,6 +137,7 @@ mod tests {
     use crate::planet::{Planet, Region};
     use crate::time::SimTime;
     use crate::util;
+    use std::collections::BTreeMap;
     use std::iter::FromIterator;
     use std::time::Duration;
 
@@ -166,7 +171,7 @@ mod tests {
 
         // there are two shards
         let shard_0_id = 0;
-        let shard_1_id = 0;
+        let shard_1_id = 1;
 
         // processes
         let processes = vec![
@@ -189,11 +194,12 @@ mod tests {
         // check discover with processes
         let sorted =
             util::sort_processes_by_distance(&region, &planet, processes);
+        dbg!(&sorted);
         client.discover(sorted);
         assert_eq!(
-            client.connected,
+            BTreeMap::from_iter(client.connected),
             // connected to process 2 on shard 0 and process 3 on shard 1
-            HashMap::from_iter(vec![(shard_0_id, 2), (shard_1_id, 3)])
+            BTreeMap::from_iter(vec![(shard_0_id, 2), (shard_1_id, 3)])
         );
     }
 

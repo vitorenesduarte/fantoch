@@ -349,6 +349,120 @@ mod tests {
 
     #[test]
     fn discover_two_shards() {
-        todo!()
+        let shard_id_0 = 0;
+        let shard_id_1 = 1;
+        // processes
+        let processes = vec![
+            (0, shard_id_0, Region::new("asia-east1")),
+            (1, shard_id_0, Region::new("asia-east1")),
+            (2, shard_id_0, Region::new("europe-north1")),
+            (3, shard_id_1, Region::new("europe-north1")),
+            (4, shard_id_1, Region::new("europe-west1")),
+            (5, shard_id_1, Region::new("asia-east1")),
+        ];
+
+        // config
+        let n = 3;
+        let f = 1;
+        let config = Config::new(n, f);
+
+        // check for bp id = 2, shard_id = 0
+        let id = 2;
+        let shard_id = 0;
+        let region = Region::new("europe-north1");
+        let planet = Planet::new();
+        let fast_quorum_size = 2;
+        let write_quorum_size = 2;
+        let mut bp = BaseProcess::new(
+            id,
+            shard_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
+
+        // discover processes and check we're connected
+        let sorted = util::sort_processes_by_distance(
+            &region,
+            &planet,
+            processes.clone(),
+        );
+        assert!(bp.discover(sorted));
+
+        // check set of all processes
+        assert_eq!(
+            BTreeSet::from_iter(bp.all()),
+            BTreeSet::from_iter(vec![2, 0, 1])
+        );
+
+        // check set of all processes (but self)
+        assert_eq!(
+            BTreeSet::from_iter(bp.all_but_me()),
+            BTreeSet::from_iter(vec![0, 1])
+        );
+
+        // check fast quorum
+        assert_eq!(
+            BTreeSet::from_iter(bp.fast_quorum()),
+            BTreeSet::from_iter(vec![2, 0])
+        );
+
+        // check write quorum
+        assert_eq!(
+            BTreeSet::from_iter(bp.write_quorum()),
+            BTreeSet::from_iter(vec![2, 0])
+        );
+
+        assert_eq!(bp.closest_shard_process.len(), 1);
+        assert_eq!(bp.closest_shard_process.get(&shard_id_0), None);
+        assert_eq!(bp.closest_shard_process.get(&shard_id_1), Some(&3));
+
+        // check for bp id = 3, shard_id = 1
+        let id = 3;
+        let shard_id = 1;
+        let region = Region::new("europe-north1");
+        let planet = Planet::new();
+        let fast_quorum_size = 2;
+        let write_quorum_size = 2;
+        let mut bp = BaseProcess::new(
+            id,
+            shard_id,
+            config,
+            fast_quorum_size,
+            write_quorum_size,
+        );
+
+        // discover processes and check we're connected
+        let sorted =
+            util::sort_processes_by_distance(&region, &planet, processes);
+        assert!(bp.discover(sorted));
+
+        // check set of all processes
+        assert_eq!(
+            BTreeSet::from_iter(bp.all()),
+            BTreeSet::from_iter(vec![3, 4, 5])
+        );
+
+        // check set of all processes (but self)
+        assert_eq!(
+            BTreeSet::from_iter(bp.all_but_me()),
+            BTreeSet::from_iter(vec![4, 5])
+        );
+
+        // check fast quorum
+        assert_eq!(
+            BTreeSet::from_iter(bp.fast_quorum()),
+            BTreeSet::from_iter(vec![3, 4])
+        );
+
+        // check write quorum
+        assert_eq!(
+            BTreeSet::from_iter(bp.write_quorum()),
+            BTreeSet::from_iter(vec![3, 4])
+        );
+
+        assert_eq!(bp.closest_shard_process.len(), 1);
+        assert_eq!(bp.closest_shard_process.get(&shard_id_0), Some(&2));
+        assert_eq!(bp.closest_shard_process.get(&shard_id_1), None);
     }
 }
