@@ -64,7 +64,7 @@ mod tests {
         // create key clocks
         let shard_id = 0;
         let n = 1;
-        let mut clocks = KC::new(n, shard_id);
+        let mut clocks = KC::new(shard_id, n);
 
         // create dot gen
         let process_id = 1;

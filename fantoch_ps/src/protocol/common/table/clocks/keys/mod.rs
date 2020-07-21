@@ -107,8 +107,9 @@ mod tests {
 
     fn keys_clocks_flow<KC: KeyClocks>(all_clocks_match: bool) {
         // create key clocks
+        let process_id = 1;
         let shard_id = 0;
-        let mut clocks = KC::new(1, shard_id);
+        let mut clocks = KC::new(process_id, shard_id);
 
         // keys
         let key_a = String::from("A");
@@ -191,8 +192,9 @@ mod tests {
 
     fn keys_clocks_no_double_votes<KC: KeyClocks>() {
         // create key clocks
+        let process_id = 1;
         let shard_id = 0;
-        let mut clocks = KC::new(1, shard_id);
+        let mut clocks = KC::new(process_id, shard_id);
 
         // command
         let key = String::from("A");
