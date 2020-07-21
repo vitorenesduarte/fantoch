@@ -1,4 +1,4 @@
-use fantoch::client::{KeyGen, Workload};
+use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::metrics::Histogram;
@@ -129,12 +129,14 @@ fn newt_real_time(aws: bool) {
 
                 // clients workload
                 let shards_per_command = 1;
+                let shard_gen = ShardGen::Random { shards: 1 };
                 let keys_per_shard = 1;
                 let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
                 let total_commands = 500;
                 let payload_size = 0;
                 let workload = Workload::new(
                     shards_per_command,
+                    shard_gen,
                     keys_per_shard,
                     key_gen,
                     total_commands,
@@ -206,12 +208,14 @@ fn equidistant<P: Protocol + Eq>(protocol_name: &str) {
 
     // clients workload
     let shards_per_command = 1;
+    let shard_gen = ShardGen::Random { shards: 1 };
     let keys_per_shard = 1;
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let total_commands = 500;
     let payload_size = 0;
     let workload = Workload::new(
         shards_per_command,
+        shard_gen,
         keys_per_shard,
         key_gen,
         total_commands,
@@ -275,12 +279,14 @@ fn increasing_regions<P: Protocol + Eq>(protocol_name: &str) {
 
     // clients workload
     let shards_per_command = 1;
+    let shard_gen = ShardGen::Random { shards: 1 };
     let keys_per_shard = 1;
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let total_commands = 500;
     let payload_size = 0;
     let workload = Workload::new(
         shards_per_command,
+        shard_gen,
         keys_per_shard,
         key_gen,
         total_commands,
