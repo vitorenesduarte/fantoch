@@ -49,6 +49,7 @@ impl Protocol for Basic {
         );
         let cmds = CommandsInfo::new(
             process_id,
+            shard_id,
             config.n(),
             config.f(),
             fast_quorum_size,
@@ -348,6 +349,7 @@ struct BasicInfo {
 impl Info for BasicInfo {
     fn new(
         _process_id: ProcessId,
+        _shard_id: ShardId,
         _n: usize,
         _f: usize,
         fast_quorum_size: usize,

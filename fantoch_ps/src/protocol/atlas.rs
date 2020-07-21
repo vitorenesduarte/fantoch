@@ -56,9 +56,10 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KC::new(config.n());
+        let keys_clocks = KC::new(shard_id, config.n());
         let cmds = CommandsInfo::new(
             process_id,
+            shard_id,
             config.n(),
             config.f(),
             fast_quorum_size,
@@ -592,9 +593,9 @@ pub struct ConsensusValue {
 }
 
 impl ConsensusValue {
-    fn new(n: usize) -> Self {
+    fn new(shard_id: ShardId, n: usize) -> Self {
         let cmd = None;
-        let clock = VClock::with(util::process_ids(n));
+        let clock = VClock::with(util::process_ids(shard_id, n));
         Self { cmd, clock }
     }
 
@@ -622,12 +623,13 @@ struct AtlasInfo {
 impl Info for AtlasInfo {
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::new(n);
+        let initial_value = ConsensusValue::new(shard_id, n);
         Self {
             status: Status::START,
             quorum: HashSet::new(),

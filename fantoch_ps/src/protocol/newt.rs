@@ -69,9 +69,10 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_clocks = KC::new(process_id);
+        let key_clocks = KC::new(process_id, shard_id);
         let cmds = CommandsInfo::new(
             process_id,
+            shard_id,
             config.n(),
             config.f(),
             fast_quorum_size,
@@ -358,7 +359,10 @@ impl<KC: KeyClocks> Newt<KC> {
                 process_votes
             );
             // check that there's one vote per key
-            assert_eq!(process_votes.len(), cmd.key_count());
+            debug_assert_eq!(
+                process_votes.len(),
+                cmd.key_count(self.bp.shard_id)
+            );
             (clock, process_votes)
         };
 
@@ -891,6 +895,7 @@ struct NewtInfo {
 impl Info for NewtInfo {
     fn new(
         process_id: ProcessId,
+        _shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,

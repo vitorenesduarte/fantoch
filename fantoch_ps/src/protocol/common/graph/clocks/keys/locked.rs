@@ -1,7 +1,7 @@
 use super::KeyClocks;
 use crate::protocol::common::shared::Shared;
 use fantoch::command::Command;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use threshold::VClock;
@@ -11,6 +11,7 @@ type Clock = RwLock<VClock<ProcessId>>;
 
 #[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
+    shard_id: ShardId,
     n: usize, // number of processes
     clocks: Arc<Shared<Clock>>,
     noop_clock: Arc<Clock>,
@@ -18,20 +19,21 @@ pub struct LockedKeyClocks {
 
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
-    fn new(n: usize) -> Self {
+    fn new(shard_id: ShardId, n: usize) -> Self {
         // create shared clocks
         let clocks = Shared::new();
         // wrap them in an arc
         let clocks = Arc::new(clocks);
 
         // create noop clock
-        let noop_clock = super::bottom_clock(n);
+        let noop_clock = super::bottom_clock(shard_id, n);
         // protect it with a rw-lock
         let noop_clock = RwLock::new(noop_clock);
         // wrap it in an arc
         let noop_clock = Arc::new(noop_clock);
 
         Self {
+            shard_id,
             n,
             clocks,
             noop_clock,
@@ -50,7 +52,7 @@ impl KeyClocks for LockedKeyClocks {
         // we start with past in case there's one, or bottom otherwise
         let clock = match past {
             Some(past) => past,
-            None => super::bottom_clock(self.n),
+            None => super::bottom_clock(self.shard_id, self.n),
         };
 
         // check if we have a noop or not and compute conflicts accordingly
@@ -64,7 +66,7 @@ impl KeyClocks for LockedKeyClocks {
     #[cfg(test)]
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
         // always start from the noop clock:
-        let mut clock = super::bottom_clock(self.n);
+        let mut clock = super::bottom_clock(self.shard_id, self.n);
         clock.join(&self.noop_clock.read());
         match cmd {
             Some(cmd) => self.cmd_clock(cmd, &mut clock),
@@ -91,7 +93,7 @@ impl LockedKeyClocks {
 
         // iterate through all command keys, grab a write lock, get their
         // current clock and add ourselves to it
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // get current clock
             let clock_entry = self.clocks.get(key);
             // grab a write lock
@@ -154,7 +156,7 @@ impl LockedKeyClocks {
     fn cmd_clock(&self, cmd: &Command, clock: &mut VClock<ProcessId>) {
         // iterate through all command keys, grab a readlock, and include their
         // current clock in the final `clock`
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // get current clock
             let clock_entry = self.clocks.get(key);
             // grab a read lock

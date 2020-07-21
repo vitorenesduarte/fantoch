@@ -101,7 +101,7 @@ async fn client_server_task(
 
     // create pending
     let aggregate = true;
-    let mut pending = Pending::new(aggregate);
+    let mut pending = Pending::new(aggregate, shard_id);
 
     loop {
         tokio::select! {
@@ -111,7 +111,7 @@ async fn client_server_task(
             }
             cmd = connection.recv() => {
                 log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks,&mut pending).await {
+                if !client_server_task_handle_cmd(cmd, shard_id, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks, &mut pending).await {
                     return;
                 }
             }
@@ -179,6 +179,7 @@ async fn server_receive_hi(
 
 async fn client_server_task_handle_cmd(
     cmd: Option<Command>,
+    shard_id: ShardId,
     client_ids: &Vec<ClientId>,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
@@ -196,7 +197,8 @@ async fn client_server_task_handle_cmd(
             pending.wait_for(&cmd);
 
             // TODO should we make the following two loops run in parallel?
-            for key in cmd.keys() {
+            let keys: Vec<_> = cmd.keys(shard_id).collect();
+            for key in keys.iter() {
                 client_server_task_register_rifl(
                     key,
                     rifl,
@@ -204,7 +206,7 @@ async fn client_server_task_handle_cmd(
                 )
                 .await;
             }
-            for _ in cmd.keys() {
+            for _ in keys {
                 client_server_task_wait_rifl_register_ack(rifl, rifl_acks)
                     .await;
             }
@@ -214,7 +216,7 @@ async fn client_server_task_handle_cmd(
 
             // find any key
             let key = cmd
-                .keys()
+                .keys(shard_id)
                 .next()
                 .expect("command should have at least one key");
 

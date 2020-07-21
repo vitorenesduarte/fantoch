@@ -6,7 +6,7 @@ mod executor;
 pub use executor::{TableExecutionInfo, TableExecutor};
 
 use crate::protocol::common::table::VoteRange;
-use fantoch::id::{Dot, ProcessId, Rifl};
+use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, Key};
 use fantoch::log;
 use fantoch::util;
@@ -21,6 +21,7 @@ type SortId = (u64, Dot);
 #[derive(Clone)]
 pub struct MultiVotesTable {
     process_id: ProcessId,
+    shard_id: ShardId,
     n: usize,
     stability_threshold: usize,
     tables: HashMap<Key, VotesTable>,
@@ -30,11 +31,13 @@ impl MultiVotesTable {
     /// Create a new `MultiVotesTable` instance given the stability threshold.
     pub fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         n: usize,
         stability_threshold: usize,
     ) -> Self {
         Self {
             process_id,
+            shard_id,
             n,
             stability_threshold,
             tables: HashMap::new(),
@@ -86,6 +89,7 @@ impl MultiVotesTable {
                 // table does not exist, let's create a new one and insert it
                 let table = VotesTable::new(
                     self.process_id,
+                    self.shard_id,
                     self.n,
                     self.stability_threshold,
                 );
@@ -111,10 +115,11 @@ struct VotesTable {
 impl VotesTable {
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         n: usize,
         stability_threshold: usize,
     ) -> Self {
-        let ids = util::process_ids(n);
+        let ids = util::process_ids(shard_id, n);
         let votes_clock = ARClock::with(ids);
         Self {
             process_id,
@@ -247,9 +252,11 @@ mod tests {
         // let's consider that n = 5 and q = 3
         // so the threshold should be n - q + 1 = 3
         let process_id = 1;
+        let shard_id = 0;
         let n = 5;
         let stability_threshold = 3;
-        let mut table = VotesTable::new(process_id, n, stability_threshold);
+        let mut table =
+            VotesTable::new(process_id, shard_id, n, stability_threshold);
 
         // in this example we'll use the dot as rifl
 
@@ -369,7 +376,7 @@ mod tests {
 
         all_ops.permutation().for_each(|p| {
             let mut table =
-                VotesTable::new(process_id_1, n, stability_threshold);
+                VotesTable::new(process_id_1, shard_id, n, stability_threshold);
             let permutation_total_order: Vec<_> = p
                 .clone()
                 .into_iter()
@@ -384,6 +391,8 @@ mod tests {
 
     #[test]
     fn votes_table_tiny_quorums() {
+        let shard_id = 0;
+
         // process ids
         let process_id_1 = 1;
         let process_id_2 = 2;
@@ -396,7 +405,8 @@ mod tests {
         let n = 5;
         let f = 1;
         let stability_threshold = n - f;
-        let mut table = VotesTable::new(process_id_1, n, stability_threshold);
+        let mut table =
+            VotesTable::new(process_id_1, shard_id, n, stability_threshold);
 
         // in this example we'll use the dot as rifl
 
@@ -503,12 +513,14 @@ mod tests {
 
     #[test]
     fn detached_votes() {
+        let shard_id = 0;
+
         // create table
         let process_id = 1;
         let n = 5;
         let stability_threshold = 3;
         let mut table =
-            MultiVotesTable::new(process_id, n, stability_threshold);
+            MultiVotesTable::new(process_id, shard_id, n, stability_threshold);
 
         // create keys
         let key_a = String::from("A");

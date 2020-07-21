@@ -1,6 +1,6 @@
 use super::KeyClocks;
 use fantoch::command::Command;
-use fantoch::id::Dot;
+use fantoch::id::{Dot, ShardId};
 use fantoch::kvs::Key;
 use fantoch::{HashMap, HashSet};
 use std::collections::BTreeMap;
@@ -11,14 +11,15 @@ type CommandsPerKey = BTreeMap<u64, Dot>;
 
 #[derive(Clone)]
 pub struct SequentialKeyClocks {
+    shard_id: ShardId,
     clocks: HashMap<Key, CommandsPerKey>,
 }
 
 impl KeyClocks for SequentialKeyClocks {
     /// Create a new `KeyClocks` instance.
-    fn new() -> Self {
+    fn new(shard_id: ShardId) -> Self {
         let clocks = HashMap::new();
-        Self { clocks }
+        Self { shard_id, clocks }
     }
 
     /// Computes this command's set of predecessors. From this moment on, this
@@ -34,7 +35,7 @@ impl KeyClocks for SequentialKeyClocks {
         // return here will grow unbounded as the more commands are processed in
         // the system
         let mut pred = HashSet::new();
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // get a mutable reference to current commands
             let current = match self.clocks.get_mut(key) {
                 Some(current) => current,

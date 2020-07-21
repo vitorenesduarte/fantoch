@@ -15,7 +15,7 @@ use self::index::{PendingIndex, VertexIndex};
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::util;
 use fantoch::HashSet;
@@ -46,9 +46,13 @@ enum FinderInfo {
 
 impl DependencyGraph {
     /// Create a new `Graph`.
-    pub fn new(process_id: ProcessId, config: &Config) -> Self {
+    pub fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: &Config,
+    ) -> Self {
         // create bottom executed clock
-        let ids = util::process_ids(config.n());
+        let ids = util::process_ids(shard_id, config.n());
         let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new();
@@ -277,10 +281,11 @@ mod tests {
     fn simple() {
         // create queue
         let process_id = 1;
+        let shard_id = 0;
         let n = 2;
         let f = 1;
         let config = Config::new(n, f);
-        let mut queue = DependencyGraph::new(process_id, &config);
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -411,6 +416,8 @@ mod tests {
     /// executed it's because there's another missing dependency, and now it
     /// will wait for that one.
     fn pending_on_different_key_regression_test() {
+        let shard_id = 0;
+
         // create config
         let n = 1;
         let f = 1;
@@ -439,7 +446,7 @@ mod tests {
 
             // create queue
             let process_id = 1;
-            let mut queue = DependencyGraph::new(process_id, &config);
+            let mut queue = DependencyGraph::new(process_id, shard_id, &config);
 
             // add cmd 2
             queue.add(dot_2, cmd_2.clone(), clock_2.clone());
@@ -712,22 +719,24 @@ mod tests {
 
     #[test]
     fn test_add_random() {
+        let shard_id = 0;
         let n = 2;
         let iterations = 10;
         let events_per_process = 3;
 
         (0..iterations).for_each(|_| {
-            let args = random_adds(n, events_per_process);
+            let args = random_adds(shard_id, n, events_per_process);
             shuffle_it(n, args);
         });
     }
 
     fn random_adds(
+        shard_id: ShardId,
         n: usize,
         events_per_process: usize,
     ) -> Vec<(Dot, VClock<ProcessId>)> {
         // create dots
-        let dots: Vec<_> = util::process_ids(n)
+        let dots: Vec<_> = util::process_ids(shard_id, n)
             .flat_map(|process_id| {
                 (1..=events_per_process)
                     .map(move |event| Dot::new(process_id, event as u64))
@@ -739,7 +748,7 @@ mod tests {
             .clone()
             .into_iter()
             .map(|dot| {
-                let clock = VClock::with(util::process_ids(n));
+                let clock = VClock::with(util::process_ids(shard_id, n));
                 (dot, RefCell::new(clock))
             })
             .collect();
@@ -806,11 +815,12 @@ mod tests {
         transitive_conflicts: bool,
     ) -> Vec<Rifl> {
         // create queue
+        let shard_id = 0;
         let process_id = 1;
         let f = 1;
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(process_id, &config);
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 
@@ -888,13 +898,14 @@ mod tests {
         };
 
         // create queue
+        let shard_id = 0;
         let process_id = 4;
         let n = 5;
         let f = 1;
         let mut config = Config::new(n, f);
         let transitive_conflicts = false;
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(process_id, &config);
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
 
         // // create vertex index and index all dots
         // let mut vertex_index = VertexIndex::new();

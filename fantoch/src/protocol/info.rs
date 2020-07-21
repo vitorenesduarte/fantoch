@@ -1,4 +1,4 @@
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::gc::GCTrack;
 use crate::util;
 use crate::HashMap;
@@ -7,6 +7,7 @@ use threshold::VClock;
 pub trait Info {
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,
@@ -17,6 +18,7 @@ pub trait Info {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandsInfo<I> {
     process_id: ProcessId,
+    shard_id: ShardId,
     n: usize,
     f: usize,
     fast_quorum_size: usize,
@@ -30,17 +32,19 @@ where
 {
     pub fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,
     ) -> Self {
         Self {
             process_id,
+            shard_id,
             n,
             f,
             fast_quorum_size,
             dot_to_info: HashMap::new(),
-            gc_track: GCTrack::new(process_id, n),
+            gc_track: GCTrack::new(process_id, shard_id, n),
         }
     }
 
@@ -50,12 +54,13 @@ where
         // TODO borrow everything we need so that the borrow checker does not
         // complain
         let process_id = self.process_id;
+        let shard_id = self.shard_id;
         let n = self.n;
         let f = self.f;
         let fast_quorum_size = self.fast_quorum_size;
-        self.dot_to_info
-            .entry(dot)
-            .or_insert_with(|| I::new(process_id, n, f, fast_quorum_size))
+        self.dot_to_info.entry(dot).or_insert_with(|| {
+            I::new(process_id, shard_id, n, f, fast_quorum_size)
+        })
     }
 
     /// Records that a command has been committed.

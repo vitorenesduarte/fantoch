@@ -854,12 +854,15 @@ pub mod tests {
 
         let ping_interval = Some(1000); // millis
 
+        // there's a single shard
+        let shard_id = 0;
+
         // create processes ports and client ports
         let n = config.n();
-        let ports: HashMap<_, _> = util::process_ids(n)
+        let ports: HashMap<_, _> = util::process_ids(shard_id, n)
             .map(|id| (id, get_available_port()))
             .collect();
-        let client_ports: HashMap<_, _> = util::process_ids(n)
+        let client_ports: HashMap<_, _> = util::process_ids(shard_id, n)
             .map(|id| (id, get_available_port()))
             .collect();
 
@@ -873,12 +876,9 @@ pub mod tests {
             })
             .collect();
 
-        // there's a single shard
-        let shard_id = 0;
-
         let mut inspect_channels = HashMap::new();
 
-        for process_id in util::process_ids(n) {
+        for process_id in util::process_ids(shard_id, n) {
             // if n = 3, this gives the following:
             // - id = 1:  [1, 2, 3]
             // - id = 2:  [2, 3, 1]
@@ -956,7 +956,7 @@ pub mod tests {
 
         // wait that all processes are connected
         println!("[main] waiting that processes are connected");
-        for _ in util::process_ids(n) {
+        for _ in util::process_ids(shard_id, n) {
             let _ = semaphore.acquire().await;
         }
         println!("[main] processes are connected");
@@ -977,7 +977,7 @@ pub mod tests {
         );
 
         let clients_per_region = clients_per_region as u64;
-        let client_handles: Vec<_> = util::process_ids(n)
+        let client_handles: Vec<_> = util::process_ids(shard_id, n)
             .map(|process_id| {
                 // if n = 3, this gives the following:
                 // id = 1: [1, 2, 3, 4]

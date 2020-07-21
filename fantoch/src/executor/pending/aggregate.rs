@@ -1,12 +1,13 @@
 use crate::command::{Command, CommandResult};
 use crate::executor::ExecutorResult;
-use crate::id::Rifl;
+use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 use crate::HashMap;
 
 /// Structure that tracks the progress of pending commands.
 #[derive(Default, Clone)]
 pub struct AggregatePending {
+    shard_id: ShardId,
     pending: HashMap<Rifl, CommandResult>,
 }
 
@@ -16,8 +17,9 @@ impl AggregatePending {
     /// the aggregation of all partial results is complete; this also means that
     /// non-parallel executors can return the full command result without having
     /// to return partials
-    pub fn new() -> Self {
+    pub fn new(shard_id: ShardId) -> Self {
         Self {
+            shard_id,
             pending: HashMap::new(),
         }
     }
@@ -26,7 +28,7 @@ impl AggregatePending {
     pub fn wait_for(&mut self, cmd: &Command) -> bool {
         // get command rifl and key count
         let rifl = cmd.rifl();
-        let key_count = cmd.key_count();
+        let key_count = cmd.key_count(self.shard_id);
         // create `CommandResult`
         let cmd_result = CommandResult::new(rifl, key_count);
         // add it to pending
@@ -81,7 +83,8 @@ mod tests {
     #[test]
     fn pending_flow() {
         // create pending and store
-        let mut pending = AggregatePending::new();
+        let shard_id = 0;
+        let mut pending = AggregatePending::new(shard_id);
         let mut store = KVStore::new();
 
         // keys and commands

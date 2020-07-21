@@ -23,7 +23,10 @@ pub fn to_regions(
     let n = regions.len();
     regions
         .into_iter()
-        .zip(fantoch::util::process_ids(n))
+        .zip(fantoch::util::process_ids(
+            todo!("partial replicationdeployment unimplemented"),
+            n,
+        ))
         .map(|(region, process_id)| {
             let region_name = region.name();
             // create fantoch region

@@ -29,7 +29,7 @@ impl Executor for GraphExecutor {
         config: Config,
         _executors: usize,
     ) -> Self {
-        let graph = DependencyGraph::new(process_id, &config);
+        let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
         let pending = HashSet::new();
         let metrics = ExecutorMetrics::new();

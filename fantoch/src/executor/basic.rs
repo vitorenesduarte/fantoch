@@ -18,14 +18,14 @@ impl Executor for BasicExecutor {
 
     fn new(
         _process_id: ProcessId,
-        _shard_id: ShardId,
+        shard_id: ShardId,
         _config: Config,
         executors: usize,
     ) -> Self {
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = executors == 1;
-        let pending = Pending::new(aggregate);
+        let pending = Pending::new(aggregate, shard_id);
         let metrics = ExecutorMetrics::new();
 
         Self {

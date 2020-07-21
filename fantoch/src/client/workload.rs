@@ -227,7 +227,10 @@ mod tests {
         let (target_shard, command) =
             workload.gen_cmd(&mut rifl_gen, &mut key_gen_state);
         assert_eq!(target_shard, 0);
-        assert_eq!(command.keys().collect::<Vec<_>>(), vec![CONFLICT_COLOR]);
+        assert_eq!(
+            command.keys(target_shard).collect::<Vec<_>>(),
+            vec![CONFLICT_COLOR]
+        );
 
         // create non-conflicting workload
         let conflict_rate = 0;
@@ -244,7 +247,7 @@ mod tests {
         let (target_shard, command) =
             workload.gen_cmd(&mut rifl_gen, &mut key_gen_state);
         assert_eq!(target_shard, 0);
-        assert_eq!(command.keys().collect::<Vec<_>>(), vec!["1"]);
+        assert_eq!(command.keys(target_shard).collect::<Vec<_>>(), vec!["1"]);
     }
 
     #[test]

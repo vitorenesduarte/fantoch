@@ -195,8 +195,9 @@ mod tests {
     #[test]
     fn votes_flow() {
         // create clocks
-        let mut clocks_p0 = SequentialKeyClocks::new(0);
-        let mut clocks_p1 = SequentialKeyClocks::new(1);
+        let shard_id = 0;
+        let mut clocks_p0 = SequentialKeyClocks::new(0, shard_id);
+        let mut clocks_p1 = SequentialKeyClocks::new(1, shard_id);
 
         // keys
         let key_a = String::from("A");
@@ -205,13 +206,13 @@ mod tests {
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
         let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
-        let mut votes_a = Votes::with_capacity(cmd_a.key_count());
+        let mut votes_a = Votes::with_capacity(cmd_a.key_count(shard_id));
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
         let cmd_ab =
             Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
-        let mut votes_ab = Votes::with_capacity(cmd_ab.key_count());
+        let mut votes_ab = Votes::with_capacity(cmd_ab.key_count(shard_id));
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)

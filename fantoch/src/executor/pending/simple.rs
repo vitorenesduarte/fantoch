@@ -1,12 +1,13 @@
 use crate::command::Command;
 use crate::executor::ExecutorResult;
 use crate::hash_map::{Entry, HashMap};
-use crate::id::Rifl;
+use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 
 /// Structure that tracks the progress of pending commands.
 #[derive(Default, Clone)]
 pub struct SimplePending {
+    shard_id: ShardId,
     pending: HashMap<Rifl, usize>,
 }
 
@@ -15,8 +16,9 @@ impl SimplePending {
     /// In this `Pending` implementation, results are returned as soon as
     /// received; this structure simply tracks if the result belongs to a client
     /// that has previously waited for such command.
-    pub fn new() -> Self {
+    pub fn new(shard_id: ShardId) -> Self {
         Self {
+            shard_id,
             pending: HashMap::new(),
         }
     }
@@ -25,7 +27,7 @@ impl SimplePending {
     pub fn wait_for(&mut self, cmd: &Command) -> bool {
         // get command rifl and key count
         let rifl = cmd.rifl();
-        let key_count = cmd.key_count();
+        let key_count = cmd.key_count(self.shard_id);
         // add to pending
         self.pending.insert(rifl, key_count).is_none()
     }
@@ -79,7 +81,8 @@ mod tests {
     #[test]
     fn pending_flow() {
         // create pending and store
-        let mut pending = SimplePending::new();
+        let shard_id = 0;
+        let mut pending = SimplePending::new(shard_id);
         let mut store = KVStore::new();
 
         // keys and commands

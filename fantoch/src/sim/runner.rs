@@ -82,7 +82,7 @@ where
         process_regions.sort();
         let to_discover: Vec<_> = process_regions
             .into_iter()
-            .zip(util::process_ids(config.n()))
+            .zip(util::process_ids(shard_id, config.n()))
             .map(|(region, process_id)| {
                 // create process and save it
                 let (process, process_events) =

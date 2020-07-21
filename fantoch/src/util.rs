@@ -53,9 +53,12 @@ pub fn key_hash(key: &Key) -> u64 {
 
 /// Returns an iterator with all process identifiers in a system with `n`
 /// processes.
-pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
+pub fn process_ids(
+    shard_id: ShardId,
+    n: usize,
+) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
-    (1..=n).map(|id| id as ProcessId)
+    (1..=n).map(move |id| (id * (shard_id as usize + 1)) as ProcessId)
 }
 
 /// Converts a reprentation of dots to the actual dots.
@@ -107,10 +110,16 @@ pub mod tests {
     #[test]
     fn process_ids_test() {
         let n = 3;
-        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(process_ids(n, 0).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(process_ids(n, 1).collect::<Vec<_>>(), vec![4, 5, 6]);
+        assert_eq!(process_ids(n, 3).collect::<Vec<_>>(), vec![10, 11, 12]);
 
         let n = 5;
-        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(process_ids(n, 0).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(
+            process_ids(n, 2).collect::<Vec<_>>(),
+            vec![11, 12, 13, 14, 15]
+        );
     }
 
     #[test]

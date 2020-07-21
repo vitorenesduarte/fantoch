@@ -61,16 +61,6 @@ impl Command {
         self.rifl
     }
 
-    /// Returns references to list of keys modified by this command.
-    pub fn keys(&self) -> impl Iterator<Item = &Key> {
-        self.ops.keys()
-    }
-
-    /// Returns references to list of keys modified by this command.
-    pub fn shards(&self) -> &HashSet<ShardId> {
-        &self.shards
-    }
-
     /// Checks if `key` is accessed by this command.
     #[allow(clippy::ptr_arg)]
     pub fn contains_key(&self, key: &Key) -> bool {
@@ -83,8 +73,21 @@ impl Command {
     }
 
     /// Returns the number of keys accessed by this command.
-    pub fn key_count(&self) -> usize {
-        self.ops.len()
+    pub fn key_count(&self, shard_id: ShardId) -> usize {
+        self.keys(shard_id).count()
+    }
+
+    /// Returns references to list of keys modified by this command.
+    pub fn keys(&self, shard_id: ShardId) -> impl Iterator<Item = &Key> {
+        self.ops
+            .iter()
+            .filter(move |(_, (_, op_shard_id))| *op_shard_id == shard_id)
+            .map(|(key, _)| key)
+    }
+
+    /// Returns references to list of keys modified by this command.
+    pub fn shards(&self) -> &HashSet<ShardId> {
+        &self.shards
     }
 
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.

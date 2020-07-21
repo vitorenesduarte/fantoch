@@ -6,7 +6,7 @@ mod aggregate;
 
 use crate::command::Command;
 use crate::executor::ExecutorResult;
-use crate::id::Rifl;
+use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 use aggregate::AggregatePending;
 use simple::SimplePending;
@@ -22,11 +22,11 @@ pub struct Pending {
 
 /// Creates a new `Pending` instance.
 impl Pending {
-    pub fn new(aggregate: bool) -> Self {
+    pub fn new(aggregate: bool, shard_id: ShardId) -> Self {
         Self {
             aggregate,
-            simple_pending: SimplePending::new(),
-            aggregate_pending: AggregatePending::new(),
+            simple_pending: SimplePending::new(shard_id),
+            aggregate_pending: AggregatePending::new(shard_id),
         }
     }
 
