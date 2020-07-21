@@ -110,6 +110,7 @@ impl Protocol for FPaxos {
     fn handle(
         &mut self,
         from: ProcessId,
+        _from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
@@ -623,7 +624,7 @@ mod tests {
         // check that the register created a spawn commander to self and handle
         // it locally
         let mut actions = if let Action::ToForward { msg } = spawn {
-            process.handle(process_id_1, msg, time)
+            process.handle(process_id_1, shard_id, msg, time)
         } else {
             panic!("Action::ToForward not found!");
         };

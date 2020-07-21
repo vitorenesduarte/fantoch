@@ -140,6 +140,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     fn handle(
         &mut self,
         from: ProcessId,
+        _from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {

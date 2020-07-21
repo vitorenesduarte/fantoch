@@ -76,8 +76,12 @@ where
             Action::ToSend { target, msg } => {
                 // handle first in self if self in target
                 let local_actions = if target.contains(&process_id) {
+                    // get process and its shard id
                     let (process, _, time) = self.get_process(process_id);
-                    process.handle(process_id, msg.clone(), time)
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
+                    // handle msg
+                    process.handle(process_id, shard_id, msg.clone(), time)
                 } else {
                     vec![]
                 };
@@ -87,9 +91,13 @@ where
                     // make sure we don't handle again in self
                     .filter(|to| to != &process_id)
                     .flat_map(|to| {
+                        // get process and its shard id
                         let (process, _, time) = self.get_process(to);
+                        assert_eq!(process.id(), to);
+                        let to_shard_id = process.shard_id();
+                        // handle msg
                         process
-                            .handle(process_id, msg.clone(), time)
+                            .handle(to, to_shard_id, msg.clone(), time)
                             .into_iter()
                             .map(move |action| (to, action))
                     });

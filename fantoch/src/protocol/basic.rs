@@ -103,6 +103,7 @@ impl Protocol for Basic {
     fn handle(
         &mut self,
         from: ProcessId,
+        _from_shard_id: ShardId,
         msg: Self::Message,
         _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {

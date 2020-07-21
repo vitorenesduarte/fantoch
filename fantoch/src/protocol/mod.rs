@@ -72,6 +72,7 @@ pub trait Protocol: Debug + Clone {
     fn handle(
         &mut self,
         from: ProcessId,
+        from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>>;

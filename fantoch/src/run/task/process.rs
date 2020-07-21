@@ -532,7 +532,7 @@ async fn handle_from_processes<P>(
     P: Protocol + 'static,
 {
     // handle message in process and potentially new actions
-    let actions = process.handle(from_id, msg, time);
+    let actions = process.handle(from_id, from_shard_id, msg, time);
     handle_actions(
         worker_index,
         actions,
@@ -647,7 +647,7 @@ where
     // us; this means that "messages to self are delivered immediately" is only
     // true for self messages to the same worker
     if reader_to_workers.only_to_self(&to_forward, worker_index) {
-        process.handle(to_forward.0, to_forward.2, time)
+        process.handle(to_forward.0, to_forward.1, to_forward.2, time)
     } else {
         if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);

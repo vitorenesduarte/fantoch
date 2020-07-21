@@ -2,7 +2,7 @@ use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{ClientId, ProcessId};
+use crate::id::{ClientId, ProcessId, ShardId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
@@ -17,7 +17,7 @@ use std::time::Duration;
 #[derive(PartialEq, Eq)]
 enum ScheduleAction<P: Protocol + Eq> {
     SubmitToProc(ProcessId, Command),
-    SendToProc(ProcessId, ProcessId, P::Message),
+    SendToProc(ProcessId, ShardId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
     PeriodicEvent(ProcessId, P::PeriodicEvent, Duration),
 }
@@ -220,6 +220,8 @@ where
                     // get process and executor
                     let (process, executor, time) =
                         self.simulation.get_process(process_id);
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
 
                     // register command in the executor
                     executor.wait_for(&cmd);
@@ -228,17 +230,26 @@ where
                     let protocol_actions = process.submit(None, cmd, time);
                     self.schedule_protocol_actions(
                         process_id,
+                        shard_id,
                         MessageRegion::Process(process_id),
                         protocol_actions,
                     );
                 }
-                ScheduleAction::SendToProc(from, process_id, msg) => {
+                ScheduleAction::SendToProc(
+                    from,
+                    from_shard_id,
+                    process_id,
+                    msg,
+                ) => {
                     // get process and executor
                     let (process, executor, time) =
                         self.simulation.get_process(process_id);
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
 
                     // handle message and get ready commands
-                    let protocol_actions = process.handle(from, msg, time);
+                    let protocol_actions =
+                        process.handle(from, from_shard_id, msg, time);
 
                     // handle new execution info in the executor
                     let to_executor = process.to_executor();
@@ -251,6 +262,7 @@ where
                     // schedule new messages
                     self.schedule_protocol_actions(
                         process_id,
+                        shard_id,
                         MessageRegion::Process(process_id),
                         protocol_actions,
                     );
@@ -297,12 +309,15 @@ where
                     // get process
                     let (process, _, time) =
                         self.simulation.get_process(process_id);
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
 
                     // handle event
                     let protocol_actions =
                         process.handle_event(event.clone(), time);
                     self.schedule_protocol_actions(
                         process_id,
+                        shard_id,
                         MessageRegion::Process(process_id),
                         protocol_actions,
                     );
@@ -343,6 +358,7 @@ where
     fn schedule_protocol_actions(
         &mut self,
         process_id: ProcessId,
+        shard_id: ShardId,
         from_region: MessageRegion,
         protocol_actions: Vec<Action<P>>,
     ) {
@@ -354,6 +370,7 @@ where
                         // otherwise, create action and schedule it
                         let action = ScheduleAction::SendToProc(
                             process_id,
+                            shard_id,
                             to,
                             msg.clone(),
                         );
@@ -365,8 +382,9 @@ where
                     });
                 }
                 Action::ToForward { msg } => {
-                    let action =
-                        ScheduleAction::SendToProc(process_id, process_id, msg);
+                    let action = ScheduleAction::SendToProc(
+                        process_id, shard_id, process_id, msg,
+                    );
                     let from_region = from_region.clone();
                     let to_region = from_region.clone();
                     self.schedule_message(from_region, to_region, action);
@@ -535,9 +553,16 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
             ScheduleAction::SubmitToProc(process_id, cmd) => {
                 write!(f, "SubmitToProc({}, {:?})", process_id, cmd)
             }
-            ScheduleAction::SendToProc(from, to, msg) => {
-                write!(f, "SendToProc({}, {}, {:?})", from, to, msg)
-            }
+            ScheduleAction::SendToProc(
+                from_process_id,
+                from_shard_id,
+                to,
+                msg,
+            ) => write!(
+                f,
+                "SendToProc({}, {}, {}, {:?})",
+                from_process_id, from_shard_id, to, msg
+            ),
             ScheduleAction::SendToClient(client_id, cmd_result) => {
                 write!(f, "SendToClient({}, {:?})", client_id, cmd_result)
             }
