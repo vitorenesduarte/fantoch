@@ -83,11 +83,11 @@ pub use prelude::{
 };
 
 use crate::client::{Client, ClientData, Workload};
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::hash_map::{Entry, HashMap};
-use crate::id::{AtomicDotGen, ClientId, Dot, ProcessId, Rifl, ShardId};
+use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use crate::HashSet;
@@ -503,14 +503,7 @@ where
 
     // generate the first message of each client
     for (_client_id, client) in clients.iter_mut() {
-        next_cmd(
-            client,
-            &time,
-            &mut reader,
-            &mut process_to_writer,
-            &mut pending,
-        )
-        .await;
+        next_cmd(client, &time, &mut process_to_writer, &mut pending).await;
     }
 
     // track which clients are finished
@@ -521,7 +514,7 @@ where
     while finished.len() < clients.len() {
         // and wait for next result
         let from_server = reader.recv().await;
-        let client = expect_cmd_result(
+        let client = handle_cmd_result(
             &mut clients,
             &time,
             from_server,
@@ -530,14 +523,7 @@ where
         );
         if let Some(client) = client {
             // if client hasn't finished, issue a new command
-            next_cmd(
-                client,
-                &time,
-                &mut reader,
-                &mut process_to_writer,
-                &mut pending,
-            )
-            .await;
+            next_cmd(client, &time, &mut process_to_writer, &mut pending).await;
         }
     }
 
@@ -586,17 +572,12 @@ where
     while finished.len() < clients.len() {
         tokio::select! {
             from_server = reader.recv() => {
-                expect_cmd_result(&mut clients, &time, from_server, &mut pending, &mut finished);
+                handle_cmd_result(&mut clients, &time, from_server, &mut pending, &mut finished);
             }
             _ = interval.tick() => {
                 // submit new command on every tick for each connected client (if there are still commands to be generated)
-                let mut to_process_after = Vec::new();
                 for (_, client) in clients.iter_mut(){
-                    let after = next_cmd(client, &time, &mut reader, &mut process_to_writer, &mut pending).await;
-                    to_process_after.extend(after);
-                }
-                for from_server in to_process_after {
-                    expect_cmd_result(&mut clients, &time, Some(from_server), &mut pending, &mut finished);
+                    next_cmd(client, &time, &mut process_to_writer, &mut pending).await;
                 }
             }
         }
@@ -686,58 +667,39 @@ where
 
 /// Generate the next command, returning a boolean representing whether a new
 /// command was generated or not.
-#[must_use]
 async fn next_cmd(
     client: &mut Client,
     time: &dyn SysTime,
-    reader: &mut ServerToClientReceiver,
     process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
     pending: &mut ShardsPending,
-) -> Vec<ServerToClient> {
+) {
     if let Some((process_id, cmd)) = client.next_cmd(time) {
         // register command in pending
-        let (dot, to_process_after) = pending.register(
-            cmd.rifl(),
-            cmd.shard_count(),
-            reader,
-            process_to_writer,
-        );
+        pending.register(&cmd);
 
         // find process writer
         let writer = process_to_writer
             .get_mut(&process_id)
             .expect("[client] dind't find writer for target process");
 
-        let msg = ClientToServer::Command(dot, cmd);
-        if let Err(e) = writer.send(msg).await {
+        if let Err(e) = writer.send(cmd).await {
             println!(
                 "[client] error while sending message to client read-write task: {:?}",
                 e
             );
         }
-        to_process_after
-    } else {
-        Vec::new()
     }
 }
 
-fn expect_cmd_result<'a>(
+fn handle_cmd_result<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    from_server: Option<ServerToClient>,
+    from_server: Option<CommandResult>,
     pending: &mut ShardsPending,
     finished: &mut HashSet<ClientId>,
 ) -> Option<&'a mut Client> {
-    if let Some(from_server) = from_server {
-        match from_server {
-            ServerToClient::Dots(_, _) => {
-                panic!("[client] was not expecting to receive dots from any server");
-            }
-            ServerToClient::CommandResult(cmd_result) => {
-                // find the client this command result belongs to
-                handle_cmd_result(clients, time, cmd_result, pending, finished)
-            }
-        }
+    if let Some(cmd_result) = from_server {
+        do_handle_cmd_result(clients, time, cmd_result, pending, finished)
     } else {
         panic!("[client] error while receiving message from client read-write task");
     }
@@ -745,7 +707,7 @@ fn expect_cmd_result<'a>(
 
 /// Handles a command result. Returns the client if a new COMMAND COMPLETED and
 /// the client did NOT FINISH.
-fn handle_cmd_result<'a>(
+fn do_handle_cmd_result<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
     cmd_result: CommandResult,
@@ -791,31 +753,20 @@ fn serialize_client_data(data: ClientData, file: String) -> RunResult<()> {
 
 struct ShardsPending {
     pending: HashMap<Rifl, (usize, Vec<CommandResult>)>,
-    // requested dots to be used for multi-shard commands
-    dots: HashMap<ProcessId, Vec<Dot>>,
 }
 
 impl ShardsPending {
     fn new() -> Self {
         Self {
             pending: HashMap::new(),
-            dots: HashMap::new(),
         }
     }
 
-    fn register(
-        &mut self,
-        rifl: Rifl,
-        shard_count: usize,
-        reader: &mut ServerToClientReceiver,
-        process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
-    ) -> (Option<Dot>, Vec<ServerToClient>) {
+    fn register(&mut self, cmd: &Command) {
+        let shard_count = cmd.shard_count();
         let results = Vec::with_capacity(shard_count);
-        let res = self.pending.insert(rifl, (shard_count, results));
+        let res = self.pending.insert(cmd.rifl(), (shard_count, results));
         assert!(res.is_none());
-
-        // find a dot for it
-        (None, Vec::new())
     }
 
     // Add new `CommandResult` and return all the `CommandResult` if we have the

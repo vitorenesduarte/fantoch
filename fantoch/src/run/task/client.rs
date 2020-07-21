@@ -1,6 +1,6 @@
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
-use crate::id::{AtomicDotGen, ClientId, Dot, ProcessId, Rifl, ShardId};
+use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
 use crate::kvs::Key;
 use crate::log;
 use crate::run::prelude::*;
@@ -112,7 +112,7 @@ async fn client_server_task(
             }
             from_client = connection.recv() => {
                 log!("[client_server] from client: {:?}", from_client);
-                if !client_server_task_handle_from_client(from_client, shard_id, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks, &mut connection, &mut pending).await {
+                if !client_server_task_handle_from_client(from_client, shard_id, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks, &mut pending).await {
                     return;
                 }
             }
@@ -179,48 +179,26 @@ async fn server_receive_hi(
 }
 
 async fn client_server_task_handle_from_client(
-    from_client: Option<ClientToServer>,
+    from_client: Option<Command>,
     shard_id: ShardId,
     client_ids: &Vec<ClientId>,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
     rifl_acks: &mut RiflAckReceiver,
-    connection: &mut Connection,
     pending: &mut Pending,
 ) -> bool {
-    if let Some(from_client) = from_client {
-        match from_client {
-            ClientToServer::Command(dot, cmd) => {
-                client_server_task_handle_cmd(
-                    dot,
-                    cmd,
-                    shard_id,
-                    atomic_dot_gen,
-                    client_to_workers,
-                    client_to_executors,
-                    rifl_acks,
-                    pending,
-                )
-                .await
-            }
-            ClientToServer::Dots(count) => {
-                // the client is requesting a new dot
-                let atomic_dot_gen = atomic_dot_gen.as_ref().unwrap_or_else(|| {
-                    panic!("received ClientToServer::Dot in a protocol without an atomic dot generator");
-                });
-                // generate new dots, and send it to the client
-                let mut dots = Vec::with_capacity(count);
-                for _ in 0..count {
-                    let dot = atomic_dot_gen.next_id();
-                    dots.push(dot);
-                }
-
-                let msg = ServerToClient::Dots(atomic_dot_gen.source(), dots);
-                connection.send(&msg).await;
-            }
-        }
-
+    if let Some(cmd) = from_client {
+        client_server_task_handle_cmd(
+            cmd,
+            shard_id,
+            atomic_dot_gen,
+            client_to_workers,
+            client_to_executors,
+            rifl_acks,
+            pending,
+        )
+        .await;
         true
     } else {
         println!("[client_server] client disconnected.");
@@ -239,7 +217,6 @@ async fn client_server_task_handle_from_client(
 }
 
 async fn client_server_task_handle_cmd(
-    dot: Option<Dot>,
     cmd: Command,
     shard_id: ShardId,
     atomic_dot_gen: &Option<AtomicDotGen>,
@@ -279,14 +256,10 @@ async fn client_server_task_handle_cmd(
         client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
     }
 
-    // create dot for this command if:
-    // - client didn't provide one, and
-    // - we have a dot generator
-    let dot = dot.or_else(|| {
-        atomic_dot_gen
-            .as_ref()
-            .map(|atomic_dot_gen| atomic_dot_gen.next_id())
-    });
+    // create dot for this command (if we have a dot gen)
+    let dot = atomic_dot_gen
+        .as_ref()
+        .map(|atomic_dot_gen| atomic_dot_gen.next_id());
     // forward command to worker process
     if let Err(e) = client_to_workers.forward((dot, cmd)).await {
         println!(
@@ -329,8 +302,7 @@ async fn client_server_task_handle_executor_result(
         match executor_result {
             ExecutorResult::Ready(cmd_result) => {
                 // if the command result is ready, simply send ti
-                let msg = ServerToClient::CommandResult(cmd_result);
-                connection.send(&msg).await;
+                connection.send(&cmd_result).await;
             }
             ExecutorResult::Partial(rifl, key, op_result) => {
                 if let Some(result) =
@@ -339,8 +311,7 @@ async fn client_server_task_handle_executor_result(
                     // since pending is in aggregate mode, if there's a result,
                     // then it's ready
                     let cmd_result = result.unwrap_ready();
-                    let msg = ServerToClient::CommandResult(cmd_result);
-                    connection.send(&msg).await;
+                    connection.send(&cmd_result).await;
                 }
             }
         }

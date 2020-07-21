@@ -51,18 +51,6 @@ pub struct ProcessHi {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientHi(pub Vec<ClientId>);
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ClientToServer {
-    Dots(usize),
-    Command(Option<Dot>, Command),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ServerToClient {
-    Dots(ProcessId, Vec<Dot>),
-    CommandResult(CommandResult),
-}
-
 #[derive(Debug, Clone)]
 pub enum ClientToExecutor {
     // clients can register
@@ -81,10 +69,10 @@ pub type ReaderReceiver<P> =
 pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
 pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
 pub type ClientToExecutorReceiver = ChannelReceiver<ClientToExecutor>;
-pub type ClientToServerReceiver = ChannelReceiver<ClientToServer>;
-pub type ClientToServerSender = ChannelSender<ClientToServer>;
-pub type ServerToClientReceiver = ChannelReceiver<ServerToClient>;
-pub type ServerToClientSender = ChannelSender<ServerToClient>;
+pub type ClientToServerReceiver = ChannelReceiver<Command>;
+pub type ClientToServerSender = ChannelSender<Command>;
+pub type ServerToClientReceiver = ChannelReceiver<CommandResult>;
+pub type ServerToClientSender = ChannelSender<CommandResult>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
 pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
 pub type SubmitReceiver = ChannelReceiver<(Option<Dot>, Command)>;
