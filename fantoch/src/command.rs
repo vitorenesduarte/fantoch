@@ -1,6 +1,6 @@
 use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
-use crate::HashMap;
+use crate::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
@@ -11,12 +11,14 @@ const DEFAULT_SHARD_ID: ShardId = 0;
 pub struct Command {
     rifl: Rifl,
     ops: HashMap<Key, (KVOp, ShardId)>,
+    shards: HashSet<ShardId>,
 }
 
 impl Command {
     /// Create a new `Command`.
     pub fn new(rifl: Rifl, ops: HashMap<Key, (KVOp, ShardId)>) -> Self {
-        Self { rifl, ops }
+        let shards = ops.iter().map(|(_, (_, shard_id))| *shard_id).collect();
+        Self { rifl, ops, shards }
     }
 
     /// Create a new `Command` from an iterator.
@@ -61,7 +63,12 @@ impl Command {
 
     /// Returns references to list of keys modified by this command.
     pub fn keys(&self) -> impl Iterator<Item = &Key> {
-        self.ops.iter().map(|(key, _)| key)
+        self.ops.keys()
+    }
+
+    /// Returns references to list of keys modified by this command.
+    pub fn shards(&self) -> &HashSet<ShardId> {
+        &self.shards
     }
 
     /// Checks if `key` is accessed by this command.
