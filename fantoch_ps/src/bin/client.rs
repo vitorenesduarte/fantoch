@@ -16,7 +16,7 @@ const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
 type ClientArgs = (
     Vec<ClientId>,
-    String,
+    Vec<String>,
     Option<Duration>,
     Workload,
     bool,
@@ -27,7 +27,7 @@ type ClientArgs = (
 fn main() -> Result<(), Box<dyn Error>> {
     let (
         ids,
-        address,
+        addresses,
         interval,
         workload,
         tcp_nodelay,
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     common::tokio_runtime().block_on(fantoch::run::client(
         ids,
-        address,
+        addresses,
         interval,
         workload,
         tcp_nodelay,
@@ -60,10 +60,10 @@ fn parse_args() -> ClientArgs {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("address")
-                .long("address")
-                .value_name("ADDR")
-                .help("address of the protocol instance to connect to (in the form IP:PORT e.g. 127.0.0.1:3000)")
+            Arg::with_name("addresses")
+                .long("addresses")
+                .value_name("ADDRESSES")
+                .help("comma-separated list of addresses to connect to (in the form IP:PORT e.g. 127.0.0.1:3000)")
                 .required(true)
                 .takes_value(true),
         )
@@ -142,7 +142,7 @@ fn parse_args() -> ClientArgs {
 
     // parse arguments
     let ids = parse_id_range(matches.value_of("ids"));
-    let address = parse_address(matches.value_of("address"));
+    let addresses = parse_addresses(matches.value_of("addresses"));
     let interval = parse_interval(matches.value_of("interval"));
     let workload = parse_workload(
         matches.value_of("shards_per_command"),
@@ -161,7 +161,7 @@ fn parse_args() -> ClientArgs {
 
     println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
     println!("client number: {}", ids.len());
-    println!("process address: {}", address);
+    println!("addresses: {:?}", addresses);
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
@@ -169,7 +169,7 @@ fn parse_args() -> ClientArgs {
 
     (
         ids,
-        address,
+        addresses,
         interval,
         workload,
         tcp_nodelay,
@@ -198,8 +198,12 @@ fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {
     }
 }
 
-fn parse_address(addresses: Option<&str>) -> String {
-    addresses.expect("address should be set").to_string()
+fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
+    addresses
+        .expect("addresses should be set")
+        .split(common::protocol::LIST_SEP)
+        .map(|address| address.to_string())
+        .collect()
 }
 
 fn parse_interval(interval: Option<&str>) -> Option<Duration> {

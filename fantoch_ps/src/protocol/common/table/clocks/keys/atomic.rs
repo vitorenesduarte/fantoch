@@ -47,12 +47,11 @@ impl KeyClocks for AtomicKeyClocks {
         // to iterate in a way that the highest clock is iterated first, this
         // will be almost equivalent to `LockedKeyClocks`
 
-        let keys: Vec<_> = cmd.keys(self.shard_id).collect();
-        let key_count = keys.len();
+        let key_count = cmd.key_count(self.shard_id);
         let mut clocks = HashSet::with_capacity(key_count);
         let mut votes = Votes::with_capacity(key_count);
         let mut up_to = min_clock;
-        keys.iter().for_each(|&key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
             let clock = self.clocks.get(key);
             let previous_value = Self::bump(&clock, up_to);
@@ -70,7 +69,7 @@ impl KeyClocks for AtomicKeyClocks {
         // - if not all clocks match (i.e. we didn't get a result equivalent to
         //   `LockedKeyClocks`), try to make them match
         if clocks.len() > 1 {
-            keys.iter().for_each(|key| {
+            cmd.keys(self.shard_id).for_each(|key| {
                 let clock = self.clocks.get(key);
                 if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
                     votes.add(key, vr);
@@ -83,10 +82,9 @@ impl KeyClocks for AtomicKeyClocks {
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
         // create votes
-        let keys: Vec<_> = cmd.keys(self.shard_id).collect();
-        let key_count = keys.len();
+        let key_count = cmd.key_count(self.shard_id);
         let mut votes = Votes::with_capacity(key_count);
-        for key in keys {
+        for key in cmd.keys(self.shard_id) {
             let clock = self.clocks.get(key);
             if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
                 votes.set(key.clone(), vec![vr]);

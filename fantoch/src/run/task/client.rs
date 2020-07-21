@@ -1,10 +1,11 @@
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
-use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
+use crate::id::{AtomicDotGen, ClientId, Dot, ProcessId, Rifl, ShardId};
 use crate::kvs::Key;
 use crate::log;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
+use crate::HashMap;
 use tokio::net::TcpListener;
 
 pub fn start_listener(
@@ -109,9 +110,9 @@ async fn client_server_task(
                 log!("[client_server] new executor result: {:?}", executor_result);
                 client_server_task_handle_executor_result(executor_result, &mut connection, &mut pending).await;
             }
-            cmd = connection.recv() => {
-                log!("[client_server] new command: {:?}", cmd);
-                if !client_server_task_handle_cmd(cmd, shard_id, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks, &mut pending).await {
+            from_client = connection.recv() => {
+                log!("[client_server] from client: {:?}", from_client);
+                if !client_server_task_handle_from_client(from_client, shard_id, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks, &mut connection, &mut pending).await {
                     return;
                 }
             }
@@ -153,7 +154,7 @@ async fn server_receive_hi(
 
     // register clients in all executors
     if let Err(e) = client_to_executors
-        .broadcast(FromClient::Register(
+        .broadcast(ClientToExecutor::Register(
             client_ids.clone(),
             rifl_acks_tx,
             executor_results_tx,
@@ -177,72 +178,55 @@ async fn server_receive_hi(
     Some((client_ids, rifl_acks_rx, executor_results_rx))
 }
 
-async fn client_server_task_handle_cmd(
-    cmd: Option<Command>,
+async fn client_server_task_handle_from_client(
+    from_client: Option<ClientToServer>,
     shard_id: ShardId,
     client_ids: &Vec<ClientId>,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
     rifl_acks: &mut RiflAckReceiver,
+    connection: &mut Connection,
     pending: &mut Pending,
 ) -> bool {
-    if let Some(cmd) = cmd {
-        // get command rifl
-        let rifl = cmd.rifl();
-
-        if client_to_executors.pool_size() > 1 {
-            // if there's more than one executor, then we'll receive partial
-            // results; in this case, register command in pending
-            pending.wait_for(&cmd);
-
-            // TODO should we make the following two loops run in parallel?
-            let keys: Vec<_> = cmd.keys(shard_id).collect();
-            for key in keys.iter() {
-                client_server_task_register_rifl(
-                    key,
-                    rifl,
+    if let Some(from_client) = from_client {
+        match from_client {
+            ClientToServer::Command(dot, cmd) => {
+                client_server_task_handle_cmd(
+                    dot,
+                    cmd,
+                    shard_id,
+                    atomic_dot_gen,
+                    client_to_workers,
                     client_to_executors,
+                    rifl_acks,
+                    pending,
                 )
-                .await;
+                .await
             }
-            for _ in keys {
-                client_server_task_wait_rifl_register_ack(rifl, rifl_acks)
-                    .await;
+            ClientToServer::Dots(count) => {
+                // the client is requesting a new dot
+                let atomic_dot_gen = atomic_dot_gen.as_ref().unwrap_or_else(|| {
+                    panic!("received ClientToServer::Dot in a protocol without an atomic dot generator");
+                });
+                // generate new dots, and send it to the client
+                let mut dots = Vec::with_capacity(count);
+                for _ in 0..count {
+                    let dot = atomic_dot_gen.next_id();
+                    dots.push(dot);
+                }
+
+                let msg = ServerToClient::Dots(atomic_dot_gen.source(), dots);
+                connection.send(&msg).await;
             }
-        } else {
-            // if there's a single executor, send a single `WaitForRifl`
-            debug_assert!(client_to_executors.pool_size() == 1);
-
-            // find any key
-            let key = cmd
-                .keys(shard_id)
-                .next()
-                .expect("command should have at least one key");
-
-            // register rifl and wait for ack
-            client_server_task_register_rifl(key, rifl, client_to_executors)
-                .await;
-            client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
         }
 
-        // create dot for this command
-        let dot = atomic_dot_gen
-            .as_ref()
-            .map(|atomic_dot_gen| atomic_dot_gen.next_id());
-        // forward command to worker process
-        if let Err(e) = client_to_workers.forward((dot, cmd)).await {
-            println!(
-                "[client_server] error while sending new command to protocol worker: {:?}",
-                e
-            );
-        }
         true
     } else {
         println!("[client_server] client disconnected.");
         // unregister client in all executors
         if let Err(e) = client_to_executors
-            .broadcast(FromClient::Unregister(client_ids.clone()))
+            .broadcast(ClientToExecutor::Unregister(client_ids.clone()))
             .await
         {
             println!(
@@ -254,13 +238,72 @@ async fn client_server_task_handle_cmd(
     }
 }
 
+async fn client_server_task_handle_cmd(
+    dot: Option<Dot>,
+    cmd: Command,
+    shard_id: ShardId,
+    atomic_dot_gen: &Option<AtomicDotGen>,
+    client_to_workers: &mut ClientToWorkers,
+    client_to_executors: &mut ClientToExecutors,
+    rifl_acks: &mut RiflAckReceiver,
+    pending: &mut Pending,
+) {
+    // get command rifl
+    let rifl = cmd.rifl();
+
+    if client_to_executors.pool_size() > 1 {
+        // if there's more than one executor, then we'll receive partial
+        // results; in this case, register command in pending
+        pending.wait_for(&cmd);
+
+        // TODO should we make the following two loops run in parallel?
+        for key in cmd.keys(shard_id) {
+            client_server_task_register_rifl(key, rifl, client_to_executors)
+                .await;
+        }
+        for _ in 0..cmd.key_count(shard_id) {
+            client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
+        }
+    } else {
+        // if there's a single executor, send a single `WaitForRifl`
+        debug_assert!(client_to_executors.pool_size() == 1);
+
+        // find any key
+        let key = cmd
+            .keys(shard_id)
+            .next()
+            .expect("command should have at least one key");
+
+        // register rifl and wait for ack
+        client_server_task_register_rifl(key, rifl, client_to_executors).await;
+        client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
+    }
+
+    // create dot for this command if:
+    // - client didn't provide one, and
+    // - we have a dot generator
+    let dot = dot.or_else(|| {
+        atomic_dot_gen
+            .as_ref()
+            .map(|atomic_dot_gen| atomic_dot_gen.next_id())
+    });
+    // forward command to worker process
+    if let Err(e) = client_to_workers.forward((dot, cmd)).await {
+        println!(
+                "[client_server] error while sending new command to protocol worker: {:?}",
+                e
+            );
+    }
+}
+
 async fn client_server_task_register_rifl(
     key: &Key,
     rifl: Rifl,
     client_to_executors: &mut ClientToExecutors,
 ) {
-    let forward = client_to_executors
-        .forward_map((key, rifl), |(_, rifl)| FromClient::WaitForRifl(rifl));
+    let forward = client_to_executors.forward_map((key, rifl), |(_, rifl)| {
+        ClientToExecutor::WaitForRifl(rifl)
+    });
     if let Err(e) = forward.await {
         println!("[client_server] error while registering new command in executor: {:?}", e);
     }
@@ -286,7 +329,8 @@ async fn client_server_task_handle_executor_result(
         match executor_result {
             ExecutorResult::Ready(cmd_result) => {
                 // if the command result is ready, simply send ti
-                connection.send(&cmd_result).await;
+                let msg = ServerToClient::CommandResult(cmd_result);
+                connection.send(&msg).await;
             }
             ExecutorResult::Partial(rifl, key, op_result) => {
                 if let Some(result) =
@@ -295,7 +339,8 @@ async fn client_server_task_handle_executor_result(
                     // since pending is in aggregate mode, if there's a result,
                     // then it's ready
                     let cmd_result = result.unwrap_ready();
-                    connection.send(&cmd_result).await;
+                    let msg = ServerToClient::CommandResult(cmd_result);
+                    connection.send(&msg).await;
                 }
             }
         }
@@ -332,38 +377,62 @@ pub async fn client_say_hi(
     }
 }
 
-pub fn start_client_rw_task(
+pub fn start_client_rw_tasks(
+    client_ids: &Vec<ClientId>,
     channel_buffer_size: usize,
-    connection: Connection,
-) -> (CommandResultReceiver, CommandSender) {
-    super::spawn_producer_and_consumer(channel_buffer_size, |tx, rx| {
-        client_rw_task(connection, tx, rx)
-    })
+    connections: Vec<(ProcessId, Connection)>,
+) -> (
+    ServerToClientReceiver,
+    HashMap<ProcessId, ClientToServerSender>,
+) {
+    // create server-to-client channels: although we keep one connection per
+    // shard, the client will receive messages that can be from any of the
+    // shards, since all rw tasks will write to the same channel
+    let (mut s2c_tx, s2c_rx) = super::channel(channel_buffer_size);
+    s2c_tx.set_name(format!("server_to_client_{}", ids_repr(&client_ids)));
+
+    let mut process_to_tx = HashMap::with_capacity(connections.len());
+    for (process_id, connection) in connections {
+        // create client-to-server channels: since clients may send operations
+        // to different shards, we keep a channel to each rw task
+        let (mut c2s_tx, c2s_rx) = super::channel(channel_buffer_size);
+        c2s_tx.set_name(format!(
+            "client_to_server_{}_{}",
+            process_id,
+            ids_repr(&client_ids)
+        ));
+
+        // spawn rw task
+        super::spawn(client_rw_task(connection, s2c_tx.clone(), c2s_rx));
+        process_to_tx.insert(process_id, c2s_tx);
+    }
+    (s2c_rx, process_to_tx)
 }
 
 async fn client_rw_task(
     mut connection: Connection,
-    mut to_parent: CommandResultSender,
-    mut from_parent: CommandReceiver,
+    mut to_parent: ServerToClientSender,
+    mut from_parent: ClientToServerReceiver,
 ) {
     loop {
         tokio::select! {
-            cmd_result = connection.recv() => {
-                log!("[client_rw] from connection: {:?}", cmd_result);
-                if let Some(cmd_result) = cmd_result {
-                    if let Err(e) = to_parent.send(cmd_result).await {
-                        println!("[client_rw] error while sending command result to parent: {:?}", e);
+            to_client = connection.recv() => {
+                log!("[client_rw] to client: {:?}", to_client);
+                if let Some(to_client) = to_client {
+                    if let Err(e) = to_parent.send(to_client).await {
+                        println!("[client_rw] error while sending message from server to parent: {:?}", e);
                     }
                 } else {
-                    println!("[client_rw] error while receiving new command result from connection");
+                    println!("[client_rw] error while receiving message from server to parent");
+                    break;
                 }
             }
-            cmd = from_parent.recv() => {
-                log!("[client_rw] from parent: {:?}", cmd);
-                if let Some(cmd) = cmd {
-                    connection.send(&cmd).await;
+            to_server = from_parent.recv() => {
+                log!("[client_rw] from client: {:?}", to_server);
+                if let Some(to_server) = to_server {
+                    connection.send(&to_server).await;
                 } else {
-                    println!("[client_rw] error while receiving new command from parent");
+                    println!("[client_rw] error while receiving message from parent to server");
                     // in this case it means that the parent (the client) is done, and so we can exit the loop
                     break;
                 }

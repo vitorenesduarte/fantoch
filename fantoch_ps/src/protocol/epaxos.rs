@@ -59,8 +59,13 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         );
         let keys_clocks = KC::new(shard_id, config.n());
         let f = Self::allowed_faults(config.n());
-        let cmds =
-            CommandsInfo::new(process_id, shard_id, config.n(), f, fast_quorum_size);
+        let cmds = CommandsInfo::new(
+            process_id,
+            shard_id,
+            config.n(),
+            f,
+            fast_quorum_size,
+        );
         let to_executor = Vec::new();
 
         // create `EPaxos`
@@ -601,9 +606,9 @@ pub struct ConsensusValue {
 }
 
 impl ConsensusValue {
-    fn new( shard_id: ShardId, n: usize) -> Self {
+    fn new(shard_id: ShardId, n: usize) -> Self {
         let cmd = None;
-        let clock = VClock::with(util::process_ids(shard_id,n ));
+        let clock = VClock::with(util::process_ids(shard_id, n));
         Self { cmd, clock }
     }
 

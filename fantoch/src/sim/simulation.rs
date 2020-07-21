@@ -126,7 +126,9 @@ where
         // find client
         let (client, time) = self.get_client(client_id);
         // handle command result
-        client.handle(cmd_result, time);
+        // TODO: we should aggregate command results if we have more than one
+        // shard in simulation
+        client.handle(vec![cmd_result], time);
         // and generate the next command
         client.next_cmd(time)
     }

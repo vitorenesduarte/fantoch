@@ -114,11 +114,10 @@ impl KeyClocks for FineLockedKeyClocks {
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
         //   necessarily end up with all key clocks equal
-        let keys: Vec<_> = cmd.keys(self.shard_id).collect();
-        let key_count = keys.len();
+        let key_count = cmd.key_count(self.shard_id);
         let mut votes = Votes::with_capacity(key_count);
-        let highest = keys
-            .into_iter()
+        let highest = cmd
+            .keys(self.shard_id)
             .map(|key| {
                 let key_lock = self.clocks.get(key);
                 let mut guard = key_lock.lock();
@@ -183,11 +182,10 @@ mod common {
         cmd: &Command,
         up_to: u64,
     ) -> Votes {
-        let keys: Vec<_> = cmd.keys(shard_id).collect();
-        let key_count = keys.len();
+        let key_count = cmd.key_count(shard_id);
         // create votes
         let mut votes = Votes::with_capacity(key_count);
-        for key in keys {
+        for key in cmd.keys(shard_id) {
             let key_lock = clocks.get(key);
             let mut guard = key_lock.lock();
             maybe_bump(id, key, &mut guard, up_to, &mut votes);

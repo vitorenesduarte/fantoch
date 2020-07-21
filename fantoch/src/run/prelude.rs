@@ -51,8 +51,20 @@ pub struct ProcessHi {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientHi(pub Vec<ClientId>);
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ClientToServer {
+    Dots(usize),
+    Command(Option<Dot>, Command),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ServerToClient {
+    Dots(ProcessId, Vec<Dot>),
+    CommandResult(CommandResult),
+}
+
 #[derive(Debug, Clone)]
-pub enum FromClient {
+pub enum ClientToExecutor {
     // clients can register
     Register(Vec<ClientId>, RiflAckSender, ExecutorResultSender),
     // unregister
@@ -68,11 +80,11 @@ pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
 pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
-pub type ClientReceiver = ChannelReceiver<FromClient>;
-pub type CommandReceiver = ChannelReceiver<Command>;
-pub type CommandSender = ChannelSender<Command>;
-pub type CommandResultReceiver = ChannelReceiver<CommandResult>;
-pub type CommandResultSender = ChannelSender<CommandResult>;
+pub type ClientToExecutorReceiver = ChannelReceiver<ClientToExecutor>;
+pub type ClientToServerReceiver = ChannelReceiver<ClientToServer>;
+pub type ClientToServerSender = ChannelSender<ClientToServer>;
+pub type ServerToClientReceiver = ChannelReceiver<ServerToClient>;
+pub type ServerToClientSender = ChannelSender<ServerToClient>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
 pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
 pub type SubmitReceiver = ChannelReceiver<(Option<Dot>, Command)>;
@@ -160,7 +172,7 @@ where
 }
 
 // 4. executors receive messages from clients
-pub type ClientToExecutors = pool::ToPool<FromClient>;
+pub type ClientToExecutors = pool::ToPool<ClientToExecutor>;
 // The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
 impl pool::PoolIndex for (&Key, Rifl) {
     fn index(&self) -> Option<(usize, usize)> {

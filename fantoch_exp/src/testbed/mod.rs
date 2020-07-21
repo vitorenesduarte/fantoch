@@ -24,7 +24,7 @@ pub fn to_regions(
     regions
         .into_iter()
         .zip(fantoch::util::process_ids(
-            todo!("partial replicationdeployment unimplemented"),
+            todo!("partial replication deployment unimplemented"),
             n,
         ))
         .map(|(region, process_id)| {

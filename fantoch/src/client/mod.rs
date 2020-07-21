@@ -25,7 +25,7 @@ use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId, RiflGen, ShardId};
 use crate::log;
 use crate::time::SysTime;
-use crate::HashMap;
+use crate::{HashMap, HashSet};
 use key_gen::KeyGenState;
 
 pub struct Client {
@@ -103,14 +103,22 @@ impl Client {
     /// results.
     pub fn handle(
         &mut self,
-        cmd_result: CommandResult,
+        cmd_results: Vec<CommandResult>,
         time: &dyn SysTime,
     ) -> bool {
+        // make sure that results belong to the same rifl
+        let mut rifls = HashSet::with_capacity(1);
+        for cmd_result in cmd_results {
+            rifls.insert(cmd_result.rifl());
+        }
+        assert_eq!(rifls.len(), 1);
+        let rifl = rifls.into_iter().next().unwrap();
+
         // end command in pending and save command latency
-        let (latency, end_time) = self.pending.end(cmd_result.rifl(), time);
+        let (latency, end_time) = self.pending.end(rifl, time);
         log!(
             "rifl {:?} ended after {} micros at {}",
-            cmd_result.rifl(),
+            rifl,
             latency.as_micros(),
             end_time
         );
@@ -233,7 +241,8 @@ mod tests {
         let mut time = SimTime::new();
 
         // creates a fake command result from a command
-        let fake_result = |cmd: Command| CommandResult::new(cmd.rifl(), 0);
+        let fake_result =
+            |cmd: Command| vec![CommandResult::new(cmd.rifl(), 0)];
 
         // start client at time 0
         let (process_id, cmd) = client

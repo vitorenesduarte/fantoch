@@ -253,10 +253,12 @@ async fn run_clients(
 
         // get ip for this region
         let ip = process_ips.get(region).expect("get process ip").clone();
+        // TODO should have one ip per shard
+        let ips = todo!("partial replication deployment unimplemented");
 
         // create client config and generate args
         let client_config =
-            ClientConfig::new(id_start, id_end, ip, workload, METRICS_FILE);
+            ClientConfig::new(id_start, id_end, ips, workload, METRICS_FILE);
         let args = client_config.to_args();
 
         let command = exp::fantoch_bin_script(

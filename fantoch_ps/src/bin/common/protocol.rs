@@ -6,7 +6,7 @@ use std::error::Error;
 use std::net::IpAddr;
 use std::time::Duration;
 
-const LIST_SEP: &str = ",";
+pub const LIST_SEP: &str = ",";
 
 const DEFAULT_SHARDS: usize = 1;
 const DEFAULT_SHARD_ID: ShardId = 0;
@@ -157,7 +157,7 @@ fn parse_args() -> ProtocolArgs {
         .arg(
             Arg::with_name("addresses")
                 .long("addresses")
-                .value_name("ADDR")
+                .value_name("ADDRESSES")
                 .help("comma-separated list of addresses to connect to; if a delay (in milliseconds) is to be injected, the address should be of the form IP:PORT-DELAY; for example, 127.0.0.1:3000-120 injects a delay of 120 milliseconds before sending a message to the process at the 127.0.0.1:3000 address")
                 .required(true)
                 .takes_value(true),

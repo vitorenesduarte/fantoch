@@ -45,13 +45,12 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        let keys: Vec<_> = cmd.keys(self.shard_id).collect();
-        let key_count = keys.len();
+        let key_count = cmd.key_count(self.shard_id);
         // create votes
         let mut votes = Votes::with_capacity(key_count);
 
         // vote on each key
-        keys.into_iter().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // get a mutable reference to current clock value
             let current = match self.clocks.get_mut(key) {
                 Some(current) => current,

@@ -1,6 +1,6 @@
 use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
-use crate::{HashMap, HashSet};
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
@@ -10,15 +10,23 @@ const DEFAULT_SHARD_ID: ShardId = 0;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
-    ops: HashMap<Key, (KVOp, ShardId)>,
-    shards: HashSet<ShardId>,
+    shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
+    // field used to output and empty iterator of keys when rustc can't figure
+    // out what we mean
+    _empty_keys: HashMap<Key, KVOp>,
 }
 
 impl Command {
     /// Create a new `Command`.
-    pub fn new(rifl: Rifl, ops: HashMap<Key, (KVOp, ShardId)>) -> Self {
-        let shards = ops.iter().map(|(_, (_, shard_id))| *shard_id).collect();
-        Self { rifl, ops, shards }
+    pub fn new(
+        rifl: Rifl,
+        shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
+    ) -> Self {
+        Self {
+            rifl,
+            shard_to_ops,
+            _empty_keys: HashMap::new(),
+        }
     }
 
     /// Create a new `Command` from an iterator.
@@ -27,10 +35,10 @@ impl Command {
         iter: I,
     ) -> Self {
         // store all keys in the default shard
-        let iter = iter
-            .into_iter()
-            .map(|(key, op)| (key, (op, DEFAULT_SHARD_ID)));
-        Self::new(rifl, HashMap::from_iter(iter))
+        let inner = HashMap::from_iter(iter);
+        let shard_to_ops =
+            HashMap::from_iter(std::iter::once((DEFAULT_SHARD_ID, inner)));
+        Self::new(rifl, shard_to_ops)
     }
 
     /// Creates a get command.
@@ -63,31 +71,43 @@ impl Command {
 
     /// Checks if `key` is accessed by this command.
     #[allow(clippy::ptr_arg)]
-    pub fn contains_key(&self, key: &Key) -> bool {
-        self.ops.contains_key(key)
+    pub fn contains_key(&self, shard_id: ShardId, key: &Key) -> bool {
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.contains_key(key))
+            .unwrap_or(false)
     }
 
     /// Checks if a command conflicts with another given command.
     pub fn conflicts(&self, other: &Command) -> bool {
-        self.ops.iter().any(|(key, _)| other.ops.contains_key(key))
+        self.shard_to_ops.iter().any(|(shard_id, shard_ops)| {
+            shard_ops
+                .iter()
+                .any(|(key, _)| other.contains_key(*shard_id, key))
+        })
     }
 
-    /// Returns the number of keys accessed by this command.
+    /// Returns the number of keys accessed by this command on the shard
+    /// provided.
     pub fn key_count(&self, shard_id: ShardId) -> usize {
-        self.keys(shard_id).count()
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.len())
+            .unwrap_or(0)
     }
 
-    /// Returns references to list of keys modified by this command.
+    /// Returns references to the keys modified by this command on the shard
+    /// provided.
     pub fn keys(&self, shard_id: ShardId) -> impl Iterator<Item = &Key> {
-        self.ops
-            .iter()
-            .filter(move |(_, (_, op_shard_id))| *op_shard_id == shard_id)
-            .map(|(key, _)| key)
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.keys())
+            .unwrap_or_else(|| self._empty_keys.keys())
     }
 
-    /// Returns references to list of keys modified by this command.
-    pub fn shards(&self) -> &HashSet<ShardId> {
-        &self.shards
+    /// Returns the number of shards accessed by this command.
+    pub fn shard_count(&self) -> usize {
+        self.shard_to_ops.len()
     }
 
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
@@ -97,7 +117,7 @@ impl Command {
         store: &mut KVStore,
     ) -> CommandResult {
         let rifl = self.rifl;
-        let key_count = self.ops.len();
+        let key_count = self.shard_to_ops.len();
         let results = self
             .into_iter(shard_id)
             .map(|(key, op)| {
@@ -114,24 +134,19 @@ impl Command {
 
     // Creates an iterator without ops on keys that do not belong to `shard`.
     pub fn into_iter(
-        self,
+        mut self,
         shard_id: ShardId,
     ) -> impl Iterator<Item = (Key, KVOp)> {
-        self.ops
-            .into_iter()
-            .filter_map(move |(key, (op, op_shard_id))| {
-                if op_shard_id == shard_id {
-                    Some((key, op))
-                } else {
-                    None
-                }
-            })
+        self.shard_to_ops
+            .remove(&shard_id)
+            .map(|shard_ops| shard_ops.into_iter())
+            .unwrap_or_else(|| self._empty_keys.into_iter())
     }
 }
 
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?} -> {:?})", self.rifl, self.ops.keys())
+        write!(f, "({:?} -> {:?})", self.rifl, self.shard_to_ops.keys())
     }
 }
 

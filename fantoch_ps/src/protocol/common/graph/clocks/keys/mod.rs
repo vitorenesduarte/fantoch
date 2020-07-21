@@ -302,7 +302,7 @@ mod tests {
                     (Some(key), Some(cmd)) => {
                         // if we have a key and not a noop, include command if
                         // it accesses the key
-                        if cmd.contains_key(&key) {
+                        if cmd.contains_key(shard_id, &key) {
                             Some((dot, clock))
                         } else {
                             None

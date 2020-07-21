@@ -156,6 +156,9 @@ impl Workload {
             target_shard.expect("there should be a target shard");
 
         for shard_id in shard_ids {
+            // create entry for shard
+            let shard_ops = ops.entry(shard_id).or_insert_with(HashMap::new);
+
             // generate unique keys
             let keys = Self::gen_unique(self.keys_per_shard, || {
                 key_gen_state.gen_cmd_key()
@@ -163,7 +166,7 @@ impl Workload {
 
             for key in keys {
                 let value = self.gen_cmd_value();
-                ops.insert(key, (KVOp::Put(value), shard_id));
+                shard_ops.insert(key, KVOp::Put(value));
             }
         }
 

@@ -15,7 +15,7 @@ pub fn start_executors<P>(
     config: Config,
     executors: usize,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
-    client_to_executors_rxs: Vec<ClientReceiver>,
+    client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
@@ -47,7 +47,7 @@ async fn executor_task<P>(
     config: Config,
     executors: usize,
     mut from_workers: ExecutionInfoReceiver<P>,
-    mut from_clients: ClientReceiver,
+    mut from_clients: ClientToExecutorReceiver,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol,
@@ -123,7 +123,7 @@ async fn handle_execution_info<P>(
 }
 
 async fn handle_from_client<P>(
-    from_client: FromClient,
+    from_client: ClientToExecutor,
     executor: &mut P::Executor,
     client_rifl_acks: &mut HashMap<ClientId, RiflAckSender>,
     client_executor_results: &mut HashMap<ClientId, ExecutorResultSender>,
@@ -132,7 +132,7 @@ async fn handle_from_client<P>(
 {
     match from_client {
         // TODO maybe send the channel in the wait for rifl msg
-        FromClient::WaitForRifl(rifl) => {
+        ClientToExecutor::WaitForRifl(rifl) => {
             // register in executor
             executor.wait_for_rifl(rifl);
 
@@ -151,7 +151,11 @@ async fn handle_from_client<P>(
                 );
             }
         }
-        FromClient::Register(client_ids, rifl_acks_tx, executor_results_tx) => {
+        ClientToExecutor::Register(
+            client_ids,
+            rifl_acks_tx,
+            executor_results_tx,
+        ) => {
             for client_id in client_ids {
                 log!("[executor] clients {} registered", client_id);
                 let res =
@@ -162,7 +166,7 @@ async fn handle_from_client<P>(
                 assert!(res.is_none());
             }
         }
-        FromClient::Unregister(client_ids) => {
+        ClientToExecutor::Unregister(client_ids) => {
             for client_id in client_ids {
                 log!("[executor] client {} unregistered", client_id);
                 let res = client_rifl_acks.remove(&client_id);

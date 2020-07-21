@@ -225,7 +225,7 @@ fn workers_executors_and_leader(
 pub struct ClientConfig {
     id_start: usize,
     id_end: usize,
-    ip: String,
+    ips: Vec<String>,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -237,14 +237,14 @@ impl ClientConfig {
     pub fn new(
         id_start: usize,
         id_end: usize,
-        ip: String,
+        ips: Vec<String>,
         workload: Workload,
         metrics_file: &str,
     ) -> Self {
         Self {
             id_start,
             id_end,
-            ip,
+            ips,
             workload,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CHANNEL_BUFFER_SIZE,
@@ -269,8 +269,8 @@ impl ClientConfig {
         args![
             "--ids",
             format!("{}-{}", self.id_start, self.id_end),
-            "--address",
-            self.ip_to_address(),
+            "--addresses",
+            self.ips_to_addresses(),
             "--shards_per_command",
             self.workload.shards_per_command(),
             "--shard_gen",
@@ -292,8 +292,12 @@ impl ClientConfig {
         ]
     }
 
-    fn ip_to_address(&self) -> String {
-        format!("{}:{}", self.ip, CLIENT_PORT)
+    fn ips_to_addresses(&self) -> String {
+        self.ips
+            .iter()
+            .map(|ip| format!("{}:{}", ip, CLIENT_PORT))
+            .collect::<Vec<_>>()
+            .join(",")
     }
 }
 
