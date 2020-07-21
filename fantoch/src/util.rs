@@ -58,7 +58,8 @@ pub fn process_ids(
     n: usize,
 ) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
-    (1..=n).map(move |id| (id * (shard_id as usize + 1)) as ProcessId)
+    let shift = n * shard_id as usize;
+    (1..=n).map(move |id| (id + shift) as ProcessId)
 }
 
 /// Converts a reprentation of dots to the actual dots.
@@ -110,14 +111,14 @@ pub mod tests {
     #[test]
     fn process_ids_test() {
         let n = 3;
-        assert_eq!(process_ids(n, 0).collect::<Vec<_>>(), vec![1, 2, 3]);
-        assert_eq!(process_ids(n, 1).collect::<Vec<_>>(), vec![4, 5, 6]);
-        assert_eq!(process_ids(n, 3).collect::<Vec<_>>(), vec![10, 11, 12]);
+        assert_eq!(process_ids(0, n).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(process_ids(1, n).collect::<Vec<_>>(), vec![4, 5, 6]);
+        assert_eq!(process_ids(3, n).collect::<Vec<_>>(), vec![10, 11, 12]);
 
         let n = 5;
-        assert_eq!(process_ids(n, 0).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(process_ids(0, n).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
         assert_eq!(
-            process_ids(n, 2).collect::<Vec<_>>(),
+            process_ids(2, n).collect::<Vec<_>>(),
             vec![11, 12, 13, 14, 15]
         );
     }
