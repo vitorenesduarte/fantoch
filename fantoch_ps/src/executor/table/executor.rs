@@ -7,11 +7,13 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
+use fantoch::log;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 #[derive(Clone)]
 pub struct TableExecutor {
+    process_id: ProcessId,
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
@@ -39,10 +41,11 @@ impl Executor for TableExecutor {
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = executors == 1;
-        let pending = Pending::new(aggregate, shard_id);
+        let pending = Pending::new(aggregate, process_id, shard_id);
         let metrics = ExecutorMetrics::new();
 
         Self {
+            process_id,
             execute_at_commit: config.execute_at_commit(),
             table,
             store,

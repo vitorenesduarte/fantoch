@@ -747,8 +747,10 @@ mod tests {
         );
 
         // compute the total number of commands
-        let total_commands_per_shard =
-            commands_per_client * clients_per_process * config.n();
+        let total_commands_per_shard = shards_per_command
+            * commands_per_client
+            * clients_per_process
+            * config.n();
         let total_commands = total_commands_per_shard * config.shards();
 
         // check that all commands were committed

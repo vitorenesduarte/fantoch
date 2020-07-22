@@ -17,7 +17,7 @@ impl Executor for BasicExecutor {
     type ExecutionInfo = BasicExecutionInfo;
 
     fn new(
-        _process_id: ProcessId,
+        process_id: ProcessId,
         shard_id: ShardId,
         _config: Config,
         executors: usize,
@@ -25,7 +25,7 @@ impl Executor for BasicExecutor {
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = executors == 1;
-        let pending = Pending::new(aggregate, shard_id);
+        let pending = Pending::new(aggregate, process_id, shard_id);
         let metrics = ExecutorMetrics::new();
 
         Self {

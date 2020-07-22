@@ -88,6 +88,7 @@ impl MultiVotesTable {
             None => {
                 // table does not exist, let's create a new one and insert it
                 let table = VotesTable::new(
+                    key.clone(),
                     self.process_id,
                     self.shard_id,
                     self.n,
@@ -103,6 +104,7 @@ impl MultiVotesTable {
 
 #[derive(Clone)]
 struct VotesTable {
+    key: Key,
     process_id: ProcessId,
     n: usize,
     stability_threshold: usize,
@@ -114,6 +116,7 @@ struct VotesTable {
 
 impl VotesTable {
     fn new(
+        key: Key,
         process_id: ProcessId,
         shard_id: ShardId,
         n: usize,
@@ -122,6 +125,7 @@ impl VotesTable {
         let ids = util::process_ids(shard_id, n);
         let votes_clock = ARClock::with(ids);
         Self {
+            key,
             process_id,
             n,
             stability_threshold,
@@ -145,8 +149,9 @@ impl VotesTable {
         let sort_id = (clock, dot);
 
         log!(
-            "p{}: Table::add {:?} {:?} | sort id {:?}",
+            "p{}: key={} Table::add {:?} {:?} | sort id {:?}",
             self.process_id,
+            self.key,
             dot,
             clock,
             sort_id
@@ -163,7 +168,12 @@ impl VotesTable {
 
     #[instrument(skip(self, votes))]
     fn add_votes(&mut self, votes: Vec<VoteRange>) {
-        log!("p{}: Table::add_votes votes: {:?}", self.process_id, votes);
+        log!(
+            "p{}: key={} Table::add_votes votes: {:?}",
+            self.process_id,
+            self.key,
+            votes
+        );
         votes.into_iter().for_each(|vote_range| {
             // assert there's at least one new vote
             assert!(self.votes_clock.add_range(
@@ -175,8 +185,9 @@ impl VotesTable {
             assert_eq!(self.votes_clock.len(), self.n);
         });
         log!(
-            "p{}: Table::add_votes votes_clock: {:?}",
+            "p{}: key={} Table::add_votes votes_clock: {:?}",
             self.process_id,
+            self.key,
             self.votes_clock
         );
     }
@@ -191,8 +202,9 @@ impl VotesTable {
         //   stable, it will be the first to be executed either way
         let stable_clock = self.stable_clock();
         log!(
-            "p{}: Table::stable_ops stable_clock: {:?}",
+            "p{}: key={} Table::stable_ops stable_clock: {:?}",
             self.process_id,
+            self.key,
             stable_clock
         );
 
@@ -217,8 +229,9 @@ impl VotesTable {
         };
 
         log!(
-            "p{}: Table::stable_ops stable dots: {:?}",
+            "p{}: key={} Table::stable_ops stable dots: {:?}",
             self.process_id,
+            self.key,
             stable.iter().map(|((_, dot), _)| *dot).collect::<Vec<_>>()
         );
 
@@ -255,8 +268,13 @@ mod tests {
         let shard_id = 0;
         let n = 5;
         let stability_threshold = 3;
-        let mut table =
-            VotesTable::new(process_id, shard_id, n, stability_threshold);
+        let mut table = VotesTable::new(
+            String::from("KEY"),
+            process_id,
+            shard_id,
+            n,
+            stability_threshold,
+        );
 
         // in this example we'll use the dot as rifl
 
@@ -375,8 +393,13 @@ mod tests {
         ];
 
         all_ops.permutation().for_each(|p| {
-            let mut table =
-                VotesTable::new(process_id_1, shard_id, n, stability_threshold);
+            let mut table = VotesTable::new(
+                String::from("KEY"),
+                process_id_1,
+                shard_id,
+                n,
+                stability_threshold,
+            );
             let permutation_total_order: Vec<_> = p
                 .clone()
                 .into_iter()
@@ -405,8 +428,13 @@ mod tests {
         let n = 5;
         let f = 1;
         let stability_threshold = n - f;
-        let mut table =
-            VotesTable::new(process_id_1, shard_id, n, stability_threshold);
+        let mut table = VotesTable::new(
+            String::from("KEY"),
+            process_id_1,
+            shard_id,
+            n,
+            stability_threshold,
+        );
 
         // in this example we'll use the dot as rifl
 

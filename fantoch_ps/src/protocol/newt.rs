@@ -773,8 +773,10 @@ impl<KC: KeyClocks> Newt<KC> {
             if let Some(shards_commits) = info.shards_commits.as_mut() {
                 shards_commits
             } else {
+                let process_id = self.bp.process_id;
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                info.shards_commits = Some(ShardsCommits::new(shard_count));
+                info.shards_commits =
+                    Some(ShardsCommits::new(process_id, shard_count));
                 info.shards_commits.as_mut().unwrap()
             };
 
@@ -1024,10 +1026,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 // - TODO: revisit this approach once we implement recovery for
                 //   partial replication
                 // create shards commit info
-                let shards_commits = ShardsCommits::new(shard_count);
                 let info = self.cmds.get(dot);
-                info.shards_commits = Some(shards_commits);
-
                 // initialize shards commit info if not yet initialized:
                 // - it may already be initialized if we receive the
                 //   `MCommitShard` from another shard before we were able to
@@ -1037,8 +1036,10 @@ impl<KC: KeyClocks> Newt<KC> {
                     shards_commits.set_votes(votes);
                 } else {
                     // otherwise, initialize it (and also save votes)
+                    let process_id = self.bp.process_id;
                     let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                    let mut shards_commits = ShardsCommits::new(shard_count);
+                    let mut shards_commits =
+                        ShardsCommits::new(process_id, shard_count);
                     shards_commits.set_votes(votes);
                     info.shards_commits = Some(shards_commits);
                 };
@@ -1117,6 +1118,7 @@ impl Info for NewtInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShardsCommits {
+    process_id: ProcessId,
     shard_count: usize,
     participants: HashSet<ProcessId>,
     max_clock: u64,
@@ -1124,10 +1126,11 @@ struct ShardsCommits {
 }
 
 impl ShardsCommits {
-    fn new(shard_count: usize) -> Self {
+    fn new(process_id: ProcessId, shard_count: usize) -> Self {
         let participants = HashSet::with_capacity(shard_count);
         let max_clock = 0;
         Self {
+            process_id,
             shard_count,
             participants,
             max_clock,
@@ -1142,6 +1145,16 @@ impl ShardsCommits {
     fn add(&mut self, from: ProcessId, clock: u64) -> bool {
         assert!(self.participants.insert(from));
         self.max_clock = std::cmp::max(self.max_clock, clock);
+        log!(
+            "p{}: ShardsCommits:add {} {} | current max = {} | participants = {:?} | shard count = {}",
+            self.process_id,
+            from,
+            clock,
+            self.max_clock,
+            self.participants,
+            self.shard_count
+        );
+
         // we're done once we have received a message from each shard
         self.participants.len() == self.shard_count
     }

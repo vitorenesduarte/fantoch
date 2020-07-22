@@ -102,7 +102,7 @@ async fn client_server_task(
 
     // create pending
     let aggregate = true;
-    let mut pending = Pending::new(aggregate, shard_id);
+    let mut pending = Pending::new(aggregate, process_id, shard_id);
 
     loop {
         tokio::select! {

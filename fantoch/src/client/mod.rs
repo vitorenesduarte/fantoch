@@ -96,7 +96,14 @@ impl Client {
             .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
             .map(|(target_shard, cmd)| {
                 // if a new command was generated, start it in pending
-                self.pending.start(cmd.rifl(), time);
+                let rifl = cmd.rifl();
+                log!(
+                    "c{}: new rifl pending {:?} | time = {}",
+                    self.client_id,
+                    rifl,
+                    time.micros()
+                );
+                self.pending.start(rifl, time);
                 (target_shard, cmd)
             })
     }
@@ -120,7 +127,8 @@ impl Client {
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(rifl, time);
         log!(
-            "rifl {:?} ended after {} micros at {}",
+            "c{}: rifl {:?} ended after {} micros at {}",
+            self.client_id,
             rifl,
             latency.as_micros(),
             end_time

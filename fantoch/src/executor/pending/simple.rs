@@ -1,12 +1,14 @@
 use crate::command::Command;
 use crate::executor::ExecutorResult;
 use crate::hash_map::{Entry, HashMap};
-use crate::id::{Rifl, ShardId};
+use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
+use crate::log;
 
 /// Structure that tracks the progress of pending commands.
 #[derive(Default, Clone)]
 pub struct SimplePending {
+    process_id: ProcessId,
     shard_id: ShardId,
     pending: HashMap<Rifl, usize>,
 }
@@ -16,8 +18,9 @@ impl SimplePending {
     /// In this `Pending` implementation, results are returned as soon as
     /// received; this structure simply tracks if the result belongs to a client
     /// that has previously waited for such command.
-    pub fn new(shard_id: ShardId) -> Self {
+    pub fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
         Self {
+            process_id,
             shard_id,
             pending: HashMap::new(),
         }
@@ -28,12 +31,24 @@ impl SimplePending {
         // get command rifl and key count
         let rifl = cmd.rifl();
         let key_count = cmd.key_count(self.shard_id);
+        log!(
+            "p{}: SimplePending::wait_for {:?} | count = {}",
+            self.process_id,
+            rifl,
+            key_count
+        );
+
         // add to pending
         self.pending.insert(rifl, key_count).is_none()
     }
 
     /// Increases the number of expected notifications on some `Rifl` by one.
     pub fn wait_for_rifl(&mut self, rifl: Rifl) {
+        log!(
+            "p{}: SimplePending::wait_for_rifl {:?}",
+            self.process_id,
+            rifl
+        );
         let key_count = self.pending.entry(rifl).or_insert(0);
         *key_count += 1;
     }
@@ -61,7 +76,18 @@ impl SimplePending {
 
                 // remove entry if occurrences reached 0
                 if *count == 0 {
+                    log!(
+                        "p{}: SimplePending::add_partial {:?} dropped",
+                        self.process_id,
+                        rifl
+                    );
                     entry.remove_entry();
+                } else {
+                    log!(
+                        "p{}: SimplePending::add_partial {:?} kept",
+                        self.process_id,
+                        rifl
+                    );
                 }
 
                 // never buffer and always return partial result
@@ -81,8 +107,9 @@ mod tests {
     #[test]
     fn pending_flow() {
         // create pending and store
+        let process_id = 1;
         let shard_id = 0;
-        let mut pending = SimplePending::new(shard_id);
+        let mut pending = SimplePending::new(process_id, shard_id);
         let mut store = KVStore::new();
 
         // keys and commands

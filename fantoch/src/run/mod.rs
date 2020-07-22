@@ -823,6 +823,7 @@ impl ShardsPending {
         result: CommandResult,
     ) -> Option<(ClientId, Vec<CommandResult>)> {
         let rifl = result.rifl();
+        println!("c{}: rifl received {:?}", rifl.source(), rifl);
         match self.pending.entry(rifl) {
             Entry::Occupied(mut entry) => {
                 let (shard_count, results) = entry.get_mut();
@@ -1182,6 +1183,7 @@ pub mod tests {
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
+                let interval = None;
 
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);
