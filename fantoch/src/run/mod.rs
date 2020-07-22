@@ -507,11 +507,19 @@ where
 
     // generate the first message of each client
     for (_client_id, client) in clients.iter_mut() {
-        next_cmd(client, &time, &mut process_to_writer, &mut pending).await;
+        let workload_finished = None;
+        next_cmd(
+            client,
+            &time,
+            &mut process_to_writer,
+            &mut pending,
+            workload_finished,
+        )
+        .await;
     }
 
-    // track which clients are finished
-    let mut finished = HashSet::new();
+    // track which clients are finished (i.e. all their commands have completed)
+    let mut finished = HashSet::with_capacity(clients.len());
 
     // wait for results and generate/submit new commands while there are
     // commands to be generated
@@ -527,7 +535,15 @@ where
         );
         if let Some(client) = client {
             // if client hasn't finished, issue a new command
-            next_cmd(client, &time, &mut process_to_writer, &mut pending).await;
+            let workload_finished = None;
+            next_cmd(
+                client,
+                &time,
+                &mut process_to_writer,
+                &mut pending,
+                workload_finished,
+            )
+            .await;
         }
     }
 
@@ -570,8 +586,10 @@ where
     // create interval
     let mut interval = tokio::time::interval(interval);
 
-    // track which clients are finished
-    let mut finished = HashSet::new();
+    // track which clients are finished (i.e. all their commands have completed)
+    let mut finished = HashSet::with_capacity(clients.len());
+    // track which clients are workload finished
+    let mut workload_finished = HashSet::with_capacity(clients.len());
 
     while finished.len() < clients.len() {
         tokio::select! {
@@ -580,8 +598,11 @@ where
             }
             _ = interval.tick() => {
                 // submit new command on every tick for each connected client (if there are still commands to be generated)
-                for (_, client) in clients.iter_mut(){
-                    next_cmd(client, &time, &mut process_to_writer, &mut pending).await;
+                for (client_id, client) in clients.iter_mut(){
+                    // if the client hasn't finished, try to issue a new command
+                    if !workload_finished.contains(client_id) {
+                        next_cmd(client, &time, &mut process_to_writer, &mut pending, Some(&mut workload_finished)).await;
+                    }
                 }
             }
         }
@@ -676,6 +697,7 @@ async fn next_cmd(
     time: &dyn SysTime,
     process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
     pending: &mut ShardsPending,
+    mut workload_finished: Option<&mut HashSet<ClientId>>,
 ) {
     if let Some((target_shard, cmd)) = client.next_cmd(time) {
         // register command in pending (which will aggregate several
@@ -691,6 +713,11 @@ async fn next_cmd(
         // 2. submit the command to the target shard
         let msg = ClientToServer::Submit(cmd);
         send_to_shard(&client, process_to_writer, &target_shard, msg).await
+    } else {
+        // record that this client has finished it's workload
+        if let Some(workload_finished) = workload_finished.as_mut() {
+            assert!(workload_finished.insert(client.id()));
+        }
     }
 }
 
@@ -711,6 +738,8 @@ async fn send_to_shard(
     }
 }
 
+/// Handles a command result. Returns the client if a new COMMAND COMPLETED and
+/// the client did NOT FINISH.
 fn handle_cmd_result<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
@@ -725,8 +754,6 @@ fn handle_cmd_result<'a>(
     }
 }
 
-/// Handles a command result. Returns the client if a new COMMAND COMPLETED and
-/// the client did NOT FINISH.
 fn do_handle_cmd_result<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
