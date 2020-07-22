@@ -7,7 +7,6 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
-use fantoch::log;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

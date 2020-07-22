@@ -714,7 +714,7 @@ async fn next_cmd(
         let msg = ClientToServer::Submit(cmd);
         send_to_shard(&client, process_to_writer, &target_shard, msg).await
     } else {
-        // record that this client has finished it's workload
+        // record that this client has finished its workload
         if let Some(workload_finished) = workload_finished.as_mut() {
             assert!(workload_finished.insert(client.id()));
         }
@@ -1183,7 +1183,6 @@ pub mod tests {
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
-                let interval = None;
 
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);

@@ -46,7 +46,7 @@ impl TarjanSCCFinder {
         self,
         vertex_index: &VertexIndex,
     ) -> (Vec<SCC>, HashSet<Dot>) {
-        let process_id = self.process_id;
+        let _process_id = self.process_id;
         // reset the id of each dot in the stack, while computing the set of
         // visited dots
         let visited = self
@@ -55,7 +55,7 @@ impl TarjanSCCFinder {
             .map(|dot| {
                 log!(
                     "p{}: Finder::finalize removing {:?} from stack",
-                    process_id,
+                    _process_id,
                     dot
                 );
 

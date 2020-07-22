@@ -352,6 +352,26 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    #[tokio::test]
+    async fn run_newt_5_2_atomic_partial_replication_two_shards_per_command_test(
+    ) {
+        let shard_count = 2;
+        let workers = 2;
+        let executors = 2;
+        let shards_per_command = 2;
+        let slow_paths = run_test::<NewtAtomic>(
+            config!(5, 2, false),
+            shard_count,
+            workers,
+            executors,
+            shards_per_command,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        )
+        .await;
+        assert!(slow_paths > 0);
+    }
+
     // ---- atlas tests ---- //
     #[test]
     fn sim_atlas_3_1_test() {

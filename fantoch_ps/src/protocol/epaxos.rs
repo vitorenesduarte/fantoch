@@ -227,7 +227,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, _time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -235,7 +235,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         cmd: Option<Command>,
         quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
@@ -244,7 +244,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             cmd,
             remote_clock,
             from,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -284,13 +284,13 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, clock, time))]
+    #[instrument(skip(self, from, dot, clock, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         clock: VClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
@@ -298,7 +298,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             dot,
             clock,
             from,
-            time.millis()
+            _time.millis()
         );
 
         // ignore ack from self (see `EPaxosInfo::new` for the reason why)
@@ -363,20 +363,20 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, value, time))]
+    #[instrument(skip(self, from, dot, value, _time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
         dot: Dot,
         value: ConsensusValue,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
             value.clock,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -413,14 +413,14 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, ballot, value, time))]
+    #[instrument(skip(self, from, dot, ballot, value, _time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
         value: ConsensusValue,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
@@ -428,7 +428,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             dot,
             ballot,
             value.clock,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -463,20 +463,20 @@ impl<KC: KeyClocks> EPaxos<KC> {
         vec![Action::ToSend { target, msg }]
     }
 
-    #[instrument(skip(self, from, dot, ballot, time))]
+    #[instrument(skip(self, from, dot, ballot, _time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
             ballot,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -505,37 +505,37 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, time))]
+    #[instrument(skip(self, from, dot, _time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            time.millis()
+            _time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
         vec![]
     }
 
-    #[instrument(skip(self, from, committed, time))]
+    #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
             from,
-            time.millis()
+            _time.millis()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -550,19 +550,19 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }
     }
 
-    #[instrument(skip(self, from, stable, time))]
+    #[instrument(skip(self, from, stable, _time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
             from,
-            time.millis()
+            _time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -570,15 +570,15 @@ impl<KC: KeyClocks> EPaxos<KC> {
         vec![]
     }
 
-    #[instrument(skip(self, time))]
+    #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(
         &mut self,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            time.millis()
+            _time.millis()
         );
 
         // retrieve the committed clock
