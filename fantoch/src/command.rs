@@ -110,6 +110,11 @@ impl Command {
         self.shard_to_ops.len()
     }
 
+    /// Returns the shards accessed by this command.
+    pub fn shards(&self) -> impl Iterator<Item = &ShardId> {
+        self.shard_to_ops.keys()
+    }
+
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
     pub fn execute(
         self,

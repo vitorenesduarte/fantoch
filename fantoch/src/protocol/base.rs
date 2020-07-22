@@ -170,6 +170,13 @@ impl BaseProcess {
             .expect("the slow quorum should be known")
     }
 
+    // Returns the closest process for this shard.
+    pub fn closest_shard_process(&self, shard_id: &ShardId) -> ProcessId {
+        *self.closest_shard_process
+            .get(shard_id)
+            .expect("closest shard process should be known")
+    }
+
     // Return metrics.
     pub fn metrics(&self) -> &ProtocolMetrics {
         &self.metrics

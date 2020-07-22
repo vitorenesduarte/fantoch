@@ -134,7 +134,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         cmd: Command,
         _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        self.handle_submit(dot, cmd)
+        self.handle_submit(dot, cmd, true)
     }
 
     /// Handles protocol messages.
@@ -146,6 +146,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         match msg {
+            Message::MForwardSubmit { dot, cmd } => {
+                self.handle_submit(Some(dot), cmd, false)
+            }
             Message::MCollect {
                 dot,
                 cmd,
@@ -232,9 +235,36 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        target_shard: bool,
     ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
+
+        // create submit messages if:
+        // - commad touches more than one shard
+        // - we're the target shard (i.e. the shard to which the client sent the command)
+        let mut actions = if target_shard {
+            // 1 MCollect + (shard_count - 1 MForwardSubmit) = shard_count
+            let action_count = cmd.shard_count();
+            let mut actions = Vec::with_capacity(action_count);
+            for shard_id in cmd.shards() {
+                if *shard_id != self.shard_id() {
+                    let mforward_submit = Message::MForwardSubmit {
+                        dot,
+                        cmd: cmd.clone(),
+                    };
+                    let target =
+                        singleton![self.bp.closest_shard_process(shard_id)];
+                    actions.push(Action::ToSend {
+                        target,
+                        msg: mforward_submit,
+                    })
+                }
+            }
+            actions
+        } else {
+            Vec::with_capacity(1)
+        };
 
         // compute its clock:
         // - this may also consume votes since we're bumping the clocks here
@@ -270,11 +300,12 @@ impl<KC: KeyClocks> Newt<KC> {
         };
         let target = self.bp.all();
 
-        // return `ToSend`
-        vec![Action::ToSend {
+        // add `MCollect` send as action and return all actions
+        actions.push(Action::ToSend {
             target,
             msg: mcollect,
-        }]
+        });
+        actions
     }
 
     #[instrument(skip(
@@ -915,6 +946,10 @@ impl Info for NewtInfo {
 // `Newt` protocol messages
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
+    MForwardSubmit {
+        dot: Dot,
+        cmd: Command,
+    },
     MCollect {
         dot: Dot,
         cmd: Command,
@@ -968,6 +1003,8 @@ impl MessageIndex for Message {
         debug_assert_eq!(GC_WORKER_INDEX, 0);
 
         match self {
+            // Partial replication messages
+            Self::MForwardSubmit { dot, .. } => worker_dot_index_shift(&dot),
             // Protocol messages
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
