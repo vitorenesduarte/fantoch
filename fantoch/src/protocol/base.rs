@@ -172,7 +172,8 @@ impl BaseProcess {
 
     // Returns the closest process for this shard.
     pub fn closest_shard_process(&self, shard_id: &ShardId) -> ProcessId {
-        *self.closest_shard_process
+        *self
+            .closest_shard_process
             .get(shard_id)
             .expect("closest shard process should be known")
     }
