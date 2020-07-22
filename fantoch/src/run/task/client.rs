@@ -179,7 +179,7 @@ async fn server_receive_hi(
 }
 
 async fn client_server_task_handle_from_client(
-    from_client: Option<Command>,
+    from_client: Option<ClientToServer>,
     shard_id: ShardId,
     client_ids: &Vec<ClientId>,
     atomic_dot_gen: &Option<AtomicDotGen>,
@@ -188,9 +188,9 @@ async fn client_server_task_handle_from_client(
     rifl_acks: &mut RiflAckReceiver,
     pending: &mut Pending,
 ) -> bool {
-    if let Some(cmd) = from_client {
+    if let Some(from_client) = from_client {
         client_server_task_handle_cmd(
-            cmd,
+            from_client,
             shard_id,
             atomic_dot_gen,
             client_to_workers,
@@ -217,7 +217,7 @@ async fn client_server_task_handle_from_client(
 }
 
 async fn client_server_task_handle_cmd(
-    cmd: Command,
+    from_client: ClientToServer,
     shard_id: ShardId,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
@@ -225,9 +225,52 @@ async fn client_server_task_handle_cmd(
     rifl_acks: &mut RiflAckReceiver,
     pending: &mut Pending,
 ) {
-    // get command rifl
-    let rifl = cmd.rifl();
+    match from_client {
+        ClientToServer::Register(cmd) => {
+            // only register the command
+            client_server_task_register_cmd(
+                &cmd,
+                shard_id,
+                client_to_executors,
+                rifl_acks,
+                pending,
+            )
+            .await;
+        }
+        ClientToServer::Submit(cmd) => {
+            // register the command and submit it
+            client_server_task_register_cmd(
+                &cmd,
+                shard_id,
+                client_to_executors,
+                rifl_acks,
+                pending,
+            )
+            .await;
 
+            // create dot for this command (if we have a dot gen)
+            let dot = atomic_dot_gen
+                .as_ref()
+                .map(|atomic_dot_gen| atomic_dot_gen.next_id());
+            // forward command to worker process
+            if let Err(e) = client_to_workers.forward((dot, cmd)).await {
+                println!(
+                "[client_server] error while sending new command to protocol worker: {:?}",
+                e
+            );
+            }
+        }
+    }
+}
+
+async fn client_server_task_register_cmd(
+    cmd: &Command,
+    shard_id: ShardId,
+    client_to_executors: &mut ClientToExecutors,
+    rifl_acks: &mut RiflAckReceiver,
+    pending: &mut Pending,
+) {
+    let rifl = cmd.rifl();
     if client_to_executors.pool_size() > 1 {
         // if there's more than one executor, then we'll receive partial
         // results; in this case, register command in pending
@@ -254,18 +297,6 @@ async fn client_server_task_handle_cmd(
         // register rifl and wait for ack
         client_server_task_register_rifl(key, rifl, client_to_executors).await;
         client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
-    }
-
-    // create dot for this command (if we have a dot gen)
-    let dot = atomic_dot_gen
-        .as_ref()
-        .map(|atomic_dot_gen| atomic_dot_gen.next_id());
-    // forward command to worker process
-    if let Err(e) = client_to_workers.forward((dot, cmd)).await {
-        println!(
-                "[client_server] error while sending new command to protocol worker: {:?}",
-                e
-            );
     }
 }
 
