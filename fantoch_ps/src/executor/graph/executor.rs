@@ -27,8 +27,10 @@ impl Executor for GraphExecutor {
         process_id: ProcessId,
         shard_id: ShardId,
         config: Config,
-        _executors: usize,
+        executors: usize,
     ) -> Self {
+        assert_eq!(executors, 1);
+
         let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
         let pending = HashSet::new();

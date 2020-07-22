@@ -29,8 +29,10 @@ impl Executor for SlotExecutor {
         _process_id: ProcessId,
         shard_id: ShardId,
         config: Config,
-        _executors: usize,
+        executors: usize,
     ) -> Self {
+        assert_eq!(executors, 1);
+
         let store = KVStore::new();
         let pending = HashSet::new();
         // the next slot to be executed is 1

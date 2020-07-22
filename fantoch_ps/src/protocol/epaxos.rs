@@ -794,9 +794,13 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(process_id_1, shard_id, config, 0);
-        let executor_2 = GraphExecutor::new(process_id_2, shard_id, config, 0);
-        let executor_3 = GraphExecutor::new(process_id_3, shard_id, config, 0);
+        let executors = 1;
+        let executor_1 =
+            GraphExecutor::new(process_id_1, shard_id, config, executors);
+        let executor_2 =
+            GraphExecutor::new(process_id_2, shard_id, config, executors);
+        let executor_3 =
+            GraphExecutor::new(process_id_3, shard_id, config, executors);
 
         // epaxos
         let (mut epaxos_1, _) =

@@ -250,32 +250,8 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // create submit messages if:
-        // - commad touches more than one shard
-        // - we're the target shard (i.e. the shard to which the client sent the
-        //   command)
-        let mut actions = if target_shard {
-            // 1 MCollect + (shard_count - 1 MForwardSubmit) = shard_count
-            let action_count = cmd.shard_count();
-            let mut actions = Vec::with_capacity(action_count);
-            for shard_id in cmd.shards() {
-                if *shard_id != self.shard_id() {
-                    let mforward_submit = Message::MForwardSubmit {
-                        dot,
-                        cmd: cmd.clone(),
-                    };
-                    let target =
-                        singleton![self.bp.closest_shard_process(shard_id)];
-                    actions.push(Action::ToSend {
-                        target,
-                        msg: mforward_submit,
-                    })
-                }
-            }
-            actions
-        } else {
-            Vec::with_capacity(1)
-        };
+        // create submit actions
+        let mut actions = self.submit_actions(dot, &cmd, target_shard);
 
         // compute its clock:
         // - this may also consume votes since we're bumping the clocks here
@@ -421,8 +397,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // if tiny quorums and f = 1, the fast quorum process can commit the
             // command right away; create `MCommit`
             let shard_count = info.cmd.as_ref().unwrap().shard_count();
-            let action = self.send_commit(dot, clock, votes, shard_count);
-            vec![action]
+            self.commit_actions(dot, clock, votes, shard_count)
         } else {
             // create `MCollectAck` and target
             let mcollectack = Message::MCollectAck {
@@ -509,9 +484,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
                 // create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                let action =
-                    self.send_commit(dot, max_clock, votes, shard_count);
-                vec![action]
+                self.commit_actions(dot, max_clock, votes, shard_count)
             } else {
                 self.bp.slow_path();
                 // slow path: create `MConsensus`
@@ -753,8 +726,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
                 // enough accepts were gathered and the value has been chosen; create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                let action = self.send_commit(dot, clock, votes, shard_count);
-                vec![action]
+                self.commit_actions(dot, clock, votes, shard_count)
             }
             None => {
                 // not enough accepts yet
@@ -835,7 +807,7 @@ impl<KC: KeyClocks> Newt<KC> {
         let mcommit = Message::MCommit {
             dot,
             clock,
-            votes: shards_commit_info.my_votes,
+            votes: shards_commit_info.votes,
         };
         let target = self.bp.all();
 
@@ -960,33 +932,71 @@ impl<KC: KeyClocks> Newt<KC> {
         }]
     }
 
-    fn send_commit(
+    fn submit_actions(
+        &self,
+        dot: Dot,
+        cmd: &Command,
+        target_shard: bool,
+    ) -> Vec<Action<Self>> {
+        if target_shard {
+            // action_count = (shard_count - 1) MForwardSubmit + 1 MCollect =
+            // shard_count
+            let action_count = cmd.shard_count();
+            let mut actions = Vec::with_capacity(action_count);
+
+            // create forward submit messages if:
+            // - we're the target shard (i.e. the shard to which the client sent
+            //   the command)
+            // - commad touches more than one shard
+            for shard_id in cmd.shards() {
+                if *shard_id != self.shard_id() {
+                    let mforward_submit = Message::MForwardSubmit {
+                        dot,
+                        cmd: cmd.clone(),
+                    };
+                    let target =
+                        singleton![self.bp.closest_shard_process(shard_id)];
+                    actions.push(Action::ToSend {
+                        target,
+                        msg: mforward_submit,
+                    })
+                }
+            }
+            actions
+        } else {
+            // action_count = 1 MCollect
+            let action_count = 1;
+            Vec::with_capacity(action_count)
+        }
+    }
+
+    fn commit_actions(
         &mut self,
         dot: Dot,
         clock: u64,
         votes: Votes,
         shard_count: usize,
-    ) -> Action<Self> {
+    ) -> Vec<Action<Self>> {
         match shard_count {
             1 => {
                 let mcommit = Message::MCommit { dot, clock, votes };
                 let target = self.bp.all();
-                Action::ToSend {
+                vec![Action::ToSend {
                     target,
                     msg: mcommit,
-                }
+                }]
             }
             _ => {
                 // if the command accesses more than one shard, send an
                 // MCommitShard to the process in the shard targetted by the
                 // client; this process will then aggregate all the MCommitShard
-                // and send and MCommitShardAggregated to the processes in its
-                // region belong to the accessed shards; assuming that all
+                // and send an MCommitShardAggregated back once it receives an
+                // MCommitShard from each shard; assuming that all
                 // shards take the fast path, this approach should work well; if
                 // there are slow paths, we probably want to disseminate each
-                // shard timestamp to all participants so that detached votes
-                // are generated ASAP; but again, with n = 3 or f = 1, this is
-                // not a problem since we'll always take the fast path
+                // shard commit clock to all participants so that detached votes
+                // are generated ASAP; with n = 3 or f = 1, this is not a
+                // problem since we'll always take the fast path
                 // - TODO: revisit this approach once we implement recovery for
                 //   partial replication
                 // create shards commit info
@@ -999,10 +1009,10 @@ impl<KC: KeyClocks> Newt<KC> {
                 let mshard_commit = Message::MShardCommit { dot, clock };
                 // the aggregation with occurs at the process in targetted shard
                 let target = singleton!(dot.source());
-                Action::ToSend {
+                vec![Action::ToSend {
                     target,
                     msg: mshard_commit,
-                }
+                }]
             }
         }
     }
@@ -1071,18 +1081,18 @@ impl Info for NewtInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShardsCommitInfo {
     shard_count: usize,
-    my_votes: Votes,
+    votes: Votes,
     participants: HashSet<ProcessId>,
     max_clock: u64,
 }
 
 impl ShardsCommitInfo {
-    fn new(shard_count: usize, my_votes: Votes) -> Self {
+    fn new(shard_count: usize, votes: Votes) -> Self {
         let participants = HashSet::with_capacity(shard_count);
         let max_clock = 0;
         Self {
             shard_count,
-            my_votes,
+            votes,
             participants,
             max_clock,
         }

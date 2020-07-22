@@ -539,9 +539,13 @@ mod tests {
         config.set_leader(process_id_1);
 
         // executors
-        let executor_1 = SlotExecutor::new(process_id_1, shard_id, config, 0);
-        let executor_2 = SlotExecutor::new(process_id_2, shard_id, config, 0);
-        let executor_3 = SlotExecutor::new(process_id_3, shard_id, config, 0);
+        let executors = 1;
+        let executor_1 =
+            SlotExecutor::new(process_id_1, shard_id, config, executors);
+        let executor_2 =
+            SlotExecutor::new(process_id_2, shard_id, config, executors);
+        let executor_3 =
+            SlotExecutor::new(process_id_3, shard_id, config, executors);
 
         // fpaxos
         let (mut fpaxos_1, _) = FPaxos::new(process_id_1, shard_id, config);
