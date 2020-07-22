@@ -59,6 +59,7 @@ mod tests {
         }};
     }
 
+    // ---- newt tests ---- //
     #[test]
     fn sim_newt_3_1_test() {
         let slow_paths = sim_test::<NewtSequential>(
@@ -90,6 +91,16 @@ mod tests {
             CLIENTS_PER_REGION,
         );
         assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn sim_newt_5_2_test() {
+        let slow_paths = sim_test::<NewtSequential>(
+            config!(5, 2, false),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_REGION,
+        );
+        assert!(slow_paths > 0);
     }
 
     #[test]
@@ -279,16 +290,23 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    #[test]
-    fn sim_newt_5_2_test() {
-        let slow_paths = sim_test::<NewtSequential>(
-            config!(5, 2, false),
+    // ---- newt (partial replication) tests ---- //
+    #[tokio::test]
+    async fn run_newt_3_1_atomic_partial_replication_test() {
+        let workers = 2;
+        let executors = 2;
+        let slow_paths = run_test::<NewtAtomic>(
+            config!(3, 1, false),
+            workers,
+            executors,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_REGION,
-        );
-        assert!(slow_paths > 0);
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
     }
 
+    // ---- atlas tests ---- //
     #[test]
     fn sim_atlas_3_1_test() {
         let slow_paths = sim_test::<AtlasSequential>(
@@ -352,6 +370,7 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    // ---- epaxos tests ---- //
     #[test]
     fn sim_epaxos_3_1_test() {
         let slow_paths = sim_test::<EPaxosSequential>(
@@ -405,6 +424,7 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    // ---- fpaxos tests ---- //
     #[test]
     fn sim_fpaxos_3_1_test() {
         sim_test::<FPaxos>(
@@ -485,13 +505,27 @@ mod tests {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
+        // create workload
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
+        let keys_per_shard = 2;
+        let key_gen = KeyGen::ConflictRate { conflict_rate: CONFLICT_RATE };
+        let payload_size = 1;
+        let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
+            key_gen,
+            commands_per_client,
+            payload_size,
+        );
+
         // run until the clients end + another 10 seconds
         let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(10));
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             config,
-            CONFLICT_RATE,
-            commands_per_client,
+            workload,
             clients_per_region,
             workers,
             executors,

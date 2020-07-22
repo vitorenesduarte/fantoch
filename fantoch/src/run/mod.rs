@@ -864,8 +864,22 @@ pub mod tests {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
-        let conflict_rate = 50;
+        // create workload
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shards: 1 };
+        let keys_per_shard = 2;
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 50 };
         let commands_per_client = 100;
+        let payload_size = 1;
+        let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
+            key_gen,
+            commands_per_client,
+            payload_size,
+        );
+
         let clients_per_region = 3;
         let workers = 2;
         let executors = 2;
@@ -876,8 +890,7 @@ pub mod tests {
         let total_stable_count =
             run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
                 config,
-                conflict_rate,
-                commands_per_client,
+                workload,
                 clients_per_region,
                 workers,
                 executors,
@@ -898,8 +911,7 @@ pub mod tests {
 
     pub async fn run_test_with_inspect_fun<P, R>(
         config: Config,
-        conflict_rate: usize,
-        commands_per_client: usize,
+        workload: Workload,
         clients_per_region: usize,
         workers: usize,
         executors: usize,
@@ -919,8 +931,7 @@ pub mod tests {
             .run_until(async {
                 run::<P, R>(
                     config,
-                    conflict_rate,
-                    commands_per_client,
+                    workload,
                     clients_per_region,
                     workers,
                     executors,
@@ -935,8 +946,7 @@ pub mod tests {
 
     async fn run<P, R>(
         config: Config,
-        conflict_rate: usize,
-        commands_per_client: usize,
+        workload: Workload,
         clients_per_region: usize,
         workers: usize,
         executors: usize,
@@ -959,7 +969,6 @@ pub mod tests {
         let tcp_flush_interval = Some(100); // millis
         let channel_buffer_size = 10000;
         let multiplexing = 2;
-
         let ping_interval = Some(1000); // millis
 
         // there's a single shard
@@ -1068,21 +1077,6 @@ pub mod tests {
             let _ = semaphore.acquire().await;
         }
         println!("[main] processes are connected");
-
-        // create workload
-        let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
-        let keys_per_shard = 2;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let payload_size = 100;
-        let workload = Workload::new(
-            shards_per_command,
-            shard_gen,
-            keys_per_shard,
-            key_gen,
-            commands_per_client,
-            payload_size,
-        );
 
         let clients_per_region = clients_per_region as u64;
         let client_handles: Vec<_> = util::process_ids(shard_id, n)
