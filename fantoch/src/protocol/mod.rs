@@ -134,7 +134,7 @@ pub trait PeriodicEventIndex {
     fn index(&self) -> Option<(usize, usize)>;
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Action<P: Protocol> {
     ToSend {
         target: HashSet<ProcessId>,

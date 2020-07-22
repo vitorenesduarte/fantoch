@@ -762,8 +762,8 @@ mod tests {
         // multiple shards will only be GCed from the targetted shard
         if shards_per_command == 1 {
             // check GC:
-            // - if there's a leader (i.e. FPaxos), GC will only prune commands at
-            //   f+1 acceptors
+            // - if there's a leader (i.e. FPaxos), GC will only prune commands
+            //   at f+1 acceptors
             // - otherwise, GC will prune comands at all processes
             let gc_at = if config.leader().is_some() {
                 config.f() + 1
