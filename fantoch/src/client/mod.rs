@@ -248,9 +248,10 @@ mod tests {
             |cmd: Command| vec![CommandResult::new(cmd.rifl(), 0)];
 
         // start client at time 0
-        let (process_id, cmd) = client
+        let (shard_id, cmd) = client
             .next_cmd(&time)
             .expect("there should a first operation");
+        let process_id = client.shard_process(&shard_id);
         // process_id should be 2
         assert_eq!(process_id, 2);
 
@@ -261,7 +262,8 @@ mod tests {
 
         // check there's next command
         assert!(next.is_some());
-        let (process_id, cmd) = next.unwrap();
+        let (shard_id, cmd) = next.unwrap();
+        let process_id = client.shard_process(&shard_id);
         // process_id should be 2
         assert_eq!(process_id, 2);
 
