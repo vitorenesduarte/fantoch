@@ -272,8 +272,13 @@ impl<KC: KeyClocks> Newt<KC> {
             process_votes
         );
 
+        // get shard count
+        let shard_count = cmd.shard_count();
+
         // send votes if we can bypass the mcollectack, otherwise store them
-        let coordinator_votes = if self.skip_fast_ack {
+        // - if the command acesses more than one shard, the optimization is disabled
+        let coordinator_votes = if self.skip_fast_ack && shard_count == 1
+        {
             process_votes
         } else {
             // get cmd info
@@ -391,6 +396,9 @@ impl<KC: KeyClocks> Newt<KC> {
             (clock, process_votes)
         };
 
+        // get shard count
+        let shard_count = cmd.shard_count();
+
         // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
@@ -398,7 +406,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
 
-        if !message_from_self && self.skip_fast_ack {
+        if !message_from_self && self.skip_fast_ack && shard_count == 1 {
             votes.merge(process_votes);
 
             // if tiny quorums and f = 1, the fast quorum process can commit the
