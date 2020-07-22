@@ -329,6 +329,7 @@ async fn writer_task<P>(
                         connection.write(&*msg).await;
                     } else {
                         println!("[writer] error receiving message from parent");
+                        break;
                     }
                 }
                 _ = interval.tick() => {
@@ -344,9 +345,11 @@ async fn writer_task<P>(
                 connection.send(&*msg).await;
             } else {
                 println!("[writer] error receiving message from parent");
+                break;
             }
         }
     }
+    println!("[writer] exiting after failure");
 }
 
 /// Starts process workers.

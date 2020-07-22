@@ -17,7 +17,9 @@ pub async fn delay_task<M>(
         match queue.front() {
             None => {
                 let msg = from.recv().await;
-                enqueue(msg, delay, &mut queue);
+                if !enqueue(msg, delay, &mut queue) {
+                    break;
+                }
             }
             Some((next_instant, _)) => {
                 tokio::select! {
@@ -25,26 +27,32 @@ pub async fn delay_task<M>(
                         let msg = dequeue(&mut queue);
                         if let Err(e) = to.send(msg).await {
                             println!("[delay_task] error forwarding message: {:?}", e);
+                            break;
                         }
                     }
                     msg = from.recv() => {
-                        enqueue(msg, delay, &mut queue);
+                        if !enqueue(msg, delay, &mut queue) {
+                            break;
+                        }
                     }
                 }
             }
         }
     }
+    println!("[delay_task] exiting after failure");
 }
 
 fn enqueue<M>(
     msg: Option<M>,
     delay: Duration,
     queue: &mut VecDeque<(Instant, M)>,
-) {
+) -> bool {
     if let Some(msg) = msg {
         queue.push_back((deadline(delay), msg));
+        true
     } else {
         println!("[delay_task] error receiving message from parent");
+        false
     }
 }
 
