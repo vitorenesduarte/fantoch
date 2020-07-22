@@ -171,9 +171,11 @@ mod tests {
             let config = Config::new(0, 0);
             // there's a single shard
             let shard_id = 0;
+            // there's a single executor
+            let executor = 1;
             // create slot executor
             let mut executor =
-                SlotExecutor::new(process_id, shard_id, config, 0);
+                SlotExecutor::new(process_id, shard_id, config, executor);
             // wait for all rifls with the exception of rifl 1
             executor.wait_for_rifl(rifl_2);
             executor.wait_for_rifl(rifl_3);
