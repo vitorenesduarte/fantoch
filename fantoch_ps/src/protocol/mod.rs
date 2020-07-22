@@ -580,11 +580,7 @@ mod tests {
             );
             (
                 process_id,
-                (
-                    total_fast_paths,
-                    total_slow_paths,
-                    total_stable_count,
-                ),
+                (total_fast_paths, total_slow_paths, total_stable_count),
             )
         })
         .collect();
@@ -648,19 +644,22 @@ mod tests {
                 let fast_paths = process_metrics
                     .get_aggregated(ProtocolMetricsKind::FastPath)
                     .cloned()
-                    .unwrap_or_default() as usize;
+                    .unwrap_or_default()
+                    as usize;
 
                 // get slow paths
                 let slow_paths = process_metrics
                     .get_aggregated(ProtocolMetricsKind::SlowPath)
                     .cloned()
-                    .unwrap_or_default() as usize;
+                    .unwrap_or_default()
+                    as usize;
 
                 // get stable count
                 let stable_count = process_metrics
                     .get_aggregated(ProtocolMetricsKind::Stable)
                     .cloned()
-                    .unwrap_or_default() as usize;
+                    .unwrap_or_default()
+                    as usize;
 
                 (process_id, (fast_paths, slow_paths, stable_count))
             })
@@ -720,7 +719,7 @@ mod tests {
         // TODO GC is not working for multi-shard commands; commands that access
         // multiple shards will only be GCed from the targetted shard
         assert_eq!(
-            gc_at * total_commands,
+            gc_at * total_commands_per_shard,
             total_stable,
             "not all processes gced"
         );
