@@ -276,9 +276,9 @@ impl<KC: KeyClocks> Newt<KC> {
         let shard_count = cmd.shard_count();
 
         // send votes if we can bypass the mcollectack, otherwise store them
-        // - if the command acesses more than one shard, the optimization is disabled
-        let coordinator_votes = if self.skip_fast_ack && shard_count == 1
-        {
+        // - if the command acesses more than one shard, the optimization is
+        //   disabled
+        let coordinator_votes = if self.skip_fast_ack && shard_count == 1 {
             process_votes
         } else {
             // get cmd info
@@ -865,6 +865,7 @@ impl<KC: KeyClocks> Newt<KC> {
             _time.millis()
         );
         assert_eq!(from, self.bp.process_id);
+        // TODO only call this if dot belongs to this shard
         self.cmds.commit(dot);
         vec![]
     }

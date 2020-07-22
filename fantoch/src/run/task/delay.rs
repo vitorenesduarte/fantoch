@@ -70,7 +70,8 @@ fn enqueue<M>(
         println!("[delay_task] error receiving message from parent");
         match read_status {
             ReadStatus::Read => {
-                // means we were in Fail, then went to Read, thus => FailAfterRead
+                // means we were in Fail, then went to Read, thus =>
+                // FailAfterRead
                 *read_status = ReadStatus::FailAfterRead;
             }
             _ => {

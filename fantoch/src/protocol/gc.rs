@@ -35,6 +35,8 @@ impl GCTrack {
     /// Records that a command has been committed.
     pub fn commit(&mut self, dot: Dot) {
         self.committed.add(&dot.source(), dot.sequence());
+        // make sure we don't record dots from other shards
+        debug_assert_eq!(self.committed.len(), self.n);
     }
 
     /// Returns a clock representing the set of commands committed locally.
@@ -69,11 +71,15 @@ impl GCTrack {
             .previous_stable
             .iter()
             .filter_map(|(process_id, previous)| {
-                let current = if let Some(current) = new_stable.get_mut(process_id) {
-                    current
-                } else {
-                    panic!("actor {} should exist in the newly stable clock", process_id)
-                };
+                let current =
+                    if let Some(current) = new_stable.get_mut(process_id) {
+                        current
+                    } else {
+                        panic!(
+                            "actor {} should exist in the newly stable clock",
+                            process_id
+                        )
+                    };
 
                 // compute representation of stable dots.
                 let start = previous.frontier() + 1;

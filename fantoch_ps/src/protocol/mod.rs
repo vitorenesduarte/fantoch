@@ -773,7 +773,8 @@ mod tests {
             * config.n();
         let total_commands = total_commands_per_shard * config.shards();
 
-        // check that all commands were committed (only for leaderless protocols)
+        // check that all commands were committed (only for leaderless
+        // protocols)
         if config.leader().is_none() {
             assert_eq!(
                 total_fast_paths + total_slow_paths,
