@@ -34,6 +34,7 @@ mod tests {
 
     // global test config
     const SHARD_COUNT: usize = 1;
+    const SHARDS_PER_COMMAND: usize = 1;
     const COMMANDS_PER_CLIENT: usize = 100;
     const CONFLICT_RATE: usize = 50;
     const CLIENTS_PER_PROCESS: usize = 10;
@@ -125,6 +126,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -143,6 +145,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -161,6 +164,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -180,6 +184,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             clients_per_process,
         )
@@ -199,6 +204,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             clients_per_process,
         )
@@ -216,6 +222,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -234,6 +241,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -252,6 +260,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -273,6 +282,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             commands_per_client,
             clients_per_process,
         )
@@ -294,6 +304,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             commands_per_client,
             clients_per_process,
         )
@@ -303,7 +314,8 @@ mod tests {
 
     // ---- newt (partial replication) tests ---- //
     #[tokio::test]
-    async fn run_newt_3_1_atomic_partial_replication_test() {
+    async fn run_newt_3_1_atomic_partial_replication_one_shard_per_command_test(
+    ) {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
@@ -312,6 +324,27 @@ mod tests {
             shard_count,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[tokio::test]
+    async fn run_newt_3_1_atomic_partial_replication_two_shards_per_command_test(
+    ) {
+        let shard_count = 2;
+        let workers = 2;
+        let executors = 2;
+        let shards_per_command = 2;
+        let slow_paths = run_test::<NewtAtomic>(
+            config!(3, 1, false),
+            shard_count,
+            workers,
+            executors,
+            shards_per_command,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -360,6 +393,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -378,6 +412,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -416,6 +451,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -434,6 +470,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -470,6 +507,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -487,6 +525,7 @@ mod tests {
             SHARD_COUNT,
             workers,
             executors,
+            SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         )
@@ -521,6 +560,7 @@ mod tests {
         shard_count: usize,
         workers: usize,
         executors: usize,
+        shards_per_command: usize,
         commands_per_client: usize,
         clients_per_process: usize,
     ) -> usize
@@ -534,7 +574,6 @@ mod tests {
         config.set_shards(shard_count);
 
         // create workload
-        let shards_per_command = 1;
         let shard_gen = ShardGen::Random { shard_count };
         let keys_per_shard = 2;
         let key_gen = KeyGen::ConflictRate {
@@ -585,7 +624,13 @@ mod tests {
         })
         .collect();
 
-        check_metrics(config, commands_per_client, clients_per_process, metrics)
+        check_metrics(
+            config,
+            shards_per_command,
+            commands_per_client,
+            clients_per_process,
+            metrics,
+        )
     }
 
     fn sim_test<P: Protocol + Eq>(
@@ -665,11 +710,18 @@ mod tests {
             })
             .collect();
 
-        check_metrics(config, commands_per_client, clients_per_process, metrics)
+        check_metrics(
+            config,
+            shards_per_command,
+            commands_per_client,
+            clients_per_process,
+            metrics,
+        )
     }
 
     fn check_metrics(
         config: Config,
+        shards_per_command: usize,
         commands_per_client: usize,
         clients_per_process: usize,
         metrics: HashMap<ProcessId, (usize, usize, usize)>,
@@ -706,23 +758,25 @@ mod tests {
             "not all commands were committed"
         );
 
-        // check GC:
-        // - if there's a leader (i.e. FPaxos), GC will only prune commands at
-        //   f+1 acceptors
-        // - otherwise, GC will prune comands at all processes
-        let gc_at = if config.leader().is_some() {
-            config.f() + 1
-        } else {
-            config.n()
-        } * config.shards();
-
         // TODO GC is not working for multi-shard commands; commands that access
         // multiple shards will only be GCed from the targetted shard
-        assert_eq!(
-            gc_at * total_commands_per_shard,
-            total_stable,
-            "not all processes gced"
-        );
+        if shards_per_command == 1 {
+            // check GC:
+            // - if there's a leader (i.e. FPaxos), GC will only prune commands at
+            //   f+1 acceptors
+            // - otherwise, GC will prune comands at all processes
+            let gc_at = if config.leader().is_some() {
+                config.f() + 1
+            } else {
+                config.n()
+            } * config.shards();
+
+            assert_eq!(
+                gc_at * total_commands_per_shard,
+                total_stable,
+                "not all processes gced"
+            );
+        }
 
         // return number of slow paths
         total_slow_paths
