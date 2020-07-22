@@ -69,9 +69,11 @@ impl GCTrack {
             .previous_stable
             .iter()
             .filter_map(|(process_id, previous)| {
-                let current = new_stable
-                    .get_mut(process_id)
-                    .expect("actor should exist in the newly stable clock");
+                let current = if let Some(current) = new_stable.get_mut(process_id) {
+                    current
+                } else {
+                    panic!("actor {} should exist in the newly stable clock", process_id)
+                };
 
                 // compute representation of stable dots.
                 let start = previous.frontier() + 1;
