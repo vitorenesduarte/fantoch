@@ -65,7 +65,7 @@ async fn main() -> Result<(), Report> {
         Region::SaEast1,
     ];
     let n = regions.len();
-    let shards = 1;
+    let shard_count = 1;
 
     /*
     let configs = vec![
@@ -121,7 +121,7 @@ async fn main() -> Result<(), Report> {
             for coefficient in vec![1.0] {
                 let workload = Workload::new(
                     shards_per_command,
-                    ShardGen::Random { shards },
+                    ShardGen::Random { shard_count },
                     keys_per_shard,
                     KeyGen::Zipf {
                         coefficient,

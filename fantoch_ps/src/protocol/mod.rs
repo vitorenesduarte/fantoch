@@ -494,10 +494,15 @@ mod tests {
     }
 
     #[allow(dead_code)]
-    fn metrics_inspect<P>(worker: &P) -> (usize, usize)
+    fn metrics_inspect<P>(worker: &P) -> (usize, usize, usize)
     where
         P: Protocol,
     {
+        let fast_paths = worker
+            .metrics()
+            .get_aggregated(ProtocolMetricsKind::FastPath)
+            .cloned()
+            .unwrap_or_default() as usize;
         let slow_paths = worker
             .metrics()
             .get_aggregated(ProtocolMetricsKind::SlowPath)
@@ -508,7 +513,7 @@ mod tests {
             .get_aggregated(ProtocolMetricsKind::Stable)
             .cloned()
             .unwrap_or_default() as usize;
-        (slow_paths, stable_count)
+        (fast_paths, slow_paths, stable_count)
     }
 
     async fn run_test<P>(
@@ -518,16 +523,19 @@ mod tests {
         executors: usize,
         commands_per_client: usize,
         clients_per_process: usize,
-    ) -> u64
+    ) -> usize
     where
         P: Protocol + Send + 'static,
     {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
+        // set number of shards
+        config.set_shards(shard_count);
+
         // create workload
         let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
+        let shard_gen = ShardGen::Random { shard_count };
         let keys_per_shard = 2;
         let key_gen = KeyGen::ConflictRate {
             conflict_rate: CONFLICT_RATE,
@@ -545,9 +553,8 @@ mod tests {
         // run until the clients end + another 10 seconds
         let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(10));
-        let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
+        let metrics = run_test_with_inspect_fun::<P, (usize, usize, usize)>(
             config,
-            shard_count,
             workload,
             clients_per_process,
             workers,
@@ -561,17 +568,23 @@ mod tests {
         .into_iter()
         .map(|(process_id, process_metrics)| {
             // aggregate worker metrics
+            let mut total_fast_paths = 0;
             let mut total_slow_paths = 0;
             let mut total_stable_count = 0;
             process_metrics.into_iter().for_each(
-                |(slow_paths, stable_count)| {
+                |(fast_paths, slow_paths, stable_count)| {
+                    total_fast_paths += fast_paths;
                     total_slow_paths += slow_paths;
                     total_stable_count += stable_count;
                 },
             );
             (
                 process_id,
-                (total_slow_paths as u64, total_stable_count as u64),
+                (
+                    total_fast_paths,
+                    total_slow_paths,
+                    total_stable_count,
+                ),
             )
         })
         .collect();
@@ -583,7 +596,7 @@ mod tests {
         mut config: Config,
         commands_per_client: usize,
         clients_per_process: usize,
-    ) -> u64 {
+    ) -> usize {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
@@ -592,7 +605,7 @@ mod tests {
 
         // clients workload
         let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
+        let shard_gen = ShardGen::Random { shard_count: 1 };
         let keys_per_shard = 2;
         let payload_size = 1;
         let key_gen = KeyGen::ConflictRate {
@@ -631,19 +644,25 @@ mod tests {
         let metrics = metrics
             .into_iter()
             .map(|(process_id, process_metrics)| {
+                // get fast paths
+                let fast_paths = process_metrics
+                    .get_aggregated(ProtocolMetricsKind::FastPath)
+                    .cloned()
+                    .unwrap_or_default() as usize;
+
                 // get slow paths
                 let slow_paths = process_metrics
                     .get_aggregated(ProtocolMetricsKind::SlowPath)
                     .cloned()
-                    .unwrap_or_default();
+                    .unwrap_or_default() as usize;
 
                 // get stable count
                 let stable_count = process_metrics
                     .get_aggregated(ProtocolMetricsKind::Stable)
                     .cloned()
-                    .unwrap_or_default();
+                    .unwrap_or_default() as usize;
 
-                (process_id, (slow_paths, stable_count))
+                (process_id, (fast_paths, slow_paths, stable_count))
             })
             .collect();
 
@@ -654,33 +673,57 @@ mod tests {
         config: Config,
         commands_per_client: usize,
         clients_per_process: usize,
-        metrics: HashMap<ProcessId, (u64, u64)>,
-    ) -> u64 {
-        // total slow path count
+        metrics: HashMap<ProcessId, (usize, usize, usize)>,
+    ) -> usize {
+        // total commands per shard
+
+        // total fast and slow paths count
+        let mut total_fast_paths = 0;
         let mut total_slow_paths = 0;
+        let mut total_stable = 0;
 
         // check process stats
-        let gced = metrics
-            .into_iter()
-            .filter(|(_, (slow_paths, stable_count))| {
+        metrics.into_iter().for_each(
+            |(process_id, (fast_paths, slow_paths, stable))| {
+                println!(
+                    "process id = {} | fast = {} | slow = {} | stable = {}",
+                    process_id, fast_paths, slow_paths, stable
+                );
+                total_fast_paths += fast_paths;
                 total_slow_paths += slow_paths;
-                // check if this process gc-ed all commands
-                *stable_count
-                    == (commands_per_client * clients_per_process * config.n())
-                        as u64
-            })
-            .count();
+                total_stable += stable;
+            },
+        );
 
-        // check if the correct number of processed gc-ed:
+        // compute the total number of commands
+        let total_commands_per_shard =
+            commands_per_client * clients_per_process * config.n();
+        let total_commands = total_commands_per_shard * config.shards();
+
+        // check that all commands were committed
+        assert_eq!(
+            total_fast_paths + total_slow_paths,
+            total_commands,
+            "not all commands were committed"
+        );
+
+        // check GC:
         // - if there's a leader (i.e. FPaxos), GC will only prune commands at
         //   f+1 acceptors
         // - otherwise, GC will prune comands at all processes
-        let expected = if config.leader().is_some() {
+        let gc_at = if config.leader().is_some() {
             config.f() + 1
         } else {
             config.n()
-        };
-        assert_eq!(gced, expected);
+        } * config.shards();
+
+        // TODO GC is not working for multi-shard commands; commands that access
+        // multiple shards will only be GCed from the targetted shard
+        assert_eq!(
+            gc_at * total_commands,
+            total_stable,
+            "not all processes gced"
+        );
 
         // return number of slow paths
         total_slow_paths

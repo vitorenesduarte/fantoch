@@ -42,7 +42,11 @@ where
 {
     // check that (n * shards) - 1 addresses were set
     let total = config.n() * config.shards();
-    assert_eq!(addresses.len(), total - 1);
+    assert_eq!(
+        addresses.len(),
+        total - 1,
+        "addresses count should be (n * shards) - 1"
+    );
 
     // compute the number of expected connections
     let total_connections = (total - 1) * multiplexing;

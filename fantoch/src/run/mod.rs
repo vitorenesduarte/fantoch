@@ -266,7 +266,11 @@ where
     };
 
     // check that we have n processes
-    assert_eq!(sorted_processes.len(), config.n() * config.shards());
+    assert_eq!(
+        sorted_processes.len(),
+        config.n() * config.shards(),
+        "sorted processes count should be n * shards"
+    );
 
     // ---------------------
     // start client listener
@@ -703,10 +707,7 @@ async fn send_to_shard(
         .get_mut(&process_id)
         .expect("[client] dind't find writer for target process");
     if let Err(e) = writer.send(msg).await {
-        println!(
-                "[client] error while sending message to client read-write task: {:?}",
-                e
-            );
+        println!("[client] error while sending message to client read-write task: {:?}", e);
     }
 }
 
@@ -867,11 +868,11 @@ pub mod tests {
         config.set_gc_interval(Duration::from_millis(100));
 
         // there's a single shard
-        let shard_count = 1;
+        config.set_shards(1);
 
         // create workload
         let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
+        let shard_gen = ShardGen::Random { shard_count: 1 };
         let keys_per_shard = 2;
         let key_gen = KeyGen::ConflictRate { conflict_rate: 50 };
         let commands_per_client = 100;
@@ -895,7 +896,6 @@ pub mod tests {
         let total_stable_count =
             run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
                 config,
-                shard_count,
                 workload,
                 clients_per_process,
                 workers,
@@ -917,7 +917,6 @@ pub mod tests {
 
     pub async fn run_test_with_inspect_fun<P, R>(
         config: Config,
-        shard_count: usize,
         workload: Workload,
         clients_per_process: usize,
         workers: usize,
@@ -938,7 +937,6 @@ pub mod tests {
             .run_until(async {
                 run::<P, R>(
                     config,
-                    shard_count,
                     workload,
                     clients_per_process,
                     workers,
@@ -954,7 +952,6 @@ pub mod tests {
 
     async fn run<P, R>(
         config: Config,
-        shard_count: usize,
         workload: Workload,
         clients_per_process: usize,
         workers: usize,
@@ -982,6 +979,7 @@ pub mod tests {
 
         // create processes ports and client ports
         let n = config.n();
+        let shard_count = config.shards();
         let ports: HashMap<_, _> = util::all_process_ids(shard_count, n)
             .map(|(id, _shard_id)| (id, get_available_port()))
             .collect();
@@ -1005,29 +1003,61 @@ pub mod tests {
         // `sorted_processes`
         let mut ids: Vec<_> = util::all_process_ids(shard_count, n).collect();
 
+        // function used to figure out which which processes belong to the same
+        // "region index"; there are as many region indexes as `n`; we have n =
+        // 5, and shard_count = 3, we have:
+        // - region index 1: processes 1, 6, 11
+        // - region index 2: processes 2, 7, 12
+        // - and so on..
+        let region_index = |process_id| {
+            let mut index = process_id;
+            let n = config.n() as u8;
+            while index > n {
+                index -= n;
+            }
+            index
+        };
+        let same_region_index =
+            |process_id: ProcessId, ids: &Vec<(ProcessId, ShardId)>| {
+                // compute index
+                let index = region_index(process_id);
+                ids.clone().into_iter().partition(|(peer_id, _)| {
+                    // keep all that have the same index
+                    region_index(*peer_id) == index
+                })
+            };
+
         for (process_id, shard_id) in util::all_process_ids(shard_count, n) {
-            // if shard_count = 1 and n = 3, this gives the following:
-            // - id = 1:  [1, 2, 3]
-            // - id = 2:  [2, 3, 1]
-            // - id = 3:  [3, 1, 2]
-            let sorted_processes = if process_id % 2 == 1 {
-                // only set if odd ids
+            let sorted_processes = if shard_count == 1 {
+                None
+            } else {
+                // only set sorted processes if partial replication
                 use rand::seq::SliceRandom;
                 ids.shuffle(&mut rand::thread_rng());
 
-                let mut sorted_processes = ids.clone();
+                // partition ids: `sorted_processes` will only contain the
+                // processes that belong to the same "region index"
+                let (mut sorted_processes, other_regions): (Vec<_>, Vec<_>) =
+                    same_region_index(process_id, &ids);
+
                 // remove self
                 let myself = (process_id, shard_id);
                 sorted_processes.retain(|entry| entry != &myself);
 
-                // check that indeed self was removed
-                assert_eq!(sorted_processes.len() + 1, ids.len());
-
                 // make self the first element
                 sorted_processes.insert(0, myself);
+
+                // add the remaining processse from other "region indexes"
+                sorted_processes.extend(other_regions);
+
+                // check that indeed self was removed
+                assert_eq!(
+                    sorted_processes.len(),
+                    ids.len(),
+                    "sorted processes should contain all ids"
+                );
+
                 Some(sorted_processes)
-            } else {
-                None
             };
 
             // get ports
@@ -1097,20 +1127,21 @@ pub mod tests {
 
         let clients_per_process = clients_per_process as u64;
         let client_handles: Vec<_> = util::all_process_ids(shard_count, n)
-            .map(|(process_id, shard_id)| {
+            .map(|(process_id, _)| {
                 // if n = 3, this gives the following:
                 // id = 1: [1, 2, 3, 4]
                 // id = 2: [5, 6, 7, 8]
                 // id = 3: [9, 10, 11, 12]
-                let id_start =
+                let client_id_start =
                     ((process_id - 1) as u64 * clients_per_process) + 1;
-                let id_end = process_id as u64 * clients_per_process;
-                let ids = (id_start..=id_end).collect();
+                let client_id_end = process_id as u64 * clients_per_process;
+                let client_ids = (client_id_start..=client_id_end).collect();
 
-                // get port
-                // connect client to all processes in this shard
-                let addresses = util::process_ids(shard_id, n)
-                    .map(|peer_id| {
+                // connect client to all processes in the same "region index"
+                let (same_region, _) = same_region_index(process_id, &ids);
+                let addresses = same_region
+                    .into_iter()
+                    .map(|(peer_id, _)| {
                         let client_port = *client_ports.get(&peer_id).unwrap();
                         format!("localhost:{}", client_port)
                     })
@@ -1128,7 +1159,7 @@ pub mod tests {
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);
                 tokio::task::spawn_local(client(
-                    ids,
+                    client_ids,
                     addresses,
                     interval,
                     workload,

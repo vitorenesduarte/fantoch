@@ -595,7 +595,7 @@ mod tests {
 
         // clients workload
         let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
+        let shard_gen = ShardGen::Random { shard_count: 1 };
         let keys_per_shard = 1;
         let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
         let total_commands = 1000;

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
 const DEFAULT_SHARDS_PER_COMMAND: usize = 1;
-const DEFAULT_SHARD_GEN: ShardGen = ShardGen::Random { shards: 1 };
+const DEFAULT_SHARD_GEN: ShardGen = ShardGen::Random { shard_count: 1 };
 const DEFAULT_KEYS_PER_SHARD: usize = 1;
 const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictRate { conflict_rate: 100 };
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
@@ -267,10 +267,10 @@ fn parse_shard_gen(shard_gen: Option<&str>) -> ShardGen {
                             "random shard generator takes a single argument"
                         );
                     }
-                    let shards = parts[1]
+                    let shard_count = parts[1]
                         .parse::<usize>()
                         .expect("number of shards should be a number");
-                    ShardGen::Random { shards }
+                    ShardGen::Random { shard_count }
                 }
                 sgen => panic!("invalid shard generator type: {}", sgen),
             }

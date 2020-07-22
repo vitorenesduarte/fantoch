@@ -210,7 +210,7 @@ mod tests {
 
         // general config
         let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
+        let shard_gen = ShardGen::Random { shard_count: 1 };
         let keys_per_shard = 1;
         let total_commands = 100;
         let payload_size = 100;
@@ -261,7 +261,7 @@ mod tests {
 
         // general config
         let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shards: 1 };
+        let shard_gen = ShardGen::Random { shard_count: 1 };
         let keys_per_shard = 1;
         let total_commands = 10000;
         let payload_size = 10;
@@ -331,7 +331,7 @@ mod tests {
 
             // total commands
             let shards_per_command = 1;
-            let shard_gen = ShardGen::Random { shards: 1 };
+            let shard_gen = ShardGen::Random { shard_count: 1 };
             let keys_per_shard = 1;
             let total_commands = 100000;
             let payload_size = 0;

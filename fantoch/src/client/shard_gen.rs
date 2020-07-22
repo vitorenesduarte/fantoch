@@ -4,17 +4,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ShardGen {
-    Random { shards: usize },
+    Random { shard_count: usize },
 }
 
 impl ShardGen {
     pub fn gen_shard(&self) -> ShardId {
         match self {
-            Self::Random { shards } => Self::gen_random(*shards),
+            Self::Random { shard_count } => Self::gen_random(*shard_count),
         }
     }
 
-    fn gen_random(shards: usize) -> ShardId {
-        rand::thread_rng().gen_range(0, shards) as ShardId
+    fn gen_random(shard_count: usize) -> ShardId {
+        rand::thread_rng().gen_range(0, shard_count) as ShardId
     }
 }
