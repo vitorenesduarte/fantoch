@@ -674,7 +674,8 @@ async fn next_cmd(
     pending: &mut ShardsPending,
 ) {
     if let Some((target_shard, cmd)) = client.next_cmd(time) {
-        // register command in pending (which will aggregate several `CommandResult`s if the command acesses more than one shard)
+        // register command in pending (which will aggregate several
+        // `CommandResult`s if the command acesses more than one shard)
         pending.register(&cmd);
 
         // 1. register the command in all shards but the target shard
@@ -819,7 +820,6 @@ impl ShardsPending {
 // protocols implemented
 pub mod tests {
     use super::*;
-    use crate::client::{KeyGen, ShardGen};
     use crate::protocol::ProtocolMetricsKind;
     use crate::util;
     use rand::Rng;
@@ -856,6 +856,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn run_basic_test() {
+        use crate::client::{KeyGen, ShardGen};
+
         // config
         let n = 3;
         let f = 1;
@@ -863,6 +865,9 @@ pub mod tests {
 
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
+
+        // there's a single shard
+        let shard_count = 1;
 
         // create workload
         let shards_per_command = 1;
@@ -880,7 +885,7 @@ pub mod tests {
             payload_size,
         );
 
-        let clients_per_region = 3;
+        let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
         let tracer_show_interval = Some(3000);
@@ -890,8 +895,9 @@ pub mod tests {
         let total_stable_count =
             run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
                 config,
+                shard_count,
                 workload,
-                clients_per_region,
+                clients_per_process,
                 workers,
                 executors,
                 tracer_show_interval,
@@ -905,14 +911,15 @@ pub mod tests {
             .sum::<usize>();
 
         // get that all commands stablized at all processes
-        let total_commands = n * clients_per_region * commands_per_client;
+        let total_commands = n * clients_per_process * commands_per_client;
         assert!(total_stable_count == total_commands * n);
     }
 
     pub async fn run_test_with_inspect_fun<P, R>(
         config: Config,
+        shard_count: usize,
         workload: Workload,
-        clients_per_region: usize,
+        clients_per_process: usize,
         workers: usize,
         executors: usize,
         tracer_show_interval: Option<usize>,
@@ -931,8 +938,9 @@ pub mod tests {
             .run_until(async {
                 run::<P, R>(
                     config,
+                    shard_count,
                     workload,
-                    clients_per_region,
+                    clients_per_process,
                     workers,
                     executors,
                     tracer_show_interval,
@@ -946,8 +954,9 @@ pub mod tests {
 
     async fn run<P, R>(
         config: Config,
+        shard_count: usize,
         workload: Workload,
-        clients_per_region: usize,
+        clients_per_process: usize,
         workers: usize,
         executors: usize,
         tracer_show_interval: Option<usize>,
@@ -966,21 +975,18 @@ pub mod tests {
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
-        let tcp_flush_interval = Some(100); // millis
+        let tcp_flush_interval = Some(1); // millis
         let channel_buffer_size = 10000;
         let multiplexing = 2;
         let ping_interval = Some(1000); // millis
 
-        // there's a single shard
-        let shard_id = 0;
-
         // create processes ports and client ports
         let n = config.n();
-        let ports: HashMap<_, _> = util::process_ids(shard_id, n)
-            .map(|id| (id, get_available_port()))
+        let ports: HashMap<_, _> = util::all_process_ids(shard_count, n)
+            .map(|(id, _shard_id)| (id, get_available_port()))
             .collect();
-        let client_ports: HashMap<_, _> = util::process_ids(shard_id, n)
-            .map(|id| (id, get_available_port()))
+        let client_ports: HashMap<_, _> = util::all_process_ids(shard_count, n)
+            .map(|(id, _shard_id)| (id, get_available_port()))
             .collect();
 
         // create connect addresses
@@ -995,20 +1001,31 @@ pub mod tests {
 
         let mut inspect_channels = HashMap::new();
 
-        for process_id in util::process_ids(shard_id, n) {
-            // if n = 3, this gives the following:
+        // the list of all ids that we can shuffle in order to set
+        // `sorted_processes`
+        let mut ids: Vec<_> = util::all_process_ids(shard_count, n).collect();
+
+        for (process_id, shard_id) in util::all_process_ids(shard_count, n) {
+            // if shard_count = 1 and n = 3, this gives the following:
             // - id = 1:  [1, 2, 3]
             // - id = 2:  [2, 3, 1]
             // - id = 3:  [3, 1, 2]
             let sorted_processes = if process_id % 2 == 1 {
                 // only set if odd ids
-                Some(
-                    (process_id..=(n as ProcessId))
-                        .chain(1..process_id)
-                        // map them all to the single existing shard
-                        .map(|id| (id, shard_id))
-                        .collect(),
-                )
+                use rand::seq::SliceRandom;
+                ids.shuffle(&mut rand::thread_rng());
+
+                let mut sorted_processes = ids.clone();
+                // remove self
+                let myself = (process_id, shard_id);
+                sorted_processes.retain(|entry| entry != &myself);
+
+                // check that indeed self was removed
+                assert_eq!(sorted_processes.len() + 1, ids.len());
+
+                // make self the first element
+                sorted_processes.insert(0, myself);
+                Some(sorted_processes)
             } else {
                 None
             };
@@ -1022,7 +1039,7 @@ pub mod tests {
             addresses.remove(&process_id);
             let addresses = addresses
                 .into_iter()
-                .map(|(_, address)| {
+                .map(|(process_id, address)| {
                     let delay = if process_id % 2 == 1 {
                         // add 0 delay to odd processes
                         Some(0)
@@ -1073,26 +1090,31 @@ pub mod tests {
 
         // wait that all processes are connected
         println!("[main] waiting that processes are connected");
-        for _ in util::process_ids(shard_id, n) {
+        for _ in util::all_process_ids(shard_count, n) {
             let _ = semaphore.acquire().await;
         }
         println!("[main] processes are connected");
 
-        let clients_per_region = clients_per_region as u64;
-        let client_handles: Vec<_> = util::process_ids(shard_id, n)
-            .map(|process_id| {
+        let clients_per_process = clients_per_process as u64;
+        let client_handles: Vec<_> = util::all_process_ids(shard_count, n)
+            .map(|(process_id, shard_id)| {
                 // if n = 3, this gives the following:
                 // id = 1: [1, 2, 3, 4]
                 // id = 2: [5, 6, 7, 8]
                 // id = 3: [9, 10, 11, 12]
                 let id_start =
-                    ((process_id - 1) as u64 * clients_per_region) + 1;
-                let id_end = process_id as u64 * clients_per_region;
+                    ((process_id - 1) as u64 * clients_per_process) + 1;
+                let id_end = process_id as u64 * clients_per_process;
                 let ids = (id_start..=id_end).collect();
 
                 // get port
-                let client_port = *client_ports.get(&process_id).unwrap();
-                let address = format!("localhost:{}", client_port);
+                // connect client to all processes in this shard
+                let addresses = util::process_ids(shard_id, n)
+                    .map(|peer_id| {
+                        let client_port = *client_ports.get(&peer_id).unwrap();
+                        format!("localhost:{}", client_port)
+                    })
+                    .collect();
 
                 // compute interval:
                 // - if the process id is even, then issue a command every 2ms
@@ -1107,7 +1129,7 @@ pub mod tests {
                 let metrics_file = format!(".metrics_client_{}", process_id);
                 tokio::task::spawn_local(client(
                     ids,
-                    vec![address],
+                    addresses,
                     interval,
                     workload,
                     tcp_nodelay,

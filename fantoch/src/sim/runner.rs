@@ -61,7 +61,7 @@ where
         planet: Planet,
         config: Config,
         workload: Workload,
-        clients_per_region: usize,
+        clients_per_process: usize,
         mut process_regions: Vec<Region>,
         client_regions: Vec<Region>,
     ) -> Self {
@@ -135,7 +135,7 @@ where
         let mut client_id = 0;
         let mut client_to_region = HashMap::new();
         for region in client_regions {
-            for _ in 1..=clients_per_region {
+            for _ in 1..=clients_per_process {
                 // create client
                 client_id += 1;
                 let mut client = Client::new(client_id, workload);
@@ -582,7 +582,7 @@ mod tests {
     use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
 
-    fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
+    fn run(f: usize, clients_per_process: usize) -> (Histogram, Histogram) {
         // planet
         let planet = Planet::new();
 
@@ -625,7 +625,7 @@ mod tests {
             planet,
             config,
             workload,
-            clients_per_region,
+            clients_per_process,
             process_regions,
             client_regions,
         );
@@ -643,7 +643,7 @@ mod tests {
             .expect("there should stats from us-west2 region");
 
         // check the number of issued commands
-        let expected = total_commands * clients_per_region;
+        let expected = total_commands * clients_per_process;
         assert_eq!(us_west1_issued, expected);
         assert_eq!(us_west2_issued, expected);
 
@@ -666,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn runner_single_client_per_region() {
+    fn runner_single_client_per_process() {
         // expected stats:
         // - client us-west1: since us-west1 is a process, from client's
         //   perspective it should be the latency of accessing the coordinator
@@ -676,39 +676,41 @@ mod tests {
         //   us-west1 (12ms + 12ms) plus the latency of accessing the closest
         //   fast quorum
 
-        // clients per region
-        let clients_per_region = 1;
+        // clients per process
+        let clients_per_process = 1;
 
         // f = 0
         let f = 0;
-        let (us_west1, us_west2) = run(f, clients_per_region);
+        let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(0.0));
         assert_eq!(us_west2.mean(), F64::new(24.0));
 
         // f = 1
         let f = 1;
-        let (us_west1, us_west2) = run(f, clients_per_region);
+        let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(34.0));
         assert_eq!(us_west2.mean(), F64::new(58.0));
 
         // f = 2
         let f = 2;
-        let (us_west1, us_west2) = run(f, clients_per_region);
+        let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(118.0));
         assert_eq!(us_west2.mean(), F64::new(142.0));
     }
 
     #[test]
-    fn runner_multiple_clients_per_region() {
+    fn runner_multiple_clients_per_process() {
         // 1 client per region
         let f = 1;
-        let clients_per_region = 1;
-        let (us_west1_with_one, us_west2_with_one) = run(f, clients_per_region);
+        let clients_per_process = 1;
+        let (us_west1_with_one, us_west2_with_one) =
+            run(f, clients_per_process);
 
         // 10 clients per region
         let f = 1;
-        let clients_per_region = 10;
-        let (us_west1_with_ten, us_west2_with_ten) = run(f, clients_per_region);
+        let clients_per_process = 10;
+        let (us_west1_with_ten, us_west2_with_ten) =
+            run(f, clients_per_process);
 
         // check stats are the same
         assert_eq!(us_west1_with_one.mean(), us_west1_with_ten.mean());

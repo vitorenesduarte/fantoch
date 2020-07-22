@@ -33,9 +33,10 @@ mod tests {
     use std::time::Duration;
 
     // global test config
+    const SHARD_COUNT: usize = 1;
     const COMMANDS_PER_CLIENT: usize = 100;
     const CONFLICT_RATE: usize = 50;
-    const CLIENTS_PER_REGION: usize = 10;
+    const CLIENTS_PER_PROCESS: usize = 10;
 
     macro_rules! config {
         ($n:expr, $f:expr) => {
@@ -65,7 +66,7 @@ mod tests {
         let slow_paths = sim_test::<NewtSequential>(
             config!(3, 1, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -78,7 +79,7 @@ mod tests {
         let slow_paths = sim_test::<NewtSequential>(
             config!(3, 1, false, clock_bump_interval),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -88,7 +89,7 @@ mod tests {
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 1, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -98,7 +99,7 @@ mod tests {
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 2, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert!(slow_paths > 0);
     }
@@ -109,7 +110,7 @@ mod tests {
         let slow_paths = sim_test::<NewtSequential>(
             config!(5, 1, false, clock_bump_interval),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -121,10 +122,11 @@ mod tests {
         let executors = 4;
         let slow_paths = run_test::<NewtSequential>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -138,10 +140,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<NewtAtomic>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -155,10 +158,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<NewtLocked>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -169,14 +173,15 @@ mod tests {
         let workers = 2;
         let executors = 2;
         // run with less clients since these take too much time in CI
-        let clients_per_region = 1;
+        let clients_per_process = 1;
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
             config!(3, 1, false, clock_bump_interval),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            clients_per_region,
+            clients_per_process,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -187,14 +192,15 @@ mod tests {
         let workers = 2;
         let executors = 2;
         // run with less clients since these take too much time in CI
-        let clients_per_region = 1;
+        let clients_per_process = 1;
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtLocked>(
             config!(3, 1, false, clock_bump_interval),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            clients_per_region,
+            clients_per_process,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -207,10 +213,11 @@ mod tests {
         let executors = 4;
         let slow_paths = run_test::<NewtSequential>(
             config!(5, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -224,10 +231,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<NewtAtomic>(
             config!(5, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -241,10 +249,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<NewtLocked>(
             config!(5, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -255,16 +264,17 @@ mod tests {
         let workers = 2;
         let executors = 2;
         // run with less clients since these take too much time in CI
-        let clients_per_region = 1;
+        let clients_per_process = 1;
         // also less commands per client
         let commands_per_client = 10;
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
             config!(5, 1, false, clock_bump_interval),
+            SHARD_COUNT,
             workers,
             executors,
             commands_per_client,
-            clients_per_region,
+            clients_per_process,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -275,16 +285,17 @@ mod tests {
         let workers = 2;
         let executors = 2;
         // run with less clients since these take too much time in CI
-        let clients_per_region = 1;
+        let clients_per_process = 1;
         // also less commands per client
         let commands_per_client = 10;
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtLocked>(
             config!(5, 1, false, clock_bump_interval),
+            SHARD_COUNT,
             workers,
             executors,
             commands_per_client,
-            clients_per_region,
+            clients_per_process,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -293,14 +304,16 @@ mod tests {
     // ---- newt (partial replication) tests ---- //
     #[tokio::test]
     async fn run_newt_3_1_atomic_partial_replication_test() {
+        let shard_count = 2;
         let workers = 2;
         let executors = 2;
         let slow_paths = run_test::<NewtAtomic>(
             config!(3, 1, false),
+            shard_count,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -312,7 +325,7 @@ mod tests {
         let slow_paths = sim_test::<AtlasSequential>(
             config!(3, 1, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -322,7 +335,7 @@ mod tests {
         let slow_paths = sim_test::<AtlasSequential>(
             config!(3, 1, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -332,7 +345,7 @@ mod tests {
         let slow_paths = sim_test::<AtlasSequential>(
             config!(5, 2, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert!(slow_paths > 0);
     }
@@ -344,10 +357,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<AtlasSequential>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -361,10 +375,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<AtlasLocked>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -376,7 +391,7 @@ mod tests {
         let slow_paths = sim_test::<EPaxosSequential>(
             config!(3, 1, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
@@ -386,7 +401,7 @@ mod tests {
         let slow_paths = sim_test::<EPaxosSequential>(
             config!(5, 2, false),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
         assert!(slow_paths > 0);
     }
@@ -398,10 +413,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<EPaxosSequential>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -415,10 +431,11 @@ mod tests {
         let executors = 1;
         let slow_paths = run_test::<EPaxosLocked>(
             config!(3, 1, false),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
         assert_eq!(slow_paths, 0);
@@ -430,7 +447,7 @@ mod tests {
         sim_test::<FPaxos>(
             config!(3, 1, true),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
     }
 
@@ -439,7 +456,7 @@ mod tests {
         sim_test::<FPaxos>(
             config!(5, 2, true),
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         );
     }
 
@@ -450,10 +467,11 @@ mod tests {
         let executors = 1;
         run_test::<FPaxos>(
             config!(3, 1, true),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
     }
@@ -466,10 +484,11 @@ mod tests {
         let executors = 1;
         run_test::<FPaxos>(
             config!(3, 1, true),
+            SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
-            CLIENTS_PER_REGION,
+            CLIENTS_PER_PROCESS,
         )
         .await;
     }
@@ -494,10 +513,11 @@ mod tests {
 
     async fn run_test<P>(
         mut config: Config,
+        shard_count: usize,
         workers: usize,
         executors: usize,
         commands_per_client: usize,
-        clients_per_region: usize,
+        clients_per_process: usize,
     ) -> u64
     where
         P: Protocol + Send + 'static,
@@ -509,7 +529,9 @@ mod tests {
         let shards_per_command = 1;
         let shard_gen = ShardGen::Random { shards: 1 };
         let keys_per_shard = 2;
-        let key_gen = KeyGen::ConflictRate { conflict_rate: CONFLICT_RATE };
+        let key_gen = KeyGen::ConflictRate {
+            conflict_rate: CONFLICT_RATE,
+        };
         let payload_size = 1;
         let workload = Workload::new(
             shards_per_command,
@@ -525,8 +547,9 @@ mod tests {
         let extra_run_time = Some(Duration::from_secs(10));
         let metrics = run_test_with_inspect_fun::<P, (usize, usize)>(
             config,
+            shard_count,
             workload,
-            clients_per_region,
+            clients_per_process,
             workers,
             executors,
             tracer_show_interval,
@@ -553,13 +576,13 @@ mod tests {
         })
         .collect();
 
-        check_metrics(config, commands_per_client, clients_per_region, metrics)
+        check_metrics(config, commands_per_client, clients_per_process, metrics)
     }
 
     fn sim_test<P: Protocol + Eq>(
         mut config: Config,
         commands_per_client: usize,
-        clients_per_region: usize,
+        clients_per_process: usize,
     ) -> u64 {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
@@ -595,7 +618,7 @@ mod tests {
             planet,
             config,
             workload,
-            clients_per_region,
+            clients_per_process,
             process_regions,
             client_regions,
         );
@@ -624,13 +647,13 @@ mod tests {
             })
             .collect();
 
-        check_metrics(config, commands_per_client, clients_per_region, metrics)
+        check_metrics(config, commands_per_client, clients_per_process, metrics)
     }
 
     fn check_metrics(
         config: Config,
         commands_per_client: usize,
-        clients_per_region: usize,
+        clients_per_process: usize,
         metrics: HashMap<ProcessId, (u64, u64)>,
     ) -> u64 {
         // total slow path count
@@ -643,7 +666,7 @@ mod tests {
                 total_slow_paths += slow_paths;
                 // check if this process gc-ed all commands
                 *stable_count
-                    == (commands_per_client * clients_per_region * config.n())
+                    == (commands_per_client * clients_per_process * config.n())
                         as u64
             })
             .count();
