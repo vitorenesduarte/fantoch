@@ -865,9 +865,10 @@ mod tests {
         client_1.discover(sorted);
 
         // start client
-        let (target, cmd) = client_1
+        let (target_shard, cmd) = client_1
             .next_cmd(&time)
             .expect("there should be a first operation");
+        let target = client_1.shard_process(&target_shard);
 
         // check that `target` is epaxos 1
         assert_eq!(target, process_id_1);

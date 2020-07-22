@@ -673,21 +673,39 @@ async fn next_cmd(
     process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
     pending: &mut ShardsPending,
 ) {
-    if let Some((process_id, cmd)) = client.next_cmd(time) {
-        // register command in pending
+    if let Some((target_shard, cmd)) = client.next_cmd(time) {
+        // register command in pending (which will aggregate several `CommandResult`s if the command acesses more than one shard)
         pending.register(&cmd);
 
-        // find process writer
-        let writer = process_to_writer
-            .get_mut(&process_id)
-            .expect("[client] dind't find writer for target process");
+        // 1. register the command in all shards but the target shard
+        for shard in cmd.shards().filter(|shard| **shard != target_shard) {
+            let msg = ClientToServer::Register(cmd.clone());
+            send_to_shard(&client, process_to_writer, shard, msg).await
+        }
 
-        if let Err(e) = writer.send(cmd).await {
-            println!(
+        // 2. submit the command to the target shard
+        let msg = ClientToServer::Submit(cmd);
+        send_to_shard(&client, process_to_writer, &target_shard, msg).await
+    }
+}
+
+async fn send_to_shard(
+    client: &Client,
+    process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
+    shard_id: &ShardId,
+    msg: ClientToServer,
+) {
+    // find closest process on this shard
+    let process_id = client.shard_process(shard_id);
+    // find process writer
+    let writer = process_to_writer
+        .get_mut(&process_id)
+        .expect("[client] dind't find writer for target process");
+    if let Err(e) = writer.send(msg).await {
+        println!(
                 "[client] error while sending message to client read-write task: {:?}",
                 e
             );
-        }
     }
 }
 

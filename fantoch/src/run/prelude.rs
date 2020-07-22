@@ -51,6 +51,17 @@ pub struct ProcessHi {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientHi(pub Vec<ClientId>);
 
+// If the command touches a single shard, then a `Submit` will be sent to that
+// shard. If the command touches more than on shard, a `Submit` will be sent to
+// one targetted shard and a `Register` will be sent to the remaining shards to
+// make sure that the client will eventually receive a `CommandResult` from all
+// shards.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ClientToServer {
+    Submit(Command),
+    Register(Command),
+}
+
 #[derive(Debug, Clone)]
 pub enum ClientToExecutor {
     // clients can register
@@ -69,8 +80,8 @@ pub type ReaderReceiver<P> =
 pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
 pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
 pub type ClientToExecutorReceiver = ChannelReceiver<ClientToExecutor>;
-pub type ClientToServerReceiver = ChannelReceiver<Command>;
-pub type ClientToServerSender = ChannelSender<Command>;
+pub type ClientToServerReceiver = ChannelReceiver<ClientToServer>;
+pub type ClientToServerSender = ChannelSender<ClientToServer>;
 pub type ServerToClientReceiver = ChannelReceiver<CommandResult>;
 pub type ServerToClientSender = ChannelSender<CommandResult>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;

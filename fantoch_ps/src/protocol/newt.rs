@@ -947,20 +947,21 @@ impl<KC: KeyClocks> Newt<KC> {
             // create forward submit messages if:
             // - we're the target shard (i.e. the shard to which the client sent
             //   the command)
-            // - commad touches more than one shard
-            for shard_id in cmd.shards() {
-                if *shard_id != self.shard_id() {
-                    let mforward_submit = Message::MForwardSubmit {
-                        dot,
-                        cmd: cmd.clone(),
-                    };
-                    let target =
-                        singleton![self.bp.closest_shard_process(shard_id)];
-                    actions.push(Action::ToSend {
-                        target,
-                        msg: mforward_submit,
-                    })
-                }
+            // - command touches more than one shard
+            for shard_id in cmd
+                .shards()
+                .filter(|shard_id| **shard_id != self.shard_id())
+            {
+                let mforward_submit = Message::MForwardSubmit {
+                    dot,
+                    cmd: cmd.clone(),
+                };
+                let target =
+                    singleton![self.bp.closest_shard_process(shard_id)];
+                actions.push(Action::ToSend {
+                    target,
+                    msg: mforward_submit,
+                })
             }
             actions
         } else {
@@ -1361,9 +1362,10 @@ mod tests {
         client_1.discover(sorted);
 
         // start client
-        let (target, cmd) = client_1
+        let (target_shard, cmd) = client_1
             .next_cmd(&time)
             .expect("there should be a first operation");
+        let target = client_1.shard_process(&target_shard);
 
         // check that `target` is newt 1
         assert_eq!(target, process_id_1);

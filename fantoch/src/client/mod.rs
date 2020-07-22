@@ -66,7 +66,7 @@ impl Client {
         self.client_id
     }
 
-    /// "Connect" to the closest process.
+    /// "Connect" to the closest process on each shard.
     pub fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) {
         self.connected = HashMap::new();
         for (process_id, shard_id) in processes {
@@ -78,23 +78,26 @@ impl Client {
         }
     }
 
+    /// Retrieves the closest process on this shard.
+    pub fn shard_process(&self, shard_id: &ShardId) -> ProcessId {
+        *self
+            .connected
+            .get(shard_id)
+            .expect("client should be connected to all shards")
+    }
+
     /// Generates the next command in this client's workload.
     pub fn next_cmd(
         &mut self,
         time: &dyn SysTime,
-    ) -> Option<(ProcessId, Command)> {
+    ) -> Option<(ShardId, Command)> {
         // generate next command in the workload if some process_id
         self.workload
             .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
             .map(|(target_shard, cmd)| {
-                // select the process id
-                let process_id = self
-                    .connected
-                    .get(&target_shard)
-                    .expect("client should be connected to all shards");
                 // if a new command was generated, start it in pending
                 self.pending.start(cmd.rifl(), time);
-                (*process_id, cmd)
+                (target_shard, cmd)
             })
     }
 

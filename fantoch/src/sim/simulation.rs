@@ -59,9 +59,10 @@ where
             .map(|(_, client)| {
                 let client = client.get_mut();
                 // start client
-                let (process_id, cmd) = client
+                let (target_shard, cmd) = client
                     .next_cmd(time)
                     .expect("clients should submit at least one command");
+                let process_id = client.shard_process(&target_shard);
                 (client.id(), process_id, cmd)
             })
             .collect()
@@ -130,7 +131,10 @@ where
         // shard in simulation
         client.handle(vec![cmd_result], time);
         // and generate the next command
-        client.next_cmd(time)
+        client.next_cmd(time).map(|(target_shard, cmd)| {
+            let target = client.shard_process(&target_shard);
+            (target, cmd)
+        })
     }
 
     /// Returns the process registered with this identifier.
