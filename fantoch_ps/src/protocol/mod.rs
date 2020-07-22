@@ -773,12 +773,14 @@ mod tests {
             * config.n();
         let total_commands = total_commands_per_shard * config.shards();
 
-        // check that all commands were committed
-        assert_eq!(
-            total_fast_paths + total_slow_paths,
-            total_commands,
-            "not all commands were committed"
-        );
+        // check that all commands were committed (only for leaderless protocols)
+        if config.leader().is_none() {
+            assert_eq!(
+                total_fast_paths + total_slow_paths,
+                total_commands,
+                "not all commands were committed"
+            );
+        }
 
         // TODO GC is not working for multi-shard commands; commands that access
         // multiple shards will only be GCed from the targetted shard
