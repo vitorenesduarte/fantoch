@@ -44,14 +44,14 @@ pub async fn bench_experiment(
                 assert_eq!(
                     machines.server_count(),
                     config.n() * config.shards(),
-                    "not enought server machines"
+                    "not enough server machines"
                 );
 
                 // check that we have the correct number of client machines
                 assert_eq!(
                     machines.client_count(),
                     config.n(),
-                    "not enought client machines"
+                    "not enough client machines"
                 );
 
                 // maybe skip configuration

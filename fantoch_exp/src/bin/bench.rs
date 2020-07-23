@@ -10,7 +10,7 @@ use std::time::Duration;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_multikey_2_passes";
+const RESULTS_DIR: &str = "../partial_replication";
 
 // aws experiment config
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
@@ -31,7 +31,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "atomic_2_passes";
+const BRANCH: &str = "partial_replication";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
@@ -61,8 +61,10 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
+        /*
         Region::CaCentral1,
         Region::SaEast1,
+        */
     ];
     let n = regions.len();
 
@@ -120,16 +122,15 @@ async fn main() -> Result<(), Report> {
     let skip = |_, _, _| false;
     */
 
-    let configs = vec![
+    let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region =
         vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
     let shards_per_command = 1;
-    let shard_count = 1;
+    let shard_count = 2;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -139,6 +140,11 @@ async fn main() -> Result<(), Report> {
     };
 
     let skip = |_, _, _| false;
+
+    // set shards in each config
+    configs
+        .iter_mut()
+        .for_each(|(_protocol, config)| config.set_shards(shard_count));
 
     let mut workloads = Vec::new();
     let workload = Workload::new(

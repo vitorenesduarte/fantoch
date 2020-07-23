@@ -8,7 +8,7 @@ use fantoch_plot::{
 };
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results_multikey_2_passes";
+const RESULTS_DIR: &str = "../partial_replication";
 
 fn main() -> Result<(), Report> {
     multi_key()?;

@@ -96,12 +96,13 @@ pub fn create_placement(
     let n = regions.len();
     let placement: HashMap<_, _> = regions
         .into_iter()
-        .flat_map(|region| {
-            (0..shard_count).map(move |shard_id| (region.clone(), shard_id))
-        })
         .enumerate()
-        .map(|(index, (region, shard_id))| {
+        .flat_map(|(index, region)| {
             let region_index = index + 1;
+            (0..shard_count)
+                .map(move |shard_id| (region_index, region.clone(), shard_id))
+        })
+        .map(|(region_index, region, shard_id)| {
             let process_id = region_index + (shard_id * n);
             let region = Region::new(region.name());
             (
