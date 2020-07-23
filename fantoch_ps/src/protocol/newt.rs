@@ -609,7 +609,8 @@ impl<KC: KeyClocks> Newt<KC> {
             .any(|peer_id| peer_id == dot.source());
 
         if self.gc_running() && my_shard {
-            // if running gc and this dot belongs to my shard, then notify self (i.e. the worker rensposible for GC) with the committed dot
+            // if running gc and this dot belongs to my shard, then notify self
+            // (i.e. the worker rensposible for GC) with the committed dot
             actions.reserve_exact(1);
             actions.push(Action::ToForward {
                 msg: Message::MCommitDot { dot },

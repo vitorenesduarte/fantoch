@@ -783,25 +783,23 @@ mod tests {
             );
         }
 
-        // TODO GC is not working for multi-shard commands; commands that access
-        // multiple shards will only be GCed from the targetted shard
-        if shards_per_command == 1 {
-            // check GC:
-            // - if there's a leader (i.e. FPaxos), GC will only prune commands
-            //   at f+1 acceptors
-            // - otherwise, GC will prune comands at all processes
-            let gc_at = if config.leader().is_some() {
-                config.f() + 1
-            } else {
-                config.n()
-            } * config.shards();
+        // check GC:
+        // - if there's a leader (i.e. FPaxos), GC will only prune commands at
+        //   f+1 acceptors
+        // - otherwise, GC will prune comands at all processes
+        let gc_at = if config.leader().is_some() {
+            config.f() + 1
+        } else {
+            config.n()
+        } * config.shards();
 
-            assert_eq!(
-                gc_at * total_commands_per_shard,
-                total_stable,
-                "not all processes gced"
-            );
-        }
+        // since GC only happens at the targetted shard, here divide by the
+        // number of `shards_per_command`
+        assert_eq!(
+            gc_at * total_commands_per_shard / shards_per_command,
+            total_stable,
+            "not all processes gced"
+        );
 
         // return number of slow paths
         total_slow_paths
