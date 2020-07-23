@@ -130,7 +130,7 @@ impl ResultsDB {
 
         for (region, _) in exp_config.placement.keys() {
             // create client file prefix
-            let prefix = fantoch_exp::bench::file_prefix(None, region);
+            let prefix = fantoch_exp::config::file_prefix(None, region);
 
             // load this region's client metrics (there's a single client
             // machine per region)
@@ -155,7 +155,7 @@ impl ResultsDB {
             let process_id = *process_id;
             // create process file prefix
             let prefix =
-                fantoch_exp::bench::file_prefix(Some(process_id), region);
+                fantoch_exp::config::file_prefix(Some(process_id), region);
 
             // load this process metrics (there will be more than one per region
             // with partial replication)

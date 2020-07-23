@@ -1,13 +1,16 @@
 #[cfg(feature = "exp")]
 use crate::args;
-use crate::exp::Placement;
 use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use fantoch::client::Workload;
 use fantoch::config::Config;
-use fantoch::id::ProcessId;
-use fantoch::planet::Planet;
+use fantoch::id::{ProcessId, ShardId};
+use fantoch::planet::{Planet, Region};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
+
+pub type RegionIndex = usize;
+pub type Placement = HashMap<(Region, ShardId), (ProcessId, RegionIndex)>;
 
 // FIXED
 #[cfg(feature = "exp")]
@@ -369,5 +372,14 @@ impl fmt::Debug for ExperimentConfig {
         writeln!(f, "protocol = {:?}", self.protocol)?;
         writeln!(f, "clients_per_region = {:?}", self.clients_per_region)?;
         writeln!(f, "workload = {:?}", self.workload)
+    }
+}
+
+// create filename prefix
+pub fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
+    if let Some(process_id) = process_id {
+        format!("server_{:?}_{}", region, process_id)
+    } else {
+        format!("client_{:?}", region)
     }
 }

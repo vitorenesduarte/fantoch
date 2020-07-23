@@ -1,7 +1,8 @@
 use crate::config::{
     ClientConfig, ExperimentConfig, ProtocolConfig, CLIENT_PORT, PORT,
+    RegionIndex,
 };
-use crate::exp::{self, Machines, RegionIndex};
+use crate::exp::{self, Machines};
 use crate::{util, SerializationFormat};
 use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use color_eyre::eyre::{self, WrapErr};
@@ -632,7 +633,7 @@ async fn pull_metrics_files(
     exp_dir: &str,
 ) -> Result<(), Report> {
     // compute filename prefix
-    let prefix = file_prefix(process_id, region);
+    let prefix = crate::config::file_prefix(process_id, region);
 
     // pull log file and remove it
     let local_path = format!("{}/{}.log", exp_dir, prefix);
@@ -670,19 +671,10 @@ async fn pull_flamegraph_file(
     exp_dir: &str,
 ) -> Result<(), Report> {
     // compute filename prefix
-    let prefix = file_prefix(process_id, region);
+    let prefix = crate::config::file_prefix(process_id, region);
     let local_path = format!("{}/{}_flamegraph.svg", exp_dir, prefix);
     util::copy_from(("flamegraph.svg", vm), local_path)
         .await
         .wrap_err("copy flamegraph")?;
     Ok(())
-}
-
-// create filename prefix
-pub fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
-    if let Some(process_id) = process_id {
-        format!("server_{:?}_{}", region, process_id)
-    } else {
-        format!("client_{:?}", region)
-    }
 }

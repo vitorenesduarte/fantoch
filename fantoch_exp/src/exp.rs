@@ -1,9 +1,10 @@
 use crate::args;
+use crate::config::{RegionIndex, Placement};
 use crate::util;
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::id::{ProcessId, ShardId};
+use fantoch::id::ProcessId;
 use fantoch::planet::Region;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
@@ -12,9 +13,6 @@ use std::pin::Pin;
 /// This script should be called like: $ bash script branch
 /// - branch: which `fantoch` branch to build
 const SETUP_SCRIPT: &str = "exp_files/setup.sh";
-
-pub type RegionIndex = usize;
-pub type Placement = HashMap<(Region, ShardId), (ProcessId, RegionIndex)>;
 
 pub struct Machines<'a> {
     placement: Placement,

@@ -1,7 +1,7 @@
 pub mod aws;
 pub mod baremetal;
 
-use crate::exp::Placement;
+use crate::config::Placement;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::planet::Region;
 use std::collections::HashMap;
