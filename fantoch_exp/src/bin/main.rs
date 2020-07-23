@@ -137,8 +137,11 @@ async fn main() -> Result<(), Report> {
         1024 * 64,
         1024 * 80,
         1024 * 96,
+        1024 * 112,
+        1024 * 128,
+        1024 * 144,
     ];
-    let shards_per_command = 1;
+    let shards_per_command = 2;
     let shard_count = 3;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;

@@ -1,10 +1,12 @@
 mod dstat;
 mod exp_data;
+mod compress;
 mod results_db;
 
 // Re-exports.
 pub use dstat::Dstat;
 pub use exp_data::ExperimentData;
+pub use compress::{DstatCompress, HistogramCompress};
 pub use results_db::ResultsDB;
 
 use fantoch::client::{KeyGen, ShardGen};

@@ -33,7 +33,7 @@ impl PlotFmt {
         format!("{} f = {}", Self::protocol_name(protocol), f)
     }
 
-    pub fn color(protocol: Protocol, f: usize) -> &'static str {
+    pub fn color(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "#1abc9c",
             (Protocol::AtlasLocked, 2) => "#218c74",
@@ -51,11 +51,11 @@ impl PlotFmt {
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
             ),
-        }
+        }.to_string()
     }
 
     // Possible values: {'/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*'}
-    pub fn hatch(protocol: Protocol, f: usize) -> &'static str {
+    pub fn hatch(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "/", // 1
             (Protocol::AtlasLocked, 2) => "\\",
@@ -74,11 +74,11 @@ impl PlotFmt {
                 "PlotFmt::hatch: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
             ),
-        }
+        }.to_string()
     }
 
     // Possible values: https://matplotlib.org/3.1.1/api/markers_api.html#module-matplotlib.markers
-    pub fn marker(protocol: Protocol, f: usize) -> &'static str {
+    pub fn marker(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "s",
             (Protocol::AtlasLocked, 2) => "D",
@@ -97,11 +97,11 @@ impl PlotFmt {
                 "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
             ),
-        }
+        }.to_string()
     }
 
     // Possible values:  {'-', '--', '-.', ':', ''}
-    pub fn linestyle(protocol: Protocol, f: usize) -> &'static str {
+    pub fn linestyle(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
             (Protocol::AtlasLocked, _) => "--",
             (Protocol::EPaxosLocked, _) => ":",
@@ -111,13 +111,15 @@ impl PlotFmt {
             (Protocol::NewtFineLocked, _) => "-",
             (Protocol::Basic, _) => "",
         }
+        .to_string()
     }
 
-    pub fn linewidth(f: usize) -> f64 {
+    pub fn linewidth(f: usize) -> String {
         match f {
             1 => 1.5,
             2 => 2.0,
             _ => panic!("PlotFmt::linewidth: f = {} not supported!", f),
         }
+        .to_string()
     }
 }

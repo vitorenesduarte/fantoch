@@ -8,28 +8,57 @@ use fantoch::planet::Region;
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::{ExperimentConfig, SerializationFormat};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::DirEntry;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
-#[derive(Debug)]
+const SNAPSHOT_SUFFIX: &str = "_experiment_data_snapshot.bincode";
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ResultsDB {
-    results: Vec<(DirEntry, ExperimentConfig, ExperimentData)>,
+    results: Vec<(ExperimentConfig, ExperimentData)>,
 }
 
 impl ResultsDB {
     pub fn load(results_dir: &str) -> Result<Self, Report> {
         // find all timestamps
-        let timestamps: Vec<_> = std::fs::read_dir(results_dir)
-            .wrap_err("read results directory")?
-            .collect();
+        let read_dir = std::fs::read_dir(results_dir)
+            .wrap_err("read results directory")?;
+        let mut timestamps = Vec::new();
+        for timestamp in read_dir {
+            let timestamp = timestamp.wrap_err("incorrect directory entry")?;
+            // ignore snapshot files
+            if !timestamp
+                .path()
+                .display()
+                .to_string()
+                .ends_with(SNAPSHOT_SUFFIX)
+            {
+                timestamps.push(timestamp);
+            }
+        }
 
         // holder for results
         let mut results = Vec::with_capacity(timestamps.len());
 
+        // track the number of loaded entries
+        let loaded_entries = Arc::new(Mutex::new(0));
+        let total_entries = timestamps.len();
+
         // load all entries
         let loads: Vec<_> = timestamps
             .into_par_iter()
-            .map(|timestamp| Self::load_entry(timestamp))
+            .map(|timestamp| {
+                let loaded_entries = loaded_entries.clone();
+                Self::load_entry(timestamp, loaded_entries, total_entries)
+            })
+            .inspect(|entry| {
+                if let Err(e) = entry {
+                    println!("error: {:?}", e);
+                }
+            })
             .collect();
         for entry in loads {
             let entry = entry.wrap_err("load entry")?;
@@ -40,20 +69,60 @@ impl ResultsDB {
     }
 
     fn load_entry(
-        timestamp: Result<DirEntry, std::io::Error>,
-    ) -> Result<(DirEntry, ExperimentConfig, ExperimentData), Report> {
-        let timestamp = timestamp.wrap_err("incorrect directory entry")?;
+        timestamp: DirEntry,
+        loaded_entries: Arc<Mutex<usize>>,
+        total_entries: usize,
+    ) -> Result<(ExperimentConfig, ExperimentData), Report> {
+        println!("start loading {:?}", timestamp.path().display());
+        let start = std::time::Instant::now();
+
         // read the configuration of this experiment
         let exp_config_path =
-            format!("{}/exp_config.json", timestamp.path().as_path().display());
+            format!("{}/exp_config.json", timestamp.path().display());
         let exp_config: ExperimentConfig = fantoch_exp::deserialize(
             exp_config_path,
             SerializationFormat::Json,
         )
         .wrap_err("deserialize experiment config")?;
 
-        let exp_data = Self::load_experiment_data(&timestamp, &exp_config)?;
-        Ok((timestamp, exp_config, exp_data))
+        // check if there's snapshot of experiment data
+        let snapshot =
+            format!("{}{}", timestamp.path().display(), SNAPSHOT_SUFFIX);
+        let exp_data = if Path::new(&snapshot).exists() {
+            // if there is, simply load it
+            fantoch_exp::deserialize(&snapshot, SerializationFormat::Bincode)
+                .wrap_err_with(|| {
+                    format!("deserialize experiment data snapshot {}", snapshot)
+                })?
+        } else {
+            // otherwise load it
+            let exp_data = Self::load_experiment_data(&timestamp, &exp_config)?;
+            // create snapshot
+            fantoch_exp::serialize(
+                &exp_data,
+                &snapshot,
+                SerializationFormat::Bincode,
+            )
+            .wrap_err_with(|| {
+                format!("deserialize experiment data snapshot {}", snapshot)
+            })?;
+            // and return it
+            exp_data
+        };
+
+        // register that a new entry is loaded
+        let mut loaded_entries = loaded_entries
+            .lock()
+            .expect("locking loaded entries should work");
+        *loaded_entries += 1;
+        println!(
+            "done loading {:?} | {} of {} | load time {}s",
+            timestamp.path().display(),
+            loaded_entries,
+            total_entries,
+            start.elapsed().as_secs()
+        );
+        Ok((exp_config, exp_data))
     }
 
     pub fn find(
@@ -63,7 +132,7 @@ impl ResultsDB {
         let filtered = self
             .results
             .iter()
-            .filter(move |(_, exp_config, _)| {
+            .filter(move |(exp_config, _)| {
                 // filter out configurations with different n
                 if exp_config.config.n() != search.n {
                     return false;
@@ -133,7 +202,7 @@ impl ResultsDB {
                 // return it
                 true
             })
-            .map(|(_, _, exp_data)| exp_data)
+            .map(|(_, exp_data)| exp_data)
             .collect();
         Ok(filtered)
     }

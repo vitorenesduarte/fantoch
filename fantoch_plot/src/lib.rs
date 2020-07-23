@@ -15,7 +15,7 @@ use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -32,9 +32,39 @@ pub enum ErrorBar {
     Without,
 }
 
+impl ErrorBar {
+    pub fn to_file_suffix(&self) -> String {
+        match self {
+            Self::Without => String::new(),
+            Self::With(percentile) => format!("_p{}", percentile * 100f64),
+        }
+    }
+}
+
 pub enum LatencyMetric {
     Average,
     Percentile(f64),
+}
+
+impl LatencyMetric {
+    pub fn to_file_suffix(&self) -> String {
+        match self {
+            Self::Average => String::new(),
+            Self::Percentile(percentile) => {
+                format!("_p{}", percentile * 100f64)
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub enum Style {
+    Label,
+    Color,
+    Hatch,
+    Marker,
+    LineStyle,
+    LineWidth,
 }
 
 enum AxisToScale {
@@ -70,7 +100,7 @@ pub fn set_global_style() -> Result<(), Report> {
 
 pub fn latency_plot<R>(
     searches: Vec<Search>,
-    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     n: usize,
     error_bar: ErrorBar,
     output_file: &str,
@@ -166,7 +196,7 @@ pub fn latency_plot<R>(
 
         // plot it:
         // - maybe set error bars
-        let kwargs = bar_style(py, search, &label_fun, BAR_WIDTH)?;
+        let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
         if let ErrorBar::With(_) = error_bar {
             pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
         }
@@ -218,7 +248,7 @@ pub fn latency_plot<R>(
 // based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
 pub fn cdf_plot(
     searches: Vec<Search>,
-    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -234,7 +264,7 @@ pub fn cdf_plot(
     let mut plotted = 0;
 
     for search in searches {
-        inner_cdf_plot(py, &ax, search, &label_fun, &mut plotted, db)?;
+        inner_cdf_plot(py, &ax, search, &style_fun, &mut plotted, db)?;
     }
 
     // set cdf plot style
@@ -251,7 +281,7 @@ pub fn cdf_plot(
 
 pub fn cdf_plot_per_f(
     searches: Vec<Search>,
-    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -296,7 +326,7 @@ pub fn cdf_plot_per_f(
 
         // plot all searches that match this `f`
         for search in searches.iter().filter(|search| search.f == f) {
-            inner_cdf_plot(py, &ax, *search, &label_fun, &mut plotted, db)?;
+            inner_cdf_plot(py, &ax, *search, &style_fun, &mut plotted, db)?;
         }
 
         // set cdf plot style
@@ -341,7 +371,7 @@ fn inner_cdf_plot(
     py: Python<'_>,
     ax: &Axes<'_>,
     search: Search,
-    label_fun: &Option<impl Fn(&Search) -> String>,
+    style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     plotted: &mut usize,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -377,7 +407,7 @@ fn inner_cdf_plot(
     let y: Vec<_> = percentiles().collect();
 
     // plot it!
-    let kwargs = line_style(py, search, label_fun)?;
+    let kwargs = line_style(py, search, style_fun)?;
     ax.plot(x, y, None, Some(kwargs))?;
     *plotted += 1;
 
@@ -386,7 +416,7 @@ fn inner_cdf_plot(
 
 pub fn throughput_latency_plot(
     searches: Vec<Search>,
-    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     n: usize,
     clients_per_region: Vec<usize>,
     latency: LatencyMetric,
@@ -471,7 +501,7 @@ pub fn throughput_latency_plot(
             .unzip();
 
         // plot it!
-        let kwargs = line_style(py, search, &label_fun)?;
+        let kwargs = line_style(py, search, &style_fun)?;
         ax.plot(x, y, None, Some(kwargs))?;
         plotted += 1;
     }
@@ -756,19 +786,37 @@ fn set_log_scale(
 fn bar_style<'a>(
     py: Python<'a>,
     search: Search,
-    label_fun: &Option<impl Fn(&Search) -> String>,
+    style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     bar_width: f64,
 ) -> Result<&'a PyDict, Report> {
     let protocol = search.protocol;
     let f = search.f;
+
+    // compute styles
+    let mut styles = style_fun
+        .as_ref()
+        .map(|style_fun| style_fun(&search))
+        .unwrap_or_default();
+
+    // compute label, color and hatch
+    let label = styles
+        .remove(&Style::Label)
+        .unwrap_or_else(|| PlotFmt::label(protocol, f));
+    let color = styles
+        .remove(&Style::Color)
+        .unwrap_or_else(|| PlotFmt::color(protocol, f));
+    let hatch = styles
+        .remove(&Style::Hatch)
+        .unwrap_or_else(|| PlotFmt::hatch(protocol, f));
+
     let kwargs = pydict!(
         py,
-        ("label", label(&search, label_fun)),
+        ("label", label),
         ("width", bar_width),
         ("edgecolor", "black"),
         ("linewidth", 1),
-        ("color", PlotFmt::color(protocol, f)),
-        ("hatch", PlotFmt::hatch(protocol, f)),
+        ("color", color),
+        ("hatch", hatch),
     );
     Ok(kwargs)
 }
@@ -776,29 +824,41 @@ fn bar_style<'a>(
 fn line_style<'a>(
     py: Python<'a>,
     search: Search,
-    label_fun: &Option<impl Fn(&Search) -> String>,
+    style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
 ) -> Result<&'a PyDict, Report> {
     let protocol = search.protocol;
     let f = search.f;
+
+    // compute styles
+    let mut styles = style_fun
+        .as_ref()
+        .map(|style_fun| style_fun(&search))
+        .unwrap_or_default();
+
+    // compute label, color, marker, linestyle and linewidth
+    let label = styles
+        .remove(&Style::Label)
+        .unwrap_or_else(|| PlotFmt::label(protocol, f));
+    let color = styles
+        .remove(&Style::Color)
+        .unwrap_or_else(|| PlotFmt::color(protocol, f));
+    let marker = styles
+        .remove(&Style::Marker)
+        .unwrap_or_else(|| PlotFmt::marker(protocol, f));
+    let linestyle = styles
+        .remove(&Style::LineStyle)
+        .unwrap_or_else(|| PlotFmt::linestyle(protocol, f));
+    let linewidth = styles
+        .remove(&Style::LineWidth)
+        .unwrap_or_else(|| PlotFmt::linewidth(f));
+
     let kwargs = pydict!(
         py,
-        ("label", label(&search, label_fun)),
-        ("color", PlotFmt::color(protocol, f)),
-        ("marker", PlotFmt::marker(protocol, f)),
-        ("linestyle", PlotFmt::linestyle(protocol, f)),
-        ("linewidth", PlotFmt::linewidth(f)),
+        ("label", label),
+        ("color", color),
+        ("marker", marker),
+        ("linestyle", linestyle),
+        ("linewidth", linewidth),
     );
     Ok(kwargs)
-}
-
-fn label(
-    search: &Search,
-    label_fun: &Option<impl Fn(&Search) -> String>,
-) -> String {
-    // compute label: use `label_fun` if one was provided
-    if let Some(label_fun) = label_fun {
-        label_fun(&search)
-    } else {
-        PlotFmt::label(search.protocol, search.f)
-    }
 }
