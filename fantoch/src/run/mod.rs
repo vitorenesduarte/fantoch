@@ -88,6 +88,7 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::hash_map::{Entry, HashMap};
 use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
+use crate::log;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use crate::HashSet;
@@ -823,7 +824,7 @@ impl ShardsPending {
         result: CommandResult,
     ) -> Option<(ClientId, Vec<CommandResult>)> {
         let rifl = result.rifl();
-        println!("c{}: rifl received {:?}", rifl.source(), rifl);
+        log!("c{}: rifl received {:?}", rifl.source(), rifl);
         match self.pending.entry(rifl) {
             Entry::Occupied(mut entry) => {
                 let (shard_count, results) = entry.get_mut();
