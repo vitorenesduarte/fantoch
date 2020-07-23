@@ -36,8 +36,6 @@ const BRANCH: &str = "atomic_2_passes";
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 
-const SHARD_COUNT: usize = 1;
-
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
         let mut config = Config::new($n, $f);
@@ -67,9 +65,9 @@ async fn main() -> Result<(), Report> {
         Region::SaEast1,
     ];
     let n = regions.len();
-    let shard_count = 1;
 
     /*
+    THROUGHPUT
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
@@ -103,6 +101,8 @@ async fn main() -> Result<(), Report> {
     };
     */
 
+    /*
+    MULTI_KEY
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
@@ -115,35 +115,49 @@ async fn main() -> Result<(), Report> {
 
     let clients_per_region =
         vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
-
     let zipf_key_count = 1_000_000;
-    let mut workloads = Vec::new();
-    for shards_per_command in vec![1] {
-        for keys_per_shard in vec![8] {
-            for coefficient in vec![1.0] {
-                let workload = Workload::new(
-                    shards_per_command,
-                    ShardGen::Random { shard_count },
-                    keys_per_shard,
-                    KeyGen::Zipf {
-                        coefficient,
-                        key_count: zipf_key_count,
-                    },
-                    COMMANDS_PER_CLIENT,
-                    PAYLOAD_SIZE,
-                );
-                workloads.push(workload);
-            }
-        }
-    }
+
     let skip = |_, _, _| false;
+    */
+
+    let configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+    ];
+
+    let clients_per_region =
+        vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
+    let shards_per_command = 1;
+    let shard_count = 1;
+    let keys_per_shard = 1;
+    let zipf_coefficient = 1.0;
+    let zipf_key_count = 1_000_000;
+    let key_gen = KeyGen::Zipf {
+        coefficient: zipf_coefficient,
+        key_count: zipf_key_count,
+    };
+
+    let skip = |_, _, _| false;
+
+    let mut workloads = Vec::new();
+    let workload = Workload::new(
+        shards_per_command,
+        ShardGen::Random { shard_count },
+        keys_per_shard,
+        key_gen,
+        COMMANDS_PER_CLIENT,
+        PAYLOAD_SIZE,
+    );
+    workloads.push(workload);
 
     // create AWS planet
     let planet = Some(Planet::from("../latency_aws"));
-    // let planet = None;
+    // let planet = None; // if delay is not to be injected
 
     baremetal_bench(
         regions,
+        shard_count,
         planet,
         configs,
         clients_per_region,
@@ -151,12 +165,22 @@ async fn main() -> Result<(), Report> {
         skip,
     )
     .await
-    // aws_bench(regions, configs, clients_per_region).await
+    /*
+    aws_bench(
+        regions,
+        shard_count,
+        configs,
+        clients_per_region,
+        workloads,
+        skip,
+    ).await
+    */
 }
 
 #[allow(dead_code)]
 async fn baremetal_bench(
     regions: Vec<Region>,
+    shard_count: usize,
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
@@ -168,7 +192,7 @@ where
     // create launcher
     let mut launchers = fantoch_exp::testbed::baremetal::create_launchers(
         &regions,
-        SHARD_COUNT,
+        shard_count,
     );
 
     // compute features
@@ -178,7 +202,7 @@ where
     let machines = fantoch_exp::testbed::baremetal::setup(
         &mut launchers,
         regions,
-        SHARD_COUNT,
+        shard_count,
         BRANCH.to_string(),
         RUN_MODE,
         features.clone(),
@@ -206,6 +230,7 @@ where
 #[allow(dead_code)]
 async fn aws_bench(
     regions: Vec<Region>,
+    shard_count: usize,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
@@ -215,6 +240,7 @@ async fn aws_bench(
     let res = do_aws_bench(
         &mut launcher,
         regions,
+        shard_count,
         configs,
         clients_per_region,
         workloads,
@@ -238,6 +264,7 @@ async fn do_aws_bench(
         rusoto_credential::DefaultCredentialsProvider,
     >,
     regions: Vec<Region>,
+    shard_count: usize,
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
@@ -250,7 +277,7 @@ async fn do_aws_bench(
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
         regions,
-        SHARD_COUNT,
+        shard_count,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
