@@ -384,8 +384,8 @@ fn parse_args() -> ProtocolArgs {
         assert_eq!(sorted_processes.len(), config.n());
     }
 
-    // check that the number of addresses equals `n - 1`
-    assert_eq!(addresses.len(), config.n() - 1);
+    // check that the number of addresses equals `(n * shards) - 1`
+    assert_eq!(addresses.len(), (config.n() * config.shards()) - 1);
 
     (
         process_id,
