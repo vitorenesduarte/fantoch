@@ -1,12 +1,12 @@
 #[cfg(feature = "exp")]
 use crate::args;
+use crate::exp::Placement;
 use crate::{FantochFeature, Protocol, RunMode, Testbed};
 use fantoch::client::Workload;
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
-use fantoch::planet::{Planet, Region};
+use fantoch::planet::Planet;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 
 // FIXED
@@ -305,7 +305,7 @@ impl ClientConfig {
 
 #[derive(Deserialize, Serialize)]
 pub struct ExperimentConfig {
-    pub regions: HashMap<Region, ProcessId>,
+    pub placement: Placement,
     pub planet: Option<Planet>,
     pub run_mode: RunMode,
     pub features: Vec<FantochFeature>,
@@ -327,7 +327,7 @@ pub struct ExperimentConfig {
 
 impl ExperimentConfig {
     pub fn new(
-        regions: HashMap<Region, ProcessId>,
+        placement: Placement,
         planet: Option<Planet>,
         run_mode: RunMode,
         features: Vec<FantochFeature>,
@@ -341,7 +341,7 @@ impl ExperimentConfig {
             workers_executors_and_leader(protocol, &mut config);
 
         Self {
-            regions,
+            placement,
             planet,
             run_mode,
             features,
