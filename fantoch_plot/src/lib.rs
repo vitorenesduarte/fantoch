@@ -9,7 +9,6 @@ pub use db::{ExperimentData, ResultsDB, Search};
 pub use fmt::PlotFmt;
 
 use color_eyre::Report;
-use fantoch_exp::Protocol;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
@@ -71,6 +70,7 @@ pub fn set_global_style() -> Result<(), Report> {
 
 pub fn latency_plot<R>(
     searches: Vec<Search>,
+    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
     n: usize,
     error_bar: ErrorBar,
     output_file: &str,
@@ -166,7 +166,7 @@ pub fn latency_plot<R>(
 
         // plot it:
         // - maybe set error bars
-        let kwargs = bar_style(py, search.protocol, search.f, BAR_WIDTH)?;
+        let kwargs = bar_style(py, search, &label_fun, BAR_WIDTH)?;
         if let ErrorBar::With(_) = error_bar {
             pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
         }
@@ -218,6 +218,7 @@ pub fn latency_plot<R>(
 // based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
 pub fn cdf_plot(
     searches: Vec<Search>,
+    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -233,7 +234,7 @@ pub fn cdf_plot(
     let mut plotted = 0;
 
     for search in searches {
-        inner_cdf_plot(py, &ax, search, &mut plotted, db)?;
+        inner_cdf_plot(py, &ax, search, &label_fun, &mut plotted, db)?;
     }
 
     // set cdf plot style
@@ -250,6 +251,7 @@ pub fn cdf_plot(
 
 pub fn cdf_plot_per_f(
     searches: Vec<Search>,
+    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -294,7 +296,7 @@ pub fn cdf_plot_per_f(
 
         // plot all searches that match this `f`
         for search in searches.iter().filter(|search| search.f == f) {
-            inner_cdf_plot(py, &ax, *search, &mut plotted, db)?;
+            inner_cdf_plot(py, &ax, *search, &label_fun, &mut plotted, db)?;
         }
 
         // set cdf plot style
@@ -339,6 +341,7 @@ fn inner_cdf_plot(
     py: Python<'_>,
     ax: &Axes<'_>,
     search: Search,
+    label_fun: &Option<impl Fn(&Search) -> String>,
     plotted: &mut usize,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -374,7 +377,7 @@ fn inner_cdf_plot(
     let y: Vec<_> = percentiles().collect();
 
     // plot it!
-    let kwargs = line_style(py, search.protocol, search.f)?;
+    let kwargs = line_style(py, search, label_fun)?;
     ax.plot(x, y, None, Some(kwargs))?;
     *plotted += 1;
 
@@ -383,6 +386,7 @@ fn inner_cdf_plot(
 
 pub fn throughput_latency_plot(
     searches: Vec<Search>,
+    label_fun: Option<Box<dyn Fn(&Search) -> String>>,
     n: usize,
     clients_per_region: Vec<usize>,
     latency: LatencyMetric,
@@ -467,7 +471,7 @@ pub fn throughput_latency_plot(
             .unzip();
 
         // plot it!
-        let kwargs = line_style(py, search.protocol, search.f)?;
+        let kwargs = line_style(py, search, &label_fun)?;
         ax.plot(x, y, None, Some(kwargs))?;
         plotted += 1;
     }
@@ -749,15 +753,17 @@ fn set_log_scale(
     Ok(())
 }
 
-fn bar_style(
-    py: Python<'_>,
-    protocol: Protocol,
-    f: usize,
+fn bar_style<'a>(
+    py: Python<'a>,
+    search: Search,
+    label_fun: &Option<impl Fn(&Search) -> String>,
     bar_width: f64,
-) -> Result<&PyDict, Report> {
+) -> Result<&'a PyDict, Report> {
+    let protocol = search.protocol;
+    let f = search.f;
     let kwargs = pydict!(
         py,
-        ("label", PlotFmt::label(protocol, f)),
+        ("label", label(&search, label_fun)),
         ("width", bar_width),
         ("edgecolor", "black"),
         ("linewidth", 1),
@@ -767,18 +773,32 @@ fn bar_style(
     Ok(kwargs)
 }
 
-fn line_style(
-    py: Python<'_>,
-    protocol: Protocol,
-    f: usize,
-) -> Result<&PyDict, Report> {
+fn line_style<'a>(
+    py: Python<'a>,
+    search: Search,
+    label_fun: &Option<impl Fn(&Search) -> String>,
+) -> Result<&'a PyDict, Report> {
+    let protocol = search.protocol;
+    let f = search.f;
     let kwargs = pydict!(
         py,
-        ("label", PlotFmt::label(protocol, f)),
+        ("label", label(&search, label_fun)),
         ("color", PlotFmt::color(protocol, f)),
         ("marker", PlotFmt::marker(protocol, f)),
         ("linestyle", PlotFmt::linestyle(protocol, f)),
         ("linewidth", PlotFmt::linewidth(f)),
     );
     Ok(kwargs)
+}
+
+fn label(
+    search: &Search,
+    label_fun: &Option<impl Fn(&Search) -> String>,
+) -> String {
+    // compute label: use `label_fun` if one was provided
+    if let Some(label_fun) = label_fun {
+        label_fun(&search)
+    } else {
+        PlotFmt::label(search.protocol, search.f)
+    }
 }

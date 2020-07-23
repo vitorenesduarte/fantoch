@@ -90,8 +90,10 @@ fn partial_replication() -> Result<(), Report> {
                     search
                 })
                 .collect();
+            let label_fun = None;
             fantoch_plot::throughput_latency_plot(
                 searches,
+                label_fun,
                 n,
                 clients_per_region.clone(),
                 latency,
@@ -159,8 +161,10 @@ fn partial_replication() -> Result<(), Report> {
                     clients_per_region,
                     suffix
                 );
+                let label_fun = None;
                 let results = fantoch_plot::latency_plot(
                     searches.clone(),
+                    label_fun,
                     n,
                     error_bar,
                     &path,
@@ -191,7 +195,13 @@ fn partial_replication() -> Result<(), Report> {
                 zipf_coefficient,
                 clients_per_region
             );
-            fantoch_plot::cdf_plot(searches.clone(), &path, &mut db)?;
+            let label_fun = None;
+            fantoch_plot::cdf_plot(
+                searches.clone(),
+                label_fun,
+                &path,
+                &mut db,
+            )?;
         }
     }
 
@@ -255,8 +265,10 @@ fn multi_key() -> Result<(), Report> {
                         search
                     })
                     .collect();
+                let label_fun = None;
                 fantoch_plot::throughput_latency_plot(
                     searches,
+                    label_fun,
                     n,
                     clients_per_region.clone(),
                     latency,
@@ -314,8 +326,10 @@ fn multi_key() -> Result<(), Report> {
                         clients_per_region,
                         suffix
                     );
+                    let label_fun = None;
                     let results = fantoch_plot::latency_plot(
                         searches.clone(),
+                        label_fun,
                         n,
                         error_bar,
                         &path,
@@ -342,7 +356,13 @@ fn multi_key() -> Result<(), Report> {
                     "cdf_n{}_k{}_zipf{}_c{}.pdf",
                     n, keys_per_shard, zipf_coefficient, clients_per_region
                 );
-                fantoch_plot::cdf_plot(searches.clone(), &path, &mut db)?;
+                let label_fun = None;
+                fantoch_plot::cdf_plot(
+                    searches.clone(),
+                    label_fun,
+                    &path,
+                    &mut db,
+                )?;
 
                 if n > 3 {
                     // generate cdf plot with subplots
@@ -350,8 +370,10 @@ fn multi_key() -> Result<(), Report> {
                         "cdf_one_per_f_n{}_k{}_zipf{}_c{}.pdf",
                         n, keys_per_shard, zipf_coefficient, clients_per_region,
                     );
+                    let label_fun = None;
                     fantoch_plot::cdf_plot_per_f(
                         searches.clone(),
+                        label_fun,
                         &path,
                         &mut db,
                     )?;
@@ -414,8 +436,10 @@ fn single_key() -> Result<(), Report> {
                     search
                 })
                 .collect();
+            let label_fun = None;
             fantoch_plot::throughput_latency_plot(
                 searches,
+                label_fun,
                 n,
                 clients_per_region.clone(),
                 latency,
@@ -472,8 +496,10 @@ fn single_key() -> Result<(), Report> {
                     "latency_n{}_c{}{}.pdf",
                     n, clients_per_region, suffix
                 );
+                let label_fun = None;
                 let results = fantoch_plot::latency_plot(
                     searches.clone(),
+                    label_fun,
                     n,
                     error_bar,
                     &path,
@@ -497,13 +523,25 @@ fn single_key() -> Result<(), Report> {
 
             // generate cdf plot
             let path = format!("cdf_n{}_c{}.pdf", n, clients_per_region);
-            fantoch_plot::cdf_plot(searches.clone(), &path, &mut db)?;
+            let label_fun = None;
+            fantoch_plot::cdf_plot(
+                searches.clone(),
+                label_fun,
+                &path,
+                &mut db,
+            )?;
 
             if n > 3 {
                 // generate cdf plot with subplots
                 let path =
                     format!("cdf_one_per_f_n{}_c{}.pdf", n, clients_per_region);
-                fantoch_plot::cdf_plot_per_f(searches.clone(), &path, &mut db)?;
+                let label_fun = None;
+                fantoch_plot::cdf_plot_per_f(
+                    searches.clone(),
+                    label_fun,
+                    &path,
+                    &mut db,
+                )?;
             }
         }
     }
