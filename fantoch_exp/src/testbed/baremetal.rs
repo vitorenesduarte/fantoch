@@ -9,17 +9,35 @@ use std::collections::HashMap;
 const MACHINES: &str = "exp_files/machines";
 const PRIVATE_KEY: &str = "~/.ssh/id_rsa";
 
-pub async fn setup<'a>(
-    launchers: &'a mut Vec<tsunami::providers::baremetal::Machine>,
-    regions: Vec<rusoto_core::Region>,
-    process_count: usize,
+pub fn create_launchers<'a>(
+    regions: &Vec<rusoto_core::Region>,
     shard_count: usize,
-    client_count: usize,
+) -> Vec<tsunami::providers::baremetal::Machine> {
+    let server_count = regions.len();
+    let client_count = regions.len();
+    let machine_count = server_count * shard_count + client_count;
+    // create one launcher per machine
+    (0..machine_count)
+        .map(|_| tsunami::providers::baremetal::Machine::default())
+        .collect()
+}
+
+pub async fn setup<'a>(
+    launcher_per_machine: &'a mut Vec<tsunami::providers::baremetal::Machine>,
+    regions: Vec<rusoto_core::Region>,
+    shard_count: usize,
     branch: String,
     run_mode: RunMode,
     features: Vec<FantochFeature>,
 ) -> Result<Machines<'a>, Report> {
-    let machine_count = process_count * shard_count + client_count;
+    let server_count = regions.len();
+    let client_count = regions.len();
+    let machine_count = server_count * shard_count + client_count;
+    assert_eq!(
+        launcher_per_machine.len(),
+        machine_count,
+        "not enough launchers"
+    );
 
     // get ips and check that we have enough of them
     let content = tokio::fs::read_to_string(MACHINES).await?;
@@ -31,7 +49,7 @@ pub async fn setup<'a>(
 
     // get machine and launcher iterators
     let mut machines_iter = machines.into_iter();
-    let mut launcher_iter = launchers.iter_mut();
+    let mut launcher_iter = launcher_per_machine.iter_mut();
 
     // setup machines
     let mut launches = Vec::with_capacity(machine_count);
@@ -57,7 +75,7 @@ pub async fn setup<'a>(
 
     // create placement, servers, and clients
     let placement = super::create_placement(shard_count, regions);
-    let mut servers = HashMap::with_capacity(process_count);
+    let mut servers = HashMap::with_capacity(server_count);
     let mut clients = HashMap::with_capacity(client_count);
 
     for result in futures::future::join_all(launches).await {
@@ -84,7 +102,7 @@ pub async fn setup<'a>(
     // check that we have enough machines
     assert_eq!(
         servers.len(),
-        process_count * shard_count,
+        server_count * shard_count,
         "not enough server vms"
     );
     assert_eq!(clients.len(), client_count, "not enough client vms");

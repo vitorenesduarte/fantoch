@@ -114,7 +114,11 @@ impl<'a> Machines<'a> {
 
         // compute the region index
         region_indexes.sort();
-        assert_eq!(region_indexes.len(), 1, "there should be a single region index for each region");
+        assert_eq!(
+            region_indexes.len(),
+            1,
+            "there should be a single region index for each region"
+        );
         let region_index = region_indexes.remove(0);
 
         (ids, region_index)

@@ -679,7 +679,7 @@ async fn pull_flamegraph_file(
 }
 
 // create filename prefix
-fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
+pub fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
     if let Some(process_id) = process_id {
         format!("server_{:?}_{}", region, process_id)
     } else {

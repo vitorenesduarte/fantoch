@@ -11,9 +11,9 @@ pub async fn setup(
         rusoto_credential::DefaultCredentialsProvider,
     >,
     regions: Vec<rusoto_core::Region>,
+    shard_count: usize,
     server_instance_type: String,
     client_instance_type: String,
-    shard_count: usize,
     max_spot_instance_request_wait_secs: u64,
     max_instance_duration_hours: usize,
     branch: String,
@@ -22,7 +22,9 @@ pub async fn setup(
 ) -> Result<Machines<'_>, Report> {
     // create nicknames for all machines
     let nicknames = super::create_nicknames(shard_count, &regions);
-    let mut vms = spawn_and_setup(
+
+    // setup machines
+    let vms = spawn_and_setup(
         launcher,
         nicknames,
         server_instance_type,
@@ -34,12 +36,31 @@ pub async fn setup(
         features,
     )
     .await?;
+
+    // create placement, servers, and clients
+    let region_count = regions.len();
+    let process_count = region_count * shard_count;
+    let client_count = region_count;
     let placement = super::create_placement(shard_count, regions);
-    todo!();
-    // let servers = vms.remove(SERVER_TAG).expect("servers vms");
-    // let clients = vms.remove(CLIENT_TAG).expect("client vms");
-    // let machines = Machines::new(super::to_regions(regions), servers,
-    // clients); Ok(machines)
+    let mut servers = HashMap::with_capacity(process_count);
+    let mut clients = HashMap::with_capacity(client_count);
+
+    for (Nickname { shard_id, region }, vm) in vms {
+        match shard_id {
+            Some(shard_id) => {
+                let (process_id, _region_index) = placement
+                    .get(&(region, shard_id))
+                    .expect("region and shard id should exist in placement");
+                assert!(servers.insert(*process_id, vm).is_none());
+            }
+            None => {
+                // add to clients
+                assert!(clients.insert(region, vm).is_none());
+            }
+        }
+    }
+    let machines = Machines::new(placement, servers, clients);
+    Ok(machines)
 }
 
 async fn spawn_and_setup<'a>(

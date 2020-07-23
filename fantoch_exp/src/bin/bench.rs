@@ -36,6 +36,8 @@ const BRANCH: &str = "atomic_2_passes";
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 
+const SHARD_COUNT: usize = 1;
+
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
         let mut config = Config::new($n, $f);
@@ -163,15 +165,11 @@ async fn baremetal_bench(
 ) -> Result<(), Report>
 where
 {
-    let servers_count = regions.len();
-    let clients_count = regions.len();
-
-    // create one launcher per machine:
-    // - TODO this is needed since tsunami's baremetal provider does not give a
-    //   global tsunami launcher as the aws provider
-    let mut launchers = (0..servers_count + clients_count)
-        .map(|_| tsunami::providers::baremetal::Machine::default())
-        .collect();
+    // create launcher
+    let mut launchers = fantoch_exp::testbed::baremetal::create_launchers(
+        &regions,
+        SHARD_COUNT,
+    );
 
     // compute features
     let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
@@ -179,9 +177,8 @@ where
     // setup baremetal machines
     let machines = fantoch_exp::testbed::baremetal::setup(
         &mut launchers,
-        servers_count,
-        clients_count,
         regions,
+        SHARD_COUNT,
         BRANCH.to_string(),
         RUN_MODE,
         features.clone(),
@@ -252,9 +249,10 @@ async fn do_aws_bench(
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
+        regions,
+        SHARD_COUNT,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
-        regions,
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         MAX_INSTANCE_DURATION_HOURS,
         BRANCH.to_string(),

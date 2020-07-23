@@ -1,5 +1,6 @@
 use crate::db::Dstat;
 use fantoch::client::ClientData;
+use fantoch::id::ProcessId;
 use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::run::task::metrics_logger::ProcessMetrics;
@@ -9,7 +10,7 @@ use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct ExperimentData {
-    pub process_metrics: HashMap<Region, ProcessMetrics>,
+    pub process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
     pub global_process_dstats: Dstat,
     pub client_latency: HashMap<Region, Histogram>,
     pub global_client_latency: Histogram,
@@ -19,8 +20,8 @@ impl ExperimentData {
     pub fn new(
         planet: &Option<Planet>,
         testbed: Testbed,
-        process_metrics: HashMap<Region, ProcessMetrics>,
-        process_dstats: HashMap<Region, Dstat>,
+        process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
+        process_dstats: HashMap<ProcessId, Dstat>,
         client_metrics: HashMap<Region, ClientData>,
         global_client_metrics: ClientData,
     ) -> Self {

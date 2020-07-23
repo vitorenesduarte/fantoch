@@ -125,18 +125,16 @@ impl ResultsDB {
         timestamp: &DirEntry,
         exp_config: &ExperimentConfig,
     ) -> Result<ExperimentData, Report> {
-        // process and client metrics
-        let mut process_metrics = HashMap::new();
+        // client metrics
         let mut client_metrics = HashMap::new();
 
-        for region in exp_config.regions.keys() {
-            // load metrics
-            let process: ProcessMetrics =
-                Self::load_metrics("server", &timestamp, region)?;
-            process_metrics.insert(region.clone(), process);
+        for (region, _) in exp_config.placement.keys() {
+            // create client file prefix
+            let prefix = fantoch_exp::bench::file_prefix(None, region);
 
-            let client: ClientData =
-                Self::load_metrics("client", &timestamp, region)?;
+            // load this region's client metrics (there's a single client
+            // machine per region)
+            let client: ClientData = Self::load_metrics(&timestamp, prefix)?;
             client_metrics.insert(region.clone(), client);
         }
 
@@ -149,16 +147,26 @@ impl ResultsDB {
         let global_client_metrics =
             Self::global_client_metrics(&client_metrics);
 
-        // process dstats (ignore client dstats, at least for now)
+        // process metrics and dstats
+        let mut process_metrics = HashMap::new();
         let mut process_dstats = HashMap::new();
 
-        for region in exp_config.regions.keys() {
-            // load dstats
-            let process =
-                Self::load_dstat(start, end, "server", &timestamp, region)?;
-            process_dstats.insert(region.clone(), process);
-        }
+        for ((region, _), (process_id, _)) in exp_config.placement.iter() {
+            let process_id = *process_id;
+            // create process file prefix
+            let prefix =
+                fantoch_exp::bench::file_prefix(Some(process_id), region);
 
+            // load this process metrics (there will be more than one per region
+            // with partial replication)
+            let process: ProcessMetrics =
+                Self::load_metrics(&timestamp, prefix.clone())?;
+            process_metrics.insert(process_id, (region.clone(), process));
+
+            // load this process dstat
+            let process = Self::load_dstat(&timestamp, prefix, start, end)?;
+            process_dstats.insert(process_id, process);
+        }
         // return experiment data
         Ok(ExperimentData::new(
             &exp_config.planet,
@@ -171,18 +179,16 @@ impl ResultsDB {
     }
 
     fn load_metrics<T>(
-        tag: &str,
         timestamp: &DirEntry,
-        region: &Region,
+        prefix: String,
     ) -> Result<T, Report>
     where
         T: serde::de::DeserializeOwned,
     {
         let path = format!(
-            "{}/{}_{}_metrics.bincode",
+            "{}/{}_metrics.bincode",
             timestamp.path().display(),
-            tag,
-            region.name(),
+            prefix,
         );
         let metrics =
             fantoch_exp::deserialize(&path, SerializationFormat::Bincode)
@@ -191,18 +197,13 @@ impl ResultsDB {
     }
 
     fn load_dstat(
+        timestamp: &DirEntry,
+        prefix: String,
         start: u64,
         end: u64,
-        tag: &str,
-        timestamp: &DirEntry,
-        region: &Region,
     ) -> Result<Dstat, Report> {
-        let path = format!(
-            "{}/{}_{}_dstat.csv",
-            timestamp.path().display(),
-            tag,
-            region.name(),
-        );
+        let path =
+            format!("{}/{}_dstat.csv", timestamp.path().display(), prefix);
         Dstat::from(start, end, &path)
             .wrap_err_with(|| format!("deserialize dstat {}", path))
     }
