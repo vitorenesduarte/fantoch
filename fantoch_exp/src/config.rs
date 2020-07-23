@@ -11,6 +11,7 @@ use std::fmt;
 
 pub type RegionIndex = usize;
 pub type Placement = HashMap<(Region, ShardId), (ProcessId, RegionIndex)>;
+type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
 
 // FIXED
 #[cfg(feature = "exp")]
@@ -315,7 +316,7 @@ impl ClientConfig {
 
 #[derive(Deserialize, Serialize)]
 pub struct ExperimentConfig {
-    pub placement: Placement,
+    pub placement: PlacementFlat,
     pub planet: Option<Planet>,
     pub run_mode: RunMode,
     pub features: Vec<FantochFeature>,
@@ -350,6 +351,12 @@ impl ExperimentConfig {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
 
+        // can't serialize to json with a key that is not a string, so let's
+        // flat it
+        let placement = placement
+            .into_iter()
+            .map(|((a, b), (c, d))| (a, b, c, d))
+            .collect();
         Self {
             placement,
             planet,

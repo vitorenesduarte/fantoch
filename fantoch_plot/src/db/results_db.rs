@@ -128,7 +128,7 @@ impl ResultsDB {
         // client metrics
         let mut client_metrics = HashMap::new();
 
-        for (region, _) in exp_config.placement.keys() {
+        for (region, _, _, _) in exp_config.placement.iter() {
             // create client file prefix
             let prefix = fantoch_exp::config::file_prefix(None, region);
 
@@ -151,7 +151,7 @@ impl ResultsDB {
         let mut process_metrics = HashMap::new();
         let mut process_dstats = HashMap::new();
 
-        for ((region, _), (process_id, _)) in exp_config.placement.iter() {
+        for (region, _, process_id, _) in exp_config.placement.iter() {
             let process_id = *process_id;
             // create process file prefix
             let prefix =
