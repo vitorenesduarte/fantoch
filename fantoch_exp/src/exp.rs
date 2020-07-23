@@ -1,5 +1,5 @@
 use crate::args;
-use crate::config::{RegionIndex, Placement};
+use crate::config::{Placement, RegionIndex};
 use crate::util;
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;

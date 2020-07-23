@@ -1,6 +1,6 @@
 use crate::config::{
-    ClientConfig, ExperimentConfig, ProtocolConfig, CLIENT_PORT, PORT,
-    RegionIndex,
+    ClientConfig, ExperimentConfig, ProtocolConfig, RegionIndex, CLIENT_PORT,
+    PORT,
 };
 use crate::exp::{self, Machines};
 use crate::{util, SerializationFormat};
@@ -166,7 +166,7 @@ async fn start_processes(
     let mut processes = HashMap::with_capacity(process_count);
     let mut wait_processes = Vec::with_capacity(process_count);
 
-    for ((from_region, _shard_id), (process_id, _region_index)) in
+    for ((from_region, shard_id), (process_id, _region_index)) in
         machines.placement()
     {
         let vm = machines.server(process_id);
@@ -197,6 +197,7 @@ async fn start_processes(
         let mut protocol_config = ProtocolConfig::new(
             protocol,
             *process_id,
+            *shard_id,
             config,
             sorted,
             ips,

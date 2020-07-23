@@ -55,7 +55,8 @@ const CLIENT_TCP_NODELAY: bool = true;
 
 #[cfg(feature = "exp")]
 pub struct ProtocolConfig {
-    id: ProcessId,
+    process_id: ProcessId,
+    shard_id: ShardId,
     sorted: Option<Vec<ProcessId>>,
     ips: Vec<(String, Option<usize>)>,
     config: Config,
@@ -76,7 +77,8 @@ pub struct ProtocolConfig {
 impl ProtocolConfig {
     pub fn new(
         protocol: Protocol,
-        id: ProcessId,
+        process_id: ProcessId,
+        shard_id: ShardId,
         mut config: Config,
         sorted: Option<Vec<ProcessId>>,
         ips: Vec<(String, Option<usize>)>,
@@ -86,7 +88,8 @@ impl ProtocolConfig {
             workers_executors_and_leader(protocol, &mut config);
 
         Self {
-            id,
+            process_id,
+            shard_id,
             sorted,
             ips,
             config,
@@ -111,7 +114,9 @@ impl ProtocolConfig {
     pub fn to_args(&self) -> Vec<String> {
         let mut args = args![
             "--id",
-            self.id,
+            self.process_id,
+            "--shard_id",
+            self.shard_id,
             "--ip",
             IP,
             "--port",
@@ -124,6 +129,8 @@ impl ProtocolConfig {
             self.config.n(),
             "--faults",
             self.config.f(),
+            "--shards",
+            self.config.shards(),
             "--transitive_conflicts",
             self.config.transitive_conflicts(),
             "--execute_at_commit",
