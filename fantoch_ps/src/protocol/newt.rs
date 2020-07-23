@@ -13,6 +13,7 @@ use fantoch::protocol::{
     Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
+use fantoch::util;
 use fantoch::{log, singleton};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
@@ -602,8 +603,13 @@ impl<KC: KeyClocks> Newt<KC> {
             }
         };
 
-        if self.gc_running() {
-            // running gc, so notify self with the committed dot
+        // check if this dot is targetted to my shard
+        // TODO: fix this once we implement recovery for partial replication
+        let my_shard = util::process_ids(self.bp.shard_id, self.bp.config.n())
+            .any(|peer_id| peer_id == dot.source());
+
+        if self.gc_running() && my_shard {
+            // if running gc and this dot belongs to my shard, then notify self (i.e. the worker rensposible for GC) with the committed dot
             actions.reserve_exact(1);
             actions.push(Action::ToForward {
                 msg: Message::MCommitDot { dot },
@@ -865,7 +871,6 @@ impl<KC: KeyClocks> Newt<KC> {
             _time.millis()
         );
         assert_eq!(from, self.bp.process_id);
-        // TODO only call this if dot belongs to this shard
         self.cmds.commit(dot);
         vec![]
     }
@@ -1302,7 +1307,6 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
-    use fantoch::util;
 
     #[test]
     fn sequential_newt_test() {
