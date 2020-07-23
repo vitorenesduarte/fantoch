@@ -28,7 +28,7 @@ tsunami = { version = "0.11.0-beta.7", default-features = false, features = ["aw
 fantoch = { path = "../fantoch" }
 
 [[bin]]
-name = "bench"
+name = "main"
 required-features = ["exp"]
 
 [[bin]]
