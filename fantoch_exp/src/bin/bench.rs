@@ -127,10 +127,19 @@ async fn main() -> Result<(), Report> {
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
-    let clients_per_region =
-        vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 32];
+    let clients_per_region = vec![
+        256,
+        1024,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 64,
+        1024 * 80,
+        1024 * 96,
+    ];
     let shards_per_command = 1;
-    let shard_count = 2;
+    let shard_count = 1;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;

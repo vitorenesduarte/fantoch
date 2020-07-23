@@ -7,7 +7,7 @@ pub use dstat::Dstat;
 pub use exp_data::ExperimentData;
 pub use results_db::ResultsDB;
 
-use fantoch::client::KeyGen;
+use fantoch::client::{KeyGen, ShardGen};
 use fantoch_exp::Protocol;
 
 #[derive(Clone, Copy)]
@@ -16,8 +16,10 @@ pub struct Search {
     pub f: usize,
     pub protocol: Protocol,
     clients_per_region: Option<usize>,
+    shards_per_command: Option<usize>,
+    shard_gen: Option<ShardGen>,
+    keys_per_shard: Option<usize>,
     key_gen: Option<KeyGen>,
-    keys_per_command: Option<usize>,
     payload_size: Option<usize>,
 }
 
@@ -28,8 +30,10 @@ impl Search {
             f,
             protocol,
             clients_per_region: None,
+            shards_per_command: None,
+            shard_gen: None,
+            keys_per_shard: None,
             key_gen: None,
-            keys_per_command: None,
             payload_size: None,
         }
     }
@@ -42,13 +46,26 @@ impl Search {
         self
     }
 
-    pub fn key_gen(&mut self, key_gen: KeyGen) -> &mut Self {
-        self.key_gen = Some(key_gen);
+    pub fn shards_per_command(
+        &mut self,
+        shards_per_command: usize,
+    ) -> &mut Self {
+        self.shards_per_command = Some(shards_per_command);
         self
     }
 
-    pub fn keys_per_command(&mut self, keys_per_command: usize) -> &mut Self {
-        self.keys_per_command = Some(keys_per_command);
+    pub fn shard_gen(&mut self, key_gen: ShardGen) -> &mut Self {
+        self.shard_gen = Some(key_gen);
+        self
+    }
+
+    pub fn keys_per_shard(&mut self, keys_per_shard: usize) -> &mut Self {
+        self.keys_per_shard = Some(keys_per_shard);
+        self
+    }
+
+    pub fn key_gen(&mut self, key_gen: KeyGen) -> &mut Self {
+        self.key_gen = Some(key_gen);
         self
     }
 

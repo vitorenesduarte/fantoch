@@ -662,6 +662,16 @@ async fn pull_metrics_files(
         .await
         .wrap_err("remove files")?;
 
+    if let Some(process_id) = process_id {
+        tracing::info!(
+            "all process {:?} metric files pulled in region {:?}",
+            process_id,
+            region
+        );
+    } else {
+        tracing::info!("all client metric files pulled in region {:?}", region);
+    }
+
     Ok(())
 }
 

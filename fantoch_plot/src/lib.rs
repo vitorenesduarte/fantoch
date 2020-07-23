@@ -83,7 +83,10 @@ pub fn latency_plot<R>(
     const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
 
     // let combinations = combinations(n);
-    assert!(searches.len() <= MAX_COMBINATIONS);
+    assert!(
+        searches.len() <= MAX_COMBINATIONS,
+        "latency_plot: expected less searches than the max number of combinations"
+    );
 
     // compute x:
     let x: Vec<_> = (0..n).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
@@ -119,7 +122,10 @@ pub fn latency_plot<R>(
 
     for (shift, search) in searches {
         // check `n`
-        assert_eq!(search.n, n);
+        assert_eq!(
+            search.n, n,
+            "latency_plot: value of n in search doesn't match the provided"
+        );
         let mut exp_data = db.find(search)?;
         match exp_data.len() {
             0 => {
@@ -180,9 +186,17 @@ pub fn latency_plot<R>(
     // set xticks
     ax.set_xticks(x, None)?;
 
-    // set x labels:
-    // - check the number of regions is correct
-    assert_eq!(all_regions.len(), n);
+    // only do the following check if we had at least one search matching
+    if plotted > 0 {
+        // set x labels:
+        // - check the number of regions is correct
+        assert_eq!(
+            all_regions.len(),
+            n,
+            "latency_plot: the number of regions doesn't match the n provided"
+        );
+    }
+
     let mut regions: Vec<_> = all_regions.into_iter().collect();
     regions.sort();
     // map regions to their pretty name
@@ -198,7 +212,6 @@ pub fn latency_plot<R>(
 
     // end plot
     end_plot(output_file, py, &plt, Some(fig))?;
-
     Ok(results)
 }
 
@@ -389,7 +402,7 @@ pub fn throughput_latency_plot(
 
     for mut search in searches {
         // check `n`
-        assert_eq!(search.n, n);
+        assert_eq!(search.n, n, "throughput_latency_plot: value of n in search doesn't match the provided");
 
         // keep track of average latency that will be used to compute throughput
         let mut avg_latency = Vec::with_capacity(clients_per_region.len());
@@ -647,7 +660,7 @@ fn add_legend(
         5 => (3, two_rows),
         6 => (3, two_rows),
         _ => panic!(
-            "do_add_legend: unsupported number of plotted instances: {}",
+            "add_legend: unsupported number of plotted instances: {}",
             plotted
         ),
     };

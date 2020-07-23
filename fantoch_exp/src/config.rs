@@ -392,8 +392,8 @@ impl fmt::Debug for ExperimentConfig {
 // create filename prefix
 pub fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
     if let Some(process_id) = process_id {
-        format!("server_{:?}_{}", region, process_id)
+        format!("{:?}_server_{}", region, process_id)
     } else {
-        format!("client_{:?}", region)
+        format!("{:?}_client", region)
     }
 }

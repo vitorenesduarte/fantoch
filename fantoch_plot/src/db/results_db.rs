@@ -87,19 +87,36 @@ impl ResultsDB {
                     }
                 }
 
-                // filter out configurations with different key generator (if
-                // set)
-                if let Some(key_gen) = search.key_gen {
-                    if exp_config.workload.key_gen() != key_gen {
+                // filter out configurations with different shards_per_comman
+                // d(if set)
+                if let Some(shards_per_command) = search.shards_per_command {
+                    if exp_config.workload.shards_per_command()
+                        != shards_per_command
+                    {
                         return false;
                     }
                 }
 
-                // filter out configurations with different keys_per_command (if
+                // filter out configurations with different shard generator (if
                 // set)
-                if let Some(keys_per_command) = search.keys_per_command {
-                    if exp_config.workload.keys_per_shard() != keys_per_command
-                    {
+                if let Some(shard_gen) = search.shard_gen {
+                    if exp_config.workload.shard_gen() != shard_gen {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different keys_per_shard (if
+                // set)
+                if let Some(keys_per_shard) = search.keys_per_shard {
+                    if exp_config.workload.keys_per_shard() != keys_per_shard {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different key generator (if
+                // set)
+                if let Some(key_gen) = search.key_gen {
+                    if exp_config.workload.key_gen() != key_gen {
                         return false;
                     }
                 }
@@ -167,6 +184,7 @@ impl ResultsDB {
             let process = Self::load_dstat(&timestamp, prefix, start, end)?;
             process_dstats.insert(process_id, process);
         }
+
         // return experiment data
         Ok(ExperimentData::new(
             &exp_config.planet,
