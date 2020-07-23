@@ -112,6 +112,7 @@ impl<'a> Machines<'a> {
 
         // compute the region index
         region_indexes.sort();
+        region_indexes.dedup();
         assert_eq!(
             region_indexes.len(),
             1,
