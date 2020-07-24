@@ -2,7 +2,7 @@ use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{ClientId, ProcessId};
+use crate::id::{ClientId, ProcessId, ShardId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
@@ -17,7 +17,7 @@ use std::time::Duration;
 #[derive(PartialEq, Eq)]
 enum ScheduleAction<P: Protocol + Eq> {
     SubmitToProc(ProcessId, Command),
-    SendToProc(ProcessId, ProcessId, P::Message),
+    SendToProc(ProcessId, ShardId, ProcessId, P::Message),
     SendToClient(ClientId, CommandResult),
     PeriodicEvent(ProcessId, P::PeriodicEvent, Duration),
 }
@@ -61,7 +61,7 @@ where
         planet: Planet,
         config: Config,
         workload: Workload,
-        clients_per_region: usize,
+        clients_per_process: usize,
         mut process_regions: Vec<Region>,
         client_regions: Vec<Region>,
     ) -> Self {
@@ -76,13 +76,17 @@ where
         let mut processes = Vec::with_capacity(config.n());
         let mut periodic_actions = Vec::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         process_regions.sort();
         let to_discover: Vec<_> = process_regions
             .into_iter()
-            .zip(util::process_ids(config.n()))
+            .zip(util::process_ids(shard_id, config.n()))
             .map(|(region, process_id)| {
                 // create process and save it
-                let (process, process_events) = P::new(process_id, config);
+                let (process, process_events) =
+                    P::new(process_id, shard_id, config);
                 processes.push((region.clone(), process));
 
                 // save periodic actions
@@ -93,12 +97,16 @@ where
                 );
 
                 log!("id {} for region {:?}", process_id, region);
-                (process_id, region)
+                (process_id, shard_id, region)
             })
             .collect();
 
         // create processs to region mapping
-        let process_to_region = to_discover.clone().into_iter().collect();
+        let process_to_region = to_discover
+            .clone()
+            .into_iter()
+            .map(|(process_id, _, region)| (process_id, region))
+            .collect();
 
         // register processes
         processes.into_iter().for_each(|(region, mut process)| {
@@ -112,8 +120,12 @@ where
 
             // create executor for this process
             let executors = 1;
-            let executor =
-                <P::Executor as Executor>::new(process.id(), config, executors);
+            let executor = <P::Executor as Executor>::new(
+                process.id(),
+                process.shard_id(),
+                config,
+                executors,
+            );
 
             // and register both
             simulation.register_process(process, executor);
@@ -123,7 +135,7 @@ where
         let mut client_id = 0;
         let mut client_to_region = HashMap::new();
         for region in client_regions {
-            for _ in 1..=clients_per_region {
+            for _ in 1..=clients_per_process {
                 // create client
                 client_id += 1;
                 let mut client = Client::new(client_id, workload);
@@ -133,7 +145,7 @@ where
                     &planet,
                     to_discover.clone(),
                 );
-                assert!(client.discover(sorted));
+                client.discover(sorted);
                 // and register it
                 simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());
@@ -208,6 +220,8 @@ where
                     // get process and executor
                     let (process, executor, time) =
                         self.simulation.get_process(process_id);
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
 
                     // register command in the executor
                     executor.wait_for(&cmd);
@@ -216,17 +230,26 @@ where
                     let protocol_actions = process.submit(None, cmd, time);
                     self.schedule_protocol_actions(
                         process_id,
+                        shard_id,
                         MessageRegion::Process(process_id),
                         protocol_actions,
                     );
                 }
-                ScheduleAction::SendToProc(from, process_id, msg) => {
+                ScheduleAction::SendToProc(
+                    from,
+                    from_shard_id,
+                    process_id,
+                    msg,
+                ) => {
                     // get process and executor
                     let (process, executor, time) =
                         self.simulation.get_process(process_id);
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
 
                     // handle message and get ready commands
-                    let protocol_actions = process.handle(from, msg, time);
+                    let protocol_actions =
+                        process.handle(from, from_shard_id, msg, time);
 
                     // handle new execution info in the executor
                     let to_executor = process.to_executor();
@@ -239,6 +262,7 @@ where
                     // schedule new messages
                     self.schedule_protocol_actions(
                         process_id,
+                        shard_id,
                         MessageRegion::Process(process_id),
                         protocol_actions,
                     );
@@ -285,12 +309,15 @@ where
                     // get process
                     let (process, _, time) =
                         self.simulation.get_process(process_id);
+                    assert_eq!(process.id(), process_id);
+                    let shard_id = process.shard_id();
 
                     // handle event
                     let protocol_actions =
                         process.handle_event(event.clone(), time);
                     self.schedule_protocol_actions(
                         process_id,
+                        shard_id,
                         MessageRegion::Process(process_id),
                         protocol_actions,
                     );
@@ -331,6 +358,7 @@ where
     fn schedule_protocol_actions(
         &mut self,
         process_id: ProcessId,
+        shard_id: ShardId,
         from_region: MessageRegion,
         protocol_actions: Vec<Action<P>>,
     ) {
@@ -342,6 +370,7 @@ where
                         // otherwise, create action and schedule it
                         let action = ScheduleAction::SendToProc(
                             process_id,
+                            shard_id,
                             to,
                             msg.clone(),
                         );
@@ -353,8 +382,9 @@ where
                     });
                 }
                 Action::ToForward { msg } => {
-                    let action =
-                        ScheduleAction::SendToProc(process_id, process_id, msg);
+                    let action = ScheduleAction::SendToProc(
+                        process_id, shard_id, process_id, msg,
+                    );
                     let from_region = from_region.clone();
                     let to_region = from_region.clone();
                     self.schedule_message(from_region, to_region, action);
@@ -523,9 +553,16 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
             ScheduleAction::SubmitToProc(process_id, cmd) => {
                 write!(f, "SubmitToProc({}, {:?})", process_id, cmd)
             }
-            ScheduleAction::SendToProc(from, to, msg) => {
-                write!(f, "SendToProc({}, {}, {:?})", from, to, msg)
-            }
+            ScheduleAction::SendToProc(
+                from_process_id,
+                from_shard_id,
+                to,
+                msg,
+            ) => write!(
+                f,
+                "SendToProc({}, {}, {}, {:?})",
+                from_process_id, from_shard_id, to, msg
+            ),
             ScheduleAction::SendToClient(client_id, cmd_result) => {
                 write!(f, "SendToClient({}, {:?})", client_id, cmd_result)
             }
@@ -541,11 +578,11 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::KeyGen;
+    use crate::client::{KeyGen, ShardGen};
     use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
 
-    fn run(f: usize, clients_per_region: usize) -> (Histogram, Histogram) {
+    fn run(f: usize, clients_per_process: usize) -> (Histogram, Histogram) {
         // planet
         let planet = Planet::new();
 
@@ -557,14 +594,17 @@ mod tests {
         config.set_gc_interval(Duration::from_millis(100));
 
         // clients workload
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shard_count: 1 };
+        let keys_per_shard = 1;
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
         let total_commands = 1000;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );
@@ -585,7 +625,7 @@ mod tests {
             planet,
             config,
             workload,
-            clients_per_region,
+            clients_per_process,
             process_regions,
             client_regions,
         );
@@ -603,7 +643,7 @@ mod tests {
             .expect("there should stats from us-west2 region");
 
         // check the number of issued commands
-        let expected = total_commands * clients_per_region;
+        let expected = total_commands * clients_per_process;
         assert_eq!(us_west1_issued, expected);
         assert_eq!(us_west2_issued, expected);
 
@@ -626,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn runner_single_client_per_region() {
+    fn runner_single_client_per_process() {
         // expected stats:
         // - client us-west1: since us-west1 is a process, from client's
         //   perspective it should be the latency of accessing the coordinator
@@ -636,39 +676,41 @@ mod tests {
         //   us-west1 (12ms + 12ms) plus the latency of accessing the closest
         //   fast quorum
 
-        // clients per region
-        let clients_per_region = 1;
+        // clients per process
+        let clients_per_process = 1;
 
         // f = 0
         let f = 0;
-        let (us_west1, us_west2) = run(f, clients_per_region);
+        let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(0.0));
         assert_eq!(us_west2.mean(), F64::new(24.0));
 
         // f = 1
         let f = 1;
-        let (us_west1, us_west2) = run(f, clients_per_region);
+        let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(34.0));
         assert_eq!(us_west2.mean(), F64::new(58.0));
 
         // f = 2
         let f = 2;
-        let (us_west1, us_west2) = run(f, clients_per_region);
+        let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(118.0));
         assert_eq!(us_west2.mean(), F64::new(142.0));
     }
 
     #[test]
-    fn runner_multiple_clients_per_region() {
+    fn runner_multiple_clients_per_process() {
         // 1 client per region
         let f = 1;
-        let clients_per_region = 1;
-        let (us_west1_with_one, us_west2_with_one) = run(f, clients_per_region);
+        let clients_per_process = 1;
+        let (us_west1_with_one, us_west2_with_one) =
+            run(f, clients_per_process);
 
         // 10 clients per region
         let f = 1;
-        let clients_per_region = 10;
-        let (us_west1_with_ten, us_west2_with_ten) = run(f, clients_per_region);
+        let clients_per_process = 10;
+        let (us_west1_with_ten, us_west2_with_ten) =
+            run(f, clients_per_process);
 
         // check stats are the same
         assert_eq!(us_west1_with_one.mean(), us_west1_with_ten.mean());

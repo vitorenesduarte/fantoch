@@ -6,6 +6,9 @@ edition = "2018"
 authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
+# by default, run the main binary
+default-run = "main"
+
 [features]
 default = ["exp"]
 exp = ["futures", "rusoto_core", "rusoto_credential", "rusoto_ec2", "tracing", "tracing-futures", "tracing-subscriber", "tokio", "tsunami"]
@@ -28,7 +31,7 @@ tsunami = { version = "0.11.0-beta.7", default-features = false, features = ["aw
 fantoch = { path = "../fantoch" }
 
 [[bin]]
-name = "bench"
+name = "main"
 required-features = ["exp"]
 
 [[bin]]

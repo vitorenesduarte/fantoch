@@ -1,4 +1,4 @@
-use fantoch::client::{KeyGen, Workload};
+use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::metrics::Histogram;
@@ -128,13 +128,17 @@ fn newt_real_time(aws: bool) {
                 }
 
                 // clients workload
+                let shards_per_command = 1;
+                let shard_gen = ShardGen::Random { shard_count: 1 };
+                let keys_per_shard = 1;
                 let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
-                let keys_per_command = 1;
                 let total_commands = 500;
                 let payload_size = 0;
                 let workload = Workload::new(
+                    shards_per_command,
+                    shard_gen,
+                    keys_per_shard,
                     key_gen,
-                    keys_per_command,
                     total_commands,
                     payload_size,
                 );
@@ -203,12 +207,20 @@ fn equidistant<P: Protocol + Eq>(protocol_name: &str) {
     let total_clients = 1000;
 
     // clients workload
+    let shards_per_command = 1;
+    let shard_gen = ShardGen::Random { shard_count: 1 };
+    let keys_per_shard = 1;
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
-    let keys_per_command = 1;
     let total_commands = 500;
     let payload_size = 0;
-    let workload =
-        Workload::new(key_gen, keys_per_command, total_commands, payload_size);
+    let workload = Workload::new(
+        shards_per_command,
+        shard_gen,
+        keys_per_shard,
+        key_gen,
+        total_commands,
+        payload_size,
+    );
 
     for &(n, f) in &configs {
         // create planet and regions
@@ -266,12 +278,20 @@ fn increasing_regions<P: Protocol + Eq>(protocol_name: &str) {
     let f = 1;
 
     // clients workload
+    let shards_per_command = 1;
+    let shard_gen = ShardGen::Random { shard_count: 1 };
+    let keys_per_shard = 1;
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
-    let keys_per_command = 1;
     let total_commands = 500;
     let payload_size = 0;
-    let workload =
-        Workload::new(key_gen, keys_per_command, total_commands, payload_size);
+    let workload = Workload::new(
+        shards_per_command,
+        shard_gen,
+        keys_per_shard,
+        key_gen,
+        total_commands,
+        payload_size,
+    );
 
     // clients per region
     let clients_per_region = 1000 / 13;

@@ -1,20 +1,32 @@
-use crate::hash_map::{self, HashMap};
-use crate::id::Rifl;
+use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::{self, FromIterator};
 
+const DEFAULT_SHARD_ID: ShardId = 0;
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
-    ops: HashMap<Key, KVOp>,
+    shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
+    // field used to output and empty iterator of keys when rustc can't figure
+    // out what we mean
+    _empty_keys: HashMap<Key, KVOp>,
 }
 
 impl Command {
     /// Create a new `Command`.
-    pub fn new(rifl: Rifl, ops: HashMap<Key, KVOp>) -> Self {
-        Self { rifl, ops }
+    pub fn new(
+        rifl: Rifl,
+        shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
+    ) -> Self {
+        Self {
+            rifl,
+            shard_to_ops,
+            _empty_keys: HashMap::new(),
+        }
     }
 
     /// Create a new `Command` from an iterator.
@@ -22,7 +34,11 @@ impl Command {
         rifl: Rifl,
         iter: I,
     ) -> Self {
-        Self::new(rifl, HashMap::from_iter(iter))
+        // store all keys in the default shard
+        let inner = HashMap::from_iter(iter);
+        let shard_to_ops =
+            HashMap::from_iter(std::iter::once((DEFAULT_SHARD_ID, inner)));
+        Self::new(rifl, shard_to_ops)
     }
 
     /// Creates a get command.
@@ -53,56 +69,89 @@ impl Command {
         self.rifl
     }
 
-    /// Returns references to list of keys modified by this command.
-    pub fn keys(&self) -> impl Iterator<Item = &Key> {
-        self.ops.iter().map(|(key, _)| key)
-    }
-
     /// Checks if `key` is accessed by this command.
     #[allow(clippy::ptr_arg)]
-    pub fn contains_key(&self, key: &Key) -> bool {
-        self.ops.contains_key(key)
+    pub fn contains_key(&self, shard_id: ShardId, key: &Key) -> bool {
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.contains_key(key))
+            .unwrap_or(false)
     }
 
     /// Checks if a command conflicts with another given command.
     pub fn conflicts(&self, other: &Command) -> bool {
-        self.ops.iter().any(|(key, _)| other.ops.contains_key(key))
+        self.shard_to_ops.iter().any(|(shard_id, shard_ops)| {
+            shard_ops
+                .iter()
+                .any(|(key, _)| other.contains_key(*shard_id, key))
+        })
     }
 
-    /// Returns the number of keys accessed by this command.
-    pub fn key_count(&self) -> usize {
-        self.ops.len()
+    /// Returns the number of keys accessed by this command on the shard
+    /// provided.
+    pub fn key_count(&self, shard_id: ShardId) -> usize {
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.len())
+            .unwrap_or(0)
+    }
+
+    /// Returns references to the keys modified by this command on the shard
+    /// provided.
+    pub fn keys(&self, shard_id: ShardId) -> impl Iterator<Item = &Key> {
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.keys())
+            .unwrap_or_else(|| self._empty_keys.keys())
+    }
+
+    /// Returns the number of shards accessed by this command.
+    pub fn shard_count(&self) -> usize {
+        self.shard_to_ops.len()
+    }
+
+    /// Returns the shards accessed by this command.
+    pub fn shards(&self) -> impl Iterator<Item = &ShardId> {
+        self.shard_to_ops.keys()
     }
 
     /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
-    pub fn execute(self, store: &mut KVStore) -> CommandResult {
-        let key_count = self.ops.len();
-        let mut results = HashMap::new();
-        for (key, op) in self.ops {
-            let partial_result = store.execute(&key, op);
-            results.insert(key, partial_result);
-        }
+    pub fn execute(
+        self,
+        shard_id: ShardId,
+        store: &mut KVStore,
+    ) -> CommandResult {
+        let rifl = self.rifl;
+        let key_count = self.shard_to_ops.len();
+        let results = self
+            .into_iter(shard_id)
+            .map(|(key, op)| {
+                let partial_result = store.execute(&key, op);
+                (key, partial_result)
+            })
+            .collect();
         CommandResult {
-            rifl: self.rifl,
+            rifl,
             key_count,
             results,
         }
     }
-}
 
-impl IntoIterator for Command {
-    type Item = (Key, KVOp);
-    type IntoIter = hash_map::IntoIter<Key, KVOp>;
-
-    /// Returns a `Command` into-iterator.
-    fn into_iter(self) -> Self::IntoIter {
-        self.ops.into_iter()
+    // Creates an iterator without ops on keys that do not belong to `shard`.
+    pub fn into_iter(
+        mut self,
+        shard_id: ShardId,
+    ) -> impl Iterator<Item = (Key, KVOp)> {
+        self.shard_to_ops
+            .remove(&shard_id)
+            .map(|shard_ops| shard_ops.into_iter())
+            .unwrap_or_else(|| self._empty_keys.into_iter())
     }
 }
 
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?} -> {:?})", self.rifl, self.ops.keys())
+        write!(f, "({:?} -> {:?})", self.rifl, self.shard_to_ops.keys())
     }
 }
 

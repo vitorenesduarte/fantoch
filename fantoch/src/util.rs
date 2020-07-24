@@ -1,4 +1,4 @@
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::kvs::Key;
 use crate::planet::{Planet, Region};
 use crate::HashMap;
@@ -51,11 +51,25 @@ pub fn key_hash(key: &Key) -> u64 {
     hasher.finish()
 }
 
-/// Returns an iterator with all process identifiers in a system with `n`
-/// processes.
-pub fn process_ids(n: usize) -> impl Iterator<Item = ProcessId> {
+/// Returns an iterator with all process identifiers in this shard in a system
+/// with `n` processes.
+pub fn process_ids(
+    shard_id: ShardId,
+    n: usize,
+) -> impl Iterator<Item = ProcessId> {
     // compute process identifiers, making sure ids are non-zero
-    (1..=n).map(|id| id as ProcessId)
+    let shift = n * shard_id as usize;
+    (1..=n).map(move |id| (id + shift) as ProcessId)
+}
+
+pub fn all_process_ids(
+    shard_count: usize,
+    n: usize,
+) -> impl Iterator<Item = (ProcessId, ShardId)> {
+    (0..shard_count).flat_map(move |shard_id| {
+        let shard_id = shard_id as ShardId;
+        process_ids(shard_id, n).map(move |process_id| (process_id, shard_id))
+    })
 }
 
 /// Converts a reprentation of dots to the actual dots.
@@ -69,8 +83,8 @@ pub fn dots(repr: Vec<(ProcessId, u64, u64)>) -> impl Iterator<Item = Dot> {
 pub fn sort_processes_by_distance(
     region: &Region,
     planet: &Planet,
-    mut processes: Vec<(ProcessId, Region)>,
-) -> Vec<ProcessId> {
+    mut processes: Vec<(ProcessId, ShardId, Region)>,
+) -> Vec<(ProcessId, ShardId)> {
     // TODO the following computation could be cached on `planet`
     let indexes: HashMap<_, _> = planet
         // get all regions sorted by distance from `region`
@@ -84,7 +98,7 @@ pub fn sort_processes_by_distance(
 
     // use the region order index (based on distance) to order `processes`
     // - if two `processes` are from the same region, they're sorted by id
-    processes.sort_unstable_by(|(id_a, a), (id_b, b)| {
+    processes.sort_unstable_by(|(id_a, _, a), (id_b, _, b)| {
         if a == b {
             id_a.cmp(id_b)
         } else {
@@ -94,7 +108,10 @@ pub fn sort_processes_by_distance(
         }
     });
 
-    processes.into_iter().map(|(id, _)| id).collect()
+    processes
+        .into_iter()
+        .map(|(id, shard_id, _)| (id, shard_id))
+        .collect()
 }
 
 #[cfg(test)]
@@ -104,10 +121,16 @@ pub mod tests {
     #[test]
     fn process_ids_test() {
         let n = 3;
-        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(process_ids(0, n).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(process_ids(1, n).collect::<Vec<_>>(), vec![4, 5, 6]);
+        assert_eq!(process_ids(3, n).collect::<Vec<_>>(), vec![10, 11, 12]);
 
         let n = 5;
-        assert_eq!(process_ids(n).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(process_ids(0, n).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(
+            process_ids(2, n).collect::<Vec<_>>(),
+            vec![11, 12, 13, 14, 15]
+        );
     }
 
     #[test]
@@ -133,14 +156,26 @@ pub mod tests {
             (16, Region::new("us-west2")),
         ];
 
+        let shard_id = 0;
+        // map them all to the same shard
+        let processes = processes
+            .into_iter()
+            .map(|(process_id, region)| (process_id, shard_id, region))
+            .collect();
+
         // sort processes
         let region = Region::new("europe-west3");
         let planet = Planet::new();
         let sorted = sort_processes_by_distance(&region, &planet, processes);
 
-        assert_eq!(
-            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2],
-            sorted
-        );
+        let expected =
+            vec![8, 9, 6, 7, 5, 14, 10, 13, 12, 15, 16, 11, 1, 0, 4, 3, 2];
+        // map them all to the same shard
+        let expected: Vec<_> = expected
+            .into_iter()
+            .map(|process_id| (process_id, shard_id))
+            .collect();
+
+        assert_eq!(expected, sorted);
     }
 }

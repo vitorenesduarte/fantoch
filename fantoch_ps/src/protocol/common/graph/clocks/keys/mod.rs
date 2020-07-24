@@ -9,14 +9,14 @@ pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use fantoch::command::Command;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::util;
 use std::fmt::Debug;
 use threshold::VClock;
 
 pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance given the number of processes.
-    fn new(n: usize) -> Self;
+    fn new(shard_id: ShardId, n: usize) -> Self;
 
     /// Adds a command's `Dot` to the clock of each key touched by the command,
     /// returning the set of local conflicting commands including past in them
@@ -37,8 +37,8 @@ pub trait KeyClocks: Debug + Clone {
 }
 
 // Creates a bottom clock of size `n`.
-fn bottom_clock(n: usize) -> VClock<ProcessId> {
-    let ids = util::process_ids(n);
+fn bottom_clock(shard_id: ShardId, n: usize) -> VClock<ProcessId> {
+    let ids = util::process_ids(shard_id, n);
     VClock::with(ids)
 }
 
@@ -62,8 +62,9 @@ mod tests {
 
     fn keys_clocks_flow<KC: KeyClocks>() {
         // create key clocks
+        let shard_id = 0;
         let n = 1;
-        let mut clocks = KC::new(n);
+        let mut clocks = KC::new(shard_id, n);
 
         // create dot gen
         let process_id = 1;
@@ -254,7 +255,8 @@ mod tests {
         // create clocks:
         // - clocks have on entry per worker and each worker has its own
         //   `DotGen`
-        let clocks = K::new(nthreads);
+        let shard_id = 0;
+        let clocks = K::new(shard_id, nthreads);
 
         // spawn workers
         let handles: Vec<_> = (1..=nthreads)
@@ -280,7 +282,9 @@ mod tests {
             let clocks = handle.join().expect("worker should finish");
             for (dot, cmd, clock) in clocks {
                 if let Some(cmd) = &cmd {
-                    all_keys.extend(cmd.keys().cloned().map(|key| Some(key)));
+                    all_keys.extend(
+                        cmd.keys(shard_id).cloned().map(|key| Some(key)),
+                    );
                 } else {
                     all_keys.insert(None);
                 }
@@ -298,7 +302,7 @@ mod tests {
                     (Some(key), Some(cmd)) => {
                         // if we have a key and not a noop, include command if
                         // it accesses the key
-                        if cmd.contains_key(&key) {
+                        if cmd.contains_key(shard_id, &key) {
                             Some((dot, clock))
                         } else {
                             None

@@ -1,12 +1,13 @@
 use super::KeyClocks;
 use fantoch::command::Command;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::Key;
 use fantoch::HashMap;
 use threshold::VClock;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyClocks {
+    shard_id: ShardId,
     n: usize, // number of processes
     clocks: HashMap<Key, VClock<ProcessId>>,
     noop_clock: VClock<ProcessId>,
@@ -14,11 +15,12 @@ pub struct SequentialKeyClocks {
 
 impl KeyClocks for SequentialKeyClocks {
     /// Create a new `SequentialKeyClocks` instance.
-    fn new(n: usize) -> Self {
+    fn new(shard_id: ShardId, n: usize) -> Self {
         Self {
+            shard_id,
             n,
             clocks: HashMap::new(),
-            noop_clock: super::bottom_clock(n),
+            noop_clock: super::bottom_clock(shard_id, n),
         }
     }
 
@@ -58,14 +60,15 @@ impl SequentialKeyClocks {
     fn add(&mut self, dot: Dot, cmd: &Option<Command>) {
         match cmd {
             Some(cmd) => {
-                cmd.keys().for_each(|key| {
+                cmd.keys(self.shard_id).for_each(|key| {
                     // get current clock for this key
                     let clock = match self.clocks.get_mut(key) {
                         Some(clock) => clock,
                         None => {
                             // if key is not present, create bottom vclock for
                             // this key
-                            let bottom = super::bottom_clock(self.n);
+                            let bottom =
+                                super::bottom_clock(self.shard_id, self.n);
                             // and insert it
                             self.clocks.entry(key.clone()).or_insert(bottom)
                         }
@@ -83,7 +86,7 @@ impl SequentialKeyClocks {
 
     /// Checks the current `clock` for some command.
     fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
-        let clock = super::bottom_clock(self.n);
+        let clock = super::bottom_clock(self.shard_id, self.n);
         self.clock_with_past(cmd, clock)
     }
 
@@ -101,7 +104,7 @@ impl SequentialKeyClocks {
         match cmd {
             Some(cmd) => {
                 // join with the clocks of all keys touched by `cmd`
-                cmd.keys().for_each(|key| {
+                cmd.keys(self.shard_id).for_each(|key| {
                     // if the key is not present, then ignore it
                     if let Some(clock) = self.clocks.get(key) {
                         past.join(clock);

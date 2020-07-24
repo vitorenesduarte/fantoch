@@ -25,7 +25,7 @@ pub use info::{CommandsInfo, Info};
 use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::metrics::Metrics;
 use crate::time::SysTime;
 use crate::HashSet;
@@ -50,12 +50,15 @@ pub trait Protocol: Debug + Clone {
     /// Returns a new instance of the protocol and a list of periodic events.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>);
 
     fn id(&self) -> ProcessId;
 
-    fn discover(&mut self, processes: Vec<ProcessId>) -> bool;
+    fn shard_id(&self) -> ShardId;
+
+    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool;
 
     #[must_use]
     fn submit(
@@ -69,6 +72,7 @@ pub trait Protocol: Debug + Clone {
     fn handle(
         &mut self,
         from: ProcessId,
+        from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>>;
@@ -130,7 +134,7 @@ pub trait PeriodicEventIndex {
     fn index(&self) -> Option<(usize, usize)>;
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Action<P: Protocol> {
     ToSend {
         target: HashSet<ProcessId>,

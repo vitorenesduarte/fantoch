@@ -19,7 +19,7 @@ mod tests {
         Clock::from(
             iter.into_iter()
                 .enumerate()
-                .map(|(actor, seq)| ((actor + 1) as u64, seq)) // make ids 1..=n
+                .map(|(actor, seq)| ((actor + 1) as ProcessId, seq)) // make ids 1..=n
                 .map(|(actor, seq)| (actor, MaxSet::from_event(seq))),
         )
     }

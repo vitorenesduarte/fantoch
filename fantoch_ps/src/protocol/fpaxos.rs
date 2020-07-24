@@ -3,7 +3,7 @@ use crate::protocol::common::synod::{GCTrack, MultiSynod, MultiSynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
     ProtocolMetrics,
@@ -35,6 +35,7 @@ impl Protocol for FPaxos {
     /// Creates a new `FPaxos` process.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
@@ -44,6 +45,7 @@ impl Protocol for FPaxos {
         // create protocol data-structures
         let bp = BaseProcess::new(
             process_id,
+            shard_id,
             config,
             fast_quorum_size,
             write_quorum_size,
@@ -83,9 +85,14 @@ impl Protocol for FPaxos {
         self.bp.process_id
     }
 
+    /// Returns the shard identifier.
+    fn shard_id(&self) -> ShardId {
+        self.bp.shard_id
+    }
+
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
+    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
         self.bp.discover(processes)
     }
 
@@ -103,6 +110,7 @@ impl Protocol for FPaxos {
     fn handle(
         &mut self,
         from: ProcessId,
+        _from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
@@ -191,14 +199,14 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, ballot, slot, cmd, time))]
+    #[instrument(skip(self, ballot, slot, cmd, _time))]
     fn handle_mspawn_commander(
         &mut self,
         from: ProcessId,
         ballot: u64,
         slot: u64,
         cmd: Command,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {} | time={}",
@@ -207,7 +215,7 @@ impl FPaxos {
             slot,
             cmd,
             from,
-            time.millis()
+            _time.millis()
         );
         // spawn commander message should come from self
         assert_eq!(from, self.id());
@@ -233,14 +241,14 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, ballot, slot, cmd, time))]
+    #[instrument(skip(self, ballot, slot, cmd, _time))]
     fn handle_maccept(
         &mut self,
         from: ProcessId,
         ballot: u64,
         slot: u64,
         cmd: Command,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MAccept({:?}, {:?}, {:?}) from {} | time={}",
@@ -249,7 +257,7 @@ impl FPaxos {
             slot,
             cmd,
             from,
-            time.millis()
+            _time.millis()
         );
 
         if let Some(msg) = self
@@ -276,13 +284,13 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, ballot, slot, time))]
+    #[instrument(skip(self, ballot, slot, _time))]
     fn handle_maccepted(
         &mut self,
         from: ProcessId,
         ballot: u64,
         slot: u64,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MAccepted({:?}, {:?}) from {} | time={}",
@@ -290,7 +298,7 @@ impl FPaxos {
             ballot,
             slot,
             from,
-            time.millis()
+            _time.millis()
         );
 
         if let Some(msg) = self
@@ -317,19 +325,19 @@ impl FPaxos {
         }
     }
 
-    #[instrument(skip(self, slot, cmd, time))]
+    #[instrument(skip(self, slot, cmd, _time))]
     fn handle_mchosen(
         &mut self,
         slot: u64,
         cmd: Command,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             slot,
             cmd,
-            time.millis()
+            _time.millis()
         );
 
         // create execution info
@@ -352,19 +360,19 @@ impl FPaxos {
         self.bp.config.gc_interval().is_some()
     }
 
-    #[instrument(skip(self, from, committed, time))]
+    #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: u64,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
             from,
-            time.millis()
+            _time.millis()
         );
         self.gc_track.committed_by(from, committed);
         // perform garbage collection of stable slots
@@ -374,15 +382,15 @@ impl FPaxos {
         vec![]
     }
 
-    #[instrument(skip(self, time))]
+    #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(
         &mut self,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            time.millis()
+            _time.millis()
         );
 
         // retrieve the committed slot
@@ -485,7 +493,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::client::{Client, KeyGen, ShardGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
@@ -506,11 +514,14 @@ mod tests {
         let europe_west3 = Region::new("europe-west2");
         let us_west1 = Region::new("europe-west2");
 
+        // there's a single shard
+        let shard_id = 0;
+
         // processes
         let processes = vec![
-            (process_id_1, europe_west2.clone()),
-            (process_id_2, europe_west3.clone()),
-            (process_id_3, us_west1.clone()),
+            (process_id_1, shard_id, europe_west2.clone()),
+            (process_id_2, shard_id, europe_west3.clone()),
+            (process_id_3, shard_id, us_west1.clone()),
         ];
 
         // planet
@@ -528,14 +539,18 @@ mod tests {
         config.set_leader(process_id_1);
 
         // executors
-        let executor_1 = SlotExecutor::new(process_id_1, config, 0);
-        let executor_2 = SlotExecutor::new(process_id_2, config, 0);
-        let executor_3 = SlotExecutor::new(process_id_3, config, 0);
+        let executors = 1;
+        let executor_1 =
+            SlotExecutor::new(process_id_1, shard_id, config, executors);
+        let executor_2 =
+            SlotExecutor::new(process_id_2, shard_id, config, executors);
+        let executor_3 =
+            SlotExecutor::new(process_id_3, shard_id, config, executors);
 
         // fpaxos
-        let (mut fpaxos_1, _) = FPaxos::new(process_id_1, config);
-        let (mut fpaxos_2, _) = FPaxos::new(process_id_2, config);
-        let (mut fpaxos_3, _) = FPaxos::new(process_id_3, config);
+        let (mut fpaxos_1, _) = FPaxos::new(process_id_1, shard_id, config);
+        let (mut fpaxos_2, _) = FPaxos::new(process_id_2, shard_id, config);
+        let (mut fpaxos_3, _) = FPaxos::new(process_id_3, shard_id, config);
 
         // discover processes in all fpaxos
         let sorted = util::sort_processes_by_distance(
@@ -563,14 +578,17 @@ mod tests {
         simulation.register_process(fpaxos_3, executor_3);
 
         // client workload
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shard_count: 1 };
+        let keys_per_shard = 1;
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
         let total_commands = 10;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );
@@ -586,12 +604,13 @@ mod tests {
             &planet,
             processes,
         );
-        assert!(client_1.discover(sorted));
+        client_1.discover(sorted);
 
         // start client
-        let (target, cmd) = client_1
+        let (target_shard, cmd) = client_1
             .next_cmd(&time)
             .expect("there should be a first operation");
+        let target = client_1.shard_process(&target_shard);
 
         // check that `target` is fpaxos 1
         assert_eq!(target, process_id_1);
@@ -610,7 +629,7 @@ mod tests {
         // check that the register created a spawn commander to self and handle
         // it locally
         let mut actions = if let Action::ToForward { msg } = spawn {
-            process.handle(process_id_1, msg, time)
+            process.handle(process_id_1, shard_id, msg, time)
         } else {
             panic!("Action::ToForward not found!");
         };

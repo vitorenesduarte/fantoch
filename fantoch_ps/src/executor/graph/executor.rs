@@ -4,7 +4,7 @@ use fantoch::config::Config;
 use fantoch::executor::{
     Executor, ExecutorMetrics, ExecutorResult, MessageKey,
 };
-use fantoch::id::{Dot, ProcessId, Rifl};
+use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,8 @@ use threshold::VClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
-    execute_at_commit: bool,
+    shard_id: ShardId,
+    config: Config,
     graph: DependencyGraph,
     store: KVStore,
     pending: HashSet<Rifl>,
@@ -22,13 +23,21 @@ pub struct GraphExecutor {
 impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
-    fn new(process_id: ProcessId, config: Config, _executors: usize) -> Self {
-        let graph = DependencyGraph::new(process_id, &config);
+    fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        executors: usize,
+    ) -> Self {
+        assert_eq!(executors, 1);
+
+        let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
         let pending = HashSet::new();
         let metrics = ExecutorMetrics::new();
         Self {
-            execute_at_commit: config.execute_at_commit(),
+            shard_id,
+            config,
             graph,
             store,
             pending,
@@ -46,7 +55,7 @@ impl Executor for GraphExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
-        let to_execute = if self.execute_at_commit {
+        let to_execute = if self.config.execute_at_commit() {
             vec![info.cmd]
         } else {
             // handle each new info
@@ -76,7 +85,7 @@ impl GraphExecutor {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(&mut self.store);
+        let result = cmd.execute(self.shard_id, &mut self.store);
 
         // if it was pending locally, then it's from a client of this
         // process

@@ -190,7 +190,7 @@ impl Leader {
         Self {
             process_id,
             is_leader,
-            ballot,
+            ballot: ballot as Ballot,
             last_slot,
         }
     }
@@ -274,7 +274,7 @@ where
     // identifer.
     fn new(initial_leader: ProcessId) -> Self {
         Self {
-            ballot: initial_leader,
+            ballot: initial_leader as Ballot,
             accepted: HashMap::new(),
         }
     }

@@ -7,7 +7,7 @@ use crate::util;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
     Protocol, ProtocolMetrics,
@@ -42,6 +42,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     /// Creates a new `Atlas` process.
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         config: Config,
     ) -> (Self, Vec<(PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
@@ -50,13 +51,15 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         // create protocol data-structures
         let bp = BaseProcess::new(
             process_id,
+            shard_id,
             config,
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KC::new(config.n());
+        let keys_clocks = KC::new(shard_id, config.n());
         let cmds = CommandsInfo::new(
             process_id,
+            shard_id,
             config.n(),
             config.f(),
             fast_quorum_size,
@@ -87,9 +90,14 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         self.bp.process_id
     }
 
+    /// Returns the shard identifier.
+    fn shard_id(&self) -> ShardId {
+        self.bp.shard_id
+    }
+
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
+    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
         self.bp.discover(processes)
     }
 
@@ -107,6 +115,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     fn handle(
         &mut self,
         from: ProcessId,
+        _from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
@@ -210,7 +219,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, _time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -218,7 +227,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         cmd: Option<Command>,
         quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
@@ -227,7 +236,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             cmd,
             remote_clock,
             from,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -267,13 +276,13 @@ impl<KC: KeyClocks> Atlas<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, clock, time))]
+    #[instrument(skip(self, from, dot, clock, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         clock: VClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
@@ -281,7 +290,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             dot,
             clock,
             from,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -341,20 +350,20 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, value, time))]
+    #[instrument(skip(self, from, dot, value, _time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
         dot: Dot,
         value: ConsensusValue,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
             value.clock,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -391,14 +400,14 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, ballot, value, time))]
+    #[instrument(skip(self, from, dot, ballot, value, _time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
         value: ConsensusValue,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
@@ -406,7 +415,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             dot,
             ballot,
             value.clock,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -441,20 +450,20 @@ impl<KC: KeyClocks> Atlas<KC> {
         vec![Action::ToSend { target, msg }]
     }
 
-    #[instrument(skip(self, from, dot, ballot, time))]
+    #[instrument(skip(self, from, dot, ballot, _time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
         dot: Dot,
         ballot: u64,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
             ballot,
-            time.millis()
+            _time.millis()
         );
 
         // get cmd info
@@ -483,37 +492,37 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, time))]
+    #[instrument(skip(self, from, dot, _time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            time.millis()
+            _time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
         vec![]
     }
 
-    #[instrument(skip(self, from, committed, time))]
+    #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
             from,
-            time.millis()
+            _time.millis()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -528,19 +537,19 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
-    #[instrument(skip(self, from, stable, time))]
+    #[instrument(skip(self, from, stable, _time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
             from,
-            time.millis()
+            _time.millis()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -548,15 +557,15 @@ impl<KC: KeyClocks> Atlas<KC> {
         vec![]
     }
 
-    #[instrument(skip(self, time))]
+    #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(
         &mut self,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            time.millis()
+            _time.millis()
         );
 
         // retrieve the committed clock
@@ -584,9 +593,9 @@ pub struct ConsensusValue {
 }
 
 impl ConsensusValue {
-    fn new(n: usize) -> Self {
+    fn new(shard_id: ShardId, n: usize) -> Self {
         let cmd = None;
-        let clock = VClock::with(util::process_ids(n));
+        let clock = VClock::with(util::process_ids(shard_id, n));
         Self { cmd, clock }
     }
 
@@ -614,12 +623,13 @@ struct AtlasInfo {
 impl Info for AtlasInfo {
     fn new(
         process_id: ProcessId,
+        shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::new(n);
+        let initial_value = ConsensusValue::new(shard_id, n);
         Self {
             status: Status::START,
             quorum: HashSet::new(),
@@ -713,7 +723,7 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::client::{Client, KeyGen, ShardGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
@@ -742,11 +752,14 @@ mod tests {
         let europe_west3 = Region::new("europe-west2");
         let us_west1 = Region::new("europe-west2");
 
+        // there's a single shard
+        let shard_id = 0;
+
         // processes
         let processes = vec![
-            (process_id_1, europe_west2.clone()),
-            (process_id_2, europe_west3.clone()),
-            (process_id_3, us_west1.clone()),
+            (process_id_1, shard_id, europe_west2.clone()),
+            (process_id_2, shard_id, europe_west3.clone()),
+            (process_id_3, shard_id, us_west1.clone()),
         ];
 
         // planet
@@ -761,14 +774,18 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(process_id_1, config, 0);
-        let executor_2 = GraphExecutor::new(process_id_2, config, 0);
-        let executor_3 = GraphExecutor::new(process_id_3, config, 0);
+        let executors = 1;
+        let executor_1 =
+            GraphExecutor::new(process_id_1, shard_id, config, executors);
+        let executor_2 =
+            GraphExecutor::new(process_id_2, shard_id, config, executors);
+        let executor_3 =
+            GraphExecutor::new(process_id_3, shard_id, config, executors);
 
         // atlas
-        let (mut atlas_1, _) = Atlas::<KC>::new(process_id_1, config);
-        let (mut atlas_2, _) = Atlas::<KC>::new(process_id_2, config);
-        let (mut atlas_3, _) = Atlas::<KC>::new(process_id_3, config);
+        let (mut atlas_1, _) = Atlas::<KC>::new(process_id_1, shard_id, config);
+        let (mut atlas_2, _) = Atlas::<KC>::new(process_id_2, shard_id, config);
+        let (mut atlas_3, _) = Atlas::<KC>::new(process_id_3, shard_id, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(
@@ -796,14 +813,17 @@ mod tests {
         simulation.register_process(atlas_3, executor_3);
 
         // client workload
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shard_count: 1 };
+        let keys_per_shard = 1;
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
         let total_commands = 10;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );
@@ -819,12 +839,13 @@ mod tests {
             &planet,
             processes,
         );
-        assert!(client_1.discover(sorted));
+        client_1.discover(sorted);
 
         // start client
-        let (target, cmd) = client_1
+        let (target_shard, cmd) = client_1
             .next_cmd(&time)
             .expect("there should be a first operation");
+        let target = client_1.shard_process(&target_shard);
 
         // check that `target` is atlas 1
         assert_eq!(target, process_id_1);

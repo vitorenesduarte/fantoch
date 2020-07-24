@@ -5,6 +5,9 @@ pub mod workload;
 // `KeyGeneratorState`.
 pub mod key_gen;
 
+// This module contains the definition of `ShardGen`.
+pub mod shard_gen;
+
 // This module contains the definition of `Pending`
 pub mod pending;
 
@@ -15,20 +18,22 @@ pub mod data;
 pub use data::ClientData;
 pub use key_gen::KeyGen;
 pub use pending::Pending;
+pub use shard_gen::ShardGen;
 pub use workload::Workload;
 
 use crate::command::{Command, CommandResult};
-use crate::id::ProcessId;
-use crate::id::{ClientId, RiflGen};
+use crate::id::{ClientId, ProcessId, RiflGen, ShardId};
 use crate::log;
 use crate::time::SysTime;
+use crate::{HashMap, HashSet};
 use key_gen::KeyGenState;
 
 pub struct Client {
     /// id of this client
     client_id: ClientId,
-    /// id of the process this client is connected to
-    process_id: Option<ProcessId>,
+    /// mapping from shard id to the process id of that shard this client is
+    /// connected to
+    connected: HashMap<ShardId, ProcessId>,
     /// rifl id generator
     rifl_gen: RiflGen,
     /// workload configuration
@@ -47,7 +52,7 @@ impl Client {
         // create client
         Self {
             client_id,
-            process_id: None,
+            connected: HashMap::new(),
             rifl_gen: RiflGen::new(client_id),
             workload,
             key_gen_state: workload.key_gen().initial_state(client_id),
@@ -61,30 +66,46 @@ impl Client {
         self.client_id
     }
 
-    /// "Connect" to the closest process.
-    pub fn discover(&mut self, processes: Vec<ProcessId>) -> bool {
-        // set the closest process
-        self.process_id = processes.into_iter().next();
+    /// "Connect" to the closest process on each shard.
+    pub fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) {
+        self.connected = HashMap::new();
+        for (process_id, shard_id) in processes {
+            // only insert the first entry for each shard id (which will be the
+            // closest)
+            if !self.connected.contains_key(&shard_id) {
+                self.connected.insert(shard_id, process_id);
+            }
+        }
+    }
 
-        // check if we have a closest process
-        self.process_id.is_some()
+    /// Retrieves the closest process on this shard.
+    pub fn shard_process(&self, shard_id: &ShardId) -> ProcessId {
+        *self
+            .connected
+            .get(shard_id)
+            .expect("client should be connected to all shards")
     }
 
     /// Generates the next command in this client's workload.
     pub fn next_cmd(
         &mut self,
         time: &dyn SysTime,
-    ) -> Option<(ProcessId, Command)> {
-        self.process_id.and_then(|process_id| {
-            // generate next command in the workload if some process_id
-            self.workload
-                .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
-                .map(|cmd| {
-                    // if a new command was generated, start it in pending
-                    self.pending.start(cmd.rifl(), time);
-                    (process_id, cmd)
-                })
-        })
+    ) -> Option<(ShardId, Command)> {
+        // generate next command in the workload if some process_id
+        self.workload
+            .next_cmd(&mut self.rifl_gen, &mut self.key_gen_state)
+            .map(|(target_shard, cmd)| {
+                // if a new command was generated, start it in pending
+                let rifl = cmd.rifl();
+                log!(
+                    "c{}: new rifl pending {:?} | time = {}",
+                    self.client_id,
+                    rifl,
+                    time.micros()
+                );
+                self.pending.start(rifl, time);
+                (target_shard, cmd)
+            })
     }
 
     /// Handle executed command and return a boolean indicating whether we have
@@ -92,14 +113,23 @@ impl Client {
     /// results.
     pub fn handle(
         &mut self,
-        cmd_result: CommandResult,
+        cmd_results: Vec<CommandResult>,
         time: &dyn SysTime,
     ) -> bool {
+        // make sure that results belong to the same rifl
+        let mut rifls = HashSet::with_capacity(1);
+        for cmd_result in cmd_results {
+            rifls.insert(cmd_result.rifl());
+        }
+        assert_eq!(rifls.len(), 1);
+        let rifl = rifls.into_iter().next().unwrap();
+
         // end command in pending and save command latency
-        let (latency, end_time) = self.pending.end(cmd_result.rifl(), time);
+        let (latency, end_time) = self.pending.end(rifl, time);
         log!(
-            "rifl {:?} ended after {} micros at {}",
-            cmd_result.rifl(),
+            "c{}: rifl {:?} ended after {} micros at {}",
+            self.client_id,
+            rifl,
             latency.as_micros(),
             end_time
         );
@@ -127,18 +157,24 @@ mod tests {
     use crate::planet::{Planet, Region};
     use crate::time::SimTime;
     use crate::util;
+    use std::collections::BTreeMap;
+    use std::iter::FromIterator;
     use std::time::Duration;
 
     // Generates some client.
     fn gen_client(total_commands: usize) -> Client {
         // workload
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shard_count: 1 };
+        let keys_per_shard = 1;
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 1;
         let payload_size = 100;
         let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
             key_gen,
-            keys_per_command,
             total_commands,
             payload_size,
         );
@@ -153,11 +189,16 @@ mod tests {
         // create planet
         let planet = Planet::new();
 
+        // there are two shards
+        let shard_0_id = 0;
+        let shard_1_id = 1;
+
         // processes
         let processes = vec![
-            (0, Region::new("asia-east1")),
-            (1, Region::new("australia-southeast1")),
-            (2, Region::new("europe-west1")),
+            (0, shard_0_id, Region::new("asia-east1")),
+            (1, shard_0_id, Region::new("australia-southeast1")),
+            (2, shard_0_id, Region::new("europe-west1")),
+            (3, shard_1_id, Region::new("europe-west2")),
         ];
 
         // client
@@ -167,14 +208,19 @@ mod tests {
 
         // check discover with empty vec
         let sorted = util::sort_processes_by_distance(&region, &planet, vec![]);
-        assert!(!client.discover(sorted));
-        assert_eq!(client.process_id, None);
+        client.discover(sorted);
+        assert!(client.connected.is_empty());
 
         // check discover with processes
         let sorted =
             util::sort_processes_by_distance(&region, &planet, processes);
-        assert!(client.discover(sorted));
-        assert_eq!(client.process_id, Some(2));
+        dbg!(&sorted);
+        client.discover(sorted);
+        assert_eq!(
+            BTreeMap::from_iter(client.connected),
+            // connected to process 2 on shard 0 and process 3 on shard 1
+            BTreeMap::from_iter(vec![(shard_0_id, 2), (shard_1_id, 3)])
+        );
     }
 
     #[test]
@@ -182,11 +228,14 @@ mod tests {
         // create planet
         let planet = Planet::new();
 
+        // there's a single shard
+        let shard_id = 0;
+
         // processes
         let processes = vec![
-            (0, Region::new("asia-east1")),
-            (1, Region::new("australia-southeast1")),
-            (2, Region::new("europe-west1")),
+            (0, shard_id, Region::new("asia-east1")),
+            (1, shard_id, Region::new("australia-southeast1")),
+            (2, shard_id, Region::new("europe-west1")),
         ];
 
         // client
@@ -203,12 +252,14 @@ mod tests {
         let mut time = SimTime::new();
 
         // creates a fake command result from a command
-        let fake_result = |cmd: Command| CommandResult::new(cmd.rifl(), 0);
+        let fake_result =
+            |cmd: Command| vec![CommandResult::new(cmd.rifl(), 0)];
 
         // start client at time 0
-        let (process_id, cmd) = client
+        let (shard_id, cmd) = client
             .next_cmd(&time)
             .expect("there should a first operation");
+        let process_id = client.shard_process(&shard_id);
         // process_id should be 2
         assert_eq!(process_id, 2);
 
@@ -219,7 +270,8 @@ mod tests {
 
         // check there's next command
         assert!(next.is_some());
-        let (process_id, cmd) = next.unwrap();
+        let (shard_id, cmd) = next.unwrap();
+        let process_id = client.shard_process(&shard_id);
         // process_id should be 2
         assert_eq!(process_id, 2);
 

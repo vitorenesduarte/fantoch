@@ -83,13 +83,15 @@ pub use prelude::{
 };
 
 use crate::client::{Client, ClientData, Workload};
-use crate::command::CommandResult;
+use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
-use crate::id::{AtomicDotGen, ClientId, ProcessId};
+use crate::hash_map::{Entry, HashMap};
+use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
+use crate::log;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
-use crate::{HashMap, HashSet};
+use crate::HashSet;
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
 use std::fmt::Debug;
@@ -101,7 +103,8 @@ use tokio::sync::Semaphore;
 
 pub async fn process<P, A>(
     process_id: ProcessId,
-    sorted_processes: Option<Vec<ProcessId>>,
+    shard_id: ShardId,
+    sorted_processes: Option<Vec<(ProcessId, ShardId)>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -128,6 +131,7 @@ where
     let semaphore = Arc::new(Semaphore::new(0));
     process_with_notify_and_inspect::<P, A, ()>(
         process_id,
+        shard_id,
         sorted_processes,
         ip,
         port,
@@ -154,7 +158,8 @@ where
 #[allow(clippy::too_many_arguments)]
 async fn process_with_notify_and_inspect<P, A, R>(
     process_id: ProcessId,
-    sorted_processes: Option<Vec<ProcessId>>,
+    shard_id: ShardId,
+    sorted_processes: Option<Vec<(ProcessId, ShardId)>>,
     ip: IpAddr,
     port: u16,
     client_port: u16,
@@ -205,9 +210,6 @@ where
     // check ports are different
     assert!(port != client_port);
 
-    // check that n - 1 addresses were set
-    assert_eq!(addresses.len(), config.n() - 1);
-
     // ---------------------
     // start process listener
     let listener = task::listen((ip, port)).await?;
@@ -222,6 +224,8 @@ where
     // connect to all processes
     let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
+        shard_id,
+        config,
         listener,
         addresses,
         reader_to_workers.clone(),
@@ -241,6 +245,7 @@ where
         task::spawn(task::ping::ping_task(
             ping_interval,
             process_id,
+            shard_id,
             ips,
             None,
         ));
@@ -250,13 +255,23 @@ where
         // it for the sorted processes
         let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
             let parent = Some(rx);
-            task::ping::ping_task(ping_interval, process_id, ips, parent)
+            task::ping::ping_task(
+                ping_interval,
+                process_id,
+                shard_id,
+                ips,
+                parent,
+            )
         });
         ask_ping_task(to_ping).await
     };
 
     // check that we have n processes
-    assert_eq!(sorted_processes.len(), config.n());
+    assert_eq!(
+        sorted_processes.len(),
+        config.n() * config.shards(),
+        "sorted processes count should be n * shards"
+    );
 
     // ---------------------
     // start client listener
@@ -296,6 +311,7 @@ where
     // start client listener
     task::client::start_listener(
         process_id,
+        shard_id,
         client_listener,
         atomic_dot_gen,
         client_to_workers,
@@ -335,6 +351,7 @@ where
     // start executors
     task::executor::start_executors::<P>(
         process_id,
+        shard_id,
         config,
         executors,
         worker_to_executors_rxs,
@@ -345,6 +362,7 @@ where
     // start process workers
     let handles = task::process::start_processes::<P, R>(
         process_id,
+        shard_id,
         config,
         sorted_processes,
         reader_to_workers_rxs,
@@ -371,7 +389,9 @@ where
     Ok(())
 }
 
-async fn ask_ping_task(mut to_ping: SortedProcessesSender) -> Vec<ProcessId> {
+async fn ask_ping_task(
+    mut to_ping: SortedProcessesSender,
+) -> Vec<(ProcessId, ShardId)> {
     let (tx, mut rx) = task::channel(1);
     if let Err(e) = to_ping.send(tx).await {
         panic!("error sending request to ping task: {:?}", e);
@@ -387,7 +407,7 @@ const MAX_CLIENT_CONNECTIONS: usize = 128;
 
 pub async fn client<A>(
     ids: Vec<ClientId>,
-    address: A,
+    addresses: Vec<A>,
     interval: Option<Duration>,
     workload: Workload,
     tcp_nodelay: bool,
@@ -409,25 +429,32 @@ where
     });
 
     // start each client worker in pool
-    let handles = pool.into_iter().map(|client_ids| {
-        // start the open loop client if some interval was provided
-        if let Some(interval) = interval {
-            task::spawn(open_loop_client::<A>(
-                client_ids,
-                address.clone(),
-                interval,
-                workload,
-                tcp_nodelay,
-                channel_buffer_size,
-            ))
+    let handles = pool.into_iter().filter_map(|client_ids| {
+        // only start a client for this pool index if any client id was assigned
+        // to it
+        if !client_ids.is_empty() {
+            // start the open loop client if some interval was provided
+            let handle = if let Some(interval) = interval {
+                task::spawn(open_loop_client::<A>(
+                    client_ids,
+                    addresses.clone(),
+                    interval,
+                    workload,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                ))
+            } else {
+                task::spawn(closed_loop_client::<A>(
+                    client_ids,
+                    addresses.clone(),
+                    workload,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                ))
+            };
+            Some(handle)
         } else {
-            task::spawn(closed_loop_client::<A>(
-                client_ids,
-                address.clone(),
-                workload,
-                tcp_nodelay,
-                channel_buffer_size,
-            ))
+            None
         }
     });
 
@@ -455,7 +482,7 @@ where
 
 async fn closed_loop_client<A>(
     client_ids: Vec<ClientId>,
-    address: A,
+    addresses: Vec<A>,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -467,33 +494,57 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut clients, mut read, mut write) = client_setup(
+    let (mut clients, mut reader, mut process_to_writer) = client_setup(
         client_ids,
-        address,
+        addresses,
         workload,
         tcp_nodelay,
         channel_buffer_size,
     )
     .await?;
 
+    // create pending
+    let mut pending = ShardsPending::new();
+
     // generate the first message of each client
     for (_client_id, client) in clients.iter_mut() {
-        next_cmd(client, &time, &mut write).await;
+        let workload_finished = None;
+        next_cmd(
+            client,
+            &time,
+            &mut process_to_writer,
+            &mut pending,
+            workload_finished,
+        )
+        .await;
     }
 
-    // track which clients are finished
-    let mut finished = HashSet::new();
+    // track which clients are finished (i.e. all their commands have completed)
+    let mut finished = HashSet::with_capacity(clients.len());
 
     // wait for results and generate/submit new commands while there are
     // commands to be generated
     while finished.len() < clients.len() {
         // and wait for next result
-        let cmd_result = read.recv().await;
-        if let Some(client) =
-            handle_cmd_result(&mut clients, &time, cmd_result, &mut finished)
-        {
+        let from_server = reader.recv().await;
+        let client = handle_cmd_result(
+            &mut clients,
+            &time,
+            from_server,
+            &mut pending,
+            &mut finished,
+        );
+        if let Some(client) = client {
             // if client hasn't finished, issue a new command
-            next_cmd(client, &time, &mut write).await;
+            let workload_finished = None;
+            next_cmd(
+                client,
+                &time,
+                &mut process_to_writer,
+                &mut pending,
+                workload_finished,
+            )
+            .await;
         }
     }
 
@@ -508,7 +559,7 @@ where
 
 async fn open_loop_client<A>(
     client_ids: Vec<ClientId>,
-    address: A,
+    addresses: Vec<A>,
     interval: Duration,
     workload: Workload,
     tcp_nodelay: bool,
@@ -521,30 +572,38 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut clients, mut read, mut write) = client_setup(
+    let (mut clients, mut reader, mut process_to_writer) = client_setup(
         client_ids,
-        address,
+        addresses,
         workload,
         tcp_nodelay,
         channel_buffer_size,
     )
     .await?;
 
+    // create pending
+    let mut pending = ShardsPending::new();
+
     // create interval
     let mut interval = tokio::time::interval(interval);
 
-    // track which clients are finished
-    let mut finished = HashSet::new();
+    // track which clients are finished (i.e. all their commands have completed)
+    let mut finished = HashSet::with_capacity(clients.len());
+    // track which clients are workload finished
+    let mut workload_finished = HashSet::with_capacity(clients.len());
 
     while finished.len() < clients.len() {
         tokio::select! {
-            cmd_result = read.recv() => {
-                handle_cmd_result(&mut clients, &time, cmd_result, &mut finished);
+            from_server = reader.recv() => {
+                handle_cmd_result(&mut clients, &time, from_server, &mut pending, &mut finished);
             }
             _ = interval.tick() => {
                 // submit new command on every tick for each connected client (if there are still commands to be generated)
-                for (_, client) in clients.iter_mut(){
-                    next_cmd(client, &time, &mut write).await;
+                for (client_id, client) in clients.iter_mut(){
+                    // if the client hasn't finished, try to issue a new command
+                    if !workload_finished.contains(client_id) {
+                        next_cmd(client, &time, &mut process_to_writer, &mut pending, Some(&mut workload_finished)).await;
+                    }
                 }
             }
         }
@@ -561,66 +620,75 @@ where
 
 async fn client_setup<A>(
     client_ids: Vec<ClientId>,
-    address: A,
+    addresses: Vec<A>,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
 ) -> Option<(
     HashMap<ClientId, Client>,
-    CommandResultReceiver,
-    CommandSender,
+    ServerToClientReceiver,
+    HashMap<ProcessId, ClientToServerSender>,
 )>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
-    // connect to process
-    let tcp_buffer_size = 0;
-    let mut connection = match task::connect(
-        address,
-        tcp_nodelay,
-        tcp_buffer_size,
-        CONNECT_RETRIES,
-    )
-    .await
-    {
-        Ok(connection) => connection,
-        Err(e) => {
-            // TODO panicking here as not sure how to make error handling send +
-            // 'static (required by tokio::spawn) and still be able
-            // to use the ? operator
-            panic!(
-                "[client] error connecting at clients {:?}: {:?}",
-                client_ids, e
-            );
-        }
-    };
+    let mut to_discover = Vec::with_capacity(addresses.len());
+    let mut connections = Vec::with_capacity(addresses.len());
 
-    // say hi
-    let process_id =
-        task::client::client_say_hi(client_ids.clone(), &mut connection)
-            .await?;
+    // connect to each address (one per shard)
+    let tcp_buffer_size = 0;
+    for address in addresses {
+        let connect = task::connect(
+            address,
+            tcp_nodelay,
+            tcp_buffer_size,
+            CONNECT_RETRIES,
+        );
+        let mut connection = match connect.await {
+            Ok(connection) => connection,
+            Err(e) => {
+                // TODO panicking here as not sure how to make error handling
+                // send + 'static (required by tokio::spawn) and
+                // still be able to use the ? operator
+                panic!(
+                    "[client] error connecting at clients {:?}: {:?}",
+                    client_ids, e
+                );
+            }
+        };
+
+        // say hi
+        let (process_id, shard_id) =
+            task::client::client_say_hi(client_ids.clone(), &mut connection)
+                .await?;
+
+        // update set of processes to be discovered by the client
+        to_discover.push((process_id, shard_id));
+
+        // update list of connected processes
+        connections.push((process_id, connection));
+    }
 
     // start client read-write task
-    let (read, mut write) =
-        task::client::start_client_rw_task(channel_buffer_size, connection);
-    write.set_name(format!(
-        "command_result_sender_client_{}",
-        task::client::ids_repr(&client_ids)
-    ));
+    let (read, process_to_write) = task::client::start_client_rw_tasks(
+        &client_ids,
+        channel_buffer_size,
+        connections,
+    );
 
     // create clients
     let clients = client_ids
         .into_iter()
         .map(|client_id| {
             let mut client = Client::new(client_id, workload);
-            // discover process (although this won't be used)
-            client.discover(vec![process_id]);
+            // discover processes
+            client.discover(to_discover.clone());
             (client_id, client)
         })
         .collect();
 
-    // return client its connection
-    Some((clients, read, write))
+    // return clients and their means to communicate with the service
+    Some((clients, read, process_to_write))
 }
 
 /// Generate the next command, returning a boolean representing whether a new
@@ -628,35 +696,79 @@ where
 async fn next_cmd(
     client: &mut Client,
     time: &dyn SysTime,
-    write: &mut CommandSender,
+    process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
+    pending: &mut ShardsPending,
+    mut workload_finished: Option<&mut HashSet<ClientId>>,
 ) {
-    if let Some((_, cmd)) = client.next_cmd(time) {
-        if let Err(e) = write.send(cmd).await {
-            println!(
-                "[client] error while sending command to client read-write task: {:?}",
-                e
-            );
+    if let Some((target_shard, cmd)) = client.next_cmd(time) {
+        // register command in pending (which will aggregate several
+        // `CommandResult`s if the command acesses more than one shard)
+        pending.register(&cmd);
+
+        // 1. register the command in all shards but the target shard
+        for shard in cmd.shards().filter(|shard| **shard != target_shard) {
+            let msg = ClientToServer::Register(cmd.clone());
+            send_to_shard(&client, process_to_writer, shard, msg).await
+        }
+
+        // 2. submit the command to the target shard
+        let msg = ClientToServer::Submit(cmd);
+        send_to_shard(&client, process_to_writer, &target_shard, msg).await
+    } else {
+        // record that this client has finished its workload
+        if let Some(workload_finished) = workload_finished.as_mut() {
+            assert!(workload_finished.insert(client.id()));
         }
     }
 }
 
-/// Handles a command result. It returns the id of the client if it hasn't
-/// finished yet.
+async fn send_to_shard(
+    client: &Client,
+    process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
+    shard_id: &ShardId,
+    msg: ClientToServer,
+) {
+    // find closest process on this shard
+    let process_id = client.shard_process(shard_id);
+    // find process writer
+    let writer = process_to_writer
+        .get_mut(&process_id)
+        .expect("[client] dind't find writer for target process");
+    if let Err(e) = writer.send(msg).await {
+        println!("[client] error while sending message to client read-write task: {:?}", e);
+    }
+}
+
+/// Handles a command result. Returns the client if a new COMMAND COMPLETED and
+/// the client did NOT FINISH.
 fn handle_cmd_result<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    cmd_result: Option<CommandResult>,
+    from_server: Option<CommandResult>,
+    pending: &mut ShardsPending,
     finished: &mut HashSet<ClientId>,
 ) -> Option<&'a mut Client> {
-    if let Some(cmd_result) = cmd_result {
-        // find the client this command result belongs to
-        let client_id = cmd_result.rifl().source();
+    if let Some(cmd_result) = from_server {
+        do_handle_cmd_result(clients, time, cmd_result, pending, finished)
+    } else {
+        panic!("[client] error while receiving message from client read-write task");
+    }
+}
+
+fn do_handle_cmd_result<'a>(
+    clients: &'a mut HashMap<ClientId, Client>,
+    time: &dyn SysTime,
+    cmd_result: CommandResult,
+    pending: &mut ShardsPending,
+    finished: &mut HashSet<ClientId>,
+) -> Option<&'a mut Client> {
+    if let Some((client_id, cmd_results)) = pending.add(cmd_result) {
         let client = clients
             .get_mut(&client_id)
             .expect("[client] command result should belong to a client");
 
         // handle command results and check if client is finished
-        if client.handle(cmd_result, time) {
+        if client.handle(cmd_results, time) {
             // record that this client is finished
             println!("client {:?} exited loop", client_id);
             assert!(finished.insert(client_id));
@@ -665,7 +777,8 @@ fn handle_cmd_result<'a>(
             Some(client)
         }
     } else {
-        panic!("[client] error while receiving command result from client read-write task");
+        // no new command completed, so return non
+        None
     }
 }
 
@@ -686,11 +799,57 @@ fn serialize_client_data(data: ClientData, file: String) -> RunResult<()> {
     Ok(())
 }
 
+struct ShardsPending {
+    pending: HashMap<Rifl, (usize, Vec<CommandResult>)>,
+}
+
+impl ShardsPending {
+    fn new() -> Self {
+        Self {
+            pending: HashMap::new(),
+        }
+    }
+
+    fn register(&mut self, cmd: &Command) {
+        let shard_count = cmd.shard_count();
+        let results = Vec::with_capacity(shard_count);
+        let res = self.pending.insert(cmd.rifl(), (shard_count, results));
+        assert!(res.is_none());
+    }
+
+    // Add new `CommandResult` and return all the `CommandResult` if we have the
+    // results from all shards.
+    fn add(
+        &mut self,
+        result: CommandResult,
+    ) -> Option<(ClientId, Vec<CommandResult>)> {
+        let rifl = result.rifl();
+        log!("c{}: rifl received {:?}", rifl.source(), rifl);
+        match self.pending.entry(rifl) {
+            Entry::Occupied(mut entry) => {
+                let (shard_count, results) = entry.get_mut();
+                // add new result
+                results.push(result);
+
+                // return results if we have all results we should
+                if results.len() == *shard_count {
+                    let (_, results) = entry.remove();
+                    Some((rifl.source(), results))
+                } else {
+                    None
+                }
+            }
+            Entry::Vacant(_) => panic!(
+                "received command result about a rifl we didn't register for"
+            ),
+        }
+    }
+}
+
 // TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the
 // protocols implemented
 pub mod tests {
     use super::*;
-    use crate::client::KeyGen;
     use crate::protocol::ProtocolMetricsKind;
     use crate::util;
     use rand::Rng;
@@ -727,6 +886,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn run_basic_test() {
+        use crate::client::{KeyGen, ShardGen};
+
         // config
         let n = 3;
         let f = 1;
@@ -735,9 +896,26 @@ pub mod tests {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
-        let conflict_rate = 100;
+        // there's a single shard
+        config.set_shards(1);
+
+        // create workload
+        let shards_per_command = 1;
+        let shard_gen = ShardGen::Random { shard_count: 1 };
+        let keys_per_shard = 2;
+        let key_gen = KeyGen::ConflictRate { conflict_rate: 50 };
         let commands_per_client = 100;
-        let clients_per_region = 3;
+        let payload_size = 1;
+        let workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
+            key_gen,
+            commands_per_client,
+            payload_size,
+        );
+
+        let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
         let tracer_show_interval = Some(3000);
@@ -747,9 +925,8 @@ pub mod tests {
         let total_stable_count =
             run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
                 config,
-                conflict_rate,
-                commands_per_client,
-                clients_per_region,
+                workload,
+                clients_per_process,
                 workers,
                 executors,
                 tracer_show_interval,
@@ -763,15 +940,14 @@ pub mod tests {
             .sum::<usize>();
 
         // get that all commands stablized at all processes
-        let total_commands = n * clients_per_region * commands_per_client;
+        let total_commands = n * clients_per_process * commands_per_client;
         assert!(total_stable_count == total_commands * n);
     }
 
     pub async fn run_test_with_inspect_fun<P, R>(
         config: Config,
-        conflict_rate: usize,
-        commands_per_client: usize,
-        clients_per_region: usize,
+        workload: Workload,
+        clients_per_process: usize,
         workers: usize,
         executors: usize,
         tracer_show_interval: Option<usize>,
@@ -790,9 +966,8 @@ pub mod tests {
             .run_until(async {
                 run::<P, R>(
                     config,
-                    conflict_rate,
-                    commands_per_client,
-                    clients_per_region,
+                    workload,
+                    clients_per_process,
                     workers,
                     executors,
                     tracer_show_interval,
@@ -806,9 +981,8 @@ pub mod tests {
 
     async fn run<P, R>(
         config: Config,
-        conflict_rate: usize,
-        commands_per_client: usize,
-        clients_per_region: usize,
+        workload: Workload,
+        clients_per_process: usize,
         workers: usize,
         executors: usize,
         tracer_show_interval: Option<usize>,
@@ -827,19 +1001,19 @@ pub mod tests {
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
-        let tcp_flush_interval = Some(100); // millis
+        let tcp_flush_interval = Some(1); // millis
         let channel_buffer_size = 10000;
         let multiplexing = 2;
-
         let ping_interval = Some(1000); // millis
 
         // create processes ports and client ports
         let n = config.n();
-        let ports: HashMap<_, _> = util::process_ids(n)
-            .map(|id| (id, get_available_port()))
+        let shard_count = config.shards();
+        let ports: HashMap<_, _> = util::all_process_ids(shard_count, n)
+            .map(|(id, _shard_id)| (id, get_available_port()))
             .collect();
-        let client_ports: HashMap<_, _> = util::process_ids(n)
-            .map(|id| (id, get_available_port()))
+        let client_ports: HashMap<_, _> = util::all_process_ids(shard_count, n)
+            .map(|(id, _shard_id)| (id, get_available_port()))
             .collect();
 
         // create connect addresses
@@ -854,20 +1028,65 @@ pub mod tests {
 
         let mut inspect_channels = HashMap::new();
 
-        for process_id in util::process_ids(n) {
-            // if n = 3, this gives the following:
-            // - id = 1:  [1, 2, 3]
-            // - id = 2:  [2, 3, 1]
-            // - id = 3:  [3, 1, 2]
-            let sorted_processes = if process_id % 2 == 1 {
-                // only set if odd ids
-                Some(
-                    (process_id..=(n as ProcessId))
-                        .chain(1..process_id)
-                        .collect(),
-                )
-            } else {
+        // the list of all ids that we can shuffle in order to set
+        // `sorted_processes`
+        let mut ids: Vec<_> = util::all_process_ids(shard_count, n).collect();
+
+        // function used to figure out which which processes belong to the same
+        // "region index"; there are as many region indexes as `n`; we have n =
+        // 5, and shard_count = 3, we have:
+        // - region index 1: processes 1, 6, 11
+        // - region index 2: processes 2, 7, 12
+        // - and so on..
+        let region_index = |process_id| {
+            let mut index = process_id;
+            let n = config.n() as u8;
+            while index > n {
+                index -= n;
+            }
+            index
+        };
+        let same_region_index =
+            |process_id: ProcessId, ids: &Vec<(ProcessId, ShardId)>| {
+                // compute index
+                let index = region_index(process_id);
+                ids.clone().into_iter().partition(|(peer_id, _)| {
+                    // keep all that have the same index
+                    region_index(*peer_id) == index
+                })
+            };
+
+        for (process_id, shard_id) in util::all_process_ids(shard_count, n) {
+            let sorted_processes = if shard_count == 1 {
                 None
+            } else {
+                // only set sorted processes if partial replication
+                use rand::seq::SliceRandom;
+                ids.shuffle(&mut rand::thread_rng());
+
+                // partition ids: `sorted_processes` will only contain the
+                // processes that belong to the same "region index"
+                let (mut sorted_processes, other_regions): (Vec<_>, Vec<_>) =
+                    same_region_index(process_id, &ids);
+
+                // remove self
+                let myself = (process_id, shard_id);
+                sorted_processes.retain(|entry| entry != &myself);
+
+                // make self the first element
+                sorted_processes.insert(0, myself);
+
+                // add the remaining processse from other "region indexes"
+                sorted_processes.extend(other_regions);
+
+                // check that indeed self was removed
+                assert_eq!(
+                    sorted_processes.len(),
+                    ids.len(),
+                    "sorted processes should contain all ids"
+                );
+
+                Some(sorted_processes)
             };
 
             // get ports
@@ -879,7 +1098,7 @@ pub mod tests {
             addresses.remove(&process_id);
             let addresses = addresses
                 .into_iter()
-                .map(|(_, address)| {
+                .map(|(process_id, address)| {
                     let delay = if process_id % 2 == 1 {
                         // add 0 delay to odd processes
                         Some(0)
@@ -905,6 +1124,7 @@ pub mod tests {
                 R,
             >(
                 process_id,
+                shard_id,
                 sorted_processes,
                 localhost,
                 port,
@@ -929,36 +1149,32 @@ pub mod tests {
 
         // wait that all processes are connected
         println!("[main] waiting that processes are connected");
-        for _ in util::process_ids(n) {
+        for _ in util::all_process_ids(shard_count, n) {
             let _ = semaphore.acquire().await;
         }
         println!("[main] processes are connected");
 
-        // create workload
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let keys_per_command = 2;
-        let payload_size = 100;
-        let workload = Workload::new(
-            key_gen,
-            keys_per_command,
-            commands_per_client,
-            payload_size,
-        );
-
-        let clients_per_region = clients_per_region as u64;
-        let client_handles: Vec<_> = util::process_ids(n)
-            .map(|process_id| {
+        let clients_per_process = clients_per_process as u64;
+        let client_handles: Vec<_> = util::all_process_ids(shard_count, n)
+            .map(|(process_id, _)| {
                 // if n = 3, this gives the following:
                 // id = 1: [1, 2, 3, 4]
                 // id = 2: [5, 6, 7, 8]
                 // id = 3: [9, 10, 11, 12]
-                let id_start = ((process_id - 1) * clients_per_region) + 1;
-                let id_end = process_id * clients_per_region;
-                let ids = (id_start..=id_end).collect();
+                let client_id_start =
+                    ((process_id - 1) as u64 * clients_per_process) + 1;
+                let client_id_end = process_id as u64 * clients_per_process;
+                let client_ids = (client_id_start..=client_id_end).collect();
 
-                // get port
-                let client_port = *client_ports.get(&process_id).unwrap();
-                let address = format!("localhost:{}", client_port);
+                // connect client to all processes in the same "region index"
+                let (same_region, _) = same_region_index(process_id, &ids);
+                let addresses = same_region
+                    .into_iter()
+                    .map(|(peer_id, _)| {
+                        let client_port = *client_ports.get(&peer_id).unwrap();
+                        format!("localhost:{}", client_port)
+                    })
+                    .collect();
 
                 // compute interval:
                 // - if the process id is even, then issue a command every 2ms
@@ -972,8 +1188,8 @@ pub mod tests {
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);
                 tokio::task::spawn_local(client(
-                    ids,
-                    address,
+                    client_ids,
+                    addresses,
                     interval,
                     workload,
                     tcp_nodelay,

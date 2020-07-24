@@ -1,26 +1,28 @@
-use crate::db::Dstat;
+use crate::db::{Dstat, DstatCompress, HistogramCompress};
 use fantoch::client::ClientData;
+use fantoch::id::ProcessId;
 use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::Testbed;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentData {
-    pub process_metrics: HashMap<Region, ProcessMetrics>,
-    pub global_process_dstats: Dstat,
-    pub client_latency: HashMap<Region, Histogram>,
-    pub global_client_latency: Histogram,
+    pub process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
+    pub global_process_dstats: DstatCompress,
+    pub client_latency: HashMap<Region, HistogramCompress>,
+    pub global_client_latency: HistogramCompress,
 }
 
 impl ExperimentData {
     pub fn new(
         planet: &Option<Planet>,
         testbed: Testbed,
-        process_metrics: HashMap<Region, ProcessMetrics>,
-        process_dstats: HashMap<Region, Dstat>,
+        process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
+        process_dstats: HashMap<ProcessId, Dstat>,
         client_metrics: HashMap<Region, ClientData>,
         global_client_metrics: ClientData,
     ) -> Self {
@@ -29,6 +31,8 @@ impl ExperimentData {
         for (_, process_dstat) in process_dstats {
             global_process_dstats.merge(&process_dstat);
         }
+        // compress global dstat
+        let global_process_dstats = DstatCompress::from(&global_process_dstats);
 
         // we should use milliseconds if: AWS or (baremetal + injected latency)
         let precision = match testbed {
@@ -57,6 +61,8 @@ impl ExperimentData {
                     client_data.latency_data(),
                 );
                 let histogram = Histogram::from(latency);
+                // compress client histogram
+                let histogram = HistogramCompress::from(&histogram);
                 (region, histogram)
             })
             .collect();
@@ -67,6 +73,9 @@ impl ExperimentData {
             global_client_metrics.latency_data(),
         );
         let global_client_latency = Histogram::from(latency);
+        // compress global client histogram
+        let global_client_latency =
+            HistogramCompress::from(&global_client_latency);
 
         Self {
             process_metrics,

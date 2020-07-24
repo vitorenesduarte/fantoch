@@ -1,4 +1,4 @@
-use super::{CLIENT_TAG, SERVER_TAG};
+use super::Nickname;
 use crate::exp::{self, Machines};
 use crate::util;
 use crate::{FantochFeature, RunMode, Testbed};
@@ -9,78 +9,105 @@ use std::collections::HashMap;
 const MACHINES: &str = "exp_files/machines";
 const PRIVATE_KEY: &str = "~/.ssh/id_rsa";
 
+pub fn create_launchers<'a>(
+    regions: &Vec<rusoto_core::Region>,
+    shard_count: usize,
+) -> Vec<tsunami::providers::baremetal::Machine> {
+    let server_count = regions.len();
+    let client_count = regions.len();
+    let machine_count = server_count * shard_count + client_count;
+    // create one launcher per machine
+    (0..machine_count)
+        .map(|_| tsunami::providers::baremetal::Machine::default())
+        .collect()
+}
+
 pub async fn setup<'a>(
-    launchers: &'a mut Vec<tsunami::providers::baremetal::Machine>,
-    servers_count: usize,
-    clients_count: usize,
+    launcher_per_machine: &'a mut Vec<tsunami::providers::baremetal::Machine>,
     regions: Vec<rusoto_core::Region>,
+    shard_count: usize,
     branch: String,
     run_mode: RunMode,
     features: Vec<FantochFeature>,
 ) -> Result<Machines<'a>, Report> {
-    let machines_count = servers_count + clients_count;
+    let server_count = regions.len();
+    let client_count = regions.len();
+    let machine_count = server_count * shard_count + client_count;
+    assert_eq!(
+        launcher_per_machine.len(),
+        machine_count,
+        "not enough launchers"
+    );
 
     // get ips and check that we have enough of them
     let content = tokio::fs::read_to_string(MACHINES).await?;
-    let machines: Vec<_> = content.lines().take(machines_count).collect();
-    assert_eq!(machines.len(), machines_count, "not enough machines");
+    let machines: Vec<_> = content.lines().take(machine_count).collect();
+    assert_eq!(machines.len(), machine_count, "not enough machines");
+
+    // create nicknames for all machines
+    let nicknames = super::create_nicknames(shard_count, &regions);
 
     // get machine and launcher iterators
     let mut machines_iter = machines.into_iter();
-    let mut launcher_iter = launchers.iter_mut();
+    let mut launcher_iter = launcher_per_machine.iter_mut();
 
     // setup machines
-    let mut launches = Vec::with_capacity(machines_count);
-    for tag in vec![SERVER_TAG, CLIENT_TAG] {
-        for region in regions.iter() {
-            // find one machine and a launcher for this machine
-            let machine = machines_iter.next().unwrap();
-            let launcher = launcher_iter.next().unwrap();
+    let mut launches = Vec::with_capacity(machine_count);
+    for nickname in nicknames {
+        // find one machine and a launcher for this machine
+        let machine = machines_iter.next().unwrap();
+        let launcher = launcher_iter.next().unwrap();
 
-            // create baremetal setup
-            let setup = baremetal_setup(
-                machine,
-                branch.clone(),
-                run_mode,
-                features.clone(),
-            )
-            .await
-            .wrap_err("baremetal setup")?;
+        // create baremetal setup
+        let setup = baremetal_setup(
+            machine,
+            branch.clone(),
+            run_mode,
+            features.clone(),
+        )
+        .await
+        .wrap_err("baremetal setup")?;
 
-            // save baremetal launch
-            let launch = baremetal_launch(
-                launcher,
-                region.name().to_string(),
-                tag.to_string(),
-                setup,
-            );
-            launches.push(launch);
-        }
+        // save baremetal launch
+        let launch = baremetal_launch(launcher, nickname, setup);
+        launches.push(launch);
     }
 
-    // mapping from tag, to a mapping from region to vm
-    let mut servers = HashMap::with_capacity(servers_count);
-    let mut clients = HashMap::with_capacity(clients_count);
+    // create placement, servers, and clients
+    let placement = super::create_placement(shard_count, regions);
+    let mut servers = HashMap::with_capacity(server_count);
+    let mut clients = HashMap::with_capacity(client_count);
 
     for result in futures::future::join_all(launches).await {
         let vm = result.wrap_err("baremetal launch")?;
-        let (tag, region) = super::from_nickname(vm.nickname.clone());
+        let Nickname { region, shard_id } = Nickname::from_string(&vm.nickname);
 
-        let res = match tag.as_str() {
-            SERVER_TAG => servers.insert(region, vm),
-            CLIENT_TAG => clients.insert(region, vm),
-            tag => {
-                panic!("unrecognized vm tag: {}", tag);
+        let unique_insert = match shard_id {
+            Some(shard_id) => {
+                // it's a server; find it's process id
+                let (process_id, _region_index) =
+                    placement.get(&(region, shard_id)).expect(
+                        "pair region and shard id should exist in placement",
+                    );
+                servers.insert(*process_id, vm).is_none()
+            }
+            None => {
+                // it's a client
+                clients.insert(region, vm).is_none()
             }
         };
-        assert!(res.is_none());
+        assert!(unique_insert);
     }
 
     // check that we have enough machines
-    assert_eq!(servers.len(), servers_count, "not enough server vms");
-    assert_eq!(clients.len(), clients_count, "not enough client vms");
+    assert_eq!(
+        servers.len(),
+        server_count * shard_count,
+        "not enough server vms"
+    );
+    assert_eq!(clients.len(), client_count, "not enough client vms");
 
-    let machines = Machines::new(super::to_regions(regions), servers, clients);
+    let machines = Machines::new(placement, servers, clients);
     Ok(machines)
 }
 
@@ -128,12 +155,14 @@ async fn baremetal_setup(
 
 async fn baremetal_launch(
     launcher: &mut tsunami::providers::baremetal::Machine,
-    region: String,
-    tag: String,
+    nickname: Nickname,
     setup: tsunami::providers::baremetal::Setup,
 ) -> Result<tsunami::Machine<'_>, Report> {
+    // get region and nickname
+    let region = nickname.region.name().clone();
+    let nickname = nickname.to_string();
+
     // create launch descriptor
-    let nickname = super::to_nickname(&tag, &region);
     let descriptor = tsunami::providers::LaunchDescriptor {
         region,
         max_wait: None,

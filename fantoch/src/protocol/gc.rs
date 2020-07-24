@@ -1,4 +1,4 @@
-use crate::id::{Dot, ProcessId};
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::log;
 use crate::util;
 use crate::HashMap;
@@ -8,6 +8,7 @@ use tracing::instrument;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GCTrack {
     process_id: ProcessId,
+    shard_id: ShardId,
     n: usize,
     // the next 3 variables will be updated by the single process responsible
     // for GC
@@ -17,22 +18,25 @@ pub struct GCTrack {
 }
 
 impl GCTrack {
-    pub fn new(process_id: ProcessId, n: usize) -> Self {
+    pub fn new(process_id: ProcessId, shard_id: ShardId, n: usize) -> Self {
         // committed clocks from all processes but self
         let all_but_me = HashMap::with_capacity(n - 1);
 
         Self {
             process_id,
+            shard_id,
             n,
-            committed: Self::bottom_aeclock(n),
+            committed: Self::bottom_aeclock(shard_id, n),
             all_but_me,
-            previous_stable: Self::bottom_vclock(n),
+            previous_stable: Self::bottom_vclock(shard_id, n),
         }
     }
 
     /// Records that a command has been committed.
     pub fn commit(&mut self, dot: Dot) {
         self.committed.add(&dot.source(), dot.sequence());
+        // make sure we don't record dots from other shards
+        debug_assert_eq!(self.committed.len(), self.n);
     }
 
     /// Returns a clock representing the set of commands committed locally.
@@ -67,9 +71,15 @@ impl GCTrack {
             .previous_stable
             .iter()
             .filter_map(|(process_id, previous)| {
-                let current = new_stable
-                    .get_mut(process_id)
-                    .expect("actor should exist in the newly stable clock");
+                let current =
+                    if let Some(current) = new_stable.get_mut(process_id) {
+                        current
+                    } else {
+                        panic!(
+                            "actor {} should exist in the newly stable clock",
+                            process_id
+                        )
+                    };
 
                 // compute representation of stable dots.
                 let start = previous.frontier() + 1;
@@ -99,7 +109,7 @@ impl GCTrack {
         if self.all_but_me.len() != self.n - 1 {
             // if we don't have info from all processes, then there are no
             // stable dots.
-            return Self::bottom_vclock(self.n);
+            return Self::bottom_vclock(self.shard_id, self.n);
         }
 
         // start from our own frontier
@@ -111,12 +121,12 @@ impl GCTrack {
         stable
     }
 
-    fn bottom_aeclock(n: usize) -> AEClock<ProcessId> {
-        AEClock::with(util::process_ids(n))
+    fn bottom_aeclock(shard_id: ShardId, n: usize) -> AEClock<ProcessId> {
+        AEClock::with(util::process_ids(shard_id, n))
     }
 
-    fn bottom_vclock(n: usize) -> VClock<ProcessId> {
-        VClock::with(util::process_ids(n))
+    fn bottom_vclock(shard_id: ShardId, n: usize) -> VClock<ProcessId> {
+        VClock::with(util::process_ids(shard_id, n))
     }
 }
 
@@ -137,11 +147,12 @@ mod tests {
     #[test]
     fn gc_flow() {
         let n = 2;
+        let shard_id = 0;
         // create new gc track for the our process: 1
-        let mut gc = GCTrack::new(1, n);
+        let mut gc = GCTrack::new(1, shard_id, n);
 
         // let's also create a gc track for process 2
-        let mut gc2 = GCTrack::new(2, n);
+        let mut gc2 = GCTrack::new(2, shard_id, n);
 
         // there's nothing committed and nothing stable
         assert_eq!(gc.committed(), vclock(0, 0));

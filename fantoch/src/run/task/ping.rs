@@ -1,5 +1,5 @@
 use super::chan::ChannelSender;
-use crate::id::ProcessId;
+use crate::id::{ProcessId, ShardId};
 use crate::log;
 use crate::metrics::Histogram;
 use crate::run::prelude::*;
@@ -14,7 +14,8 @@ const ITERATIONS_PER_PING: u64 = 5;
 pub async fn ping_task(
     ping_interval: Option<usize>,
     process_id: ProcessId,
-    ips: HashMap<ProcessId, (IpAddr, ConnectionDelay)>,
+    shard_id: ShardId,
+    ips: HashMap<ProcessId, (ShardId, IpAddr, ConnectionDelay)>,
     parent: Option<SortedProcessesReceiver>,
 ) {
     // if no interval, do not ping
@@ -36,8 +37,8 @@ pub async fn ping_task(
     //  create ping stats
     let mut ping_stats = ips
         .into_iter()
-        .map(|(process_id, (ip, delay))| {
-            (process_id, (ip, delay, Histogram::new()))
+        .map(|(process_id, (shard_id, ip, delay))| {
+            (process_id, (shard_id, ip, delay, Histogram::new()))
         })
         .collect();
 
@@ -45,7 +46,7 @@ pub async fn ping_task(
         // do one round of pinging and then process the parent message
         ping_task_ping(&mut ping_stats).await;
         let sort_request = parent.recv().await;
-        ping_task_sort(process_id, &ping_stats, sort_request).await;
+        ping_task_sort(process_id, shard_id, &ping_stats, sort_request).await;
     }
 
     loop {
@@ -61,9 +62,12 @@ pub async fn ping_task(
 }
 
 async fn ping_task_ping(
-    ping_stats: &mut HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
+    ping_stats: &mut HashMap<
+        ProcessId,
+        (ShardId, IpAddr, ConnectionDelay, Histogram),
+    >,
 ) {
-    for (ip, delay, histogram) in ping_stats.values_mut() {
+    for (_shard_id, ip, delay, histogram) in ping_stats.values_mut() {
         for _ in 0..ITERATIONS_PER_PING {
             let latency = loop {
                 let command =
@@ -106,21 +110,29 @@ async fn ping_task_ping(
 }
 
 fn ping_task_show(
-    ping_stats: &HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
+    ping_stats: &HashMap<
+        ProcessId,
+        (ShardId, IpAddr, ConnectionDelay, Histogram),
+    >,
 ) {
-    for (process_id, (_, _, histogram)) in ping_stats {
+    for (process_id, (_, _, _, histogram)) in ping_stats {
         println!("[ping_task] {}: {:?}", process_id, histogram);
     }
 }
 
 async fn ping_task_sort(
     process_id: ProcessId,
-    ping_stats: &HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
-    sort_request: Option<ChannelSender<Vec<ProcessId>>>,
+    shard_id: ShardId,
+    ping_stats: &HashMap<
+        ProcessId,
+        (ShardId, IpAddr, ConnectionDelay, Histogram),
+    >,
+    sort_request: Option<ChannelSender<Vec<(ProcessId, ShardId)>>>,
 ) {
     match sort_request {
         Some(mut sort_request) => {
-            let sorted_processes = sort_by_distance(process_id, &ping_stats);
+            let sorted_processes =
+                sort_by_distance(process_id, shard_id, &ping_stats);
             if let Err(e) = sort_request.send(sorted_processes).await {
                 println!(
                     "[ping_task] error sending message to parent: {:?}",
@@ -138,17 +150,27 @@ async fn ping_task_sort(
 /// returned list.
 fn sort_by_distance(
     process_id: ProcessId,
-    ping_stats: &HashMap<ProcessId, (IpAddr, ConnectionDelay, Histogram)>,
-) -> Vec<ProcessId> {
+    shard_id: ShardId,
+    ping_stats: &HashMap<
+        ProcessId,
+        (ShardId, IpAddr, ConnectionDelay, Histogram),
+    >,
+) -> Vec<(ProcessId, ShardId)> {
     // sort processes by ping time
     let mut pings = ping_stats
         .iter()
-        .map(|(id, (_, _, histogram))| (u64::from(histogram.mean()), id))
+        .map(|(id, (shard_id, _, _, histogram))| {
+            (u64::from(histogram.mean()), id, shard_id)
+        })
         .collect::<Vec<_>>();
     pings.sort();
     // make sure we're the first process
-    std::iter::once(process_id)
-        .chain(pings.into_iter().map(|(_latency, &process_id)| process_id))
+    std::iter::once((process_id, shard_id))
+        .chain(
+            pings.into_iter().map(|(_latency, process_id, shard_id)| {
+                (*process_id, *shard_id)
+            }),
+        )
         .collect()
 }
 
@@ -161,19 +183,34 @@ mod tests {
     fn sort_by_distance_test() {
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
+        let process_id = 1;
+        let shard_id = 0;
+
         let mut ping_stats = HashMap::new();
-        assert_eq!(sort_by_distance(1, &ping_stats), vec![1]);
+        assert_eq!(
+            sort_by_distance(process_id, shard_id, &ping_stats),
+            vec![(process_id, shard_id)]
+        );
 
-        ping_stats.insert(2, (ip, None, Histogram::from(vec![10, 20, 30])));
-        assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 2]);
+        ping_stats.insert(2, (7, ip, None, Histogram::from(vec![10, 20, 30])));
+        assert_eq!(
+            sort_by_distance(process_id, shard_id, &ping_stats),
+            vec![(process_id, shard_id), (2, 7)]
+        );
 
-        ping_stats.insert(3, (ip, None, Histogram::from(vec![5, 5, 5])));
-        assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 3, 2]);
+        ping_stats.insert(3, (7, ip, None, Histogram::from(vec![5, 5, 5])));
+        assert_eq!(
+            sort_by_distance(process_id, shard_id, &ping_stats),
+            vec![(process_id, shard_id), (3, 7), (2, 7)]
+        );
 
-        let (_, _, histogram_2) = ping_stats.get_mut(&2).unwrap();
+        let (_, _, _, histogram_2) = ping_stats.get_mut(&2).unwrap();
         for _ in 1..100 {
             histogram_2.increment(1);
         }
-        assert_eq!(sort_by_distance(1, &ping_stats), vec![1, 2, 3]);
+        assert_eq!(
+            sort_by_distance(process_id, shard_id, &ping_stats),
+            vec![(process_id, shard_id), (2, 7), (3, 7)]
+        );
     }
 }

@@ -8,28 +8,57 @@ use fantoch::planet::Region;
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::{ExperimentConfig, SerializationFormat};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::DirEntry;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
-#[derive(Debug)]
+const SNAPSHOT_SUFFIX: &str = "_experiment_data_snapshot.bincode";
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ResultsDB {
-    results: Vec<(DirEntry, ExperimentConfig, ExperimentData)>,
+    results: Vec<(ExperimentConfig, ExperimentData)>,
 }
 
 impl ResultsDB {
     pub fn load(results_dir: &str) -> Result<Self, Report> {
         // find all timestamps
-        let timestamps: Vec<_> = std::fs::read_dir(results_dir)
-            .wrap_err("read results directory")?
-            .collect();
+        let read_dir = std::fs::read_dir(results_dir)
+            .wrap_err("read results directory")?;
+        let mut timestamps = Vec::new();
+        for timestamp in read_dir {
+            let timestamp = timestamp.wrap_err("incorrect directory entry")?;
+            // ignore snapshot files
+            if !timestamp
+                .path()
+                .display()
+                .to_string()
+                .ends_with(SNAPSHOT_SUFFIX)
+            {
+                timestamps.push(timestamp);
+            }
+        }
 
         // holder for results
         let mut results = Vec::with_capacity(timestamps.len());
 
+        // track the number of loaded entries
+        let loaded_entries = Arc::new(Mutex::new(0));
+        let total_entries = timestamps.len();
+
         // load all entries
         let loads: Vec<_> = timestamps
             .into_par_iter()
-            .map(|timestamp| Self::load_entry(timestamp))
+            .map(|timestamp| {
+                let loaded_entries = loaded_entries.clone();
+                Self::load_entry(timestamp, loaded_entries, total_entries)
+            })
+            .inspect(|entry| {
+                if let Err(e) = entry {
+                    println!("error: {:?}", e);
+                }
+            })
             .collect();
         for entry in loads {
             let entry = entry.wrap_err("load entry")?;
@@ -40,20 +69,60 @@ impl ResultsDB {
     }
 
     fn load_entry(
-        timestamp: Result<DirEntry, std::io::Error>,
-    ) -> Result<(DirEntry, ExperimentConfig, ExperimentData), Report> {
-        let timestamp = timestamp.wrap_err("incorrect directory entry")?;
+        timestamp: DirEntry,
+        loaded_entries: Arc<Mutex<usize>>,
+        total_entries: usize,
+    ) -> Result<(ExperimentConfig, ExperimentData), Report> {
+        println!("start loading {:?}", timestamp.path().display());
+        let start = std::time::Instant::now();
+
         // read the configuration of this experiment
         let exp_config_path =
-            format!("{}/exp_config.json", timestamp.path().as_path().display());
+            format!("{}/exp_config.json", timestamp.path().display());
         let exp_config: ExperimentConfig = fantoch_exp::deserialize(
             exp_config_path,
             SerializationFormat::Json,
         )
         .wrap_err("deserialize experiment config")?;
 
-        let exp_data = Self::load_experiment_data(&timestamp, &exp_config)?;
-        Ok((timestamp, exp_config, exp_data))
+        // check if there's snapshot of experiment data
+        let snapshot =
+            format!("{}{}", timestamp.path().display(), SNAPSHOT_SUFFIX);
+        let exp_data = if Path::new(&snapshot).exists() {
+            // if there is, simply load it
+            fantoch_exp::deserialize(&snapshot, SerializationFormat::Bincode)
+                .wrap_err_with(|| {
+                    format!("deserialize experiment data snapshot {}", snapshot)
+                })?
+        } else {
+            // otherwise load it
+            let exp_data = Self::load_experiment_data(&timestamp, &exp_config)?;
+            // create snapshot
+            fantoch_exp::serialize(
+                &exp_data,
+                &snapshot,
+                SerializationFormat::Bincode,
+            )
+            .wrap_err_with(|| {
+                format!("deserialize experiment data snapshot {}", snapshot)
+            })?;
+            // and return it
+            exp_data
+        };
+
+        // register that a new entry is loaded
+        let mut loaded_entries = loaded_entries
+            .lock()
+            .expect("locking loaded entries should work");
+        *loaded_entries += 1;
+        println!(
+            "done loading {:?} | {} of {} | load time {}s",
+            timestamp.path().display(),
+            loaded_entries,
+            total_entries,
+            start.elapsed().as_secs()
+        );
+        Ok((exp_config, exp_data))
     }
 
     pub fn find(
@@ -63,7 +132,7 @@ impl ResultsDB {
         let filtered = self
             .results
             .iter()
-            .filter(move |(_, exp_config, _)| {
+            .filter(move |(exp_config, _)| {
                 // filter out configurations with different n
                 if exp_config.config.n() != search.n {
                     return false;
@@ -87,20 +156,36 @@ impl ResultsDB {
                     }
                 }
 
-                // filter out configurations with different key generator (if
-                // set)
-                if let Some(key_gen) = search.key_gen {
-                    if exp_config.workload.key_gen() != key_gen {
+                // filter out configurations with different shards_per_comman
+                // d(if set)
+                if let Some(shards_per_command) = search.shards_per_command {
+                    if exp_config.workload.shards_per_command()
+                        != shards_per_command
+                    {
                         return false;
                     }
                 }
 
-                // filter out configurations with different keys_per_command (if
+                // filter out configurations with different shard generator (if
                 // set)
-                if let Some(keys_per_command) = search.keys_per_command {
-                    if exp_config.workload.keys_per_command()
-                        != keys_per_command
-                    {
+                if let Some(shard_gen) = search.shard_gen {
+                    if exp_config.workload.shard_gen() != shard_gen {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different keys_per_shard (if
+                // set)
+                if let Some(keys_per_shard) = search.keys_per_shard {
+                    if exp_config.workload.keys_per_shard() != keys_per_shard {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different key generator (if
+                // set)
+                if let Some(key_gen) = search.key_gen {
+                    if exp_config.workload.key_gen() != key_gen {
                         return false;
                     }
                 }
@@ -117,7 +202,7 @@ impl ResultsDB {
                 // return it
                 true
             })
-            .map(|(_, _, exp_data)| exp_data)
+            .map(|(_, exp_data)| exp_data)
             .collect();
         Ok(filtered)
     }
@@ -126,18 +211,16 @@ impl ResultsDB {
         timestamp: &DirEntry,
         exp_config: &ExperimentConfig,
     ) -> Result<ExperimentData, Report> {
-        // process and client metrics
-        let mut process_metrics = HashMap::new();
+        // client metrics
         let mut client_metrics = HashMap::new();
 
-        for region in exp_config.regions.keys() {
-            // load metrics
-            let process: ProcessMetrics =
-                Self::load_metrics("server", &timestamp, region)?;
-            process_metrics.insert(region.clone(), process);
+        for (region, _, _, _) in exp_config.placement.iter() {
+            // create client file prefix
+            let prefix = fantoch_exp::config::file_prefix(None, region);
 
-            let client: ClientData =
-                Self::load_metrics("client", &timestamp, region)?;
+            // load this region's client metrics (there's a single client
+            // machine per region)
+            let client: ClientData = Self::load_metrics(&timestamp, prefix)?;
             client_metrics.insert(region.clone(), client);
         }
 
@@ -150,14 +233,25 @@ impl ResultsDB {
         let global_client_metrics =
             Self::global_client_metrics(&client_metrics);
 
-        // process dstats (ignore client dstats, at least for now)
+        // process metrics and dstats
+        let mut process_metrics = HashMap::new();
         let mut process_dstats = HashMap::new();
 
-        for region in exp_config.regions.keys() {
-            // load dstats
-            let process =
-                Self::load_dstat(start, end, "server", &timestamp, region)?;
-            process_dstats.insert(region.clone(), process);
+        for (region, _, process_id, _) in exp_config.placement.iter() {
+            let process_id = *process_id;
+            // create process file prefix
+            let prefix =
+                fantoch_exp::config::file_prefix(Some(process_id), region);
+
+            // load this process metrics (there will be more than one per region
+            // with partial replication)
+            let process: ProcessMetrics =
+                Self::load_metrics(&timestamp, prefix.clone())?;
+            process_metrics.insert(process_id, (region.clone(), process));
+
+            // load this process dstat
+            let process = Self::load_dstat(&timestamp, prefix, start, end)?;
+            process_dstats.insert(process_id, process);
         }
 
         // return experiment data
@@ -172,18 +266,16 @@ impl ResultsDB {
     }
 
     fn load_metrics<T>(
-        tag: &str,
         timestamp: &DirEntry,
-        region: &Region,
+        prefix: String,
     ) -> Result<T, Report>
     where
         T: serde::de::DeserializeOwned,
     {
         let path = format!(
-            "{}/{}_{}_metrics.bincode",
+            "{}/{}_metrics.bincode",
             timestamp.path().display(),
-            tag,
-            region.name(),
+            prefix,
         );
         let metrics =
             fantoch_exp::deserialize(&path, SerializationFormat::Bincode)
@@ -192,18 +284,13 @@ impl ResultsDB {
     }
 
     fn load_dstat(
+        timestamp: &DirEntry,
+        prefix: String,
         start: u64,
         end: u64,
-        tag: &str,
-        timestamp: &DirEntry,
-        region: &Region,
     ) -> Result<Dstat, Report> {
-        let path = format!(
-            "{}/{}_{}_dstat.csv",
-            timestamp.path().display(),
-            tag,
-            region.name(),
-        );
+        let path =
+            format!("{}/{}_dstat.csv", timestamp.path().display(), prefix);
         Dstat::from(start, end, &path)
             .wrap_err_with(|| format!("deserialize dstat {}", path))
     }

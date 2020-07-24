@@ -51,14 +51,14 @@ impl KeyGenState {
     pub fn gen_cmd_key(&mut self) -> Key {
         match self.key_gen {
             KeyGen::ConflictRate { conflict_rate } => {
-                self.gen_with_conflict_rate(conflict_rate)
+                self.gen_conflict_rate(conflict_rate)
             }
-            KeyGen::Zipf { .. } => self.gen_with_zipf(),
+            KeyGen::Zipf { .. } => self.gen_zipf(),
         }
     }
 
     /// Generate a command key based on the conflict rate provided.
-    fn gen_with_conflict_rate(&self, conflict_rate: usize) -> Key {
+    fn gen_conflict_rate(&self, conflict_rate: usize) -> Key {
         debug_assert!(conflict_rate <= 100);
 
         // check if we should generate a conflict:
@@ -78,7 +78,7 @@ impl KeyGenState {
     }
 
     /// Generate a command key based on the initiliazed zipfian distribution.
-    fn gen_with_zipf(&mut self) -> Key {
+    fn gen_zipf(&mut self) -> Key {
         let zipf = self
             .zipf
             .expect("ZipfDistribution should already be initialized");

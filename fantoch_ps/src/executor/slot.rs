@@ -3,7 +3,7 @@ use fantoch::config::Config;
 use fantoch::executor::{
     Executor, ExecutorMetrics, ExecutorResult, MessageKey,
 };
-use fantoch::id::{ProcessId, Rifl};
+use fantoch::id::{ProcessId, Rifl, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,8 @@ type Slot = u64;
 
 #[derive(Clone)]
 pub struct SlotExecutor {
-    execute_at_commit: bool,
+    shard_id: ShardId,
+    config: Config,
     store: KVStore,
     pending: HashSet<Rifl>,
     next_slot: Slot,
@@ -24,7 +25,14 @@ pub struct SlotExecutor {
 impl Executor for SlotExecutor {
     type ExecutionInfo = SlotExecutionInfo;
 
-    fn new(_process_id: ProcessId, config: Config, _executors: usize) -> Self {
+    fn new(
+        _process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        executors: usize,
+    ) -> Self {
+        assert_eq!(executors, 1);
+
         let store = KVStore::new();
         let pending = HashSet::new();
         // the next slot to be executed is 1
@@ -33,7 +41,8 @@ impl Executor for SlotExecutor {
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
         Self {
-            execute_at_commit: config.execute_at_commit(),
+            shard_id,
+            config,
             store,
             pending,
             next_slot,
@@ -58,7 +67,7 @@ impl Executor for SlotExecutor {
         // necessarily true
         assert!(slot >= self.next_slot);
 
-        if self.execute_at_commit {
+        if self.config.execute_at_commit() {
             self.execute(cmd)
         } else {
             // add received command to the commands to be executed and try to
@@ -97,7 +106,7 @@ impl SlotExecutor {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(&mut self.store);
+        let result = cmd.execute(self.shard_id, &mut self.store);
         // update results if this rifl is pending
         if self.pending.remove(&rifl) {
             vec![ExecutorResult::Ready(result)]
@@ -160,8 +169,13 @@ mod tests {
             // create config (that will not be used)
             let process_id = 1;
             let config = Config::new(0, 0);
+            // there's a single shard
+            let shard_id = 0;
+            // there's a single executor
+            let executor = 1;
             // create slot executor
-            let mut executor = SlotExecutor::new(process_id, config, 0);
+            let mut executor =
+                SlotExecutor::new(process_id, shard_id, config, executor);
             // wait for all rifls with the exception of rifl 1
             executor.wait_for_rifl(rifl_2);
             executor.wait_for_rifl(rifl_3);

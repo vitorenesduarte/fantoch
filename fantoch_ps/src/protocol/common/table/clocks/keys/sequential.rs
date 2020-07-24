@@ -1,7 +1,7 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
-use fantoch::id::ProcessId;
+use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::Key;
 use fantoch::HashMap;
 use std::cmp;
@@ -9,18 +9,23 @@ use std::cmp;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyClocks {
     id: ProcessId,
+    shard_id: ShardId,
     clocks: HashMap<Key, u64>,
 }
 
 impl KeyClocks for SequentialKeyClocks {
     /// Create a new `SequentialKeyClocks` instance.
-    fn new(id: ProcessId) -> Self {
+    fn new(id: ProcessId, shard_id: ShardId) -> Self {
         let clocks = HashMap::new();
-        Self { id, clocks }
+        Self {
+            id,
+            shard_id,
+            clocks,
+        }
     }
 
     fn init_clocks(&mut self, cmd: &Command) {
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // create entry if key not present yet
             if !self.clocks.contains_key(key) {
                 self.clocks.insert(key.clone(), 0);
@@ -40,11 +45,12 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
+        let key_count = cmd.key_count(self.shard_id);
         // create votes
-        let mut votes = Votes::with_capacity(cmd.key_count());
+        let mut votes = Votes::with_capacity(key_count);
 
         // vote on each key
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // get a mutable reference to current clock value
             let current = match self.clocks.get_mut(key) {
                 Some(current) => current,
@@ -82,7 +88,7 @@ impl SequentialKeyClocks {
     /// If the command touches multiple keys, returns the maximum between the
     /// clocks associated with each key.
     fn clock(&self, cmd: &Command) -> u64 {
-        cmd.keys()
+        cmd.keys(self.shard_id)
             .filter_map(|key| self.clocks.get(key))
             .max()
             .cloned()

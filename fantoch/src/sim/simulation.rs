@@ -59,9 +59,10 @@ where
             .map(|(_, client)| {
                 let client = client.get_mut();
                 // start client
-                let (process_id, cmd) = client
+                let (target_shard, cmd) = client
                     .next_cmd(time)
                     .expect("clients should submit at least one command");
+                let process_id = client.shard_process(&target_shard);
                 (client.id(), process_id, cmd)
             })
             .collect()
@@ -74,10 +75,15 @@ where
     ) -> Vec<(ProcessId, Action<P>)> {
         match action {
             Action::ToSend { target, msg } => {
+                // get self process and its shard id
+                let (process, _, time) = self.get_process(process_id);
+                assert_eq!(process.id(), process_id);
+                let shard_id = process.shard_id();
+
                 // handle first in self if self in target
                 let local_actions = if target.contains(&process_id) {
-                    let (process, _, time) = self.get_process(process_id);
-                    process.handle(process_id, msg.clone(), time)
+                    // handle msg
+                    process.handle(process_id, shard_id, msg.clone(), time)
                 } else {
                     vec![]
                 };
@@ -87,9 +93,13 @@ where
                     // make sure we don't handle again in self
                     .filter(|to| to != &process_id)
                     .flat_map(|to| {
-                        let (process, _, time) = self.get_process(to);
-                        process
-                            .handle(process_id, msg.clone(), time)
+                        // get target process
+                        let (to_process, _, time) = self.get_process(to);
+                        assert_eq!(to_process.id(), to);
+
+                        // handle msg
+                        to_process
+                            .handle(process_id, shard_id, msg.clone(), time)
                             .into_iter()
                             .map(move |action| (to, action))
                     });
@@ -117,9 +127,14 @@ where
         // find client
         let (client, time) = self.get_client(client_id);
         // handle command result
-        client.handle(cmd_result, time);
+        // TODO: we should aggregate command results if we have more than one
+        // shard in simulation
+        client.handle(vec![cmd_result], time);
         // and generate the next command
-        client.next_cmd(time)
+        client.next_cmd(time).map(|(target_shard, cmd)| {
+            let target = client.shard_process(&target_shard);
+            (target, cmd)
+        })
     }
 
     /// Returns the process registered with this identifier.

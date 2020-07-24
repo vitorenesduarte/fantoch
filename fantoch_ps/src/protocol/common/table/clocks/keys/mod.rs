@@ -15,12 +15,12 @@ pub use sequential::SequentialKeyClocks;
 
 use crate::protocol::common::table::Votes;
 use fantoch::command::Command;
-use fantoch::id::ProcessId;
+use fantoch::id::{ProcessId, ShardId};
 use std::fmt::Debug;
 
 pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance given the local process identifier.
-    fn new(id: ProcessId) -> Self;
+    fn new(id: ProcessId, shard_id: ShardId) -> Self;
 
     /// Makes sure there's a clock for each key in the command.
     fn init_clocks(&mut self, cmd: &Command);
@@ -107,7 +107,9 @@ mod tests {
 
     fn keys_clocks_flow<KC: KeyClocks>(all_clocks_match: bool) {
         // create key clocks
-        let mut clocks = KC::new(1);
+        let process_id = 1;
+        let shard_id = 0;
+        let mut clocks = KC::new(process_id, shard_id);
 
         // keys
         let key_a = String::from("A");
@@ -190,7 +192,9 @@ mod tests {
 
     fn keys_clocks_no_double_votes<KC: KeyClocks>() {
         // create key clocks
-        let mut clocks = KC::new(1);
+        let process_id = 1;
+        let shard_id = 0;
+        let mut clocks = KC::new(process_id, shard_id);
 
         // command
         let key = String::from("A");
@@ -247,7 +251,8 @@ mod tests {
     ) {
         // create clocks
         let process_id = 1;
-        let clocks = K::new(process_id);
+        let shard_id = 0;
+        let clocks = K::new(process_id, shard_id);
 
         // spawn workers
         let handles: Vec<_> = (0..nthreads)

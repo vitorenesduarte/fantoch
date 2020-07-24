@@ -180,8 +180,8 @@ async fn listener_task(
 ) {
     loop {
         match listener.accept().await {
-            Ok((stream, addr)) => {
-                log!("[listener] new connection: {:?}", addr);
+            Ok((stream, _addr)) => {
+                log!("[listener] new connection: {:?}", _addr);
 
                 // create connection
                 let connection =

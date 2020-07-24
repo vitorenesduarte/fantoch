@@ -2,7 +2,7 @@ use super::KeyClocks;
 use crate::protocol::common::shared::Shared;
 use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
-use fantoch::id::ProcessId;
+use fantoch::id::{ProcessId, ShardId};
 use fantoch::HashSet;
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,22 +11,27 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct AtomicKeyClocks {
     id: ProcessId,
+    shard_id: ShardId,
     clocks: Arc<Shared<AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
-    fn new(id: ProcessId) -> Self {
+    fn new(id: ProcessId, shard_id: ShardId) -> Self {
         // create shared clocks
         let clocks = Shared::new();
         // wrap them in an arc
         let clocks = Arc::new(clocks);
 
-        Self { id, clocks }
+        Self {
+            id,
+            shard_id,
+            clocks,
+        }
     }
 
     fn init_clocks(&mut self, cmd: &Command) {
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // get initializes the key to the default value, and that's exactly
             // what we want
             let _ = self.clocks.get(key);
@@ -42,10 +47,11 @@ impl KeyClocks for AtomicKeyClocks {
         // to iterate in a way that the highest clock is iterated first, this
         // will be almost equivalent to `LockedKeyClocks`
 
-        let mut clocks = HashSet::with_capacity(cmd.key_count());
-        let mut votes = Votes::with_capacity(cmd.key_count());
+        let key_count = cmd.key_count(self.shard_id);
+        let mut clocks = HashSet::with_capacity(key_count);
+        let mut votes = Votes::with_capacity(key_count);
         let mut up_to = min_clock;
-        cmd.keys().for_each(|key| {
+        cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
             let clock = self.clocks.get(key);
             let previous_value = Self::bump(&clock, up_to);
@@ -63,7 +69,7 @@ impl KeyClocks for AtomicKeyClocks {
         // - if not all clocks match (i.e. we didn't get a result equivalent to
         //   `LockedKeyClocks`), try to make them match
         if clocks.len() > 1 {
-            cmd.keys().for_each(|key| {
+            cmd.keys(self.shard_id).for_each(|key| {
                 let clock = self.clocks.get(key);
                 if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
                     votes.add(key, vr);
@@ -76,8 +82,9 @@ impl KeyClocks for AtomicKeyClocks {
 
     fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
         // create votes
-        let mut votes = Votes::with_capacity(cmd.key_count());
-        for key in cmd.keys() {
+        let key_count = cmd.key_count(self.shard_id);
+        let mut votes = Votes::with_capacity(key_count);
+        for key in cmd.keys(self.shard_id) {
             let clock = self.clocks.get(key);
             if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
                 votes.set(key.clone(), vec![vr]);

@@ -5,13 +5,14 @@ use fantoch::config::Config;
 use fantoch::executor::{
     Executor, ExecutorMetrics, ExecutorResult, MessageKey, Pending,
 };
-use fantoch::id::{Dot, ProcessId, Rifl};
+use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 #[derive(Clone)]
 pub struct TableExecutor {
+    process_id: ProcessId,
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
@@ -22,18 +23,28 @@ pub struct TableExecutor {
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
-    fn new(process_id: ProcessId, config: Config, executors: usize) -> Self {
+    fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        executors: usize,
+    ) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
-        let table =
-            MultiVotesTable::new(process_id, config.n(), stability_threshold);
+        let table = MultiVotesTable::new(
+            process_id,
+            shard_id,
+            config.n(),
+            stability_threshold,
+        );
         let store = KVStore::new();
         // aggregate results if the number of executors is 1
         let aggregate = executors == 1;
-        let pending = Pending::new(aggregate);
+        let pending = Pending::new(aggregate, process_id, shard_id);
         let metrics = ExecutorMetrics::new();
 
         Self {
+            process_id,
             execute_at_commit: config.execute_at_commit(),
             table,
             store,
