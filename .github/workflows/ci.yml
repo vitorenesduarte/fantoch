@@ -18,6 +18,14 @@ jobs:
           toolchain: nightly-2020-06-10
           override: true
 
+      - name: Cargo cache restore
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Test fantoch
         run: cd fantoch/ && cargo test --features timing
         env:
