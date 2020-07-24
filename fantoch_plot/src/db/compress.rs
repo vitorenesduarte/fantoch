@@ -6,6 +6,8 @@ use std::fmt;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HistogramCompress {
+    min: F64,
+    max: F64,
     mean: F64,
     stddev: F64,
     percentiles: HashMap<String, F64>,
@@ -13,9 +15,12 @@ pub struct HistogramCompress {
 
 impl HistogramCompress {
     pub fn from(histogram: &Histogram) -> Self {
+        let min = histogram.min();
+        let max = histogram.max();
         let mean = histogram.mean();
         let stddev = histogram.stddev();
-        // all percentiles from 1 to 100 + 99.9 + 99.99 + 99.999
+        // all percentiles from 0.01 to 1.0 (step by 0.01) + 0.999 + 0.9999 +
+        // 0.99999
         let percentiles = (0..100)
             .map(|percentile| percentile as f64 / 100f64)
             .chain(vec![0.999, 0.9999, 0.99999])
@@ -24,10 +29,20 @@ impl HistogramCompress {
             })
             .collect();
         Self {
+            min,
+            max,
             mean,
             stddev,
             percentiles,
         }
+    }
+
+    pub fn min(&self) -> F64 {
+        self.min
+    }
+
+    pub fn max(&self) -> F64 {
+        self.max
     }
 
     pub fn mean(&self) -> F64 {
@@ -55,10 +70,9 @@ impl fmt::Debug for HistogramCompress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "avg={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
-            // "min={:<6} max={:<6} avg={:<6} p95={:<6} p99={:<6} p99.9={:<6}
-            // p99.99={:<6}", self.min().value().round(),
-            // self.max().value().round(),
+            "min={:<6} max={:<6} avg={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
+            self.min().value().round(),
+            self.max().value().round(),
             self.mean().value().round(),
             self.percentile(0.95).value().round(),
             self.percentile(0.99).value().round(),

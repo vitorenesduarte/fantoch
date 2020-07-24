@@ -233,6 +233,19 @@ impl ResultsDB {
         let global_client_metrics =
             Self::global_client_metrics(&client_metrics);
 
+        // client dstats (need to be after processing client metrics so that we
+        // have a `start` and an `end` for pruning)
+        let mut client_dstats = HashMap::new();
+
+        for (region, _, _, _) in exp_config.placement.iter() {
+            // create client file prefix
+            let prefix = fantoch_exp::config::file_prefix(None, region);
+
+            // load this region's client dstat
+            let client = Self::load_dstat(&timestamp, prefix, start, end)?;
+            client_dstats.insert(region.clone(), client);
+        }
+
         // process metrics and dstats
         let mut process_metrics = HashMap::new();
         let mut process_dstats = HashMap::new();
@@ -261,6 +274,7 @@ impl ResultsDB {
             process_metrics,
             process_dstats,
             client_metrics,
+            client_dstats,
             global_client_metrics,
         ))
     }

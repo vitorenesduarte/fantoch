@@ -4,7 +4,8 @@ use fantoch::client::{KeyGen, ShardGen};
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
-    ErrorBar, ExperimentData, LatencyMetric, PlotFmt, ResultsDB, Search, Style,
+    DstatType, ErrorBar, ExperimentData, LatencyMetric, PlotFmt, ResultsDB,
+    Search, Style,
 };
 use std::collections::HashMap;
 
@@ -217,15 +218,23 @@ fn partial_replication() -> Result<(), Report> {
                 .collect();
 
             // generate dstat table
-            let path = format!(
-                "dstat_n{}_ts{}_s{}_c{}_zipf{}.pdf",
-                n,
-                shard_count,
-                shards_per_command,
-                clients_per_region,
-                zipf_coefficient,
-            );
-            fantoch_plot::dstat_table(searches.clone(), &path, &mut db)?;
+            for dstat_type in vec![DstatType::Process, DstatType::Client] {
+                let path = format!(
+                    "dstat_{}_n{}_ts{}_s{}_c{}_zipf{}.pdf",
+                    dstat_type.name(),
+                    n,
+                    shard_count,
+                    shards_per_command,
+                    clients_per_region,
+                    zipf_coefficient,
+                );
+                fantoch_plot::dstat_table(
+                    searches.clone(),
+                    dstat_type,
+                    &path,
+                    &mut db,
+                )?;
+            }
 
             // generate latency plot
             let mut shown = false;
@@ -376,11 +385,22 @@ fn multi_key() -> Result<(), Report> {
                         .collect();
 
                 // generate dstat table
-                let path = format!(
-                    "dstat_n{}_k{}_c{}_zipf{}.pdf",
-                    n, keys_per_shard, clients_per_region, zipf_coefficient,
-                );
-                fantoch_plot::dstat_table(searches.clone(), &path, &mut db)?;
+                for dstat_type in vec![DstatType::Process, DstatType::Client] {
+                    let path = format!(
+                        "dstat_{}_n{}_k{}_c{}_zipf{}.pdf",
+                        dstat_type.name(),
+                        n,
+                        keys_per_shard,
+                        clients_per_region,
+                        zipf_coefficient,
+                    );
+                    fantoch_plot::dstat_table(
+                        searches.clone(),
+                        dstat_type,
+                        &path,
+                        &mut db,
+                    )?;
+                }
 
                 // generate latency plot
                 let mut shown = false;

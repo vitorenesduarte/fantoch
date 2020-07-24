@@ -13,6 +13,7 @@ use std::time::Duration;
 pub struct ExperimentData {
     pub process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
     pub global_process_dstats: DstatCompress,
+    pub global_client_dstats: DstatCompress,
     pub client_latency: HashMap<Region, HistogramCompress>,
     pub global_client_latency: HistogramCompress,
 }
@@ -24,6 +25,7 @@ impl ExperimentData {
         process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
         process_dstats: HashMap<ProcessId, Dstat>,
         client_metrics: HashMap<Region, ClientData>,
+        client_dstats: HashMap<Region, Dstat>,
         global_client_metrics: ClientData,
     ) -> Self {
         // merge all process dstats
@@ -31,8 +33,16 @@ impl ExperimentData {
         for (_, process_dstat) in process_dstats {
             global_process_dstats.merge(&process_dstat);
         }
-        // compress global dstat
+        // compress global process dstat
         let global_process_dstats = DstatCompress::from(&global_process_dstats);
+
+        // merge all client dstats
+        let mut global_client_dstats = Dstat::new();
+        for (_, client_dstat) in client_dstats {
+            global_client_dstats.merge(&client_dstat);
+        }
+        // compress global client dstat
+        let global_client_dstats = DstatCompress::from(&global_client_dstats);
 
         // we should use milliseconds if: AWS or (baremetal + injected latency)
         let precision = match testbed {
@@ -81,6 +91,7 @@ impl ExperimentData {
             process_metrics,
             global_process_dstats,
             client_latency,
+            global_client_dstats,
             global_client_latency,
         }
     }

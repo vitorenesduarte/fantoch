@@ -67,6 +67,20 @@ pub enum Style {
     LineWidth,
 }
 
+pub enum DstatType {
+    Process,
+    Client,
+}
+
+impl DstatType {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Process => "process",
+            Self::Client => "client",
+        }
+    }
+}
+
 enum AxisToScale {
     X,
     Y,
@@ -524,6 +538,7 @@ pub fn throughput_latency_plot(
 
 pub fn dstat_table(
     searches: Vec<Search>,
+    dstat_type: DstatType,
     output_file: &str,
     db: &mut ResultsDB,
 ) -> Result<(), Report> {
@@ -564,14 +579,18 @@ pub fn dstat_table(
         );
         row_labels.push(row_label);
 
+        // select the correct dstats depending on the `DstatType` chosen
+        let dstats = match dstat_type {
+            DstatType::Process => &exp_data.global_process_dstats,
+            DstatType::Client => &exp_data.global_client_dstats,
+        };
         // fetch all cell data
-        let cpu_usr = exp_data.global_process_dstats.cpu_usr_mad();
-        let cpu_sys = exp_data.global_process_dstats.cpu_sys_mad();
-        let cpu_wait = exp_data.global_process_dstats.cpu_wait_mad();
-        let net_recv = exp_data.global_process_dstats.net_recv();
-        let net_send = exp_data.global_process_dstats.net_send_mad();
-        let mem_used = exp_data.global_process_dstats.mem_used_mad();
-
+        let cpu_usr = dstats.cpu_usr_mad();
+        let cpu_sys = dstats.cpu_sys_mad();
+        let cpu_wait = dstats.cpu_wait_mad();
+        let net_recv = dstats.net_recv();
+        let net_send = dstats.net_send_mad();
+        let mem_used = dstats.mem_used_mad();
         // create cell
         let cell =
             vec![cpu_usr, cpu_sys, cpu_wait, net_recv, net_send, mem_used];
