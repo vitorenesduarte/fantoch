@@ -1,4 +1,4 @@
-use crate::db::{Dstat, HistogramCompress, DstatCompress};
+use crate::db::{Dstat, DstatCompress, HistogramCompress};
 use fantoch::client::ClientData;
 use fantoch::id::ProcessId;
 use fantoch::metrics::Histogram;

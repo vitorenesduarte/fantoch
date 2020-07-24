@@ -40,8 +40,10 @@ fn partial_replication() -> Result<(), Report> {
         // shards_per_command, shard_count
         (1, 1),
         (1, 2),
-        (2, 2),
         (1, 3),
+        (2, 2),
+        (2, 3),
+        (1, 4),
     ];
 
     // load results
@@ -94,14 +96,43 @@ fn partial_replication() -> Result<(), Report> {
                 )
             })
             .collect();
+
         let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
-            Some(Box::new(|_| {
-                // set some styles as empty
+            Some(Box::new(|search| {
+                // create styles
+                let mut styles = HashMap::new();
+                styles.insert((1, 1), ("#1abc9c", "s"));
+                styles.insert((1, 2), ("#218c74", "D"));
+                styles.insert((2, 2), ("#227093", "."));
+                styles.insert((1, 3), ("#bdc3c7", "+"));
+                styles.insert((2, 3), ("#34495e", "x"));
+                styles.insert((1, 4), ("#ffa726", "v"));
+
+                // get shards config of this search
+                let shards_per_command = search.shards_per_command.unwrap();
+                let ShardGen::Random { shard_count } =
+                    search.shard_gen.unwrap();
+
+                // find color and marker for this search
+                let (color, marker) = if let Some(entry) =
+                    styles.get(&(shards_per_command, shard_count))
+                {
+                    entry
+                } else {
+                    panic!(
+                        "unsupported shards config pair: {:?}",
+                        (shards_per_command, shard_count)
+                    );
+                };
+
+                // set all styles for this search
                 let mut style = HashMap::new();
-                style.insert(Style::Color, String::new());
-                style.insert(Style::Marker, String::new());
-                style.insert(Style::LineStyle, String::new());
-                style.insert(Style::LineWidth, String::new());
+                style.insert(
+                    Style::Label,
+                    format!("t = {} | s = {}", shard_count, shards_per_command),
+                );
+                style.insert(Style::Color, color.to_string());
+                style.insert(Style::Marker, marker.to_string());
                 style
             }));
         fantoch_plot::throughput_latency_plot(
@@ -187,7 +218,7 @@ fn partial_replication() -> Result<(), Report> {
 
             // generate dstat table
             let path = format!(
-                "dstat_n{}_ts{}_s_{}_c{}_zipf{}.pdf",
+                "dstat_n{}_ts{}_s{}_c{}_zipf{}.pdf",
                 n,
                 shard_count,
                 shards_per_command,

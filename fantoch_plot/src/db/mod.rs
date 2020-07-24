@@ -1,12 +1,12 @@
+mod compress;
 mod dstat;
 mod exp_data;
-mod compress;
 mod results_db;
 
 // Re-exports.
+pub use compress::{DstatCompress, HistogramCompress};
 pub use dstat::Dstat;
 pub use exp_data::ExperimentData;
-pub use compress::{DstatCompress, HistogramCompress};
 pub use results_db::ResultsDB;
 
 use fantoch::client::{KeyGen, ShardGen};
@@ -17,12 +17,12 @@ pub struct Search {
     pub n: usize,
     pub f: usize,
     pub protocol: Protocol,
-    clients_per_region: Option<usize>,
-    shards_per_command: Option<usize>,
-    shard_gen: Option<ShardGen>,
-    keys_per_shard: Option<usize>,
-    key_gen: Option<KeyGen>,
-    payload_size: Option<usize>,
+    pub clients_per_region: Option<usize>,
+    pub shards_per_command: Option<usize>,
+    pub shard_gen: Option<ShardGen>,
+    pub keys_per_shard: Option<usize>,
+    pub key_gen: Option<KeyGen>,
+    pub payload_size: Option<usize>,
 }
 
 impl Search {

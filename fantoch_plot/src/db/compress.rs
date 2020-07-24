@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HistogramCompress {
     mean: F64,
     stddev: F64,
@@ -47,6 +47,24 @@ impl HistogramCompress {
                 percentile
             )
         }
+    }
+}
+
+// same as `Histogram`'s
+impl fmt::Debug for HistogramCompress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "avg={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
+            // "min={:<6} max={:<6} avg={:<6} p95={:<6} p99={:<6} p99.9={:<6}
+            // p99.99={:<6}", self.min().value().round(),
+            // self.max().value().round(),
+            self.mean().value().round(),
+            self.percentile(0.95).value().round(),
+            self.percentile(0.99).value().round(),
+            self.percentile(0.999).value().round(),
+            self.percentile(0.9999).value().round()
+        )
     }
 }
 
