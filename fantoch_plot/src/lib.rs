@@ -588,7 +588,7 @@ pub fn dstat_table(
         let cpu_usr = dstats.cpu_usr_mad();
         let cpu_sys = dstats.cpu_sys_mad();
         let cpu_wait = dstats.cpu_wait_mad();
-        let net_recv = dstats.net_recv();
+        let net_recv = dstats.net_recv_mad();
         let net_send = dstats.net_send_mad();
         let mem_used = dstats.mem_used_mad();
         // create cell

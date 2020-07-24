@@ -116,7 +116,7 @@ impl DstatCompress {
         Self::mad(&self.cpu_wait, None)
     }
 
-    pub fn net_recv(&self) -> (u64, u64) {
+    pub fn net_recv_mad(&self) -> (u64, u64) {
         Self::mad(&self.net_recv, Some(1_000_000f64))
     }
 
@@ -145,7 +145,7 @@ impl fmt::Debug for DstatCompress {
         let usr = self.cpu_usr_mad();
         let sys = self.cpu_sys_mad();
         let wait = self.cpu_wait_mad();
-        let recv = self.net_recv();
+        let recv = self.net_recv_mad();
         let send = self.net_send_mad();
         let used = self.mem_used_mad();
         writeln!(f, "cpu:")?;
