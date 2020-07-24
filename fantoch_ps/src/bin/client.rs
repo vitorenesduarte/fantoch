@@ -93,7 +93,7 @@ fn parse_args() -> ClientArgs {
             Arg::with_name("keys_per_shard")
                 .long("keys_per_shard")
                 .value_name("KEYS_PER_SHARD")
-                .help("number of keys per shard accessed commands to be issued by each client; default: 1")
+                .help("number of keys per shard accessed by commands to be issued by each client; default: 1")
                 .takes_value(true),
         )
         .arg(

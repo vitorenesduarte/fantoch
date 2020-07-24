@@ -285,10 +285,9 @@ async fn client_server_task_register_cmd(
             client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
         }
     } else {
-        // if there's a single executor, send a single `WaitForRifl`
         debug_assert!(client_to_executors.pool_size() == 1);
-
-        // find any key
+        // if there's a single executor, send a single `WaitForRifl`; since the
+        // selected key doesn't matter, find any
         let key = cmd
             .keys(shard_id)
             .next()
@@ -388,15 +387,16 @@ pub fn start_client_rw_tasks(
     HashMap<ProcessId, ClientToServerSender>,
 ) {
     // create server-to-client channels: although we keep one connection per
-    // shard, the client will receive messages that can be from any of the
-    // shards, since all rw tasks will write to the same channel
+    // shard, we'll have all rw tasks will write to the same channel; this means
+    // the client will read from a single channel (and potentially receive
+    // messages from any of the shards)
     let (mut s2c_tx, s2c_rx) = super::channel(channel_buffer_size);
     s2c_tx.set_name(format!("server_to_client_{}", ids_repr(&client_ids)));
 
     let mut process_to_tx = HashMap::with_capacity(connections.len());
     for (process_id, connection) in connections {
         // create client-to-server channels: since clients may send operations
-        // to different shards, we keep a channel to each rw task
+        // to different shards, we create one client-to-rw channel per rw task
         let (mut c2s_tx, c2s_rx) = super::channel(channel_buffer_size);
         c2s_tx.set_name(format!(
             "client_to_server_{}_{}",

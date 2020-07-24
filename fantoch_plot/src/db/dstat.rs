@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct Dstat {
     pub cpu_usr: Histogram,
     pub cpu_sys: Histogram,
@@ -18,14 +18,7 @@ pub struct Dstat {
 
 impl Dstat {
     pub fn new() -> Self {
-        Self {
-            cpu_usr: Histogram::new(),
-            cpu_sys: Histogram::new(),
-            cpu_wait: Histogram::new(),
-            net_recv: Histogram::new(),
-            net_send: Histogram::new(),
-            mem_used: Histogram::new(),
-        }
+        Default::default()
     }
 
     pub fn merge(&mut self, other: &Self) {
@@ -37,7 +30,7 @@ impl Dstat {
         self.mem_used.merge(&other.mem_used);
     }
 
-    pub fn from(start: u64, end: u64, path: &String) -> Result<Self, Report> {
+    pub fn from(start: u64, end: u64, path: &str) -> Result<Self, Report> {
         // create all histograms
         let mut cpu_usr = Histogram::new();
         let mut cpu_sys = Histogram::new();

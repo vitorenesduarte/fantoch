@@ -831,7 +831,10 @@ impl ShardsPending {
                 // add new result
                 results.push(result);
 
-                // return results if we have all results we should
+                // return results if we have one `CommandResult` per shard
+                // - TODO: add an assert checking that indeed these
+                //   `CommandResult` came from different shards, and are not
+                //   sent by the same shard
                 if results.len() == *shard_count {
                     let (_, results) = entry.remove();
                     Some((rifl.source(), results))

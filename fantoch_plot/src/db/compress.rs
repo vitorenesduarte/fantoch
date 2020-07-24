@@ -119,8 +119,8 @@ impl DstatCompress {
         let mut mean = hist.mean().value();
         let mut stddev = hist.stddev().value();
         if let Some(norm) = norm {
-            mean = mean / norm;
-            stddev = stddev / norm;
+            mean /= norm;
+            stddev /= norm;
         }
         (mean.round() as u64, stddev.round() as u64)
     }

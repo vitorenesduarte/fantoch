@@ -9,7 +9,7 @@ use std::collections::HashMap;
 const MACHINES: &str = "exp_files/machines";
 const PRIVATE_KEY: &str = "~/.ssh/id_rsa";
 
-pub fn create_launchers<'a>(
+pub fn create_launchers(
     regions: &Vec<rusoto_core::Region>,
     shard_count: usize,
 ) -> Vec<tsunami::providers::baremetal::Machine> {

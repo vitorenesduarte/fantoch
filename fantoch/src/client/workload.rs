@@ -38,16 +38,13 @@ impl Workload {
         payload_size: usize,
     ) -> Self {
         // check for valid workloads
-        match key_gen {
-            KeyGen::ConflictRate { conflict_rate } => {
-                if conflict_rate == 100 && keys_per_shard > 1 {
-                    panic!("invalid workload; can't generate more than one key per shard when the conflict_rate is 100");
-                }
-                if keys_per_shard > 2 {
-                    panic!("invalid workload; can't generate more than two keys per shard with the conflict_rate key generator");
-                }
+        if let KeyGen::ConflictRate { conflict_rate } = key_gen {
+            if conflict_rate == 100 && keys_per_shard > 1 {
+                panic!("invalid workload; can't generate more than one key per shard when the conflict_rate is 100");
             }
-            _ => (),
+            if keys_per_shard > 2 {
+                panic!("invalid workload; can't generate more than two keys per shard with the conflict_rate key generator");
+            }
         }
         Self {
             shards_per_command,
@@ -157,7 +154,9 @@ impl Workload {
 
         for shard_id in shard_ids {
             // create entry for shard
-            let shard_ops = ops.entry(shard_id).or_insert_with(HashMap::new);
+            let shard_ops = ops
+                .entry(shard_id)
+                .or_insert_with(|| HashMap::with_capacity(self.keys_per_shard));
 
             // generate unique keys
             let keys = Self::gen_unique(self.keys_per_shard, || {

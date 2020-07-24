@@ -57,26 +57,16 @@ fn enqueue<M>(
 ) {
     if let Some(msg) = msg {
         queue.push_back((deadline(delay), msg));
-        match read_status {
-            ReadStatus::Fail => {
-                // means we were in Fail, thus => Read
-                *read_status = ReadStatus::Read;
-            }
-            _ => {
-                // keep in read / fail after read
-            }
+        if let ReadStatus::Fail = read_status {
+            // means we were in Fail, thus => Read
+            *read_status = ReadStatus::Read;
         }
     } else {
         println!("[delay_task] error receiving message from parent");
-        match read_status {
-            ReadStatus::Read => {
-                // means we were in Fail, then went to Read, thus =>
-                // FailAfterRead
-                *read_status = ReadStatus::FailAfterRead;
-            }
-            _ => {
-                // keep in fail / fail after read
-            }
+        if let ReadStatus::Read = read_status {
+            // means we were in Fail, then went to Read, thus =>
+            // FailAfterRead
+            *read_status = ReadStatus::FailAfterRead;
         }
     }
 }

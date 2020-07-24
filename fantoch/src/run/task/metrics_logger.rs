@@ -67,7 +67,7 @@ pub async fn metrics_logger_task(
 /// likely we won't end up with a corrupted file if we're shutdown in the middle
 /// of this.
 // TODO make this async
-fn serialize_process_metrics(data: &ProcessMetrics, path: &String) {
+fn serialize_process_metrics(data: &ProcessMetrics, path: &str) {
     // if the file does not exist it will be created, otherwise truncated
     let tmp = format!("{}_tmp", path);
     let file = std::fs::File::create(&tmp)

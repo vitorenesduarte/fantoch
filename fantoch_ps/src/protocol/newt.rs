@@ -278,7 +278,8 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // send votes if we can bypass the mcollectack, otherwise store them
         // - if the command acesses more than one shard, the optimization is
-        //   disabled
+        //   disabled; this is because the `MShardCommit` messages "need to" be
+        //   aggregated at a single process (in order to reduce net traffic)
         let coordinator_votes = if self.skip_fast_ack && shard_count == 1 {
             process_votes
         } else {
@@ -407,12 +408,13 @@ impl<KC: KeyClocks> Newt<KC> {
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
 
+        // (see previous use of `self.skip_fast_ack` for an explanation of
+        // what's going on here)
         if !message_from_self && self.skip_fast_ack && shard_count == 1 {
             votes.merge(process_votes);
 
             // if tiny quorums and f = 1, the fast quorum process can commit the
             // command right away; create `MCommit`
-            let shard_count = info.cmd.as_ref().unwrap().shard_count();
             self.commit_actions(dot, clock, votes, shard_count)
         } else {
             // create `MCollectAck` and target
@@ -481,8 +483,8 @@ impl<KC: KeyClocks> Newt<KC> {
         // - TODO: it also seems that this (or the MCommit equivalent) must run
         //   with real time, otherwise there's a huge tail; but that don't make
         //   any sense
+        let cmd = info.cmd.as_ref().unwrap();
         if !message_from_self {
-            let cmd = info.cmd.as_ref().unwrap();
             let detached = self.key_clocks.vote(cmd, max_clock);
             // update votes with detached
             info.votes.merge(detached);
@@ -499,7 +501,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 let votes = Self::reset_votes(&mut info.votes);
 
                 // create `MCommit`
-                let shard_count = info.cmd.as_ref().unwrap().shard_count();
+                let shard_count = cmd.shard_count();
                 self.commit_actions(dot, max_clock, votes, shard_count)
             } else {
                 self.bp.slow_path();
@@ -610,7 +612,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         if self.gc_running() && my_shard {
             // if running gc and this dot belongs to my shard, then notify self
-            // (i.e. the worker rensposible for GC) with the committed dot
+            // (i.e. the worker responsible for GC) with the committed dot
             actions.reserve_exact(1);
             actions.push(Action::ToForward {
                 msg: Message::MCommitDot { dot },
@@ -848,14 +850,7 @@ impl<KC: KeyClocks> Newt<KC> {
             .expect("votes in shard commit info should be set");
 
         // create `MCommit`
-        let mcommit = Message::MCommit { dot, clock, votes };
-        let target = self.bp.all();
-
-        // return `ToSend`
-        vec![Action::ToSend {
-            target,
-            msg: mcommit,
-        }]
+        self.final_commit_action(dot, clock, votes)
     }
 
     #[instrument(skip(self, from, dot, _time))]
@@ -979,7 +974,7 @@ impl<KC: KeyClocks> Newt<KC> {
         target_shard: bool,
     ) -> Vec<Action<Self>> {
         if target_shard {
-            // action_count = (shard_count - 1) MForwardSubmit + 1 MCollect =
+            // action_count = (shard_count - 1)MForwardSubmit + 1MCollect =
             // shard_count
             let action_count = cmd.shard_count();
             let mut actions = Vec::with_capacity(action_count);
@@ -1005,7 +1000,7 @@ impl<KC: KeyClocks> Newt<KC> {
             }
             actions
         } else {
-            // action_count = 1 MCollect
+            // action_count = 1MCollect
             let action_count = 1;
             Vec::with_capacity(action_count)
         }
@@ -1020,12 +1015,8 @@ impl<KC: KeyClocks> Newt<KC> {
     ) -> Vec<Action<Self>> {
         match shard_count {
             1 => {
-                let mcommit = Message::MCommit { dot, clock, votes };
-                let target = self.bp.all();
-                vec![Action::ToSend {
-                    target,
-                    msg: mcommit,
-                }]
+                // create `MCommit`
+                self.final_commit_action(dot, clock, votes)
             }
             _ => {
                 // if the command accesses more than one shard, send an
@@ -1062,6 +1053,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 // create `MShardCommit`
                 let mshard_commit = Message::MShardCommit { dot, clock };
                 // the aggregation with occurs at the process in targetted shard
+                // (which is the owner of the commmand's `dot`)
                 let target = singleton!(dot.source());
                 vec![Action::ToSend {
                     target,
@@ -1069,6 +1061,20 @@ impl<KC: KeyClocks> Newt<KC> {
                 }]
             }
         }
+    }
+
+    fn final_commit_action(
+        &self,
+        dot: Dot,
+        clock: u64,
+        votes: Votes,
+    ) -> Vec<Action<Self>> {
+        let mcommit = Message::MCommit { dot, clock, votes };
+        let target = self.bp.all();
+        vec![Action::ToSend {
+            target,
+            msg: mcommit,
+        }]
     }
 
     // Replaces the value `local_votes` with empty votes, returning the previous
