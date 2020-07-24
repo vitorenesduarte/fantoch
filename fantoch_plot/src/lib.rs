@@ -594,6 +594,7 @@ pub fn dstat_table(
         // create cell
         let cell =
             vec![cpu_usr, cpu_sys, cpu_wait, net_recv, net_send, mem_used];
+        // format cell
         let fmt_cell_data = |mad: (_, _)| format!("{} ± {}", mad.0, mad.1);
         let cell: Vec<_> = cell.into_iter().map(fmt_cell_data).collect();
 
