@@ -1,5 +1,7 @@
 // Re-exports.
-pub use fantoch::util::{process_ids, sort_processes_by_distance};
+pub use fantoch::util::{
+    closest_process_per_shard, process_ids, sort_processes_by_distance,
+};
 
 #[cfg(test)]
 pub use tests::{gen_cmd, vclock};

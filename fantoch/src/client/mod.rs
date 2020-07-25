@@ -33,7 +33,7 @@ pub struct Client {
     client_id: ClientId,
     /// mapping from shard id to the process id of that shard this client is
     /// connected to
-    connected: HashMap<ShardId, ProcessId>,
+    processes: HashMap<ShardId, ProcessId>,
     /// rifl id generator
     rifl_gen: RiflGen,
     /// workload configuration
@@ -52,7 +52,7 @@ impl Client {
         // create client
         Self {
             client_id,
-            connected: HashMap::new(),
+            processes: HashMap::new(),
             rifl_gen: RiflGen::new(client_id),
             workload,
             key_gen_state: workload.key_gen().initial_state(client_id),
@@ -67,21 +67,14 @@ impl Client {
     }
 
     /// "Connect" to the closest process on each shard.
-    pub fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) {
-        self.connected = HashMap::new();
-        for (process_id, shard_id) in processes {
-            // only insert the first entry for each shard id (which will be the
-            // closest)
-            if !self.connected.contains_key(&shard_id) {
-                self.connected.insert(shard_id, process_id);
-            }
-        }
+    pub fn connect(&mut self, processes: HashMap<ShardId, ProcessId>) {
+        self.processes = processes;
     }
 
     /// Retrieves the closest process on this shard.
     pub fn shard_process(&self, shard_id: &ShardId) -> ProcessId {
         *self
-            .connected
+            .processes
             .get(shard_id)
             .expect("client should be connected to all shards")
     }
@@ -207,17 +200,16 @@ mod tests {
         let mut client = gen_client(total_commands);
 
         // check discover with empty vec
-        let sorted = util::sort_processes_by_distance(&region, &planet, vec![]);
-        client.discover(sorted);
-        assert!(client.connected.is_empty());
+        let closest = util::closest_process_per_shard(&region, &planet, vec![]);
+        client.connect(closest);
+        assert!(client.processes.is_empty());
 
         // check discover with processes
-        let sorted =
-            util::sort_processes_by_distance(&region, &planet, processes);
-        dbg!(&sorted);
-        client.discover(sorted);
+        let closest =
+            util::closest_process_per_shard(&region, &planet, processes);
+        client.connect(closest);
         assert_eq!(
-            BTreeMap::from_iter(client.connected),
+            BTreeMap::from_iter(client.processes),
             // connected to process 2 on shard 0 and process 3 on shard 1
             BTreeMap::from_iter(vec![(shard_0_id, 2), (shard_1_id, 3)])
         );
@@ -244,9 +236,9 @@ mod tests {
         let mut client = gen_client(total_commands);
 
         // discover
-        let sorted =
-            util::sort_processes_by_distance(&region, &planet, processes);
-        client.discover(sorted);
+        let closest =
+            util::closest_process_per_shard(&region, &planet, processes);
+        client.connect(closest);
 
         // create system time
         let mut time = SimTime::new();

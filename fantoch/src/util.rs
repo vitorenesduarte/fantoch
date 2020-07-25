@@ -114,6 +114,22 @@ pub fn sort_processes_by_distance(
         .collect()
 }
 
+/// Returns a mapping from shard id to the closest process on that shard.
+pub fn closest_process_per_shard(
+    region: &Region,
+    planet: &Planet,
+    processes: Vec<(ProcessId, ShardId, Region)>,
+) -> HashMap<ShardId, ProcessId> {
+    let sorted = sort_processes_by_distance(region, planet, processes);
+    let mut processes = HashMap::new();
+    for (process_id, shard_id) in sorted {
+        if !processes.contains_key(&shard_id) {
+            processes.insert(shard_id, process_id);
+        }
+    }
+    processes
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;

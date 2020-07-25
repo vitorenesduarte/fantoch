@@ -632,7 +632,7 @@ async fn client_setup<A>(
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
-    let mut to_discover = Vec::with_capacity(addresses.len());
+    let mut to_discover = HashMap::with_capacity(addresses.len());
     let mut connections = Vec::with_capacity(addresses.len());
 
     // connect to each address (one per shard)
@@ -663,7 +663,7 @@ where
                 .await?;
 
         // update set of processes to be discovered by the client
-        to_discover.push((process_id, shard_id));
+        assert!(to_discover.insert(shard_id, process_id).is_none(), "client should try to connect to the same shard more than once, only to the closest one");
 
         // update list of connected processes
         connections.push((process_id, connection));
@@ -682,7 +682,7 @@ where
         .map(|client_id| {
             let mut client = Client::new(client_id, workload);
             // discover processes
-            client.discover(to_discover.clone());
+            client.connect(to_discover.clone());
             (client_id, client)
         })
         .collect();

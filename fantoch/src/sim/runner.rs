@@ -140,12 +140,12 @@ where
                 client_id += 1;
                 let mut client = Client::new(client_id, workload);
                 // discover
-                let sorted = util::sort_processes_by_distance(
+                let closest = util::closest_process_per_shard(
                     &region,
                     &planet,
                     to_discover.clone(),
                 );
-                client.discover(sorted);
+                client.connect(closest);
                 // and register it
                 simulation.register_client(client);
                 client_to_region.insert(client_id, region.clone());

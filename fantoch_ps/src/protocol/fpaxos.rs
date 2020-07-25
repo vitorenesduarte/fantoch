@@ -599,12 +599,9 @@ mod tests {
         let mut client_1 = Client::new(client_id, workload);
 
         // discover processes in client 1
-        let sorted = util::sort_processes_by_distance(
-            &client_region,
-            &planet,
-            processes,
-        );
-        client_1.discover(sorted);
+        let closest =
+            util::closest_process_per_shard(&client_region, &planet, processes);
+        client_1.connect(closest);
 
         // start client
         let (target_shard, cmd) = client_1
