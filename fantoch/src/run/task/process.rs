@@ -40,16 +40,16 @@ where
     A: ToSocketAddrs + Debug,
     P: Protocol + 'static,
 {
-    // check that (n * shards) - 1 addresses were set
-    let total = config.n() * config.shards();
+    // check that (n-1 + shards-1) addresses were set
+    let total = config.n() - 1 + config.shards() - 1;
     assert_eq!(
         addresses.len(),
-        total - 1,
-        "addresses count should be (n * shards) - 1"
+        total,
+        "addresses count should be (n-1 + shards-1)"
     );
 
     // compute the number of expected connections
-    let total_connections = (total - 1) * multiplexing;
+    let total_connections = total * multiplexing;
 
     // spawn listener
     let mut from_listener = task::spawn_producer(channel_buffer_size, |tx| {

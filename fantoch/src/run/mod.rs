@@ -266,11 +266,11 @@ where
         ask_ping_task(to_ping).await
     };
 
-    // check that we have n processes
+    // check that we have n processes (all in my shard), plus one connection to each other shard
     assert_eq!(
         sorted_processes.len(),
-        config.n() * config.shards(),
-        "sorted processes count should be n * shards"
+        config.n() + config.shards() - 1,
+        "sorted processes count should be n + shards - 1"
     );
 
     // ---------------------
@@ -1049,58 +1049,67 @@ pub mod tests {
             }
             index
         };
-        let same_region_index =
+        let same_shard_id_but_self =
+            |process_id: ProcessId,
+             shard_id: ShardId,
+             ids: &Vec<(ProcessId, ShardId)>| {
+                ids.clone().into_iter().filter(move |(peer_id, peer_shard_id)| {
+                    // keep all that have the same shard id (that are not self)
+                    *peer_id != process_id && *peer_shard_id == shard_id
+                })
+            };
+        let same_region_index_but_self =
             |process_id: ProcessId, ids: &Vec<(ProcessId, ShardId)>| {
                 // compute index
                 let index = region_index(process_id);
-                ids.clone().into_iter().partition(|(peer_id, _)| {
-                    // keep all that have the same index
-                    region_index(*peer_id) == index
+                ids.clone().into_iter().filter(move |(peer_id, _)| {
+                    // keep all that have the same index (that are not self)
+                    *peer_id != process_id && region_index(*peer_id) == index
                 })
             };
 
+        // compute the set of processes we should connect to
+
         for (process_id, shard_id) in util::all_process_ids(shard_count, n) {
-            let sorted_processes = if shard_count == 1 {
+            // the following shuffle is here in case these `connect_to` processes are used to compute `sorted_processes`
+            use rand::seq::SliceRandom;
+            ids.shuffle(&mut rand::thread_rng());
+
+            // start `connect_to` will the processes within the same region (i.e. one connection to each shard)
+            let mut connect_to: Vec<_> =
+                same_region_index_but_self(process_id, &ids).collect();
+
+            // make self the first element
+            let myself = (process_id, shard_id);
+            connect_to.insert(0, myself);
+
+            // add the missing processes from my shard (i.e. the processes from my shard in the other regions)
+            connect_to
+                .extend(same_shard_id_but_self(process_id, shard_id, &ids));
+
+            let sorted_processes = if shard_count > 1 {
+                // don't set sorted processes in partial replication (no reason, just for testing)
                 None
             } else {
-                // only set sorted processes if partial replication
-                use rand::seq::SliceRandom;
-                ids.shuffle(&mut rand::thread_rng());
-
-                // partition ids: `sorted_processes` will only contain the
-                // processes that belong to the same "region index"
-                let (mut sorted_processes, other_regions): (Vec<_>, Vec<_>) =
-                    same_region_index(process_id, &ids);
-
-                // remove self
-                let myself = (process_id, shard_id);
-                sorted_processes.retain(|entry| entry != &myself);
-
-                // make self the first element
-                sorted_processes.insert(0, myself);
-
-                // add the remaining processse from other "region indexes"
-                sorted_processes.extend(other_regions);
-
-                // check that indeed self was removed
-                assert_eq!(
-                    sorted_processes.len(),
-                    ids.len(),
-                    "sorted processes should contain all ids"
-                );
-
-                Some(sorted_processes)
+                // set sorted processes in full replication (no reason, just for testing)
+                Some(connect_to.clone())
             };
 
             // get ports
             let port = *ports.get(&process_id).unwrap();
             let client_port = *client_ports.get(&process_id).unwrap();
 
-            // addresses: all but self
-            let mut addresses = all_addresses.clone();
-            addresses.remove(&process_id);
-            let addresses = addresses
+            // compute addresses
+            let addresses = all_addresses
+                .clone()
                 .into_iter()
+                .filter(|(peer_id, _)| {
+                    // connect to all in `connect_to` but self
+                    connect_to
+                        .iter()
+                        .any(|(to_connect_id, _)| to_connect_id == peer_id)
+                        && *peer_id != process_id
+                })
                 .map(|(process_id, address)| {
                     let delay = if process_id % 2 == 1 {
                         // add 0 delay to odd processes
@@ -1170,10 +1179,11 @@ pub mod tests {
                 let client_ids = (client_id_start..=client_id_end).collect();
 
                 // connect client to all processes in the same "region index"
-                let (same_region, _) = same_region_index(process_id, &ids);
-                let addresses = same_region
-                    .into_iter()
-                    .map(|(peer_id, _)| {
+                let addresses = same_region_index_but_self(process_id, &ids)
+                    .map(|(peer_id, _)| peer_id)
+                    // also connect to "self"
+                    .chain(std::iter::once(process_id))
+                    .map(|peer_id| {
                         let client_port = *client_ports.get(&peer_id).unwrap();
                         format!("localhost:{}", client_port)
                     })

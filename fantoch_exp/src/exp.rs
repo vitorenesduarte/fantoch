@@ -4,9 +4,9 @@ use crate::util;
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::id::ProcessId;
+use fantoch::id::{ProcessId, ShardId};
 use fantoch::planet::Region;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -128,58 +128,53 @@ impl<'a> Machines<'a> {
         shard_count: usize,
         n: usize,
         process_id: ProcessId,
+        shard_id: ShardId,
+        region_index: usize,
     ) -> Vec<ProcessId> {
-        // find my region index
-        let mut indexes: Vec<_> = self
-            .placement
-            .values()
-            .filter_map(|(peer_id, region_index)| {
-                if *peer_id == process_id {
-                    Some(*region_index)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        assert_eq!(
-            indexes.len(),
-            1,
-            "there should be a single region index for this processe"
-        );
-        let my_region_index = indexes.remove(0);
-
         let mut sorted_processes = Vec::new();
         // make sure we're the first process
         sorted_processes.push(process_id);
 
-        // add the remaining processes
-        for region_index in (my_region_index..=n).chain(1..my_region_index) {
-            let region_ids = self.placement.values().filter_map(
-                |(peer_id, peer_region_index)| {
-                    // find all processes that are not self and are jin this
-                    // region index
-                    if *peer_id != process_id
-                        && *peer_region_index == region_index
-                    {
-                        Some(*peer_id)
-                    } else {
-                        None
-                    }
-                },
-            );
+        // for each region, add:
+        // - all (but self), if same region
+        // - the one some my shard, if different region
+        for index in (region_index..=n).chain(1..region_index) {
+            // select the processes in this region index;
+            let index_processes =
+                self.placement.iter().filter(|(_, (_, peer_region_index))| {
+                    *peer_region_index == index
+                });
+
+            let region_ids: Vec<_> = if index == region_index {
+                // select all (but self)
+                index_processes
+                    .filter_map(|(_, (peer_id, _))| {
+                        if *peer_id != process_id {
+                            Some(*peer_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            } else {
+                // select the one process from my shard
+                index_processes
+                    .filter_map(|((_, peer_shard_id), (peer_id, _))| {
+                        if *peer_shard_id == shard_id {
+                            Some(*peer_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            };
             sorted_processes.extend(region_ids);
         }
 
-        // check that we have all process ids
-        let expected: BTreeSet<_> =
-            fantoch::util::all_process_ids(shard_count, n)
-                .map(|(process_id, _)| process_id)
-                .collect();
-        let sorted_ids: BTreeSet<_> =
-            sorted_processes.clone().into_iter().collect();
         assert_eq!(
-            expected, sorted_ids,
-            "sorted processes should contain all ids"
+            sorted_processes.len(),
+            n + shard_count - 1,
+            "the number of sorted processes should be n + shards - 1"
         );
 
         // return sorted processes

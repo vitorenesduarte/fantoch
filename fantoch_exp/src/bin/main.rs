@@ -31,7 +31,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "partial_replication";
+const BRANCH: &str = "master";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
@@ -128,6 +128,7 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
+        /*
         256,
         1024,
         1024 * 4,
@@ -137,6 +138,7 @@ async fn main() -> Result<(), Report> {
         1024 * 64,
         1024 * 80,
         1024 * 96,
+        */
         1024 * 112,
         1024 * 128,
         1024 * 144,

@@ -155,43 +155,45 @@ async fn start_processes(
         .map(|(process_id, vm)| (*process_id, vm.public_ip.clone()))
         .collect();
     tracing::debug!("processes ips: {:?}", ips);
-    let all_but_self = |process_id: &ProcessId| {
-        // select all ips but self
-        ips.iter()
-            .filter(|(ip_id, _ip)| ip_id != &process_id)
-            .collect::<Vec<_>>()
-    };
 
     let process_count = config.n() * config.shards();
     let mut processes = HashMap::with_capacity(process_count);
     let mut wait_processes = Vec::with_capacity(process_count);
 
-    for ((from_region, shard_id), (process_id, _region_index)) in
+    for ((from_region, shard_id), (process_id, region_index)) in
         machines.placement()
     {
         let vm = machines.server(process_id);
 
-        // set sorted if on baremetal and no delay will be injected
-        let set_sorted = testbed == Testbed::Baremetal && planet.is_none();
-        let sorted = if set_sorted {
-            Some(machines.sorted_processes(
-                config.shards(),
-                config.n(),
-                *process_id,
-            ))
-        } else {
-            None
-        };
+        // compute the set of sorted processes
+        let sorted = machines.sorted_processes(
+            config.shards(),
+            config.n(),
+            *process_id,
+            *shard_id,
+            *region_index,
+        );
 
-        // get ips for this region
-        let ips = all_but_self(process_id)
-            .into_iter()
-            .map(|(to_process_id, ip)| {
-                let to_region = machines.process_region(to_process_id);
+        // get ips to connect to (based on sorted)
+        let ips = sorted
+            .iter()
+            .filter(|peer_id| *peer_id != process_id)
+            .map(|peer_id| {
+                // get process ip
+                let ip = ips
+                    .get(peer_id)
+                    .expect("all processes should have an ip")
+                    .clone();
+                // compute delay to be injected (if theres's a `planet`)
+                let to_region = machines.process_region(peer_id);
                 let delay = maybe_inject_delay(from_region, to_region, planet);
-                (ip.clone(), delay)
+                (ip, delay)
             })
             .collect();
+
+        // set sorted only if on baremetal and no delay will be injected
+        let set_sorted = testbed == Testbed::Baremetal && planet.is_none();
+        let sorted = if set_sorted { Some(sorted) } else { None };
 
         // create protocol config and generate args
         let mut protocol_config = ProtocolConfig::new(
