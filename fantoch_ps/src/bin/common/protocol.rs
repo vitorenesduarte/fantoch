@@ -379,14 +379,6 @@ fn parse_args() -> ProtocolArgs {
     println!("ping_interval: {:?}", ping_interval);
     println!("metrics file: {:?}", metrics_file);
 
-    // check that the number of sorted processes equals `n` (if it was set)
-    if let Some(sorted_processes) = &sorted_processes {
-        assert_eq!(sorted_processes.len(), config.n());
-    }
-
-    // check that the number of addresses equals `(n * shards) - 1`
-    assert_eq!(addresses.len(), (config.n() * config.shards()) - 1);
-
     (
         process_id,
         shard_id,
