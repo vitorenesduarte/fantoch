@@ -4,7 +4,7 @@ members = [
   "fantoch",
   "fantoch_ps",
   "fantoch_bote",
-  "fantoch_timing",
+  "fantoch_prof",
   "fantoch_exp",
   "fantoch_plot",
 #  "fantoch_mc",

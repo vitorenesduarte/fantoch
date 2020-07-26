@@ -12,9 +12,13 @@ use tracing::event::Event;
 use tracing::span::{Attributes, Id, Record};
 use tracing::{Metadata, Subscriber};
 
+struct FunctionInfo {
+    start_time: u64,
+}
+
 thread_local! {
     static CLOCK: RefCell<Clock> = RefCell::new(Clock::new());
-    static START_TIMES: RefCell<HashMap<u64, u64>> = RefCell::new(HashMap::new());
+    static INFOS: RefCell<HashMap<u64, FunctionInfo>> = RefCell::new(HashMap::new());
 }
 
 // assume 100ms as the highest execution time
@@ -26,17 +30,20 @@ fn now() -> u64 {
 }
 
 /// Record function start time.
-fn start(id: u64, time: u64) {
-    START_TIMES.with(|start_times| {
-        let res = start_times.borrow_mut().insert(id, time);
+fn start(id: u64, start_time: u64) {
+    // create function info
+    let info = FunctionInfo { start_time };
+
+    INFOS.with(|infos| {
+        let res = infos.borrow_mut().insert(id, info);
         assert!(res.is_none());
     })
 }
 
 /// Retrieve function start time.
-fn end(id: u64) -> u64 {
-    START_TIMES.with(|start_times| {
-        start_times
+fn end(id: u64) -> FunctionInfo {
+    INFOS.with(|infos| {
+        infos
             .borrow_mut()
             .remove(&id)
             .expect("function should have been started")
@@ -44,7 +51,7 @@ fn end(id: u64) -> u64 {
 }
 
 #[derive(Clone)]
-pub struct TimingSubscriber {
+pub struct ProfSubscriber {
     next_id: Arc<AtomicU64>,
     // mapping from function name to id used for that function
     functions: Arc<DashMap<&'static str, u64>>,
@@ -52,7 +59,7 @@ pub struct TimingSubscriber {
     histograms: Arc<DashMap<u64, Histogram<u64>>>,
 }
 
-impl TimingSubscriber {
+impl ProfSubscriber {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
@@ -63,7 +70,7 @@ impl TimingSubscriber {
     }
 }
 
-impl Subscriber for TimingSubscriber {
+impl Subscriber for ProfSubscriber {
     fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
         true
     }
@@ -89,7 +96,8 @@ impl Subscriber for TimingSubscriber {
     fn exit(&self, span: &Id) {
         let id = span.into_u64();
         let end_time = now();
-        let start_time = end(id);
+        let info = end(id);
+        let start_time = info.start_time;
         // function execution time in nanos
         if end_time > start_time {
             let time = end_time - start_time;
@@ -115,7 +123,7 @@ impl Subscriber for TimingSubscriber {
     }
 }
 
-impl TimingSubscriber {
+impl ProfSubscriber {
     fn new_span_from_function_name(&self, function_name: &'static str) -> Id {
         // get function id
         let id = match self.functions.get(function_name) {
@@ -137,7 +145,7 @@ impl TimingSubscriber {
     }
 }
 
-impl fmt::Debug for TimingSubscriber {
+impl fmt::Debug for ProfSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name_to_id: Vec<(&'static str, u64)> = self
             .functions
@@ -175,7 +183,7 @@ mod tests {
 
     #[test]
     fn clone_test() {
-        let s_1 = TimingSubscriber::new();
+        let s_1 = ProfSubscriber::new();
         let s_2 = s_1.clone();
 
         // no functions or histograms in the beginning

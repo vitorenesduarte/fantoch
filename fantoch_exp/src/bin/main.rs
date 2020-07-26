@@ -13,7 +13,8 @@ use tsunami::Tsunami;
 const RESULTS_DIR: &str = "../partial_replication";
 
 // aws experiment config
-const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
+const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
+// const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const MAX_INSTANCE_DURATION_HOURS: usize = 1;

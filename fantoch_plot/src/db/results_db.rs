@@ -73,7 +73,7 @@ impl ResultsDB {
         loaded_entries: Arc<Mutex<usize>>,
         total_entries: usize,
     ) -> Result<(ExperimentConfig, ExperimentData), Report> {
-        println!("start loading {:?}", timestamp.path().display());
+        // register load start time
         let start = std::time::Instant::now();
 
         // read the configuration of this experiment
@@ -116,11 +116,11 @@ impl ResultsDB {
             .expect("locking loaded entries should work");
         *loaded_entries += 1;
         println!(
-            "done loading {:?} | {} of {} | load time {}s",
+            "loaded {:?} after {:?} | {} of {}",
             timestamp.path().display(),
+            start.elapsed(),
             loaded_entries,
             total_entries,
-            start.elapsed().as_secs()
         );
         Ok((exp_config, exp_data))
     }

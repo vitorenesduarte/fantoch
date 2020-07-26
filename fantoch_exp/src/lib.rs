@@ -46,14 +46,14 @@ impl RunMode {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum FantochFeature {
     Amortize,
-    Timing,
+    Prof,
 }
 
 impl FantochFeature {
     pub fn name(&self) -> String {
         match self {
             FantochFeature::Amortize => "amortize",
-            FantochFeature::Timing => "timing",
+            FantochFeature::Prof => "prof",
         }
         .to_string()
     }

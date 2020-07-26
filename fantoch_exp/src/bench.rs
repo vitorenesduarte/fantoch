@@ -34,7 +34,7 @@ pub async fn bench_experiment(
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     if tracer_show_interval.is_some() {
-        panic!("vitor: you should set the timing feature for this to work!");
+        panic!("vitor: you should set the 'prof' feature for this to work!");
     }
 
     for workload in workloads {
