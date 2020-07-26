@@ -2,10 +2,10 @@
 pub async fn tracer_task(tracer_show_interval: Option<usize>) {
     match tracer_show_interval {
         Some(_) => {
-            panic!("[tracker_task] tracer show interval was set but the 'prof' feature is disabled");
+            panic!("[tracer_task] tracer show interval was set but the 'prof' feature is disabled");
         }
         None => {
-            println!("[tracker_task] disabled since the 'prof' feature is not enabled");
+            println!("[tracer_task] disabled since the 'prof' feature is not enabled");
         }
     }
 }
@@ -18,7 +18,7 @@ pub async fn tracer_task(tracer_show_interval: Option<usize>) {
 
     // if no interval, do not trace
     if tracer_show_interval.is_none() {
-        println!("[tracker_task] tracer show interval was not set even though the 'prof' feature is enabled");
+        println!("[tracer_task] tracer show interval was not set even though the 'prof' feature is enabled");
         return;
     }
     let tracer_show_interval = tracer_show_interval.unwrap();
@@ -31,7 +31,7 @@ pub async fn tracer_task(tracer_show_interval: Option<usize>) {
 
     // create tokio interval
     let millis = Duration::from_millis(tracer_show_interval as u64);
-    log!("[tracker_task] interval {:?}", millis);
+    log!("[tracer_task] interval {:?}", millis);
     let mut interval = time::interval(millis);
 
     loop {

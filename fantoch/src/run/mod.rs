@@ -921,7 +921,7 @@ pub mod tests {
         let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
-        let tracer_show_interval = Some(3000);
+        let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(5));
 
         // run test and get total stable commands
@@ -1053,10 +1053,12 @@ pub mod tests {
             |process_id: ProcessId,
              shard_id: ShardId,
              ids: &Vec<(ProcessId, ShardId)>| {
-                ids.clone().into_iter().filter(move |(peer_id, peer_shard_id)| {
-                    // keep all that have the same shard id (that are not self)
-                    *peer_id != process_id && *peer_shard_id == shard_id
-                })
+                ids.clone().into_iter().filter(
+                    move |(peer_id, peer_shard_id)| {
+                        // keep all that have the same shard id (that are not self)
+                        *peer_id != process_id && *peer_shard_id == shard_id
+                    },
+                )
             };
         let same_region_index_but_self =
             |process_id: ProcessId, ids: &Vec<(ProcessId, ShardId)>| {
