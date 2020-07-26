@@ -19,7 +19,7 @@ jobs:
           override: true
 
       - name: Test fantoch
-        run: cd fantoch/ && cargo test --features timing
+        run: cd fantoch/ && cargo test
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
@@ -28,7 +28,7 @@ jobs:
         timeout-minutes: 60
 
       - name: Test fantoch_ps
-        run: cd fantoch_ps/ && cargo test --features timing
+        run: cd fantoch_ps/ && cargo test
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
