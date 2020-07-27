@@ -94,6 +94,10 @@ fn track_memory(size: i64) {
     })
 }
 
+/// `AllocProf` steals many ideas from:
+/// - https://gitlab.com/sio4/code/alloc-counter
+/// - https://github.com/xd009642/traced-allocator
+/// - https://fasterthanli.me/articles/small-strings-in-rust
 pub struct AllocProf<T: GlobalAlloc> {
     allocator: T,
 }
