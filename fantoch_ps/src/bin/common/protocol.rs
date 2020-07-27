@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use fantoch::config::Config;
+use jemallocator::Jemalloc;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::protocol::Protocol;
 use std::error::Error;
@@ -30,7 +31,11 @@ const DEFAULT_NEWT_CLOCK_BUMP_INTERVAL: usize = 10;
 const DEFAULT_SKIP_FAST_ACK: bool = false;
 
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+#[cfg(not(feature = "prof"))]
+static ALLOC: Jemalloc = Jemalloc;
+#[cfg(feature = "prof")]
+static ALLOC: fantoch_prof::AllocProf<Jemalloc> = fantoch_prof::AllocProf::new();
+
 
 type ProtocolArgs = (
     ProcessId,
