@@ -424,28 +424,41 @@ async fn wait_process_ended(
         region
     );
 
-    // pull flamegraph if in flamegraph mode
-    if run_mode == RunMode::Flamegraph {
-        // wait for the flamegraph process to finish writing the flamegraph file
-        let mut count = 1;
-        while count != 0 {
-            tokio::time::delay_for(duration).await;
-            let command =
-                "ps -aux | grep flamegraph | grep -v grep | wc -l".to_string();
-            let stdout =
-                util::vm_exec(vm, &command).await.wrap_err("ps | wc")?;
-            if stdout.is_empty() {
-                tracing::warn!("empty output from: {}", command);
-            } else {
-                count = stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
-            }
+    // pull aditional files
+    match run_mode {
+        RunMode::Release => {
+            // nothing to do in this case
         }
+        RunMode::Flamegraph => {
+            // wait for the flamegraph process to finish writing the flamegraph
+            // file
+            let mut count = 1;
+            while count != 0 {
+                tokio::time::delay_for(duration).await;
+                let command =
+                    "ps -aux | grep flamegraph | grep -v grep | wc -l"
+                        .to_string();
+                let stdout =
+                    util::vm_exec(vm, &command).await.wrap_err("ps | wc")?;
+                if stdout.is_empty() {
+                    tracing::warn!("empty output from: {}", command);
+                } else {
+                    count =
+                        stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+                }
+            }
 
-        // once the flamegraph process is not running, we can grab the
-        // flamegraph file
-        pull_flamegraph_file(Some(process_id), &region, vm, exp_dir)
-            .await
-            .wrap_err("pull_flamegraph_file")?;
+            // once the flamegraph process is not running, we can grab the
+            // flamegraph file
+            pull_flamegraph_file(Some(process_id), &region, vm, exp_dir)
+                .await
+                .wrap_err("pull_flamegraph_file")?;
+        }
+        RunMode::Heaptrack => {
+            pull_heaptrack_file(Some(process_id), &region, vm, exp_dir)
+                .await
+                .wrap_err("pull_heaptrack_file")?;
+        }
     }
     Ok(())
 }
@@ -689,5 +702,27 @@ async fn pull_flamegraph_file(
     util::copy_from(("flamegraph.svg", vm), local_path)
         .await
         .wrap_err("copy flamegraph")?;
+    Ok(())
+}
+
+async fn pull_heaptrack_file(
+    process_id: Option<ProcessId>,
+    region: &Region,
+    vm: &tsunami::Machine<'_>,
+    exp_dir: &str,
+) -> Result<(), Report> {
+    // find heaptrack file, which will be something like:
+    // "heaptrack.newt_atomic.18836.gz
+    let command = format!("ls heaptrack.*.gz");
+    let heaptrack =
+        util::vm_exec(vm, command).await.wrap_err("ls heaptrack")?;
+    tracing::debug!("{}", heaptrack);
+
+    // compute filename prefix
+    let prefix = crate::config::file_prefix(process_id, region);
+    let local_path = format!("{}/{}_heaptrack.gz", exp_dir, prefix);
+    util::copy_from((heaptrack, vm), local_path)
+        .await
+        .wrap_err("copy heaptrack")?;
     Ok(())
 }

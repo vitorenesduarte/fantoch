@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 release="--release"
-release=""
-common_args="--commands_per_client 1000"
+common_args="--commands_per_client 10000"
 
 case $1 in
 1) 

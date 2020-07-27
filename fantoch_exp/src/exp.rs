@@ -198,7 +198,7 @@ pub fn fantoch_setup(
 > {
     Box::new(move |vm| {
         let branch = branch.clone();
-        let flamegraph = run_mode.is_flamegraph();
+        let mode = run_mode.name();
         let aws = testbed.is_aws();
         let features = features
             .clone()
@@ -220,7 +220,7 @@ pub fn fantoch_setup(
             while !done {
                 let stdout = util::vm_script_exec(
                     script_file,
-                    args![branch, flamegraph, aws, features, "2>&1"],
+                    args![branch, mode, aws, features, "2>&1"],
                     &vm,
                 )
                 .await?;
