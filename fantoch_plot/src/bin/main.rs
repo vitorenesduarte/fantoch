@@ -218,7 +218,7 @@ fn partial_replication() -> Result<(), Report> {
                 .collect();
 
             // generate dstat table
-            for dstat_type in vec![DstatType::Process, DstatType::Client] {
+            for dstat_type in dstat_combinations(shard_count, n) {
                 let path = format!(
                     "dstat_{}_n{}_ts{}_s{}_c{}_zipf{}.pdf",
                     dstat_type.name(),
@@ -302,6 +302,7 @@ fn partial_replication() -> Result<(), Report> {
 #[allow(dead_code)]
 fn multi_key() -> Result<(), Report> {
     // fixed parameters
+    let shard_count = 1;
     let n = 5;
     let zipf_key_count = 1_000_000;
     // let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
@@ -385,7 +386,7 @@ fn multi_key() -> Result<(), Report> {
                         .collect();
 
                 // generate dstat table
-                for dstat_type in vec![DstatType::Process, DstatType::Client] {
+                for dstat_type in dstat_combinations(shard_count, n) {
                     let path = format!(
                         "dstat_{}_n{}_k{}_c{}_zipf{}.pdf",
                         dstat_type.name(),
@@ -666,6 +667,14 @@ fn protocol_combinations(
     }
 
     combinations
+}
+
+fn dstat_combinations(shard_count: usize, n: usize) -> Vec<DstatType> {
+    let global_dstats = vec![DstatType::ProcessGlobal, DstatType::ClientGlobal];
+    fantoch::util::all_process_ids(shard_count, n)
+        .map(|(process_id, _)| DstatType::Process(process_id))
+        .chain(global_dstats)
+        .collect()
 }
 
 fn fmt_exp_data(exp_data: &ExperimentData) -> String {

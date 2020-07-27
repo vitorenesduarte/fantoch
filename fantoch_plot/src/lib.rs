@@ -9,6 +9,7 @@ pub use db::{ExperimentData, ResultsDB, Search};
 pub use fmt::PlotFmt;
 
 use color_eyre::Report;
+use fantoch::id::ProcessId;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
@@ -68,15 +69,17 @@ pub enum Style {
 }
 
 pub enum DstatType {
-    Process,
-    Client,
+    Process(ProcessId),
+    ProcessGlobal,
+    ClientGlobal,
 }
 
 impl DstatType {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            Self::Process => "process",
-            Self::Client => "client",
+            Self::Process(process_id) => format!("process_{}", process_id),
+            Self::ProcessGlobal => String::from("process_global"),
+            Self::ClientGlobal => String::from("client_global"),
         }
     }
 }
@@ -581,8 +584,16 @@ pub fn dstat_table(
 
         // select the correct dstats depending on the `DstatType` chosen
         let dstats = match dstat_type {
-            DstatType::Process => &exp_data.global_process_dstats,
-            DstatType::Client => &exp_data.global_client_dstats,
+            DstatType::Process(process_id) => {
+                match exp_data.process_dstats.get(&process_id) {
+                    Some(dstats) => dstats,
+                    None => {
+                        panic!("didn't found dstat for process {}", process_id)
+                    }
+                }
+            }
+            DstatType::ProcessGlobal => &exp_data.global_process_dstats,
+            DstatType::ClientGlobal => &exp_data.global_client_dstats,
         };
         // fetch all cell data
         let cpu_usr = dstats.cpu_usr_mad();
