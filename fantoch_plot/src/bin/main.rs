@@ -11,6 +11,8 @@ use std::collections::HashMap;
 
 // folder where all results are stored
 const RESULTS_DIR: &str = "../partial_replication";
+// folder where all plots will be stored
+const PLOT_DIR: Option<&str> = Some("plots");
 
 fn main() -> Result<(), Report> {
     // set global style
@@ -142,6 +144,7 @@ fn partial_replication() -> Result<(), Report> {
             n,
             clients_per_region.clone(),
             latency_metric,
+            PLOT_DIR,
             &path,
             &mut db,
         )?;
@@ -185,6 +188,7 @@ fn partial_replication() -> Result<(), Report> {
                 n,
                 clients_per_region.clone(),
                 latency_metric,
+                PLOT_DIR,
                 &path,
                 &mut db,
             )?;
@@ -220,17 +224,18 @@ fn partial_replication() -> Result<(), Report> {
             // generate dstat table
             for dstat_type in dstat_combinations(shard_count, n) {
                 let path = format!(
-                    "dstat_{}_n{}_ts{}_s{}_c{}_zipf{}.pdf",
-                    dstat_type.name(),
+                    "dstat_n{}_ts{}_s{}_c{}_zipf{}_{}.pdf",
                     n,
                     shard_count,
                     shards_per_command,
                     clients_per_region,
                     zipf_coefficient,
+                    dstat_type.name(),
                 );
                 fantoch_plot::dstat_table(
                     searches.clone(),
                     dstat_type,
+                    PLOT_DIR,
                     &path,
                     &mut db,
                 )?;
@@ -258,6 +263,7 @@ fn partial_replication() -> Result<(), Report> {
                     style_fun,
                     n,
                     error_bar,
+                    PLOT_DIR,
                     &path,
                     &mut db,
                     fmt_exp_data,
@@ -290,6 +296,7 @@ fn partial_replication() -> Result<(), Report> {
             fantoch_plot::cdf_plot(
                 searches.clone(),
                 style_fun,
+                PLOT_DIR,
                 &path,
                 &mut db,
             )?;
@@ -358,6 +365,7 @@ fn multi_key() -> Result<(), Report> {
                     n,
                     clients_per_region.clone(),
                     latency_metric,
+                    PLOT_DIR,
                     &path,
                     &mut db,
                 )?;
@@ -388,16 +396,17 @@ fn multi_key() -> Result<(), Report> {
                 // generate dstat table
                 for dstat_type in dstat_combinations(shard_count, n) {
                     let path = format!(
-                        "dstat_{}_n{}_k{}_c{}_zipf{}.pdf",
-                        dstat_type.name(),
+                        "dstat_n{}_k{}_c{}_zipf{}_{}.pdf",
                         n,
                         keys_per_shard,
                         clients_per_region,
                         zipf_coefficient,
+                        dstat_type.name(),
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
                         dstat_type,
+                        PLOT_DIR,
                         &path,
                         &mut db,
                     )?;
@@ -424,6 +433,7 @@ fn multi_key() -> Result<(), Report> {
                         style_fun,
                         n,
                         error_bar,
+                        PLOT_DIR,
                         &path,
                         &mut db,
                         fmt_exp_data,
@@ -452,6 +462,7 @@ fn multi_key() -> Result<(), Report> {
                 fantoch_plot::cdf_plot(
                     searches.clone(),
                     style_fun,
+                    PLOT_DIR,
                     &path,
                     &mut db,
                 )?;
@@ -466,6 +477,7 @@ fn multi_key() -> Result<(), Report> {
                     fantoch_plot::cdf_plot_per_f(
                         searches.clone(),
                         style_fun,
+                        PLOT_DIR,
                         &path,
                         &mut db,
                     )?;
@@ -530,6 +542,7 @@ fn single_key() -> Result<(), Report> {
                 n,
                 clients_per_region.clone(),
                 latency_metric,
+                PLOT_DIR,
                 &path,
                 &mut db,
             )?;
@@ -586,6 +599,7 @@ fn single_key() -> Result<(), Report> {
                     style_fun,
                     n,
                     error_bar,
+                    PLOT_DIR,
                     &path,
                     &mut db,
                     fmt_exp_data,
@@ -611,6 +625,7 @@ fn single_key() -> Result<(), Report> {
             fantoch_plot::cdf_plot(
                 searches.clone(),
                 style_fun,
+                PLOT_DIR,
                 &path,
                 &mut db,
             )?;
@@ -623,6 +638,7 @@ fn single_key() -> Result<(), Report> {
                 fantoch_plot::cdf_plot_per_f(
                     searches.clone(),
                     style_fun,
+                    PLOT_DIR,
                     &path,
                     &mut db,
                 )?;

@@ -266,7 +266,8 @@ where
         ask_ping_task(to_ping).await
     };
 
-    // check that we have n processes (all in my shard), plus one connection to each other shard
+    // check that we have n processes (all in my shard), plus one connection to
+    // each other shard
     assert_eq!(
         sorted_processes.len(),
         config.n() + config.shards() - 1,
@@ -1055,7 +1056,8 @@ pub mod tests {
              ids: &Vec<(ProcessId, ShardId)>| {
                 ids.clone().into_iter().filter(
                     move |(peer_id, peer_shard_id)| {
-                        // keep all that have the same shard id (that are not self)
+                        // keep all that have the same shard id (that are not
+                        // self)
                         *peer_id != process_id && *peer_shard_id == shard_id
                     },
                 )
@@ -1073,11 +1075,13 @@ pub mod tests {
         // compute the set of processes we should connect to
 
         for (process_id, shard_id) in util::all_process_ids(shard_count, n) {
-            // the following shuffle is here in case these `connect_to` processes are used to compute `sorted_processes`
+            // the following shuffle is here in case these `connect_to`
+            // processes are used to compute `sorted_processes`
             use rand::seq::SliceRandom;
             ids.shuffle(&mut rand::thread_rng());
 
-            // start `connect_to` will the processes within the same region (i.e. one connection to each shard)
+            // start `connect_to` will the processes within the same region
+            // (i.e. one connection to each shard)
             let mut connect_to: Vec<_> =
                 same_region_index_but_self(process_id, &ids).collect();
 
@@ -1085,15 +1089,18 @@ pub mod tests {
             let myself = (process_id, shard_id);
             connect_to.insert(0, myself);
 
-            // add the missing processes from my shard (i.e. the processes from my shard in the other regions)
+            // add the missing processes from my shard (i.e. the processes from
+            // my shard in the other regions)
             connect_to
                 .extend(same_shard_id_but_self(process_id, shard_id, &ids));
 
             let sorted_processes = if shard_count > 1 {
-                // don't set sorted processes in partial replication (no reason, just for testing)
+                // don't set sorted processes in partial replication (no reason,
+                // just for testing)
                 None
             } else {
-                // set sorted processes in full replication (no reason, just for testing)
+                // set sorted processes in full replication (no reason, just for
+                // testing)
                 Some(connect_to.clone())
             };
 
