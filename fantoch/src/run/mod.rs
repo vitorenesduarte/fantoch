@@ -1013,7 +1013,7 @@ pub mod tests {
         let tcp_buffer_size = 1024;
         let tcp_flush_interval = Some(1); // millis
         let process_channel_buffer_size = 10000;
-        let client_channel_buffer_size = 100;
+        let client_channel_buffer_size = 10000;
         let multiplexing = 2;
         let ping_interval = Some(1000); // millis
 

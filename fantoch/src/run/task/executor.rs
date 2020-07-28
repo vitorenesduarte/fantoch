@@ -219,7 +219,7 @@ impl ToClients {
 
         // create `ToClient` and save it
         let to_client = ToClient::new(rifl_acks_tx, executor_results_tx);
-        debug_assert!(self.to_clients.insert(id, to_client).is_none());
+        assert!(self.to_clients.insert(id, to_client).is_none());
     }
 
     fn unregister(&mut self, client_ids: Vec<ClientId>) {
@@ -234,7 +234,7 @@ impl ToClients {
         ids.dedup();
         assert_eq!(ids.len(), 1, "id indexing client ids should be the same");
 
-        debug_assert!(self.to_clients.remove(&ids[0]).is_some());
+        assert!(self.to_clients.remove(&ids[0]).is_some());
     }
 
     fn to_client(&mut self, client_id: &ClientId) -> &mut ToClient {
