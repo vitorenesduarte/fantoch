@@ -110,6 +110,8 @@ impl AllocProf<jemallocator::Jemalloc> {
     }
 }
 
+/// TODO `track_memory` may allocate right? so not sure we can call it in the
+/// implementations below.
 unsafe impl<T> GlobalAlloc for AllocProf<T>
 where
     T: GlobalAlloc,
@@ -179,7 +181,7 @@ impl Subscriber for ProfSubscriber {
     }
 
     fn new_span(&self, span: &Attributes<'_>) -> Id {
-        // getfunction name
+        // get function name
         let function_name = span.metadata().name();
         self.new_span_from_function_name(function_name)
     }

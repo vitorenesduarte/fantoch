@@ -697,7 +697,7 @@ fn end_plot(
     plt: &PyPlot<'_>,
     fig: Option<Figure<'_>>,
 ) -> Result<(), Report> {
-    // maybe move save `output_file` in `output_dir` (if one was set)
+    // maybe save `output_file` in `output_dir` (if one was set)
     let output_file = if let Some(output_dir) = output_dir {
         // make sure `output_dir` exists
         std::fs::create_dir_all(&output_dir).wrap_err("create plot dir")?;

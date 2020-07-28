@@ -76,7 +76,7 @@ rustup update ${RUST_TOOLCHAIN}
 
 case ${mode} in
 "release")
-    # nothing else install
+    # nothing else to install
     ;;
 "flamegraph")
     # install perf:

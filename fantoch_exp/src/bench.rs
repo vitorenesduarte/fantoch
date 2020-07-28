@@ -696,12 +696,21 @@ async fn pull_flamegraph_file(
     vm: &tsunami::Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
+    // flamegraph will always generate a file with this name
+    let flamegraph = "flamegraph.svg";
+
     // compute filename prefix
     let prefix = crate::config::file_prefix(process_id, region);
     let local_path = format!("{}/{}_flamegraph.svg", exp_dir, prefix);
-    util::copy_from(("flamegraph.svg", vm), local_path)
+    util::copy_from((flamegraph, vm), local_path)
         .await
         .wrap_err("copy flamegraph")?;
+
+    // remove flamegraph file
+    let command = format!("rm {}", flamegraph);
+    util::vm_exec(vm, command)
+        .await
+        .wrap_err("remove flamegraph ile")?;
     Ok(())
 }
 
@@ -716,13 +725,18 @@ async fn pull_heaptrack_file(
     let command = format!("ls heaptrack.*.gz");
     let heaptrack =
         util::vm_exec(vm, command).await.wrap_err("ls heaptrack")?;
-    tracing::debug!("{}", heaptrack);
 
     // compute filename prefix
     let prefix = crate::config::file_prefix(process_id, region);
     let local_path = format!("{}/{}_heaptrack.gz", exp_dir, prefix);
-    util::copy_from((heaptrack, vm), local_path)
+    util::copy_from((&heaptrack, vm), local_path)
         .await
         .wrap_err("copy heaptrack")?;
+
+    // remove heaptrack file
+    let command = format!("rm {}", heaptrack);
+    util::vm_exec(vm, command)
+        .await
+        .wrap_err("remove heaptrack file")?;
     Ok(())
 }
