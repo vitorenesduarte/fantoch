@@ -302,6 +302,7 @@ async fn reader_task<P>(
             }
             None => {
                 println!("[reader] error receiving message from connection");
+                break;
             }
         }
     }

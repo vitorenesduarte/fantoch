@@ -125,10 +125,7 @@ impl ResultsDB {
         Ok((exp_config, exp_data))
     }
 
-    pub fn find(
-        &mut self,
-        search: Search,
-    ) -> Result<Vec<&ExperimentData>, Report> {
+    pub fn find(&self, search: Search) -> Result<Vec<&ExperimentData>, Report> {
         let filtered = self
             .results
             .iter()

@@ -123,7 +123,7 @@ pub fn latency_plot<R>(
     error_bar: ErrorBar,
     output_dir: Option<&str>,
     output_file: &str,
-    db: &mut ResultsDB,
+    db: &ResultsDB,
     f: impl Fn(&ExperimentData) -> R,
 ) -> Result<Vec<(Search, R)>, Report> {
     const FULL_REGION_WIDTH: f64 = 10f64;
@@ -270,7 +270,7 @@ pub fn cdf_plot(
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_dir: Option<&str>,
     output_file: &str,
-    db: &mut ResultsDB,
+    db: &ResultsDB,
 ) -> Result<(), Report> {
     // start python
     let gil = Python::acquire_gil();
@@ -304,7 +304,7 @@ pub fn cdf_plot_per_f(
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_dir: Option<&str>,
     output_file: &str,
-    db: &mut ResultsDB,
+    db: &ResultsDB,
 ) -> Result<(), Report> {
     let fs: BTreeSet<_> = searches.iter().map(|search| search.f).collect();
     let fs: Vec<_> = fs.into_iter().collect();
@@ -394,7 +394,7 @@ fn inner_cdf_plot(
     search: Search,
     style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     plotted: &mut usize,
-    db: &mut ResultsDB,
+    db: &ResultsDB,
 ) -> Result<(), Report> {
     let mut exp_data = db.find(search)?;
     match exp_data.len() {
@@ -443,7 +443,7 @@ pub fn throughput_latency_plot(
     latency: LatencyMetric,
     output_dir: Option<&str>,
     output_file: &str,
-    db: &mut ResultsDB,
+    db: &ResultsDB,
 ) -> Result<(), Report> {
     // start python
     let gil = Python::acquire_gil();
@@ -549,7 +549,7 @@ pub fn dstat_table(
     dstat_type: DstatType,
     output_dir: Option<&str>,
     output_file: &str,
-    db: &mut ResultsDB,
+    db: &ResultsDB,
 ) -> Result<(), Report> {
     let col_labels = vec![
         "cpu_usr",
