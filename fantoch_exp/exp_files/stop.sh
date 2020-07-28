@@ -44,6 +44,10 @@ stop_fantoch() {
         running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
         sleep 1
     done
+
+    # remove files
+    cmd="rm -f .metrics .log .metrics dstat.csv heaptrack.*.gz"
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 }
 
 stop_all() {

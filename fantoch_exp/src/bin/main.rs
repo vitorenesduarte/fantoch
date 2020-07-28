@@ -32,7 +32,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "master";
+const BRANCH: &str = "track_alloc";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
@@ -138,11 +138,13 @@ async fn main() -> Result<(), Report> {
         1024 * 32,
         1024 * 64,
         1024 * 80,
-        1024 * 96,
         */
+        1024 * 96,
+        /*
         1024 * 112,
         1024 * 128,
         1024 * 144,
+        */
     ];
     let shards_per_command = 1;
     let shard_count = 4;

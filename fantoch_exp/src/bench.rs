@@ -600,10 +600,12 @@ async fn pull_metrics(
     tracing::info!("experiment metrics will be saved in {}", exp_dir);
 
     let mut pulls = Vec::with_capacity(machines.vm_count());
+    // prepare server metrics pull
     for (process_id, vm) in machines.servers() {
         let region = machines.process_region(process_id);
         pulls.push(pull_metrics_files(Some(*process_id), region, vm, &exp_dir));
     }
+    // prepare client metrics pull
     for (region, vm) in machines.clients() {
         pulls.push(pull_metrics_files(None, region, vm, &exp_dir));
     }
@@ -669,10 +671,8 @@ async fn pull_metrics_files(
         .await
         .wrap_err("copy metrics")?;
 
-    // files to be removed
+    // remove metric files
     let to_remove = format!("rm {} {} {}", LOG_FILE, DSTAT_FILE, METRICS_FILE);
-
-    // remove files
     util::vm_exec(vm, to_remove)
         .await
         .wrap_err("remove files")?;
