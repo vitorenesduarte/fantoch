@@ -142,7 +142,8 @@ async fn server_receive_hi(
     // create channel where the executors will write:
     // - ack rifl after wait_for_rifl
     // - executor results
-    let (mut rifl_acks_tx, rifl_acks_rx) = super::channel(client_channel_buffer_size);
+    let (mut rifl_acks_tx, rifl_acks_rx) =
+        super::channel(client_channel_buffer_size);
     let (mut executor_results_tx, executor_results_rx) =
         super::channel(client_channel_buffer_size);
 

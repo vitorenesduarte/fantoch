@@ -40,7 +40,7 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = None;
 // - in Apollo with 16k clients per site, 1M is not enough with newt; setting it
 //   to 100M (since 10M is also not enough)
 const PROCESS_CHANNEL_BUFFER_SIZE: usize = 100_000_000;
-const CLIENT_CHANNEL_BUFFER_SIZE: usize = 100;
+const CLIENT_CHANNEL_BUFFER_SIZE: usize = 10_000;
 
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
