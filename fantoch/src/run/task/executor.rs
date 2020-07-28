@@ -234,7 +234,7 @@ impl ToClients {
         ids.dedup();
         assert_eq!(ids.len(), 1, "id indexing client ids should be the same");
 
-        debug_assert!(self.to_clients.remove(&ids[0]).is_none());
+        debug_assert!(self.to_clients.remove(&ids[0]).is_some());
     }
 
     fn to_client(&mut self, client_id: &ClientId) -> &mut ToClient {
