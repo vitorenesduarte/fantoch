@@ -9,7 +9,7 @@ license = "MIT/Apache-2.0"
 [features]
 default = []
 amortize = ["griddle"]
-timing = ["fantoch_timing"]
+prof = ["fantoch_prof"]
 
 [dependencies]
 ahash = "0.4.1"
@@ -27,7 +27,7 @@ tokio-util = { version = "0.3.1", features = ["codec"] }
 tracing = "0.1.16"
 zipf = "6.1.0"
 
-fantoch_timing = { path = "../fantoch_timing", optional = true }
+fantoch_prof = { path = "../fantoch_prof", optional = true }
 
 [dev-dependencies]
 quickcheck = "0.9.2"

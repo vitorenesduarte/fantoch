@@ -12,6 +12,7 @@ use std::time::Duration;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentData {
     pub process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
+    pub process_dstats: HashMap<ProcessId, DstatCompress>,
     pub global_process_dstats: DstatCompress,
     pub global_client_dstats: DstatCompress,
     pub client_latency: HashMap<Region, HistogramCompress>,
@@ -28,11 +29,18 @@ impl ExperimentData {
         client_dstats: HashMap<Region, Dstat>,
         global_client_metrics: ClientData,
     ) -> Self {
-        // merge all process dstats
+        // compress process dstats and create global process dstat
         let mut global_process_dstats = Dstat::new();
-        for (_, process_dstat) in process_dstats {
-            global_process_dstats.merge(&process_dstat);
-        }
+        let process_dstats = process_dstats
+            .into_iter()
+            .map(|(process_id, process_dstat)| {
+                // merge with global process dstat
+                global_process_dstats.merge(&process_dstat);
+                // compress process dstat
+                let process_dstat = DstatCompress::from(&process_dstat);
+                (process_id, process_dstat)
+            })
+            .collect();
         // compress global process dstat
         let global_process_dstats = DstatCompress::from(&global_process_dstats);
 
@@ -89,6 +97,7 @@ impl ExperimentData {
 
         Self {
             process_metrics,
+            process_dstats,
             global_process_dstats,
             client_latency,
             global_client_dstats,

@@ -113,7 +113,8 @@ pub async fn process<P, A>(
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
-    channel_buffer_size: usize,
+    process_channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
@@ -141,7 +142,8 @@ where
         tcp_nodelay,
         tcp_buffer_size,
         tcp_flush_interval,
-        channel_buffer_size,
+        process_channel_buffer_size,
+        client_channel_buffer_size,
         workers,
         executors,
         multiplexing,
@@ -168,7 +170,8 @@ async fn process_with_notify_and_inspect<P, A, R>(
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
-    channel_buffer_size: usize,
+    process_channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
@@ -217,7 +220,7 @@ where
     // create forward channels: reader -> workers
     let (reader_to_workers, reader_to_workers_rxs) = ReaderToWorkers::<P>::new(
         "reader_to_workers",
-        channel_buffer_size,
+        process_channel_buffer_size,
         workers,
     );
 
@@ -233,7 +236,7 @@ where
         tcp_nodelay,
         tcp_buffer_size,
         tcp_flush_interval,
-        channel_buffer_size,
+        process_channel_buffer_size,
         multiplexing,
     )
     .await?;
@@ -253,7 +256,7 @@ where
     } else {
         // when we don't have the sorted processes, spawn the ping task and ask
         // it for the sorted processes
-        let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
+        let to_ping = task::spawn_consumer(process_channel_buffer_size, |rx| {
             let parent = Some(rx);
             task::ping::ping_task(
                 ping_interval,
@@ -266,7 +269,8 @@ where
         ask_ping_task(to_ping).await
     };
 
-    // check that we have n processes (all in my shard), plus one connection to each other shard
+    // check that we have n processes (all in my shard), plus one connection to
+    // each other shard
     assert_eq!(
         sorted_processes.len(),
         config.n() + config.shards() - 1,
@@ -290,21 +294,24 @@ where
         None
     };
 
-    // create forward channels: client -> workers
-    let (client_to_workers, client_to_workers_rxs) =
-        ClientToWorkers::new("client_to_workers", channel_buffer_size, workers);
-
     // create forward channels: periodic task -> workers
     let (periodic_to_workers, periodic_to_workers_rxs) = PeriodicToWorkers::new(
         "periodic_to_workers",
-        channel_buffer_size,
+        process_channel_buffer_size,
+        workers,
+    );
+
+    // create forward channels: client -> workers
+    let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(
+        "client_to_workers",
+        client_channel_buffer_size,
         workers,
     );
 
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
         "client_to_executors",
-        channel_buffer_size,
+        client_channel_buffer_size,
         executors,
     );
 
@@ -317,16 +324,16 @@ where
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
-        channel_buffer_size,
+        client_channel_buffer_size,
     );
 
     // maybe create metrics logger
     let (worker_to_metrics_logger, executor_to_metrics_logger) =
         if let Some(metrics_file) = metrics_file {
             let (worker_to_metrics_logger, from_workers) =
-                task::channel(channel_buffer_size);
+                task::channel(process_channel_buffer_size);
             let (executor_to_metrics_logger, from_executors) =
-                task::channel(channel_buffer_size);
+                task::channel(process_channel_buffer_size);
             task::spawn(task::metrics_logger::metrics_logger_task(
                 metrics_file,
                 from_workers,
@@ -344,7 +351,7 @@ where
     let (worker_to_executors, worker_to_executors_rxs) =
         WorkerToExecutors::<P>::new(
             "worker_to_executors",
-            channel_buffer_size,
+            process_channel_buffer_size,
             executors,
         );
 
@@ -373,7 +380,7 @@ where
         to_writers,
         reader_to_workers,
         worker_to_executors,
-        channel_buffer_size,
+        process_channel_buffer_size,
         execution_log,
         worker_to_metrics_logger,
     );
@@ -921,7 +928,7 @@ pub mod tests {
         let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
-        let tracer_show_interval = Some(3000);
+        let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(5));
 
         // run test and get total stable commands
@@ -1005,7 +1012,8 @@ pub mod tests {
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
         let tcp_flush_interval = Some(1); // millis
-        let channel_buffer_size = 10000;
+        let process_channel_buffer_size = 10000;
+        let client_channel_buffer_size = 10000;
         let multiplexing = 2;
         let ping_interval = Some(1000); // millis
 
@@ -1053,10 +1061,13 @@ pub mod tests {
             |process_id: ProcessId,
              shard_id: ShardId,
              ids: &Vec<(ProcessId, ShardId)>| {
-                ids.clone().into_iter().filter(move |(peer_id, peer_shard_id)| {
-                    // keep all that have the same shard id (that are not self)
-                    *peer_id != process_id && *peer_shard_id == shard_id
-                })
+                ids.clone().into_iter().filter(
+                    move |(peer_id, peer_shard_id)| {
+                        // keep all that have the same shard id (that are not
+                        // self)
+                        *peer_id != process_id && *peer_shard_id == shard_id
+                    },
+                )
             };
         let same_region_index_but_self =
             |process_id: ProcessId, ids: &Vec<(ProcessId, ShardId)>| {
@@ -1071,11 +1082,13 @@ pub mod tests {
         // compute the set of processes we should connect to
 
         for (process_id, shard_id) in util::all_process_ids(shard_count, n) {
-            // the following shuffle is here in case these `connect_to` processes are used to compute `sorted_processes`
+            // the following shuffle is here in case these `connect_to`
+            // processes are used to compute `sorted_processes`
             use rand::seq::SliceRandom;
             ids.shuffle(&mut rand::thread_rng());
 
-            // start `connect_to` will the processes within the same region (i.e. one connection to each shard)
+            // start `connect_to` will the processes within the same region
+            // (i.e. one connection to each shard)
             let mut connect_to: Vec<_> =
                 same_region_index_but_self(process_id, &ids).collect();
 
@@ -1083,15 +1096,18 @@ pub mod tests {
             let myself = (process_id, shard_id);
             connect_to.insert(0, myself);
 
-            // add the missing processes from my shard (i.e. the processes from my shard in the other regions)
+            // add the missing processes from my shard (i.e. the processes from
+            // my shard in the other regions)
             connect_to
                 .extend(same_shard_id_but_self(process_id, shard_id, &ids));
 
             let sorted_processes = if shard_count > 1 {
-                // don't set sorted processes in partial replication (no reason, just for testing)
+                // don't set sorted processes in partial replication (no reason,
+                // just for testing)
                 None
             } else {
-                // set sorted processes in full replication (no reason, just for testing)
+                // set sorted processes in full replication (no reason, just for
+                // testing)
                 Some(connect_to.clone())
             };
 
@@ -1125,7 +1141,7 @@ pub mod tests {
             let execution_log = Some(format!("p{}.execution_log", process_id));
 
             // create inspect channel and save sender side
-            let (inspect_tx, inspect) = task::channel(channel_buffer_size);
+            let (inspect_tx, inspect) = task::channel(1);
             inspect_channels.insert(process_id, inspect_tx);
 
             // spawn processes
@@ -1146,7 +1162,8 @@ pub mod tests {
                 tcp_nodelay,
                 tcp_buffer_size,
                 tcp_flush_interval,
-                channel_buffer_size,
+                process_channel_buffer_size,
+                client_channel_buffer_size,
                 workers,
                 executors,
                 multiplexing,
@@ -1206,7 +1223,7 @@ pub mod tests {
                     interval,
                     workload,
                     tcp_nodelay,
-                    channel_buffer_size,
+                    client_channel_buffer_size,
                     Some(metrics_file),
                 ))
             })
@@ -1227,8 +1244,7 @@ pub mod tests {
 
         if let Some(inspect_fun) = inspect_fun {
             // create reply channel
-            let (reply_chan_tx, mut reply_chan) =
-                task::channel(channel_buffer_size);
+            let (reply_chan_tx, mut reply_chan) = task::channel(1);
 
             // contact all processes
             for (process_id, mut inspect_tx) in inspect_channels {

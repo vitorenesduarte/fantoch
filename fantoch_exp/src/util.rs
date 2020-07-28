@@ -1,7 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use std::path::Path;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[macro_export]
 macro_rules! args {
@@ -43,7 +42,7 @@ pub fn vm_prepare_command(
     vm: &tsunami::Machine<'_>,
     command: String,
 ) -> tokio::process::Command {
-    prepare_command(
+    prepare_ssh(
         &vm.username,
         &vm.public_ip,
         vm.private_key.as_ref().expect("private key should be set"),
@@ -57,7 +56,7 @@ pub async fn exec(
     private_key: &std::path::PathBuf,
     command: impl ToString,
 ) -> Result<String, Report> {
-    let out = prepare_command(username, public_ip, private_key, command)
+    let out = prepare_ssh(username, public_ip, private_key, command)
         .output()
         .await
         .wrap_err("ssh command")?;
@@ -68,40 +67,44 @@ pub async fn exec(
     Ok(out)
 }
 
-pub fn prepare_command(
+pub fn prepare_ssh(
     username: &str,
     public_ip: &str,
     private_key: &std::path::PathBuf,
     command: impl ToString,
 ) -> tokio::process::Command {
     let ssh_command = format!(
-        "ssh -o StrictHostKeyChecking=no {}@{} -i {} {}",
+        "ssh -o StrictHostKeyChecking=no -i {} {}@{} {}",
+        private_key.as_path().display(),
         username,
         public_ip,
-        private_key.as_path().display(),
         escape(command)
     );
-    tracing::debug!("{}", ssh_command);
-    let mut command = tokio::process::Command::new("sh");
-    command.arg("-c");
-    command.arg(ssh_command);
-    command
+    create_command(ssh_command)
 }
 
 pub async fn copy_to(
     local_path: impl AsRef<Path>,
     (remote_path, vm): (impl AsRef<Path>, &tsunami::Machine<'_>),
 ) -> Result<(), Report> {
-    // get file contents
-    let mut contents = Vec::new();
-    tokio::fs::File::open(local_path)
-        .await?
-        .read_to_end(&mut contents)
-        .await?;
-    // write them in remote machine
-    let mut remote_file = vm.ssh.sftp().write_to(remote_path).await?;
-    remote_file.write_all(&contents).await?;
-    remote_file.close().await?;
+    let from = local_path.as_ref().display();
+    let to = format!(
+        "{}@{}:{}",
+        vm.username,
+        vm.public_ip,
+        remote_path.as_ref().display()
+    );
+    let scp_command = format!(
+        "scp -o StrictHostKeyChecking=no -i {} {} {}",
+        vm.private_key
+            .as_ref()
+            .expect("private key should be set")
+            .as_path()
+            .display(),
+        from,
+        to,
+    );
+    create_command(scp_command).status().await?;
     Ok(())
 }
 
@@ -109,17 +112,33 @@ pub async fn copy_from(
     (remote_path, vm): (impl AsRef<Path>, &tsunami::Machine<'_>),
     local_path: impl AsRef<Path>,
 ) -> Result<(), Report> {
-    // get file contents from remote machine
-    let mut contents = Vec::new();
-    let mut remote_file = vm.ssh.sftp().read_from(remote_path).await?;
-    remote_file.read_to_end(&mut contents).await?;
-    remote_file.close().await?;
-    // write them in file
-    tokio::fs::File::create(local_path)
-        .await?
-        .write_all(&contents)
-        .await?;
+    let from = format!(
+        "{}@{}:{}",
+        vm.username,
+        vm.public_ip,
+        remote_path.as_ref().display()
+    );
+    let to = local_path.as_ref().display();
+    let scp_command = format!(
+        "scp -o StrictHostKeyChecking=no -i {} {} {}",
+        vm.private_key
+            .as_ref()
+            .expect("private key should be set")
+            .as_path()
+            .display(),
+        from,
+        to,
+    );
+    create_command(scp_command).status().await?;
     Ok(())
+}
+
+pub fn create_command(command_arg: String) -> tokio::process::Command {
+    tracing::debug!("{}", command_arg);
+    let mut command = tokio::process::Command::new("sh");
+    command.arg("-c");
+    command.arg(command_arg);
+    command
 }
 
 fn escape(command: impl ToString) -> String {

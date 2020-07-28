@@ -23,13 +23,13 @@ MAX_SO_RCVBUF=$((10 * 1024 * 1024)) # 10mb
 MAX_SO_SNDBUF=$((10 * 1024 * 1024)) # 10mb
 
 if [ $# < 3 || $# > 4 ]; then
-    echo "usage: build.sh branch flamegraph aws (features)"
+    echo "usage: build.sh branch mode aws (features)"
     exit 1
 fi
 
 # get branch
 branch=$1
-flamegraph=$2
+mode=$2 # possible values: release, flamegraph, heaptrack
 aws=$3
 features=$4 # comma-separated list of features
 
@@ -74,7 +74,11 @@ rustup toolchain install ${RUST_TOOLCHAIN}
 rustup override set ${RUST_TOOLCHAIN}
 rustup update ${RUST_TOOLCHAIN}
 
-if [ "${flamegraph}" == "true" ]; then
+case ${mode} in
+"release")
+    # nothing else to install
+    ;;
+"flamegraph")
     # install perf:
     # - this command seems to be debian specific
     sudo apt-get update
@@ -100,7 +104,15 @@ if [ "${flamegraph}" == "true" ]; then
     # install flamegraph
     cargo install flamegraph
     flamegraph --help
-fi
+    ;;
+"heaptrack")
+    # install heaptrack
+    sudo apt install heaptrack -y
+    ;;
+*)
+    echo "invalid run mode: ${mode}"
+    exit 1
+esac
 
 # increase maximum number of open files by changing "/etc/security/limits.conf"
 # - first delete current setting, if any

@@ -56,10 +56,8 @@ async fn executor_task<P>(
     let mut executor =
         P::Executor::new(process_id, shard_id, config, executors);
 
-    // mapping from client id to its rifl acks channel
-    let mut client_rifl_acks = HashMap::new();
-    // mapping from client id to its executor results channel
-    let mut client_executor_results = HashMap::new();
+    // holder of all client info
+    let mut to_clients = ToClients::new();
 
     // create interval (for metrics notification)
     let mut interval = time::interval(super::metrics_logger::METRICS_INTERVAL);
@@ -69,7 +67,7 @@ async fn executor_task<P>(
             execution_info = from_workers.recv() => {
                 log!("[executor] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(execution_info, &mut executor, &mut client_executor_results).await;
+                    handle_execution_info::<P>(execution_info, &mut executor, &mut to_clients).await;
                 } else {
                     println!("[executor] error while receiving execution info from parent");
                 }
@@ -77,7 +75,7 @@ async fn executor_task<P>(
             from_client = from_clients.recv() => {
                 log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client::<P>(from_client, &mut executor, &mut client_rifl_acks, &mut client_executor_results).await;
+                    handle_from_client::<P>(from_client, &mut executor, &mut to_clients).await;
                 } else {
                     println!("[executor] error while receiving new command from clients");
                 }
@@ -98,7 +96,7 @@ async fn executor_task<P>(
 async fn handle_execution_info<P>(
     execution_info: <P::Executor as Executor>::ExecutionInfo,
     executor: &mut P::Executor,
-    client_executor_results: &mut HashMap<ClientId, ExecutorResultSender>,
+    to_clients: &mut ToClients,
 ) where
     P: Protocol,
 {
@@ -107,13 +105,14 @@ async fn handle_execution_info<P>(
     for executor_result in executor.handle(execution_info) {
         // get client id
         let client_id = executor_result.client();
-        // get client channel
-        let tx = client_executor_results
-            .get_mut(&client_id)
-            .expect("command result should belong to a registered client");
 
         // send executor result to client
-        if let Err(e) = tx.send(executor_result).await {
+        let send = to_clients
+            .to_client(&client_id)
+            .executor_results_tx
+            .send(executor_result)
+            .await;
+        if let Err(e) = send {
             println!(
                 "[executor] error while sending executor result to client {}: {:?}",
                 client_id, e
@@ -125,8 +124,7 @@ async fn handle_execution_info<P>(
 async fn handle_from_client<P>(
     from_client: ClientToExecutor,
     executor: &mut P::Executor,
-    client_rifl_acks: &mut HashMap<ClientId, RiflAckSender>,
-    client_executor_results: &mut HashMap<ClientId, ExecutorResultSender>,
+    to_clients: &mut ToClients,
 ) where
     P: Protocol,
 {
@@ -138,13 +136,14 @@ async fn handle_from_client<P>(
 
             // get client id
             let client_id = rifl.source();
-            // get client channel
-            let tx = client_rifl_acks
-                .get_mut(&client_id)
-                .expect("wait for rifl should belong to a registered client");
 
             // send executor result to client
-            if let Err(e) = tx.send(rifl).await {
+            let send = to_clients
+                .to_client(&client_id)
+                .rifl_acks_tx
+                .send(rifl)
+                .await;
+            if let Err(e) = send {
                 println!(
                     "[executor] error while sending rifl ack to client {}: {:?}",
                     client_id, e
@@ -156,24 +155,97 @@ async fn handle_from_client<P>(
             rifl_acks_tx,
             executor_results_tx,
         ) => {
-            for client_id in client_ids {
-                log!("[executor] clients {} registered", client_id);
-                let res =
-                    client_rifl_acks.insert(client_id, rifl_acks_tx.clone());
-                assert!(res.is_none());
-                let res = client_executor_results
-                    .insert(client_id, executor_results_tx.clone());
-                assert!(res.is_none());
-            }
+            to_clients.register(client_ids, rifl_acks_tx, executor_results_tx);
         }
         ClientToExecutor::Unregister(client_ids) => {
-            for client_id in client_ids {
-                log!("[executor] client {} unregistered", client_id);
-                let res = client_rifl_acks.remove(&client_id);
-                assert!(res.is_some());
-                let res = client_executor_results.remove(&client_id);
-                assert!(res.is_some());
-            }
+            to_clients.unregister(client_ids);
         }
+    }
+}
+
+struct ToClient {
+    rifl_acks_tx: RiflAckSender,
+    executor_results_tx: ExecutorResultSender,
+}
+
+impl ToClient {
+    fn new(
+        rifl_acks_tx: RiflAckSender,
+        executor_results_tx: ExecutorResultSender,
+    ) -> Self {
+        Self {
+            rifl_acks_tx,
+            executor_results_tx,
+        }
+    }
+}
+
+struct ToClients {
+    /// since many `ClientId` can share the same `ToClient`, in order to avoid
+    /// cloning these senders we'll have this additional index that tells us
+    /// which `ToClient` to use for each `ClientId`
+    next_id: usize,
+    index: HashMap<ClientId, usize>,
+    to_clients: HashMap<usize, ToClient>,
+}
+
+impl ToClients {
+    fn new() -> Self {
+        Self {
+            next_id: 0,
+            index: HashMap::new(),
+            to_clients: HashMap::new(),
+        }
+    }
+
+    fn register(
+        &mut self,
+        client_ids: Vec<ClientId>,
+        rifl_acks_tx: RiflAckSender,
+        executor_results_tx: ExecutorResultSender,
+    ) {
+        // compute id for this set of clients
+        let id = self.next_id;
+        self.next_id += 1;
+
+        // map each `ClientId` to the computed id
+        for client_id in client_ids {
+            log!("[executor] clients {} registered", client_id);
+            assert!(
+                self.index.insert(client_id, id).is_none(),
+                "client already registered"
+            );
+        }
+
+        // create `ToClient` and save it
+        let to_client = ToClient::new(rifl_acks_tx, executor_results_tx);
+        assert!(self.to_clients.insert(id, to_client).is_none());
+    }
+
+    fn unregister(&mut self, client_ids: Vec<ClientId>) {
+        let mut ids: Vec<_> = client_ids
+            .into_iter()
+            .filter_map(|client_id| {
+                log!("[executor] clients {} unregistered", client_id);
+                self.index.remove(&client_id)
+            })
+            .collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 1, "id indexing client ids should be the same");
+
+        assert!(self.to_clients.remove(&ids[0]).is_some());
+    }
+
+    fn to_client(&mut self, client_id: &ClientId) -> &mut ToClient {
+        // search index
+        let id = self
+            .index
+            .get(client_id)
+            .expect("command result should belong to an indexed client");
+        // get client channels
+        self.to_clients
+            .get_mut(id)
+            .expect("indexed client not found")
     }
 }

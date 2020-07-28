@@ -8,7 +8,7 @@ license = "MIT/Apache-2.0"
 
 [features]
 amortize = ["fantoch/amortize"]
-timing = ["fantoch/timing"]
+prof = ["fantoch/prof", "fantoch_prof"]
 parallel-sim = ["rayon"]
 
 [dependencies]
@@ -28,6 +28,7 @@ num_cpus = "1.13.0"
 jemallocator = "0.3.2"
 
 fantoch = { path = "../fantoch" }
+fantoch_prof = { path = "../fantoch_prof", optional = true }
 
 [dev-dependencies]
 permutator = "0.4.0"

@@ -1,18 +1,37 @@
 #!/usr/bin/env bash
 
 protocol=$1
-release="--release"
-release=""
+mode="release"
+
+# features="prof"
+# tracer_show_interval="--tracer_show_interval 10000"
+features="amortize"
+tracer_show_interval=""
+
+common_args="${tracer_show_interval} --processes 3 --faults 1 --workers 1 --executors 1 --multiplexing 1 --tcp_buffer_size 0 --shards 1 --shard_id 0"
+
+
+# build binary
+cd ../fantoch_ps
+if [ "${mode}" == "release" ]; then
+	cargo build --release --bin ${protocol} --features ${features}
+else
+	cargo build --bin ${protocol} --features ${features}
+fi
+cd -
+binary="../target/${mode}/${protocol}"
+ 
+heaptrack="heaptrack"
 
 case $2 in
 1) 
-  cargo run ${release} --bin ${protocol} -- --id 1 --sorted 1,2,3 --port 3001 --addresses localhost:3002,localhost:3003 --client_port 4001 --processes 3 --faults 1 --workers 2 --executors 2 --multiplexing 1 --tcp_buffer_size 0
+  ${heaptrack} ${binary} --id 1 --sorted 1-0,2-0,3-0 --port 3001 --addresses localhost:3002,localhost:3003 --client_port 4001 ${common_args}
   ;;
 2)
-  cargo run ${release} --bin ${protocol} -- --id 2 --sorted 2,3,1 --port 3002 --addresses localhost:3001,localhost:3003 --client_port 4002 --processes 3 --faults 1 --workers 2 --executors 2 --multiplexing 1 --tcp_buffer_size 0
+  ${heaptrack} ${binary} --id 2 --sorted 2-0,3-0,1-0 --port 3002 --addresses localhost:3001,localhost:3003 --client_port 4002 ${common_args}
   ;;
 3)
-  cargo run ${release} --bin ${protocol} -- --id 3 --sorted 3,1,2 --port 3003 --addresses localhost:3001,localhost:3002 --client_port 4003 --processes 3 --faults 1 --workers 2 --executors 2 --multiplexing 1 --tcp_buffer_size 0
+  ${heaptrack} ${binary} --id 3 --sorted 3-0,1-0,2-0 --port 3003 --addresses localhost:3001,localhost:3002 --client_port 4003 ${common_args}
   ;; 
 *)
   echo "process id $0 invalid"

@@ -24,36 +24,43 @@ use std::path::Path;
 pub enum RunMode {
     Release,
     Flamegraph,
+    Heaptrack,
 }
 
 impl RunMode {
+    pub fn name(&self) -> String {
+        match self {
+            Self::Release => "release",
+            Self::Flamegraph => "flamegraph",
+            Self::Heaptrack => "heaptrack",
+        }
+        .to_string()
+    }
+
     pub fn binary(&self, binary: &str) -> String {
         let binary = format!("./fantoch/target/release/{}", binary);
         match self {
-            RunMode::Release => binary,
-            RunMode::Flamegraph => {
+            Self::Release => binary,
+            Self::Flamegraph => {
                 // `source` is needed in order for `flamegraph` to be found
                 format!("source ~/.cargo/env && flamegraph {}", binary)
             }
+            Self::Heaptrack => format!("heaptrack {}", binary),
         }
-    }
-
-    pub fn is_flamegraph(&self) -> bool {
-        self == &RunMode::Flamegraph
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum FantochFeature {
     Amortize,
-    Timing,
+    Prof,
 }
 
 impl FantochFeature {
     pub fn name(&self) -> String {
         match self {
             FantochFeature::Amortize => "amortize",
-            FantochFeature::Timing => "timing",
+            FantochFeature::Prof => "prof",
         }
         .to_string()
     }

@@ -86,7 +86,6 @@ fn parse_args() -> ClientArgs {
                 .long("shard_gen")
                 .value_name("SHARD_GEN")
                 .help("representation of a shard generator; possible values 'random,10' where 10 is the number of shards; default: 'random,1'")
-                .required(true)
                 .takes_value(true),
         )
         .arg(
