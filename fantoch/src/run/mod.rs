@@ -113,7 +113,8 @@ pub async fn process<P, A>(
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
-    channel_buffer_size: usize,
+    process_channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
@@ -141,7 +142,8 @@ where
         tcp_nodelay,
         tcp_buffer_size,
         tcp_flush_interval,
-        channel_buffer_size,
+        process_channel_buffer_size,
+        client_channel_buffer_size,
         workers,
         executors,
         multiplexing,
@@ -168,7 +170,8 @@ async fn process_with_notify_and_inspect<P, A, R>(
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
-    channel_buffer_size: usize,
+    process_channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
@@ -217,7 +220,7 @@ where
     // create forward channels: reader -> workers
     let (reader_to_workers, reader_to_workers_rxs) = ReaderToWorkers::<P>::new(
         "reader_to_workers",
-        channel_buffer_size,
+        process_channel_buffer_size,
         workers,
     );
 
@@ -233,7 +236,7 @@ where
         tcp_nodelay,
         tcp_buffer_size,
         tcp_flush_interval,
-        channel_buffer_size,
+        process_channel_buffer_size,
         multiplexing,
     )
     .await?;
@@ -253,7 +256,7 @@ where
     } else {
         // when we don't have the sorted processes, spawn the ping task and ask
         // it for the sorted processes
-        let to_ping = task::spawn_consumer(channel_buffer_size, |rx| {
+        let to_ping = task::spawn_consumer(process_channel_buffer_size, |rx| {
             let parent = Some(rx);
             task::ping::ping_task(
                 ping_interval,
@@ -291,21 +294,24 @@ where
         None
     };
 
-    // create forward channels: client -> workers
-    let (client_to_workers, client_to_workers_rxs) =
-        ClientToWorkers::new("client_to_workers", channel_buffer_size, workers);
-
     // create forward channels: periodic task -> workers
     let (periodic_to_workers, periodic_to_workers_rxs) = PeriodicToWorkers::new(
         "periodic_to_workers",
-        channel_buffer_size,
+        process_channel_buffer_size,
+        workers,
+    );
+
+    // create forward channels: client -> workers
+    let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(
+        "client_to_workers",
+        client_channel_buffer_size,
         workers,
     );
 
     // create forward channels: client -> executors
     let (client_to_executors, client_to_executors_rxs) = ClientToExecutors::new(
         "client_to_executors",
-        channel_buffer_size,
+        client_channel_buffer_size,
         executors,
     );
 
@@ -318,16 +324,16 @@ where
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
-        channel_buffer_size,
+        client_channel_buffer_size,
     );
 
     // maybe create metrics logger
     let (worker_to_metrics_logger, executor_to_metrics_logger) =
         if let Some(metrics_file) = metrics_file {
             let (worker_to_metrics_logger, from_workers) =
-                task::channel(channel_buffer_size);
+                task::channel(process_channel_buffer_size);
             let (executor_to_metrics_logger, from_executors) =
-                task::channel(channel_buffer_size);
+                task::channel(process_channel_buffer_size);
             task::spawn(task::metrics_logger::metrics_logger_task(
                 metrics_file,
                 from_workers,
@@ -345,7 +351,7 @@ where
     let (worker_to_executors, worker_to_executors_rxs) =
         WorkerToExecutors::<P>::new(
             "worker_to_executors",
-            channel_buffer_size,
+            process_channel_buffer_size,
             executors,
         );
 
@@ -374,7 +380,7 @@ where
         to_writers,
         reader_to_workers,
         worker_to_executors,
-        channel_buffer_size,
+        process_channel_buffer_size,
         execution_log,
         worker_to_metrics_logger,
     );
@@ -1006,7 +1012,8 @@ pub mod tests {
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
         let tcp_flush_interval = Some(1); // millis
-        let channel_buffer_size = 10000;
+        let process_channel_buffer_size = 10000;
+        let client_channel_buffer_size = 100;
         let multiplexing = 2;
         let ping_interval = Some(1000); // millis
 
@@ -1134,7 +1141,7 @@ pub mod tests {
             let execution_log = Some(format!("p{}.execution_log", process_id));
 
             // create inspect channel and save sender side
-            let (inspect_tx, inspect) = task::channel(channel_buffer_size);
+            let (inspect_tx, inspect) = task::channel(1);
             inspect_channels.insert(process_id, inspect_tx);
 
             // spawn processes
@@ -1155,7 +1162,8 @@ pub mod tests {
                 tcp_nodelay,
                 tcp_buffer_size,
                 tcp_flush_interval,
-                channel_buffer_size,
+                process_channel_buffer_size,
+                client_channel_buffer_size,
                 workers,
                 executors,
                 multiplexing,
@@ -1215,7 +1223,7 @@ pub mod tests {
                     interval,
                     workload,
                     tcp_nodelay,
-                    channel_buffer_size,
+                    client_channel_buffer_size,
                     Some(metrics_file),
                 ))
             })
@@ -1236,8 +1244,7 @@ pub mod tests {
 
         if let Some(inspect_fun) = inspect_fun {
             // create reply channel
-            let (reply_chan_tx, mut reply_chan) =
-                task::channel(channel_buffer_size);
+            let (reply_chan_tx, mut reply_chan) = task::channel(1);
 
             // contact all processes
             for (process_id, mut inspect_tx) in inspect_channels {

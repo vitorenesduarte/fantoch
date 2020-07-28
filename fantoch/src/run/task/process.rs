@@ -366,7 +366,7 @@ pub fn start_processes<P, R>(
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     worker_to_executors: WorkerToExecutors<P>,
-    channel_buffer_size: usize,
+    process_channel_buffer_size: usize,
     execution_log: Option<String>,
     to_metrics_logger: Option<ProtocolMetricsSender>,
 ) -> Vec<JoinHandle<()>>
@@ -389,7 +389,7 @@ where
 
     let to_execution_logger = execution_log.map(|execution_log| {
         // if the execution log was set, then start the execution logger
-        let mut tx = task::spawn_consumer(channel_buffer_size, |rx| {
+        let mut tx = task::spawn_consumer(process_channel_buffer_size, |rx| {
             execution_logger::execution_logger_task::<P>(execution_log, rx)
         });
         tx.set_name("to_execution_logger");

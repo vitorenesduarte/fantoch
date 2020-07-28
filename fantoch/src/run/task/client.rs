@@ -16,7 +16,7 @@ pub fn start_listener(
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
-    channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
 ) {
     super::spawn(client_listener_task(
         process_id,
@@ -26,7 +26,7 @@ pub fn start_listener(
         client_to_workers,
         client_to_executors,
         tcp_nodelay,
-        channel_buffer_size,
+        client_channel_buffer_size,
     ));
 }
 
@@ -40,11 +40,11 @@ async fn client_listener_task(
     client_to_workers: ClientToWorkers,
     client_to_executors: ClientToExecutors,
     tcp_nodelay: bool,
-    channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
 ) {
     // start listener task
     let tcp_buffer_size = 0;
-    let mut rx = super::spawn_producer(channel_buffer_size, |tx| {
+    let mut rx = super::spawn_producer(client_channel_buffer_size, |tx| {
         super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
@@ -62,7 +62,7 @@ async fn client_listener_task(
                     atomic_dot_gen.clone(),
                     client_to_workers.clone(),
                     client_to_executors.clone(),
-                    channel_buffer_size,
+                    client_channel_buffer_size,
                     connection,
                 ));
             }
@@ -83,13 +83,13 @@ async fn client_server_task(
     atomic_dot_gen: Option<AtomicDotGen>,
     mut client_to_workers: ClientToWorkers,
     mut client_to_executors: ClientToExecutors,
-    channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     mut connection: Connection,
 ) {
     let client = server_receive_hi(
         process_id,
         shard_id,
-        channel_buffer_size,
+        client_channel_buffer_size,
         &mut connection,
         &mut client_to_executors,
     )
@@ -123,7 +123,7 @@ async fn client_server_task(
 async fn server_receive_hi(
     process_id: ProcessId,
     shard_id: ShardId,
-    channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
 ) -> Option<(Vec<ClientId>, RiflAckReceiver, ExecutorResultReceiver)> {
@@ -142,9 +142,9 @@ async fn server_receive_hi(
     // create channel where the executors will write:
     // - ack rifl after wait_for_rifl
     // - executor results
-    let (mut rifl_acks_tx, rifl_acks_rx) = super::channel(channel_buffer_size);
+    let (mut rifl_acks_tx, rifl_acks_rx) = super::channel(client_channel_buffer_size);
     let (mut executor_results_tx, executor_results_rx) =
-        super::channel(channel_buffer_size);
+        super::channel(client_channel_buffer_size);
 
     // set channels name
     let ids_repr = ids_repr(&client_ids);

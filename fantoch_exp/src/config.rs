@@ -39,7 +39,8 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = None;
 //   leader; setting it to 1M
 // - in Apollo with 16k clients per site, 1M is not enough with newt; setting it
 //   to 100M (since 10M is also not enough)
-const CHANNEL_BUFFER_SIZE: usize = 100_000_000;
+const PROCESS_CHANNEL_BUFFER_SIZE: usize = 100_000_000;
+const CLIENT_CHANNEL_BUFFER_SIZE: usize = 100;
 
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
@@ -64,7 +65,8 @@ pub struct ProtocolConfig {
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     tcp_flush_interval: Option<usize>,
-    channel_buffer_size: usize,
+    process_channel_buffer_size: usize,
+    client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
@@ -97,7 +99,8 @@ impl ProtocolConfig {
             tcp_nodelay: PROCESS_TCP_NODELAY,
             tcp_buffer_size: PROCESS_TCP_BUFFER_SIZE,
             tcp_flush_interval: PROCESS_TCP_FLUSH_INTERVAL,
-            channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            process_channel_buffer_size: PROCESS_CHANNEL_BUFFER_SIZE,
+            client_channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
             workers,
             executors,
             multiplexing: MULTIPLEXING,
@@ -174,8 +177,10 @@ impl ProtocolConfig {
             args.extend(args!["--tcp_flush_interval", interval]);
         }
         args.extend(args![
-            "--channel_buffer_size",
-            self.channel_buffer_size,
+            "--process_channel_buffer_size",
+            self.process_channel_buffer_size,
+            "--client_channel_buffer_size",
+            self.client_channel_buffer_size,
             "--workers",
             self.workers,
             "--executors",
@@ -258,7 +263,7 @@ impl ClientConfig {
             ips,
             workload,
             tcp_nodelay: CLIENT_TCP_NODELAY,
-            channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
             metrics_file: metrics_file.to_string(),
         }
     }
@@ -369,13 +374,13 @@ impl ExperimentConfig {
             process_tcp_nodelay: PROCESS_TCP_NODELAY,
             tcp_buffer_size: PROCESS_TCP_BUFFER_SIZE,
             tcp_flush_interval: PROCESS_TCP_FLUSH_INTERVAL,
-            process_channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            process_channel_buffer_size: PROCESS_CHANNEL_BUFFER_SIZE,
             workers,
             executors,
             multiplexing: MULTIPLEXING,
             workload,
             client_tcp_nodelay: CLIENT_TCP_NODELAY,
-            client_channel_buffer_size: CHANNEL_BUFFER_SIZE,
+            client_channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
         }
     }
 }
