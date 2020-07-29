@@ -71,10 +71,7 @@ async fn periodic_loop_without_inspect<P, R>(
         0 => {
             // nothing to do, loop forever
             loop {
-                tokio::time::delay_for(tokio::time::Duration::from_secs(
-                    60 * 60,
-                ))
-                .await;
+                time::delay_for(Duration::from_secs(60 * 60)).await;
             }
         }
         1 => {
@@ -99,6 +96,24 @@ async fn periodic_loop_without_inspect<P, R>(
                     }
                     _ = interval1.tick() => {
                         periodic_task_send_msg(&mut periodic_to_workers, event_msg1.clone()).await;
+                    }
+                }
+            }
+        }
+        3 => {
+            let (event_msg0, mut interval0) = intervals.remove(0);
+            let (event_msg1, mut interval1) = intervals.remove(0);
+            let (event_msg2, mut interval2) = intervals.remove(0);
+            loop {
+                tokio::select! {
+                    _ = interval0.tick() => {
+                        periodic_task_send_msg(&mut periodic_to_workers, event_msg0.clone()).await;
+                    }
+                    _ = interval1.tick() => {
+                        periodic_task_send_msg(&mut periodic_to_workers, event_msg1.clone()).await;
+                    }
+                    _ = interval2.tick() => {
+                        periodic_task_send_msg(&mut periodic_to_workers, event_msg2.clone()).await;
                     }
                 }
             }
@@ -145,6 +160,27 @@ async fn periodic_loop_with_inspect<P, R>(
                     }
                     _ = interval1.tick() => {
                         periodic_task_send_msg(&mut periodic_to_workers, event_msg1.clone()).await;
+                    }
+                    inspect = to_periodic_inspect.recv() => {
+                        periodic_task_inspect(&mut periodic_to_workers, inspect).await
+                    }
+                }
+            }
+        }
+        3 => {
+            let (event_msg0, mut interval0) = intervals.remove(0);
+            let (event_msg1, mut interval1) = intervals.remove(0);
+            let (event_msg2, mut interval2) = intervals.remove(0);
+            loop {
+                tokio::select! {
+                    _ = interval0.tick() => {
+                        periodic_task_send_msg(&mut periodic_to_workers, event_msg0.clone()).await;
+                    }
+                    _ = interval1.tick() => {
+                        periodic_task_send_msg(&mut periodic_to_workers, event_msg1.clone()).await;
+                    }
+                    _ = interval2.tick() => {
+                        periodic_task_send_msg(&mut periodic_to_workers, event_msg2.clone()).await;
                     }
                     inspect = to_periodic_inspect.recv() => {
                         periodic_task_inspect(&mut periodic_to_workers, inspect).await
