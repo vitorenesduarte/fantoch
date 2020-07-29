@@ -30,11 +30,11 @@ pub trait KeyClocks: Debug + Clone {
     /// returns the consumed votes.
     fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes);
 
-    /// Votes up to `clock` and returns the consumed votes.
-    fn vote(&mut self, cmd: &Command, clock: u64) -> Votes;
+    /// Votes up to `clock` for the keys accessed by `cmd`.
+    fn vote(&mut self, cmd: &Command, clock: u64, votes: &mut Votes);
 
-    /// Votes up to `clock` on all keys and returns the consumed votes.
-    fn vote_all(&mut self, clock: u64) -> Votes;
+    /// Votes up to `clock` on all keys.
+    fn vote_all(&mut self, clock: u64, votes: &mut Votes);
 
     fn parallel() -> bool;
 }
@@ -202,29 +202,35 @@ mod tests {
         let cmd = Command::get(cmd_rifl, key.clone());
 
         // get process votes up to 5
-        let process_votes = clocks.vote(&cmd, 5);
+        let mut process_votes = Votes::new();
+        clocks.vote(&cmd, 5, &mut process_votes);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![1, 2, 3, 4, 5]);
 
         // get process votes up to 5 again: should get no votes
-        let process_votes = clocks.vote(&cmd, 5);
+        let mut process_votes = Votes::new();
+        clocks.vote(&cmd, 5, &mut process_votes);
         assert!(process_votes.is_empty());
 
         // get process votes up to 6
-        let process_votes = clocks.vote(&cmd, 6);
+        let mut process_votes = Votes::new();
+        clocks.vote(&cmd, 6, &mut process_votes);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![6]);
 
         // get process votes up to 2: should get no votes
-        let process_votes = clocks.vote(&cmd, 2);
+        let mut process_votes = Votes::new();
+        clocks.vote(&cmd, 2, &mut process_votes);
         assert!(process_votes.is_empty());
 
         // get process votes up to 3: should get no votes
-        let process_votes = clocks.vote(&cmd, 3);
+        let mut process_votes = Votes::new();
+        clocks.vote(&cmd, 3, &mut process_votes);
         assert!(process_votes.is_empty());
 
         // get process votes up to 10
-        let process_votes = clocks.vote(&cmd, 10);
+        let mut process_votes = Votes::new();
+        clocks.vote(&cmd, 10, &mut process_votes);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![7, 8, 9, 10]);
     }

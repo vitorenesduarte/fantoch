@@ -35,15 +35,13 @@ pub struct Newt<KC> {
     key_clocks: KC,
     cmds: CommandsInfo<NewtInfo>,
     to_executor: Vec<ExecutionInfo>,
+    // set of detached votes
+    detached: Votes,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
-    // With many many operations, it can happen that logical clocks are
-    // higher that current time (if it starts at 0), and in that case,
-    // the real time feature of newt doesn't work. Solution: track the highest
-    // committed clock; when periodically bumping with real time, use this
-    // value as the minimum value to bump to
-    max_commit_clock: u64,
+    // bump to messages that arrived before the initial `MCollect` message
+    buffered_bump_tos: HashMap<Dot, u64>,
     skip_fast_ack: bool,
 }
 
@@ -79,8 +77,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             fast_quorum_size,
         );
         let to_executor = Vec::new();
+        let detached = Votes::new();
         let buffered_commits = HashMap::new();
-        let max_commit_clock = 0;
+        let buffered_bump_tos = HashMap::new();
         // enable skip fast ack if configured like that and the fast quorum size
         // is 2
         let skip_fast_ack = config.skip_fast_ack() && fast_quorum_size == 2;
@@ -91,8 +90,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             key_clocks,
             cmds,
             to_executor,
+            detached,
             buffered_commits,
-            max_commit_clock,
+            buffered_bump_tos,
             skip_fast_ack,
         };
 
@@ -107,6 +107,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         if let Some(interval) = config.newt_clock_bump_interval() {
             events.reserve_exact(1);
             events.push((PeriodicEvent::ClockBump, interval));
+        }
+
+        // maybe create send detached periodic event
+        if let Some(interval) = config.newt_detached_send_interval() {
+            events.reserve_exact(1);
+            events.push((PeriodicEvent::SendDetached, interval));
         }
 
         // return both
@@ -172,9 +178,6 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             Message::MCommit { dot, clock, votes } => {
                 self.handle_mcommit(from, dot, clock, votes, time)
             }
-            Message::MCommitClock { clock } => {
-                self.handle_mcommit_clock(from, clock, time)
-            }
             Message::MDetached { detached } => {
                 self.handle_mdetached(detached, time)
             }
@@ -187,6 +190,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             // Partial replication
             Message::MForwardSubmit { dot, cmd } => {
                 self.handle_submit(Some(dot), cmd, false)
+            }
+            Message::MBumpTo { dot, clock } => {
+                self.handle_mbump_to(dot, clock, time)
             }
             Message::MShardCommit { dot, clock } => {
                 self.handle_mshard_commit(from, from_shard_id, dot, clock, time)
@@ -218,6 +224,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
                 self.handle_event_garbage_collection(time)
             }
             PeriodicEvent::ClockBump => self.handle_event_clock_bump(time),
+            PeriodicEvent::SendDetached => {
+                self.handle_event_send_detached(time)
+            }
         }
     }
 
@@ -350,6 +359,12 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
+            // if not:
+            // - maybe initialize `self.key_clocks`
+            // - simply save the payload and set status to `PENDING`
+            // - if we received the `MCommit` before the `MCollect`, and the
+            //   `MCommit` now
+
             if self.bp.config.newt_clock_bump_interval().is_some() {
                 // make sure there's a clock for each existing key:
                 // - this ensures that all clocks will be bumped in the periodic
@@ -357,7 +372,6 @@ impl<KC: KeyClocks> Newt<KC> {
                 self.key_clocks.init_clocks(&cmd);
             }
 
-            // if not, simply save the payload and set status to `PENDING`
             info.status = Status::PENDING;
             info.cmd = Some(cmd);
 
@@ -374,15 +388,22 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
-
         let (clock, process_votes) = if message_from_self {
             // if it is, do not recompute clock and votes
             (remote_clock, Votes::new())
         } else {
-            // otherwise, compute clock considering the `remote_clock` as its
-            // minimum value
+            // check if there's any buffered `MBumpTo` request; if yes, bump to
+            // the max between that request and the received `remote_clock`
+            let bump_to =
+                if let Some(bump_to) = self.buffered_bump_tos.remove(&dot) {
+                    std::cmp::max(bump_to, remote_clock)
+                } else {
+                    remote_clock
+                };
+
+            // compute clock considering `bump_to` as the minimum value
             let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, remote_clock);
+                self.key_clocks.bump_and_vote(&cmd, bump_to);
             log!(
                 "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
                 self.bp.process_id,
@@ -415,21 +436,9 @@ impl<KC: KeyClocks> Newt<KC> {
 
             // if tiny quorums and f = 1, the fast quorum process can commit the
             // command right away; create `MCommit`
-            self.commit_actions(dot, clock, votes, shard_count)
+            self.mcommit_actions(dot, clock, votes, shard_count)
         } else {
-            // create `MCollectAck` and target
-            let mcollectack = Message::MCollectAck {
-                dot,
-                clock,
-                process_votes,
-            };
-            let target = singleton![from];
-
-            // return `ToSend`
-            vec![Action::ToSend {
-                target,
-                msg: mcollectack,
-            }]
+            self.mcollect_actions(from, dot, clock, process_votes, shard_count)
         }
     }
 
@@ -485,9 +494,7 @@ impl<KC: KeyClocks> Newt<KC> {
         //   any sense
         let cmd = info.cmd.as_ref().unwrap();
         if !message_from_self {
-            let detached = self.key_clocks.vote(cmd, max_clock);
-            // update votes with detached
-            info.votes.merge(detached);
+            self.key_clocks.vote(cmd, max_clock, &mut self.detached);
         }
 
         // check if we have all necessary replies
@@ -502,7 +509,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
                 // create `MCommit`
                 let shard_count = cmd.shard_count();
-                self.commit_actions(dot, max_clock, votes, shard_count)
+                self.mcommit_actions(dot, max_clock, votes, shard_count)
             } else {
                 self.bp.slow_path();
                 // slow path: create `MConsensus`
@@ -583,27 +590,10 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // don't try to generate detached votes if configured with real time
         // (since it will be done in a periodic event)
-        let mut actions = {
-            if self.bp.config.newt_clock_bump_interval().is_some() {
-                // in this case, only notify the clock bump worker of the commit
-                // clock
-                vec![Action::ToForward {
-                    msg: Message::MCommitClock { clock },
-                }]
-            } else {
-                // try to generate detached votes
-                let cmd = info.cmd.as_ref().unwrap();
-                let detached = self.key_clocks.vote(cmd, clock);
-                if detached.is_empty() {
-                    vec![]
-                } else {
-                    vec![Action::ToSend {
-                        target: self.bp.all(),
-                        msg: Message::MDetached { detached },
-                    }]
-                }
-            }
-        };
+        if self.bp.config.newt_clock_bump_interval().is_none() {
+            let cmd = info.cmd.as_ref().unwrap();
+            self.key_clocks.vote(cmd, clock, &mut self.detached);
+        }
 
         // check if this dot is targetted to my shard
         // TODO: fix this once we implement recovery for partial replication
@@ -613,36 +603,48 @@ impl<KC: KeyClocks> Newt<KC> {
         if self.gc_running() && my_shard {
             // if running gc and this dot belongs to my shard, then notify self
             // (i.e. the worker responsible for GC) with the committed dot
-            actions.reserve_exact(1);
-            actions.push(Action::ToForward {
+            vec![Action::ToForward {
                 msg: Message::MCommitDot { dot },
-            });
+            }]
         } else {
             // not running gc, so remove the dot info now
             self.cmds.gc_single(dot);
+            vec![]
         }
-        actions
     }
 
-    #[instrument(skip(self, from, clock, _time))]
-    fn handle_mcommit_clock(
+    #[instrument(skip(self, dot, clock, _time))]
+    fn handle_mbump_to(
         &mut self,
-        from: ProcessId,
+        dot: Dot,
         clock: u64,
         _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
-            "p{}: MCommitClock({}) | time={}",
+            "p{}: MBumpTo({:?}, {}) | time={}",
             self.id(),
+            dot,
             clock,
             _time.millis()
         );
-        assert_eq!(from, self.bp.process_id);
 
-        // simply update the highest commit clock
-        self.max_commit_clock = std::cmp::max(self.max_commit_clock, clock);
+        // get cmd info
+        let info = self.cmds.get(dot);
 
-        // nothing to send
+        // maybe bump up to `clock`
+        if let Some(cmd) = info.cmd.as_ref() {
+            // we have the payload, thus we can bump to `clock`
+            self.key_clocks.vote(cmd, clock, &mut self.detached);
+        } else {
+            // in this case we don't have the payload (which means we have
+            // received the `MBumpTo` from some shard before `MCollect` from my
+            // shard
+            let current = self.buffered_bump_tos.entry(dot).or_default();
+            // if the command acesses more than two shards, we could receive
+            // several `MBumpTo`'s before the `MCollect`; in this case, save the
+            // highest one
+            *current = std::cmp::max(*current, clock);
+        }
         vec![]
     }
 
@@ -750,7 +752,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
                 // enough accepts were gathered and the value has been chosen; create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                self.commit_actions(dot, clock, votes, shard_count)
+                self.mcommit_actions(dot, clock, votes, shard_count)
             }
             None => {
                 // not enough accepts yet
@@ -850,7 +852,7 @@ impl<KC: KeyClocks> Newt<KC> {
             .expect("votes in shard commit info should be set");
 
         // create `MCommit`
-        self.final_commit_action(dot, clock, votes)
+        self.final_mcommit_action(dot, clock, votes)
     }
 
     #[instrument(skip(self, from, dot, _time))]
@@ -944,27 +946,42 @@ impl<KC: KeyClocks> Newt<KC> {
         &mut self,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        log!("p{}: PeriodicEvent::ClockBump", self.id());
+        log!(
+            "p{}: PeriodicEvent::ClockBump | time={}",
+            self.id(),
+            time.millis()
+        );
 
-        // vote up to:
-        // - highest committed clock or
-        // - the current time,
-        // whatever is the highest.
-        // The fact that micros as used here is not an accident. With many
+        // Iterate all clocks and bump them to the current time. The fact that
+        // micros as used here is not an accident. With many
         // clients (like 1024 per site with 5 sites), millis do not provide
         // "enough precision".
-        let min_clock = std::cmp::max(self.max_commit_clock, time.micros());
-
-        // iterate all clocks and bump them to the current time:
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
-        let detached = self.key_clocks.vote_all(min_clock);
+        self.key_clocks.vote_all(time.micros(), &mut self.detached);
+        vec![]
+    }
 
-        // create `ToSend`
-        vec![Action::ToSend {
-            target: self.bp.all(),
-            msg: Message::MDetached { detached },
-        }]
+    #[instrument(skip(self, _time))]
+    fn handle_event_send_detached(
+        &mut self,
+        _time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: PeriodicEvent::SendDetached | time={}",
+            self.id(),
+            _time.millis()
+        );
+
+        let detached = mem::take(&mut self.detached);
+        if detached.is_empty() {
+            vec![]
+        } else {
+            vec![Action::ToSend {
+                target: self.bp.all(),
+                msg: Message::MDetached { detached },
+            }]
+        }
     }
 
     fn submit_actions(
@@ -983,9 +1000,9 @@ impl<KC: KeyClocks> Newt<KC> {
             // - we're the target shard (i.e. the shard to which the client sent
             //   the command)
             // - command touches more than one shard
-            for shard_id in cmd
-                .shards()
-                .filter(|shard_id| **shard_id != self.shard_id())
+            let my_shard_id = self.bp.shard_id;
+            for shard_id in
+                cmd.shards().filter(|shard_id| **shard_id != my_shard_id)
             {
                 let mforward_submit = Message::MForwardSubmit {
                     dot,
@@ -1006,7 +1023,56 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    fn commit_actions(
+    // if the command accesses more than one shard, notify the remaining shards
+    // so that they can bump the keys accessed by this command on their shard to
+    // the timestamp computed here
+    fn mcollect_actions(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        clock: u64,
+        process_votes: Votes,
+        shard_count: usize,
+    ) -> Vec<Action<Self>> {
+        // action_count = (shard_count - 1)MBumpTo + 1MCollectAck =
+        // shard_count
+        let mut actions = Vec::with_capacity(shard_count);
+
+        // create `MCollectAck`
+        let mcollectack = Message::MCollectAck {
+            dot,
+            clock,
+            process_votes,
+        };
+        let target = singleton![from];
+        actions.push(Action::ToSend {
+            msg: mcollectack,
+            target,
+        });
+
+        if shard_count > 1 {
+            // get cmd info
+            let info = self.cmds.get(dot);
+            let cmd = info.cmd.as_ref().unwrap();
+
+            // create bumpto messages if the command acesses more than one shard
+            let my_shard_id = self.bp.shard_id;
+            for shard_id in
+                cmd.shards().filter(|shard_id| **shard_id != my_shard_id)
+            {
+                let mbump_to = Message::MBumpTo { dot, clock };
+                let target =
+                    singleton![self.bp.closest_shard_process(shard_id)];
+                actions.push(Action::ToSend {
+                    target,
+                    msg: mbump_to,
+                })
+            }
+        }
+        actions
+    }
+
+    fn mcommit_actions(
         &mut self,
         dot: Dot,
         clock: u64,
@@ -1016,7 +1082,7 @@ impl<KC: KeyClocks> Newt<KC> {
         match shard_count {
             1 => {
                 // create `MCommit`
-                self.final_commit_action(dot, clock, votes)
+                self.final_mcommit_action(dot, clock, votes)
             }
             _ => {
                 // if the command accesses more than one shard, send an
@@ -1063,7 +1129,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    fn final_commit_action(
+    fn final_mcommit_action(
         &self,
         dot: Dot,
         clock: u64,
@@ -1202,9 +1268,6 @@ pub enum Message {
         clock: u64,
         votes: Votes,
     },
-    MCommitClock {
-        clock: u64,
-    },
     MDetached {
         detached: Votes,
     },
@@ -1221,6 +1284,10 @@ pub enum Message {
     MForwardSubmit {
         dot: Dot,
         cmd: Command,
+    },
+    MBumpTo {
+        dot: Dot,
+        clock: u64,
     },
     MShardCommit {
         dot: Dot,
@@ -1256,9 +1323,6 @@ impl MessageIndex for Message {
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
-            Self::MCommitClock { .. } => {
-                worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
-            }
             Self::MDetached { .. } => {
                 worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
             }
@@ -1266,6 +1330,7 @@ impl MessageIndex for Message {
             Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
             // Partial replication messages
             Self::MForwardSubmit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MBumpTo { dot, .. } => worker_dot_index_shift(&dot),
             Self::MShardCommit { dot, .. } => worker_dot_index_shift(&dot),
             Self::MShardAggregatedCommit { dot, .. } => {
                 worker_dot_index_shift(&dot)
@@ -1284,6 +1349,7 @@ impl MessageIndex for Message {
 pub enum PeriodicEvent {
     GarbageCollection,
     ClockBump,
+    SendDetached,
 }
 
 impl PeriodicEventIndex for PeriodicEvent {
@@ -1294,6 +1360,10 @@ impl PeriodicEventIndex for PeriodicEvent {
         match self {
             Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
             Self::ClockBump => worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX),
+            Self::SendDetached => {
+                // should be sent to all workers
+                None
+            }
         }
     }
 }
@@ -1487,25 +1557,17 @@ mod tests {
 
         // all processes handle it
         let actions = simulation.forward_to_processes(mcommit);
-        // there are four actions
-        assert_eq!(actions.len(), 4);
+        // there are three actions
+        assert_eq!(actions.len(), 3);
 
-        // we have 3 MCommitDots and one MDetached (by the process that's not
-        // part of the fast quorum)
-        let mut mcommitdot_count = 0;
-        let mut mdetached_count = 0;
-        actions.into_iter().for_each(|(_, action)| match action {
-            Action::ToForward { msg } => {
-                assert!(matches!(msg, Message::MCommitDot {..}));
-                mcommitdot_count += 1;
+        // check that the three actions are the forward of MCommitDot
+        assert!(actions.into_iter().all(|(_, action)| {
+            if let Action::ToForward { msg } = action {
+                matches!(msg, Message::MCommitDot {..})
+            } else {
+                false
             }
-            Action::ToSend { msg, .. } => {
-                assert!(matches!(msg, Message::MDetached {..}));
-                mdetached_count += 1;
-            }
-        });
-        assert_eq!(mcommitdot_count, 3);
-        assert_eq!(mdetached_count, 1);
+        }));
 
         // process 1 should have something to the executor
         let (process, executor, _) = simulation.get_process(process_id_1);

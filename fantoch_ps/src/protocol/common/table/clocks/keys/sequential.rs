@@ -38,17 +38,15 @@ impl KeyClocks for SequentialKeyClocks {
         let clock = cmp::max(min_clock, self.clock(cmd) + 1);
 
         // compute votes up to that clock
-        let votes = self.vote(cmd, clock);
+        let key_count = cmd.key_count(self.shard_id);
+        let mut votes = Votes::with_capacity(key_count);
+        self.vote(cmd, clock, &mut votes);
 
         // return both
         (clock, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        let key_count = cmd.key_count(self.shard_id);
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
-
+    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         // vote on each key
         cmd.keys(self.shard_id).for_each(|key| {
             // get a mutable reference to current clock value
@@ -57,25 +55,16 @@ impl KeyClocks for SequentialKeyClocks {
                 None => self.clocks.entry(key.clone()).or_insert(0),
             };
 
-            Self::maybe_bump(self.id, key, current, up_to, &mut votes);
+            Self::maybe_bump(self.id, key, current, up_to, votes);
         });
-
-        // return votes
-        votes
     }
 
-    fn vote_all(&mut self, up_to: u64) -> Votes {
-        // create votes
-        let mut votes = Votes::with_capacity(self.clocks.len());
-
+    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
         // vote on each key
         let id = self.id;
         self.clocks.iter_mut().for_each(|(key, current)| {
-            Self::maybe_bump(id, key, current, up_to, &mut votes);
+            Self::maybe_bump(id, key, current, up_to, votes);
         });
-
-        // return votes
-        votes
     }
 
     fn parallel() -> bool {
@@ -110,7 +99,7 @@ impl SequentialKeyClocks {
             let vr = VoteRange::new(id, *current + 1, up_to);
             // update current clock to be `clock`
             *current = up_to;
-            votes.set(key.clone(), vec![vr]);
+            votes.add(key, vr);
         }
     }
 }
