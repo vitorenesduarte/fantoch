@@ -362,7 +362,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // if not:
             // - maybe initialize `self.key_clocks`
             // - simply save the payload and set status to `PENDING`
-            // - if we received the `MCommit` before the `MCollect`, and the
+            // - if we received the `MCommit` before the `MCollect`, handle the
             //   `MCommit` now
 
             if self.bp.config.newt_clock_bump_interval().is_some() {
@@ -638,7 +638,8 @@ impl<KC: KeyClocks> Newt<KC> {
         } else {
             // in this case we don't have the payload (which means we have
             // received the `MBumpTo` from some shard before `MCollect` from my
-            // shard
+            // shard); thus, buffer this request and handle it when we do
+            // receive the `MCollect` (see `handle_mcollect`)
             let current = self.buffered_bump_tos.entry(dot).or_default();
             // if the command acesses more than two shards, we could receive
             // several `MBumpTo`'s before the `MCollect`; in this case, save the
