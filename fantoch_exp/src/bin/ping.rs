@@ -8,11 +8,12 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tracing::instrument;
 use tracing_futures::Instrument;
+use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
+const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
 const INSTANCE_TYPE: &str = "m3.xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
 
@@ -50,29 +51,29 @@ async fn main() -> Result<(), Report> {
     ];
 
     ping_experiment(
+        LAUCH_MODE,
         regions,
         INSTANCE_TYPE,
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-        MAX_INSTANCE_DURATION_HOURS,
         PING_DURATION_SECS,
     )
     .await
 }
 
 async fn ping_experiment(
+    launch_mode: LaunchMode,
     regions: Vec<Region>,
     instance_type: impl ToString + Clone,
     max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     let result = ping_experiment_run(
         &mut launcher,
+        launch_mode,
         regions,
         instance_type,
         max_spot_instance_request_wait_secs,
-        max_instance_duration_hours,
         experiment_duration_secs,
     )
     .await;
@@ -86,10 +87,10 @@ pub async fn ping_experiment_run(
     launcher: &mut tsunami::providers::aws::Launcher<
         rusoto_credential::DefaultCredentialsProvider,
     >,
+    launch_mode: LaunchMode,
     regions: Vec<Region>,
     instance_type: impl ToString + Clone,
     max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
     let mut descriptors = Vec::with_capacity(regions.len());
@@ -123,7 +124,7 @@ pub async fn ping_experiment_run(
     }
 
     // spawn and connect
-    launcher.set_max_instance_duration(max_instance_duration_hours);
+    launcher.set_mode(launch_mode);
     let max_wait =
         Some(Duration::from_secs(max_spot_instance_request_wait_secs));
     launcher.spawn(descriptors, max_wait).await?;

@@ -7,17 +7,18 @@ use fantoch_exp::exp::Machines;
 use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;
+use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
 const RESULTS_DIR: &str = "../partial_replication";
 
 // aws experiment config
+const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
 const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
 // const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // run mode
 const RUN_MODE: RunMode = RunMode::Release;
@@ -303,12 +304,12 @@ async fn do_aws_bench(
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
+        LAUCH_MODE,
         regions,
         shard_count,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-        MAX_INSTANCE_DURATION_HOURS,
         BRANCH.to_string(),
         RUN_MODE,
         features.clone(),

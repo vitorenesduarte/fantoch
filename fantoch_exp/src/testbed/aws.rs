@@ -10,12 +10,12 @@ pub async fn setup(
     launcher: &mut tsunami::providers::aws::Launcher<
         rusoto_credential::DefaultCredentialsProvider,
     >,
+    launch_mode: tsunami::providers::aws::LaunchMode,
     regions: Vec<rusoto_core::Region>,
     shard_count: usize,
     server_instance_type: String,
     client_instance_type: String,
     max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
     branch: String,
     run_mode: RunMode,
     features: Vec<FantochFeature>,
@@ -26,11 +26,11 @@ pub async fn setup(
     // setup machines
     let vms = spawn_and_setup(
         launcher,
+        launch_mode,
         nicknames,
         server_instance_type,
         client_instance_type,
         max_spot_instance_request_wait_secs,
-        max_instance_duration_hours,
         branch,
         run_mode,
         features,
@@ -67,11 +67,11 @@ async fn spawn_and_setup<'a>(
     launcher: &'a mut tsunami::providers::aws::Launcher<
         rusoto_credential::DefaultCredentialsProvider,
     >,
+    launch_mode: tsunami::providers::aws::LaunchMode,
     nicknames: Vec<Nickname>,
     server_instance_type: String,
     client_instance_type: String,
     max_spot_instance_request_wait_secs: u64,
-    max_instance_duration_hours: usize,
     branch: String,
     run_mode: RunMode,
     features: Vec<FantochFeature>,
@@ -114,7 +114,7 @@ async fn spawn_and_setup<'a>(
 
     // spawn and connect
     launcher
-        .set_max_instance_duration(max_instance_duration_hours)
+        .set_mode(launch_mode)
         // make sure ports are open
         // TODO create VPC and use private ips
         .open_ports();
