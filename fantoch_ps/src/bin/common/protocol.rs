@@ -25,7 +25,7 @@ const DEFAULT_MULTIPLEXING: usize = 1;
 
 // newt's config
 const DEFAULT_NEWT_TINY_QUORUMS: bool = false;
-const DEFAULT_NEWT_CLOCK_BUMP_INTERVAL: usize = 10;
+const DEFAULT_NEWT_DETACHED_SEND_INTERVAL: Duration = Duration::from_millis(5);
 
 // protocol's config
 const DEFAULT_SKIP_FAST_ACK: bool = false;
@@ -233,7 +233,14 @@ fn parse_args() -> ProtocolArgs {
             Arg::with_name("newt_clock_bump_interval")
                 .long("newt_clock_bump_interval")
                 .value_name("NEWT_CLOCK_BUMP_INTERVAL")
-                .help("number indicating the interval (in milliseconds) between clock bump; if this value is not set, then clocks are not bumped periodically")
+                .help("number indicating the interval (in milliseconds) between clock bumps; if this value is not set, then clocks are not bumped periodically")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("newt_detached_send_interval")
+                .long("newt_detached_send_interval")
+                .value_name("NEWT_DETACHED_SEND_INTERVAL")
+                .help("number indicating the interval (in milliseconds) between mdetached messages are sent; default: 5")
                 .takes_value(true),
         )
         .arg(
@@ -355,6 +362,9 @@ fn parse_args() -> ProtocolArgs {
         parse_newt_tiny_quorums(matches.value_of("newt_tiny_quorums")),
         parse_newt_clock_bump_interval(
             matches.value_of("newt_clock_bump_interval"),
+        ),
+        parse_newt_detached_send_interval(
+            matches.value_of("newt_detached_send_interval"),
         ),
         parse_skip_fast_ack(matches.value_of("skip_fast_ack")),
     );
@@ -518,6 +528,7 @@ pub fn build_config(
     leader: Option<ProcessId>,
     newt_tiny_quorums: bool,
     newt_clock_bump_interval: Option<Duration>,
+    newt_detached_send_interval: Duration,
     skip_fast_ack: bool,
 ) -> Config {
     // create config
@@ -537,6 +548,7 @@ pub fn build_config(
     if let Some(interval) = newt_clock_bump_interval {
         config.set_newt_clock_bump_interval(interval);
     }
+    config.set_newt_detached_send_interval(newt_detached_send_interval);
     // set protocol's config
     config.set_skip_fast_ack(skip_fast_ack);
     config
@@ -615,6 +627,20 @@ fn parse_newt_clock_bump_interval(
         Duration::from_millis(ms)
     })
 }
+
+fn parse_newt_detached_send_interval(
+    newt_detached_send_interval: Option<&str>,
+) -> Duration {
+    newt_detached_send_interval
+        .map(|newt_detached_send_interval| {
+            let ms = newt_detached_send_interval
+                .parse::<u64>()
+                .expect("newt_detached_send_interval should be a number");
+            Duration::from_millis(ms)
+        })
+        .unwrap_or(DEFAULT_NEWT_DETACHED_SEND_INTERVAL)
+}
+
 pub fn parse_skip_fast_ack(skip_fast_ack: Option<&str>) -> bool {
     skip_fast_ack
         .map(|skip_fast_ack| {

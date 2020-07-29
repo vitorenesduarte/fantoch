@@ -131,8 +131,6 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
-        256,
-        1024,
         1024 * 4,
         1024 * 8,
         1024 * 16,
@@ -149,7 +147,7 @@ async fn main() -> Result<(), Report> {
         1024 * 128,
     ];
     let shards_per_command = 2;
-    let shard_count = 3;
+    let shard_count = 2;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;

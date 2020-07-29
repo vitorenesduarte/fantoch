@@ -43,12 +43,14 @@ fn partial_replication() -> Result<(), Report> {
         // shards_per_command, shard_count
         (1, 1),
         (1, 2),
-        (1, 3),
         (2, 2),
+        /*
+        (1, 3),
         (2, 3),
-        /* (1, 4),
-         * (1, 5),
-         * (1, 6), */
+        (1, 4),
+        (1, 5),
+        (1, 6),
+        */
     ];
 
     // load results
@@ -119,8 +121,8 @@ fn partial_replication() -> Result<(), Report> {
                 styles.insert((1, 1), ("#1abc9c", "s"));
                 styles.insert((1, 2), ("#218c74", "D"));
                 styles.insert((2, 2), ("#227093", "."));
-                styles.insert((1, 3), ("#bdc3c7", "+"));
-                styles.insert((2, 3), ("#34495e", "x"));
+                // styles.insert((1, 3), ("#bdc3c7", "+"));
+                // styles.insert((2, 3), ("#34495e", "x"));
                 // styles.insert((1, 4), ("#ffa726", "v"));
                 // styles.insert((1, 5), ("#227093", "."));
                 // styles.insert((1, 6), ("#34495e", "x"));
