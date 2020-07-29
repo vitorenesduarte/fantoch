@@ -54,7 +54,7 @@ mod tests {
         ($n:expr, $f:expr) => {{
             let mut config = Config::new($n, $f);
             // always set `newt_detached_send_interval`
-            config.set_newt_detached_send_interval(Duration::from_millis(1));
+            config.set_newt_detached_send_interval(Duration::from_millis(100));
             config
         }};
         ($n:expr, $f:expr, $clock_bump_interval:expr) => {{
