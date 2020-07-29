@@ -14,7 +14,7 @@ use std::fs::DirEntry;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-const SNAPSHOT_SUFFIX: &str = "_experiment_data_snapshot.bincode";
+const SNAPSHOT_SUFFIX: &str = "_experiment_data_snapshot.bincode.gz";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResultsDB {
@@ -90,13 +90,10 @@ impl ResultsDB {
             format!("{}{}", timestamp.path().display(), SNAPSHOT_SUFFIX);
         let exp_data = if Path::new(&snapshot).exists() {
             // if there is, simply load it
-            fantoch_exp::deserialize(
-                &snapshot,
-                SerializationFormat::BincodeGz,
-            )
-            .wrap_err_with(|| {
-                format!("deserialize experiment data snapshot {}", snapshot)
-            })?
+            fantoch_exp::deserialize(&snapshot, SerializationFormat::BincodeGz)
+                .wrap_err_with(|| {
+                    format!("deserialize experiment data snapshot {}", snapshot)
+                })?
         } else {
             // otherwise load it
             let exp_data = Self::load_experiment_data(&timestamp, &exp_config)?;

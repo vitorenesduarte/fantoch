@@ -44,12 +44,12 @@ fn partial_replication() -> Result<(), Report> {
         (1, 1),
         (1, 2),
         (2, 2),
+        (1, 6),
         /*
         (1, 3),
         (2, 3),
         (1, 4),
         (1, 5),
-        (1, 6),
         */
     ];
 
@@ -125,7 +125,7 @@ fn partial_replication() -> Result<(), Report> {
                 // styles.insert((2, 3), ("#34495e", "x"));
                 // styles.insert((1, 4), ("#ffa726", "v"));
                 // styles.insert((1, 5), ("#227093", "."));
-                // styles.insert((1, 6), ("#34495e", "x"));
+                styles.insert((1, 6), ("#34495e", "x"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();

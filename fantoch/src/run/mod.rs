@@ -791,10 +791,7 @@ fn do_handle_cmd_result<'a>(
 }
 
 // TODO make this async
-fn serialize_and_compress<T: Serialize>(
-    data: &T,
-    file: &str,
-) -> RunResult<()> {
+fn serialize_and_compress<T: Serialize>(data: &T, file: &str) -> RunResult<()> {
     // if the file does not exist it will be created, otherwise truncated
     std::fs::File::create(file)
         .ok()
