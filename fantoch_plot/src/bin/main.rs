@@ -39,16 +39,16 @@ fn partial_replication() -> Result<(), Report> {
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic];
 
-    let combinations = vec![
+    let shard_combinations = vec![
         // shards_per_command, shard_count
         (1, 1),
         (1, 2),
         (1, 3),
-        // (2, 2),
-        // (2, 3),
-        (1, 4),
-        (1, 5),
-        (1, 6),
+        (2, 2),
+        (2, 3),
+        /* (1, 4),
+         * (1, 5),
+         * (1, 6), */
     ];
 
     // load results
@@ -59,6 +59,10 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 32,
+        1024 * 36,
+        1024 * 40,
+        1024 * 48,
+        1024 * 56,
         1024 * 64,
         1024 * 80,
         1024 * 96,
@@ -88,7 +92,7 @@ fn partial_replication() -> Result<(), Report> {
             latency_metric.to_file_suffix(),
         );
         // create searches
-        let searches = combinations
+        let searches = shard_combinations
             .clone()
             .into_iter()
             .flat_map(|(shards_per_command, shard_count)| {
@@ -114,12 +118,12 @@ fn partial_replication() -> Result<(), Report> {
                 let mut styles = HashMap::new();
                 styles.insert((1, 1), ("#1abc9c", "s"));
                 styles.insert((1, 2), ("#218c74", "D"));
-                // styles.insert((2, 2), ("#227093", "."));
+                styles.insert((2, 2), ("#227093", "."));
                 styles.insert((1, 3), ("#bdc3c7", "+"));
-                // styles.insert((2, 3), ("#34495e", "x"));
-                styles.insert((1, 4), ("#ffa726", "v"));
-                styles.insert((1, 5), ("#227093", "."));
-                styles.insert((1, 6), ("#34495e", "x"));
+                styles.insert((2, 3), ("#34495e", "x"));
+                // styles.insert((1, 4), ("#ffa726", "v"));
+                // styles.insert((1, 5), ("#227093", "."));
+                // styles.insert((1, 6), ("#34495e", "x"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();
@@ -160,7 +164,7 @@ fn partial_replication() -> Result<(), Report> {
         )?;
     }
 
-    for (shards_per_command, shard_count) in combinations {
+    for (shards_per_command, shard_count) in shard_combinations {
         let shard_gen = ShardGen::Random { shard_count };
 
         // generate throughput-latency plot

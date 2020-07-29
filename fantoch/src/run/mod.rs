@@ -94,6 +94,7 @@ use crate::time::{RunTime, SysTime};
 use crate::HashSet;
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
+use serde::Serialize;
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -480,7 +481,7 @@ where
 
     if let Some(file) = metrics_file {
         println!("will write client data to {}", file);
-        serialize_client_data(data, file)?;
+        serialize_and_compress(&data, &file)?;
     }
 
     println!("all clients ended");
@@ -790,18 +791,27 @@ fn do_handle_cmd_result<'a>(
 }
 
 // TODO make this async
-fn serialize_client_data(data: ClientData, file: String) -> RunResult<()> {
+fn serialize_and_compress<T: Serialize>(
+    data: &T,
+    file: &str,
+) -> RunResult<()> {
     // if the file does not exist it will be created, otherwise truncated
     std::fs::File::create(file)
         .ok()
         // create a buf writer
         .map(std::io::BufWriter::new)
+        // compress using gzip
+        .map(|buffer| {
+            flate2::write::GzEncoder::new(buffer, flate2::Compression::best())
+        })
         // and try to serialize
         .map(|writer| {
-            bincode::serialize_into(writer, &data)
-                .expect("error serializing client data")
+            bincode::serialize_into(writer, data)
+                .expect("error serializing data")
         })
-        .unwrap_or_else(|| panic!("couldn't save client data"));
+        .unwrap_or_else(|| {
+            panic!("couldn't save serialized data in file {:?}", file)
+        });
 
     Ok(())
 }

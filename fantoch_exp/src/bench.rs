@@ -666,7 +666,7 @@ async fn pull_metrics_files(
         .wrap_err("copy dstat")?;
 
     // pull metrics file and remove it
-    let local_path = format!("{}/{}_metrics.bincode", exp_dir, prefix);
+    let local_path = format!("{}/{}_metrics.bincode.gz", exp_dir, prefix);
     util::copy_from((METRICS_FILE, vm), local_path)
         .await
         .wrap_err("copy metrics")?;

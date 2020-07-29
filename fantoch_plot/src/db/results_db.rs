@@ -90,10 +90,13 @@ impl ResultsDB {
             format!("{}{}", timestamp.path().display(), SNAPSHOT_SUFFIX);
         let exp_data = if Path::new(&snapshot).exists() {
             // if there is, simply load it
-            fantoch_exp::deserialize(&snapshot, SerializationFormat::Bincode)
-                .wrap_err_with(|| {
-                    format!("deserialize experiment data snapshot {}", snapshot)
-                })?
+            fantoch_exp::deserialize(
+                &snapshot,
+                SerializationFormat::GzipBincode,
+            )
+            .wrap_err_with(|| {
+                format!("deserialize experiment data snapshot {}", snapshot)
+            })?
         } else {
             // otherwise load it
             let exp_data = Self::load_experiment_data(&timestamp, &exp_config)?;
@@ -101,7 +104,7 @@ impl ResultsDB {
             fantoch_exp::serialize(
                 &exp_data,
                 &snapshot,
-                SerializationFormat::Bincode,
+                SerializationFormat::GzipBincode,
             )
             .wrap_err_with(|| {
                 format!("deserialize experiment data snapshot {}", snapshot)
@@ -284,12 +287,12 @@ impl ResultsDB {
         T: serde::de::DeserializeOwned,
     {
         let path = format!(
-            "{}/{}_metrics.bincode",
+            "{}/{}_metrics.bincode.gz",
             timestamp.path().display(),
             prefix,
         );
         let metrics =
-            fantoch_exp::deserialize(&path, SerializationFormat::Bincode)
+            fantoch_exp::deserialize(&path, SerializationFormat::GzipBincode)
                 .wrap_err_with(|| format!("deserialize metrics {}", path))?;
         Ok(metrics)
     }
