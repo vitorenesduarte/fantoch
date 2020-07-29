@@ -22,6 +22,9 @@ pub struct Config {
     newt_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
     newt_clock_bump_interval: Option<Duration>,
+    /// defines the interval the sending of `MDetached` messages in newt, if
+    /// any
+    newt_detached_send_interval: Option<Duration>,
     /// defines whether protocols should try to bypass the fast quorum process
     /// ack (which is only possible if the fast quorum size is 2)
     skip_fast_ack: bool,
@@ -50,6 +53,8 @@ impl Config {
         let newt_tiny_quorums = false;
         // by default, clocks are not bumped periodically
         let newt_clock_bump_interval = None;
+        // by default, `MDetached` messages are not sent
+        let newt_detached_send_interval = None;
         // by default `skip_fast_ack = false;
         let skip_fast_ack = false;
         Self {
@@ -62,6 +67,7 @@ impl Config {
             leader,
             newt_tiny_quorums,
             newt_clock_bump_interval,
+            newt_detached_send_interval,
             skip_fast_ack,
         }
     }
@@ -137,7 +143,7 @@ impl Config {
         self.newt_tiny_quorums = newt_tiny_quorums;
     }
 
-    /// Checks Newt clock bumpp interval.
+    /// Checks newt clock bump interval.
     pub fn newt_clock_bump_interval(&self) -> Option<Duration> {
         self.newt_clock_bump_interval
     }
@@ -145,6 +151,16 @@ impl Config {
     /// Sets newt clock bump interval.
     pub fn set_newt_clock_bump_interval(&mut self, interval: Duration) {
         self.newt_clock_bump_interval = Some(interval);
+    }
+
+    /// Checks newt
+    pub fn newt_detached_send_interval(&self) -> Option<Duration> {
+        self.newt_detached_send_interval
+    }
+
+    /// Sets newt clock bump interval.
+    pub fn set_newt_detached_send_interval(&mut self, interval: Duration) {
+        self.newt_detached_send_interval = Some(interval);
     }
 
     /// Checks whether skip fast ack is enabled or not.
@@ -300,6 +316,13 @@ mod tests {
         let interval = Duration::from_millis(1);
         config.set_newt_clock_bump_interval(interval);
         assert_eq!(config.newt_clock_bump_interval(), Some(interval));
+
+        // by default, there's no sending of `MDetached` messages
+        assert!(config.newt_detached_send_interval().is_none());
+        // but that can change
+        let interval = Duration::from_millis(2);
+        config.set_newt_detached_send_interval(interval);
+        assert_eq!(config.newt_detached_send_interval(), Some(interval));
 
         // by default, skip fast ack is false
         assert!(!config.skip_fast_ack());
