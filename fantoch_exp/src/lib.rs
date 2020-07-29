@@ -116,7 +116,7 @@ impl Testbed {
 
 #[derive(Debug)]
 pub enum SerializationFormat {
-    GzipBincode,
+    BincodeGz,
     Json,
 }
 
@@ -135,7 +135,7 @@ where
     let buf = std::io::BufWriter::new(file);
     // and try to serialize
     match format {
-        SerializationFormat::GzipBincode => {
+        SerializationFormat::BincodeGz => {
             let buf =
                 flate2::write::GzEncoder::new(buf, flate2::Compression::best());
             bincode::serialize_into(buf, &data).wrap_err("serialize")?
@@ -161,7 +161,7 @@ where
     let buf = std::io::BufReader::new(file);
     // and try to deserialize
     let data = match format {
-        SerializationFormat::GzipBincode => {
+        SerializationFormat::BincodeGz => {
             let buf = flate2::bufread::GzDecoder::new(buf);
             bincode::deserialize_from(buf).wrap_err("deserialize")?
         }

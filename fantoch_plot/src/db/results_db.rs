@@ -92,7 +92,7 @@ impl ResultsDB {
             // if there is, simply load it
             fantoch_exp::deserialize(
                 &snapshot,
-                SerializationFormat::GzipBincode,
+                SerializationFormat::BincodeGz,
             )
             .wrap_err_with(|| {
                 format!("deserialize experiment data snapshot {}", snapshot)
@@ -104,7 +104,7 @@ impl ResultsDB {
             fantoch_exp::serialize(
                 &exp_data,
                 &snapshot,
-                SerializationFormat::GzipBincode,
+                SerializationFormat::BincodeGz,
             )
             .wrap_err_with(|| {
                 format!("deserialize experiment data snapshot {}", snapshot)
@@ -292,7 +292,7 @@ impl ResultsDB {
             prefix,
         );
         let metrics =
-            fantoch_exp::deserialize(&path, SerializationFormat::GzipBincode)
+            fantoch_exp::deserialize(&path, SerializationFormat::BincodeGz)
                 .wrap_err_with(|| format!("deserialize metrics {}", path))?;
         Ok(metrics)
     }
