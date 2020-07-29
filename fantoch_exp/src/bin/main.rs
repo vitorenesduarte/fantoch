@@ -23,7 +23,8 @@ const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
-const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50)); // every 50
+const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
+const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
@@ -48,6 +49,7 @@ macro_rules! config {
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
+        config.set_newt_detached_send_interval(SEND_DETACHED_INTERVAL);
         config.set_transitive_conflicts(TRANSITIVE_CONFLICTS);
         config
     }};
