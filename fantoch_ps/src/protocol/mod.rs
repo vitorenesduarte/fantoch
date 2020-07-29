@@ -356,6 +356,7 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    #[ignore]
     #[tokio::test]
     async fn run_newt_5_2_atomic_partial_replication_two_shards_per_command_test(
     ) {
