@@ -1,6 +1,5 @@
 use super::Nickname;
-use crate::exp::{self, Machines};
-use crate::util;
+use crate::exp::{self, Machine, Machines};
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
@@ -81,6 +80,7 @@ pub async fn setup<'a>(
     for result in futures::future::join_all(launches).await {
         let vm = result.wrap_err("baremetal launch")?;
         let Nickname { region, shard_id } = Nickname::from_string(&vm.nickname);
+        let vm = Machine::Tsunami(vm);
 
         let unique_insert = match shard_id {
             Some(shard_id) => {
@@ -124,7 +124,7 @@ async fn baremetal_setup(
 
     // fetch public ip
     let command = String::from("hostname -I");
-    let ips = util::exec(
+    let ips = Machine::ssh_exec(
         &username,
         &hostname,
         &std::path::PathBuf::from(PRIVATE_KEY),

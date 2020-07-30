@@ -1,6 +1,5 @@
 use crate::args;
 use crate::config::{Placement, RegionIndex};
-use crate::util;
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
@@ -8,26 +7,230 @@ use fantoch::id::{ProcessId, ShardId};
 use fantoch::planet::Region;
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::Path;
 use std::pin::Pin;
 
 /// This script should be called like: $ bash script branch
 /// - branch: which `fantoch` branch to build
 const SETUP_SCRIPT: &str = "exp_files/setup.sh";
 
+pub enum Machine<'a> {
+    Tsunami(tsunami::Machine<'a>),
+    TsunamiRef(&'a tsunami::Machine<'a>),
+    Local,
+}
+
+impl<'a> Machine<'a> {
+    pub fn ip(&self) -> String {
+        match self {
+            Self::Tsunami(vm) => vm.public_ip.clone(),
+            Self::TsunamiRef(vm) => vm.public_ip.clone(),
+            Self::Local => String::from("127.0.0.1"),
+        }
+    }
+
+    pub async fn exec(&self, command: impl ToString) -> Result<String, Report> {
+        match self {
+            Self::Tsunami(vm) => Self::tsunami_exec(vm, command),
+            Self::TsunamiRef(vm) => Self::tsunami_exec(vm, command),
+            Self::Local => todo!(),
+        }
+        .await
+    }
+
+    pub fn prepare_exec(
+        &self,
+        command: impl ToString,
+    ) -> tokio::process::Command {
+        match &self {
+            Self::Tsunami(vm) => Self::tsunami_prepare_exec(vm, command),
+            Self::TsunamiRef(vm) => Self::tsunami_prepare_exec(vm, command),
+            Self::Local => todo!(),
+        }
+    }
+
+    pub async fn script_exec(
+        &self,
+        path: &str,
+        args: Vec<String>,
+    ) -> Result<String, Report> {
+        let args = args.join(" ");
+        let command = format!("chmod u+x {} && ./{} {}", path, path, args);
+        self.exec(command).await.wrap_err("chmod && ./script")
+    }
+
+    pub async fn copy_to(
+        &self,
+        local_path: impl AsRef<Path>,
+        remote_path: impl AsRef<Path>,
+    ) -> Result<(), Report> {
+        match self {
+            Self::Tsunami(vm) => {
+                Self::tsunami_copy_to(vm, local_path, remote_path)
+            }
+            Self::TsunamiRef(vm) => {
+                Self::tsunami_copy_to(vm, local_path, remote_path)
+            }
+            Self::Local => todo!(),
+        }
+        .await
+    }
+
+    pub async fn copy_from(
+        &self,
+        remote_path: impl AsRef<Path>,
+        local_path: impl AsRef<Path>,
+    ) -> Result<(), Report> {
+        match self {
+            Self::Tsunami(vm) => {
+                Self::tsunami_copy_from(vm, remote_path, local_path)
+            }
+            Self::TsunamiRef(vm) => {
+                Self::tsunami_copy_from(vm, remote_path, local_path)
+            }
+            Self::Local => todo!(),
+        }
+        .await
+    }
+
+    async fn tsunami_exec(
+        vm: &tsunami::Machine<'_>,
+        command: impl ToString,
+    ) -> Result<String, Report> {
+        Self::ssh_exec(
+            vm.username.as_ref(),
+            vm.public_ip.as_ref(),
+            vm.private_key.as_ref().expect("private key should be set"),
+            command,
+        )
+        .await
+    }
+
+    fn tsunami_prepare_exec(
+        vm: &tsunami::Machine<'_>,
+        command: impl ToString,
+    ) -> tokio::process::Command {
+        Self::prepare_ssh_exec(
+            vm.username.as_ref(),
+            vm.public_ip.as_ref(),
+            vm.private_key.as_ref().expect("private key should be set"),
+            command,
+        )
+    }
+
+    async fn tsunami_copy_to(
+        vm: &tsunami::Machine<'_>,
+        local_path: impl AsRef<Path>,
+        remote_path: impl AsRef<Path>,
+    ) -> Result<(), Report> {
+        let from = local_path.as_ref().display();
+        let to = format!(
+            "{}@{}:{}",
+            vm.username,
+            vm.public_ip,
+            remote_path.as_ref().display()
+        );
+        let scp_command = format!(
+            "scp -o StrictHostKeyChecking=no -i {} {} {}",
+            vm.private_key
+                .as_ref()
+                .expect("private key should be set")
+                .as_path()
+                .display(),
+            from,
+            to,
+        );
+        Self::create_command(scp_command).status().await?;
+        Ok(())
+    }
+
+    async fn tsunami_copy_from(
+        vm: &tsunami::Machine<'_>,
+        remote_path: impl AsRef<Path>,
+        local_path: impl AsRef<Path>,
+    ) -> Result<(), Report> {
+        let from = format!(
+            "{}@{}:{}",
+            vm.username,
+            vm.public_ip,
+            remote_path.as_ref().display()
+        );
+        let to = local_path.as_ref().display();
+        let scp_command = format!(
+            "scp -o StrictHostKeyChecking=no -i {} {} {}",
+            vm.private_key
+                .as_ref()
+                .expect("private key should be set")
+                .as_path()
+                .display(),
+            from,
+            to,
+        );
+        Self::create_command(scp_command).status().await?;
+        Ok(())
+    }
+
+    pub async fn ssh_exec(
+        username: &str,
+        public_ip: &str,
+        private_key: &std::path::PathBuf,
+        command: impl ToString,
+    ) -> Result<String, Report> {
+        let out =
+            Self::prepare_ssh_exec(username, public_ip, private_key, command)
+                .output()
+                .await
+                .wrap_err("ssh command")?;
+        let out = String::from_utf8(out.stdout)
+            .wrap_err("output conversion to utf8")?
+            .trim()
+            .to_string();
+        Ok(out)
+    }
+
+    fn prepare_ssh_exec(
+        username: &str,
+        public_ip: &str,
+        private_key: &std::path::PathBuf,
+        command: impl ToString,
+    ) -> tokio::process::Command {
+        let ssh_command = format!(
+            "ssh -o StrictHostKeyChecking=no -i {} {}@{} {}",
+            private_key.as_path().display(),
+            username,
+            public_ip,
+            Self::escape(command)
+        );
+        Self::create_command(ssh_command)
+    }
+
+    fn create_command(command_arg: String) -> tokio::process::Command {
+        tracing::debug!("{}", command_arg);
+        let mut command = tokio::process::Command::new("sh");
+        command.arg("-c");
+        command.arg(command_arg);
+        command
+    }
+
+    fn escape(command: impl ToString) -> String {
+        format!("\"{}\"", command.to_string())
+    }
+}
+
 pub struct Machines<'a> {
     placement: Placement,
     // potentially more than one process machine per region (if partial
     // replication)
-    servers: HashMap<ProcessId, tsunami::Machine<'a>>,
+    servers: HashMap<ProcessId, Machine<'a>>,
     // only one client machine per region
-    clients: HashMap<Region, tsunami::Machine<'a>>,
+    clients: HashMap<Region, Machine<'a>>,
 }
 
 impl<'a> Machines<'a> {
     pub fn new(
         placement: Placement,
-        servers: HashMap<ProcessId, tsunami::Machine<'a>>,
-        clients: HashMap<Region, tsunami::Machine<'a>>,
+        servers: HashMap<ProcessId, Machine<'a>>,
+        clients: HashMap<Region, Machine<'a>>,
     ) -> Self {
         assert_eq!(
             placement.len(),
@@ -45,25 +248,21 @@ impl<'a> Machines<'a> {
         &self.placement
     }
 
-    pub fn servers(
-        &self,
-    ) -> impl Iterator<Item = (&ProcessId, &tsunami::Machine<'_>)> {
+    pub fn servers(&self) -> impl Iterator<Item = (&ProcessId, &Machine<'_>)> {
         self.servers.iter()
     }
 
-    pub fn server(&self, process_id: &ProcessId) -> &tsunami::Machine<'_> {
+    pub fn server(&self, process_id: &ProcessId) -> &Machine<'_> {
         self.servers
             .get(process_id)
             .expect("server vm should exist")
     }
 
-    pub fn clients(
-        &self,
-    ) -> impl Iterator<Item = (&Region, &tsunami::Machine<'_>)> {
+    pub fn clients(&self) -> impl Iterator<Item = (&Region, &Machine<'_>)> {
         self.clients.iter()
     }
 
-    pub fn vms(&self) -> impl Iterator<Item = &tsunami::Machine<'_>> {
+    pub fn vms(&self) -> impl Iterator<Item = &Machine<'_>> {
         self.servers
             .iter()
             .map(|(_, vm)| vm)
@@ -208,6 +407,7 @@ pub fn fantoch_setup(
         + 'static,
 > {
     Box::new(move |vm| {
+        let vm = Machine::TsunamiRef(vm);
         let branch = branch.clone();
         let mode = run_mode.name();
         let aws = testbed.is_aws();
@@ -222,19 +422,19 @@ pub fn fantoch_setup(
             let script_file = "setup.sh";
 
             // first copy file to the machine
-            util::copy_to(SETUP_SCRIPT, (script_file, &vm))
+            vm.copy_to(SETUP_SCRIPT, script_file)
                 .await
                 .wrap_err("copy_to setup script")?;
 
             // execute script remotely: "$ setup.sh branch"
             let mut done = false;
             while !done {
-                let stdout = util::vm_script_exec(
-                    script_file,
-                    args![branch, mode, aws, features, "2>&1"],
-                    &vm,
-                )
-                .await?;
+                let stdout = vm
+                    .script_exec(
+                        script_file,
+                        args![branch, mode, aws, features, "2>&1"],
+                    )
+                    .await?;
                 tracing::debug!("full output:\n{}", stdout);
                 // check if there was no warning about the packages we need
                 let all_available = vec![

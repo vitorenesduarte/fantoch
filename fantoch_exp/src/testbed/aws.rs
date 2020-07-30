@@ -1,5 +1,5 @@
 use super::Nickname;
-use crate::exp::{self, Machines};
+use crate::exp::{self, Machine, Machines};
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::Report;
 use std::collections::HashMap;
@@ -46,6 +46,7 @@ pub async fn setup(
     let mut clients = HashMap::with_capacity(client_count);
 
     for (Nickname { shard_id, region }, vm) in vms {
+        let vm = Machine::Tsunami(vm);
         match shard_id {
             Some(shard_id) => {
                 let (process_id, _region_index) = placement

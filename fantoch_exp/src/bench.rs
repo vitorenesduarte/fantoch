@@ -2,8 +2,7 @@ use crate::config::{
     self, ClientConfig, ExperimentConfig, ProcessType, ProtocolConfig,
     RegionIndex, CLIENT_PORT, PORT,
 };
-use crate::exp::{self, Machines};
-use crate::util;
+use crate::exp::{self, Machine, Machines};
 use crate::{FantochFeature, Protocol, RunMode, SerializationFormat, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
@@ -160,7 +159,7 @@ async fn start_processes(
 {
     let ips: Ips = machines
         .servers()
-        .map(|(process_id, vm)| (*process_id, vm.public_ip.clone()))
+        .map(|(process_id, vm)| (*process_id, vm.ip()))
         .collect();
     tracing::debug!("processes ips: {:?}", ips);
 
@@ -236,7 +235,8 @@ async fn start_processes(
             run_mode,
             log_file,
         );
-        let process = util::vm_prepare_command(&vm, command)
+        let process = vm
+            .prepare_exec(command)
             .spawn()
             .wrap_err("failed to start process")?;
         processes.insert(*process_id, (from_region.clone(), process));
@@ -325,7 +325,8 @@ async fn run_clients(
             RunMode::Release,
             log_file,
         );
-        let client = util::vm_prepare_command(&vm, command)
+        let client = vm
+            .prepare_exec(command)
             .spawn()
             .wrap_err("failed to start client")?;
         clients.insert(region_index, client);
@@ -365,8 +366,7 @@ async fn stop_processes(
         // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
         let command =
             format!("lsof -i :{} -i :{} | grep -v PID", PORT, CLIENT_PORT);
-        let output =
-            util::vm_exec(vm, command).await.wrap_err("lsof | grep")?;
+        let output = vm.exec(command).await.wrap_err("lsof | grep")?;
         let mut pids: Vec<_> = output
             .lines()
             // take the second column (which contains the PID)
@@ -388,8 +388,7 @@ async fn stop_processes(
                 // kill it
                 let pid = pids[0];
                 let command = format!("kill {}", pid);
-                let output =
-                    util::vm_exec(vm, command).await.wrap_err("kill")?;
+                let output = vm.exec(command).await.wrap_err("kill")?;
                 tracing::debug!("{}", output);
             }
             n => panic!("there should be at most one pid and found {}", n),
@@ -409,20 +408,21 @@ async fn stop_processes(
 
 async fn wait_process_started(
     process_id: &ProcessId,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
 ) -> Result<(), Report> {
     // small delay between calls
     let duration = tokio::time::Duration::from_secs(2);
 
+    // compute process type and log file
+    let process_type = ProcessType::Server(*process_id);
+    let log_file = config::run_file(process_type, LOG_FILE_EXT);
+
     let mut count = 0;
     while count != 1 {
         tokio::time::delay_for(duration).await;
-        let command = format!(
-            "grep -c 'process {} started' {}",
-            process_id,
-            config::run_file(ProcessType::Server(*process_id), LOG_FILE_EXT),
-        );
-        let stdout = util::vm_exec(vm, &command).await.wrap_err("grep -c")?;
+        let command =
+            format!("grep -c 'process {} started' {}", process_id, log_file);
+        let stdout = vm.exec(&command).await.wrap_err("grep -c")?;
         if stdout.is_empty() {
             tracing::warn!("empty output from: {}", command);
         } else {
@@ -435,7 +435,7 @@ async fn wait_process_started(
 async fn wait_process_ended(
     process_id: ProcessId,
     region: Region,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
     run_mode: RunMode,
     exp_dir: &str,
 ) -> Result<(), Report> {
@@ -446,7 +446,7 @@ async fn wait_process_ended(
     while count != 0 {
         tokio::time::delay_for(duration).await;
         let command = format!("lsof -i :{} -i :{} | wc -l", PORT, CLIENT_PORT);
-        let stdout = util::vm_exec(vm, &command).await.wrap_err("lsof | wc")?;
+        let stdout = vm.exec(&command).await.wrap_err("lsof | wc")?;
         if stdout.is_empty() {
             tracing::warn!("empty output from: {}", command);
         } else {
@@ -460,7 +460,7 @@ async fn wait_process_ended(
         region
     );
 
-    // create process type
+    // compute process type
     let process_type = ProcessType::Server(process_id);
 
     // pull aditional files
@@ -477,8 +477,7 @@ async fn wait_process_ended(
                 let command =
                     "ps -aux | grep flamegraph | grep -v grep | wc -l"
                         .to_string();
-                let stdout =
-                    util::vm_exec(vm, &command).await.wrap_err("ps | wc")?;
+                let stdout = vm.exec(&command).await.wrap_err("ps | wc")?;
                 if stdout.is_empty() {
                     tracing::warn!("empty output from: {}", command);
                 } else {
@@ -505,19 +504,20 @@ async fn wait_process_ended(
 async fn wait_client_ended(
     region_index: RegionIndex,
     region: Region,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
 ) -> Result<(), Report> {
     // small delay between calls
     let duration = tokio::time::Duration::from_secs(10);
 
+    // compute process type and log file
+    let process_type = ProcessType::Client(region_index);
+    let log_file = config::run_file(process_type, LOG_FILE_EXT);
+
     let mut count = 0;
     while count != 1 {
         tokio::time::delay_for(duration).await;
-        let command = format!(
-            "grep -c 'all clients ended' {}",
-            config::run_file(ProcessType::Client(region_index), LOG_FILE_EXT),
-        );
-        let stdout = util::vm_exec(vm, &command).await.wrap_err("grep -c")?;
+        let command = format!("grep -c 'all clients ended' {}", log_file);
+        let stdout = vm.exec(&command).await.wrap_err("grep -c")?;
         if stdout.is_empty() {
             tracing::warn!("empty output from: {}", command);
         } else {
@@ -536,13 +536,13 @@ async fn wait_client_ended(
 
 async fn start_dstat(
     dstat_file: String,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
 ) -> Result<tokio::process::Child, Report> {
     let command = format!(
         "dstat -t -T -cdnm --io --output {} 1 > /dev/null",
         dstat_file
     );
-    util::vm_prepare_command(&vm, command.clone())
+    vm.prepare_exec(command)
         .spawn()
         .wrap_err("failed to start dstat")
 }
@@ -566,7 +566,7 @@ async fn stop_dstats(
     for vm in machines.vms() {
         // find dstat pid in remote vm
         let command = "ps -aux | grep dstat | grep -v grep";
-        let output = util::vm_exec(vm, command).await.wrap_err("ps")?;
+        let output = vm.exec(command).await.wrap_err("ps")?;
         let mut pids: Vec<_> = output
             .lines()
             // take the second column (which contains the PID)
@@ -591,8 +591,7 @@ async fn stop_dstats(
                 }
                 // kill dstat
                 let command = format!("kill {}", pids.join(" "));
-                let output =
-                    util::vm_exec(vm, command).await.wrap_err("kill")?;
+                let output = vm.exec(command).await.wrap_err("kill")?;
                 tracing::debug!("{}", output);
             }
         }
@@ -604,10 +603,10 @@ async fn stop_dstats(
     Ok(())
 }
 
-async fn check_no_dstat(vm: &tsunami::Machine<'_>) -> Result<(), Report> {
+async fn check_no_dstat(vm: &Machine<'_>) -> Result<(), Report> {
     let command = "ps -aux | grep dstat | grep -v grep | wc -l";
     loop {
-        let stdout = util::vm_exec(vm, &command).await?;
+        let stdout = vm.exec(&command).await?;
         if stdout.is_empty() {
             tracing::warn!("empty output from: {}", command);
             // check again
@@ -687,7 +686,7 @@ fn exp_timestamp() -> u128 {
 async fn pull_metrics_files(
     process_type: ProcessType,
     region: &Region,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
     // compute filename prefix
@@ -700,27 +699,25 @@ async fn pull_metrics_files(
 
     // pull log file and remove it
     let local_path = format!("{}/{}.log", exp_dir, prefix);
-    util::copy_from((&log_file, vm), local_path)
+    vm.copy_from(&log_file, local_path)
         .await
         .wrap_err("copy log")?;
 
     // pull dstat and remove it
     let local_path = format!("{}/{}_dstat.csv", exp_dir, prefix);
-    util::copy_from((&dstat_file, vm), local_path)
+    vm.copy_from(&dstat_file, local_path)
         .await
         .wrap_err("copy dstat")?;
 
     // pull metrics file and remove it
     let local_path = format!("{}/{}_metrics.bincode.gz", exp_dir, prefix);
-    util::copy_from((&metrics_file, vm), local_path)
+    vm.copy_from(&metrics_file, local_path)
         .await
         .wrap_err("copy metrics")?;
 
     // remove metric files
     let to_remove = format!("rm {} {} {}", log_file, dstat_file, metrics_file);
-    util::vm_exec(vm, to_remove)
-        .await
-        .wrap_err("remove files")?;
+    vm.exec(to_remove).await.wrap_err("remove files")?;
 
     match process_type {
         ProcessType::Server(process_id) => {
@@ -744,7 +741,7 @@ async fn pull_metrics_files(
 async fn pull_flamegraph_file(
     process_type: ProcessType,
     region: &Region,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
     // flamegraph will always generate a file with this name
@@ -753,41 +750,36 @@ async fn pull_flamegraph_file(
     // compute filename prefix
     let prefix = config::file_prefix(process_type, region);
     let local_path = format!("{}/{}_flamegraph.svg", exp_dir, prefix);
-    util::copy_from((flamegraph, vm), local_path)
+    vm.copy_from(flamegraph, local_path)
         .await
         .wrap_err("copy flamegraph")?;
 
     // remove flamegraph file
     let command = format!("rm {}", flamegraph);
-    util::vm_exec(vm, command)
-        .await
-        .wrap_err("remove flamegraph ile")?;
+    vm.exec(command).await.wrap_err("remove flamegraph ile")?;
     Ok(())
 }
 
 async fn pull_heaptrack_file(
     process_type: ProcessType,
     region: &Region,
-    vm: &tsunami::Machine<'_>,
+    vm: &Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
     // find heaptrack file, which will be something like:
     // "heaptrack.newt_atomic.18836.gz
     let command = format!("ls heaptrack.*.gz");
-    let heaptrack =
-        util::vm_exec(vm, command).await.wrap_err("ls heaptrack")?;
+    let heaptrack = vm.exec(command).await.wrap_err("ls heaptrack")?;
 
     // compute filename prefix
     let prefix = config::file_prefix(process_type, region);
     let local_path = format!("{}/{}_heaptrack.gz", exp_dir, prefix);
-    util::copy_from((&heaptrack, vm), local_path)
+    vm.copy_from(&heaptrack, local_path)
         .await
         .wrap_err("copy heaptrack")?;
 
     // remove heaptrack file
     let command = format!("rm {}", heaptrack);
-    util::vm_exec(vm, command)
-        .await
-        .wrap_err("remove heaptrack file")?;
+    vm.exec(command).await.wrap_err("remove heaptrack file")?;
     Ok(())
 }
