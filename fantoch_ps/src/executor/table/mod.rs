@@ -111,7 +111,8 @@ struct VotesTable {
     // `votes_clock` collects all votes seen until now so that we can compute
     // which timestamp is stable
     votes_clock: ARClock<ProcessId>,
-    // this buffer saves us always allocating a vector when computing the stable clock (see `stable_clock`)
+    // this buffer saves us always allocating a vector when computing the
+    // stable clock (see `stable_clock`)
     frontiers_buffer: Vec<u64>,
     ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
@@ -245,6 +246,8 @@ impl VotesTable {
 
     // Computes the (potentially) new stable clock in this table.
     fn stable_clock(&mut self) -> u64 {
+        // NOTE: we don't use `self.votes_clocks.frontier_threshold` function in
+        // order to save us an allocation
         let clock_size = self.votes_clock.len();
         if self.stability_threshold <= clock_size {
             // clear current frontiers

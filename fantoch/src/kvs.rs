@@ -32,7 +32,17 @@ impl KVStore {
     pub fn execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
         match op {
             KVOp::Get => self.store.get(key).cloned(),
-            KVOp::Put(value) => self.store.insert(key.clone(), value),
+            KVOp::Put(value) => {
+                // only clone key if not already in the KVS
+                if let Some((key, previous_value)) =
+                    self.store.remove_entry(key)
+                {
+                    self.store.insert(key, value);
+                    Some(previous_value)
+                } else {
+                    self.store.insert(key.clone(), value)
+                }
+            }
             KVOp::Delete => self.store.remove(key),
         }
     }
