@@ -52,6 +52,7 @@ impl RunMode {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum FantochFeature {
+    Jemalloc,
     Amortize,
     Prof,
 }
@@ -59,6 +60,7 @@ pub enum FantochFeature {
 impl FantochFeature {
     pub fn name(&self) -> String {
         match self {
+            FantochFeature::Jemalloc => "jemalloc",
             FantochFeature::Amortize => "amortize",
             FantochFeature::Prof => "prof",
         }

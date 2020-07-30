@@ -36,7 +36,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 // bench-specific config
 const BRANCH: &str = "local_deployment";
 // TODO allow more than one feature
-const FEATURE: Option<FantochFeature> = None;
+const FEATURE: Option<FantochFeature> = Some(FantochFeature::Jemalloc);
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
 
 macro_rules! config {
