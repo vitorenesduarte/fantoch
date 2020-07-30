@@ -65,7 +65,9 @@ mod tests {
         }};
     }
 
-    /// Computes the number of commands per client and clients per process according to "CI" env var; if set to true, run the tests with a smaller load
+    /// Computes the number of commands per client and clients per process
+    /// according to "CI" env var; if set to true, run the tests with a smaller
+    /// load
     fn small_load_in_ci() -> (usize, usize) {
         if let Ok(value) = std::env::var("CI") {
             // if ci is set, it should be a bool

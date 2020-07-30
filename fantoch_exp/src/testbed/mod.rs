@@ -1,5 +1,6 @@
 pub mod aws;
 pub mod baremetal;
+pub mod local;
 
 use crate::config::Placement;
 use fantoch::id::{ProcessId, ShardId};

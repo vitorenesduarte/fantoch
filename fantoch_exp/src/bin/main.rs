@@ -3,7 +3,7 @@ use color_eyre::Report;
 use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
-use fantoch_exp::exp::Machines;
+use fantoch_exp::machine::Machines;
 use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;
@@ -11,7 +11,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../partial_replication";
+const RESULTS_DIR: &str = "../local";
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
@@ -19,9 +19,6 @@ const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
 // const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-
-// run mode
-const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
@@ -34,10 +31,13 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "merge_past";
+const BRANCH: &str = "local_deployment";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
+
+// run mode
+const RUN_MODE: RunMode = RunMode::Heaptrack;
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -132,15 +132,17 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
+        1024,
+        /*
         1024 * 4,
         1024 * 8,
         1024 * 16,
-        // 1024 * 24,
+        1024 * 24,
         1024 * 32,
-        // 1024 * 36,
-        // 1024 * 40,
-        // 1024 * 48,
-        // 1024 * 56,
+        1024 * 36,
+        1024 * 40,
+        1024 * 48,
+        1024 * 56,
         1024 * 64,
         1024 * 96,
         1024 * 128,
@@ -150,9 +152,10 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
+        */
     ];
     let shards_per_command = 1;
-    let shard_count = 6;
+    let shard_count = 1;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -183,7 +186,7 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
-    baremetal_bench(
+    local_bench(
         regions,
         shard_count,
         planet,
@@ -194,6 +197,16 @@ async fn main() -> Result<(), Report> {
     )
     .await
     /*
+    baremetal_bench(
+        regions,
+        shard_count,
+        planet,
+        configs,
+        clients_per_region,
+        workloads,
+        skip,
+    )
+    .await
     aws_bench(
         regions,
         shard_count,
@@ -203,6 +216,49 @@ async fn main() -> Result<(), Report> {
         skip,
     ).await
     */
+}
+
+#[allow(dead_code)]
+async fn local_bench(
+    regions: Vec<Region>,
+    shard_count: usize,
+    planet: Option<Planet>,
+    configs: Vec<(Protocol, Config)>,
+    clients_per_region: Vec<usize>,
+    workloads: Vec<Workload>,
+    skip: impl Fn(Protocol, Config, usize) -> bool,
+) -> Result<(), Report>
+where
+{
+    // compute features
+    let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
+
+    // setup baremetal machines
+    let machines = fantoch_exp::testbed::local::setup(
+        regions,
+        shard_count,
+        BRANCH.to_string(),
+        RUN_MODE,
+        features.clone(),
+    )
+    .await
+    .wrap_err("local spawn")?;
+
+    // run benchmarks
+    run_bench(
+        machines,
+        features,
+        Testbed::Local,
+        planet,
+        configs,
+        clients_per_region,
+        workloads,
+        skip,
+    )
+    .await
+    .wrap_err("run bench")?;
+
+    Ok(())
 }
 
 #[allow(dead_code)]

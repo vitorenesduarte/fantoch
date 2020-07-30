@@ -6,7 +6,7 @@ use color_eyre::Report;
 use fantoch::client::ClientData;
 use fantoch::planet::Region;
 use fantoch::run::task::metrics_logger::ProcessMetrics;
-use fantoch_exp::{ExperimentConfig, SerializationFormat};
+use fantoch_exp::{ExperimentConfig, ProcessType, SerializationFormat};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -211,14 +211,22 @@ impl ResultsDB {
         // client metrics
         let mut client_metrics = HashMap::new();
 
-        for (region, _, _, _) in exp_config.placement.iter() {
-            // create client file prefix
-            let prefix = fantoch_exp::config::file_prefix(None, region);
+        for (region, _, _, region_index) in exp_config.placement.iter() {
+            // only load client metrics for this region if we haven't already
+            if !client_metrics.contains_key(region) {
+                // create client file prefix
+                let process_type = ProcessType::Client(*region_index);
+                let prefix =
+                    fantoch_exp::config::file_prefix(process_type, region);
 
-            // load this region's client metrics (there's a single client
-            // machine per region)
-            let client: ClientData = Self::load_metrics(&timestamp, prefix)?;
-            client_metrics.insert(region.clone(), client);
+                // load this region's client metrics (there's a single client
+                // machine per region)
+                let client: ClientData =
+                    Self::load_metrics(&timestamp, prefix)?;
+                assert!(client_metrics
+                    .insert(region.clone(), client)
+                    .is_none());
+            }
         }
 
         // clean-up client data
@@ -234,13 +242,18 @@ impl ResultsDB {
         // have a `start` and an `end` for pruning)
         let mut client_dstats = HashMap::new();
 
-        for (region, _, _, _) in exp_config.placement.iter() {
-            // create client file prefix
-            let prefix = fantoch_exp::config::file_prefix(None, region);
+        for (region, _, _, region_index) in exp_config.placement.iter() {
+            // only load client dstats for this region if we haven't already
+            if !client_metrics.contains_key(region) {
+                // create client file prefix
+                let process_type = ProcessType::Client(*region_index);
+                let prefix =
+                    fantoch_exp::config::file_prefix(process_type, region);
 
-            // load this region's client dstat
-            let client = Self::load_dstat(&timestamp, prefix, start, end)?;
-            client_dstats.insert(region.clone(), client);
+                // load this region's client dstat
+                let client = Self::load_dstat(&timestamp, prefix, start, end)?;
+                assert!(client_dstats.insert(region.clone(), client).is_none());
+            }
         }
 
         // process metrics and dstats
@@ -250,8 +263,8 @@ impl ResultsDB {
         for (region, _, process_id, _) in exp_config.placement.iter() {
             let process_id = *process_id;
             // create process file prefix
-            let prefix =
-                fantoch_exp::config::file_prefix(Some(process_id), region);
+            let process_type = ProcessType::Server(process_id);
+            let prefix = fantoch_exp::config::file_prefix(process_type, region);
 
             // load this process metrics (there will be more than one per region
             // with partial replication)

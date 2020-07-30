@@ -16,8 +16,6 @@ type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
 // FIXED
 #[cfg(feature = "exp")]
 const IP: &str = "0.0.0.0";
-pub const PORT: usize = 3000;
-pub const CLIENT_PORT: usize = 4000;
 
 // parallelism config
 const WORKERS: usize = 16;
@@ -60,7 +58,7 @@ pub struct ProtocolConfig {
     process_id: ProcessId,
     shard_id: ShardId,
     sorted: Option<Vec<ProcessId>>,
-    ips: Vec<(String, Option<usize>)>,
+    ips: Vec<(ProcessId, String, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
@@ -84,8 +82,8 @@ impl ProtocolConfig {
         shard_id: ShardId,
         mut config: Config,
         sorted: Option<Vec<ProcessId>>,
-        ips: Vec<(String, Option<usize>)>,
-        metrics_file: &str,
+        ips: Vec<(ProcessId, String, Option<usize>)>,
+        metrics_file: String,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -107,7 +105,7 @@ impl ProtocolConfig {
             execution_log: EXECUTION_LOG,
             tracer_show_interval: TRACER_SHOW_INTERVAL,
             ping_interval: PING_INTERVAL,
-            metrics_file: metrics_file.to_string(),
+            metrics_file,
         }
     }
 
@@ -124,9 +122,9 @@ impl ProtocolConfig {
             "--ip",
             IP,
             "--port",
-            PORT,
+            port(self.process_id),
             "--client_port",
-            CLIENT_PORT,
+            client_port(self.process_id),
             "--addresses",
             self.ips_to_addresses(),
             "--processes",
@@ -210,8 +208,8 @@ impl ProtocolConfig {
     fn ips_to_addresses(&self) -> String {
         self.ips
             .iter()
-            .map(|(ip, delay)| {
-                let address = format!("{}:{}", ip, PORT);
+            .map(|(peer_id, ip, delay)| {
+                let address = format!("{}:{}", ip, port(*peer_id));
                 if let Some(delay) = delay {
                     format!("{}-{}", address, delay)
                 } else {
@@ -247,7 +245,7 @@ fn workers_executors_and_leader(
 pub struct ClientConfig {
     id_start: usize,
     id_end: usize,
-    ips: Vec<String>,
+    ips: Vec<(ProcessId, String)>,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -259,9 +257,9 @@ impl ClientConfig {
     pub fn new(
         id_start: usize,
         id_end: usize,
-        ips: Vec<String>,
+        ips: Vec<(ProcessId, String)>,
         workload: Workload,
-        metrics_file: &str,
+        metrics_file: String,
     ) -> Self {
         Self {
             id_start,
@@ -270,7 +268,7 @@ impl ClientConfig {
             workload,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
-            metrics_file: metrics_file.to_string(),
+            metrics_file,
         }
     }
 
@@ -319,7 +317,9 @@ impl ClientConfig {
     fn ips_to_addresses(&self) -> String {
         self.ips
             .iter()
-            .map(|ip| format!("{}:{}", ip, CLIENT_PORT))
+            .map(|(process_id, ip)| {
+                format!("{}:{}", ip, client_port(*process_id))
+            })
             .collect::<Vec<_>>()
             .join(",")
     }
@@ -400,11 +400,39 @@ impl fmt::Debug for ExperimentConfig {
     }
 }
 
-// create filename prefix
-pub fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
-    if let Some(process_id) = process_id {
-        format!("{:?}_server_{}", region, process_id)
-    } else {
-        format!("{:?}_client", region)
+#[derive(Clone, Copy, Debug)]
+pub enum ProcessType {
+    Server(ProcessId),
+    Client(usize),
+}
+
+impl ProcessType {
+    pub fn name(&self) -> String {
+        match self {
+            Self::Server(process_id) => format!("server_{}", process_id),
+            Self::Client(region_index) => format!("client_{}", region_index),
+        }
     }
+}
+
+// create filename for a run file (which can be a log, metrics, dstats, etc,
+// depending on the extension passed in)
+pub fn run_file(process_type: ProcessType, file_ext: &str) -> String {
+    format!("{}.{}", process_type.name(), file_ext)
+}
+
+// create filename prefix
+pub fn file_prefix(process_type: ProcessType, region: &Region) -> String {
+    format!("{:?}_{}", region, process_type.name())
+}
+
+const PORT: usize = 3000;
+const CLIENT_PORT: usize = 4000;
+
+pub fn port(process_id: ProcessId) -> usize {
+    process_id as usize + PORT
+}
+
+pub fn client_port(process_id: ProcessId) -> usize {
+    process_id as usize + CLIENT_PORT
 }

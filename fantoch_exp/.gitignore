@@ -1,3 +1,9 @@
 hosts
 *.dat
 *_log
+*.metrics
+*.log
+*.csv
+*.gz
+4
+fantoch/

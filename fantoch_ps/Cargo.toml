@@ -7,8 +7,9 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [features]
+jemalloc = ["jemallocator"]
 amortize = ["fantoch/amortize"]
-prof = ["fantoch/prof", "fantoch_prof"]
+prof = ["fantoch/prof", "fantoch_prof", "jemallocator"]
 parallel-sim = ["rayon"]
 
 [dependencies]
@@ -25,7 +26,7 @@ tracing = "0.1.17"
 parking_lot = "0.11.0"
 num_cpus = "1.13.0"
 
-jemallocator = "0.3.2"
+jemallocator = { version = "0.3.2", optional = true }
 
 fantoch = { path = "../fantoch" }
 fantoch_prof = { path = "../fantoch_prof", optional = true }

@@ -7,6 +7,7 @@ MACHINES_FILE="${DIR}/machines"
 SSH_ARGS="-oStrictHostKeyChecking=no"
 PORT=3000
 CLIENT_PORT=4000
+MAX_PROCS=24
 
 wait_jobs() {
     for job in $(jobs -p); do
@@ -37,13 +38,18 @@ stop_fantoch() {
     cmd="ps -aux | grep dstat | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
-    # wait for processes to end
-    cmd="lsof -i :${PORT} -i :${CLIENT_PORT} | wc -l"
-    local running=-1
-    while [[ ${running} != 0 ]]; do
-        # shellcheck disable=SC2029
-        running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
-        sleep 1
+    for process_id in $(seq 1 ${MAX_PROCS}); do
+        # compute ports
+        local port=$(( PORT + process_id ))
+        local client_port=$(( CLIENT_PORT + process_id ))
+
+        # wait for processes to end
+        cmd="lsof -i :${port} -i :${client_port} | wc -l"
+        local running=-1
+        while [[ ${running} != 0 ]]; do
+            # shellcheck disable=SC2029
+            running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        done
     done
 
     # remove files

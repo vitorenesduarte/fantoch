@@ -3,7 +3,7 @@
 #[cfg(feature = "exp")]
 pub mod bench;
 #[cfg(feature = "exp")]
-pub mod exp;
+pub mod machine;
 #[cfg(feature = "exp")]
 pub mod testbed;
 #[cfg(feature = "exp")]
@@ -11,8 +11,8 @@ pub mod util;
 
 pub mod config;
 
-// Re-export `ExperimentConfig`.
-pub use config::ExperimentConfig;
+// Re-exports.
+pub use config::{ExperimentConfig, ProcessType};
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
@@ -52,6 +52,7 @@ impl RunMode {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum FantochFeature {
+    Jemalloc,
     Amortize,
     Prof,
 }
@@ -59,6 +60,7 @@ pub enum FantochFeature {
 impl FantochFeature {
     pub fn name(&self) -> String {
         match self {
+            FantochFeature::Jemalloc => "jemalloc",
             FantochFeature::Amortize => "amortize",
             FantochFeature::Prof => "prof",
         }
@@ -106,11 +108,17 @@ impl Protocol {
 pub enum Testbed {
     Aws,
     Baremetal,
+    Local,
 }
 
 impl Testbed {
-    pub fn is_aws(&self) -> bool {
-        self == &Testbed::Aws
+    pub fn name(&self) -> String {
+        match self {
+            Self::Aws => "aws",
+            Self::Baremetal => "baremetal",
+            Self::Local => "local",
+        }
+        .to_string()
     }
 }
 

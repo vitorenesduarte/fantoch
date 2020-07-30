@@ -1,5 +1,5 @@
 use super::Nickname;
-use crate::exp::{self, Machines};
+use crate::machine::{Machine, Machines};
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::Report;
 use std::collections::HashMap;
@@ -46,6 +46,7 @@ pub async fn setup(
     let mut clients = HashMap::with_capacity(client_count);
 
     for (Nickname { shard_id, region }, vm) in vms {
+        let vm = Machine::Tsunami(vm);
         match shard_id {
             Some(shard_id) => {
                 let (process_id, _region_index) = placement
@@ -101,7 +102,7 @@ async fn spawn_and_setup<'a>(
             .instance_type(instance_type)
             .region_with_ubuntu_ami(region)
             .await?
-            .setup(exp::fantoch_setup(
+            .setup(crate::machine::fantoch_setup(
                 branch.clone(),
                 run_mode,
                 features.clone(),
