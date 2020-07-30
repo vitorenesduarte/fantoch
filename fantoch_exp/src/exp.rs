@@ -408,9 +408,9 @@ pub fn fantoch_setup(
 > {
     Box::new(move |vm| {
         let vm = Machine::TsunamiRef(vm);
-        let branch = branch.clone();
+        let testbed = testbed.name();
         let mode = run_mode.name();
-        let aws = testbed.is_aws();
+        let branch = branch.clone();
         let features = features
             .clone()
             .into_iter()
@@ -432,7 +432,7 @@ pub fn fantoch_setup(
                 let stdout = vm
                     .script_exec(
                         script_file,
-                        args![branch, mode, aws, features, "2>&1"],
+                        args![testbed, mode, branch, features, "2>&1"],
                     )
                     .await?;
                 tracing::debug!("full output:\n{}", stdout);

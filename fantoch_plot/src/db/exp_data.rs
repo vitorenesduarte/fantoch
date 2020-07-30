@@ -59,7 +59,7 @@ impl ExperimentData {
                 assert!(planet.is_none());
                 LatencyPrecision::Millis
             }
-            Testbed::Baremetal => {
+            Testbed::Baremetal | Testbed::Local => {
                 // use ms if latency was injected, otherwise micros
                 if planet.is_some() {
                     LatencyPrecision::Millis

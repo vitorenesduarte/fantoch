@@ -106,11 +106,17 @@ impl Protocol {
 pub enum Testbed {
     Aws,
     Baremetal,
+    Local,
 }
 
 impl Testbed {
-    pub fn is_aws(&self) -> bool {
-        self == &Testbed::Aws
+    pub fn name(&self) -> String {
+        match self {
+            Self::Aws => "aws",
+            Self::Baremetal => "baremetal",
+            Self::Local => "local",
+        }
+        .to_string()
     }
 }
 
