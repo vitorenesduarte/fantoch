@@ -12,7 +12,7 @@ prof = ["fantoch/prof", "fantoch_prof"]
 parallel-sim = ["rayon"]
 
 [dependencies]
-ahash = "0.4.1"
+ahash = "0.4.4"
 clap = "2.33.1"
 dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "b8d83eec3179cf849ad4f2038001b46545daed1e" }
 futures = { version = "0.3.5", default-features = false, features = [] }
@@ -21,7 +21,7 @@ rayon = { version = "1.3.1", optional = true }
 serde = { version = "1.0.114", features = ["derive"] }
 threshold = "0.8.9"
 tokio = { version = "0.2.21", features = ["full", "parking_lot"] }
-tracing = "0.1.16"
+tracing = "0.1.17"
 parking_lot = "0.11.0"
 num_cpus = "1.13.0"
 

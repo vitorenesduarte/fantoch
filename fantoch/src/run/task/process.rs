@@ -302,6 +302,7 @@ async fn reader_task<P>(
             }
             None => {
                 println!("[reader] error receiving message from connection");
+                break;
             }
         }
     }
@@ -590,6 +591,7 @@ async fn handle_actions<P>(
                 // prevent unnecessary cloning of messages, since send only
                 // requires a reference to the message
                 let msg_to_send = Arc::new(msg.clone());
+
                 // send to writers in parallel
                 let mut sends = to_writers
                     .iter_mut()
@@ -618,8 +620,6 @@ async fn handle_actions<P>(
                     )
                     .await;
                     actions.extend(new_actions);
-                } else {
-                    break;
                 }
             }
             Action::ToForward { msg } => {

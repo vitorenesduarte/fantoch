@@ -165,6 +165,12 @@ impl ProtocolConfig {
                 interval.as_millis()
             ]);
         }
+        if let Some(interval) = self.config.newt_detached_send_interval() {
+            args.extend(args![
+                "--newt_detached_send_interval",
+                interval.as_millis()
+            ]);
+        }
         args.extend(args!["--skip_fast_ack", self.config.skip_fast_ack()]);
 
         args.extend(args![

@@ -82,12 +82,12 @@ impl KeyClocks for LockedKeyClocks {
         (up_to, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to)
+    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
+        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to, votes)
     }
 
-    fn vote_all(&mut self, up_to: u64) -> Votes {
-        common::vote_all(self.id, &self.clocks, up_to)
+    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
+        common::vote_all(self.id, &self.clocks, up_to, votes)
     }
 
     fn parallel() -> bool {
@@ -140,12 +140,12 @@ impl KeyClocks for FineLockedKeyClocks {
         (highest, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to)
+    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
+        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to, votes)
     }
 
-    fn vote_all(&mut self, up_to: u64) -> Votes {
-        common::vote_all(self.id, &self.clocks, up_to)
+    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
+        common::vote_all(self.id, &self.clocks, up_to, votes)
     }
 
     fn parallel() -> bool {
@@ -181,39 +181,31 @@ mod common {
         clocks: &Clocks,
         cmd: &Command,
         up_to: u64,
-    ) -> Votes {
-        let key_count = cmd.key_count(shard_id);
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
+        votes: &mut Votes,
+    ) {
         for key in cmd.keys(shard_id) {
             let key_lock = clocks.get(key);
             let mut guard = key_lock.lock();
-            maybe_bump(id, key, &mut guard, up_to, &mut votes);
+            maybe_bump(id, key, &mut guard, up_to, votes);
             // release the lock
             drop(guard);
         }
-        votes
     }
 
     pub(super) fn vote_all(
         id: ProcessId,
         clocks: &Clocks,
         up_to: u64,
-    ) -> Votes {
-        let key_count = clocks.len();
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
-
+        votes: &mut Votes,
+    ) {
         clocks.iter().for_each(|entry| {
             let key = entry.key();
             let key_lock = entry.value();
             let mut guard = key_lock.lock();
-            maybe_bump(id, key, &mut guard, up_to, &mut votes);
+            maybe_bump(id, key, &mut guard, up_to, votes);
             // release the lock
             drop(guard);
         });
-
-        votes
     }
 
     pub(super) fn maybe_bump(
@@ -229,7 +221,7 @@ mod common {
             let vr = VoteRange::new(id, *current + 1, up_to);
             // update current clock to be `clock`
             *current = up_to;
-            votes.set(key.clone(), vec![vr]);
+            votes.add(key, vr);
         }
     }
 }

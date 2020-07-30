@@ -7,23 +7,25 @@ use fantoch_exp::exp::Machines;
 use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;
+use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
 const RESULTS_DIR: &str = "../partial_replication";
 
 // aws experiment config
+const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
 const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
 // const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
-const MAX_INSTANCE_DURATION_HOURS: usize = 1;
 
 // run mode
 const RUN_MODE: RunMode = RunMode::Release;
 
 // processes config
-const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50)); // every 50
+const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
+const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
@@ -32,7 +34,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // bench-specific config
-const BRANCH: &str = "track_alloc";
+const BRANCH: &str = "merge_past";
 // TODO allow more than one feature
 const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
@@ -48,6 +50,7 @@ macro_rules! config {
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
+        config.set_newt_detached_send_interval(SEND_DETACHED_INTERVAL);
         config.set_transitive_conflicts(TRANSITIVE_CONFLICTS);
         config
     }};
@@ -129,25 +132,27 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
-        /*
-        256,
-        1024,
         1024 * 4,
         1024 * 8,
         1024 * 16,
-         */
+        // 1024 * 24,
         1024 * 32,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
         1024 * 64,
-        1024 * 80,
         1024 * 96,
-        1024 * 112,
         1024 * 128,
-        1024 * 144,
-        /*
-         */
+        1024 * 160,
+        1024 * 192,
+        1024 * 224,
+        1024 * 240,
+        1024 * 256,
+        1024 * 272,
     ];
     let shards_per_command = 1;
-    let shard_count = 4;
+    let shard_count = 6;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -299,12 +304,12 @@ async fn do_aws_bench(
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
+        LAUCH_MODE,
         regions,
         shard_count,
         SERVER_INSTANCE_TYPE.to_string(),
         CLIENT_INSTANCE_TYPE.to_string(),
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
-        MAX_INSTANCE_DURATION_HOURS,
         BRANCH.to_string(),
         RUN_MODE,
         features.clone(),

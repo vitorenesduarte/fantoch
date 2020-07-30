@@ -39,32 +39,46 @@ fn partial_replication() -> Result<(), Report> {
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic];
 
-    let combinations = vec![
+    let shard_combinations = vec![
         // shards_per_command, shard_count
         (1, 1),
         (1, 2),
-        (1, 3),
         (2, 2),
+        (1, 6),
+        /*
+        (1, 3),
         (2, 3),
         (1, 4),
+        (1, 5),
+        */
     ];
 
     // load results
-    let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+    let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
-        256,
-        1024,
         1024 * 4,
         1024 * 8,
         1024 * 16,
         1024 * 32,
+        1024 * 36,
+        1024 * 40,
+        1024 * 48,
+        1024 * 56,
         1024 * 64,
         1024 * 80,
         1024 * 96,
         1024 * 112,
         1024 * 128,
         1024 * 144,
+        1024 * 160,
+        1024 * 176,
+        1024 * 192,
+        1024 * 208,
+        1024 * 224,
+        1024 * 240,
+        1024 * 256,
+        1024 * 272,
     ];
 
     // generate all-combo throughput-latency plot
@@ -80,7 +94,7 @@ fn partial_replication() -> Result<(), Report> {
             latency_metric.to_file_suffix(),
         );
         // create searches
-        let searches = combinations
+        let searches = shard_combinations
             .clone()
             .into_iter()
             .flat_map(|(shards_per_command, shard_count)| {
@@ -107,9 +121,11 @@ fn partial_replication() -> Result<(), Report> {
                 styles.insert((1, 1), ("#1abc9c", "s"));
                 styles.insert((1, 2), ("#218c74", "D"));
                 styles.insert((2, 2), ("#227093", "."));
-                styles.insert((1, 3), ("#bdc3c7", "+"));
-                styles.insert((2, 3), ("#34495e", "x"));
-                styles.insert((1, 4), ("#ffa726", "v"));
+                // styles.insert((1, 3), ("#bdc3c7", "+"));
+                // styles.insert((2, 3), ("#34495e", "x"));
+                // styles.insert((1, 4), ("#ffa726", "v"));
+                // styles.insert((1, 5), ("#227093", "."));
+                styles.insert((1, 6), ("#34495e", "x"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();
@@ -146,11 +162,11 @@ fn partial_replication() -> Result<(), Report> {
             latency_metric,
             PLOT_DIR,
             &path,
-            &mut db,
+            &db,
         )?;
     }
 
-    for (shards_per_command, shard_count) in combinations {
+    for (shards_per_command, shard_count) in shard_combinations {
         let shard_gen = ShardGen::Random { shard_count };
 
         // generate throughput-latency plot
@@ -190,7 +206,7 @@ fn partial_replication() -> Result<(), Report> {
                 latency_metric,
                 PLOT_DIR,
                 &path,
-                &mut db,
+                &db,
             )?;
         }
 
@@ -237,7 +253,7 @@ fn partial_replication() -> Result<(), Report> {
                     dstat_type,
                     PLOT_DIR,
                     &path,
-                    &mut db,
+                    &db,
                 )?;
             }
 
@@ -265,7 +281,7 @@ fn partial_replication() -> Result<(), Report> {
                     error_bar,
                     PLOT_DIR,
                     &path,
-                    &mut db,
+                    &db,
                     fmt_exp_data,
                 )?;
 
@@ -298,7 +314,7 @@ fn partial_replication() -> Result<(), Report> {
                 style_fun,
                 PLOT_DIR,
                 &path,
-                &mut db,
+                &db,
             )?;
         }
     }
@@ -321,7 +337,7 @@ fn multi_key() -> Result<(), Report> {
     ];
 
     // load results
-    let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+    let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
 
@@ -367,7 +383,7 @@ fn multi_key() -> Result<(), Report> {
                     latency_metric,
                     PLOT_DIR,
                     &path,
-                    &mut db,
+                    &db,
                 )?;
             }
 
@@ -408,7 +424,7 @@ fn multi_key() -> Result<(), Report> {
                         dstat_type,
                         PLOT_DIR,
                         &path,
-                        &mut db,
+                        &db,
                     )?;
                 }
 
@@ -435,7 +451,7 @@ fn multi_key() -> Result<(), Report> {
                         error_bar,
                         PLOT_DIR,
                         &path,
-                        &mut db,
+                        &db,
                         fmt_exp_data,
                     )?;
 
@@ -464,7 +480,7 @@ fn multi_key() -> Result<(), Report> {
                     style_fun,
                     PLOT_DIR,
                     &path,
-                    &mut db,
+                    &db,
                 )?;
 
                 if n > 3 {
@@ -479,7 +495,7 @@ fn multi_key() -> Result<(), Report> {
                         style_fun,
                         PLOT_DIR,
                         &path,
-                        &mut db,
+                        &db,
                     )?;
                 }
             }
@@ -501,7 +517,7 @@ fn single_key() -> Result<(), Report> {
     ];
 
     // load results
-    let mut db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+    let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     for n in vec![3, 5] {
         // generate throughput-latency plot
@@ -544,7 +560,7 @@ fn single_key() -> Result<(), Report> {
                 latency_metric,
                 PLOT_DIR,
                 &path,
-                &mut db,
+                &db,
             )?;
         }
 
@@ -601,7 +617,7 @@ fn single_key() -> Result<(), Report> {
                     error_bar,
                     PLOT_DIR,
                     &path,
-                    &mut db,
+                    &db,
                     fmt_exp_data,
                 )?;
 
@@ -627,7 +643,7 @@ fn single_key() -> Result<(), Report> {
                 style_fun,
                 PLOT_DIR,
                 &path,
-                &mut db,
+                &db,
             )?;
 
             if n > 3 {
@@ -640,7 +656,7 @@ fn single_key() -> Result<(), Report> {
                     style_fun,
                     PLOT_DIR,
                     &path,
-                    &mut db,
+                    &db,
                 )?;
             }
         }

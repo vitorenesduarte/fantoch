@@ -80,33 +80,23 @@ impl KeyClocks for AtomicKeyClocks {
         (up_to, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64) -> Votes {
-        // create votes
-        let key_count = cmd.key_count(self.shard_id);
-        let mut votes = Votes::with_capacity(key_count);
+    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         for key in cmd.keys(self.shard_id) {
             let clock = self.clocks.get(key);
             if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
-                votes.set(key.clone(), vec![vr]);
+                votes.add(key, vr);
             }
         }
-        votes
     }
 
-    fn vote_all(&mut self, up_to: u64) -> Votes {
-        let key_count = self.clocks.len();
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
-
+    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
         self.clocks.iter().for_each(|entry| {
             let key = entry.key();
             let clock = entry.value();
             if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
-                votes.set(key.clone(), vec![vr]);
+                votes.add(key, vr);
             }
         });
-
-        votes
     }
 
     fn parallel() -> bool {
