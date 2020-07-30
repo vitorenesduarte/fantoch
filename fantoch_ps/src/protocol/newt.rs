@@ -392,7 +392,8 @@ impl<KC: KeyClocks> Newt<KC> {
             // if it is a message from self, do not recompute clock and votes
             (remote_clock, Votes::new())
         } else {
-            // if not from self, compute clock considering `remote_clock` as the minimum value
+            // if not from self, compute clock considering `remote_clock` as the
+            // minimum value
             let (clock, process_votes) =
                 self.key_clocks.bump_and_vote(&cmd, remote_clock);
             log!(

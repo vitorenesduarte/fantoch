@@ -90,7 +90,18 @@ impl<'a> Machines<'a> {
                 return region;
             }
         }
-        panic!("process id should be in placement")
+        panic!("process with id {:?} should be in placement", target_id)
+    }
+
+    pub fn region_index(&self, target_region: &Region) -> usize {
+        for ((region, _shard_id), (_process_id, region_index)) in
+            self.placement.iter()
+        {
+            if target_region == region {
+                return *region_index;
+            }
+        }
+        panic!("region {:?} should be in placement", target_region)
     }
 
     pub fn processes_in_region(

@@ -85,7 +85,7 @@ impl ProtocolConfig {
         mut config: Config,
         sorted: Option<Vec<ProcessId>>,
         ips: Vec<(String, Option<usize>)>,
-        metrics_file: &str,
+        metrics_file: String,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -107,7 +107,7 @@ impl ProtocolConfig {
             execution_log: EXECUTION_LOG,
             tracer_show_interval: TRACER_SHOW_INTERVAL,
             ping_interval: PING_INTERVAL,
-            metrics_file: metrics_file.to_string(),
+            metrics_file,
         }
     }
 
@@ -261,7 +261,7 @@ impl ClientConfig {
         id_end: usize,
         ips: Vec<String>,
         workload: Workload,
-        metrics_file: &str,
+        metrics_file: String,
     ) -> Self {
         Self {
             id_start,
@@ -270,7 +270,7 @@ impl ClientConfig {
             workload,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
-            metrics_file: metrics_file.to_string(),
+            metrics_file,
         }
     }
 
@@ -400,11 +400,28 @@ impl fmt::Debug for ExperimentConfig {
     }
 }
 
-// create filename prefix
-pub fn file_prefix(process_id: Option<ProcessId>, region: &Region) -> String {
-    if let Some(process_id) = process_id {
-        format!("{:?}_server_{}", region, process_id)
-    } else {
-        format!("{:?}_client", region)
+#[derive(Clone, Copy)]
+pub enum ProcessType {
+    Server(ProcessId),
+    Client(usize),
+}
+
+impl ProcessType {
+    pub fn name(&self) -> String {
+        match self {
+            Self::Server(process_id) => format!("server_{}", process_id),
+            Self::Client(region_index) => format!("client_{}", region_index),
+        }
     }
+}
+
+// create filename for a run file (which can be a log, metrics, dstats, etc,
+// depending on the extension passed in)
+pub fn run_file(process_type: ProcessType, file_ext: &str) -> String {
+    format!("{}.{}", process_type.name(), file_ext)
+}
+
+// create filename prefix
+pub fn file_prefix(process_type: ProcessType, region: &Region) -> String {
+    format!("{:?}_{}", region, process_type.name())
 }

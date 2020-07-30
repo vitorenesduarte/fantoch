@@ -11,8 +11,8 @@ pub mod util;
 
 pub mod config;
 
-// Re-export `ExperimentConfig`.
-pub use config::ExperimentConfig;
+// Re-exports.
+pub use config::{ExperimentConfig, ProcessType};
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
