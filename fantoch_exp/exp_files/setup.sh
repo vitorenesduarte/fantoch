@@ -166,7 +166,7 @@ build_fantoch() {
     fi
 }
 
-if [ $# < 3 || $# > 4 ]; then
+if [[ $# < 3 || $# > 4 ]]; then
     echo "usage: setup.sh testbed mode branch (features)"
     exit 1
 fi

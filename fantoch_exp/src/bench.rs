@@ -388,14 +388,19 @@ async fn stop_processes(
                     region
                 );
             }
-            1 => {
-                // kill it
-                let pid = pids[0];
-                let command = format!("kill {}", pid);
+            n => {
+                if n > 2 {
+                    // in `Testbed::Local` there can be more than one process;
+                    // TODO: investigate why
+                    tracing::warn!(
+                        "found more than one process. killing all of them"
+                    );
+                }
+                // kill all
+                let command = format!("kill {}", pids.join(" "));
                 let output = vm.exec(command).await.wrap_err("kill")?;
                 tracing::debug!("{}", output);
             }
-            n => panic!("there should be at most one pid and found {}", n),
         }
 
         wait_processes.push(wait_process_ended(
@@ -723,7 +728,9 @@ async fn pull_metrics_files(
         .await
         .wrap_err("copy metrics")?;
 
-    // remove metric files
+    // remove metric files:
+    // - note that in the case of `Process::Server`, the metrics file is
+    //   generated periodic, and thus, remove it makes little sense
     let to_remove = format!("rm {} {} {}", log_file, dstat_file, metrics_file);
     vm.exec(to_remove).await.wrap_err("remove files")?;
 
