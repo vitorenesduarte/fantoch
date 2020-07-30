@@ -400,7 +400,7 @@ impl fmt::Debug for ExperimentConfig {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ProcessType {
     Server(ProcessId),
     Client(usize),

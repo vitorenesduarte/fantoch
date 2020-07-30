@@ -139,7 +139,7 @@ async fn run_experiment(
 
     // stop processes: should only be stopped after copying all the metrics to
     // avoid unnecessary noise in the logs
-    stop_processes(machines, run_mode, exp_dir, processes)
+    stop_processes(machines, run_mode, protocol, exp_dir, processes)
         .await
         .wrap_err("stop_processes")?;
 
@@ -345,13 +345,43 @@ async fn run_clients(
 async fn stop_processes(
     machines: &Machines<'_>,
     run_mode: RunMode,
+    protocol: Protocol,
     exp_dir: String,
     processes: HashMap<ProcessId, (Region, tokio::process::Child)>,
 ) -> Result<(), Report> {
     let mut wait_processes = Vec::with_capacity(machines.server_count());
     for (process_id, (region, mut pchild)) in processes {
-        // find process id and vm
+        // find vm
         let vm = machines.server(&process_id);
+
+        let heaptrack_pid = if let RunMode::Heaptrack = run_mode {
+            // find heaptrack pid if in heaptrack mode
+            let command = format!(
+                "ps -aux | grep heaptrack | grep ' \\-\\-id {}' | grep -v 'sh -c'",
+                process_id
+            );
+            let heaptrack_process =
+                vm.exec(command).await.wrap_err("ps heaptrack")?;
+            tracing::debug!("{}: {}", process_id, heaptrack_process);
+
+            // check that there's a single heaptrack processs
+            let lines: Vec<_> = heaptrack_process.split("\n").collect();
+            assert_eq!(
+                lines.len(),
+                1,
+                "there should be a single heaptrack process"
+            );
+
+            // compute heaptrack pid
+            let parts: Vec<_> = lines[0].split_whitespace().collect();
+            tracing::debug!("{}: parts {:?}", process_id, parts);
+            let heaptrack_pid = parts[1]
+                .parse::<u32>()
+                .expect("heaptrack pid should be a number");
+            Some(heaptrack_pid)
+        } else {
+            None
+        };
 
         // kill ssh process
         if let Err(e) = pchild.kill() {
@@ -366,7 +396,7 @@ async fn stop_processes(
         // find process pid in remote vm
         // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
         let command = format!(
-            "lsof -i :{} -i :{} | grep -v PID",
+            "lsof -i :{} -i :{} -sTCP:LISTEN | grep -v PID",
             config::port(process_id),
             config::client_port(process_id)
         );
@@ -388,23 +418,23 @@ async fn stop_processes(
                     region
                 );
             }
-            n => {
-                if n > 2 {
-                    // in `Testbed::Local` there can be more than one process;
-                    // TODO: investigate why
-                    tracing::warn!(
-                        "found more than one process. killing all of them"
-                    );
-                }
+            1 => {
                 // kill all
                 let command = format!("kill {}", pids.join(" "));
                 let output = vm.exec(command).await.wrap_err("kill")?;
                 tracing::debug!("{}", output);
             }
+            n => panic!("there should be at most one pid and found {}", n),
         }
 
         wait_processes.push(wait_process_ended(
-            process_id, region, vm, run_mode, &exp_dir,
+            protocol,
+            heaptrack_pid,
+            process_id,
+            region,
+            vm,
+            run_mode,
+            &exp_dir,
         ));
     }
 
@@ -442,6 +472,8 @@ async fn wait_process_started(
 }
 
 async fn wait_process_ended(
+    protocol: Protocol,
+    heaptrack_pid: Option<u32>,
     process_id: ProcessId,
     region: Region,
     vm: &Machine<'_>,
@@ -506,9 +538,18 @@ async fn wait_process_ended(
                 .wrap_err("pull_flamegraph_file")?;
         }
         RunMode::Heaptrack => {
-            pull_heaptrack_file(process_type, &region, vm, exp_dir)
-                .await
-                .wrap_err("pull_heaptrack_file")?;
+            let heaptrack_pid =
+                heaptrack_pid.expect("heaptrack pid should be set");
+            pull_heaptrack_file(
+                protocol,
+                heaptrack_pid,
+                process_type,
+                &region,
+                vm,
+                exp_dir,
+            )
+            .await
+            .wrap_err("pull_heaptrack_file")?;
         }
     }
     Ok(())
@@ -776,15 +817,16 @@ async fn pull_flamegraph_file(
 }
 
 async fn pull_heaptrack_file(
+    protocol: Protocol,
+    heaptrack_pid: u32,
     process_type: ProcessType,
     region: &Region,
     vm: &Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
-    // find heaptrack file, which will be something like:
-    // "heaptrack.newt_atomic.18836.gz
-    let command = format!("ls heaptrack.*.gz");
-    let heaptrack = vm.exec(command).await.wrap_err("ls heaptrack")?;
+    // compute heaptrack filename: heaptrack.BINARY.PID.gz
+    let heaptrack =
+        format!("heaptrack.{}.{}.gz", protocol.binary(), heaptrack_pid);
 
     // compute filename prefix
     let prefix = config::file_prefix(process_type, region);
