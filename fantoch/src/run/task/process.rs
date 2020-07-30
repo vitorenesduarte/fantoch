@@ -10,7 +10,6 @@ use crate::run::task;
 use crate::run::ConnectionDelay;
 use crate::time::RunTime;
 use crate::HashMap;
-use futures::stream::{FuturesUnordered, StreamExt};
 use rand::Rng;
 use std::fmt::Debug;
 use std::net::IpAddr;
@@ -592,21 +591,13 @@ async fn handle_actions<P>(
                 // requires a reference to the message
                 let msg_to_send = Arc::new(msg.clone());
 
-                // send to writers in parallel
-                let mut sends = to_writers
-                    .iter_mut()
-                    .filter_map(|(to, channels)| {
-                        if target.contains(to) {
-                            Some(send_to_one_writer::<P>(
-                                msg_to_send.clone(),
-                                channels,
-                            ))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<FuturesUnordered<_>>();
-                while sends.next().await.is_some() {}
+                // send message to writers in target
+                for (to, channels) in to_writers.iter_mut() {
+                    if target.contains(to) {
+                        send_to_one_writer::<P>(msg_to_send.clone(), channels)
+                            .await
+                    }
+                }
 
                 // check if should handle message locally
                 if target.contains(&process.id()) {
