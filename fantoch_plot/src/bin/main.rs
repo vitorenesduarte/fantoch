@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../partial_replication";
+const RESULTS_DIR: &str = "../local";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -57,6 +57,8 @@ fn partial_replication() -> Result<(), Report> {
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
+        16,
+        /*
         1024 * 4,
         1024 * 8,
         1024 * 16,
@@ -79,6 +81,7 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
+        */
     ];
 
     // generate all-combo throughput-latency plot
