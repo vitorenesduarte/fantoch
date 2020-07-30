@@ -389,21 +389,12 @@ impl<KC: KeyClocks> Newt<KC> {
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
         let (clock, process_votes) = if message_from_self {
-            // if it is, do not recompute clock and votes
+            // if it is a message from self, do not recompute clock and votes
             (remote_clock, Votes::new())
         } else {
-            // check if there's any buffered `MBumpTo` request; if yes, bump to
-            // the max between that request and the received `remote_clock`
-            let bump_to =
-                if let Some(bump_to) = self.buffered_bump_tos.remove(&dot) {
-                    std::cmp::max(bump_to, remote_clock)
-                } else {
-                    remote_clock
-                };
-
-            // compute clock considering `bump_to` as the minimum value
+            // if not from self, compute clock considering `remote_clock` as the minimum value
             let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, bump_to);
+                self.key_clocks.bump_and_vote(&cmd, remote_clock);
             log!(
                 "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
                 self.bp.process_id,
@@ -418,6 +409,11 @@ impl<KC: KeyClocks> Newt<KC> {
             );
             (clock, process_votes)
         };
+
+        // if there are any buffered `MBumpTo`'s, generate detached votes
+        if let Some(bump_to) = self.buffered_bump_tos.remove(&dot) {
+            self.key_clocks.vote(&cmd, bump_to, &mut self.detached);
+        }
 
         // get shard count
         let shard_count = cmd.shard_count();
