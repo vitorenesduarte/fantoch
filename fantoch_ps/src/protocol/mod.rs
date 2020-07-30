@@ -65,6 +65,23 @@ mod tests {
         }};
     }
 
+    /// Computes the number of commands per client and clients per process according to "CI" env var; if set to true, run the tests with a smaller load
+    fn small_load_in_ci() -> (usize, usize) {
+        if let Ok(value) = std::env::var("CI") {
+            // if ci is set, it should be a bool
+            let ci =
+                value.parse::<bool>().expect("CI env var should be a bool");
+            if ci {
+                // 10 commands per client and 1 client per process
+                (10, 1)
+            } else {
+                panic!("CI env var is set and it's not true");
+            }
+        } else {
+            (COMMANDS_PER_CLIENT, CLIENTS_PER_PROCESS)
+        }
+    }
+
     // ---- newt tests ---- //
     #[test]
     fn sim_newt_3_1_test() {
@@ -180,8 +197,7 @@ mod tests {
     async fn run_real_time_newt_3_1_atomic_test() {
         let workers = 2;
         let executors = 2;
-        // run with less clients since these take too much time in CI
-        let clients_per_process = 1;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
             newt_config!(3, 1, clock_bump_interval),
@@ -189,7 +205,7 @@ mod tests {
             workers,
             executors,
             SHARDS_PER_COMMAND,
-            COMMANDS_PER_CLIENT,
+            commands_per_client,
             clients_per_process,
         )
         .await;
@@ -200,8 +216,7 @@ mod tests {
     async fn run_real_time_newt_3_1_locked_test() {
         let workers = 2;
         let executors = 2;
-        // run with less clients since these take too much time in CI
-        let clients_per_process = 1;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtLocked>(
             newt_config!(3, 1, clock_bump_interval),
@@ -209,7 +224,7 @@ mod tests {
             workers,
             executors,
             SHARDS_PER_COMMAND,
-            COMMANDS_PER_CLIENT,
+            commands_per_client,
             clients_per_process,
         )
         .await;
@@ -276,10 +291,7 @@ mod tests {
     async fn run_real_time_newt_5_1_atomic_test() {
         let workers = 2;
         let executors = 2;
-        // run with less clients since these take too much time in CI
-        let clients_per_process = 1;
-        // also less commands per client
-        let commands_per_client = 10;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
             newt_config!(5, 1, clock_bump_interval),
@@ -298,10 +310,7 @@ mod tests {
     async fn run_real_time_newt_5_1_locked_test() {
         let workers = 2;
         let executors = 2;
-        // run with less clients since these take too much time in CI
-        let clients_per_process = 1;
-        // also less commands per client
-        let commands_per_client = 10;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtLocked>(
             newt_config!(5, 1, clock_bump_interval),
@@ -343,20 +352,20 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let shards_per_command = 2;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<NewtAtomic>(
             newt_config!(3, 1),
             shard_count,
             workers,
             executors,
             shards_per_command,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
+            commands_per_client,
+            clients_per_process,
         )
         .await;
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
     #[tokio::test]
     async fn run_newt_5_2_atomic_partial_replication_two_shards_per_command_test(
     ) {
@@ -364,14 +373,15 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let shards_per_command = 2;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<NewtAtomic>(
             newt_config!(5, 2),
             shard_count,
             workers,
             executors,
             shards_per_command,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
+            commands_per_client,
+            clients_per_process,
         )
         .await;
         assert!(slow_paths > 0);
