@@ -13,7 +13,7 @@ use fantoch::util;
 use fantoch::HashMap;
 use std::collections::BTreeMap;
 use std::mem;
-use threshold::ARClock;
+use threshold::{ARClock, EventSet};
 use tracing::instrument;
 
 type SortId = (u64, Dot);
@@ -111,6 +111,8 @@ struct VotesTable {
     // `votes_clock` collects all votes seen until now so that we can compute
     // which timestamp is stable
     votes_clock: ARClock<ProcessId>,
+    // this buffer saves us always allocating a vector when computing the stable clock (see `stable_clock`)
+    frontiers_buffer: Vec<u64>,
     ops: BTreeMap<SortId, (Rifl, KVOp)>,
 }
 
@@ -124,12 +126,14 @@ impl VotesTable {
     ) -> Self {
         let ids = util::process_ids(shard_id, n);
         let votes_clock = ARClock::with(ids);
+        let frontiers_buffer = Vec::with_capacity(n);
         Self {
             key,
             process_id,
             n,
             stability_threshold,
             votes_clock,
+            frontiers_buffer,
             ops: BTreeMap::new(),
         }
     }
@@ -240,10 +244,27 @@ impl VotesTable {
     }
 
     // Computes the (potentially) new stable clock in this table.
-    fn stable_clock(&self) -> u64 {
-        self.votes_clock
-            .frontier_threshold(self.stability_threshold)
-            .expect("stability threshold must always be smaller than the number of processes")
+    fn stable_clock(&mut self) -> u64 {
+        let clock_size = self.votes_clock.len();
+        if self.stability_threshold <= clock_size {
+            // clear current frontiers
+            self.frontiers_buffer.clear();
+
+            // get frontiers and sort them
+            for (_, eset) in self.votes_clock.iter() {
+                self.frontiers_buffer.push(eset.frontier());
+            }
+            self.frontiers_buffer.sort_unstable();
+
+            // get the frontier at the correct threshold
+            *self
+                .frontiers_buffer
+                .iter()
+                .nth(clock_size - self.stability_threshold)
+                .expect("there should be a stable clock")
+        } else {
+            panic!("stability threshold must always be smaller than the number of processes")
+        }
     }
 }
 
@@ -555,10 +576,10 @@ mod tests {
         let key_b = String::from("B");
 
         // closure to compute the stable clock for some key
-        let stable_clock = |table: &MultiVotesTable, key: &Key| {
+        let stable_clock = |table: &mut MultiVotesTable, key: &Key| {
             table
                 .tables
-                .get(key)
+                .get_mut(key)
                 .expect("table for this key should exist")
                 .stable_clock()
         };
@@ -570,7 +591,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
-        assert_eq!(stable_clock(&table, &key_a), 0);
+        assert_eq!(stable_clock(&mut table, &key_a), 0);
 
         // p1 votes on key b
         let stable = table
@@ -578,8 +599,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
-        assert_eq!(stable_clock(&table, &key_a), 0);
-        assert_eq!(stable_clock(&table, &key_b), 0);
+        assert_eq!(stable_clock(&mut table, &key_a), 0);
+        assert_eq!(stable_clock(&mut table, &key_b), 0);
 
         // p2 votes on key A
         let process_id = 2;
@@ -588,8 +609,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
-        assert_eq!(stable_clock(&table, &key_a), 0);
-        assert_eq!(stable_clock(&table, &key_b), 0);
+        assert_eq!(stable_clock(&mut table, &key_a), 0);
+        assert_eq!(stable_clock(&mut table, &key_b), 0);
 
         // p3 votes on key A
         let process_id = 3;
@@ -598,8 +619,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
-        assert_eq!(stable_clock(&table, &key_a), 1);
-        assert_eq!(stable_clock(&table, &key_b), 0);
+        assert_eq!(stable_clock(&mut table, &key_a), 1);
+        assert_eq!(stable_clock(&mut table, &key_b), 0);
 
         // p3 votes on key B
         let stable = table
@@ -607,8 +628,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
-        assert_eq!(stable_clock(&table, &key_a), 1);
-        assert_eq!(stable_clock(&table, &key_b), 0);
+        assert_eq!(stable_clock(&mut table, &key_a), 1);
+        assert_eq!(stable_clock(&mut table, &key_b), 0);
 
         // p4 votes on key B
         let process_id = 4;
@@ -617,7 +638,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(stable.is_empty());
         // check stable clocks
-        assert_eq!(stable_clock(&table, &key_a), 1);
-        assert_eq!(stable_clock(&table, &key_b), 1);
+        assert_eq!(stable_clock(&mut table, &key_a), 1);
+        assert_eq!(stable_clock(&mut table, &key_b), 1);
     }
 }
