@@ -2,6 +2,7 @@ use clap::{App, Arg};
 use fantoch::config::Config;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::protocol::Protocol;
+#[cfg(any(feature = "jemalloc", feature = "prof"))]
 use jemallocator::Jemalloc;
 use std::error::Error;
 use std::net::IpAddr;
@@ -31,7 +32,7 @@ const DEFAULT_NEWT_DETACHED_SEND_INTERVAL: Duration = Duration::from_millis(5);
 const DEFAULT_SKIP_FAST_ACK: bool = false;
 
 #[global_allocator]
-#[cfg(not(feature = "prof"))]
+#[cfg(all(feature = "jemalloc", not(feature = "prof")))]
 static ALLOC: Jemalloc = Jemalloc;
 #[cfg(feature = "prof")]
 static ALLOC: fantoch_prof::AllocProf<Jemalloc> =
