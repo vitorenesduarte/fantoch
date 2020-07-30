@@ -194,7 +194,7 @@ async fn start_processes(
                 // compute delay to be injected (if theres's a `planet`)
                 let to_region = machines.process_region(peer_id);
                 let delay = maybe_inject_delay(from_region, to_region, planet);
-                (ip, delay)
+                (*peer_id, ip, delay)
             })
             .collect();
 
@@ -294,10 +294,11 @@ async fn run_clients(
         let ips = processes_in_region
             .iter()
             .map(|process_id| {
-                process_ips
+                let ip = process_ips
                     .get(process_id)
                     .expect("process should have ip")
-                    .clone()
+                    .clone();
+                (*process_id, ip)
             })
             .collect();
 

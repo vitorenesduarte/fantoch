@@ -58,7 +58,7 @@ pub struct ProtocolConfig {
     process_id: ProcessId,
     shard_id: ShardId,
     sorted: Option<Vec<ProcessId>>,
-    ips: Vec<(String, Option<usize>)>,
+    ips: Vec<(ProcessId, String, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
@@ -82,7 +82,7 @@ impl ProtocolConfig {
         shard_id: ShardId,
         mut config: Config,
         sorted: Option<Vec<ProcessId>>,
-        ips: Vec<(String, Option<usize>)>,
+        ips: Vec<(ProcessId, String, Option<usize>)>,
         metrics_file: String,
     ) -> Self {
         let (workers, executors) =
@@ -122,9 +122,9 @@ impl ProtocolConfig {
             "--ip",
             IP,
             "--port",
-            PORT,
+            port(self.process_id),
             "--client_port",
-            CLIENT_PORT,
+            client_port(self.process_id),
             "--addresses",
             self.ips_to_addresses(),
             "--processes",
@@ -208,8 +208,8 @@ impl ProtocolConfig {
     fn ips_to_addresses(&self) -> String {
         self.ips
             .iter()
-            .map(|(ip, delay)| {
-                let address = format!("{}:{}", ip, PORT);
+            .map(|(peer_id, ip, delay)| {
+                let address = format!("{}:{}", ip, port(*peer_id));
                 if let Some(delay) = delay {
                     format!("{}-{}", address, delay)
                 } else {
@@ -245,7 +245,7 @@ fn workers_executors_and_leader(
 pub struct ClientConfig {
     id_start: usize,
     id_end: usize,
-    ips: Vec<String>,
+    ips: Vec<(ProcessId, String)>,
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -257,7 +257,7 @@ impl ClientConfig {
     pub fn new(
         id_start: usize,
         id_end: usize,
-        ips: Vec<String>,
+        ips: Vec<(ProcessId, String)>,
         workload: Workload,
         metrics_file: String,
     ) -> Self {
@@ -317,7 +317,9 @@ impl ClientConfig {
     fn ips_to_addresses(&self) -> String {
         self.ips
             .iter()
-            .map(|ip| format!("{}:{}", ip, CLIENT_PORT))
+            .map(|(process_id, ip)| {
+                format!("{}:{}", ip, client_port(*process_id))
+            })
             .collect::<Vec<_>>()
             .join(",")
     }
