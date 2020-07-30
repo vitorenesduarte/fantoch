@@ -128,7 +128,7 @@ pub async fn ping_experiment_run(
     let max_wait =
         Some(Duration::from_secs(max_spot_instance_request_wait_secs));
     launcher.spawn(descriptors, max_wait).await?;
-    let vms = launcher.connect_all().await?;
+    let mut vms = launcher.connect_all().await?;
 
     // create HOSTS file content: each line should be "region::ip"
     // - create ping future for each region along the way
@@ -137,15 +137,20 @@ pub async fn ping_experiment_run(
         .iter()
         .map(|region| {
             let region_name = region.name();
-            let vm = vms.get(region_name).unwrap();
+            let vm = vms.remove(region_name).unwrap();
+
+            // compute host entry
+            let host = format!("{}::{}", region_name, vm.public_ip);
+
             // create ping future
             let region_span =
                 tracing::info_span!("region", name = ?region_name);
             let ping =
                 ping(vm, experiment_duration_secs).instrument(region_span);
             pings.push(ping);
-            // create host entry
-            format!("{}::{}", region_name, vm.public_ip)
+
+            // return host name
+            host
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -162,7 +167,7 @@ pub async fn ping_experiment_run(
 
 #[instrument]
 async fn ping(
-    vm: &tsunami::Machine<'_>,
+    vm: tsunami::Machine<'_>,
     experiment_duration_secs: usize,
 ) -> Result<(), Report> {
     tracing::info!(
@@ -175,7 +180,7 @@ async fn ping(
     let hosts_file = "hosts";
     let output_file = format!("{}.dat", vm.nickname);
 
-    let vm = Machine::TsunamiRef(vm);
+    let vm = Machine::Tsunami(vm);
 
     // first copy both SCRIPT and HOSTS files to the machine
     vm.copy_to(SCRIPT, script_file)
