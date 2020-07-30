@@ -1,6 +1,6 @@
 use crate::config::{
     self, ClientConfig, ExperimentConfig, ProcessType, ProtocolConfig,
-    RegionIndex, CLIENT_PORT, PORT,
+    RegionIndex,
 };
 use crate::exp::{self, Machine, Machines};
 use crate::{FantochFeature, Protocol, RunMode, SerializationFormat, Testbed};
@@ -364,8 +364,11 @@ async fn stop_processes(
 
         // find process pid in remote vm
         // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
-        let command =
-            format!("lsof -i :{} -i :{} | grep -v PID", PORT, CLIENT_PORT);
+        let command = format!(
+            "lsof -i :{} -i :{} | grep -v PID",
+            config::port(process_id),
+            config::client_port(process_id)
+        );
         let output = vm.exec(command).await.wrap_err("lsof | grep")?;
         let mut pids: Vec<_> = output
             .lines()
@@ -445,7 +448,11 @@ async fn wait_process_ended(
     let mut count = 1;
     while count != 0 {
         tokio::time::delay_for(duration).await;
-        let command = format!("lsof -i :{} -i :{} | wc -l", PORT, CLIENT_PORT);
+        let command = format!(
+            "lsof -i :{} -i :{} | wc -l",
+            config::port(process_id),
+            config::client_port(process_id)
+        );
         let stdout = vm.exec(&command).await.wrap_err("lsof | wc")?;
         if stdout.is_empty() {
             tracing::warn!("empty output from: {}", command);

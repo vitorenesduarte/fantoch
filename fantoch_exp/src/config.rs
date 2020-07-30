@@ -16,8 +16,6 @@ type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
 // FIXED
 #[cfg(feature = "exp")]
 const IP: &str = "0.0.0.0";
-pub const PORT: usize = 3000;
-pub const CLIENT_PORT: usize = 4000;
 
 // parallelism config
 const WORKERS: usize = 16;
@@ -424,4 +422,15 @@ pub fn run_file(process_type: ProcessType, file_ext: &str) -> String {
 // create filename prefix
 pub fn file_prefix(process_type: ProcessType, region: &Region) -> String {
     format!("{:?}_{}", region, process_type.name())
+}
+
+const PORT: usize = 3000;
+const CLIENT_PORT: usize = 4000;
+
+pub fn port(process_id: ProcessId) -> usize {
+    process_id as usize + PORT
+}
+
+pub fn client_port(process_id: ProcessId) -> usize {
+    process_id as usize + CLIENT_PORT
 }
