@@ -20,9 +20,6 @@ const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
-// run mode
-const RUN_MODE: RunMode = RunMode::Release;
-
 // processes config
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
@@ -36,8 +33,11 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 // bench-specific config
 const BRANCH: &str = "local_deployment";
 // TODO allow more than one feature
-const FEATURE: Option<FantochFeature> = Some(FantochFeature::Jemalloc);
+const FEATURE: Option<FantochFeature> = None;
 // const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
+
+// run mode
+const RUN_MODE: RunMode = RunMode::Heaptrack;
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -132,7 +132,7 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
-        16,
+        1024,
         /*
         1024 * 4,
         1024 * 8,
