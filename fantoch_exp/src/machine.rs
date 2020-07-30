@@ -29,11 +29,12 @@ impl<'a> Machine<'a> {
 
     pub async fn exec(&self, command: impl ToString) -> Result<String, Report> {
         match self {
-            Self::Tsunami(vm) => Self::tsunami_exec(vm, command),
-            Self::TsunamiRef(vm) => Self::tsunami_exec(vm, command),
-            Self::Local => todo!(),
+            Self::Tsunami(vm) => Self::tsunami_exec(vm, command).await,
+            Self::TsunamiRef(vm) => Self::tsunami_exec(vm, command).await,
+            Self::Local => {
+                Self::exec_command(Self::create_command(command)).await
+            }
         }
-        .await
     }
 
     pub fn prepare_exec(
@@ -43,7 +44,7 @@ impl<'a> Machine<'a> {
         match &self {
             Self::Tsunami(vm) => Self::tsunami_prepare_exec(vm, command),
             Self::TsunamiRef(vm) => Self::tsunami_prepare_exec(vm, command),
-            Self::Local => todo!(),
+            Self::Local => Self::create_command(command),
         }
     }
 
@@ -64,14 +65,13 @@ impl<'a> Machine<'a> {
     ) -> Result<(), Report> {
         match self {
             Self::Tsunami(vm) => {
-                Self::tsunami_copy_to(vm, local_path, remote_path)
+                Self::tsunami_copy_to(vm, local_path, remote_path).await
             }
             Self::TsunamiRef(vm) => {
-                Self::tsunami_copy_to(vm, local_path, remote_path)
+                Self::tsunami_copy_to(vm, local_path, remote_path).await
             }
-            Self::Local => todo!(),
+            Self::Local => Self::local_copy(local_path, remote_path).await,
         }
-        .await
     }
 
     pub async fn copy_from(
@@ -81,14 +81,13 @@ impl<'a> Machine<'a> {
     ) -> Result<(), Report> {
         match self {
             Self::Tsunami(vm) => {
-                Self::tsunami_copy_from(vm, remote_path, local_path)
+                Self::tsunami_copy_from(vm, remote_path, local_path).await
             }
             Self::TsunamiRef(vm) => {
-                Self::tsunami_copy_from(vm, remote_path, local_path)
+                Self::tsunami_copy_from(vm, remote_path, local_path).await
             }
-            Self::Local => todo!(),
+            Self::Local => Self::local_copy(remote_path, local_path).await,
         }
-        .await
     }
 
     async fn tsunami_exec(
@@ -168,22 +167,29 @@ impl<'a> Machine<'a> {
         Ok(())
     }
 
+    async fn local_copy(
+        from: impl AsRef<Path>,
+        to: impl AsRef<Path>,
+    ) -> Result<(), Report> {
+        let cp_command =
+            format!("cp {} {}", from.as_ref().display(), to.as_ref().display());
+        Self::create_command(cp_command).status().await?;
+        Ok(())
+    }
+
     pub async fn ssh_exec(
         username: &str,
         public_ip: &str,
         private_key: &std::path::PathBuf,
         command: impl ToString,
     ) -> Result<String, Report> {
-        let out =
-            Self::prepare_ssh_exec(username, public_ip, private_key, command)
-                .output()
-                .await
-                .wrap_err("ssh command")?;
-        let out = String::from_utf8(out.stdout)
-            .wrap_err("output conversion to utf8")?
-            .trim()
-            .to_string();
-        Ok(out)
+        Self::exec_command(Self::prepare_ssh_exec(
+            username,
+            public_ip,
+            private_key,
+            command,
+        ))
+        .await
     }
 
     fn prepare_ssh_exec(
@@ -202,12 +208,24 @@ impl<'a> Machine<'a> {
         Self::create_command(ssh_command)
     }
 
-    fn create_command(command_arg: String) -> tokio::process::Command {
+    fn create_command(command_arg: impl ToString) -> tokio::process::Command {
+        let command_arg = command_arg.to_string();
         tracing::debug!("{}", command_arg);
         let mut command = tokio::process::Command::new("sh");
         command.arg("-c");
         command.arg(command_arg);
         command
+    }
+
+    async fn exec_command(
+        mut command: tokio::process::Command,
+    ) -> Result<String, Report> {
+        let out = command.output().await.wrap_err("ssh command")?;
+        let out = String::from_utf8(out.stdout)
+            .wrap_err("output conversion to utf8")?
+            .trim()
+            .to_string();
+        Ok(out)
     }
 
     fn escape(command: impl ToString) -> String {
