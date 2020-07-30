@@ -1,5 +1,5 @@
 use super::Nickname;
-use crate::exp::{self, Machine, Machines};
+use crate::machine::{Machine, Machines};
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
@@ -144,7 +144,7 @@ async fn baremetal_setup(
     let setup =
         tsunami::providers::baremetal::Setup::new(addr, Some(username))?
             .key_path(PRIVATE_KEY)
-            .setup(exp::fantoch_setup(
+            .setup(crate::machine::fantoch_setup(
                 branch,
                 run_mode,
                 features,

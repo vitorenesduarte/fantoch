@@ -3,7 +3,7 @@
 #[cfg(feature = "exp")]
 pub mod bench;
 #[cfg(feature = "exp")]
-pub mod exp;
+pub mod machine;
 #[cfg(feature = "exp")]
 pub mod testbed;
 #[cfg(feature = "exp")]

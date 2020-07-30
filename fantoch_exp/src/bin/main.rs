@@ -3,7 +3,7 @@ use color_eyre::Report;
 use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
-use fantoch_exp::exp::Machines;
+use fantoch_exp::machine::Machines;
 use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;

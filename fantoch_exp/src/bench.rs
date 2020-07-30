@@ -2,7 +2,7 @@ use crate::config::{
     self, ClientConfig, ExperimentConfig, ProcessType, ProtocolConfig,
     RegionIndex,
 };
-use crate::exp::{self, Machine, Machines};
+use crate::machine::{Machine, Machines};
 use crate::{FantochFeature, Protocol, RunMode, SerializationFormat, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
@@ -229,7 +229,7 @@ async fn start_processes(
         }
         let args = protocol_config.to_args();
 
-        let command = exp::fantoch_bin_script(
+        let command = crate::machine::fantoch_bin_script(
             protocol.binary(),
             args,
             run_mode,
@@ -319,7 +319,7 @@ async fn run_clients(
             ClientConfig::new(id_start, id_end, ips, workload, metrics_file);
         let args = client_config.to_args();
 
-        let command = exp::fantoch_bin_script(
+        let command = crate::machine::fantoch_bin_script(
             "client",
             args,
             // always run clients on release mode

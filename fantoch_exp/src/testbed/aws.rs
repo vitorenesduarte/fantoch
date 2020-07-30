@@ -1,5 +1,5 @@
 use super::Nickname;
-use crate::exp::{self, Machine, Machines};
+use crate::machine::{Machine, Machines};
 use crate::{FantochFeature, RunMode, Testbed};
 use color_eyre::Report;
 use std::collections::HashMap;
@@ -102,7 +102,7 @@ async fn spawn_and_setup<'a>(
             .instance_type(instance_type)
             .region_with_ubuntu_ami(region)
             .await?
-            .setup(exp::fantoch_setup(
+            .setup(crate::machine::fantoch_setup(
                 branch.clone(),
                 run_mode,
                 features.clone(),

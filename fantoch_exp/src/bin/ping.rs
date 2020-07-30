@@ -1,7 +1,7 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch_exp::args;
-use fantoch_exp::exp::Machine;
+use fantoch_exp::machine::Machine;
 use rusoto_core::Region;
 use std::time::Duration;
 use tokio::fs::File;
