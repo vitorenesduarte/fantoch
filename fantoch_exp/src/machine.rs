@@ -10,8 +10,6 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 
-/// This script should be called like: $ bash script branch
-/// - branch: which `fantoch` branch to build
 const SETUP_SCRIPT: &str = "exp_files/setup.sh";
 
 pub enum Machine<'a> {
@@ -406,17 +404,17 @@ pub fn fantoch_setup(
         + Sync
         + 'static,
 > {
+    assert!(
+        matches!(testbed, Testbed::Aws | Testbed::Baremetal),
+        "fantoch_setup should only be called with the aws and baremetal testbeds"
+    );
+
     Box::new(move |vm| {
         let vm = Machine::TsunamiRef(vm);
         let testbed = testbed.name();
         let mode = run_mode.name();
         let branch = branch.clone();
-        let features = features
-            .clone()
-            .into_iter()
-            .map(|feature| feature.name())
-            .collect::<Vec<_>>()
-            .join(",");
+        let features = fantoch_features_as_arg(&features);
         Box::pin(async move {
             // files
             let script_file = "setup.sh";
@@ -426,7 +424,7 @@ pub fn fantoch_setup(
                 .await
                 .wrap_err("copy_to setup script")?;
 
-            // execute script remotely: "$ setup.sh branch"
+            // execute setup script
             let mut done = false;
             while !done {
                 let stdout = vm
@@ -476,6 +474,41 @@ pub fn fantoch_setup(
             Ok(())
         })
     })
+}
+
+pub async fn local_fantoch_setup(
+    branch: String,
+    run_mode: RunMode,
+    features: Vec<FantochFeature>,
+    testbed: Testbed,
+) -> Result<(), Report> {
+    assert!(
+        testbed == Testbed::Local,
+        "local_fantoch_setup should only be called with the local testbed"
+    );
+
+    let testbed = testbed.name();
+    let mode = run_mode.name();
+    let features = fantoch_features_as_arg(&features);
+    let vm = Machine::Local;
+
+    // execute setup script
+    let stdout = vm
+        .script_exec(
+            SETUP_SCRIPT,
+            args![testbed, mode, branch, features, "2>&1"],
+        )
+        .await?;
+    tracing::debug!("full output:\n{}", stdout);
+    Ok(())
+}
+
+fn fantoch_features_as_arg(features: &Vec<FantochFeature>) -> String {
+    features
+        .iter()
+        .map(|feature| feature.name())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 pub fn fantoch_bin_script(
