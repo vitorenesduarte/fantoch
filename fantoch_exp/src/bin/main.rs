@@ -11,7 +11,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../save_allocs";
+const RESULTS_DIR: &str = "../flames";
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
@@ -30,10 +30,15 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
+// processes and client config
+const CPUS: Option<usize> = Some(1);
+
 // fantoch run config
 const BRANCH: &str = "master";
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
-const RUN_MODE: RunMode = RunMode::Release;
+const RUN_MODE: RunMode = RunMode::Flamegraph;
+// const FEATURES: &[FantochFeature] = &[];
+// const RUN_MODE: RunMode = RunMode::Heaptrack;
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -128,6 +133,8 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
+        1024,
+        /*
         1024 * 4,
         1024 * 8,
         1024 * 16,
@@ -146,9 +153,10 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
+        */
     ];
-    let shards_per_command = 2;
-    let shard_count = 2;
+    let shards_per_command = 1;
+    let shard_count = 1;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -179,7 +187,7 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
-    baremetal_bench(
+    local_bench(
         regions,
         shard_count,
         planet,
@@ -190,7 +198,7 @@ async fn main() -> Result<(), Report> {
     )
     .await
     /*
-    local_bench(
+    baremetal_bench(
         regions,
         shard_count,
         planet,
@@ -237,7 +245,6 @@ where
     // run benchmarks
     run_bench(
         machines,
-        FEATURES.to_vec(),
         Testbed::Local,
         planet,
         configs,
@@ -284,7 +291,6 @@ where
     // run benchmarks
     run_bench(
         machines,
-        FEATURES.to_vec(),
         Testbed::Baremetal,
         planet,
         configs,
@@ -363,7 +369,6 @@ async fn do_aws_bench(
     // run benchmarks
     run_bench(
         machines,
-        FEATURES.to_vec(),
         Testbed::Aws,
         planet,
         configs,
@@ -379,7 +384,6 @@ async fn do_aws_bench(
 
 async fn run_bench(
     machines: Machines<'_>,
-    features: Vec<FantochFeature>,
     testbed: Testbed,
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
@@ -390,13 +394,14 @@ async fn run_bench(
     fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
-        features,
+        FEATURES.to_vec(),
         testbed,
         planet,
         configs,
         TRACER_SHOW_INTERVAL,
         clients_per_region,
         workloads,
+        CPUS,
         skip,
         RESULTS_DIR,
     )

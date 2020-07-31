@@ -30,6 +30,7 @@ pub async fn bench_experiment(
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: Option<usize>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
@@ -69,6 +70,7 @@ pub async fn bench_experiment(
                     tracer_show_interval,
                     clients,
                     workload,
+                    cpus,
                     &results_dir,
                 )
                 .await?;
@@ -89,6 +91,7 @@ async fn run_experiment(
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
     workload: Workload,
+    cpus: Option<usize>,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // holder of dstat processes to be launched in all machines
@@ -103,6 +106,7 @@ async fn run_experiment(
         protocol,
         config,
         tracer_show_interval,
+        cpus,
         &mut dstats,
     )
     .await
@@ -112,6 +116,7 @@ async fn run_experiment(
     run_clients(
         clients_per_region,
         workload,
+        cpus,
         machines,
         process_ips,
         &mut dstats,
@@ -155,6 +160,7 @@ async fn start_processes(
     protocol: Protocol,
     config: Config,
     tracer_show_interval: Option<usize>,
+    cpus: Option<usize>,
     dstats: &mut Vec<tokio::process::Child>,
 ) -> Result<(Ips, HashMap<ProcessId, (Region, tokio::process::Child)>), Report>
 {
@@ -224,6 +230,7 @@ async fn start_processes(
             sorted,
             ips,
             metrics_file,
+            cpus,
         );
         if let Some(interval) = tracer_show_interval {
             protocol_config.set_tracer_show_interval(interval);
@@ -273,6 +280,7 @@ fn maybe_inject_delay(
 async fn run_clients(
     clients_per_region: usize,
     workload: Workload,
+    cpus: Option<usize>,
     machines: &Machines<'_>,
     process_ips: Ips,
     dstats: &mut Vec<tokio::process::Child>,
@@ -317,8 +325,14 @@ async fn run_clients(
         dstats.push(dstat);
 
         // create client config and generate args
-        let client_config =
-            ClientConfig::new(id_start, id_end, ips, workload, metrics_file);
+        let client_config = ClientConfig::new(
+            id_start,
+            id_end,
+            ips,
+            workload,
+            metrics_file,
+            cpus,
+        );
         let args = client_config.to_args();
 
         let command = crate::machine::fantoch_bin_script(
