@@ -12,6 +12,7 @@ pub mod util;
 pub mod config;
 
 // Re-exports.
+#[cfg(feature = "exp")]
 pub use bench::ExperimentTimeouts;
 pub use config::{ExperimentConfig, ProcessType};
 
