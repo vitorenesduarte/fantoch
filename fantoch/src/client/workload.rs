@@ -332,7 +332,7 @@ mod tests {
             let shards_per_command = 1;
             let shard_gen = ShardGen::Random { shard_count: 1 };
             let keys_per_shard = 1;
-            let total_commands = 100000;
+            let total_commands = 1000000;
             let payload_size = 0;
 
             // create workload
