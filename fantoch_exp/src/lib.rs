@@ -48,13 +48,14 @@ impl RunMode {
             Self::Release => run_command,
             Self::Flamegraph => {
                 // compute flamegraph file
-                // compute flamegraph file
                 let flamegraph_file =
                     config::run_file(process_type, FLAMEGRAPH_FILE_EXT);
+                // compute perf file (which will be supported once https://github.com/flamegraph-rs/flamegraph/pull/95 gets in)
+                let perf_file = config::run_file(process_type, "perf.data");
                 // `source` is needed in order for `flamegraph` to be found
                 format!(
-                    "source ~/.cargo/env && flamegraph -o {} {}",
-                    flamegraph_file, run_command
+                    "source ~/.cargo/env && flamegraph -o {} -c 'record -F 997 --call-graph dwarf -g -o {}' {}",
+                    flamegraph_file, perf_file, run_command
                 )
             }
             Self::Heaptrack => format!("heaptrack {}", run_command),

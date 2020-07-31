@@ -34,7 +34,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = Some(1);
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "flames";
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Flamegraph;
 // const FEATURES: &[FantochFeature] = &[];
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
-        1024,
+        1024 * 4,
         /*
         1024 * 4,
         1024 * 8,
