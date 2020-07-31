@@ -18,6 +18,7 @@ type Ips = HashMap<ProcessId, String>;
 const LOG_FILE_EXT: &str = "log";
 const DSTAT_FILE_EXT: &str = "dstat.csv";
 const METRICS_FILE_EXT: &str = "metrics";
+pub(crate) const FLAMEGRAPH_FILE_EXT: &str = "flamegraph.svg";
 
 pub async fn bench_experiment(
     machines: Machines<'_>,
@@ -230,6 +231,7 @@ async fn start_processes(
         let args = protocol_config.to_args();
 
         let command = crate::machine::fantoch_bin_script(
+            process_type,
             protocol.binary(),
             args,
             run_mode,
@@ -320,6 +322,7 @@ async fn run_clients(
         let args = client_config.to_args();
 
         let command = crate::machine::fantoch_bin_script(
+            process_type,
             "client",
             args,
             // always run clients on release mode
@@ -357,7 +360,7 @@ async fn stop_processes(
         let heaptrack_pid = if let RunMode::Heaptrack = run_mode {
             // find heaptrack pid if in heaptrack mode
             let command = format!(
-                "ps -aux | grep heaptrack | grep ' \\-\\-id {}' | grep -v 'sh -c'",
+                "ps -aux | grep heaptrack | grep ' \\-\\-id {}' | grep -v 'bash -c'",
                 process_id
             );
             let heaptrack_process =
@@ -800,18 +803,18 @@ async fn pull_flamegraph_file(
     vm: &Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
-    // flamegraph will always generate a file with this name
-    let flamegraph = "flamegraph.svg";
+    // compute flamegraph file
+    let flamegraph_file = config::run_file(process_type, FLAMEGRAPH_FILE_EXT);
 
     // compute filename prefix
     let prefix = config::file_prefix(process_type, region);
     let local_path = format!("{}/{}_flamegraph.svg", exp_dir, prefix);
-    vm.copy_from(flamegraph, local_path)
+    vm.copy_from(&flamegraph_file, local_path)
         .await
         .wrap_err("copy flamegraph")?;
 
     // remove flamegraph file
-    let command = format!("rm {}", flamegraph);
+    let command = format!("rm {}", flamegraph_file);
     vm.exec(command).await.wrap_err("remove flamegraph ile")?;
     Ok(())
 }

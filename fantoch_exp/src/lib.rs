@@ -14,6 +14,7 @@ pub mod config;
 // Re-exports.
 pub use config::{ExperimentConfig, ProcessType};
 
+use crate::bench::FLAMEGRAPH_FILE_EXT;
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use serde::{Deserialize, Serialize};
@@ -37,15 +38,26 @@ impl RunMode {
         .to_string()
     }
 
-    pub fn binary(&self, binary: &str) -> String {
-        let binary = format!("./fantoch/target/release/{}", binary);
+    pub fn run_command(
+        &self,
+        process_type: ProcessType,
+        binary: &str,
+    ) -> String {
+        let run_command = format!("./fantoch/target/release/{}", binary);
         match self {
-            Self::Release => binary,
+            Self::Release => run_command,
             Self::Flamegraph => {
+                // compute flamegraph file
+                // compute flamegraph file
+                let flamegraph_file =
+                    config::run_file(process_type, FLAMEGRAPH_FILE_EXT);
                 // `source` is needed in order for `flamegraph` to be found
-                format!("source ~/.cargo/env && flamegraph {}", binary)
+                format!(
+                    "source ~/.cargo/env && flamegraph -o {} {}",
+                    flamegraph_file, run_command
+                )
             }
-            Self::Heaptrack => format!("heaptrack {}", binary),
+            Self::Heaptrack => format!("heaptrack {}", run_command),
         }
     }
 }
