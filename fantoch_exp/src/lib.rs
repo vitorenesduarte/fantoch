@@ -27,6 +27,7 @@ pub enum RunMode {
     Heaptrack,
 }
 
+#[cfg(feature = "exp")]
 impl RunMode {
     pub fn name(&self) -> String {
         match self {
