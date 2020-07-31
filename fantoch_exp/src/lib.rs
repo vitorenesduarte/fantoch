@@ -14,7 +14,6 @@ pub mod config;
 // Re-exports.
 pub use config::{ExperimentConfig, ProcessType};
 
-use crate::bench::FLAMEGRAPH_FILE_EXT;
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use serde::{Deserialize, Serialize};
@@ -48,8 +47,10 @@ impl RunMode {
             Self::Release => run_command,
             Self::Flamegraph => {
                 // compute flamegraph file
-                let flamegraph_file =
-                    config::run_file(process_type, FLAMEGRAPH_FILE_EXT);
+                let flamegraph_file = config::run_file(
+                    process_type,
+                    crate::bench::FLAMEGRAPH_FILE_EXT,
+                );
                 // compute perf file (which will be supported once https://github.com/flamegraph-rs/flamegraph/pull/95 gets in)
                 let perf_file = config::run_file(process_type, "perf.data");
                 // `source` is needed in order for `flamegraph` to be found
