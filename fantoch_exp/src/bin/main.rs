@@ -11,7 +11,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../local";
+const RESULTS_DIR: &str = "../save_allocs";
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
@@ -30,14 +30,10 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
-// bench-specific config
-const BRANCH: &str = "local_deployment";
-// TODO allow more than one feature
-const FEATURE: Option<FantochFeature> = None;
-// const FEATURE: Option<FantochFeature> = Some(FantochFeature::Amortize);
-
-// run mode
-const RUN_MODE: RunMode = RunMode::Heaptrack;
+// fantoch run config
+const BRANCH: &str = "master";
+const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
+const RUN_MODE: RunMode = RunMode::Release;
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -132,8 +128,6 @@ async fn main() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
-        1024,
-        /*
         1024 * 4,
         1024 * 8,
         1024 * 16,
@@ -152,10 +146,9 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
-        */
     ];
-    let shards_per_command = 1;
-    let shard_count = 1;
+    let shards_per_command = 2;
+    let shard_count = 2;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -186,7 +179,7 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
-    local_bench(
+    baremetal_bench(
         regions,
         shard_count,
         planet,
@@ -197,7 +190,7 @@ async fn main() -> Result<(), Report> {
     )
     .await
     /*
-    baremetal_bench(
+    local_bench(
         regions,
         shard_count,
         planet,
@@ -230,16 +223,13 @@ async fn local_bench(
 ) -> Result<(), Report>
 where
 {
-    // compute features
-    let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
-
     // setup baremetal machines
     let machines = fantoch_exp::testbed::local::setup(
         regions,
         shard_count,
         BRANCH.to_string(),
         RUN_MODE,
-        features.clone(),
+        FEATURES.to_vec(),
     )
     .await
     .wrap_err("local spawn")?;
@@ -247,7 +237,7 @@ where
     // run benchmarks
     run_bench(
         machines,
-        features,
+        FEATURES.to_vec(),
         Testbed::Local,
         planet,
         configs,
@@ -279,9 +269,6 @@ where
         shard_count,
     );
 
-    // compute features
-    let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
-
     // setup baremetal machines
     let machines = fantoch_exp::testbed::baremetal::setup(
         &mut launchers,
@@ -289,7 +276,7 @@ where
         shard_count,
         BRANCH.to_string(),
         RUN_MODE,
-        features.clone(),
+        FEATURES.to_vec(),
     )
     .await
     .wrap_err("baremetal spawn")?;
@@ -297,7 +284,7 @@ where
     // run benchmarks
     run_bench(
         machines,
-        features,
+        FEATURES.to_vec(),
         Testbed::Baremetal,
         planet,
         configs,
@@ -354,9 +341,6 @@ async fn do_aws_bench(
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
-    // compute features
-    let features = FEATURE.map(|feature| vec![feature]).unwrap_or_default();
-
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
@@ -368,7 +352,7 @@ async fn do_aws_bench(
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         BRANCH.to_string(),
         RUN_MODE,
-        features.clone(),
+        FEATURES.to_vec(),
     )
     .await
     .wrap_err("aws spawn")?;
@@ -379,7 +363,7 @@ async fn do_aws_bench(
     // run benchmarks
     run_bench(
         machines,
-        features,
+        FEATURES.to_vec(),
         Testbed::Aws,
         planet,
         configs,

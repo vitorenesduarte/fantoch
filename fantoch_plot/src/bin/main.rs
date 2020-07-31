@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../local";
+const RESULTS_DIR: &str = "../save_allocs";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -44,12 +44,12 @@ fn partial_replication() -> Result<(), Report> {
         (1, 1),
         (1, 2),
         (2, 2),
-        (1, 6),
         /*
         (1, 3),
         (2, 3),
         (1, 4),
         (1, 5),
+        (1, 6),
         */
     ];
 
@@ -57,8 +57,6 @@ fn partial_replication() -> Result<(), Report> {
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
-        16,
-        /*
         1024 * 4,
         1024 * 8,
         1024 * 16,
@@ -81,7 +79,6 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
-        */
     ];
 
     // generate all-combo throughput-latency plot
@@ -128,7 +125,7 @@ fn partial_replication() -> Result<(), Report> {
                 // styles.insert((2, 3), ("#34495e", "x"));
                 // styles.insert((1, 4), ("#ffa726", "v"));
                 // styles.insert((1, 5), ("#227093", "."));
-                styles.insert((1, 6), ("#34495e", "x"));
+                // styles.insert((1, 6), ("#34495e", "x"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();

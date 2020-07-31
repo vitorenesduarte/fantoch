@@ -45,7 +45,7 @@ stop_fantoch() {
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
     # remove files
-    cmd="rm -f .metrics .log .metrics dstat.csv heaptrack.*.gz"
+    cmd="rm -f *.metrics *.log *.dstat.csv heaptrack.*.gz"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 }
 
@@ -61,3 +61,4 @@ stop_all() {
 }
 
 stop_all $1
+
