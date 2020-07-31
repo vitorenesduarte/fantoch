@@ -7,10 +7,11 @@ const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 
 #[allow(dead_code)]
-pub fn tokio_runtime() -> tokio::runtime::Runtime {
+pub fn tokio_runtime(cpus: Option<usize>) -> tokio::runtime::Runtime {
     // get number of cpus
-    let cpus = num_cpus::get();
-    println!("cpus: {}", cpus);
+    let available = num_cpus::get();
+    let cpus = cpus.unwrap_or(available);
+    println!("cpus: {} of {}", cpus, available);
 
     // create tokio runtime
     tokio::runtime::Builder::new()
@@ -57,4 +58,8 @@ fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
                 .expect("buffer size should be a number")
         })
         .unwrap_or(default)
+}
+
+pub fn parse_cpus(cpus: Option<&str>) -> Option<usize> {
+    cpus.map(|cpus| cpus.parse::<usize>().expect("cpus should be a number"))
 }

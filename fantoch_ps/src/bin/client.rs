@@ -22,6 +22,7 @@ type ClientArgs = (
     bool,
     usize,
     Option<String>,
+    Option<usize>,
 );
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -33,9 +34,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         tcp_nodelay,
         channel_buffer_size,
         metrics_file,
+        cpus,
     ) = parse_args();
 
-    common::tokio_runtime().block_on(fantoch::run::client(
+    common::tokio_runtime(cpus).block_on(fantoch::run::client(
         ids,
         addresses,
         interval,
@@ -137,6 +139,13 @@ fn parse_args() -> ClientArgs {
                 .help("file in which metrics are written to; by default metrics are not logged")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("cpus")
+                .long("cpus")
+                .value_name("CPUS")
+                .help("number of cpus to be used by tokio; by default all available cpus are used")
+                .takes_value(true),
+        )
         .get_matches();
 
     // parse arguments
@@ -157,6 +166,7 @@ fn parse_args() -> ClientArgs {
         matches.value_of("channel_buffer_size"),
     );
     let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
+    let cpus = common::parse_cpus(matches.value_of("cpus"));
 
     println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
     println!("client number: {}", ids.len());
@@ -174,6 +184,7 @@ fn parse_args() -> ClientArgs {
         tcp_nodelay,
         channel_buffer_size,
         metrics_file,
+        cpus,
     )
 }
 

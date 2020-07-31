@@ -1,6 +1,6 @@
 use crate::args;
 use crate::config::{Placement, RegionIndex};
-use crate::{FantochFeature, RunMode, Testbed};
+use crate::{FantochFeature, ProcessType, RunMode, Testbed};
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::id::{ProcessId, ShardId};
@@ -211,7 +211,7 @@ impl<'a> Machine<'a> {
     fn create_command(command_arg: impl ToString) -> tokio::process::Command {
         let command_arg = command_arg.to_string();
         tracing::debug!("{}", command_arg);
-        let mut command = tokio::process::Command::new("sh");
+        let mut command = tokio::process::Command::new("bash");
         command.arg("-c");
         command.arg(command_arg);
         command
@@ -530,12 +530,18 @@ fn fantoch_features_as_arg(features: &Vec<FantochFeature>) -> String {
 }
 
 pub fn fantoch_bin_script(
+    process_type: ProcessType,
     binary: &str,
     args: Vec<String>,
     run_mode: RunMode,
     output_file: impl ToString,
 ) -> String {
-    let binary = run_mode.binary(binary);
+    let run_command = run_mode.run_command(process_type, binary);
     let args = args.join(" ");
-    format!("{} {} > {} 2>&1", binary, args, output_file.to_string())
+    format!(
+        "{} {} > {} 2>&1",
+        run_command,
+        args,
+        output_file.to_string()
+    )
 }

@@ -27,6 +27,7 @@ pub enum RunMode {
     Heaptrack,
 }
 
+#[cfg(feature = "exp")]
 impl RunMode {
     pub fn name(&self) -> String {
         match self {
@@ -37,15 +38,29 @@ impl RunMode {
         .to_string()
     }
 
-    pub fn binary(&self, binary: &str) -> String {
-        let binary = format!("./fantoch/target/release/{}", binary);
+    pub fn run_command(
+        &self,
+        process_type: ProcessType,
+        binary: &str,
+    ) -> String {
+        let run_command = format!("./fantoch/target/release/{}", binary);
         match self {
-            Self::Release => binary,
+            Self::Release => run_command,
             Self::Flamegraph => {
+                // compute flamegraph file
+                let flamegraph_file = config::run_file(
+                    process_type,
+                    crate::bench::FLAMEGRAPH_FILE_EXT,
+                );
+                // compute perf file (which will be supported once https://github.com/flamegraph-rs/flamegraph/pull/95 gets in)
+                let perf_file = config::run_file(process_type, "perf.data");
                 // `source` is needed in order for `flamegraph` to be found
-                format!("source ~/.cargo/env && flamegraph {}", binary)
+                format!(
+                    "source ~/.cargo/env && flamegraph -o {} -c 'record -F 997 --call-graph dwarf -g -o {}' {}",
+                    flamegraph_file, perf_file, run_command
+                )
             }
-            Self::Heaptrack => format!("heaptrack {}", binary),
+            Self::Heaptrack => format!("heaptrack {}", run_command),
         }
     }
 }

@@ -72,6 +72,7 @@ pub struct ProtocolConfig {
     tracer_show_interval: Option<usize>,
     ping_interval: Option<usize>,
     metrics_file: String,
+    cpus: Option<usize>,
 }
 
 #[cfg(feature = "exp")]
@@ -84,6 +85,7 @@ impl ProtocolConfig {
         sorted: Option<Vec<ProcessId>>,
         ips: Vec<(ProcessId, String, Option<usize>)>,
         metrics_file: String,
+        cpus: Option<usize>,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -106,6 +108,7 @@ impl ProtocolConfig {
             tracer_show_interval: TRACER_SHOW_INTERVAL,
             ping_interval: PING_INTERVAL,
             metrics_file,
+            cpus,
         }
     }
 
@@ -202,6 +205,9 @@ impl ProtocolConfig {
             args.extend(args!["--ping_interval", interval]);
         }
         args.extend(args!["--metrics_file", self.metrics_file]);
+        if let Some(cpus) = self.cpus {
+            args.extend(args!["--cpus", cpus]);
+        }
         args
     }
 
@@ -250,6 +256,7 @@ pub struct ClientConfig {
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     metrics_file: String,
+    cpus: Option<usize>,
 }
 
 #[cfg(feature = "exp")]
@@ -260,6 +267,7 @@ impl ClientConfig {
         ips: Vec<(ProcessId, String)>,
         workload: Workload,
         metrics_file: String,
+        cpus: Option<usize>,
     ) -> Self {
         Self {
             id_start,
@@ -269,6 +277,7 @@ impl ClientConfig {
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
             metrics_file,
+            cpus,
         }
     }
 
@@ -288,7 +297,7 @@ impl ClientConfig {
                 key_count,
             } => format!("zipf,{},{}", coefficient, key_count),
         };
-        args![
+        let mut args = args![
             "--ids",
             format!("{}-{}", self.id_start, self.id_end),
             "--addresses",
@@ -311,7 +320,11 @@ impl ClientConfig {
             self.channel_buffer_size,
             "--metrics_file",
             self.metrics_file,
-        ]
+        ];
+        if let Some(cpus) = self.cpus {
+            args.extend(args!["--cpus", cpus]);
+        }
+        args
     }
 
     fn ips_to_addresses(&self) -> String {

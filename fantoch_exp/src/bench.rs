@@ -18,6 +18,7 @@ type Ips = HashMap<ProcessId, String>;
 const LOG_FILE_EXT: &str = "log";
 const DSTAT_FILE_EXT: &str = "dstat.csv";
 const METRICS_FILE_EXT: &str = "metrics";
+pub(crate) const FLAMEGRAPH_FILE_EXT: &str = "flamegraph.svg";
 
 pub async fn bench_experiment(
     machines: Machines<'_>,
@@ -29,6 +30,7 @@ pub async fn bench_experiment(
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: Option<usize>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
@@ -68,6 +70,7 @@ pub async fn bench_experiment(
                     tracer_show_interval,
                     clients,
                     workload,
+                    cpus,
                     &results_dir,
                 )
                 .await?;
@@ -88,6 +91,7 @@ async fn run_experiment(
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
     workload: Workload,
+    cpus: Option<usize>,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // holder of dstat processes to be launched in all machines
@@ -102,6 +106,7 @@ async fn run_experiment(
         protocol,
         config,
         tracer_show_interval,
+        cpus,
         &mut dstats,
     )
     .await
@@ -111,6 +116,7 @@ async fn run_experiment(
     run_clients(
         clients_per_region,
         workload,
+        cpus,
         machines,
         process_ips,
         &mut dstats,
@@ -154,6 +160,7 @@ async fn start_processes(
     protocol: Protocol,
     config: Config,
     tracer_show_interval: Option<usize>,
+    cpus: Option<usize>,
     dstats: &mut Vec<tokio::process::Child>,
 ) -> Result<(Ips, HashMap<ProcessId, (Region, tokio::process::Child)>), Report>
 {
@@ -223,6 +230,7 @@ async fn start_processes(
             sorted,
             ips,
             metrics_file,
+            cpus,
         );
         if let Some(interval) = tracer_show_interval {
             protocol_config.set_tracer_show_interval(interval);
@@ -230,6 +238,7 @@ async fn start_processes(
         let args = protocol_config.to_args();
 
         let command = crate::machine::fantoch_bin_script(
+            process_type,
             protocol.binary(),
             args,
             run_mode,
@@ -271,6 +280,7 @@ fn maybe_inject_delay(
 async fn run_clients(
     clients_per_region: usize,
     workload: Workload,
+    cpus: Option<usize>,
     machines: &Machines<'_>,
     process_ips: Ips,
     dstats: &mut Vec<tokio::process::Child>,
@@ -315,11 +325,18 @@ async fn run_clients(
         dstats.push(dstat);
 
         // create client config and generate args
-        let client_config =
-            ClientConfig::new(id_start, id_end, ips, workload, metrics_file);
+        let client_config = ClientConfig::new(
+            id_start,
+            id_end,
+            ips,
+            workload,
+            metrics_file,
+            cpus,
+        );
         let args = client_config.to_args();
 
         let command = crate::machine::fantoch_bin_script(
+            process_type,
             "client",
             args,
             // always run clients on release mode
@@ -357,7 +374,7 @@ async fn stop_processes(
         let heaptrack_pid = if let RunMode::Heaptrack = run_mode {
             // find heaptrack pid if in heaptrack mode
             let command = format!(
-                "ps -aux | grep heaptrack | grep ' \\-\\-id {}' | grep -v 'sh -c'",
+                "ps -aux | grep heaptrack | grep ' \\-\\-id {}' | grep -v 'bash -c'",
                 process_id
             );
             let heaptrack_process =
@@ -800,18 +817,18 @@ async fn pull_flamegraph_file(
     vm: &Machine<'_>,
     exp_dir: &str,
 ) -> Result<(), Report> {
-    // flamegraph will always generate a file with this name
-    let flamegraph = "flamegraph.svg";
+    // compute flamegraph file
+    let flamegraph_file = config::run_file(process_type, FLAMEGRAPH_FILE_EXT);
 
     // compute filename prefix
     let prefix = config::file_prefix(process_type, region);
     let local_path = format!("{}/{}_flamegraph.svg", exp_dir, prefix);
-    vm.copy_from(flamegraph, local_path)
+    vm.copy_from(&flamegraph_file, local_path)
         .await
         .wrap_err("copy flamegraph")?;
 
     // remove flamegraph file
-    let command = format!("rm {}", flamegraph);
+    let command = format!("rm {}", flamegraph_file);
     vm.exec(command).await.wrap_err("remove flamegraph ile")?;
     Ok(())
 }
