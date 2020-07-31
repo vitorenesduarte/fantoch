@@ -18,9 +18,9 @@ type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
 const IP: &str = "0.0.0.0";
 
 // parallelism config
-const WORKERS: usize = 1;
-const EXECUTORS: usize = 1;
-const MULTIPLEXING: usize = 1;
+const WORKERS: usize = 16;
+const EXECUTORS: usize = 16;
+const MULTIPLEXING: usize = 32;
 
 // process tcp config
 const PROCESS_TCP_NODELAY: bool = true;

@@ -11,7 +11,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../flames";
+const RESULTS_DIR: &str = "../heaptrack";
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
@@ -31,12 +31,12 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 
 // processes and client config
-const CPUS: Option<usize> = Some(1);
+const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "flames";
+const BRANCH: &str = "master";
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
-const RUN_MODE: RunMode = RunMode::Flamegraph;
+const RUN_MODE: RunMode = RunMode::Release;
 // const FEATURES: &[FantochFeature] = &[];
 // const RUN_MODE: RunMode = RunMode::Heaptrack;
 
