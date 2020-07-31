@@ -12,6 +12,7 @@ pub mod util;
 pub mod config;
 
 // Re-exports.
+pub use bench::ExperimentTimeouts;
 pub use config::{ExperimentConfig, ProcessType};
 
 use color_eyre::eyre::WrapErr;

@@ -4,7 +4,9 @@ use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::machine::Machines;
-use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
+use fantoch_exp::{
+    ExperimentTimeouts, FantochFeature, Protocol, RunMode, Testbed,
+};
 use rusoto_core::Region;
 use std::time::Duration;
 use tsunami::providers::aws::LaunchMode;
@@ -12,6 +14,16 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 const RESULTS_DIR: &str = "../heaptrack";
+
+// timeouts
+const fn minutes(minutes: u64) -> Duration {
+    Duration::from_secs(3600 * minutes)
+}
+const EXPERIMENT_TIMEOUTS: ExperimentTimeouts = ExperimentTimeouts {
+    start: Some(minutes(20)),
+    run: Some(minutes(20)),
+    stop: Some(minutes(20)),
+};
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
@@ -403,6 +415,7 @@ async fn run_bench(
         workloads,
         CPUS,
         skip,
+        EXPERIMENT_TIMEOUTS,
         RESULTS_DIR,
     )
     .await

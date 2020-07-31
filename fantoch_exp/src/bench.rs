@@ -12,6 +12,7 @@ use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::path::Path;
+use tokio::time::Duration;
 
 type Ips = HashMap<ProcessId, String>;
 
@@ -19,6 +20,23 @@ const LOG_FILE_EXT: &str = "log";
 const DSTAT_FILE_EXT: &str = "dstat.csv";
 const METRICS_FILE_EXT: &str = "metrics";
 pub(crate) const FLAMEGRAPH_FILE_EXT: &str = "flamegraph.svg";
+
+#[derive(Clone, Copy)]
+pub struct ExperimentTimeouts {
+    pub start: Option<Duration>,
+    pub run: Option<Duration>,
+    pub stop: Option<Duration>,
+}
+
+#[derive(Debug)]
+struct TimeoutError(&'static str);
+
+impl std::fmt::Display for TimeoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl std::error::Error for TimeoutError {}
 
 pub async fn bench_experiment(
     machines: Machines<'_>,
@@ -32,6 +50,7 @@ pub async fn bench_experiment(
     workloads: Vec<Workload>,
     cpus: Option<usize>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
+    experiment_timeouts: ExperimentTimeouts,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     if tracer_show_interval.is_some() {
@@ -59,26 +78,49 @@ pub async fn bench_experiment(
                 if skip(protocol, config, clients) {
                     continue;
                 }
-                run_experiment(
-                    &machines,
-                    run_mode,
-                    features.clone(),
-                    testbed,
-                    &planet,
-                    protocol,
-                    config,
-                    tracer_show_interval,
-                    clients,
-                    workload,
-                    cpus,
-                    &results_dir,
-                )
-                .await?;
+                loop {
+                    let run = run_experiment(
+                        &machines,
+                        run_mode,
+                        features.clone(),
+                        testbed,
+                        &planet,
+                        protocol,
+                        config,
+                        tracer_show_interval,
+                        clients,
+                        workload,
+                        cpus,
+                        experiment_timeouts,
+                        &results_dir,
+                    );
+                    if let Err(e) = run.await {
+                        // check if it's a timeout error
+                        match e.downcast_ref::<TimeoutError>() {
+                            Some(TimeoutError(source)) => {
+                                // if it's a timeout error, restart the
+                                // experiment
+                                tracing::warn!("timeout in {:?}; will cleanup and try again", source);
+                                cleanup().await;
+                            }
+                            None => {
+                                // if not, quit
+                                return Err(e);
+                            }
+                        }
+                    } else {
+                        // if there's no error, then exit the loop and run the
+                        // next experiment (if any)
+                        break;
+                    }
+                }
             }
         }
     }
     Ok(())
 }
+
+async fn cleanup() {}
 
 async fn run_experiment(
     machines: &Machines<'_>,
@@ -92,13 +134,14 @@ async fn run_experiment(
     clients_per_region: usize,
     workload: Workload,
     cpus: Option<usize>,
+    experiment_timeouts: ExperimentTimeouts,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // holder of dstat processes to be launched in all machines
     let mut dstats = Vec::with_capacity(machines.vm_count());
 
     // start processes
-    let (process_ips, processes) = start_processes(
+    let start = start_processes(
         machines,
         run_mode,
         testbed,
@@ -108,21 +151,45 @@ async fn run_experiment(
         tracer_show_interval,
         cpus,
         &mut dstats,
-    )
-    .await
-    .wrap_err("start_processes")?;
+    );
+    // check if a start timeout was set
+    let start_result = if let Some(timeout) = experiment_timeouts.start {
+        // if yes, abort experiment if timeout triggers
+        tokio::select! {
+            result = start => result,
+            _ = tokio::time::delay_for(timeout) => {
+                return Err(Report::new(TimeoutError("start processes")));
+            }
+        }
+    } else {
+        // if no, simply wait for start to finish
+        start.await
+    };
+    let (process_ips, processes) = start_result.wrap_err("start_processes")?;
 
     // run clients
-    run_clients(
+    let run_clients = run_clients(
         clients_per_region,
         workload,
         cpus,
         machines,
         process_ips,
         &mut dstats,
-    )
-    .await
-    .wrap_err("run_clients")?;
+    );
+    // check if a run timeout was set
+    let run_clients_result = if let Some(timeout) = experiment_timeouts.run {
+        // if yes, abort experiment if timeout triggers
+        tokio::select! {
+            result = run_clients => result,
+            _ = tokio::time::delay_for(timeout) => {
+                return Err(Report::new(TimeoutError("run clients")));
+            }
+        }
+    } else {
+        // if not, simply wait for run to finish
+        run_clients.await
+    };
+    run_clients_result.wrap_err("run_clients")?;
 
     // stop dstat
     stop_dstats(machines, dstats).await.wrap_err("stop_dstat")?;
@@ -139,17 +206,34 @@ async fn run_experiment(
         clients_per_region,
         workload,
     );
-    let exp_dir = pull_metrics(machines, exp_config, results_dir)
-        .await
-        .wrap_err("pull_metrics")?;
 
-    // stop processes: should only be stopped after copying all the metrics to
-    // avoid unnecessary noise in the logs
-    stop_processes(machines, run_mode, protocol, exp_dir, processes)
-        .await
-        .wrap_err("stop_processes")?;
+    let pull_metrics_and_stop = async {
+        let exp_dir = pull_metrics(machines, exp_config, results_dir)
+            .await
+            .wrap_err("pull_metrics")?;
 
-    Ok(())
+        // stop processes: should only be stopped after copying all the metrics
+        // to avoid unnecessary noise in the logs
+        stop_processes(machines, run_mode, protocol, exp_dir, processes)
+            .await
+            .wrap_err("stop_processes")?;
+
+        Ok(())
+    };
+
+    // check if a stop was set
+    if let Some(timeout) = experiment_timeouts.stop {
+        // if yes, abort experiment if timeout triggers
+        tokio::select! {
+            result = pull_metrics_and_stop => result,
+            _ = tokio::time::delay_for(timeout) => {
+                return Err(Report::new(TimeoutError("pull metrics and stop processes")));
+            }
+        }
+    } else {
+        // if not, simply wait for stop to finish
+        pull_metrics_and_stop.await
+    }
 }
 
 async fn start_processes(
@@ -504,7 +588,7 @@ async fn wait_process_ended(
     while count != 0 {
         tokio::time::delay_for(duration).await;
         let command = format!(
-            "lsof -i :{} -i :{} | wc -l",
+            "lsof -i :{} -i :{} -sTCP:LISTEN | wc -l",
             config::port(process_id),
             config::client_port(process_id)
         );
@@ -544,7 +628,7 @@ async fn wait_process_ended(
                     tracing::warn!("empty output from: {}", command);
                 } else {
                     count =
-                        stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+                        stdout.parse::<usize>().wrap_err("ps | wc parse")?;
                 }
             }
 
