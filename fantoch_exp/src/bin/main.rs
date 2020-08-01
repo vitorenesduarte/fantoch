@@ -199,8 +199,6 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
-    // cleanup previous experiment
-    // - since we don't know which experiment ran before, cleanup all protocols
     baremetal_bench(
         regions,
         shard_count,

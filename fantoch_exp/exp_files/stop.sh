@@ -50,6 +50,11 @@ stop_fantoch() {
 }
 
 stop_all() {
+    if [ $# -ne 1 ]; then
+        echo "usage: stop_all binary"
+        exit 1
+    fi
+
     # variables
     local binary=$1
     local machine
