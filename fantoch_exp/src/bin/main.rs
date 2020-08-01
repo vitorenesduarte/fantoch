@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../heaptrack";
+const RESULTS_DIR: &str = "../save_allocs";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -46,7 +46,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "exp_timeouts";
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Release;
 // const FEATURES: &[FantochFeature] = &[];
@@ -146,18 +146,16 @@ async fn main() -> Result<(), Report> {
 
     let clients_per_region = vec![
         1024 * 4,
-        /*
-        1024 * 4,
         1024 * 8,
         1024 * 16,
-        1024 * 24,
+        // 1024 * 24,
         1024 * 32,
-        1024 * 36,
-        1024 * 40,
-        1024 * 48,
-        1024 * 56,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
         1024 * 64,
-        1024 * 96,
+        // 1024 * 96,
         1024 * 128,
         1024 * 160,
         1024 * 192,
@@ -165,10 +163,9 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
-        */
     ];
     let shards_per_command = 1;
-    let shard_count = 1;
+    let shard_count = 6;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -199,7 +196,7 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
-    local_bench(
+    baremetal_bench(
         regions,
         shard_count,
         planet,
@@ -210,7 +207,7 @@ async fn main() -> Result<(), Report> {
     )
     .await
     /*
-    baremetal_bench(
+    local_bench(
         regions,
         shard_count,
         planet,

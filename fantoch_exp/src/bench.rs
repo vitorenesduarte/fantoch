@@ -494,39 +494,10 @@ async fn stop_processes(
             );
         }
 
-        // find process pid in remote vm
-        // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
-        let command = format!(
-            "lsof -i :{} -i :{} -sTCP:LISTEN | grep -v PID",
-            config::port(process_id),
-            config::client_port(process_id)
-        );
-        let output = vm.exec(command).await.wrap_err("lsof | grep")?;
-        let mut pids: Vec<_> = output
-            .lines()
-            // take the second column (which contains the PID)
-            .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
-            .collect();
-        pids.sort();
-        pids.dedup();
-
-        // there should be at most one pid
-        match pids.len() {
-            0 => {
-                tracing::warn!(
-                    "process {} already not running in region {:?}",
-                    process_id,
-                    region
-                );
-            }
-            1 => {
-                // kill all
-                let command = format!("kill {}", pids.join(" "));
-                let output = vm.exec(command).await.wrap_err("kill")?;
-                tracing::debug!("{}", output);
-            }
-            n => panic!("there should be at most one pid and found {}", n),
-        }
+        // stop process
+        stop_process(vm, process_id, &region)
+            .await
+            .wrap_err("stop_process")?;
 
         wait_processes.push(wait_process_ended(
             protocol,
@@ -542,6 +513,47 @@ async fn stop_processes(
     // wait all processse started
     for result in futures::future::join_all(wait_processes).await {
         let () = result?;
+    }
+    Ok(())
+}
+
+async fn stop_process(
+    vm: &Machine<'_>,
+    process_id: ProcessId,
+    region: &Region,
+) -> Result<(), Report> {
+    // find process pid in remote vm
+    // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
+    let command = format!(
+        "lsof -i :{} -i :{} -sTCP:LISTEN | grep -v PID",
+        config::port(process_id),
+        config::client_port(process_id)
+    );
+    let output = vm.exec(command).await.wrap_err("lsof | grep")?;
+    let mut pids: Vec<_> = output
+        .lines()
+        // take the second column (which contains the PID)
+        .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
+        .collect();
+    pids.sort();
+    pids.dedup();
+
+    // there should be at most one pid
+    match pids.len() {
+        0 => {
+            tracing::warn!(
+                "process {} already not running in region {:?}",
+                process_id,
+                region
+            );
+        }
+        1 => {
+            // kill all
+            let command = format!("kill {}", pids.join(" "));
+            let output = vm.exec(command).await.wrap_err("kill")?;
+            tracing::debug!("{}", output);
+        }
+        n => panic!("there should be at most one pid and found {}", n),
     }
     Ok(())
 }
