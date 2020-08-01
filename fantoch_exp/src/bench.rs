@@ -79,6 +79,13 @@ pub async fn bench_experiment(
                     continue;
                 }
                 loop {
+                    let exp_dir = create_exp_dir(&results_dir)
+                        .await
+                        .wrap_err("create_exp_dir")?;
+                    tracing::info!(
+                        "experiment metrics will be saved in {}",
+                        exp_dir
+                    );
                     let run = run_experiment(
                         &machines,
                         run_mode,
@@ -92,15 +99,18 @@ pub async fn bench_experiment(
                         workload,
                         cpus,
                         experiment_timeouts,
-                        &results_dir,
+                        &exp_dir,
                     );
                     if let Err(e) = run.await {
                         // check if it's a timeout error
                         match e.downcast_ref::<TimeoutError>() {
                             Some(TimeoutError(source)) => {
-                                // if it's a timeout error, restart the
-                                // experiment
+                                // if it's a timeout error, cleanup and restart
+                                // the experiment
                                 tracing::warn!("timeout in {:?}; will cleanup and try again", source);
+                                tokio::fs::remove_dir_all(exp_dir)
+                                    .await
+                                    .wrap_err("remove exp dir")?;
                                 cleanup(&machines, vec![protocol]).await?;
                             }
                             None => {
@@ -133,7 +143,7 @@ async fn run_experiment(
     workload: Workload,
     cpus: Option<usize>,
     experiment_timeouts: ExperimentTimeouts,
-    results_dir: impl AsRef<Path>,
+    exp_dir: &str,
 ) -> Result<(), Report> {
     // holder of dstat processes to be launched in all machines
     let mut dstats = Vec::with_capacity(machines.vm_count());
@@ -206,13 +216,13 @@ async fn run_experiment(
     );
 
     let pull_metrics_and_stop = async {
-        let exp_dir = pull_metrics(machines, exp_config, results_dir)
+        pull_metrics(machines, exp_config, &exp_dir)
             .await
             .wrap_err("pull_metrics")?;
 
         // stop processes: should only be stopped after copying all the metrics
         // to avoid unnecessary noise in the logs
-        stop_processes(machines, run_mode, protocol, exp_dir, processes)
+        stop_processes(machines, run_mode, protocol, &exp_dir, processes)
             .await
             .wrap_err("stop_processes")?;
 
@@ -445,7 +455,7 @@ async fn stop_processes(
     machines: &Machines<'_>,
     run_mode: RunMode,
     protocol: Protocol,
-    exp_dir: String,
+    exp_dir: &str,
     processes: HashMap<ProcessId, (Region, tokio::process::Child)>,
 ) -> Result<(), Report> {
     let mut wait_processes = Vec::with_capacity(machines.server_count());
@@ -797,13 +807,15 @@ async fn check_no_dstat(vm: &Machine<'_>) -> Result<(), Report> {
 async fn pull_metrics(
     machines: &Machines<'_>,
     exp_config: ExperimentConfig,
-    results_dir: impl AsRef<Path>,
-) -> Result<String, Report> {
-    // save experiment config, making sure experiment directory exists
-    let exp_dir = save_exp_config(exp_config, results_dir)
-        .await
-        .wrap_err("save_exp_config")?;
-    tracing::info!("experiment metrics will be saved in {}", exp_dir);
+    exp_dir: &str,
+) -> Result<(), Report> {
+    // save experiment config
+    crate::serialize(
+        exp_config,
+        format!("{}/exp_config.json", exp_dir),
+        SerializationFormat::Json,
+    )
+    .wrap_err("save_exp_config")?;
 
     let mut pulls = Vec::with_capacity(machines.vm_count());
     // prepare server metrics pull
@@ -826,11 +838,10 @@ async fn pull_metrics(
         let _ = result.wrap_err("pull_metrics")?;
     }
 
-    Ok(exp_dir)
+    Ok(())
 }
 
-async fn save_exp_config(
-    exp_config: ExperimentConfig,
+async fn create_exp_dir(
     results_dir: impl AsRef<Path>,
 ) -> Result<String, Report> {
     let timestamp = exp_timestamp();
@@ -838,13 +849,6 @@ async fn save_exp_config(
     tokio::fs::create_dir_all(&exp_dir)
         .await
         .wrap_err("create_dir_all")?;
-
-    // save config file
-    crate::serialize(
-        exp_config,
-        format!("{}/exp_config.json", exp_dir),
-        SerializationFormat::Json,
-    )?;
     Ok(exp_dir)
 }
 
