@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../save_allocs";
+const RESULTS_DIR: &str = "../cleanup";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -51,6 +51,9 @@ const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Release;
 // const FEATURES: &[FantochFeature] = &[];
 // const RUN_MODE: RunMode = RunMode::Heaptrack;
+
+// list of protocol binaries to cleanup before running the experiment
+const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[Protocol::NewtAtomic];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -196,6 +199,8 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
+    // cleanup previous experiment
+    // - since we don't know which experiment ran before, cleanup all protocols
     baremetal_bench(
         regions,
         shard_count,
@@ -400,6 +405,20 @@ async fn run_bench(
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
+    match testbed {
+        Testbed::Local | Testbed::Baremetal => {
+            fantoch_exp::bench::cleanup(
+                &machines,
+                PROTOCOLS_TO_CLEANUP.to_vec(),
+            )
+            .await
+            .wrap_err("initial cleanup")?;
+            tracing::info!("initial cleanup completed");
+        }
+        Testbed::Aws => {
+            tracing::info!("nothing to cleanup on AWS");
+        }
+    }
     fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,

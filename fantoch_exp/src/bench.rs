@@ -101,7 +101,7 @@ pub async fn bench_experiment(
                                 // if it's a timeout error, restart the
                                 // experiment
                                 tracing::warn!("timeout in {:?}; will cleanup and try again", source);
-                                cleanup().await;
+                                cleanup(&machines, vec![protocol]).await?;
                             }
                             None => {
                                 // if not, quit
@@ -119,8 +119,6 @@ pub async fn bench_experiment(
     }
     Ok(())
 }
-
-async fn cleanup() {}
 
 async fn run_experiment(
     machines: &Machines<'_>,
@@ -730,43 +728,50 @@ async fn stop_dstats(
         }
     }
 
+    // stop dstats in parallel
+    let mut stops = Vec::new();
     for vm in machines.vms() {
-        // find dstat pid in remote vm
-        let command = "ps -aux | grep dstat | grep -v grep";
-        let output = vm.exec(command).await.wrap_err("ps")?;
-        let mut pids: Vec<_> = output
-            .lines()
-            // take the second column (which contains the PID)
-            .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
-            .collect();
-        pids.sort();
-        pids.dedup();
+        stops.push(stop_dstat(vm));
+    }
+    for result in futures::future::join_all(stops).await {
+        let _ = result.wrap_err("stop_dstat")?;
+    }
+    Ok(())
+}
 
-        // there should be at most one pid
-        match pids.len() {
-            0 => {
-                tracing::warn!("dstat already not running");
+async fn stop_dstat(vm: &Machine<'_>) -> Result<(), Report> {
+    // find dstat pid in remote vm
+    let command = "ps -aux | grep dstat | grep -v grep";
+    let output = vm.exec(command).await.wrap_err("ps")?;
+    let mut pids: Vec<_> = output
+        .lines()
+        // take the second column (which contains the PID)
+        .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
+        .collect();
+    pids.sort();
+    pids.dedup();
+
+    // there should be at most one pid
+    match pids.len() {
+        0 => {
+            tracing::warn!("dstat already not running");
+        }
+        n => {
+            if n > 2 {
+                // there should be `bash -c dstat` and a `python2
+                // /usr/bin/dstat`; if more than these two, then there's
+                // more than one dstat running
+                tracing::warn!(
+                    "found more than one dstat. killing all of them"
+                );
             }
-            n => {
-                if n > 2 {
-                    // there should be `bash -c dstat` and a `python2
-                    // /usr/bin/dstat`; if more than these two, then there's
-                    // more than one dstat running
-                    tracing::warn!(
-                        "found more than one dstat. killing all of them"
-                    );
-                }
-                // kill dstat
-                let command = format!("kill {}", pids.join(" "));
-                let output = vm.exec(command).await.wrap_err("kill")?;
-                tracing::debug!("{}", output);
-            }
+            // kill dstat
+            let command = format!("kill {}", pids.join(" "));
+            let output = vm.exec(command).await.wrap_err("kill")?;
+            tracing::debug!("{}", output);
         }
     }
-
-    for vm in machines.vms() {
-        check_no_dstat(vm).await.wrap_err("check_no_dstat")?;
-    }
+    check_no_dstat(vm).await.wrap_err("check_no_dstat")?;
     Ok(())
 }
 
@@ -951,5 +956,64 @@ async fn pull_heaptrack_file(
     // remove heaptrack file
     let command = format!("rm {}", heaptrack);
     vm.exec(command).await.wrap_err("remove heaptrack file")?;
+    Ok(())
+}
+
+pub async fn cleanup(
+    machines: &Machines<'_>,
+    protocols: Vec<Protocol>,
+) -> Result<(), Report> {
+    // stop dstats in all machines
+    stop_dstats(machines, Vec::new())
+        .await
+        .wrap_err("stop_dstat")?;
+
+    // do the rest of the cleanup
+    let mut cleanups = Vec::new();
+    for protocol in protocols {
+        for (_, vm) in machines.servers() {
+            cleanups.push(cleanup_machine(vm, protocol.binary()));
+        }
+    }
+    for (_, vm) in machines.clients() {
+        cleanups.push(cleanup_machine(vm, "client"));
+    }
+
+    // cleanup all machines in parallel
+    for result in futures::future::join_all(cleanups).await {
+        let _ = result.wrap_err("cleanup")?;
+    }
+    Ok(())
+}
+
+async fn cleanup_machine(
+    vm: &Machine<'_>,
+    binary: &'static str,
+) -> Result<(), Report> {
+    // kill the binary
+    let command = format!("pkill {}", binary);
+    vm.exec(command).await.wrap_err("pkill binary")?;
+
+    // wait for binary to end
+    let mut count = 1;
+    while count != 0 {
+        let command = format!(
+            "ps -aux | grep fantoch/target/release/{} | grep -v grep | wc -l",
+            binary
+        );
+        let stdout = vm.exec(&command).await.wrap_err("ps -aux | wc")?;
+        if stdout.is_empty() {
+            tracing::warn!("empty output from: {}", command);
+        } else {
+            count = stdout.parse::<usize>().wrap_err("ps -aux | wc parse")?;
+        }
+    }
+
+    // remove files
+    let command = format!(
+        "rm -f *.{} *.{} *.{} *.{} heaptrack.*.gz",
+        LOG_FILE_EXT, DSTAT_FILE_EXT, METRICS_FILE_EXT, FLAMEGRAPH_FILE_EXT
+    );
+    vm.exec(command).await.wrap_err("rm files")?;
     Ok(())
 }

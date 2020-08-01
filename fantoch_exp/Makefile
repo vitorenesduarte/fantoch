@@ -1,2 +1,2 @@
 clean:
-	rm -f *.log *.csv *.svg *perf.data* 4
+	rm -f *.log *.csv *.svg *.metrics *perf.data* 4

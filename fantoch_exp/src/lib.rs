@@ -108,7 +108,7 @@ pub enum Protocol {
 }
 
 impl Protocol {
-    pub fn binary(&self) -> &str {
+    pub fn binary(&self) -> &'static str {
         match self {
             Protocol::AtlasLocked => "atlas_locked",
             Protocol::EPaxosLocked => "epaxos_locked",
