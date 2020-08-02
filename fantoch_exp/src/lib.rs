@@ -5,6 +5,8 @@ pub mod bench;
 #[cfg(feature = "exp")]
 pub mod machine;
 #[cfg(feature = "exp")]
+pub mod progress;
+#[cfg(feature = "exp")]
 pub mod testbed;
 #[cfg(feature = "exp")]
 pub mod util;
@@ -15,6 +17,7 @@ pub mod config;
 #[cfg(feature = "exp")]
 pub use bench::ExperimentTimeouts;
 pub use config::{ExperimentConfig, ProcessType};
+pub use progress::TracingProgressBar;
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
