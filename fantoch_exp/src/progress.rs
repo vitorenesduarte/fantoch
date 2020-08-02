@@ -5,11 +5,11 @@ pub struct TracingProgressBar {
 
 impl TracingProgressBar {
     pub fn init(len: u64) -> Self {
+        // create progress bar style
         let style = indicatif::ProgressStyle::default_bar().template(
             "[{elapsed_precise}] {wide_bar:.green} {pos:>2}/{len:2} (ETA {eta})",
         );
-        // .progress_chars("#>-");
-        // .progress_chars("#>-");
+        // create progress bar and set its style
         let progress = indicatif::ProgressBar::new(len);
         progress.set_style(style);
         let progress = Self { progress };
