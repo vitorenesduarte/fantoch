@@ -3,10 +3,10 @@ use color_eyre::Report;
 use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
+use fantoch_exp::bench::ExperimentTimeouts;
 use fantoch_exp::machine::Machines;
-use fantoch_exp::{
-    ExperimentTimeouts, FantochFeature, Protocol, RunMode, Testbed,
-};
+use fantoch_exp::progress::TracingProgressBar;
+use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
 use std::time::Duration;
 use tsunami::providers::aws::LaunchMode;
@@ -197,7 +197,7 @@ async fn main() -> Result<(), Report> {
     // let planet = None; // if delay is not to be injected
 
     // init logging
-    let progress = fantoch_exp::TracingProgressBar::init(
+    let progress = TracingProgressBar::init(
         (workloads.len() * clients_per_region.len() * configs.len()) as u64,
     );
 
@@ -245,7 +245,7 @@ async fn local_bench(
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: fantoch_exp::TracingProgressBar,
+    progress: TracingProgressBar,
 ) -> Result<(), Report>
 where
 {
@@ -286,7 +286,7 @@ async fn baremetal_bench(
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: fantoch_exp::TracingProgressBar,
+    progress: TracingProgressBar,
 ) -> Result<(), Report>
 where
 {
@@ -333,7 +333,7 @@ async fn aws_bench(
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: fantoch_exp::TracingProgressBar,
+    progress: TracingProgressBar,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     let res = do_aws_bench(
@@ -369,7 +369,7 @@ async fn do_aws_bench(
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: fantoch_exp::TracingProgressBar,
+    progress: TracingProgressBar,
 ) -> Result<(), Report> {
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
@@ -415,7 +415,7 @@ async fn run_bench(
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: fantoch_exp::TracingProgressBar,
+    progress: TracingProgressBar,
 ) -> Result<(), Report> {
     fantoch_exp::bench::bench_experiment(
         machines,
