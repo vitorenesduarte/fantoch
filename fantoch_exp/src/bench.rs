@@ -12,6 +12,7 @@ use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
 use std::collections::HashMap;
 use std::path::Path;
+use tokio::time::Duration;
 
 type Ips = HashMap<ProcessId, String>;
 
@@ -19,6 +20,23 @@ const LOG_FILE_EXT: &str = "log";
 const DSTAT_FILE_EXT: &str = "dstat.csv";
 const METRICS_FILE_EXT: &str = "metrics";
 pub(crate) const FLAMEGRAPH_FILE_EXT: &str = "flamegraph.svg";
+
+#[derive(Clone, Copy)]
+pub struct ExperimentTimeouts {
+    pub start: Option<Duration>,
+    pub run: Option<Duration>,
+    pub stop: Option<Duration>,
+}
+
+#[derive(Debug)]
+struct TimeoutError(&'static str);
+
+impl std::fmt::Display for TimeoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl std::error::Error for TimeoutError {}
 
 pub async fn bench_experiment(
     machines: Machines<'_>,
@@ -32,6 +50,7 @@ pub async fn bench_experiment(
     workloads: Vec<Workload>,
     cpus: Option<usize>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
+    experiment_timeouts: ExperimentTimeouts,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     if tracer_show_interval.is_some() {
@@ -59,21 +78,52 @@ pub async fn bench_experiment(
                 if skip(protocol, config, clients) {
                     continue;
                 }
-                run_experiment(
-                    &machines,
-                    run_mode,
-                    features.clone(),
-                    testbed,
-                    &planet,
-                    protocol,
-                    config,
-                    tracer_show_interval,
-                    clients,
-                    workload,
-                    cpus,
-                    &results_dir,
-                )
-                .await?;
+                loop {
+                    let exp_dir = create_exp_dir(&results_dir)
+                        .await
+                        .wrap_err("create_exp_dir")?;
+                    tracing::info!(
+                        "experiment metrics will be saved in {}",
+                        exp_dir
+                    );
+                    let run = run_experiment(
+                        &machines,
+                        run_mode,
+                        features.clone(),
+                        testbed,
+                        &planet,
+                        protocol,
+                        config,
+                        tracer_show_interval,
+                        clients,
+                        workload,
+                        cpus,
+                        experiment_timeouts,
+                        &exp_dir,
+                    );
+                    if let Err(e) = run.await {
+                        // check if it's a timeout error
+                        match e.downcast_ref::<TimeoutError>() {
+                            Some(TimeoutError(source)) => {
+                                // if it's a timeout error, cleanup and restart
+                                // the experiment
+                                tracing::warn!("timeout in {:?}; will cleanup and try again", source);
+                                tokio::fs::remove_dir_all(exp_dir)
+                                    .await
+                                    .wrap_err("remove exp dir")?;
+                                cleanup(&machines, vec![protocol]).await?;
+                            }
+                            None => {
+                                // if not, quit
+                                return Err(e);
+                            }
+                        }
+                    } else {
+                        // if there's no error, then exit the loop and run the
+                        // next experiment (if any)
+                        break;
+                    }
+                }
             }
         }
     }
@@ -92,13 +142,14 @@ async fn run_experiment(
     clients_per_region: usize,
     workload: Workload,
     cpus: Option<usize>,
-    results_dir: impl AsRef<Path>,
+    experiment_timeouts: ExperimentTimeouts,
+    exp_dir: &str,
 ) -> Result<(), Report> {
     // holder of dstat processes to be launched in all machines
     let mut dstats = Vec::with_capacity(machines.vm_count());
 
     // start processes
-    let (process_ips, processes) = start_processes(
+    let start = start_processes(
         machines,
         run_mode,
         testbed,
@@ -108,21 +159,45 @@ async fn run_experiment(
         tracer_show_interval,
         cpus,
         &mut dstats,
-    )
-    .await
-    .wrap_err("start_processes")?;
+    );
+    // check if a start timeout was set
+    let start_result = if let Some(timeout) = experiment_timeouts.start {
+        // if yes, abort experiment if timeout triggers
+        tokio::select! {
+            result = start => result,
+            _ = tokio::time::delay_for(timeout) => {
+                return Err(Report::new(TimeoutError("start processes")));
+            }
+        }
+    } else {
+        // if no, simply wait for start to finish
+        start.await
+    };
+    let (process_ips, processes) = start_result.wrap_err("start_processes")?;
 
     // run clients
-    run_clients(
+    let run_clients = run_clients(
         clients_per_region,
         workload,
         cpus,
         machines,
         process_ips,
         &mut dstats,
-    )
-    .await
-    .wrap_err("run_clients")?;
+    );
+    // check if a run timeout was set
+    let run_clients_result = if let Some(timeout) = experiment_timeouts.run {
+        // if yes, abort experiment if timeout triggers
+        tokio::select! {
+            result = run_clients => result,
+            _ = tokio::time::delay_for(timeout) => {
+                return Err(Report::new(TimeoutError("run clients")));
+            }
+        }
+    } else {
+        // if not, simply wait for run to finish
+        run_clients.await
+    };
+    run_clients_result.wrap_err("run_clients")?;
 
     // stop dstat
     stop_dstats(machines, dstats).await.wrap_err("stop_dstat")?;
@@ -139,17 +214,34 @@ async fn run_experiment(
         clients_per_region,
         workload,
     );
-    let exp_dir = pull_metrics(machines, exp_config, results_dir)
-        .await
-        .wrap_err("pull_metrics")?;
 
-    // stop processes: should only be stopped after copying all the metrics to
-    // avoid unnecessary noise in the logs
-    stop_processes(machines, run_mode, protocol, exp_dir, processes)
-        .await
-        .wrap_err("stop_processes")?;
+    let pull_metrics_and_stop = async {
+        pull_metrics(machines, exp_config, &exp_dir)
+            .await
+            .wrap_err("pull_metrics")?;
 
-    Ok(())
+        // stop processes: should only be stopped after copying all the metrics
+        // to avoid unnecessary noise in the logs
+        stop_processes(machines, run_mode, protocol, &exp_dir, processes)
+            .await
+            .wrap_err("stop_processes")?;
+
+        Ok(())
+    };
+
+    // check if a stop was set
+    if let Some(timeout) = experiment_timeouts.stop {
+        // if yes, abort experiment if timeout triggers
+        tokio::select! {
+            result = pull_metrics_and_stop => result,
+            _ = tokio::time::delay_for(timeout) => {
+                return Err(Report::new(TimeoutError("pull metrics and stop processes")));
+            }
+        }
+    } else {
+        // if not, simply wait for stop to finish
+        pull_metrics_and_stop.await
+    }
 }
 
 async fn start_processes(
@@ -363,7 +455,7 @@ async fn stop_processes(
     machines: &Machines<'_>,
     run_mode: RunMode,
     protocol: Protocol,
-    exp_dir: String,
+    exp_dir: &str,
     processes: HashMap<ProcessId, (Region, tokio::process::Child)>,
 ) -> Result<(), Report> {
     let mut wait_processes = Vec::with_capacity(machines.server_count());
@@ -410,39 +502,10 @@ async fn stop_processes(
             );
         }
 
-        // find process pid in remote vm
-        // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
-        let command = format!(
-            "lsof -i :{} -i :{} -sTCP:LISTEN | grep -v PID",
-            config::port(process_id),
-            config::client_port(process_id)
-        );
-        let output = vm.exec(command).await.wrap_err("lsof | grep")?;
-        let mut pids: Vec<_> = output
-            .lines()
-            // take the second column (which contains the PID)
-            .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
-            .collect();
-        pids.sort();
-        pids.dedup();
-
-        // there should be at most one pid
-        match pids.len() {
-            0 => {
-                tracing::warn!(
-                    "process {} already not running in region {:?}",
-                    process_id,
-                    region
-                );
-            }
-            1 => {
-                // kill all
-                let command = format!("kill {}", pids.join(" "));
-                let output = vm.exec(command).await.wrap_err("kill")?;
-                tracing::debug!("{}", output);
-            }
-            n => panic!("there should be at most one pid and found {}", n),
-        }
+        // stop process
+        stop_process(vm, process_id, &region)
+            .await
+            .wrap_err("stop_process")?;
 
         wait_processes.push(wait_process_ended(
             protocol,
@@ -458,6 +521,47 @@ async fn stop_processes(
     // wait all processse started
     for result in futures::future::join_all(wait_processes).await {
         let () = result?;
+    }
+    Ok(())
+}
+
+async fn stop_process(
+    vm: &Machine<'_>,
+    process_id: ProcessId,
+    region: &Region,
+) -> Result<(), Report> {
+    // find process pid in remote vm
+    // TODO: this should equivalent to `pkill PROTOCOL_BINARY`
+    let command = format!(
+        "lsof -i :{} -i :{} -sTCP:LISTEN | grep -v PID",
+        config::port(process_id),
+        config::client_port(process_id)
+    );
+    let output = vm.exec(command).await.wrap_err("lsof | grep")?;
+    let mut pids: Vec<_> = output
+        .lines()
+        // take the second column (which contains the PID)
+        .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
+        .collect();
+    pids.sort();
+    pids.dedup();
+
+    // there should be at most one pid
+    match pids.len() {
+        0 => {
+            tracing::warn!(
+                "process {} already not running in region {:?}",
+                process_id,
+                region
+            );
+        }
+        1 => {
+            // kill all
+            let command = format!("kill {}", pids.join(" "));
+            let output = vm.exec(command).await.wrap_err("kill")?;
+            tracing::debug!("{}", output);
+        }
+        n => panic!("there should be at most one pid and found {}", n),
     }
     Ok(())
 }
@@ -504,7 +608,7 @@ async fn wait_process_ended(
     while count != 0 {
         tokio::time::delay_for(duration).await;
         let command = format!(
-            "lsof -i :{} -i :{} | wc -l",
+            "lsof -i :{} -i :{} -sTCP:LISTEN | wc -l",
             config::port(process_id),
             config::client_port(process_id)
         );
@@ -544,7 +648,7 @@ async fn wait_process_ended(
                     tracing::warn!("empty output from: {}", command);
                 } else {
                     count =
-                        stdout.parse::<usize>().wrap_err("lsof | wc parse")?;
+                        stdout.parse::<usize>().wrap_err("ps | wc parse")?;
                 }
             }
 
@@ -634,43 +738,50 @@ async fn stop_dstats(
         }
     }
 
+    // stop dstats in parallel
+    let mut stops = Vec::new();
     for vm in machines.vms() {
-        // find dstat pid in remote vm
-        let command = "ps -aux | grep dstat | grep -v grep";
-        let output = vm.exec(command).await.wrap_err("ps")?;
-        let mut pids: Vec<_> = output
-            .lines()
-            // take the second column (which contains the PID)
-            .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
-            .collect();
-        pids.sort();
-        pids.dedup();
+        stops.push(stop_dstat(vm));
+    }
+    for result in futures::future::join_all(stops).await {
+        let _ = result.wrap_err("stop_dstat")?;
+    }
+    Ok(())
+}
 
-        // there should be at most one pid
-        match pids.len() {
-            0 => {
-                tracing::warn!("dstat already not running");
+async fn stop_dstat(vm: &Machine<'_>) -> Result<(), Report> {
+    // find dstat pid in remote vm
+    let command = "ps -aux | grep dstat | grep -v grep";
+    let output = vm.exec(command).await.wrap_err("ps")?;
+    let mut pids: Vec<_> = output
+        .lines()
+        // take the second column (which contains the PID)
+        .map(|line| line.split_whitespace().collect::<Vec<_>>()[1])
+        .collect();
+    pids.sort();
+    pids.dedup();
+
+    // there should be at most one pid
+    match pids.len() {
+        0 => {
+            tracing::warn!("dstat already not running");
+        }
+        n => {
+            if n > 2 {
+                // there should be `bash -c dstat` and a `python2
+                // /usr/bin/dstat`; if more than these two, then there's
+                // more than one dstat running
+                tracing::warn!(
+                    "found more than one dstat. killing all of them"
+                );
             }
-            n => {
-                if n > 2 {
-                    // there should be `bash -c dstat` and a `python2
-                    // /usr/bin/dstat`; if more than these two, then there's
-                    // more than one dstat running
-                    tracing::warn!(
-                        "found more than one dstat. killing all of them"
-                    );
-                }
-                // kill dstat
-                let command = format!("kill {}", pids.join(" "));
-                let output = vm.exec(command).await.wrap_err("kill")?;
-                tracing::debug!("{}", output);
-            }
+            // kill dstat
+            let command = format!("kill {}", pids.join(" "));
+            let output = vm.exec(command).await.wrap_err("kill")?;
+            tracing::debug!("{}", output);
         }
     }
-
-    for vm in machines.vms() {
-        check_no_dstat(vm).await.wrap_err("check_no_dstat")?;
-    }
+    check_no_dstat(vm).await.wrap_err("check_no_dstat")?;
     Ok(())
 }
 
@@ -696,13 +807,15 @@ async fn check_no_dstat(vm: &Machine<'_>) -> Result<(), Report> {
 async fn pull_metrics(
     machines: &Machines<'_>,
     exp_config: ExperimentConfig,
-    results_dir: impl AsRef<Path>,
-) -> Result<String, Report> {
-    // save experiment config, making sure experiment directory exists
-    let exp_dir = save_exp_config(exp_config, results_dir)
-        .await
-        .wrap_err("save_exp_config")?;
-    tracing::info!("experiment metrics will be saved in {}", exp_dir);
+    exp_dir: &str,
+) -> Result<(), Report> {
+    // save experiment config
+    crate::serialize(
+        exp_config,
+        format!("{}/exp_config.json", exp_dir),
+        SerializationFormat::Json,
+    )
+    .wrap_err("save_exp_config")?;
 
     let mut pulls = Vec::with_capacity(machines.vm_count());
     // prepare server metrics pull
@@ -725,11 +838,10 @@ async fn pull_metrics(
         let _ = result.wrap_err("pull_metrics")?;
     }
 
-    Ok(exp_dir)
+    Ok(())
 }
 
-async fn save_exp_config(
-    exp_config: ExperimentConfig,
+async fn create_exp_dir(
     results_dir: impl AsRef<Path>,
 ) -> Result<String, Report> {
     let timestamp = exp_timestamp();
@@ -737,13 +849,6 @@ async fn save_exp_config(
     tokio::fs::create_dir_all(&exp_dir)
         .await
         .wrap_err("create_dir_all")?;
-
-    // save config file
-    crate::serialize(
-        exp_config,
-        format!("{}/exp_config.json", exp_dir),
-        SerializationFormat::Json,
-    )?;
     Ok(exp_dir)
 }
 
@@ -855,5 +960,64 @@ async fn pull_heaptrack_file(
     // remove heaptrack file
     let command = format!("rm {}", heaptrack);
     vm.exec(command).await.wrap_err("remove heaptrack file")?;
+    Ok(())
+}
+
+pub async fn cleanup(
+    machines: &Machines<'_>,
+    protocols: Vec<Protocol>,
+) -> Result<(), Report> {
+    // stop dstats in all machines
+    stop_dstats(machines, Vec::new())
+        .await
+        .wrap_err("stop_dstat")?;
+
+    // do the rest of the cleanup
+    let mut cleanups = Vec::new();
+    for protocol in protocols {
+        for (_, vm) in machines.servers() {
+            cleanups.push(cleanup_machine(vm, protocol.binary()));
+        }
+    }
+    for (_, vm) in machines.clients() {
+        cleanups.push(cleanup_machine(vm, "client"));
+    }
+
+    // cleanup all machines in parallel
+    for result in futures::future::join_all(cleanups).await {
+        let _ = result.wrap_err("cleanup")?;
+    }
+    Ok(())
+}
+
+async fn cleanup_machine(
+    vm: &Machine<'_>,
+    binary: &'static str,
+) -> Result<(), Report> {
+    // kill the binary
+    let command = format!("pkill {}", binary);
+    vm.exec(command).await.wrap_err("pkill binary")?;
+
+    // wait for binary to end
+    let mut count = 1;
+    while count != 0 {
+        let command = format!(
+            "ps -aux | grep fantoch/target/release/{} | grep -v grep | wc -l",
+            binary
+        );
+        let stdout = vm.exec(&command).await.wrap_err("ps -aux | wc")?;
+        if stdout.is_empty() {
+            tracing::warn!("empty output from: {}", command);
+        } else {
+            count = stdout.parse::<usize>().wrap_err("ps -aux | wc parse")?;
+        }
+    }
+
+    // remove files
+    let command = format!(
+        "rm -f *.{} *.{} *.{} *.{} heaptrack.*.gz",
+        LOG_FILE_EXT, DSTAT_FILE_EXT, METRICS_FILE_EXT, FLAMEGRAPH_FILE_EXT
+    );
+    vm.exec(command).await.wrap_err("rm files")?;
     Ok(())
 }

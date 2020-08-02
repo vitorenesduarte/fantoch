@@ -4,14 +4,26 @@ use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::machine::Machines;
-use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
+use fantoch_exp::{
+    ExperimentTimeouts, FantochFeature, Protocol, RunMode, Testbed,
+};
 use rusoto_core::Region;
 use std::time::Duration;
 use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../heaptrack";
+const RESULTS_DIR: &str = "../cleanup";
+
+// timeouts
+const fn minutes(minutes: u64) -> Duration {
+    Duration::from_secs(3600 * minutes)
+}
+const EXPERIMENT_TIMEOUTS: ExperimentTimeouts = ExperimentTimeouts {
+    start: Some(minutes(20)),
+    run: Some(minutes(20)),
+    stop: Some(minutes(20)),
+};
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
@@ -34,11 +46,14 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "exp_timeouts";
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Release;
 // const FEATURES: &[FantochFeature] = &[];
 // const RUN_MODE: RunMode = RunMode::Heaptrack;
+
+// list of protocol binaries to cleanup before running the experiment
+const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[Protocol::NewtAtomic];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -134,18 +149,16 @@ async fn main() -> Result<(), Report> {
 
     let clients_per_region = vec![
         1024 * 4,
-        /*
-        1024 * 4,
         1024 * 8,
         1024 * 16,
-        1024 * 24,
+        // 1024 * 24,
         1024 * 32,
-        1024 * 36,
-        1024 * 40,
-        1024 * 48,
-        1024 * 56,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
         1024 * 64,
-        1024 * 96,
+        // 1024 * 96,
         1024 * 128,
         1024 * 160,
         1024 * 192,
@@ -153,10 +166,9 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
-        */
     ];
     let shards_per_command = 1;
-    let shard_count = 1;
+    let shard_count = 6;
     let keys_per_shard = 1;
     let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
@@ -187,7 +199,7 @@ async fn main() -> Result<(), Report> {
     let planet = Some(Planet::from("../latency_aws"));
     // let planet = None; // if delay is not to be injected
 
-    local_bench(
+    baremetal_bench(
         regions,
         shard_count,
         planet,
@@ -198,7 +210,7 @@ async fn main() -> Result<(), Report> {
     )
     .await
     /*
-    baremetal_bench(
+    local_bench(
         regions,
         shard_count,
         planet,
@@ -391,6 +403,20 @@ async fn run_bench(
     workloads: Vec<Workload>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
 ) -> Result<(), Report> {
+    match testbed {
+        Testbed::Local | Testbed::Baremetal => {
+            fantoch_exp::bench::cleanup(
+                &machines,
+                PROTOCOLS_TO_CLEANUP.to_vec(),
+            )
+            .await
+            .wrap_err("initial cleanup")?;
+            tracing::info!("initial cleanup completed");
+        }
+        Testbed::Aws => {
+            tracing::info!("nothing to cleanup on AWS");
+        }
+    }
     fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
@@ -403,6 +429,7 @@ async fn run_bench(
         workloads,
         CPUS,
         skip,
+        EXPERIMENT_TIMEOUTS,
         RESULTS_DIR,
     )
     .await

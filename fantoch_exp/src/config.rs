@@ -26,8 +26,8 @@ const MULTIPLEXING: usize = 32;
 const PROCESS_TCP_NODELAY: bool = true;
 // by default, each socket stream is buffered (with a buffer of size 8KBs),
 // which should greatly reduce the number of syscalls for small-sized messages
-const PROCESS_TCP_BUFFER_SIZE: usize = 8 * 1024;
-const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = None;
+const PROCESS_TCP_BUFFER_SIZE: usize = 5 * 1024 * 1024; // 5MB
+const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2);
 
 // if this value is 100, the run doesn't finish, which probably means there's a
 // deadlock somewhere with 1000 we can see that channels fill up sometimes with

@@ -12,6 +12,8 @@ pub mod util;
 pub mod config;
 
 // Re-exports.
+#[cfg(feature = "exp")]
+pub use bench::ExperimentTimeouts;
 pub use config::{ExperimentConfig, ProcessType};
 
 use color_eyre::eyre::WrapErr;
@@ -106,7 +108,7 @@ pub enum Protocol {
 }
 
 impl Protocol {
-    pub fn binary(&self) -> &str {
+    pub fn binary(&self) -> &'static str {
         match self {
             Protocol::AtlasLocked => "atlas_locked",
             Protocol::EPaxosLocked => "epaxos_locked",
