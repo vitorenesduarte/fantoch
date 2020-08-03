@@ -3,6 +3,7 @@ use crate::config::{
     RegionIndex,
 };
 use crate::machine::{Machine, Machines};
+use crate::progress::TracingProgressBar;
 use crate::{FantochFeature, Protocol, RunMode, SerializationFormat, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
@@ -51,10 +52,24 @@ pub async fn bench_experiment(
     cpus: Option<usize>,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     experiment_timeouts: ExperimentTimeouts,
+    protocols_to_cleanup: Vec<Protocol>,
+    progress: TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     if tracer_show_interval.is_some() {
         panic!("vitor: you should set the 'prof' feature for this to work!");
+    }
+
+    match testbed {
+        Testbed::Local | Testbed::Baremetal => {
+            cleanup(&machines, protocols_to_cleanup)
+                .await
+                .wrap_err("initial cleanup")?;
+            tracing::info!("initial cleanup completed");
+        }
+        Testbed::Aws => {
+            tracing::info!("nothing to cleanup on AWS");
+        }
     }
 
     for workload in workloads {
@@ -76,6 +91,7 @@ pub async fn bench_experiment(
 
                 // maybe skip configuration
                 if skip(protocol, config, clients) {
+                    progress.inc();
                     continue;
                 }
                 loop {
@@ -121,12 +137,14 @@ pub async fn bench_experiment(
                     } else {
                         // if there's no error, then exit the loop and run the
                         // next experiment (if any)
+                        progress.inc();
                         break;
                     }
                 }
             }
         }
     }
+    progress.finish();
     Ok(())
 }
 
