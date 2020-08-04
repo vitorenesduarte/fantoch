@@ -43,10 +43,10 @@ impl KeyClocks for LockedKeyClocks {
     /// Adds a command's `Dot` to the clock of each key touched by the command,
     /// returning the set of local conflicting commands including past in them
     /// in case there's a past.
-    fn add(
+    fn add_cmd(
         &mut self,
         dot: Dot,
-        cmd: &Option<Command>,
+        cmd: &Command,
         past: Option<VClock<ProcessId>>,
     ) -> VClock<ProcessId> {
         // we start with past in case there's one, or bottom otherwise
@@ -54,24 +54,32 @@ impl KeyClocks for LockedKeyClocks {
             Some(past) => past,
             None => super::bottom_clock(self.shard_id, self.n),
         };
+        self.do_add_cmd(dot, cmd, clock)
+    }
 
-        // check if we have a noop or not and compute conflicts accordingly
-        match cmd {
-            Some(cmd) => self.add_cmd(dot, cmd, clock),
-            None => self.add_noop(dot, clock),
-        }
+    fn add_noop(&mut self, dot: Dot) -> VClock<ProcessId> {
+        // start with an empty clock
+        let clock = super::bottom_clock(self.shard_id, self.n);
+        self.do_add_noop(dot, clock)
     }
 
     /// Checks the current `clock` for some command.
     #[cfg(test)]
-    fn clock(&self, cmd: &Option<Command>) -> VClock<ProcessId> {
+    fn cmd_clock(&self, cmd: &Command) -> VClock<ProcessId> {
         // always start from the noop clock:
         let mut clock = super::bottom_clock(self.shard_id, self.n);
         clock.join(&self.noop_clock.read());
-        match cmd {
-            Some(cmd) => self.cmd_clock(cmd, &mut clock),
-            None => self.noop_clock(&mut clock),
-        }
+        self.do_cmd_clock(cmd, &mut clock);
+        clock
+    }
+
+    /// Checks the current noop `clock`.
+    #[cfg(test)]
+    fn noop_clock(&self) -> VClock<ProcessId> {
+        // always start from the noop clock:
+        let mut clock = super::bottom_clock(self.shard_id, self.n);
+        clock.join(&self.noop_clock.read());
+        self.do_noop_clock(&mut clock);
         clock
     }
 
@@ -81,7 +89,7 @@ impl KeyClocks for LockedKeyClocks {
 }
 
 impl LockedKeyClocks {
-    fn add_cmd(
+    fn do_add_cmd(
         &self,
         dot: Dot,
         cmd: &Command,
@@ -110,7 +118,7 @@ impl LockedKeyClocks {
         clock
     }
 
-    fn add_noop(
+    fn do_add_noop(
         &self,
         dot: Dot,
         mut clock: VClock<ProcessId>,
@@ -130,12 +138,12 @@ impl LockedKeyClocks {
         drop(noop_clock);
 
         // compute the clock for this noop
-        self.noop_clock(&mut clock);
+        self.do_noop_clock(&mut clock);
 
         clock
     }
 
-    fn noop_clock(&self, clock: &mut VClock<ProcessId>) {
+    fn do_noop_clock(&self, clock: &mut VClock<ProcessId>) {
         // iterate through all keys, grab a read lock, and include their current
         // clock in the final `clock`
         self.clocks.iter().for_each(|entry| {
@@ -149,11 +157,11 @@ impl LockedKeyClocks {
     }
 
     #[cfg(test)]
-    // TODO this is similar to a loop in `add_cmd`; can we refactor? yes but the
+    // TODO this is similar to a loop in `do_add_cmd`; can we refactor? yes but the
     // code would be more complicated (e.g. we would grab a read or a write lock
     // depending on whether we're adding the command to the current clocks),
     // thus it's probably not worth it
-    fn cmd_clock(&self, cmd: &Command, clock: &mut VClock<ProcessId>) {
+    fn do_cmd_clock(&self, cmd: &Command, clock: &mut VClock<ProcessId>) {
         // iterate through all command keys, grab a readlock, and include their
         // current clock in the final `clock`
         cmd.keys(self.shard_id).for_each(|key| {
