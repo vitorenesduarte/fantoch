@@ -32,6 +32,9 @@ pub struct EPaxos<KC> {
     keys_clocks: KC,
     cmds: CommandsInfo<EPaxosInfo>,
     to_executor: Vec<ExecutionInfo>,
+    // commit notifications that arrived before the initial `MCollect` message
+    // (this may be possible even without network failures due to multiplexing)
+    buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
 }
 
 impl<KC: KeyClocks> Protocol for EPaxos<KC> {
@@ -67,6 +70,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
             fast_quorum_size,
         );
         let to_executor = Vec::new();
+        let buffered_commits = HashMap::new();
 
         // create `EPaxos`
         let protocol = Self {
@@ -74,6 +78,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
             keys_clocks,
             cmds,
             to_executor,
+            buffered_commits,
         };
 
         // create periodic events
@@ -199,9 +204,6 @@ impl<KC: KeyClocks> EPaxos<KC> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // wrap command
-        let cmd = Some(cmd);
-
         // compute its clock
         // - similarly to Atlas, here we don't save the command in
         //   `keys_clocks`; if we did, it would be declared as a dependency of
@@ -209,7 +211,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         //   prevents fast paths with f > 1; in fact we do, but since the
         //   coordinator does not recompute this value in the MCollect handler,
         //   it's effectively the same
-        let clock = self.keys_clocks.add(dot, &cmd, None);
+        let clock = self.keys_clocks.add_cmd(dot, &cmd, None);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
@@ -218,7 +220,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             clock,
             quorum: self.bp.fast_quorum(),
         };
-        let target = self.bp.fast_quorum();
+        let target = self.bp.all();
 
         // return `ToSend`
         vec![Action::ToSend {
@@ -227,15 +229,15 @@ impl<KC: KeyClocks> EPaxos<KC> {
         }]
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, _time))]
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        cmd: Option<Command>,
+        cmd: Command,
         quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
@@ -244,7 +246,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             cmd,
             remote_clock,
             from,
-            _time.millis()
+            time.millis()
         );
 
         // get cmd info
@@ -255,6 +257,25 @@ impl<KC: KeyClocks> EPaxos<KC> {
             return vec![];
         }
 
+        // check if part of fast quorum
+        if !quorum.contains(&self.bp.process_id) {
+            // if not:
+            // - simply save the payload and set status to `PAYLOAD`
+            // - if we received the `MCommit` before the `MCollect`, handle the
+            //   `MCommit` now
+
+            info.status = Status::PAYLOAD;
+            info.cmd = Some(cmd);
+
+            // check if there's a buffered commit notification; if yes, handle
+            // the commit again (since now we have the payload)
+            if let Some((from, value)) = self.buffered_commits.remove(&dot) {
+                return self.handle_mcommit(from, dot, value, time);
+            } else {
+                return vec![];
+            }
+        }
+
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
 
@@ -263,14 +284,15 @@ impl<KC: KeyClocks> EPaxos<KC> {
             remote_clock
         } else {
             // otherwise, compute clock with the remote clock as past
-            self.keys_clocks.add(dot, &cmd, Some(remote_clock))
+            self.keys_clocks.add_cmd(dot, &cmd, Some(remote_clock))
         };
 
         // update command info
         info.status = Status::COLLECT;
         info.quorum = quorum;
+        info.cmd = Some(cmd);
         // create and set consensus value
-        let value = ConsensusValue::with(cmd, clock.clone());
+        let value = ConsensusValue::with(false, clock.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
@@ -324,10 +346,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             let (final_clock, all_equal) = info.quorum_clocks.union();
 
             // create consensus value
-            // TODO can the following be more performant or at least more
-            // ergonomic?
-            let cmd = info.synod.value().cmd.clone();
-            let value = ConsensusValue::with(cmd, final_clock);
+            let value = ConsensusValue::with(false, final_clock);
 
             // fast path condition:
             // - all reported clocks if `max_clock` was reported by at least f
@@ -382,24 +401,38 @@ impl<KC: KeyClocks> EPaxos<KC> {
         // get cmd info
         let info = self.cmds.get(dot);
 
+        if info.status == Status::START {
+            // TODO we missed the `MCollect` message and should try to recover
+            // the payload:
+            // - save this notification just in case we've received the
+            //   `MCollect` and `MCommit` in opposite orders (due to
+            //   multiplexing)
+            self.buffered_commits.insert(dot, (from, value));
+            return vec![];
+        }
+
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             return vec![];
         }
 
+        // check it's not a noop
+        assert_eq!(
+            value.is_noop, false,
+            "handling noop's is not implemented yet"
+        );
+
+        // create execution info
+        let cmd = info.cmd.clone().expect("there should be a command payload");
+        let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
+        self.to_executor.push(execution_info);
+
         // update command info:
         info.status = Status::COMMIT;
 
         // handle commit in synod
-        let msg = SynodMessage::MChosen(value.clone());
+        let msg = SynodMessage::MChosen(value);
         assert!(info.synod.handle(from, msg).is_none());
-
-        // create execution info if not a noop
-        if let Some(cmd) = value.cmd {
-            // create execution info
-            let execution_info = ExecutionInfo::new(dot, cmd, value.clock);
-            self.to_executor.push(execution_info);
-        }
 
         if self.gc_running() {
             // notify self with the committed dot
@@ -596,24 +629,24 @@ impl<KC: KeyClocks> EPaxos<KC> {
     }
 }
 
-// consensus value is a pair where the first component is the command (noop if
-// `None`) and the second component its dependencies represented as a vector
-// clock.
+// consensus value is a pair where the first component is a flag indicating
+// whether this is a noop and the second component is the commands dependencies
+// represented as a vector clock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
-    cmd: Option<Command>,
+    is_noop: bool,
     clock: VClock<ProcessId>,
 }
 
 impl ConsensusValue {
     fn new(shard_id: ShardId, n: usize) -> Self {
-        let cmd = None;
+        let is_noop = false;
         let clock = VClock::with(util::process_ids(shard_id, n));
-        Self { cmd, clock }
+        Self { is_noop, clock }
     }
 
-    fn with(cmd: Option<Command>, clock: VClock<ProcessId>) -> Self {
-        Self { cmd, clock }
+    fn with(is_noop: bool, clock: VClock<ProcessId>) -> Self {
+        Self { is_noop, clock }
     }
 }
 
@@ -628,6 +661,8 @@ struct EPaxosInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
     synod: Synod<ConsensusValue>,
+    // `None` if not set yet
+    cmd: Option<Command>,
     // `quorum_clocks` is used by the coordinator to compute the threshold
     // clock when deciding whether to take the fast path
     quorum_clocks: QuorumClocks,
@@ -654,6 +689,7 @@ impl Info for EPaxosInfo {
             status: Status::START,
             quorum: HashSet::new(),
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
+            cmd: None,
             quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
         }
     }
@@ -664,7 +700,7 @@ impl Info for EPaxosInfo {
 pub enum Message {
     MCollect {
         dot: Dot,
-        cmd: Option<Command>, // it's never a noop though
+        cmd: Command,
         clock: VClock<ProcessId>,
         quorum: HashSet<ProcessId>,
     },
@@ -736,6 +772,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
+    PAYLOAD,
     COLLECT,
     COMMIT,
 }
@@ -881,10 +918,8 @@ mod tests {
         assert_eq!(actions.len(), 1);
         let mcollect = actions.pop().unwrap();
 
-        // check that the mcollect is being sent to 2 processes
-        let check_target = |target: &HashSet<ProcessId>| {
-            target.len() == 2 && target.contains(&1) && target.contains(&2)
-        };
+        // check that the mcollect is being sent to *all* processes
+        let check_target = |target: &HashSet<ProcessId>| target.len() == n;
         assert!(
             matches!(mcollect.clone(), Action::ToSend{target, ..} if check_target(&target))
         );

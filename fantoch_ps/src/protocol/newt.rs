@@ -361,7 +361,7 @@ impl<KC: KeyClocks> Newt<KC> {
         if !quorum.contains(&self.bp.process_id) {
             // if not:
             // - maybe initialize `self.key_clocks`
-            // - simply save the payload and set status to `PENDING`
+            // - simply save the payload and set status to `PAYLOAD`
             // - if we received the `MCommit` before the `MCollect`, handle the
             //   `MCommit` now
 
@@ -372,7 +372,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 self.key_clocks.init_clocks(&cmd);
             }
 
-            info.status = Status::PENDING;
+            info.status = Status::PAYLOAD;
             info.cmd = Some(cmd);
 
             // check if there's a buffered commit notification; if yes, handle
@@ -564,14 +564,7 @@ impl<KC: KeyClocks> Newt<KC> {
             return vec![];
         }
 
-        // update command info:
-        info.status = Status::COMMIT;
-
-        // handle commit in synod
-        let msg = SynodMessage::MChosen(clock);
-        assert!(info.synod.handle(from, msg).is_none());
-
-        // create execution info if not a noop
+        // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
         // create execution info
         let rifl = cmd.rifl();
@@ -584,6 +577,13 @@ impl<KC: KeyClocks> Newt<KC> {
                 ExecutionInfo::votes(dot, clock, rifl, key, op, key_votes)
             });
         self.to_executor.extend(execution_info);
+
+        // update command info:
+        info.status = Status::COMMIT;
+
+        // handle commit in synod
+        let msg = SynodMessage::MChosen(clock);
+        assert!(info.synod.handle(from, msg).is_none());
 
         // don't try to generate detached votes if configured with real time
         // (since it will be done in a periodic event)
@@ -1167,8 +1167,7 @@ struct NewtInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
     synod: Synod<u64>,
-    // `None` if not set yet (not like in `Atlas` where this `None` would be a
-    // `noOp` - there are no `noOp`'s in `Newt`)
+    // `None` if not set yet
     cmd: Option<Command>,
     // `votes` is used by the coordinator to aggregate `ProcessVotes` from fast
     // quorum members
@@ -1370,7 +1369,7 @@ impl PeriodicEventIndex for PeriodicEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
-    PENDING,
+    PAYLOAD,
     COLLECT,
     COMMIT,
 }
