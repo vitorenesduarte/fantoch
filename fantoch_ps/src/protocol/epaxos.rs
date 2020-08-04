@@ -416,9 +416,13 @@ impl<KC: KeyClocks> EPaxos<KC> {
             return vec![];
         }
 
+        // check it's not a noop
+        assert_eq!(
+            value.is_noop, false,
+            "handling noop's is not implemented yet"
+        );
+
         // create execution info
-        // TODO: when implementing recovery, check consensus value if this is a
-        // noop
         let cmd = info.cmd.clone().expect("there should be a command payload");
         let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
         self.to_executor.push(execution_info);
