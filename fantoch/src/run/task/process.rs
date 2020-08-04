@@ -10,6 +10,7 @@ use crate::run::task;
 use crate::run::ConnectionDelay;
 use crate::time::RunTime;
 use crate::HashMap;
+use color_eyre::Report;
 use rand::Rng;
 use std::fmt::Debug;
 use std::net::IpAddr;
@@ -31,10 +32,13 @@ pub async fn connect_to_all<A, P>(
     tcp_flush_interval: Option<usize>,
     channel_buffer_size: usize,
     multiplexing: usize,
-) -> RunResult<(
-    HashMap<ProcessId, (ShardId, IpAddr, Option<usize>)>,
-    HashMap<ProcessId, Vec<WriterSender<P>>>,
-)>
+) -> Result<
+    (
+        HashMap<ProcessId, (ShardId, IpAddr, Option<usize>)>,
+        HashMap<ProcessId, Vec<WriterSender<P>>>,
+    ),
+    Report,
+>
 where
     A: ToSocketAddrs + Debug,
     P: Protocol + 'static,

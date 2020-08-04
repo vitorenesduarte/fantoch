@@ -503,8 +503,9 @@ impl<KC: KeyClocks> Newt<KC> {
         //   is no longer a problem
         //
         // - TODO: it also seems that this (or the MCommit equivalent) must run
-        //   with real time, otherwise there's a huge tail; but that doesn't make
-        //   any sense; NOTE: this was probably before high-resolution real-time clocks
+        //   with real time, otherwise there's a huge tail; but that doesn't
+        //   make any sense; NOTE: this was probably before high-resolution
+        //   real-time clocks
         let cmd = info.cmd.as_ref().unwrap();
         if !message_from_self {
             self.key_clocks.vote(cmd, max_clock, &mut self.detached);

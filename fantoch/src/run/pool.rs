@@ -1,7 +1,7 @@
 use crate::log;
-use crate::run::prelude::*;
 use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
+use color_eyre::Report;
 use futures::stream::{FuturesUnordered, StreamExt};
 use std::fmt::Debug;
 
@@ -67,7 +67,7 @@ where
 
     /// Forwards message `msg` to the pool worker with id `msg.index() %
     /// pool_size`.
-    pub async fn forward(&mut self, msg: M) -> RunResult<()>
+    pub async fn forward(&mut self, msg: M) -> Result<(), Report>
     where
         M: PoolIndex,
     {
@@ -77,7 +77,11 @@ where
 
     /// Forwards message `map(value)` to the pool worker with id `value.index()
     /// % pool_size`.
-    pub async fn forward_map<V, F>(&mut self, value: V, map: F) -> RunResult<()>
+    pub async fn forward_map<V, F>(
+        &mut self,
+        value: V,
+        map: F,
+    ) -> Result<(), Report>
     where
         V: PoolIndex,
         F: FnOnce(V) -> M,
@@ -87,7 +91,7 @@ where
     }
 
     /// Forwards a message to the pool.
-    pub async fn broadcast(&mut self, msg: M) -> RunResult<()>
+    pub async fn broadcast(&mut self, msg: M) -> Result<(), Report>
     where
         M: Clone,
     {
@@ -130,7 +134,7 @@ where
         &mut self,
         index: Option<usize>,
         msg: M,
-    ) -> RunResult<()> {
+    ) -> Result<(), Report> {
         log!("index: {} {:?} of {}", self.name, index, self.pool_size());
         // send to the correct worker if an index was specified. otherwise, send
         // to all workers.

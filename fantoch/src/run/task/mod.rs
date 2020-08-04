@@ -32,9 +32,9 @@ pub mod metrics_logger;
 pub use chan::channel;
 
 use crate::log;
-use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use chan::{ChannelReceiver, ChannelSender};
+use color_eyre::Report;
 use std::fmt::Debug;
 use std::future::Future;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -132,7 +132,7 @@ pub async fn connect<A>(
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     connect_retries: usize,
-) -> RunResult<Connection>
+) -> Result<Connection, Report>
 where
     A: ToSocketAddrs + Clone + Debug,
 {
@@ -164,7 +164,7 @@ where
 }
 
 /// Listen on some address.
-pub async fn listen<A>(address: A) -> RunResult<TcpListener>
+pub async fn listen<A>(address: A) -> Result<TcpListener, Report>
 where
     A: ToSocketAddrs,
 {

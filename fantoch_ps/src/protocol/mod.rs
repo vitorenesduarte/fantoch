@@ -30,7 +30,7 @@ mod tests {
     use fantoch::id::ProcessId;
     use fantoch::planet::Planet;
     use fantoch::protocol::{Protocol, ProtocolMetricsKind};
-    use fantoch::run::tests::run_test_with_inspect_fun;
+    use fantoch::run::tests::{run_test_with_inspect_fun, tokio_test_runtime};
     use fantoch::sim::Runner;
     use fantoch::HashMap;
     use std::time::Duration;
@@ -142,8 +142,8 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_3_1_sequential_test() {
+    #[test]
+    fn run_newt_3_1_sequential_test() {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 4;
@@ -155,13 +155,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_3_1_atomic_test() {
+    #[test]
+    fn run_newt_3_1_atomic_test() {
         // newt atomic can handle as many workers as we want but we may want to
         // only have one executor
         let workers = 4;
@@ -174,13 +173,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_3_1_locked_test() {
+    #[test]
+    fn run_newt_3_1_locked_test() {
         // newt locked can handle as many workers as we want but we may want to
         // only have one executor
         let workers = 4;
@@ -193,13 +191,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_real_time_newt_3_1_atomic_test() {
+    #[test]
+    fn run_real_time_newt_3_1_atomic_test() {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
@@ -212,13 +209,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             commands_per_client,
             clients_per_process,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_real_time_newt_3_1_locked_test() {
+    #[test]
+    fn run_real_time_newt_3_1_locked_test() {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
@@ -231,13 +227,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             commands_per_client,
             clients_per_process,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_5_1_sequential_test() {
+    #[test]
+    fn run_newt_5_1_sequential_test() {
         // newt sequential can only handle one worker but many executors
         let workers = 1;
         let executors = 4;
@@ -249,13 +244,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_5_1_atomic_test() {
+    #[test]
+    fn run_newt_5_1_atomic_test() {
         // newt atomic can handle as many workers as we want but we may want to
         // only have one executor
         let workers = 4;
@@ -268,13 +262,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_5_1_locked_test() {
+    #[test]
+    fn run_newt_5_1_locked_test() {
         // newt locked can handle as many workers as we want but we may want to
         // only have one executor
         let workers = 4;
@@ -287,13 +280,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_real_time_newt_5_1_atomic_test() {
+    #[test]
+    fn run_real_time_newt_5_1_atomic_test() {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
@@ -306,13 +298,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             commands_per_client,
             clients_per_process,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_real_time_newt_5_1_locked_test() {
+    #[test]
+    fn run_real_time_newt_5_1_locked_test() {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
@@ -325,15 +316,13 @@ mod tests {
             SHARDS_PER_COMMAND,
             commands_per_client,
             clients_per_process,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
     // ---- newt (partial replication) tests ---- //
-    #[tokio::test]
-    async fn run_newt_3_1_atomic_partial_replication_one_shard_per_command_test(
-    ) {
+    #[test]
+    fn run_newt_3_1_atomic_partial_replication_one_shard_per_command_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
@@ -345,14 +334,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_3_1_atomic_partial_replication_two_shards_per_command_test(
-    ) {
+    #[test]
+    fn run_newt_3_1_atomic_partial_replication_two_shards_per_command_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
@@ -366,14 +353,12 @@ mod tests {
             shards_per_command,
             commands_per_client,
             clients_per_process,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_newt_5_2_atomic_partial_replication_two_shards_per_command_test(
-    ) {
+    #[test]
+    fn run_newt_5_2_atomic_partial_replication_two_shards_per_command_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
@@ -387,8 +372,7 @@ mod tests {
             shards_per_command,
             commands_per_client,
             clients_per_process,
-        )
-        .await;
+        );
         assert!(slow_paths > 0);
     }
 
@@ -423,8 +407,8 @@ mod tests {
         assert!(slow_paths > 0);
     }
 
-    #[tokio::test]
-    async fn run_atlas_3_1_sequential_test() {
+    #[test]
+    fn run_atlas_3_1_sequential_test() {
         // atlas sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
@@ -436,13 +420,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_atlas_3_1_locked_test() {
+    #[test]
+    fn run_atlas_3_1_locked_test() {
         // atlas locked can handle as many workers as we want but only one
         // executor
         let workers = 4;
@@ -455,18 +438,16 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
     // ---- atlas (partial replication) tests ---- //
-    #[tokio::test]
-    async fn run_atlas_3_1_atomic_partial_replication_one_shard_per_command_test(
-    ) {
+    #[test]
+    fn run_atlas_3_1_atomic_partial_replication_one_shard_per_command_test() {
         let shard_count = 2;
         let workers = 2;
-        let executors = 2;
+        let executors = 1;
         let slow_paths = run_test::<AtlasLocked>(
             newt_config!(3, 1),
             shard_count,
@@ -475,8 +456,7 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
@@ -501,8 +481,8 @@ mod tests {
         assert!(slow_paths > 0);
     }
 
-    #[tokio::test]
-    async fn run_epaxos_3_1_sequential_test() {
+    #[test]
+    fn run_epaxos_3_1_sequential_test() {
         // epaxos sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
@@ -514,13 +494,12 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
-    #[tokio::test]
-    async fn run_epaxos_locked_test() {
+    #[test]
+    fn run_epaxos_locked_test() {
         // epaxos locked can handle as many workers as we want but only one
         // executor
         let workers = 4;
@@ -533,8 +512,7 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
         assert_eq!(slow_paths, 0);
     }
 
@@ -559,8 +537,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn run_fpaxos_3_1_sequential_test() {
+    #[test]
+    fn run_fpaxos_3_1_sequential_test() {
         let leader = 1;
         // run fpaxos in sequential mode
         let workers = 1;
@@ -573,12 +551,11 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
     }
 
-    #[tokio::test]
-    async fn run_fpaxos_3_1_parallel_test() {
+    #[test]
+    fn run_fpaxos_3_1_parallel_test() {
         let leader = 1;
         // run fpaxos in paralel mode (in terms of workers, since execution is
         // never parallel)
@@ -592,8 +569,7 @@ mod tests {
             SHARDS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
-        )
-        .await;
+        );
     }
 
     #[allow(dead_code)]
@@ -619,7 +595,7 @@ mod tests {
         (fast_paths, slow_paths, stable_count)
     }
 
-    async fn run_test<P>(
+    fn run_test<P>(
         mut config: Config,
         shard_count: usize,
         workers: usize,
@@ -656,37 +632,37 @@ mod tests {
         // run until the clients end + another 10 seconds
         let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(10));
-        let metrics = run_test_with_inspect_fun::<P, (usize, usize, usize)>(
-            config,
-            workload,
-            clients_per_process,
-            workers,
-            executors,
-            tracer_show_interval,
-            Some(metrics_inspect),
-            extra_run_time,
-        )
-        .await
-        .expect("run should complete successfully")
-        .into_iter()
-        .map(|(process_id, process_metrics)| {
-            // aggregate worker metrics
-            let mut total_fast_paths = 0;
-            let mut total_slow_paths = 0;
-            let mut total_stable_count = 0;
-            process_metrics.into_iter().for_each(
-                |(fast_paths, slow_paths, stable_count)| {
-                    total_fast_paths += fast_paths;
-                    total_slow_paths += slow_paths;
-                    total_stable_count += stable_count;
-                },
-            );
-            (
-                process_id,
-                (total_fast_paths, total_slow_paths, total_stable_count),
-            )
-        })
-        .collect();
+        let metrics = tokio_test_runtime()
+            .block_on(run_test_with_inspect_fun::<P, (usize, usize, usize)>(
+                config,
+                workload,
+                clients_per_process,
+                workers,
+                executors,
+                tracer_show_interval,
+                Some(metrics_inspect),
+                extra_run_time,
+            ))
+            .expect("run should complete successfully")
+            .into_iter()
+            .map(|(process_id, process_metrics)| {
+                // aggregate worker metrics
+                let mut total_fast_paths = 0;
+                let mut total_slow_paths = 0;
+                let mut total_stable_count = 0;
+                process_metrics.into_iter().for_each(
+                    |(fast_paths, slow_paths, stable_count)| {
+                        total_fast_paths += fast_paths;
+                        total_slow_paths += slow_paths;
+                        total_stable_count += stable_count;
+                    },
+                );
+                (
+                    process_id,
+                    (total_fast_paths, total_slow_paths, total_stable_count),
+                )
+            })
+            .collect();
 
         check_metrics(
             config,
