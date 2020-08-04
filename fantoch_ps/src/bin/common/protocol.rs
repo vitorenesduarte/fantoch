@@ -1,10 +1,10 @@
 use clap::{App, Arg};
+use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::protocol::Protocol;
 #[cfg(any(feature = "jemalloc", feature = "prof"))]
 use jemallocator::Jemalloc;
-use std::error::Error;
 use std::net::IpAddr;
 use std::time::Duration;
 
@@ -63,7 +63,7 @@ type ProtocolArgs = (
 );
 
 #[allow(dead_code)]
-pub fn run<P>() -> Result<(), Box<dyn Error>>
+pub fn run<P>() -> Result<(), Report>
 where
     P: Protocol + Send + 'static,
 {

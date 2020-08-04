@@ -1,9 +1,9 @@
 mod common;
 
 use clap::{App, Arg};
+use color_eyre::Report;
 use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::id::ClientId;
-use std::error::Error;
 use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
@@ -25,7 +25,7 @@ type ClientArgs = (
     Option<usize>,
 );
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Report> {
     let (
         ids,
         addresses,
