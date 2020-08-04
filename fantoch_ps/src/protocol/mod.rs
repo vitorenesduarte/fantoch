@@ -13,6 +13,9 @@ mod newt;
 // This module contains the definition of `FPaxos`.
 mod fpaxos;
 
+// This module contains common functionality for partial replication.
+mod partial;
+
 // Re-exports.
 pub use atlas::{AtlasLocked, AtlasSequential};
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
@@ -447,6 +450,26 @@ mod tests {
         let slow_paths = run_test::<AtlasLocked>(
             config!(3, 1),
             SHARD_COUNT,
+            workers,
+            executors,
+            SHARDS_PER_COMMAND,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        )
+        .await;
+        assert_eq!(slow_paths, 0);
+    }
+
+    // ---- atlas (partial replication) tests ---- //
+    #[tokio::test]
+    async fn run_atlas_3_1_atomic_partial_replication_one_shard_per_command_test(
+    ) {
+        let shard_count = 2;
+        let workers = 2;
+        let executors = 2;
+        let slow_paths = run_test::<AtlasLocked>(
+            newt_config!(3, 1),
+            shard_count,
             workers,
             executors,
             SHARDS_PER_COMMAND,
