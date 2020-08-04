@@ -157,10 +157,10 @@ impl LockedKeyClocks {
     }
 
     #[cfg(test)]
-    // TODO this is similar to a loop in `do_add_cmd`; can we refactor? yes but the
-    // code would be more complicated (e.g. we would grab a read or a write lock
-    // depending on whether we're adding the command to the current clocks),
-    // thus it's probably not worth it
+    // TODO this is similar to a loop in `do_add_cmd`; can we refactor? yes but
+    // the code would be more complicated (e.g. we would grab a read or a
+    // write lock depending on whether we're adding the command to the
+    // current clocks), thus it's probably not worth it
     fn do_cmd_clock(&self, cmd: &Command, clock: &mut VClock<ProcessId>) {
         // iterate through all command keys, grab a readlock, and include their
         // current clock in the final `clock`

@@ -404,7 +404,8 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
 
         // create execution info
-        // TODO: when implementing recovery, check consensus value if this is a noop
+        // TODO: when implementing recovery, check consensus value if this is a
+        // noop
         let cmd = info.cmd.clone().expect("there should be a command payload");
         let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
         self.to_executor.push(execution_info);
@@ -611,7 +612,9 @@ impl<KC: KeyClocks> Atlas<KC> {
     }
 }
 
-// consensus value is a pair where the first component is a flag indicating whether this is a noop and the second component is the commands dependencies represented as a vector clock.
+// consensus value is a pair where the first component is a flag indicating
+// whether this is a noop and the second component is the commands dependencies
+// represented as a vector clock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     is_noop: bool,
