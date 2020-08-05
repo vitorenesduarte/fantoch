@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../save_allocs";
+const RESULTS_DIR: &str = "../partial_replication";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -30,27 +30,33 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let keys_per_shard = 1;
+    /*
     let zipf_key_count = 1_000_000;
     let zipf_coefficient = 1.0;
     let key_gen = KeyGen::Zipf {
         coefficient: zipf_coefficient,
         key_count: zipf_key_count,
     };
+    */
+    let key_gens = vec![
+        KeyGen::ConflictRate { conflict_rate: 1 },
+        KeyGen::ConflictRate { conflict_rate: 0 },
+    ];
     let payload_size = 0;
-    let protocols = vec![Protocol::NewtAtomic];
+    let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
 
     let shard_combinations = vec![
         // shards_per_command, shard_count
         (1, 1),
         (1, 2),
-        (2, 2),
         /*
+        (2, 2),
         (1, 3),
         (2, 3),
         (1, 4),
         (1, 5),
-        */
         (1, 6),
+        */
     ];
 
     // load results
@@ -82,50 +88,52 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 272,
     ];
 
-    // generate all-combo throughput-latency plot
-    for latency_metric in vec![
-        LatencyMetric::Average,
-        LatencyMetric::Percentile(0.99),
-        LatencyMetric::Percentile(0.999),
-    ] {
-        let path = format!(
-            "throughput_latency_n{}_zipf{}{}.pdf",
-            n,
-            zipf_coefficient,
-            latency_metric.to_file_suffix(),
-        );
-        // create searches
-        let searches = shard_combinations
-            .clone()
-            .into_iter()
-            .flat_map(|(shards_per_command, shard_count)| {
-                let shard_gen = ShardGen::Random { shard_count };
-                protocol_combinations(n, protocols.clone()).into_iter().map(
-                    move |(protocol, f)| {
-                        let mut search = Search::new(n, f, protocol);
-                        search
-                            .shards_per_command(shards_per_command)
-                            .shard_gen(shard_gen)
-                            .keys_per_shard(keys_per_shard)
-                            .key_gen(key_gen)
-                            .payload_size(payload_size);
-                        search
-                    },
-                )
-            })
-            .collect();
+    for key_gen in key_gens {
+        // generate all-combo throughput-latency plot
+        for latency_metric in vec![
+            LatencyMetric::Average,
+            LatencyMetric::Percentile(0.99),
+            LatencyMetric::Percentile(0.999),
+        ] {
+            let path = format!(
+                "throughput_latency_n{}_{}{}.pdf",
+                n,
+                key_gen,
+                latency_metric.to_file_suffix(),
+            );
+            // create searches
+            let searches = shard_combinations
+                .clone()
+                .into_iter()
+                .flat_map(|(shards_per_command, shard_count)| {
+                    let shard_gen = ShardGen::Random { shard_count };
+                    protocol_combinations(n, protocols.clone()).into_iter().map(
+                        move |(protocol, f)| {
+                            let mut search = Search::new(n, f, protocol);
+                            search
+                                .shards_per_command(shards_per_command)
+                                .shard_gen(shard_gen)
+                                .keys_per_shard(keys_per_shard)
+                                .key_gen(key_gen)
+                                .payload_size(payload_size);
+                            search
+                        },
+                    )
+                })
+                .collect();
 
-        let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
-            Some(Box::new(|search| {
+            let style_fun: Option<
+                Box<dyn Fn(&Search) -> HashMap<Style, String>>,
+            > = Some(Box::new(|search| {
                 // create styles
                 let mut styles = HashMap::new();
                 styles.insert((1, 1), ("#1abc9c", "s"));
                 styles.insert((1, 2), ("#218c74", "D"));
                 styles.insert((2, 2), ("#227093", "."));
-                // styles.insert((1, 3), ("#bdc3c7", "+"));
-                // styles.insert((2, 3), ("#34495e", "x"));
-                // styles.insert((1, 4), ("#ffa726", "v"));
-                // styles.insert((1, 5), ("#227093", "."));
+                styles.insert((1, 3), ("#bdc3c7", "+"));
+                styles.insert((2, 3), ("#34495e", "x"));
+                styles.insert((1, 4), ("#ffa726", "v"));
+                styles.insert((1, 5), ("#227093", "."));
                 styles.insert((1, 6), ("#34495e", "x"));
 
                 // get shards config of this search
@@ -155,50 +163,6 @@ fn partial_replication() -> Result<(), Report> {
                 style.insert(Style::Marker, marker.to_string());
                 style
             }));
-        fantoch_plot::throughput_latency_plot(
-            searches,
-            style_fun,
-            n,
-            clients_per_region.clone(),
-            latency_metric,
-            PLOT_DIR,
-            &path,
-            &db,
-        )?;
-    }
-
-    for (shards_per_command, shard_count) in shard_combinations {
-        let shard_gen = ShardGen::Random { shard_count };
-
-        // generate throughput-latency plot
-        for latency_metric in vec![
-            LatencyMetric::Average,
-            LatencyMetric::Percentile(0.99),
-            LatencyMetric::Percentile(0.999),
-        ] {
-            let path = format!(
-                "throughput_latency_n{}_ts{}_s{}_zipf{}{}.pdf",
-                n,
-                shard_count,
-                shards_per_command,
-                zipf_coefficient,
-                latency_metric.to_file_suffix(),
-            );
-            // create searches
-            let searches = protocol_combinations(n, protocols.clone())
-                .into_iter()
-                .map(|(protocol, f)| {
-                    let mut search = Search::new(n, f, protocol);
-                    search
-                        .shards_per_command(shards_per_command)
-                        .shard_gen(shard_gen)
-                        .keys_per_shard(keys_per_shard)
-                        .key_gen(key_gen)
-                        .payload_size(payload_size);
-                    search
-                })
-                .collect();
-            let style_fun = None;
             fantoch_plot::throughput_latency_plot(
                 searches,
                 style_fun,
@@ -211,112 +175,158 @@ fn partial_replication() -> Result<(), Report> {
             )?;
         }
 
-        // generate dstat, latency and cdf plots
-        for clients_per_region in clients_per_region.clone() {
-            println!(
-                "n = {} | ts = {} | s = {} | zipf = {} | c = {}",
-                n,
-                shard_count,
-                shards_per_command,
-                zipf_coefficient,
-                clients_per_region,
-            );
+        for (shards_per_command, shard_count) in shard_combinations.clone() {
+            let shard_gen = ShardGen::Random { shard_count };
 
-            // create searches
-            let searches: Vec<_> = protocol_combinations(n, protocols.clone())
-                .into_iter()
-                .map(move |(protocol, f)| {
-                    let mut search = Search::new(n, f, protocol);
-                    search
-                        .clients_per_region(clients_per_region)
-                        .shards_per_command(shards_per_command)
-                        .shard_gen(shard_gen)
-                        .keys_per_shard(keys_per_shard)
-                        .key_gen(key_gen)
-                        .payload_size(payload_size);
-                    search
-                })
-                .collect();
-
-            // generate dstat table
-            for dstat_type in dstat_combinations(shard_count, n) {
-                let path = format!(
-                    "dstat_n{}_ts{}_s{}_c{}_zipf{}_{}.pdf",
-                    n,
-                    shard_count,
-                    shards_per_command,
-                    clients_per_region,
-                    zipf_coefficient,
-                    dstat_type.name(),
-                );
-                fantoch_plot::dstat_table(
-                    searches.clone(),
-                    dstat_type,
-                    PLOT_DIR,
-                    &path,
-                    &db,
-                )?;
-            }
-
-            // generate latency plot
-            let mut shown = false;
-            for error_bar in vec![
-                ErrorBar::Without,
-                ErrorBar::With(0.99),
-                ErrorBar::With(0.999),
+            // generate throughput-latency plot
+            for latency_metric in vec![
+                LatencyMetric::Average,
+                LatencyMetric::Percentile(0.99),
+                LatencyMetric::Percentile(0.999),
             ] {
                 let path = format!(
-                    "latency_n{}_ts{}_s{}_zipf{}_c{}{}.pdf",
+                    "throughput_latency_n{}_ts{}_s{}_{}{}.pdf",
                     n,
                     shard_count,
                     shards_per_command,
-                    zipf_coefficient,
-                    clients_per_region,
-                    error_bar.to_file_suffix(),
+                    key_gen,
+                    latency_metric.to_file_suffix(),
                 );
+                // create searches
+                let searches = protocol_combinations(n, protocols.clone())
+                    .into_iter()
+                    .map(|(protocol, f)| {
+                        let mut search = Search::new(n, f, protocol);
+                        search
+                            .shards_per_command(shards_per_command)
+                            .shard_gen(shard_gen)
+                            .keys_per_shard(keys_per_shard)
+                            .key_gen(key_gen)
+                            .payload_size(payload_size);
+                        search
+                    })
+                    .collect();
                 let style_fun = None;
-                let results = fantoch_plot::latency_plot(
-                    searches.clone(),
+                fantoch_plot::throughput_latency_plot(
+                    searches,
                     style_fun,
                     n,
-                    error_bar,
+                    clients_per_region.clone(),
+                    latency_metric,
                     PLOT_DIR,
                     &path,
                     &db,
-                    fmt_exp_data,
                 )?;
-
-                if !shown {
-                    // only show results once
-                    for (search, histogram_fmt) in results {
-                        println!(
-                            "{:<7} f = {} | {}",
-                            PlotFmt::protocol_name(search.protocol),
-                            search.f,
-                            histogram_fmt,
-                        );
-                    }
-                    shown = true;
-                }
             }
 
-            // generate cdf plot
-            let path = format!(
-                "cdf_n{}_ts{}_s{}_zipf{}_c{}.pdf",
-                n,
-                shard_count,
-                shards_per_command,
-                zipf_coefficient,
-                clients_per_region
-            );
-            let style_fun = None;
-            fantoch_plot::cdf_plot(
-                searches.clone(),
-                style_fun,
-                PLOT_DIR,
-                &path,
-                &db,
-            )?;
+            // generate dstat, latency and cdf plots
+            for clients_per_region in clients_per_region.clone() {
+                println!(
+                    "n = {} | ts = {} | s = {} | {} | c = {}",
+                    n,
+                    shard_count,
+                    shards_per_command,
+                    key_gen,
+                    clients_per_region,
+                );
+
+                // create searches
+                let searches: Vec<_> =
+                    protocol_combinations(n, protocols.clone())
+                        .into_iter()
+                        .map(move |(protocol, f)| {
+                            let mut search = Search::new(n, f, protocol);
+                            search
+                                .clients_per_region(clients_per_region)
+                                .shards_per_command(shards_per_command)
+                                .shard_gen(shard_gen)
+                                .keys_per_shard(keys_per_shard)
+                                .key_gen(key_gen)
+                                .payload_size(payload_size);
+                            search
+                        })
+                        .collect();
+
+                // generate dstat table
+                for dstat_type in dstat_combinations(shard_count, n) {
+                    let path = format!(
+                        "dstat_n{}_ts{}_s{}_c{}_{}_{}.pdf",
+                        n,
+                        shard_count,
+                        shards_per_command,
+                        clients_per_region,
+                        key_gen,
+                        dstat_type.name(),
+                    );
+                    fantoch_plot::dstat_table(
+                        searches.clone(),
+                        dstat_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate latency plot
+                let mut shown = false;
+                for error_bar in vec![
+                    ErrorBar::Without,
+                    ErrorBar::With(0.99),
+                    ErrorBar::With(0.999),
+                ] {
+                    let path = format!(
+                        "latency_n{}_ts{}_s{}_{}_c{}{}.pdf",
+                        n,
+                        shard_count,
+                        shards_per_command,
+                        key_gen,
+                        clients_per_region,
+                        error_bar.to_file_suffix(),
+                    );
+                    let style_fun = None;
+                    let results = fantoch_plot::latency_plot(
+                        searches.clone(),
+                        style_fun,
+                        n,
+                        error_bar,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                        fmt_exp_data,
+                    )?;
+
+                    if !shown {
+                        // only show results once
+                        for (search, histogram_fmt) in results {
+                            println!(
+                                "{:<7} f = {} | {}",
+                                PlotFmt::protocol_name(search.protocol),
+                                search.f,
+                                histogram_fmt,
+                            );
+                        }
+                        shown = true;
+                    }
+                }
+
+                // generate cdf plot
+                let path = format!(
+                    "cdf_n{}_ts{}_s{}_{}_c{}.pdf",
+                    n,
+                    shard_count,
+                    shards_per_command,
+                    key_gen,
+                    clients_per_region
+                );
+                let style_fun = None;
+                fantoch_plot::cdf_plot(
+                    searches.clone(),
+                    style_fun,
+                    PLOT_DIR,
+                    &path,
+                    &db,
+                )?;
+            }
         }
     }
 
@@ -357,10 +367,10 @@ fn multi_key() -> Result<(), Report> {
                 LatencyMetric::Percentile(0.999),
             ] {
                 let path = format!(
-                    "throughput_latency_n{}_k{}_zipf{}{}.pdf",
+                    "throughput_latency_n{}_k{}_{}{}.pdf",
                     n,
                     keys_per_shard,
-                    zipf_coefficient,
+                    key_gen,
                     latency_metric.to_file_suffix(),
                 );
                 // create searches
@@ -391,8 +401,8 @@ fn multi_key() -> Result<(), Report> {
             // generate dstat, latency and cdf plots
             for clients_per_region in clients_per_region.clone() {
                 println!(
-                    "n = {} | k = {} | zipf = {} | c = {}",
-                    n, keys_per_shard, zipf_coefficient, clients_per_region,
+                    "n = {} | k = {} | {} | c = {}",
+                    n, keys_per_shard, key_gen, clients_per_region,
                 );
 
                 // create searches
@@ -413,11 +423,11 @@ fn multi_key() -> Result<(), Report> {
                 // generate dstat table
                 for dstat_type in dstat_combinations(shard_count, n) {
                     let path = format!(
-                        "dstat_n{}_k{}_c{}_zipf{}_{}.pdf",
+                        "dstat_n{}_k{}_c{}_{}_{}.pdf",
                         n,
                         keys_per_shard,
                         clients_per_region,
-                        zipf_coefficient,
+                        key_gen,
                         dstat_type.name(),
                     );
                     fantoch_plot::dstat_table(
@@ -437,10 +447,10 @@ fn multi_key() -> Result<(), Report> {
                     ErrorBar::With(0.999),
                 ] {
                     let path = format!(
-                        "latency_n{}_k{}_zipf{}_c{}{}.pdf",
+                        "latency_n{}_k{}_{}_c{}{}.pdf",
                         n,
                         keys_per_shard,
-                        zipf_coefficient,
+                        key_gen,
                         clients_per_region,
                         error_bar.to_file_suffix()
                     );
@@ -472,8 +482,8 @@ fn multi_key() -> Result<(), Report> {
 
                 // generate cdf plot
                 let path = format!(
-                    "cdf_n{}_k{}_zipf{}_c{}.pdf",
-                    n, keys_per_shard, zipf_coefficient, clients_per_region
+                    "cdf_n{}_k{}_{}_c{}.pdf",
+                    n, keys_per_shard, key_gen, clients_per_region
                 );
                 let style_fun = None;
                 fantoch_plot::cdf_plot(
@@ -487,8 +497,8 @@ fn multi_key() -> Result<(), Report> {
                 if n > 3 {
                     // generate cdf plot with subplots
                     let path = format!(
-                        "cdf_one_per_f_n{}_k{}_zipf{}_c{}.pdf",
-                        n, keys_per_shard, zipf_coefficient, clients_per_region,
+                        "cdf_one_per_f_n{}_k{}_{}_c{}.pdf",
+                        n, keys_per_shard, key_gen, clients_per_region,
                     );
                     let style_fun = None;
                     fantoch_plot::cdf_plot_per_f(

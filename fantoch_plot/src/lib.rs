@@ -178,13 +178,25 @@ pub fn latency_plot<R>(
         let mut exp_data = db.find(search)?;
         match exp_data.len() {
             0 => {
-                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(search.protocol), search.f);
+                eprintln!(
+                    "missing data for {} f = {}",
+                    PlotFmt::protocol_name(search.protocol),
+                    search.f
+                );
                 continue;
-            },
+            }
             1 => (),
-            _ => panic!("found more than 1 matching experiment for this search criteria"),
+            _ => {
+                let matches: Vec<_> = exp_data
+                    .into_iter()
+                    .map(|(timestamp, _)| {
+                        timestamp.path().display().to_string()
+                    })
+                    .collect();
+                panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+            }
         };
-        let exp_data = exp_data.pop().unwrap();
+        let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
         // compute y: avg latencies sorted by region name
         let mut err = Vec::new();
@@ -407,11 +419,15 @@ fn inner_cdf_plot(
             return Ok(());
         }
         1 => (),
-        _ => panic!(
-            "found more than 1 matching experiment for this search criteria"
-        ),
+        _ => {
+            let matches: Vec<_> = exp_data
+                .into_iter()
+                .map(|(timestamp, _)| timestamp.path().display().to_string())
+                .collect();
+            panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+        }
     };
-    let exp_data = exp_data.pop().unwrap();
+    let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
     // compute x: all values in the global histogram
     let x: Vec<_> = percentiles()
@@ -473,15 +489,27 @@ pub fn throughput_latency_plot(
             let mut exp_data = db.find(search)?;
             match exp_data.len() {
                 0 => {
-                    eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(search.protocol), search.f);
+                    eprintln!(
+                        "missing data for {} f = {}",
+                        PlotFmt::protocol_name(search.protocol),
+                        search.f
+                    );
                     avg_latency.push(0f64);
                     y.push(0f64);
                     continue;
-                },
+                }
                 1 => (),
-                _ => panic!("found more than 1 matching experiment for this search criteria"),
+                _ => {
+                    let matches: Vec<_> = exp_data
+                        .into_iter()
+                        .map(|(timestamp, _)| {
+                            timestamp.path().display().to_string()
+                        })
+                        .collect();
+                    panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+                }
             };
-            let exp_data = exp_data.pop().unwrap();
+            let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
             // get average latency
             let avg = exp_data.global_client_latency.mean().value();
@@ -572,13 +600,25 @@ pub fn dstat_table(
         let mut exp_data = db.find(search)?;
         match exp_data.len() {
             0 => {
-                eprintln!("missing data for {} f = {}", PlotFmt::protocol_name(search.protocol), search.f);
+                eprintln!(
+                    "missing data for {} f = {}",
+                    PlotFmt::protocol_name(search.protocol),
+                    search.f
+                );
                 continue;
-            },
+            }
             1 => (),
-            _ => panic!("found more than 1 matching experiment for this search criteria"),
+            _ => {
+                let matches: Vec<_> = exp_data
+                    .into_iter()
+                    .map(|(timestamp, _)| {
+                        timestamp.path().display().to_string()
+                    })
+                    .collect();
+                panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+            }
         };
-        let exp_data = exp_data.pop().unwrap();
+        let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
         // create row label
         let row_label = format!(

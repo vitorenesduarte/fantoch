@@ -40,6 +40,12 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2);
 const PROCESS_CHANNEL_BUFFER_SIZE: usize = 100_000_000;
 const CLIENT_CHANNEL_BUFFER_SIZE: usize = 10_000;
 
+// tokio config
+#[cfg(feature = "exp")]
+const PROCESS_STACK_SIZE: Option<usize> = Some(16 * 1024 * 1024); // 16MB
+#[cfg(feature = "exp")]
+const CLIENT_STACK_SIZE: Option<usize> = None; // default is 2MB
+
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
 #[cfg(feature = "exp")]
@@ -72,6 +78,7 @@ pub struct ProtocolConfig {
     tracer_show_interval: Option<usize>,
     ping_interval: Option<usize>,
     metrics_file: String,
+    stack_size: Option<usize>,
     cpus: Option<usize>,
 }
 
@@ -108,6 +115,7 @@ impl ProtocolConfig {
             tracer_show_interval: TRACER_SHOW_INTERVAL,
             ping_interval: PING_INTERVAL,
             metrics_file,
+            stack_size: PROCESS_STACK_SIZE,
             cpus,
         }
     }
@@ -205,6 +213,9 @@ impl ProtocolConfig {
             args.extend(args!["--ping_interval", interval]);
         }
         args.extend(args!["--metrics_file", self.metrics_file]);
+        if let Some(stack_size) = self.stack_size {
+            args.extend(args!["--stack_size", stack_size]);
+        }
         if let Some(cpus) = self.cpus {
             args.extend(args!["--cpus", cpus]);
         }
@@ -256,6 +267,7 @@ pub struct ClientConfig {
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     metrics_file: String,
+    stack_size: Option<usize>,
     cpus: Option<usize>,
 }
 
@@ -277,6 +289,7 @@ impl ClientConfig {
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
             metrics_file,
+            stack_size: CLIENT_STACK_SIZE,
             cpus,
         }
     }
@@ -321,6 +334,9 @@ impl ClientConfig {
             "--metrics_file",
             self.metrics_file,
         ];
+        if let Some(stack_size) = self.stack_size {
+            args.extend(args!["--stack_size", stack_size]);
+        }
         if let Some(cpus) = self.cpus {
             args.extend(args!["--cpus", cpus]);
         }

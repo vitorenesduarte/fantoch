@@ -72,9 +72,9 @@ pub async fn bench_experiment(
         }
     }
 
-    for workload in workloads {
-        for &clients in &clients_per_region {
-            for &(protocol, config) in &configs {
+    for &(protocol, config) in &configs {
+        for workload in &workloads {
+            for &clients in &clients_per_region {
                 // check that we have the correct number of server machines
                 assert_eq!(
                     machines.server_count(),
@@ -112,7 +112,7 @@ pub async fn bench_experiment(
                         config,
                         tracer_show_interval,
                         clients,
-                        workload,
+                        *workload,
                         cpus,
                         experiment_timeouts,
                         &exp_dir,
