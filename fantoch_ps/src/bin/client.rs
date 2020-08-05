@@ -22,6 +22,7 @@ type ClientArgs = (
     bool,
     usize,
     Option<String>,
+    usize,
     Option<usize>,
 );
 
@@ -34,10 +35,11 @@ fn main() -> Result<(), Report> {
         tcp_nodelay,
         channel_buffer_size,
         metrics_file,
+        stack_size,
         cpus,
     ) = parse_args();
 
-    common::tokio_runtime(cpus).block_on(fantoch::run::client(
+    common::tokio_runtime(stack_size, cpus).block_on(fantoch::run::client(
         ids,
         addresses,
         interval,
@@ -140,6 +142,13 @@ fn parse_args() -> ClientArgs {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("stack_size")
+                .long("stack_size")
+                .value_name("STACK_SIZE")
+                .help("stack size (in bytes) of each tokio thread; default: 2 * 1024 * 1024 (bytes)")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("cpus")
                 .long("cpus")
                 .value_name("CPUS")
@@ -166,6 +175,7 @@ fn parse_args() -> ClientArgs {
         matches.value_of("channel_buffer_size"),
     );
     let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
+    let stack_size = common::parse_stack_size(matches.value_of("stack_size"));
     let cpus = common::parse_cpus(matches.value_of("cpus"));
 
     println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
@@ -175,6 +185,7 @@ fn parse_args() -> ClientArgs {
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
     println!("metrics file: {:?}", metrics_file);
+    println!("stack size: {:?}", stack_size);
 
     (
         ids,
@@ -184,6 +195,7 @@ fn parse_args() -> ClientArgs {
         tcp_nodelay,
         channel_buffer_size,
         metrics_file,
+        stack_size,
         cpus,
     )
 }

@@ -59,6 +59,7 @@ type ProtocolArgs = (
     Option<usize>,
     Option<usize>,
     Option<String>,
+    usize,
     Option<usize>,
 );
 
@@ -88,6 +89,7 @@ where
         tracer_show_interval,
         ping_interval,
         metrics_file,
+        stack_size,
         cpus,
     ) = parse_args();
 
@@ -113,7 +115,7 @@ where
         ping_interval,
         metrics_file,
     );
-    super::tokio_runtime(cpus).block_on(process)
+    super::tokio_runtime(stack_size, cpus).block_on(process)
 }
 
 fn parse_args() -> ProtocolArgs {
@@ -342,6 +344,13 @@ fn parse_args() -> ProtocolArgs {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("stack_size")
+                .long("stack_size")
+                .value_name("STACK_SIZE")
+                .help("stack size (in bytes) of each tokio thread; default: 2 * 1024 * 1024 (bytes)")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("cpus")
                 .long("cpus")
                 .value_name("CPUS")
@@ -399,6 +408,7 @@ fn parse_args() -> ProtocolArgs {
         parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
     let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
     let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
+    let stack_size = super::parse_stack_size(matches.value_of("stack_size"));
     let cpus = super::parse_cpus(matches.value_of("cpus"));
 
     println!("process id: {}", process_id);
@@ -426,6 +436,7 @@ fn parse_args() -> ProtocolArgs {
     println!("trace_show_interval: {:?}", tracer_show_interval);
     println!("ping_interval: {:?}", ping_interval);
     println!("metrics file: {:?}", metrics_file);
+    println!("stack size: {:?}", stack_size);
 
     (
         process_id,
@@ -448,6 +459,7 @@ fn parse_args() -> ProtocolArgs {
         tracer_show_interval,
         ping_interval,
         metrics_file,
+        stack_size,
         cpus,
     )
 }
