@@ -476,10 +476,10 @@ async fn process_task<P, R>(
                 selected_from_processes(worker_index, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
             }
             event = from_periodic.recv() => {
-                selected_from_periodic_task(worker_index, event, &mut process, &mut to_writers, &mut reader_to_workers, &time).await
+                selected_from_periodic_task(worker_index, event, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
             }
             cmd = from_clients.recv() => {
-                selected_from_client(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &time).await
+                selected_from_client(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
             }
             _ = interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -544,35 +544,26 @@ async fn handle_from_processes<P>(
 {
     // handle message in process and potentially new actions
     process.handle(from_id, from_shard_id, msg, time);
-    handle_actions(worker_index, process, to_writers, reader_to_workers, time)
-        .await;
-
-    // notify executors
-    for execution_info in process.to_executors_iter() {
-        // if there's an execution logger, then also send execution info to it
-        if let Some(to_execution_logger) = to_execution_logger {
-            if let Err(e) =
-                to_execution_logger.send(execution_info.clone()).await
-            {
-                println!("[server] error while sending new execution info to execution logger: {:?}", e);
-            }
-        }
-        // notify executor
-        if let Err(e) = worker_to_executors.forward(execution_info).await {
-            println!(
-                "[server] error while sending new execution info to executor: {:?}",
-                e
-            );
-        }
-    }
+    send_to_processes_and_executors(
+        worker_index,
+        process,
+        to_writers,
+        reader_to_workers,
+        worker_to_executors,
+        to_execution_logger,
+        time,
+    )
+    .await;
 }
 
 // TODO maybe run in parallel
-async fn handle_actions<P>(
+async fn send_to_processes_and_executors<P>(
     worker_index: usize,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
     P: Protocol + 'static,
@@ -616,6 +607,25 @@ async fn handle_actions<P>(
                 )
                 .await;
             }
+        }
+    }
+
+    // notify executors
+    for execution_info in process.to_executors_iter() {
+        // if there's an execution logger, then also send execution info to it
+        if let Some(to_execution_logger) = to_execution_logger {
+            if let Err(e) =
+                to_execution_logger.send(execution_info.clone()).await
+            {
+                println!("[server] error while sending new execution info to execution logger: {:?}", e);
+            }
+        }
+        // notify executor
+        if let Err(e) = worker_to_executors.forward(execution_info).await {
+            println!(
+                "[server] error while sending new execution info to executor: {:?}",
+                e
+            );
         }
     }
 }
@@ -666,6 +676,8 @@ async fn selected_from_client<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
     P: Protocol + 'static,
@@ -679,6 +691,8 @@ async fn selected_from_client<P>(
             process,
             to_writers,
             reader_to_workers,
+            worker_to_executors,
+            to_execution_logger,
             time,
         )
         .await
@@ -694,14 +708,24 @@ async fn handle_from_client<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
     P: Protocol + 'static,
 {
     // submit command in process
     process.submit(dot, cmd, time);
-    handle_actions(worker_index, process, to_writers, reader_to_workers, time)
-        .await;
+    send_to_processes_and_executors(
+        worker_index,
+        process,
+        to_writers,
+        reader_to_workers,
+        worker_to_executors,
+        to_execution_logger,
+        time,
+    )
+    .await;
 }
 
 async fn selected_from_periodic_task<P, R>(
@@ -710,6 +734,8 @@ async fn selected_from_periodic_task<P, R>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
     P: Protocol + 'static,
@@ -723,6 +749,8 @@ async fn selected_from_periodic_task<P, R>(
             process,
             to_writers,
             reader_to_workers,
+            worker_to_executors,
+            to_execution_logger,
             time,
         )
         .await
@@ -737,6 +765,8 @@ async fn handle_from_periodic_task<P, R>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
+    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
     P: Protocol + 'static,
@@ -746,11 +776,13 @@ async fn handle_from_periodic_task<P, R>(
         FromPeriodicMessage::Event(event) => {
             // handle event in process
             process.handle_event(event, time);
-            handle_actions(
+            send_to_processes_and_executors(
                 worker_index,
                 process,
                 to_writers,
                 reader_to_workers,
+                worker_to_executors,
+                to_execution_logger,
                 time,
             )
             .await;

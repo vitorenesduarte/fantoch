@@ -44,6 +44,12 @@ pub struct Newt<KC: KeyClocks> {
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
     // bump to messages that arrived before the initial `MCollect` message
     buffered_bump_tos: HashMap<Dot, u64>,
+    // With many many operations, it can happen that logical clocks are
+    // higher that current time (e.g. if it starts at 0 in simulation), and in
+    // that case, the real time feature of newt doesn't work. Solution: track
+    // the highest committed clock; when periodically bumping with real time,
+    // use this value as the minimum value to bump to
+    max_commit_clock: u64,
     skip_fast_ack: bool,
 }
 
@@ -83,6 +89,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         let detached = Votes::new();
         let buffered_commits = HashMap::new();
         let buffered_bump_tos = HashMap::new();
+        let max_commit_clock = 0;
         // enable skip fast ack if configured like that and the fast quorum size
         // is 2
         let skip_fast_ack = config.skip_fast_ack() && fast_quorum_size == 2;
@@ -97,6 +104,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             detached,
             buffered_commits,
             buffered_bump_tos,
+            max_commit_clock,
             skip_fast_ack,
         };
 
@@ -176,6 +184,9 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             } => self.handle_mcollectack(from, dot, clock, process_votes, time),
             Message::MCommit { dot, clock, votes } => {
                 self.handle_mcommit(from, dot, clock, votes, time)
+            }
+            Message::MCommitClock { clock } => {
+                self.handle_mcommit_clock(from, clock, time)
             }
             Message::MDetached { detached } => {
                 self.handle_mdetached(detached, time)
@@ -348,7 +359,7 @@ impl<KC: KeyClocks> Newt<KC> {
             remote_clock,
             votes,
             from,
-            time.millis()
+            time.micros()
         );
 
         // get cmd info
@@ -464,7 +475,7 @@ impl<KC: KeyClocks> Newt<KC> {
             clock,
             remote_votes,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -559,7 +570,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             clock,
             votes,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -602,7 +613,14 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // don't try to generate detached votes if configured with real time
         // (since it will be done in a periodic event)
-        if self.bp.config.newt_clock_bump_interval().is_none() {
+        if self.bp.config.newt_clock_bump_interval().is_some() {
+            // in this case, only notify the clock bump worker of the commit
+            // clock
+            self.to_processes.push(Action::ToForward {
+                msg: Message::MCommitClock { clock },
+            });
+        } else {
+            // try to generate detached votes
             let cmd = info.cmd.as_ref().unwrap();
             self.key_clocks.vote(cmd, clock, &mut self.detached);
         }
@@ -624,6 +642,25 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
+    #[instrument(skip(self, from, clock, _time))]
+    fn handle_mcommit_clock(
+        &mut self,
+        from: ProcessId,
+        clock: u64,
+        _time: &dyn SysTime,
+    ) {
+        log!(
+            "p{}: MCommitClock({}) | time={}",
+            self.id(),
+            clock,
+            _time.micros()
+        );
+        assert_eq!(from, self.bp.process_id);
+
+        // simply update the highest commit clock
+        self.max_commit_clock = std::cmp::max(self.max_commit_clock, clock);
+    }
+
     #[instrument(skip(self, dot, clock, _time))]
     fn handle_mbump_to(&mut self, dot: Dot, clock: u64, _time: &dyn SysTime) {
         log!(
@@ -631,7 +668,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             dot,
             clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -660,7 +697,7 @@ impl<KC: KeyClocks> Newt<KC> {
             "p{}: MDetached({:?}) | time={}",
             self.id(),
             detached,
-            _time.millis()
+            _time.micros()
         );
 
         // create execution info
@@ -685,7 +722,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             ballot,
             clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -735,7 +772,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             dot,
             ballot,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -777,7 +814,7 @@ impl<KC: KeyClocks> Newt<KC> {
             dot,
             clock,
             _from_shard_id,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -821,7 +858,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             dot,
             clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -858,7 +895,7 @@ impl<KC: KeyClocks> Newt<KC> {
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -876,7 +913,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             committed,
             from,
-            _time.millis()
+            _time.micros()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -901,7 +938,7 @@ impl<KC: KeyClocks> Newt<KC> {
             self.id(),
             stable,
             from,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -913,7 +950,7 @@ impl<KC: KeyClocks> Newt<KC> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         // retrieve the committed clock
@@ -931,16 +968,22 @@ impl<KC: KeyClocks> Newt<KC> {
         log!(
             "p{}: PeriodicEvent::ClockBump | time={}",
             self.id(),
-            time.millis()
+            time.micros()
         );
 
-        // Iterate all clocks and bump them to the current time. The fact that
-        // micros as used here is not an accident. With many
+        // vote up to:
+        // - highest committed clock or
+        // - the current time,
+        // whatever is the highest.
+        // The fact that micros as used here is not an accident. With many
         // clients (like 1024 per site with 5 sites), millis do not provide
         // "enough precision".
+        let min_clock = std::cmp::max(self.max_commit_clock, time.micros());
+
+        // Iterate all clocks and bump them.
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
-        self.key_clocks.vote_all(time.micros(), &mut self.detached);
+        self.key_clocks.vote_all(min_clock, &mut self.detached);
     }
 
     #[instrument(skip(self, _time))]
@@ -948,7 +991,7 @@ impl<KC: KeyClocks> Newt<KC> {
         log!(
             "p{}: PeriodicEvent::SendDetached | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         let detached = mem::take(&mut self.detached);
@@ -1132,6 +1175,9 @@ pub enum Message {
         clock: u64,
         votes: Votes,
     },
+    MCommitClock {
+        clock: u64,
+    },
     MDetached {
         detached: Votes,
     },
@@ -1187,6 +1233,9 @@ impl MessageIndex for Message {
             Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MCommitClock { .. } => {
+                worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
+            }
             Self::MDetached { .. } => {
                 worker_index_no_shift(CLOCK_BUMP_WORKER_INDEX)
             }

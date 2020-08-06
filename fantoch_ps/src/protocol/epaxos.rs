@@ -240,7 +240,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             cmd,
             remote_clock,
             from,
-            time.millis()
+            time.micros()
         );
 
         // get cmd info
@@ -313,7 +313,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             dot,
             clock,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         // ignore ack from self (see `EPaxosInfo::new` for the reason why)
@@ -386,7 +386,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             dot,
             value.clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -451,7 +451,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             dot,
             ballot,
             value.clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -499,7 +499,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             dot,
             ballot,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -538,7 +538,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -556,7 +556,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             committed,
             from,
-            _time.millis()
+            _time.micros()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -581,7 +581,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             stable,
             from,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -593,7 +593,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         // retrieve the committed clock

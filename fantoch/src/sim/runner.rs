@@ -220,22 +220,13 @@ where
                     // get process and executor
                     let (process, executor, time) =
                         self.simulation.get_process(process_id);
-                    assert_eq!(process.id(), process_id);
-                    let shard_id = process.shard_id();
 
                     // register command in the executor
                     executor.wait_for(&cmd);
 
-                    // submit to process and schedule output messages
+                    // submit to process and schedule new actions
                     process.submit(None, cmd, time);
-                    let protocol_actions =
-                        process.to_processes_iter().collect();
-                    self.schedule_protocol_actions(
-                        process_id,
-                        shard_id,
-                        MessageRegion::Process(process_id),
-                        protocol_actions,
-                    );
+                    self.send_to_processes_and_executors(process_id);
                 }
                 ScheduleAction::SendToProc(
                     from,
@@ -244,39 +235,12 @@ where
                     msg,
                 ) => {
                     // get process and executor
-                    let (process, executor, time) =
+                    let (process, _, time) =
                         self.simulation.get_process(process_id);
-                    assert_eq!(process.id(), process_id);
-                    let shard_id = process.shard_id();
 
-                    // handle message and get ready commands
+                    // handle message and schedule new actions
                     process.handle(from, from_shard_id, msg, time);
-                    let protocol_actions =
-                        process.to_processes_iter().collect();
-
-                    // handle new execution info in the executor
-                    let to_executor = process.to_executors();
-                    let ready: Vec<_> = to_executor
-                        .into_iter()
-                        .flat_map(|info| executor.handle(info))
-                        .map(|result| result.unwrap_ready())
-                        .collect();
-
-                    // schedule new messages
-                    self.schedule_protocol_actions(
-                        process_id,
-                        shard_id,
-                        MessageRegion::Process(process_id),
-                        protocol_actions,
-                    );
-
-                    // schedule new command results
-                    ready.into_iter().for_each(|cmd_result| {
-                        self.schedule_to_client(
-                            MessageRegion::Process(process_id),
-                            cmd_result,
-                        )
-                    });
+                    self.send_to_processes_and_executors(process_id);
                 }
                 ScheduleAction::SendToClient(client_id, cmd_result) => {
                     // handle new command result in client
@@ -312,19 +276,10 @@ where
                     // get process
                     let (process, _, time) =
                         self.simulation.get_process(process_id);
-                    assert_eq!(process.id(), process_id);
-                    let shard_id = process.shard_id();
 
-                    // handle event
+                    // handle event adn schedule new actions
                     process.handle_event(event.clone(), time);
-                    let protocol_actions =
-                        process.to_processes_iter().collect();
-                    self.schedule_protocol_actions(
-                        process_id,
-                        shard_id,
-                        MessageRegion::Process(process_id),
-                        protocol_actions,
-                    );
+                    self.send_to_processes_and_executors(process_id);
 
                     // schedule the next periodic event
                     self.schedule_event(process_id, event, delay);
@@ -356,6 +311,40 @@ where
             MessageRegion::Process(process_id),
             action,
         );
+    }
+
+    fn send_to_processes_and_executors(&mut self, process_id: ProcessId) {
+        // get process and executor
+        let (process, executor, _time) =
+            self.simulation.get_process(process_id);
+        assert_eq!(process.id(), process_id);
+        let shard_id = process.shard_id();
+
+        // get ready commands
+        let protocol_actions = process.to_processes_iter().collect();
+
+        // handle new execution info in the executor
+        let ready: Vec<_> = process
+            .to_executors_iter()
+            .flat_map(|info| executor.handle(info))
+            .map(|result| result.unwrap_ready())
+            .collect();
+
+        // schedule new messages
+        self.schedule_protocol_actions(
+            process_id,
+            shard_id,
+            MessageRegion::Process(process_id),
+            protocol_actions,
+        );
+
+        // schedule new command results
+        ready.into_iter().for_each(|cmd_result| {
+            self.schedule_to_client(
+                MessageRegion::Process(process_id),
+                cmd_result,
+            )
+        });
     }
 
     /// (maybe) Schedules a new send from some process.

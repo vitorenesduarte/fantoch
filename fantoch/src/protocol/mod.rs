@@ -75,6 +75,7 @@ pub trait Protocol: Debug + Clone {
     #[must_use]
     fn to_processes(&mut self) -> Option<Action<Self>>;
 
+    #[must_use]
     fn to_executors(
         &mut self,
     ) -> Option<<Self::Executor as Executor>::ExecutionInfo>;
@@ -85,10 +86,12 @@ pub trait Protocol: Debug + Clone {
 
     fn metrics(&self) -> &ProtocolMetrics;
 
+    #[must_use]
     fn to_processes_iter(&mut self) -> ToProcessesIter<'_, Self> {
         ToProcessesIter { process: self }
     }
 
+    #[must_use]
     fn to_executors_iter(&mut self) -> ToExecutorsIter<'_, Self> {
         ToExecutorsIter { process: self }
     }

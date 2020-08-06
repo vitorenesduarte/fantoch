@@ -262,7 +262,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             cmd,
             remote_clock,
             from,
-            time.millis()
+            time.micros()
         );
 
         // get cmd info
@@ -335,7 +335,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             dot,
             clock,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -402,7 +402,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             dot,
             value.clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -473,7 +473,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             dot,
             ballot,
             value.clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -521,7 +521,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             dot,
             ballot,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -558,7 +558,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             dot,
             clock,
             _from_shard_id,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -600,7 +600,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             dot,
             clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -635,7 +635,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
@@ -653,7 +653,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             committed,
             from,
-            _time.millis()
+            _time.micros()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
@@ -678,7 +678,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             stable,
             from,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
@@ -690,7 +690,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         // retrieve the committed clock

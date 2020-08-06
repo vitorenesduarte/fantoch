@@ -209,7 +209,7 @@ impl FPaxos {
             slot,
             cmd,
             from,
-            _time.millis()
+            _time.micros()
         );
         // spawn commander message should come from self
         assert_eq!(from, self.id());
@@ -251,7 +251,7 @@ impl FPaxos {
             slot,
             cmd,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         if let Some(msg) = self
@@ -291,7 +291,7 @@ impl FPaxos {
             ballot,
             slot,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         if let Some(msg) = self
@@ -322,7 +322,7 @@ impl FPaxos {
             self.id(),
             slot,
             cmd,
-            _time.millis()
+            _time.micros()
         );
 
         // create execution info
@@ -354,7 +354,7 @@ impl FPaxos {
             self.id(),
             committed,
             from,
-            _time.millis()
+            _time.micros()
         );
         self.gc_track.committed_by(from, committed);
         // perform garbage collection of stable slots
@@ -368,7 +368,7 @@ impl FPaxos {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         // retrieve the committed slot
