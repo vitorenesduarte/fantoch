@@ -81,35 +81,39 @@ where
                 let shard_id = process.shard_id();
 
                 // handle first in self if self in target
-                let local_actions = if target.contains(&process_id) {
+                if target.contains(&process_id) {
                     // handle msg
-                    process.handle(process_id, shard_id, msg.clone(), time)
-                } else {
-                    vec![]
+                    process.handle(process_id, shard_id, msg.clone(), time);
                 };
+                // take out (potentially) new actions:
+                // - this makes sure that the first to_send is the one from self
+                let mut actions: Vec<_> = process
+                    .to_processes_iter()
+                    .map(|action| (process_id, action))
+                    .collect();
 
-                let actions = target
+                target
                     .into_iter()
                     // make sure we don't handle again in self
                     .filter(|to| to != &process_id)
-                    .flat_map(|to| {
+                    .for_each(|to| {
                         // get target process
                         let (to_process, _, time) = self.get_process(to);
                         assert_eq!(to_process.id(), to);
 
                         // handle msg
-                        to_process
-                            .handle(process_id, shard_id, msg.clone(), time)
-                            .into_iter()
-                            .map(move |action| (to, action))
+                        to_process.handle(
+                            process_id,
+                            shard_id,
+                            msg.clone(),
+                            time,
+                        );
+                        // take out new actions
+                        to_process.to_processes_iter().for_each(|action| {
+                            actions.push((to, action));
+                        })
                     });
-
-                // make sure that the first to_send is the one from self
-                local_actions
-                    .into_iter()
-                    .map(|action| (process_id, action))
-                    .chain(actions)
-                    .collect()
+                actions
             }
             action => {
                 panic!("non supported action: {:?}", action);

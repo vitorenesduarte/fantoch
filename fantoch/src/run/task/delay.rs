@@ -2,7 +2,7 @@ use super::chan::{ChannelReceiver, ChannelSender};
 use std::collections::VecDeque;
 use tokio::time::{self, Duration, Instant};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 enum ReadStatus {
     Fail,
     Read,
@@ -57,15 +57,14 @@ fn enqueue<M>(
 ) {
     if let Some(msg) = msg {
         queue.push_back((deadline(delay), msg));
-        if let ReadStatus::Fail = read_status {
-            // means we were in Fail, thus => Read
+        if *read_status == ReadStatus::Fail {
+            // mark it as having read at least once
             *read_status = ReadStatus::Read;
         }
     } else {
         println!("[delay_task] error receiving message from parent");
-        if let ReadStatus::Read = read_status {
-            // means we were in Fail, then went to Read, thus =>
-            // FailAfterRead
+        if *read_status == ReadStatus::Read {
+            // mark it as a failure after at least one read
             *read_status = ReadStatus::FailAfterRead;
         }
     }

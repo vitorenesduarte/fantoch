@@ -448,14 +448,15 @@ mod tests {
         let shard_count = 2;
         let workers = 2;
         let executors = 1;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
             newt_config!(3, 1),
             shard_count,
             workers,
             executors,
             SHARDS_PER_COMMAND,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
+            commands_per_client,
+            clients_per_process,
         );
         assert_eq!(slow_paths, 0);
     }

@@ -12,7 +12,6 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use fantoch::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::mem;
 use std::time::Duration;
 use tracing::instrument;
 
@@ -24,7 +23,8 @@ pub struct FPaxos {
     leader: ProcessId,
     multi_synod: MultiSynod<Command>,
     gc_track: GCTrack,
-    to_executor: Vec<ExecutionInfo>,
+    to_processes: Vec<Action<Self>>,
+    to_executors: Vec<ExecutionInfo>,
 }
 
 impl Protocol for FPaxos {
@@ -58,7 +58,8 @@ impl Protocol for FPaxos {
         // create multi synod
         let multi_synod =
             MultiSynod::new(process_id, initial_leader, config.n(), config.f());
-        let to_executor = Vec::new();
+        let to_processes = Vec::new();
+        let to_executors = Vec::new();
 
         // create `FPaxos`
         let protocol = Self {
@@ -66,7 +67,8 @@ impl Protocol for FPaxos {
             leader: initial_leader,
             multi_synod,
             gc_track: GCTrack::new(process_id, config.n()),
-            to_executor,
+            to_processes,
+            to_executors,
         };
 
         // create periodic events
@@ -97,13 +99,8 @@ impl Protocol for FPaxos {
     }
 
     /// Submits a command issued by some client.
-    fn submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-        _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
-        self.handle_submit(dot, cmd)
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command, _time: &dyn SysTime) {
+        self.handle_submit(dot, cmd);
     }
 
     /// Handles protocol messages.
@@ -113,7 +110,7 @@ impl Protocol for FPaxos {
         _from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         match msg {
             Message::MForwardSubmit { cmd } => self.handle_submit(None, cmd),
             Message::MSpawnCommander { ballot, slot, cmd } => {
@@ -135,11 +132,7 @@ impl Protocol for FPaxos {
     }
 
     /// Handles periodic local events.
-    fn handle_event(
-        &mut self,
-        event: Self::PeriodicEvent,
-        time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime) {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection(time)
@@ -147,9 +140,14 @@ impl Protocol for FPaxos {
         }
     }
 
-    /// Returns new commands results to be sent to clients.
-    fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        mem::take(&mut self.to_executor)
+    /// Returns a new action to be sent to other processes.
+    fn to_processes(&mut self) -> Option<Action<Self>> {
+        self.to_processes.pop()
+    }
+
+    /// Returns new execution info for executors.
+    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+        self.to_executors.pop()
     }
 
     fn parallel() -> bool {
@@ -168,11 +166,7 @@ impl Protocol for FPaxos {
 impl FPaxos {
     /// Handles a submit operation by a client.
     #[instrument(skip(self, _dot, cmd))]
-    fn handle_submit(
-        &mut self,
-        _dot: Option<Dot>,
-        cmd: Command,
-    ) -> Vec<Action<Self>> {
+    fn handle_submit(&mut self, _dot: Option<Dot>, cmd: Command) {
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
                 // in this case, we're the leader:
@@ -180,8 +174,8 @@ impl FPaxos {
                 //   process for parallelism)
                 let mspawn = Message::MSpawnCommander { ballot, slot, cmd };
 
-                // return `ToSend`
-                vec![Action::ToForward { msg: mspawn }]
+                // save new action
+                self.to_processes.push(Action::ToForward { msg: mspawn });
             }
             MultiSynodMessage::MForwardSubmit(cmd) => {
                 // in this case, we're not the leader and should forward the
@@ -189,11 +183,11 @@ impl FPaxos {
                 let mforward = Message::MForwardSubmit { cmd };
                 let target = singleton![self.leader];
 
-                // return `ToSend`
-                vec![Action::ToSend {
+                // save new action
+                self.to_processes.push(Action::ToSend {
                     target,
                     msg: mforward,
-                }]
+                });
             }
             msg => panic!("can't handle {:?} in handle_submit", msg),
         }
@@ -207,7 +201,7 @@ impl FPaxos {
         slot: u64,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
@@ -215,7 +209,7 @@ impl FPaxos {
             slot,
             cmd,
             from,
-            _time.millis()
+            _time.micros()
         );
         // spawn commander message should come from self
         assert_eq!(from, self.id());
@@ -231,11 +225,11 @@ impl FPaxos {
                 let maccept = Message::MAccept { ballot, slot, cmd };
                 let target = self.bp.write_quorum();
 
-                // return `ToSend`
-                vec![Action::ToSend {
+                // save new action
+                self.to_processes.push(Action::ToSend {
                     target,
                     msg: maccept,
-                }]
+                });
             }
             msg => panic!("can't handle {:?} in handle_mspawn_commander", msg),
         }
@@ -249,7 +243,7 @@ impl FPaxos {
         slot: u64,
         cmd: Command,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MAccept({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
@@ -257,7 +251,7 @@ impl FPaxos {
             slot,
             cmd,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         if let Some(msg) = self
@@ -270,17 +264,16 @@ impl FPaxos {
                     let maccepted = Message::MAccepted { ballot, slot };
                     let target = singleton![from];
 
-                    // return `ToSend`
-                    vec![Action::ToSend {
+                    // save new action
+                    self.to_processes.push(Action::ToSend {
                         target,
                         msg: maccepted,
-                    }]
+                    });
                 }
                 msg => panic!("can't handle {:?} in handle_maccept", msg),
             }
         } else {
             // TODO maybe warn the leader that it is not longer a leader?
-            vec![]
         }
     }
 
@@ -291,14 +284,14 @@ impl FPaxos {
         ballot: u64,
         slot: u64,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MAccepted({:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
             slot,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         if let Some(msg) = self
@@ -311,38 +304,30 @@ impl FPaxos {
                     let mcommit = Message::MChosen { slot, cmd };
                     let target = self.bp.all();
 
-                    // return `ToSend`
-                    vec![Action::ToSend {
+                    // save new action
+                    self.to_processes.push(Action::ToSend {
                         target,
                         msg: mcommit,
-                    }]
+                    });
                 }
                 msg => panic!("can't handle {:?} in handle_maccepted", msg),
             }
-        } else {
-            // nothing to send
-            vec![]
         }
     }
 
     #[instrument(skip(self, slot, cmd, _time))]
-    fn handle_mchosen(
-        &mut self,
-        slot: u64,
-        cmd: Command,
-        _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    fn handle_mchosen(&mut self, slot: u64, cmd: Command, _time: &dyn SysTime) {
         log!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             slot,
             cmd,
-            _time.millis()
+            _time.micros()
         );
 
         // create execution info
         let execution_info = ExecutionInfo::new(slot, cmd);
-        self.to_executor.push(execution_info);
+        self.to_executors.push(execution_info);
 
         if self.gc_running() {
             // register that it has been committed
@@ -351,9 +336,6 @@ impl FPaxos {
             // if we're not running gc, remove the slot info now
             self.multi_synod.gc_single(slot);
         }
-
-        // nothing to send
-        vec![]
     }
 
     fn gc_running(&self) -> bool {
@@ -366,41 +348,37 @@ impl FPaxos {
         from: ProcessId,
         committed: u64,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
             from,
-            _time.millis()
+            _time.micros()
         );
         self.gc_track.committed_by(from, committed);
         // perform garbage collection of stable slots
         let stable = self.gc_track.stable();
         let stable_count = self.multi_synod.gc(stable);
         self.bp.stable(stable_count);
-        vec![]
     }
 
     #[instrument(skip(self, _time))]
-    fn handle_event_garbage_collection(
-        &mut self,
-        _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         // retrieve the committed slot
         let committed = self.gc_track.committed();
 
-        // create `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
-        }]
+        })
     }
 }
 
@@ -618,15 +596,17 @@ mod tests {
         // register command in executor and submit it in fpaxos 1
         let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let mut actions = process.submit(None, cmd, time);
+        process.submit(None, cmd, time);
+        let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
         let spawn = actions.pop().unwrap();
 
         // check that the register created a spawn commander to self and handle
         // it locally
-        let mut actions = if let Action::ToForward { msg } = spawn {
-            process.handle(process_id_1, shard_id, msg, time)
+        let mut actions: Vec<_> = if let Action::ToForward { msg } = spawn {
+            process.handle(process_id_1, shard_id, msg, time);
+            process.to_processes_iter().collect()
         } else {
             panic!("Action::ToForward not found!");
         };
@@ -678,13 +658,16 @@ mod tests {
 
         // process 1 should have something to the executor
         let (process, executor, _) = simulation.get_process(process_id_1);
-        let to_executor = process.to_executor();
+        let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
         let mut ready: Vec<_> = to_executor
             .into_iter()
-            .flat_map(|info| executor.handle(info))
+            .flat_map(|info| {
+                executor.handle(info);
+                executor.to_clients_iter().collect::<Vec<_>>()
+            })
             .map(|result| result.unwrap_ready())
             .collect();
         assert_eq!(ready.len(), 1);
@@ -698,7 +681,8 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _, time) = simulation.get_process(target);
-        let mut actions = process.submit(None, cmd, time);
+        process.submit(None, cmd, time);
+        let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
         let mcollect = actions.pop().unwrap();

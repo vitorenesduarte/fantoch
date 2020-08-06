@@ -17,7 +17,6 @@ use fantoch::time::SysTime;
 use fantoch::{log, singleton};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::mem;
 use std::time::Duration;
 use threshold::VClock;
 use tracing::instrument;
@@ -28,11 +27,12 @@ pub type AtlasLocked = Atlas<LockedKeyClocks>;
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Atlas<KC> {
+pub struct Atlas<KC: KeyClocks> {
     bp: BaseProcess,
     keys_clocks: KC,
     cmds: CommandsInfo<AtlasInfo>,
-    to_executor: Vec<ExecutionInfo>,
+    to_processes: Vec<Action<Self>>,
+    to_executors: Vec<ExecutionInfo>,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
@@ -68,7 +68,8 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             config.f(),
             fast_quorum_size,
         );
-        let to_executor = Vec::new();
+        let to_processes = Vec::new();
+        let to_executors = Vec::new();
         let buffered_commits = HashMap::new();
 
         // create `Atlas`
@@ -76,7 +77,8 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             bp,
             keys_clocks,
             cmds,
-            to_executor,
+            to_processes,
+            to_executors,
             buffered_commits,
         };
 
@@ -108,12 +110,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     }
 
     /// Submits a command issued by some client.
-    fn submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-        _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command, _time: &dyn SysTime) {
         self.handle_submit(dot, cmd, true)
     }
 
@@ -124,7 +121,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         match msg {
             // Protocol messages
             Message::MCollect {
@@ -169,11 +166,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     }
 
     /// Handles periodic local events.
-    fn handle_event(
-        &mut self,
-        event: Self::PeriodicEvent,
-        time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime) {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection(time)
@@ -181,9 +174,14 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         }
     }
 
-    /// Returns new commands results to be sent to clients.
-    fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        mem::take(&mut self.to_executor)
+    /// Returns a new action to be sent to other processes.
+    fn to_processes(&mut self) -> Option<Action<Self>> {
+        self.to_processes.pop()
+    }
+
+    /// Returns new execution info for executors.
+    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+        self.to_executors.pop()
     }
 
     fn parallel() -> bool {
@@ -207,25 +205,20 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Option<Dot>,
         cmd: Command,
         target_shard: bool,
-    ) -> Vec<Action<Self>> {
+    ) {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // create submit actions
         let create_mforward_submit =
             |dot, cmd| Message::MForwardSubmit { dot, cmd };
-        let mut actions: Vec<Action<Self>> = partial::submit_actions(
+        partial::submit_actions(
             &self.bp,
             dot,
             &cmd,
             target_shard,
             create_mforward_submit,
-        );
-        log!(
-            "p{}: submit extra actions for {:?}: {:?}",
-            self.id(),
-            dot,
-            actions
+            &mut self.to_processes,
         );
 
         // compute its clock
@@ -245,12 +238,11 @@ impl<KC: KeyClocks> Atlas<KC> {
         };
         let target = self.bp.all();
 
-        // add `Mcollect` send as action and return all actions
-        actions.push(Action::ToSend {
+        // add `Mcollect` send as action
+        self.to_processes.push(Action::ToSend {
             target,
             msg: mcollect,
         });
-        actions
     }
 
     #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
@@ -262,7 +254,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         quorum: HashSet<ProcessId>,
         remote_clock: VClock<ProcessId>,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
@@ -270,7 +262,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             cmd,
             remote_clock,
             from,
-            time.millis()
+            time.micros()
         );
 
         // get cmd info
@@ -278,7 +270,7 @@ impl<KC: KeyClocks> Atlas<KC> {
 
         // discard message if no longer in START
         if info.status != Status::START {
-            return vec![];
+            return;
         }
 
         // check if part of fast quorum
@@ -294,10 +286,9 @@ impl<KC: KeyClocks> Atlas<KC> {
             // check if there's a buffered commit notification; if yes, handle
             // the commit again (since now we have the payload)
             if let Some((from, value)) = self.buffered_commits.remove(&dot) {
-                return self.handle_mcommit(from, dot, value, time);
-            } else {
-                return vec![];
+                self.handle_mcommit(from, dot, value, time);
             }
+            return;
         }
 
         // check if it's a message from self
@@ -323,11 +314,11 @@ impl<KC: KeyClocks> Atlas<KC> {
         let mcollectack = Message::MCollectAck { dot, clock };
         let target = singleton![from];
 
-        // return `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        self.to_processes.push(Action::ToSend {
             target,
             msg: mcollectack,
-        }]
+        });
     }
 
     #[instrument(skip(self, from, dot, clock, _time))]
@@ -337,14 +328,14 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Dot,
         clock: VClock<ProcessId>,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
             clock,
             from,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -352,7 +343,7 @@ impl<KC: KeyClocks> Atlas<KC> {
 
         if info.status != Status::COLLECT {
             // do nothing if we're no longer COLLECT
-            return vec![];
+            return;
         }
 
         // update quorum clocks
@@ -374,7 +365,14 @@ impl<KC: KeyClocks> Atlas<KC> {
                 self.bp.fast_path();
                 // fast path: create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                Self::mcommit_actions(&self.bp, info, shard_count, dot, value)
+                Self::mcommit_actions(
+                    &self.bp,
+                    info,
+                    shard_count,
+                    dot,
+                    value,
+                    &mut self.to_processes,
+                )
             } else {
                 self.bp.slow_path();
 
@@ -382,14 +380,12 @@ impl<KC: KeyClocks> Atlas<KC> {
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };
                 let target = self.bp.write_quorum();
-                // return `ToSend`
-                vec![Action::ToSend {
+                // save new action
+                self.to_processes.push(Action::ToSend {
                     target,
                     msg: mconsensus,
-                }]
+                });
             }
-        } else {
-            vec![]
         }
     }
 
@@ -400,13 +396,13 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Dot,
         value: ConsensusValue,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
             value.clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -419,12 +415,12 @@ impl<KC: KeyClocks> Atlas<KC> {
             //   `MCollect` and `MCommit` in opposite orders (due to
             //   multiplexing)
             self.buffered_commits.insert(dot, (from, value));
-            return vec![];
+            return;
         }
 
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
-            return vec![];
+            return;
         }
 
         // check it's not a noop
@@ -436,7 +432,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
         let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
-        self.to_executor.push(execution_info);
+        self.to_executors.push(execution_info);
 
         // update command info:
         info.status = Status::COMMIT;
@@ -453,13 +449,12 @@ impl<KC: KeyClocks> Atlas<KC> {
         if self.gc_running() && my_shard {
             // if running gc and this dot belongs to my shard, then notify self
             // (i.e. the worker responsible for GC) with the committed dot
-            vec![Action::ToForward {
+            self.to_processes.push(Action::ToForward {
                 msg: Message::MCommitDot { dot },
-            }]
+            });
         } else {
             // not running gc, so remove the dot info now
             self.cmds.gc_single(dot);
-            vec![]
         }
     }
 
@@ -471,14 +466,14 @@ impl<KC: KeyClocks> Atlas<KC> {
         ballot: u64,
         value: ConsensusValue,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
             ballot,
             value.clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -498,8 +493,8 @@ impl<KC: KeyClocks> Atlas<KC> {
                 Message::MCommit { dot, value }
             }
             None => {
-                // ballot too low to be accepted
-                return vec![];
+                // ballot too low to be accepted: nothing to do
+                return;
             }
             _ => panic!(
                 "no other type of message should be output by Synod in the MConsensus handler"
@@ -509,8 +504,8 @@ impl<KC: KeyClocks> Atlas<KC> {
         // create target
         let target = singleton![from];
 
-        // return `ToSend`
-        vec![Action::ToSend { target, msg }]
+        // save new action
+        self.to_processes.push(Action::ToSend { target, msg });
     }
 
     #[instrument(skip(self, from, dot, ballot, _time))]
@@ -520,13 +515,13 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Dot,
         ballot: u64,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
             ballot,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -537,11 +532,10 @@ impl<KC: KeyClocks> Atlas<KC> {
             Some(SynodMessage::MChosen(value)) => {
                 // enough accepts were gathered and the value has been chosen; create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
-                Self::mcommit_actions(&self.bp, info, shard_count, dot, value)
+                Self::mcommit_actions(&self.bp, info, shard_count, dot, value, &mut self.to_processes)
             }
             None => {
-                // not enough accepts yet
-                vec![]
+                // not enough accepts yet: nothing to do
             }
             _ => panic!(
                 "no other type of message should be output by Synod in the MConsensusAck handler"
@@ -557,14 +551,14 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Dot,
         clock: VClock<ProcessId>,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MShardCommit({:?}, {:?}) from shard {} | time={}",
             self.id(),
             dot,
             clock,
             _from_shard_id,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -590,6 +584,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             clock,
             add_shards_commits_info,
             create_mshard_aggregated_commit,
+            &mut self.to_processes,
         )
     }
 
@@ -599,13 +594,13 @@ impl<KC: KeyClocks> Atlas<KC> {
         dot: Dot,
         clock: VClock<ProcessId>,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MShardAggregatedCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
             clock,
-            _time.millis()
+            _time.micros()
         );
 
         // get cmd info
@@ -625,6 +620,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             clock,
             extract_mcommit_extra_data,
             create_mcommit,
+            &mut self.to_processes,
         )
     }
 
@@ -634,16 +630,15 @@ impl<KC: KeyClocks> Atlas<KC> {
         from: ProcessId,
         dot: Dot,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-        vec![]
     }
 
     #[instrument(skip(self, from, committed, _time))]
@@ -652,24 +647,22 @@ impl<KC: KeyClocks> Atlas<KC> {
         from: ProcessId,
         committed: VClock<ProcessId>,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
             from,
-            _time.millis()
+            _time.micros()
         );
         self.cmds.committed_by(from, committed);
         // compute newly stable dots
         let stable = self.cmds.stable();
         // create `ToForward` to self
-        if stable.is_empty() {
-            vec![]
-        } else {
-            vec![Action::ToForward {
+        if !stable.is_empty() {
+            self.to_processes.push(Action::ToForward {
                 msg: Message::MStable { stable },
-            }]
+            });
         }
     }
 
@@ -679,39 +672,35 @@ impl<KC: KeyClocks> Atlas<KC> {
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
             from,
-            _time.millis()
+            _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
-        vec![]
     }
 
     #[instrument(skip(self, _time))]
-    fn handle_event_garbage_collection(
-        &mut self,
-        _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
-            _time.millis()
+            _time.micros()
         );
 
         // retrieve the committed clock
         let committed = self.cmds.committed();
 
-        // create `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
-        }]
+        });
     }
 
     fn mcommit_actions(
@@ -720,7 +709,8 @@ impl<KC: KeyClocks> Atlas<KC> {
         shard_count: usize,
         dot: Dot,
         value: ConsensusValue,
-    ) -> Vec<Action<Self>> {
+        to_processes: &mut Vec<Action<Self>>,
+    ) {
         let create_mcommit = |dot, value, ()| Message::MCommit { dot, value };
         let create_mshard_commit =
             |dot, value: ConsensusValue| Message::MShardCommit {
@@ -740,6 +730,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             create_mcommit,
             create_mshard_commit,
             update_shards_commit_info,
+            to_processes,
         )
     }
 
@@ -1046,7 +1037,8 @@ mod tests {
         // register command in executor and submit it in atlas 1
         let (process, executor, time) = simulation.get_process(target);
         executor.wait_for(&cmd);
-        let mut actions = process.submit(None, cmd, time);
+        process.submit(None, cmd, time);
+        let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
         let mcollect = actions.pop().unwrap();
@@ -1096,13 +1088,16 @@ mod tests {
 
         // process 1 should have something to the executor
         let (process, executor, _) = simulation.get_process(process_id_1);
-        let to_executor = process.to_executor();
+        let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
         let mut ready: Vec<_> = to_executor
             .into_iter()
-            .flat_map(|info| executor.handle(info))
+            .flat_map(|info| {
+                executor.handle(info);
+                executor.to_clients_iter().collect::<Vec<_>>()
+            })
             .map(|result| result.unwrap_ready())
             .collect();
         assert_eq!(ready.len(), 1);
@@ -1116,7 +1111,8 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _, time) = simulation.get_process(target);
-        let mut actions = process.submit(None, cmd, time);
+        process.submit(None, cmd, time);
+        let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
         let mcollect = actions.pop().unwrap();

@@ -11,16 +11,11 @@ pub fn submit_actions<P>(
     cmd: &Command,
     target_shard: bool,
     create_mforward_submit: impl Fn(Dot, Command) -> <P as Protocol>::Message,
-) -> Vec<Action<P>>
-where
+    to_processes: &mut Vec<Action<P>>,
+) where
     P: Protocol,
 {
     if target_shard {
-        // action_count = (shard_count - 1)MForwardSubmit + 1MCollect =
-        // shard_count
-        let action_count = cmd.shard_count();
-        let mut actions = Vec::with_capacity(action_count);
-
         // create forward submit messages if:
         // - we're the target shard (i.e. the shard to which the client sent the
         //   command)
@@ -31,16 +26,11 @@ where
         {
             let mforward_submit = create_mforward_submit(dot, cmd.clone());
             let target = singleton![bp.closest_shard_process(shard_id)];
-            actions.push(Action::ToSend {
+            to_processes.push(Action::ToSend {
                 target,
                 msg: mforward_submit,
             })
         }
-        actions
-    } else {
-        // action_count = 1MCollect
-        let action_count = 1;
-        Vec::with_capacity(action_count)
     }
 }
 
@@ -54,15 +44,22 @@ pub fn mcommit_actions<P, I, D1, D2>(
     create_mcommit: impl FnOnce(Dot, D1, D2) -> <P as Protocol>::Message,
     create_mshard_commit: impl FnOnce(Dot, D1) -> <P as Protocol>::Message,
     update_shards_commits_info: impl FnOnce(&mut I, D2),
-) -> Vec<Action<P>>
-where
+    to_processes: &mut Vec<Action<P>>,
+) where
     P: Protocol,
     I: Default + Debug,
 {
     match shard_count {
         1 => {
             // create `MCommit`
-            final_mcommit_action(bp, dot, data1, data2, create_mcommit)
+            final_mcommit_action(
+                bp,
+                dot,
+                data1,
+                data2,
+                create_mcommit,
+                to_processes,
+            )
         }
         _ => {
             // if the command accesses more than one shard, send an
@@ -95,10 +92,10 @@ where
             // the aggregation with occurs at the process in targetted shard
             // (which is the owner of the commmand's `dot`)
             let target = singleton!(dot.source());
-            vec![Action::ToSend {
+            to_processes.push(Action::ToSend {
                 target,
                 msg: mshard_commit,
-            }]
+            });
         }
     }
 }
@@ -115,8 +112,8 @@ pub fn handle_mshard_commit<P, I, D1>(
         Dot,
         &I,
     ) -> <P as Protocol>::Message,
-) -> Vec<Action<P>>
-where
+    to_processes: &mut Vec<Action<P>>,
+) where
     P: Protocol,
     I: Default + Debug,
 {
@@ -136,13 +133,11 @@ where
             create_mshard_aggregated_commit(dot, &shards_commits.info);
         let target = shards_commits.participants.clone();
 
-        // return `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        to_processes.push(Action::ToSend {
             target,
             msg: mshard_aggregated_commit,
-        }]
-    } else {
-        vec![]
+        });
     }
 }
 
@@ -153,8 +148,8 @@ pub fn handle_mshard_aggregated_commit<P, I, D1, D2>(
     data1: D1,
     extract_mcommit_extra_data: impl FnOnce(I) -> D2,
     create_mcommit: impl FnOnce(Dot, D1, D2) -> <P as Protocol>::Message,
-) -> Vec<Action<P>>
-where
+    to_processes: &mut Vec<Action<P>>,
+) where
     P: Protocol,
 {
     // take shards commit info
@@ -168,7 +163,7 @@ where
     let data2 = extract_mcommit_extra_data(shards_commits.info);
 
     // create `MCommit`
-    final_mcommit_action(bp, dot, data1, data2, create_mcommit)
+    final_mcommit_action(bp, dot, data1, data2, create_mcommit, to_processes)
 }
 
 fn final_mcommit_action<P, D1, D2>(
@@ -177,16 +172,16 @@ fn final_mcommit_action<P, D1, D2>(
     data1: D1,
     data2: D2,
     create_mcommit: impl FnOnce(Dot, D1, D2) -> <P as Protocol>::Message,
-) -> Vec<Action<P>>
-where
+    to_processes: &mut Vec<Action<P>>,
+) where
     P: Protocol,
 {
     let mcommit = create_mcommit(dot, data1, data2);
     let target = bp.all();
-    vec![Action::ToSend {
+    to_processes.push(Action::ToSend {
         target,
         msg: mcommit,
-    }]
+    });
 }
 
 fn init_shards_commits<'a, I>(

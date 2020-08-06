@@ -10,7 +10,6 @@ use crate::time::SysTime;
 use crate::HashSet;
 use crate::{log, singleton};
 use serde::{Deserialize, Serialize};
-use std::mem;
 use std::time::Duration;
 use threshold::VClock;
 use tracing::instrument;
@@ -21,7 +20,8 @@ type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 pub struct Basic {
     bp: BaseProcess,
     cmds: CommandsInfo<BasicInfo>,
-    to_executor: Vec<ExecutionInfo>,
+    to_processes: Vec<Action<Self>>,
+    to_executors: Vec<ExecutionInfo>,
 }
 
 impl Protocol for Basic {
@@ -54,13 +54,15 @@ impl Protocol for Basic {
             config.f(),
             fast_quorum_size,
         );
-        let to_executor = Vec::new();
+        let to_processes = Vec::new();
+        let to_executors = Vec::new();
 
         // create `Basic`
         let protocol = Self {
             bp,
             cmds,
-            to_executor,
+            to_processes,
+            to_executors,
         };
 
         // create periodic events
@@ -91,13 +93,8 @@ impl Protocol for Basic {
     }
 
     /// Submits a command issued by some client.
-    fn submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-        _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
-        self.handle_submit(dot, cmd)
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command, _time: &dyn SysTime) {
+        self.handle_submit(dot, cmd);
     }
 
     /// Handles protocol messages.
@@ -107,7 +104,7 @@ impl Protocol for Basic {
         _from_shard_id: ShardId,
         msg: Self::Message,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         match msg {
             Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
             Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
@@ -127,7 +124,7 @@ impl Protocol for Basic {
         &mut self,
         event: Self::PeriodicEvent,
         _time: &dyn SysTime,
-    ) -> Vec<Action<Self>> {
+    ) {
         match event {
             PeriodicEvent::GarbageCollection => {
                 self.handle_event_garbage_collection()
@@ -135,9 +132,14 @@ impl Protocol for Basic {
         }
     }
 
-    /// Returns new commands results to be sent to clients.
-    fn to_executor(&mut self) -> Vec<ExecutionInfo> {
-        mem::take(&mut self.to_executor)
+    /// Returns a new action to be sent to other processes.
+    fn to_processes(&mut self) -> Option<Action<Self>> {
+        self.to_processes.pop()
+    }
+
+    /// Returns new execution info for executors.
+    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+        self.to_executors.pop()
     }
 
     fn parallel() -> bool {
@@ -156,11 +158,7 @@ impl Protocol for Basic {
 impl Basic {
     /// Handles a submit operation by a client.
     #[instrument(skip(self, dot, cmd))]
-    fn handle_submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-    ) -> Vec<Action<Self>> {
+    fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
@@ -168,20 +166,15 @@ impl Basic {
         let mstore = Message::MStore { dot, cmd };
         let target = self.bp.fast_quorum();
 
-        // return `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        self.to_processes.push(Action::ToSend {
             target,
             msg: mstore,
-        }]
+        })
     }
 
     #[instrument(skip(self, from, dot, cmd))]
-    fn handle_mstore(
-        &mut self,
-        from: ProcessId,
-        dot: Dot,
-        cmd: Command,
-    ) -> Vec<Action<Self>> {
+    fn handle_mstore(&mut self, from: ProcessId, dot: Dot, cmd: Command) {
         log!("p{}: MStore({:?}, {:?}) from {}", self.id(), dot, cmd, from);
 
         // get cmd info
@@ -194,19 +187,15 @@ impl Basic {
         let mstoreack = Message::MStoreAck { dot };
         let target = singleton![from];
 
-        // return `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        self.to_processes.push(Action::ToSend {
             target,
             msg: mstoreack,
-        }]
+        })
     }
 
     #[instrument(skip(self, from, dot))]
-    fn handle_mstoreack(
-        &mut self,
-        from: ProcessId,
-        dot: Dot,
-    ) -> Vec<Action<Self>> {
+    fn handle_mstoreack(&mut self, from: ProcessId, dot: Dot) {
         log!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
         // get cmd info
@@ -223,23 +212,16 @@ impl Basic {
             };
             let target = self.bp.all();
 
-            // return `ToSend`
-            vec![Action::ToSend {
+            // save new action
+            self.to_processes.push(Action::ToSend {
                 target,
                 msg: mcommit,
-            }]
-        } else {
-            vec![]
+            });
         }
     }
 
     #[instrument(skip(self, _from, dot, cmd))]
-    fn handle_mcommit(
-        &mut self,
-        _from: ProcessId,
-        dot: Dot,
-        cmd: Command,
-    ) -> Vec<Action<Self>> {
+    fn handle_mcommit(&mut self, _from: ProcessId, dot: Dot, cmd: Command) {
         log!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // // get cmd info and its rifl
@@ -255,38 +237,28 @@ impl Basic {
         let execution_info = cmd
             .into_iter(self.bp.shard_id)
             .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
-        self.to_executor.extend(execution_info);
+        self.to_executors.extend(execution_info);
 
         if self.gc_running() {
             // notify self with the committed dot
-            vec![Action::ToForward {
+            self.to_processes.push(Action::ToForward {
                 msg: Message::MCommitDot { dot },
-            }]
+            });
         } else {
             // if we're not running gc, remove the dot info now
             self.cmds.gc_single(dot);
-            vec![]
         }
     }
 
     #[instrument(skip(self, from, dot))]
-    fn handle_mcommit_dot(
-        &mut self,
-        from: ProcessId,
-        dot: Dot,
-    ) -> Vec<Action<Self>> {
+    fn handle_mcommit_dot(&mut self, from: ProcessId, dot: Dot) {
         log!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
-        vec![]
     }
 
     #[instrument(skip(self, from, committed))]
-    fn handle_mgc(
-        &mut self,
-        from: ProcessId,
-        committed: VClock<ProcessId>,
-    ) -> Vec<Action<Self>> {
+    fn handle_mgc(&mut self, from: ProcessId, committed: VClock<ProcessId>) {
         log!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
@@ -297,12 +269,10 @@ impl Basic {
         // compute newly stable dots
         let stable = self.cmds.stable();
         // create `ToForward` to self
-        if stable.is_empty() {
-            vec![]
-        } else {
-            vec![Action::ToForward {
+        if !stable.is_empty() {
+            self.to_processes.push(Action::ToForward {
                 msg: Message::MStable { stable },
-            }]
+            })
         }
     }
 
@@ -311,26 +281,25 @@ impl Basic {
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
-    ) -> Vec<Action<Self>> {
+    ) {
         log!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
-        vec![]
     }
 
     #[instrument(skip(self))]
-    fn handle_event_garbage_collection(&mut self) -> Vec<Action<Self>> {
+    fn handle_event_garbage_collection(&mut self) {
         log!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
         let committed = self.cmds.committed();
 
-        // create `ToSend`
-        vec![Action::ToSend {
+        // save new action
+        self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
             msg: Message::MGarbageCollection { committed },
-        }]
+        });
     }
 
     fn gc_running(&self) -> bool {
@@ -532,7 +501,8 @@ mod tests {
         // register command in executor and submit it in basic 1
         let (process, executor, time) = simulation.get_process(process_id_1);
         executor.wait_for(&cmd);
-        let mut actions = process.submit(None, cmd, time);
+        process.submit(None, cmd, time);
+        let mut actions: Vec<_> = process.to_processes_iter().collect();
 
         // there's a single action
         assert_eq!(actions.len(), 1);
@@ -585,13 +555,16 @@ mod tests {
 
         // process 1 should have something to the executor
         let (process, executor, _) = simulation.get_process(process_id_1);
-        let to_executor = process.to_executor();
+        let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
 
         // handle in executor and check there's a single command ready
         let mut ready: Vec<_> = to_executor
             .into_iter()
-            .flat_map(|info| executor.handle(info))
+            .flat_map(|info| {
+                executor.handle(info);
+                executor.to_clients_iter().collect::<Vec<_>>()
+            })
             .map(|result| result.unwrap_ready())
             .collect();
         assert_eq!(ready.len(), 1);
@@ -605,7 +578,8 @@ mod tests {
             .expect("there should a new submit");
 
         let (process, _, time) = simulation.get_process(target);
-        let mut actions = process.submit(None, cmd, time);
+        process.submit(None, cmd, time);
+        let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
         let mstore = actions.pop().unwrap();
