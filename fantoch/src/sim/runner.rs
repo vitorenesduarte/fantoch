@@ -227,7 +227,9 @@ where
                     executor.wait_for(&cmd);
 
                     // submit to process and schedule output messages
-                    let protocol_actions = process.submit(None, cmd, time);
+                    process.submit(None, cmd, time);
+                    let protocol_actions =
+                        process.to_processes_iter().collect();
                     self.schedule_protocol_actions(
                         process_id,
                         shard_id,
@@ -248,11 +250,12 @@ where
                     let shard_id = process.shard_id();
 
                     // handle message and get ready commands
+                    process.handle(from, from_shard_id, msg, time);
                     let protocol_actions =
-                        process.handle(from, from_shard_id, msg, time);
+                        process.to_processes_iter().collect();
 
                     // handle new execution info in the executor
-                    let to_executor = process.to_executor();
+                    let to_executor = process.to_executors();
                     let ready: Vec<_> = to_executor
                         .into_iter()
                         .flat_map(|info| executor.handle(info))
@@ -313,8 +316,9 @@ where
                     let shard_id = process.shard_id();
 
                     // handle event
+                    process.handle_event(event.clone(), time);
                     let protocol_actions =
-                        process.handle_event(event.clone(), time);
+                        process.to_processes_iter().collect();
                     self.schedule_protocol_actions(
                         process_id,
                         shard_id,

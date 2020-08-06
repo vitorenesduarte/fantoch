@@ -60,40 +60,68 @@ pub trait Protocol: Debug + Clone {
 
     fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool;
 
-    #[must_use]
-    fn submit(
-        &mut self,
-        dot: Option<Dot>,
-        cmd: Command,
-        time: &dyn SysTime,
-    ) -> Vec<Action<Self>>;
+    fn submit(&mut self, dot: Option<Dot>, cmd: Command, time: &dyn SysTime);
 
-    #[must_use]
     fn handle(
         &mut self,
         from: ProcessId,
         from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
-    ) -> Vec<Action<Self>>;
+    );
+
+    fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime);
 
     #[must_use]
-    fn handle_event(
-        &mut self,
-        event: Self::PeriodicEvent,
-        time: &dyn SysTime,
-    ) -> Vec<Action<Self>>;
+    fn to_processes(&mut self) -> Option<Action<Self>>;
 
-    #[must_use]
-    fn to_executor(
+    fn to_executors(
         &mut self,
-    ) -> Vec<<Self::Executor as Executor>::ExecutionInfo>;
+    ) -> Option<<Self::Executor as Executor>::ExecutionInfo>;
 
     fn parallel() -> bool;
 
     fn leaderless() -> bool;
 
     fn metrics(&self) -> &ProtocolMetrics;
+
+    fn to_processes_iter(&mut self) -> ToProcessesIter<'_, Self> {
+        ToProcessesIter { process: self }
+    }
+
+    fn to_executors_iter(&mut self) -> ToExecutorsIter<'_, Self> {
+        ToExecutorsIter { process: self }
+    }
+}
+
+pub struct ToProcessesIter<'a, P> {
+    process: &'a mut P,
+}
+
+impl<'a, P> Iterator for ToProcessesIter<'a, P>
+where
+    P: Protocol,
+{
+    type Item = Action<P>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.process.to_processes()
+    }
+}
+
+pub struct ToExecutorsIter<'a, P> {
+    process: &'a mut P,
+}
+
+impl<'a, P> Iterator for ToExecutorsIter<'a, P>
+where
+    P: Protocol,
+{
+    type Item = <P::Executor as Executor>::ExecutionInfo;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.process.to_executors()
+    }
 }
 
 pub type ProtocolMetrics = Metrics<ProtocolMetricsKind, u64>;
@@ -134,7 +162,7 @@ pub trait PeriodicEventIndex {
     fn index(&self) -> Option<(usize, usize)>;
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action<P: Protocol> {
     ToSend {
         target: HashSet<ProcessId>,

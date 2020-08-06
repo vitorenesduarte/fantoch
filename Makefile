@@ -3,6 +3,8 @@ fmt:
 	cargo fmt --all
 	rustup override set stable
 
+t: test
+
 test:
 	cd fantoch && cargo test --release && cd ..
 	cd fantoch_ps && cargo test --release && cd ..

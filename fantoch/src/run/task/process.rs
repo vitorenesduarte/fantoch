@@ -543,31 +543,21 @@ async fn handle_from_processes<P>(
     P: Protocol + 'static,
 {
     // handle message in process and potentially new actions
-    let actions = process.handle(from_id, from_shard_id, msg, time);
-    handle_actions(
-        worker_index,
-        actions,
-        process,
-        to_writers,
-        reader_to_workers,
-        time,
-    )
-    .await;
+    process.handle(from_id, from_shard_id, msg, time);
+    handle_actions(worker_index, process, to_writers, reader_to_workers, time)
+        .await;
 
-    // get new execution info for the executor
-    let to_executor = process.to_executor();
-
-    // if there's an execution logger, then also send execution info to it
-    if let Some(to_execution_logger) = to_execution_logger {
-        for execution_info in to_executor.clone() {
-            if let Err(e) = to_execution_logger.send(execution_info).await {
+    // notify executors
+    for execution_info in process.to_executors_iter() {
+        // if there's an execution logger, then also send execution info to it
+        if let Some(to_execution_logger) = to_execution_logger {
+            if let Err(e) =
+                to_execution_logger.send(execution_info.clone()).await
+            {
                 println!("[server] error while sending new execution info to execution logger: {:?}", e);
             }
         }
-    }
-
-    // notify executors
-    for execution_info in to_executor {
+        // notify executor
         if let Err(e) = worker_to_executors.forward(execution_info).await {
             println!(
                 "[server] error while sending new execution info to executor: {:?}",
@@ -580,7 +570,6 @@ async fn handle_from_processes<P>(
 // TODO maybe run in parallel
 async fn handle_actions<P>(
     worker_index: usize,
-    mut actions: Vec<Action<P>>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -588,7 +577,7 @@ async fn handle_actions<P>(
 ) where
     P: Protocol + 'static,
 {
-    while let Some(action) = actions.pop() {
+    while let Some(action) = process.to_processes() {
         match action {
             Action::ToSend { target, msg } => {
                 // prevent unnecessary cloning of messages, since send only
@@ -606,7 +595,7 @@ async fn handle_actions<P>(
                 // check if should handle message locally
                 if target.contains(&process.id()) {
                     // handle msg locally if self in `target`
-                    let new_actions = handle_message_from_self::<P>(
+                    handle_message_from_self::<P>(
                         worker_index,
                         msg,
                         process,
@@ -614,12 +603,11 @@ async fn handle_actions<P>(
                         time,
                     )
                     .await;
-                    actions.extend(new_actions);
                 }
             }
             Action::ToForward { msg } => {
                 // handle msg locally if self in `target`
-                let new_actions = handle_message_from_self(
+                handle_message_from_self(
                     worker_index,
                     msg,
                     process,
@@ -627,7 +615,6 @@ async fn handle_actions<P>(
                     time,
                 )
                 .await;
-                actions.extend(new_actions);
             }
         }
     }
@@ -639,8 +626,7 @@ async fn handle_message_from_self<P>(
     process: &mut P,
     reader_to_workers: &mut ReaderToWorkers<P>,
     time: &RunTime,
-) -> Vec<Action<P>>
-where
+) where
     P: Protocol + 'static,
 {
     // create msg to be forwarded
@@ -654,7 +640,6 @@ where
         if let Err(e) = reader_to_workers.forward(to_forward).await {
             println!("[server] error notifying process task with msg from self: {:?}", e);
         }
-        vec![]
     }
 }
 
@@ -714,16 +699,9 @@ async fn handle_from_client<P>(
     P: Protocol + 'static,
 {
     // submit command in process
-    let actions = process.submit(dot, cmd, time);
-    handle_actions(
-        worker_index,
-        actions,
-        process,
-        to_writers,
-        reader_to_workers,
-        time,
-    )
-    .await;
+    process.submit(dot, cmd, time);
+    handle_actions(worker_index, process, to_writers, reader_to_workers, time)
+        .await;
 }
 
 async fn selected_from_periodic_task<P, R>(
@@ -767,10 +745,9 @@ async fn handle_from_periodic_task<P, R>(
     match msg {
         FromPeriodicMessage::Event(event) => {
             // handle event in process
-            let actions = process.handle_event(event, time);
+            process.handle_event(event, time);
             handle_actions(
                 worker_index,
-                actions,
                 process,
                 to_writers,
                 reader_to_workers,
