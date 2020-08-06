@@ -272,7 +272,7 @@ pub fn latency_plot<R>(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
     Ok(results)
 }
 
@@ -306,7 +306,7 @@ pub fn cdf_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -339,6 +339,8 @@ pub fn cdf_plot_per_f(
 
     let mut previous_axis: Option<Axes<'_>> = None;
 
+    let mut plotted = 0;
+
     for f in vec![2, 1] {
         let mut hide_xticklabels = false;
 
@@ -355,11 +357,18 @@ pub fn cdf_plot_per_f(
         let ax = plt.subplot(2, 1, f, kwargs)?;
 
         // keep track of the number of plotted instances
-        let mut plotted = 0;
+        let mut subfigure_plotted = 0;
 
         // plot all searches that match this `f`
         for search in searches.iter().filter(|search| search.f == f) {
-            inner_cdf_plot(py, &ax, *search, &style_fun, &mut plotted, db)?;
+            inner_cdf_plot(
+                py,
+                &ax,
+                *search,
+                &style_fun,
+                &mut subfigure_plotted,
+                db,
+            )?;
         }
 
         // set cdf plot style
@@ -373,14 +382,17 @@ pub fn cdf_plot_per_f(
         // specific pull-up for this kind of plot
         let y_bbox_to_anchor = Some(1.41);
         // legend
-        add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
+        add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
 
         // save axis
         previous_axis = Some(ax);
+
+        // track global number of plotted
+        plotted += subfigure_plotted;
     }
 
     // end plot
-    end_plot(output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -567,7 +579,7 @@ pub fn throughput_latency_plot(
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
@@ -595,7 +607,7 @@ pub fn dstat_table(
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
 
-    let mut has_data = false;
+    let mut plotted = 0;
     for search in searches {
         let mut exp_data = db.find(search)?;
         match exp_data.len() {
@@ -659,11 +671,10 @@ pub fn dstat_table(
         cells.push(cell);
 
         // mark that there's data to be plotted
-        has_data = true
+        plotted += 1;
     }
 
-    // only try to plot if there's any data
-    if has_data {
+    if plotted > 0 {
         // start python
         let gil = Python::acquire_gil();
         let py = gil.python();
@@ -693,8 +704,9 @@ pub fn dstat_table(
         plt.tight_layout()?;
 
         // end plot
-        end_plot(output_dir, output_file, py, &plt, None)?;
+        end_plot(plotted, output_dir, output_file, py, &plt, None)?;
     }
+
     Ok(())
 }
 
@@ -731,12 +743,18 @@ fn start_plot<'a>(
 }
 
 fn end_plot(
+    plotted: usize,
     output_dir: Option<&str>,
     output_file: &str,
     py: Python<'_>,
     plt: &PyPlot<'_>,
     fig: Option<Figure<'_>>,
 ) -> Result<(), Report> {
+    if plotted == 0 {
+        // if nothing was plotted, just close the current figure
+        return plt.close(None);
+    };
+
     // maybe save `output_file` in `output_dir` (if one was set)
     let output_file = if let Some(output_dir) = output_dir {
         // make sure `output_dir` exists
@@ -767,6 +785,9 @@ fn add_legend(
     py: Python<'_>,
     ax: &Axes<'_>,
 ) -> Result<(), Report> {
+    if plotted == 0 {
+        return Ok(());
+    }
     // default values for `y_bbox_to_anchor`
     let one_row = 1.17;
     let two_rows = 1.255;
