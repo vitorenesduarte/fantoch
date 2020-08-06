@@ -137,6 +137,7 @@ impl MessageKey for SlotExecutionInfo {}
 mod tests {
     use super::*;
     use permutator::Permutation;
+    use std::collections::BTreeMap;
 
     #[test]
     fn slot_executor_flow() {
@@ -148,11 +149,12 @@ mod tests {
         let rifl_5 = Rifl::new(5, 1);
 
         // create commands
-        let cmd_1 = Command::put(rifl_1, String::from("a"), String::from("1"));
-        let cmd_2 = Command::get(rifl_2, String::from("a"));
-        let cmd_3 = Command::put(rifl_3, String::from("a"), String::from("2"));
-        let cmd_4 = Command::get(rifl_4, String::from("a"));
-        let cmd_5 = Command::put(rifl_5, String::from("b"), String::from("3"));
+        let key = String::from("a");
+        let cmd_1 = Command::put(rifl_1, key.clone(), String::from("1"));
+        let cmd_2 = Command::get(rifl_2, key.clone());
+        let cmd_3 = Command::put(rifl_3, key.clone(), String::from("2"));
+        let cmd_4 = Command::get(rifl_4, key.clone());
+        let cmd_5 = Command::put(rifl_5, key.clone(), String::from("3"));
 
         // create execution info
         let ei_1 = SlotExecutionInfo::new(1, cmd_1);
@@ -163,9 +165,13 @@ mod tests {
         let mut infos = vec![ei_1, ei_2, ei_3, ei_4, ei_5];
 
         // create expected results:
-        // - we don't expect rifl 1 before we will not wait for it in the
+        // - we don't expect rifl 1 because we will not wait for it in the
         //   executor
-        let expected_rifl_order = vec![rifl_2, rifl_3, rifl_4, rifl_5];
+        let mut expected_results = BTreeMap::new();
+        expected_results.insert(rifl_2, Some(String::from("1")));
+        expected_results.insert(rifl_3, Some(String::from("1")));
+        expected_results.insert(rifl_4, Some(String::from("2")));
+        expected_results.insert(rifl_5, Some(String::from("2")));
 
         // check the execution order for all possible permutations
         infos.permutation().for_each(|p| {
@@ -185,18 +191,27 @@ mod tests {
             executor.wait_for_rifl(rifl_4);
             executor.wait_for_rifl(rifl_5);
 
-            let rifls: Vec<_> = p
+            let results: BTreeMap<_, _> = p
                 .clone()
                 .into_iter()
                 .flat_map(|info| {
                     executor.handle(info);
                     executor
                         .to_clients_iter()
-                        .map(|result| result.unwrap_ready().rifl())
+                        .map(|result| {
+                            let ready = result.unwrap_ready();
+                            let rifl = ready.rifl();
+                            let result = ready
+                                .results()
+                                .get(&key)
+                                .expect("key should be in results")
+                                .clone();
+                            (rifl, result)
+                        })
                         .collect::<Vec<_>>()
                 })
                 .collect();
-            assert_eq!(rifls, expected_rifl_order);
+            assert_eq!(results, expected_results);
         });
     }
 }
