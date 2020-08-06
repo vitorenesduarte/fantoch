@@ -1,8 +1,8 @@
 mod common;
 
+use color_eyre::Report;
 use fantoch_ps::protocol::NewtFineLocked;
-use std::error::Error;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Report> {
     common::protocol::run::<NewtFineLocked>()
 }

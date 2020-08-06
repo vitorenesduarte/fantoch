@@ -8,7 +8,6 @@ use fantoch::planet::Region;
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::{ExperimentConfig, ProcessType, SerializationFormat};
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::path::Path;
@@ -16,9 +15,9 @@ use std::sync::{Arc, Mutex};
 
 const SNAPSHOT_SUFFIX: &str = "_experiment_data_snapshot.bincode.gz";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct ResultsDB {
-    results: Vec<(ExperimentConfig, ExperimentData)>,
+    results: Vec<(DirEntry, ExperimentConfig, ExperimentData)>,
 }
 
 impl ResultsDB {
@@ -61,8 +60,25 @@ impl ResultsDB {
             })
             .collect();
         for entry in loads {
-            let entry = entry.wrap_err("load entry")?;
-            results.push(entry);
+            let entry = entry.wrap_err("load entry");
+            match entry {
+                Ok(entry) => {
+                    results.push(entry);
+                }
+                Err(e) => {
+                    let missing_file =
+                        String::from("No such file or directory (os error 2)");
+                    if e.root_cause().to_string() == missing_file {
+                        // if some file was not found, it may be because the
+                        // experiment is still running; in this case, ignore the
+                        // error
+                        println!("entry ignored...");
+                    } else {
+                        // if not, quit
+                        return Err(e);
+                    }
+                }
+            }
         }
 
         Ok(Self { results })
@@ -72,7 +88,7 @@ impl ResultsDB {
         timestamp: DirEntry,
         loaded_entries: Arc<Mutex<usize>>,
         total_entries: usize,
-    ) -> Result<(ExperimentConfig, ExperimentData), Report> {
+    ) -> Result<(DirEntry, ExperimentConfig, ExperimentData), Report> {
         // register load start time
         let start = std::time::Instant::now();
 
@@ -83,7 +99,12 @@ impl ResultsDB {
             exp_config_path,
             SerializationFormat::Json,
         )
-        .wrap_err("deserialize experiment config")?;
+        .wrap_err_with(|| {
+            format!(
+                "deserialize experiment config of {:?}",
+                timestamp.path().display()
+            )
+        })?;
 
         // check if there's snapshot of experiment data
         let snapshot =
@@ -122,14 +143,17 @@ impl ResultsDB {
             loaded_entries,
             total_entries,
         );
-        Ok((exp_config, exp_data))
+        Ok((timestamp, exp_config, exp_data))
     }
 
-    pub fn find(&self, search: Search) -> Result<Vec<&ExperimentData>, Report> {
+    pub fn find(
+        &self,
+        search: Search,
+    ) -> Result<Vec<(&DirEntry, &ExperimentData)>, Report> {
         let filtered = self
             .results
             .iter()
-            .filter(move |(exp_config, _)| {
+            .filter(move |(_, exp_config, _)| {
                 // filter out configurations with different n
                 if exp_config.config.n() != search.n {
                     return false;
@@ -199,7 +223,7 @@ impl ResultsDB {
                 // return it
                 true
             })
-            .map(|(_, exp_data)| exp_data)
+            .map(|(timestamp, _, exp_data)| (timestamp, exp_data))
             .collect();
         Ok(filtered)
     }

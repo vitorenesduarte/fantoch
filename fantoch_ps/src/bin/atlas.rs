@@ -1,10 +1,10 @@
 mod common;
 
+use color_eyre::Report;
 use fantoch_ps::protocol::AtlasSequential;
-use std::error::Error;
 
 // TODO can we generate all the protocol binaries with a macro?
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Report> {
     common::protocol::run::<AtlasSequential>()
 }

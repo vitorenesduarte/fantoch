@@ -92,6 +92,7 @@ use crate::log;
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use crate::HashSet;
+use color_eyre::Report;
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
 use serde::Serialize;
@@ -123,7 +124,7 @@ pub async fn process<P, A>(
     tracer_show_interval: Option<usize>,
     ping_interval: Option<usize>,
     metrics_file: Option<String>,
-) -> RunResult<()>
+) -> Result<(), Report>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
     A: ToSocketAddrs + Debug + Clone,
@@ -182,7 +183,7 @@ async fn process_with_notify_and_inspect<P, A, R>(
     metrics_file: Option<String>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
-) -> RunResult<()>
+) -> Result<(), Report>
 where
     P: Protocol + Send + 'static, // TODO what does this 'static do?
     A: ToSocketAddrs + Debug + Clone,
@@ -421,7 +422,7 @@ pub async fn client<A>(
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     metrics_file: Option<String>,
-) -> RunResult<()>
+) -> Result<(), Report>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
@@ -791,7 +792,10 @@ fn do_handle_cmd_result<'a>(
 }
 
 // TODO make this async
-fn serialize_and_compress<T: Serialize>(data: &T, file: &str) -> RunResult<()> {
+fn serialize_and_compress<T: Serialize>(
+    data: &T,
+    file: &str,
+) -> Result<(), Report> {
     // if the file does not exist it will be created, otherwise truncated
     std::fs::File::create(file)
         .ok()
@@ -901,8 +905,8 @@ pub mod tests {
             .unwrap_or_default() as usize
     }
 
-    #[tokio::test]
-    async fn run_basic_test() {
+    #[test]
+    fn run_basic_test() {
         use crate::client::{KeyGen, ShardGen};
 
         // config
@@ -939,18 +943,19 @@ pub mod tests {
         let extra_run_time = Some(Duration::from_secs(5));
 
         // run test and get total stable commands
-        let total_stable_count =
-            run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
-                config,
-                workload,
-                clients_per_process,
-                workers,
-                executors,
-                tracer_show_interval,
-                Some(inspect_stable_commands),
-                extra_run_time,
+        let total_stable_count = tokio_test_runtime()
+            .block_on(
+                run_test_with_inspect_fun::<crate::protocol::Basic, usize>(
+                    config,
+                    workload,
+                    clients_per_process,
+                    workers,
+                    executors,
+                    tracer_show_interval,
+                    Some(inspect_stable_commands),
+                    extra_run_time,
+                ),
             )
-            .await
             .expect("run should complete successfully")
             .into_iter()
             .map(|(_, stable_counts)| stable_counts.into_iter().sum::<usize>())
@@ -959,6 +964,19 @@ pub mod tests {
         // get that all commands stablized at all processes
         let total_commands = n * clients_per_process * commands_per_client;
         assert!(total_stable_count == total_commands * n);
+    }
+
+    pub fn tokio_test_runtime() -> tokio::runtime::Runtime {
+        // create tokio runtime
+        tokio::runtime::Builder::new()
+            .threaded_scheduler()
+            .core_threads(num_cpus::get())
+            .thread_stack_size(32 * 1024 * 1024) // 32MB
+            .enable_io()
+            .enable_time()
+            .thread_name("runner")
+            .build()
+            .expect("tokio runtime build should work")
     }
 
     pub async fn run_test_with_inspect_fun<P, R>(
@@ -970,42 +988,7 @@ pub mod tests {
         tracer_show_interval: Option<usize>,
         inspect_fun: Option<fn(&P) -> R>,
         extra_run_time: Option<Duration>,
-    ) -> RunResult<HashMap<ProcessId, Vec<R>>>
-    where
-        P: Protocol + Send + 'static,
-        R: Clone + Debug + Send + 'static,
-    {
-        // create local task set
-        let local = tokio::task::LocalSet::new();
-
-        // run test in local task set
-        local
-            .run_until(async {
-                run::<P, R>(
-                    config,
-                    workload,
-                    clients_per_process,
-                    workers,
-                    executors,
-                    tracer_show_interval,
-                    inspect_fun,
-                    extra_run_time,
-                )
-                .await
-            })
-            .await
-    }
-
-    async fn run<P, R>(
-        config: Config,
-        workload: Workload,
-        clients_per_process: usize,
-        workers: usize,
-        executors: usize,
-        tracer_show_interval: Option<usize>,
-        inspect_fun: Option<fn(&P) -> R>,
-        extra_run_time: Option<Duration>,
-    ) -> RunResult<HashMap<ProcessId, Vec<R>>>
+    ) -> Result<HashMap<ProcessId, Vec<R>>, Report>
     where
         P: Protocol + Send + 'static,
         R: Clone + Debug + Send + 'static,
@@ -1153,34 +1136,32 @@ pub mod tests {
 
             // spawn processes
             let metrics_file = format!(".metrics_process_{}", process_id);
-            tokio::task::spawn_local(process_with_notify_and_inspect::<
-                P,
-                String,
-                R,
-            >(
-                process_id,
-                shard_id,
-                sorted_processes,
-                localhost,
-                port,
-                client_port,
-                addresses,
-                config,
-                tcp_nodelay,
-                tcp_buffer_size,
-                tcp_flush_interval,
-                process_channel_buffer_size,
-                client_channel_buffer_size,
-                workers,
-                executors,
-                multiplexing,
-                execution_log,
-                tracer_show_interval,
-                ping_interval,
-                Some(metrics_file),
-                semaphore.clone(),
-                Some(inspect),
-            ));
+            tokio::task::spawn(
+                process_with_notify_and_inspect::<P, String, R>(
+                    process_id,
+                    shard_id,
+                    sorted_processes,
+                    localhost,
+                    port,
+                    client_port,
+                    addresses,
+                    config,
+                    tcp_nodelay,
+                    tcp_buffer_size,
+                    tcp_flush_interval,
+                    process_channel_buffer_size,
+                    client_channel_buffer_size,
+                    workers,
+                    executors,
+                    multiplexing,
+                    execution_log,
+                    tracer_show_interval,
+                    ping_interval,
+                    Some(metrics_file),
+                    semaphore.clone(),
+                    Some(inspect),
+                ),
+            );
         }
 
         // wait that all processes are connected
@@ -1224,7 +1205,7 @@ pub mod tests {
 
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);
-                tokio::task::spawn_local(client(
+                tokio::task::spawn(client(
                     client_ids,
                     addresses,
                     interval,

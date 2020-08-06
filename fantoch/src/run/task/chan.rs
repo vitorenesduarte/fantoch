@@ -1,4 +1,4 @@
-use crate::run::prelude::*;
+use color_eyre::Report;
 use std::fmt::Debug;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -32,7 +32,7 @@ where
         self.name = Some(name.into());
     }
 
-    pub async fn send(&mut self, value: M) -> RunResult<()> {
+    pub async fn send(&mut self, value: M) -> Result<(), Report> {
         match self.sender.try_send(value) {
             Ok(()) => {
                 // if it was sent, we're done
@@ -44,11 +44,14 @@ where
                     Some(name) => println!("named channel {} is full", name),
                     None => println!("unnamed channel is full"),
                 }
-                self.sender.send(value).await.map_err(|err| err.into())
+                self.sender
+                    .send(value)
+                    .await
+                    .map_err(|e| Report::msg(e.to_string()))
             }
             Err(e) => {
                 // otherwise, upstream the error
-                Err(e.into())
+                Err(Report::msg(e.to_string()))
             }
         }
     }

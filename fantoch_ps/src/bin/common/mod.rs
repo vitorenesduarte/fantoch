@@ -5,9 +5,13 @@ pub mod protocol;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
+const DEFAULT_STACK_SIZE: usize = 2 * 1024 * 1024; // 2MBs
 
 #[allow(dead_code)]
-pub fn tokio_runtime(cpus: Option<usize>) -> tokio::runtime::Runtime {
+pub fn tokio_runtime(
+    stack_size: usize,
+    cpus: Option<usize>,
+) -> tokio::runtime::Runtime {
     // get number of cpus
     let available = num_cpus::get();
     let cpus = cpus.unwrap_or(available);
@@ -17,6 +21,7 @@ pub fn tokio_runtime(cpus: Option<usize>) -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
         .threaded_scheduler()
         .core_threads(cpus)
+        .thread_stack_size(stack_size)
         .enable_io()
         .enable_time()
         .thread_name("runner")
@@ -58,6 +63,16 @@ fn parse_buffer_size(buffer_size: Option<&str>, default: usize) -> usize {
                 .expect("buffer size should be a number")
         })
         .unwrap_or(default)
+}
+
+pub fn parse_stack_size(stack_size: Option<&str>) -> usize {
+    stack_size
+        .map(|stack_size| {
+            stack_size
+                .parse::<usize>()
+                .expect("stack size should be a number")
+        })
+        .unwrap_or(DEFAULT_STACK_SIZE)
 }
 
 pub fn parse_cpus(cpus: Option<&str>) -> Option<usize> {

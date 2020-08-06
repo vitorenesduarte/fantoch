@@ -3,6 +3,7 @@ use crate::protocol::common::graph::{
     KeyClocks, LockedKeyClocks, QuorumClocks, SequentialKeyClocks,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
+use crate::protocol::partial::{self, ShardsCommits};
 use crate::util;
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -113,18 +114,19 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         cmd: Command,
         _time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
-        self.handle_submit(dot, cmd)
+        self.handle_submit(dot, cmd, true)
     }
 
     /// Handles protocol messages.
     fn handle(
         &mut self,
         from: ProcessId,
-        _from_shard_id: ShardId,
+        from_shard_id: ShardId,
         msg: Self::Message,
         time: &dyn SysTime,
     ) -> Vec<Action<Self>> {
         match msg {
+            // Protocol messages
             Message::MCollect {
                 dot,
                 cmd,
@@ -143,6 +145,17 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             Message::MConsensusAck { dot, ballot } => {
                 self.handle_mconsensusack(from, dot, ballot, time)
             }
+            // Partial replication
+            Message::MForwardSubmit { dot, cmd } => {
+                self.handle_submit(Some(dot), cmd, false)
+            }
+            Message::MShardCommit { dot, clock } => {
+                self.handle_mshard_commit(from, from_shard_id, dot, clock, time)
+            }
+            Message::MShardAggregatedCommit { dot, clock } => {
+                self.handle_mshard_aggregated_commit(dot, clock, time)
+            }
+            // GC messages
             Message::MCommitDot { dot } => {
                 self.handle_mcommit_dot(from, dot, time)
             }
@@ -193,9 +206,27 @@ impl<KC: KeyClocks> Atlas<KC> {
         &mut self,
         dot: Option<Dot>,
         cmd: Command,
+        target_shard: bool,
     ) -> Vec<Action<Self>> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
+
+        // create submit actions
+        let create_mforward_submit =
+            |dot, cmd| Message::MForwardSubmit { dot, cmd };
+        let mut actions: Vec<Action<Self>> = partial::submit_actions(
+            &self.bp,
+            dot,
+            &cmd,
+            target_shard,
+            create_mforward_submit,
+        );
+        log!(
+            "p{}: submit extra actions for {:?}: {:?}",
+            self.id(),
+            dot,
+            actions
+        );
 
         // compute its clock
         // - here we don't save the command in `keys_clocks`; if we did, it
@@ -214,11 +245,12 @@ impl<KC: KeyClocks> Atlas<KC> {
         };
         let target = self.bp.all();
 
-        // return `ToSend`
-        vec![Action::ToSend {
+        // add `Mcollect` send as action and return all actions
+        actions.push(Action::ToSend {
             target,
             msg: mcollect,
-        }]
+        });
+        actions
     }
 
     #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
@@ -341,19 +373,11 @@ impl<KC: KeyClocks> Atlas<KC> {
             if equal_to_union {
                 self.bp.fast_path();
                 // fast path: create `MCommit`
-                // TODO create a slim-MCommit that only sends the payload to the
-                // non-fast-quorum members, or send the payload
-                // to all in a slim-MConsensus
-                let mcommit = Message::MCommit { dot, value };
-                let target = self.bp.all();
-
-                // return `ToSend`
-                vec![Action::ToSend {
-                    target,
-                    msg: mcommit,
-                }]
+                let shard_count = info.cmd.as_ref().unwrap().shard_count();
+                Self::mcommit_actions(&self.bp, info, shard_count, dot, value)
             } else {
                 self.bp.slow_path();
+
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };
@@ -421,13 +445,19 @@ impl<KC: KeyClocks> Atlas<KC> {
         let msg = SynodMessage::MChosen(value);
         assert!(info.synod.handle(from, msg).is_none());
 
-        if self.gc_running() {
-            // notify self with the committed dot
+        // check if this dot is targetted to my shard
+        // TODO: fix this once we implement recovery for partial replication
+        let my_shard = util::process_ids(self.bp.shard_id, self.bp.config.n())
+            .any(|peer_id| peer_id == dot.source());
+
+        if self.gc_running() && my_shard {
+            // if running gc and this dot belongs to my shard, then notify self
+            // (i.e. the worker responsible for GC) with the committed dot
             vec![Action::ToForward {
                 msg: Message::MCommitDot { dot },
             }]
         } else {
-            // if we're not running gc, remove the dot info now
+            // not running gc, so remove the dot info now
             self.cmds.gc_single(dot);
             vec![]
         }
@@ -505,15 +535,9 @@ impl<KC: KeyClocks> Atlas<KC> {
         // compute message: that can either be nothing or an mcommit
         match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
             Some(SynodMessage::MChosen(value)) => {
-                // enough accepts were gathered and the value has been chosen: create `MCommit` and target
-                let target = self.bp.all();
-                let mcommit = Message::MCommit { dot, value };
-
-                // return `ToSend`
-                vec![Action::ToSend {
-                    target,
-                    msg: mcommit,
-                }]
+                // enough accepts were gathered and the value has been chosen; create `MCommit`
+                let shard_count = info.cmd.as_ref().unwrap().shard_count();
+                Self::mcommit_actions(&self.bp, info, shard_count, dot, value)
             }
             None => {
                 // not enough accepts yet
@@ -523,6 +547,85 @@ impl<KC: KeyClocks> Atlas<KC> {
                 "no other type of message should be output by Synod in the MConsensusAck handler"
             ),
         }
+    }
+
+    #[instrument(skip(self, from, _from_shard_id, dot, clock, _time))]
+    fn handle_mshard_commit(
+        &mut self,
+        from: ProcessId,
+        _from_shard_id: ShardId,
+        dot: Dot,
+        clock: VClock<ProcessId>,
+        _time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: MShardCommit({:?}, {:?}) from shard {} | time={}",
+            self.id(),
+            dot,
+            clock,
+            _from_shard_id,
+            _time.millis()
+        );
+
+        // get cmd info
+        let info = self.cmds.get(dot);
+
+        let shard_count = info.cmd.as_ref().unwrap().shard_count();
+        let add_shards_commits_info =
+            |max_clock: &mut VClock<ProcessId>, clock| max_clock.join(&clock);
+        let create_mshard_aggregated_commit =
+            |dot, max_clock: &VClock<ProcessId>| {
+                Message::MShardAggregatedCommit {
+                    dot,
+                    clock: max_clock.clone(),
+                }
+            };
+
+        partial::handle_mshard_commit(
+            &self.bp,
+            &mut info.shards_commits,
+            shard_count,
+            from,
+            dot,
+            clock,
+            add_shards_commits_info,
+            create_mshard_aggregated_commit,
+        )
+    }
+
+    #[instrument(skip(self, dot, clock, _time))]
+    fn handle_mshard_aggregated_commit(
+        &mut self,
+        dot: Dot,
+        clock: VClock<ProcessId>,
+        _time: &dyn SysTime,
+    ) -> Vec<Action<Self>> {
+        log!(
+            "p{}: MShardAggregatedCommit({:?}, {:?}) | time={}",
+            self.id(),
+            dot,
+            clock,
+            _time.millis()
+        );
+
+        // get cmd info
+        let info = self.cmds.get(dot);
+
+        // nothing else to extract
+        let extract_mcommit_extra_data = |_| ();
+        let create_mcommit = |dot, clock, ()| {
+            let value = ConsensusValue::with(false, clock);
+            Message::MCommit { dot, value }
+        };
+
+        partial::handle_mshard_aggregated_commit(
+            &self.bp,
+            &mut info.shards_commits,
+            dot,
+            clock,
+            extract_mcommit_extra_data,
+            create_mcommit,
+        )
     }
 
     #[instrument(skip(self, from, dot, _time))]
@@ -611,6 +714,35 @@ impl<KC: KeyClocks> Atlas<KC> {
         }]
     }
 
+    fn mcommit_actions(
+        bp: &BaseProcess,
+        info: &mut AtlasInfo,
+        shard_count: usize,
+        dot: Dot,
+        value: ConsensusValue,
+    ) -> Vec<Action<Self>> {
+        let create_mcommit = |dot, value, ()| Message::MCommit { dot, value };
+        let create_mshard_commit =
+            |dot, value: ConsensusValue| Message::MShardCommit {
+                dot,
+                clock: value.clock,
+            };
+        // nothing to update
+        let update_shards_commit_info = |_: &mut VClock<ProcessId>, ()| {};
+
+        partial::mcommit_actions(
+            bp,
+            &mut info.shards_commits,
+            shard_count,
+            dot,
+            value,
+            (),
+            create_mcommit,
+            create_mshard_commit,
+            update_shards_commit_info,
+        )
+    }
+
     fn gc_running(&self) -> bool {
         self.bp.config.gc_interval().is_some()
     }
@@ -653,6 +785,8 @@ struct AtlasInfo {
     // `quorum_clocks` is used by the coordinator to compute the threshold
     // clock when deciding whether to take the fast path
     quorum_clocks: QuorumClocks,
+    // `shard_commits` is only used when commands accessed more than one shard
+    shards_commits: Option<ShardsCommits<VClock<ProcessId>>>,
 }
 
 impl Info for AtlasInfo {
@@ -671,6 +805,7 @@ impl Info for AtlasInfo {
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             cmd: None,
             quorum_clocks: QuorumClocks::new(fast_quorum_size),
+            shards_commits: None,
         }
     }
 }
@@ -678,6 +813,7 @@ impl Info for AtlasInfo {
 // `Atlas` protocol messages
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
+    // Protocol messages
     MCollect {
         dot: Dot,
         cmd: Command,
@@ -701,6 +837,20 @@ pub enum Message {
         dot: Dot,
         ballot: u64,
     },
+    // Partial replication messages
+    MForwardSubmit {
+        dot: Dot,
+        cmd: Command,
+    },
+    MShardCommit {
+        dot: Dot,
+        clock: VClock<ProcessId>,
+    },
+    MShardAggregatedCommit {
+        dot: Dot,
+        clock: VClock<ProcessId>,
+    },
+    // GC messages
     MCommitDot {
         dot: Dot,
     },
@@ -724,6 +874,12 @@ impl MessageIndex for Message {
             Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
             Self::MConsensus { dot, .. } => worker_dot_index_shift(&dot),
             Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
+            // Partial replication messages
+            Self::MForwardSubmit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MShardCommit { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MShardAggregatedCommit { dot, .. } => {
+                worker_dot_index_shift(&dot)
+            }
             // GC messages
             Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {

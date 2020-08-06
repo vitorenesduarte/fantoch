@@ -19,6 +19,17 @@ impl KeyGen {
     }
 }
 
+impl std::fmt::Display for KeyGen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ConflictRate { conflict_rate } => {
+                write!(f, "conflict{}", conflict_rate)
+            }
+            Self::Zipf { coefficient, .. } => write!(f, "zipf{}", coefficient),
+        }
+    }
+}
+
 pub struct KeyGenState {
     key_gen: KeyGen,
     client_id: ClientId,

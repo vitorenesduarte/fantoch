@@ -9,7 +9,6 @@ use crate::protocol::{
 };
 use crate::util;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
@@ -38,9 +37,6 @@ pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
 pub fn worker_dot_index_shift(dot: &Dot) -> Option<(usize, usize)> {
     worker_index_shift(dot.sequence() as usize)
 }
-
-// common error type
-pub type RunResult<V> = Result<V, Box<dyn Error>>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProcessHi {

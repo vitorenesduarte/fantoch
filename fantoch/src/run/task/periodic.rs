@@ -132,10 +132,16 @@ async fn periodic_loop_with_inspect<P, R>(
     P: Protocol + 'static,
     R: Clone + 'static,
 {
+    let mut error_shown = false;
     match intervals.len() {
         0 => loop {
             let inspect = to_periodic_inspect.recv().await;
-            periodic_task_inspect(&mut periodic_to_workers, inspect).await;
+            periodic_task_inspect(
+                &mut periodic_to_workers,
+                inspect,
+                &mut error_shown,
+            )
+            .await;
         },
         1 => {
             let (event_msg0, mut interval0) = intervals.remove(0);
@@ -145,7 +151,7 @@ async fn periodic_loop_with_inspect<P, R>(
                         periodic_task_send_msg(&mut periodic_to_workers, event_msg0.clone()).await;
                     }
                     inspect = to_periodic_inspect.recv() => {
-                        periodic_task_inspect(&mut periodic_to_workers, inspect).await
+                        periodic_task_inspect(&mut periodic_to_workers, inspect, &mut error_shown).await
                     }
                 }
             }
@@ -162,7 +168,7 @@ async fn periodic_loop_with_inspect<P, R>(
                         periodic_task_send_msg(&mut periodic_to_workers, event_msg1.clone()).await;
                     }
                     inspect = to_periodic_inspect.recv() => {
-                        periodic_task_inspect(&mut periodic_to_workers, inspect).await
+                        periodic_task_inspect(&mut periodic_to_workers, inspect, &mut error_shown).await
                     }
                 }
             }
@@ -183,7 +189,7 @@ async fn periodic_loop_with_inspect<P, R>(
                         periodic_task_send_msg(&mut periodic_to_workers, event_msg2.clone()).await;
                     }
                     inspect = to_periodic_inspect.recv() => {
-                        periodic_task_inspect(&mut periodic_to_workers, inspect).await
+                        periodic_task_inspect(&mut periodic_to_workers, inspect, &mut error_shown).await
                     }
                 }
             }
@@ -209,6 +215,7 @@ async fn periodic_task_send_msg<P, R>(
 async fn periodic_task_inspect<P, R>(
     periodic_to_workers: &mut PeriodicToWorkers<P, R>,
     inspect: Option<InspectFun<P, R>>,
+    error_shown: &mut bool,
 ) where
     P: Protocol + 'static,
     R: Clone + 'static,
@@ -217,6 +224,9 @@ async fn periodic_task_inspect<P, R>(
         let inspect_msg = FromPeriodicMessage::Inspect(inspect_fun, reply_chan);
         periodic_task_send_msg(periodic_to_workers, inspect_msg).await;
     } else {
-        println!("[periodic] error while receiving new inspect message");
+        if !*error_shown {
+            println!("[periodic] error while receiving new inspect message");
+            *error_shown = true;
+        }
     }
 }
