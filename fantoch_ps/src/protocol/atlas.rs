@@ -1094,7 +1094,10 @@ mod tests {
         // handle in executor and check there's a single command ready
         let mut ready: Vec<_> = to_executor
             .into_iter()
-            .flat_map(|info| executor.handle(info))
+            .flat_map(|info| {
+                executor.handle(info);
+                executor.to_clients_iter().collect::<Vec<_>>()
+            })
             .map(|result| result.unwrap_ready())
             .collect();
         assert_eq!(ready.len(), 1);

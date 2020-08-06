@@ -11,6 +11,7 @@ pub struct BasicExecutor {
     store: KVStore,
     pending: Pending,
     metrics: ExecutorMetrics,
+    to_clients: Vec<ExecutorResult>,
 }
 
 impl Executor for BasicExecutor {
@@ -27,11 +28,13 @@ impl Executor for BasicExecutor {
         let aggregate = executors == 1;
         let pending = Pending::new(aggregate, process_id, shard_id);
         let metrics = ExecutorMetrics::new();
+        let to_clients = Vec::new();
 
         Self {
             store,
             pending,
             metrics,
+            to_clients,
         }
     }
 
@@ -44,7 +47,7 @@ impl Executor for BasicExecutor {
         self.pending.wait_for_rifl(rifl);
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
+    fn handle(&mut self, info: Self::ExecutionInfo) {
         let BasicExecutionInfo { rifl, key, op } = info;
         // execute op in the `KVStore`
         let op_result = self.store.execute(&key, op);
@@ -53,10 +56,12 @@ impl Executor for BasicExecutor {
         if let Some(result) =
             self.pending.add_partial(rifl, || (key, op_result))
         {
-            vec![result]
-        } else {
-            Vec::new()
+            self.to_clients.push(result);
         }
+    }
+
+    fn to_clients(&mut self) -> Option<ExecutorResult> {
+        self.to_clients.pop()
     }
 
     fn parallel() -> bool {

@@ -28,7 +28,8 @@ async fn main() {
     while let Some(execution_info) = rw.recv().await {
         println!("adding {:?}", execution_info);
         // result should be empty as we're not wait for any rifl
-        let res = executor.handle(execution_info);
+        executor.handle(execution_info);
+        let res: Vec<_> = executor.to_clients_iter().collect();
         assert!(res.is_empty());
         executor.show_internal_status();
     }

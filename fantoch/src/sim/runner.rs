@@ -326,7 +326,11 @@ where
         // handle new execution info in the executor
         let ready: Vec<_> = process
             .to_executors_iter()
-            .flat_map(|info| executor.handle(info))
+            .flat_map(|info| {
+                executor.handle(info);
+                // TODO remove collect
+                executor.to_clients_iter().collect::<Vec<_>>()
+            })
             .map(|result| result.unwrap_ready())
             .collect();
 

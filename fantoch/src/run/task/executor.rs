@@ -102,7 +102,8 @@ async fn handle_execution_info<P>(
 {
     // forward executor results (commands or partial commands) to clients that
     // are waiting for them
-    for executor_result in executor.handle(execution_info) {
+    executor.handle(execution_info);
+    for executor_result in executor.to_clients_iter() {
         // get client id
         let client_id = executor_result.client();
 

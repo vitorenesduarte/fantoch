@@ -20,6 +20,7 @@ pub struct SlotExecutor {
     // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
     metrics: ExecutorMetrics,
+    to_clients: Vec<ExecutorResult>,
 }
 
 impl Executor for SlotExecutor {
@@ -40,6 +41,7 @@ impl Executor for SlotExecutor {
         // there's nothing to execute in the beginning
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
+        let to_clients = Vec::new();
         Self {
             shard_id,
             config,
@@ -48,6 +50,7 @@ impl Executor for SlotExecutor {
             next_slot,
             to_execute,
             metrics,
+            to_clients,
         }
     }
 
@@ -60,7 +63,7 @@ impl Executor for SlotExecutor {
         assert!(self.pending.insert(rifl));
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) -> Vec<ExecutorResult> {
+    fn handle(&mut self, info: Self::ExecutionInfo) {
         let SlotExecutionInfo { slot, cmd } = info;
         // we shouldn't receive execution info about slots already executed
         // TODO actually, if recovery is involved, then this may not be
@@ -68,7 +71,7 @@ impl Executor for SlotExecutor {
         assert!(slot >= self.next_slot);
 
         if self.config.execute_at_commit() {
-            self.execute(cmd)
+            self.execute(cmd);
         } else {
             // add received command to the commands to be executed and try to
             // execute commands
@@ -77,8 +80,12 @@ impl Executor for SlotExecutor {
             // slot
             let res = self.to_execute.insert(slot, cmd);
             assert!(res.is_none());
-            self.try_next_slot()
+            self.try_next_slot();
         }
+    }
+
+    fn to_clients(&mut self) -> Option<ExecutorResult> {
+        self.to_clients.pop()
     }
 
     fn parallel() -> bool {
@@ -91,27 +98,23 @@ impl Executor for SlotExecutor {
 }
 
 impl SlotExecutor {
-    fn try_next_slot(&mut self) -> Vec<ExecutorResult> {
-        let mut results = Vec::new();
+    fn try_next_slot(&mut self) {
         // gather commands while the next command to be executed exists
         while let Some(cmd) = self.to_execute.remove(&self.next_slot) {
-            results.extend(self.execute(cmd));
+            self.execute(cmd);
             // update the next slot to be executed
             self.next_slot += 1;
         }
-        results
     }
 
-    fn execute(&mut self, cmd: Command) -> Vec<ExecutorResult> {
+    fn execute(&mut self, cmd: Command) {
         // get command rifl
         let rifl = cmd.rifl();
         // execute the command
         let result = cmd.execute(self.shard_id, &mut self.store);
         // update results if this rifl is pending
         if self.pending.remove(&rifl) {
-            vec![ExecutorResult::Ready(result)]
-        } else {
-            vec![]
+            self.to_clients.push(ExecutorResult::Ready(result));
         }
     }
 }
@@ -186,10 +189,11 @@ mod tests {
                 .clone()
                 .into_iter()
                 .flat_map(|info| {
+                    executor.handle(info);
                     executor
-                        .handle(info)
-                        .into_iter()
+                        .to_clients_iter()
                         .map(|result| result.unwrap_ready().rifl())
+                        .collect::<Vec<_>>()
                 })
                 .collect();
             assert_eq!(rifls, expected_rifl_order);
