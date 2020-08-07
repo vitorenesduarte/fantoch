@@ -10,7 +10,6 @@ use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
-#[derive(Clone)]
 pub struct GraphExecutor {
     shard_id: ShardId,
     config: Config,

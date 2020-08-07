@@ -3,7 +3,6 @@ use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use fantoch::HashSet;
-use std::cell::RefCell;
 use std::cmp;
 use std::collections::BTreeSet;
 use threshold::{AEClock, EventSet, VClock};
@@ -61,9 +60,10 @@ impl TarjanSCCFinder {
             );
 
             // find vertex and reset its id
-            let vertex_cell =
-                vertex_index.find(&dot).expect("stack member should exist");
-            vertex_cell.borrow_mut().set_id(0);
+            let vertex = vertex_index
+                .get_mut(&dot)
+                .expect("stack member should exist");
+            vertex.id = 0;
 
             // add dot to set of visited
             visited.insert(dot);
@@ -76,14 +76,11 @@ impl TarjanSCCFinder {
     pub fn strong_connect(
         &mut self,
         dot: Dot,
-        vertex_cell: &RefCell<Vertex>,
+        vertex: &mut Vertex,
         executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
-        // borrow the vertex mutably
-        let mut vertex = vertex_cell.borrow_mut();
-
         // update id
         self.id += 1;
 
@@ -95,18 +92,18 @@ impl TarjanSCCFinder {
         );
 
         // set id and low for vertex
-        vertex.set_id(self.id);
-        vertex.update_low(|_| self.id);
+        vertex.id = self.id;
+        vertex.low = self.id;
 
         // add to the stack
-        vertex.set_on_stack(true);
+        vertex.on_stack = true;
         self.stack.push(dot);
 
         // TODO can we avoid vertex.clock().clone()
         // - if rust understood mutability of struct fields, the clone wouldn't
         //   be necessary
         // compute non-executed deps for each process
-        for (process_id, to) in vertex.clock().clone().iter() {
+        for (process_id, to) in vertex.clock.iter() {
             // get min event from which we need to start checking for
             // dependencies
             let to = to.frontier();
@@ -149,7 +146,7 @@ impl TarjanSCCFinder {
                     continue;
                 }
 
-                match vertex_index.find(&dep_dot) {
+                match vertex_index.get_mut(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
@@ -161,11 +158,10 @@ impl TarjanSCCFinder {
                         );
                         return FinderResult::MissingDependency(dep_dot);
                     }
-                    Some(dep_vertex_cell) => {
+                    Some(dep_vertex) => {
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
                         //   that conflicts are trnasitive
-                        let mut dep_vertex = dep_vertex_cell.borrow();
                         if !self.transitive_conflicts
                             && !vertex.conflicts(&dep_vertex)
                         {
@@ -178,31 +174,23 @@ impl TarjanSCCFinder {
                         }
 
                         // if not visited, visit
-                        if dep_vertex.id() == 0 {
+                        if dep_vertex.id == 0 {
                             log!(
                                 "p{}: Finder::strong_connect non-visited {:?}",
                                 self.process_id,
                                 dep_dot
                             );
 
-                            // drop borrow guards
-                            drop(vertex);
-                            drop(dep_vertex);
-
                             // OPTIMIZATION: passing the vertex as an argument
                             // to `strong_connect`
                             // is also essential to avoid double look-up
                             let result = self.strong_connect(
                                 dep_dot,
-                                &dep_vertex_cell,
+                                dep_vertex,
                                 executed_clock,
                                 vertex_index,
                                 found,
                             );
-
-                            // borrow again
-                            vertex = vertex_cell.borrow_mut();
-                            dep_vertex = dep_vertex_cell.borrow();
 
                             // if missing dependency, give up
                             if let FinderResult::MissingDependency(_) = result {
@@ -210,20 +198,17 @@ impl TarjanSCCFinder {
                             }
 
                             // min low with dep low
-                            vertex.update_low(|low| {
-                                cmp::min(low, dep_vertex.low())
-                            });
+                            vertex.low = cmp::min(vertex.low, dep_vertex.low);
 
                             // drop dep borrow
                             drop(dep_vertex);
                         } else {
                             // if visited and on the stack
-                            if dep_vertex.on_stack() {
+                            if dep_vertex.on_stack {
                                 log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
                                 // min low with dep id
-                                vertex.update_low(|low| {
-                                    cmp::min(low, dep_vertex.id())
-                                });
+                                vertex.low =
+                                    cmp::min(vertex.low, dep_vertex.id);
                             }
 
                             // drop dep borrow
@@ -237,7 +222,7 @@ impl TarjanSCCFinder {
         // if after visiting all neighbors, an SCC was found if vertex.id ==
         // vertex.low
         // - good news: the SCC members are on the stack
-        if vertex.id() == vertex.low() {
+        if vertex.id == vertex.low {
             let mut scc = SCC::new();
 
             // drop borrow
@@ -260,11 +245,10 @@ impl TarjanSCCFinder {
                 *found += 1;
 
                 // get its vertex and change its `on_stack` value
-                let mut member_vertex = vertex_index
-                    .find(&member_dot)
-                    .expect("stack member should exist")
-                    .borrow_mut();
-                member_vertex.set_on_stack(false);
+                let member_vertex = vertex_index
+                    .get_mut(&member_dot)
+                    .expect("stack member should exist");
+                member_vertex.on_stack = false;
 
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
@@ -329,44 +313,6 @@ impl Vertex {
     /// Retrieves vertex's dot.
     pub fn dot(&self) -> Dot {
         self.dot
-    }
-
-    /// Retrieves vertex's clock.
-    fn clock(&self) -> &VClock<ProcessId> {
-        &self.clock
-    }
-
-    /// Retrieves vertex's id.
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    /// Retrieves vertex's low.
-    fn low(&self) -> usize {
-        self.low
-    }
-
-    /// Check if vertex is on the stack.
-    fn on_stack(&self) -> bool {
-        self.on_stack
-    }
-
-    /// Sets vertex's id.
-    fn set_id(&mut self, id: usize) {
-        self.id = id;
-    }
-
-    /// Updates vertex's low.
-    fn update_low<F>(&mut self, update: F)
-    where
-        F: FnOnce(usize) -> usize,
-    {
-        self.low = update(self.low);
-    }
-
-    /// Sets if vertex is on the stack or not.
-    fn set_on_stack(&mut self, on_stack: bool) {
-        self.on_stack = on_stack;
     }
 
     /// This vertex conflicts with another vertex by checking if their commands

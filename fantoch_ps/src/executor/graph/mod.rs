@@ -22,7 +22,6 @@ use fantoch::HashSet;
 use std::fmt;
 use threshold::{AEClock, VClock};
 
-#[derive(Clone)]
 pub struct DependencyGraph {
     process_id: ProcessId,
     executed_clock: AEClock<ProcessId>,
@@ -235,7 +234,7 @@ impl DependencyGraph {
 
     fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
         // get the vertex
-        match self.vertex_index.find(&dot) {
+        match self.vertex_index.get_mut(&dot) {
             Some(vertex) => self.finder.strong_connect(
                 dot,
                 vertex,
