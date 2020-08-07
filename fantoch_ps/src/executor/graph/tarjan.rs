@@ -19,6 +19,7 @@ pub enum FinderResult {
     NotFound,
 }
 
+#[derive(Clone)]
 pub struct TarjanSCCFinder {
     process_id: ProcessId,
     transitive_conflicts: bool,
@@ -43,33 +44,32 @@ impl TarjanSCCFinder {
     /// It also resets the ids of all vertices still on the stack.
     #[must_use]
     pub fn finalize(
-        self,
+        &mut self,
         vertex_index: &VertexIndex,
     ) -> (Vec<SCC>, HashSet<Dot>) {
         let _process_id = self.process_id;
+        // take out sccs
+        let sccs = std::mem::take(&mut self.sccs);
         // reset the id of each dot in the stack, while computing the set of
         // visited dots
-        let visited = self
-            .stack
-            .into_iter()
-            .map(|dot| {
-                log!(
-                    "p{}: Finder::finalize removing {:?} from stack",
-                    _process_id,
-                    dot
-                );
-
-                // find vertex and reset its id
-                let vertex_cell =
-                    vertex_index.find(&dot).expect("stack member should exist");
-                vertex_cell.borrow_mut().set_id(0);
-
-                // add dot to set of visited
+        let mut visited = HashSet::new();
+        while let Some(dot) = self.stack.pop() {
+            log!(
+                "p{}: Finder::finalize removing {:?} from stack",
+                _process_id,
                 dot
-            })
-            .collect();
+            );
+
+            // find vertex and reset its id
+            let vertex_cell =
+                vertex_index.find(&dot).expect("stack member should exist");
+            vertex_cell.borrow_mut().set_id(0);
+
+            // add dot to set of visited
+            visited.insert(dot);
+        }
         // return SCCs found and visited dots
-        (self.sccs, visited)
+        (sccs, visited)
     }
 
     /// Tries to find an SCC starting from root `dot`.
@@ -79,7 +79,7 @@ impl TarjanSCCFinder {
         vertex_cell: &RefCell<Vertex>,
         executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
-        ready_commands: &mut usize,
+        found: &mut usize,
     ) -> FinderResult {
         // borrow the vertex mutably
         let mut vertex = vertex_cell.borrow_mut();
@@ -197,7 +197,7 @@ impl TarjanSCCFinder {
                                 &dep_vertex_cell,
                                 executed_clock,
                                 vertex_index,
-                                ready_commands,
+                                found,
                             );
 
                             // borrow again
@@ -256,8 +256,8 @@ impl TarjanSCCFinder {
                     member_dot
                 );
 
-                // increment ready count
-                *ready_commands += 1;
+                // increment number of commands found
+                *found += 1;
 
                 // get its vertex and change its `on_stack` value
                 let mut member_vertex = vertex_index

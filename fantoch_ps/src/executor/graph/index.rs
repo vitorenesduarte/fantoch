@@ -45,10 +45,7 @@ impl PendingIndex {
     ///   was a dependency and maybe now `dot` can be executed
     pub fn index(&mut self, dep_dot: Dot, dot: Dot) {
         // get current list of pending dots
-        let pending = match self.index.get_mut(&dep_dot) {
-            Some(pending) => pending,
-            None => self.index.entry(dep_dot).or_insert_with(HashSet::new),
-        };
+        let pending = self.index.entry(dep_dot).or_insert_with(HashSet::new);
         // add new `dot` to pending
         pending.insert(dot);
     }

@@ -58,17 +58,16 @@ impl Executor for GraphExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) {
-        let to_execute = if self.config.execute_at_commit() {
-            vec![info.cmd]
+        if self.config.execute_at_commit() {
+            self.execute(info.cmd);
         } else {
             // handle each new info
             self.graph.add(info.dot, info.cmd, info.clock);
             // get more commands that are ready to be executed
-            self.graph.commands_to_execute()
-        };
-
-        // execute them all
-        to_execute.into_iter().for_each(|cmd| self.execute(cmd))
+            while let Some(cmd) = self.graph.command_to_execute() {
+                self.execute(cmd);
+            }
+        }
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
