@@ -30,11 +30,7 @@ pub trait Executor: Sized {
         + Sync
         + MessageKey; // TODO why is Sync needed??
 
-    fn new(
-        process_id: ProcessId,
-        shard_id: ShardId,
-        config: Config,
-    ) -> Self;
+    fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self;
 
     fn handle(&mut self, infos: Self::ExecutionInfo);
 

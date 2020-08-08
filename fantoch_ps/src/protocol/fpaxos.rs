@@ -517,7 +517,6 @@ mod tests {
         config.set_leader(process_id_1);
 
         // executors
-        let executors = 1;
         let executor_1 = SlotExecutor::new(process_id_1, shard_id, config);
         let executor_2 = SlotExecutor::new(process_id_2, shard_id, config);
         let executor_3 = SlotExecutor::new(process_id_3, shard_id, config);
@@ -654,7 +653,8 @@ mod tests {
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
-        let (process, executor, pending,_) = simulation.get_process(process_id_1);
+        let (process, executor, pending, _) =
+            simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
 

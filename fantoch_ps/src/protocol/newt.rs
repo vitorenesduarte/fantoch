@@ -1350,13 +1350,9 @@ mod tests {
         config.set_gc_interval(Duration::from_millis(100));
 
         // executors
-        let executors = 1;
-        let executor_1 =
-            TableExecutor::new(process_id_1, shard_id, config);
-        let executor_2 =
-            TableExecutor::new(process_id_2, shard_id, config);
-        let executor_3 =
-            TableExecutor::new(process_id_3, shard_id, config);
+        let executor_1 = TableExecutor::new(process_id_1, shard_id, config);
+        let executor_2 = TableExecutor::new(process_id_2, shard_id, config);
+        let executor_3 = TableExecutor::new(process_id_3, shard_id, config);
 
         // newts
         let (mut newt_1, _) = Newt::<KC>::new(process_id_1, shard_id, config);

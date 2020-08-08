@@ -415,8 +415,6 @@ mod tests {
     /// executed it's because there's another missing dependency, and now it
     /// will wait for that one.
     fn pending_on_different_key_regression_test() {
-        let shard_id = 0;
-
         // create config
         let n = 1;
         let f = 1;
@@ -814,7 +812,6 @@ mod tests {
         transitive_conflicts: bool,
     ) -> Vec<Rifl> {
         // create queue
-        let shard_id = 0;
         let process_id = 1;
         let f = 1;
         let mut config = Config::new(n, f);
@@ -897,7 +894,6 @@ mod tests {
         };
 
         // create queue
-        let shard_id = 0;
         let process_id = 4;
         let n = 5;
         let f = 1;

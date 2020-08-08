@@ -20,11 +20,7 @@ pub struct TableExecutor {
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
-    fn new(
-        process_id: ProcessId,
-        shard_id: ShardId,
-        config: Config,
-    ) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
         let table = MultiVotesTable::new(

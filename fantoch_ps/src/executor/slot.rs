@@ -169,13 +169,12 @@ mod tests {
                     executor
                         .to_clients_iter()
                         .map(|result| {
-                            let ready = result.unwrap_ready();
-                            let rifl = ready.rifl();
-                            let result = ready
-                                .results()
-                                .get(&key)
-                                .expect("key should be in results")
-                                .clone();
+                            let (rifl, result_key, result) =
+                                result.unwrap_partial();
+                            assert_eq!(
+                                key, result_key,
+                                "expected key not in partial"
+                            );
                             (rifl, result)
                         })
                         .collect::<Vec<_>>()

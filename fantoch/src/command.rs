@@ -116,7 +116,8 @@ impl Command {
         self.shard_to_ops.keys()
     }
 
-    /// Executes self in a `KVStore`, returning the resulting an iterator of `ExecutorResult`.
+    /// Executes self in a `KVStore`, returning the resulting an iterator of
+    /// `ExecutorResult`.
     pub fn execute(
         self,
         shard_id: ShardId,
