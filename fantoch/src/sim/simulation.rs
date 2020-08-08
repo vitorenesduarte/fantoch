@@ -1,5 +1,6 @@
 use crate::client::Client;
 use crate::command::{Command, CommandResult};
+use crate::executor::Pending;
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Action, Protocol};
 use crate::time::SimTime;
@@ -8,7 +9,7 @@ use std::cell::Cell;
 
 pub struct Simulation<P: Protocol> {
     time: SimTime,
-    processes: HashMap<ProcessId, Cell<(P, P::Executor)>>,
+    processes: HashMap<ProcessId, Cell<(P, P::Executor, Pending)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
@@ -34,10 +35,17 @@ where
     /// Registers a `Process` in the `Simulation` by storing it in a `Cell`.
     pub fn register_process(&mut self, process: P, executor: P::Executor) {
         // get identifier
-        let id = process.id();
+        let process_id = process.id();
+        let shard_id = process.shard_id();
+
+        // create pending
+        let aggregate = true;
+        let pending = Pending::new(aggregate, process_id, shard_id);
 
         // register process and check it has never been registered before
-        let res = self.processes.insert(id, Cell::new((process, executor)));
+        let res = self
+            .processes
+            .insert(process_id, Cell::new((process, executor, pending)));
         assert!(res.is_none());
     }
 
@@ -76,7 +84,7 @@ where
         match action {
             Action::ToSend { target, msg } => {
                 // get self process and its shard id
-                let (process, _, time) = self.get_process(process_id);
+                let (process, _, _, time) = self.get_process(process_id);
                 assert_eq!(process.id(), process_id);
                 let shard_id = process.shard_id();
 
@@ -98,7 +106,7 @@ where
                     .filter(|to| to != &process_id)
                     .for_each(|to| {
                         // get target process
-                        let (to_process, _, time) = self.get_process(to);
+                        let (to_process, _, _, time) = self.get_process(to);
                         assert_eq!(to_process.id(), to);
 
                         // handle msg
@@ -146,8 +154,8 @@ where
     pub fn get_process(
         &mut self,
         process_id: ProcessId,
-    ) -> (&mut P, &mut P::Executor, &SimTime) {
-        let (process, executor) = self
+    ) -> (&mut P, &mut P::Executor, &mut Pending, &SimTime) {
+        let (process, executor, pending) = self
             .processes
             .get_mut(&process_id)
             .unwrap_or_else(|| {
@@ -157,7 +165,7 @@ where
                 );
             })
             .get_mut();
-        (process, executor, &self.time)
+        (process, executor, pending, &self.time)
     }
 
     /// Returns the client registered with this identifier.

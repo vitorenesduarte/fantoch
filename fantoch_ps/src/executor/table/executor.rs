@@ -1,9 +1,8 @@
 use crate::executor::table::MultiVotesTable;
 use crate::protocol::common::table::VoteRange;
-use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
-    Executor, ExecutorMetrics, ExecutorResult, MessageKey, Pending,
+    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
@@ -14,7 +13,6 @@ pub struct TableExecutor {
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
-    pending: Pending,
     metrics: ExecutorMetrics,
     to_clients: Vec<ExecutorResult>,
 }
@@ -26,7 +24,6 @@ impl Executor for TableExecutor {
         process_id: ProcessId,
         shard_id: ShardId,
         config: Config,
-        executors: usize,
     ) -> Self {
         // TODO this is specific to newt
         let (_, _, stability_threshold) = config.newt_quorum_sizes();
@@ -37,9 +34,6 @@ impl Executor for TableExecutor {
             stability_threshold,
         );
         let store = KVStore::new();
-        // aggregate results if the number of executors is 1
-        let aggregate = executors == 1;
-        let pending = Pending::new(aggregate, process_id, shard_id);
         let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
 
@@ -47,19 +41,9 @@ impl Executor for TableExecutor {
             execute_at_commit: config.execute_at_commit(),
             table,
             store,
-            pending,
             metrics,
             to_clients,
         }
-    }
-
-    fn wait_for(&mut self, cmd: &Command) {
-        // start command in pending
-        assert!(self.pending.wait_for(cmd));
-    }
-
-    fn wait_for_rifl(&mut self, rifl: Rifl) {
-        self.pending.wait_for_rifl(rifl);
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) {
@@ -113,13 +97,11 @@ impl TableExecutor {
         to_execute.for_each(|(rifl, op)| {
             // execute op in the `KVStore`
             let op_result = self.store.execute(&key, op);
-
-            // add partial result to `Pending`
-            if let Some(executor_result) =
-                self.pending.add_partial(rifl, || (key.clone(), op_result))
-            {
-                self.to_clients.push(executor_result);
-            }
+            self.to_clients.push(ExecutorResult::Partial(
+                rifl,
+                key.clone(),
+                op_result,
+            ));
         })
     }
 }

@@ -362,7 +362,6 @@ where
         process_id,
         shard_id,
         config,
-        executors,
         worker_to_executors_rxs,
         client_to_executors_rxs,
         executor_to_metrics_logger,

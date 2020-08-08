@@ -13,7 +13,6 @@ pub fn start_executors<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
-    executors: usize,
     worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
@@ -32,7 +31,6 @@ pub fn start_executors<P>(
             process_id,
             shard_id,
             config,
-            executors,
             from_workers,
             from_clients,
             to_metrics_logger.clone(),
@@ -45,7 +43,6 @@ async fn executor_task<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
-    executors: usize,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
@@ -53,8 +50,7 @@ async fn executor_task<P>(
     P: Protocol,
 {
     // create executor
-    let mut executor =
-        P::Executor::new(process_id, shard_id, config, executors);
+    let mut executor = P::Executor::new(process_id, shard_id, config);
 
     // holder of all client info
     let mut to_clients = ToClients::new();
@@ -75,7 +71,7 @@ async fn executor_task<P>(
             from_client = from_clients.recv() => {
                 log!("[executor] from client: {:?}", from_client);
                 if let Some(from_client) = from_client {
-                    handle_from_client::<P>(from_client, &mut executor, &mut to_clients).await;
+                    handle_from_client::<P>(from_client, &mut to_clients).await;
                 } else {
                     println!("[executor] error while receiving new command from clients");
                 }
@@ -107,56 +103,27 @@ async fn handle_execution_info<P>(
         // get client id
         let client_id = executor_result.client();
 
-        // send executor result to client
-        let send = to_clients
-            .to_client(&client_id)
-            .executor_results_tx
-            .send(executor_result)
-            .await;
-        if let Err(e) = send {
-            println!(
-                "[executor] error while sending executor result to client {}: {:?}",
-                client_id, e
-            );
+        // send executor result to client (in case it is registered)
+        if let Some(executor_results_tx) = to_clients.to_client(&client_id) {
+            if let Err(e) = executor_results_tx.send(executor_result).await {
+                println!(
+                    "[executor] error while sending executor result to client {}: {:?}",
+                    client_id, e
+                );
+            }
         }
     }
 }
 
 async fn handle_from_client<P>(
     from_client: ClientToExecutor,
-    executor: &mut P::Executor,
     to_clients: &mut ToClients,
 ) where
     P: Protocol,
 {
     match from_client {
-        // TODO maybe send the channel in the wait for rifl msg
-        ClientToExecutor::WaitForRifl(rifl) => {
-            // register in executor
-            executor.wait_for_rifl(rifl);
-
-            // get client id
-            let client_id = rifl.source();
-
-            // send executor result to client
-            let send = to_clients
-                .to_client(&client_id)
-                .rifl_acks_tx
-                .send(rifl)
-                .await;
-            if let Err(e) = send {
-                println!(
-                    "[executor] error while sending rifl ack to client {}: {:?}",
-                    client_id, e
-                );
-            }
-        }
-        ClientToExecutor::Register(
-            client_ids,
-            rifl_acks_tx,
-            executor_results_tx,
-        ) => {
-            to_clients.register(client_ids, rifl_acks_tx, executor_results_tx);
+        ClientToExecutor::Register(client_ids, executor_results_tx) => {
+            to_clients.register(client_ids, executor_results_tx);
         }
         ClientToExecutor::Unregister(client_ids) => {
             to_clients.unregister(client_ids);
@@ -164,30 +131,13 @@ async fn handle_from_client<P>(
     }
 }
 
-struct ToClient {
-    rifl_acks_tx: RiflAckSender,
-    executor_results_tx: ExecutorResultSender,
-}
-
-impl ToClient {
-    fn new(
-        rifl_acks_tx: RiflAckSender,
-        executor_results_tx: ExecutorResultSender,
-    ) -> Self {
-        Self {
-            rifl_acks_tx,
-            executor_results_tx,
-        }
-    }
-}
-
 struct ToClients {
-    /// since many `ClientId` can share the same `ToClient`, in order to avoid
-    /// cloning these senders we'll have this additional index that tells us
-    /// which `ToClient` to use for each `ClientId`
+    /// since many `ClientId` can share the same `ExecutorResultSender`, in
+    /// order to avoid cloning these senders we'll have this additional index
+    /// that tells us which `ToClient` to use for each `ClientId`
     next_id: usize,
     index: HashMap<ClientId, usize>,
-    to_clients: HashMap<usize, ToClient>,
+    to_clients: HashMap<usize, ExecutorResultSender>,
 }
 
 impl ToClients {
@@ -202,7 +152,6 @@ impl ToClients {
     fn register(
         &mut self,
         client_ids: Vec<ClientId>,
-        rifl_acks_tx: RiflAckSender,
         executor_results_tx: ExecutorResultSender,
     ) {
         // compute id for this set of clients
@@ -218,9 +167,8 @@ impl ToClients {
             );
         }
 
-        // create `ToClient` and save it
-        let to_client = ToClient::new(rifl_acks_tx, executor_results_tx);
-        assert!(self.to_clients.insert(id, to_client).is_none());
+        // save executor result sender
+        assert!(self.to_clients.insert(id, executor_results_tx).is_none());
     }
 
     fn unregister(&mut self, client_ids: Vec<ClientId>) {
@@ -238,15 +186,20 @@ impl ToClients {
         assert!(self.to_clients.remove(&ids[0]).is_some());
     }
 
-    fn to_client(&mut self, client_id: &ClientId) -> &mut ToClient {
+    fn to_client(
+        &mut self,
+        client_id: &ClientId,
+    ) -> Option<&mut ExecutorResultSender> {
         // search index
-        let id = self
-            .index
-            .get(client_id)
-            .expect("command result should belong to an indexed client");
-        // get client channels
-        self.to_clients
-            .get_mut(id)
-            .expect("indexed client not found")
+        if let Some(id) = self.index.get(client_id) {
+            // get client channel
+            Some(
+                self.to_clients
+                    .get_mut(id)
+                    .expect("indexed client not found"),
+            )
+        } else {
+            None
+        }
     }
 }

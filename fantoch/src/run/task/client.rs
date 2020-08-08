@@ -1,7 +1,6 @@
 use crate::command::Command;
 use crate::executor::{ExecutorResult, Pending};
-use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
-use crate::kvs::Key;
+use crate::id::{AtomicDotGen, ClientId, ProcessId, ShardId};
 use crate::log;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
@@ -98,7 +97,7 @@ async fn client_server_task(
         println!("[client_server] giving up on new client {:?} since handshake failed:", connection);
         return;
     }
-    let (client_ids, mut rifl_acks, mut executor_results) = client.unwrap();
+    let (client_ids, mut executor_results) = client.unwrap();
 
     // create pending
     let aggregate = true;
@@ -112,7 +111,7 @@ async fn client_server_task(
             }
             from_client = connection.recv() => {
                 log!("[client_server] from client: {:?}", from_client);
-                if !client_server_task_handle_from_client(from_client, shard_id, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut rifl_acks, &mut pending).await {
+                if !client_server_task_handle_from_client(from_client, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut pending).await {
                     return;
                 }
             }
@@ -126,7 +125,7 @@ async fn server_receive_hi(
     client_channel_buffer_size: usize,
     connection: &mut Connection,
     client_to_executors: &mut ClientToExecutors,
-) -> Option<(Vec<ClientId>, RiflAckReceiver, ExecutorResultReceiver)> {
+) -> Option<(Vec<ClientId>, ExecutorResultReceiver)> {
     // receive hi from client
     let client_ids = if let Some(ClientHi(client_ids)) = connection.recv().await
     {
@@ -139,29 +138,19 @@ async fn server_receive_hi(
         return None;
     };
 
-    // create channel where the executors will write:
-    // - ack rifl after wait_for_rifl
-    // - executor results
-    let (mut rifl_acks_tx, rifl_acks_rx) =
-        super::channel(client_channel_buffer_size);
+    // create channel where the executors will write executor results
     let (mut executor_results_tx, executor_results_rx) =
         super::channel(client_channel_buffer_size);
 
     // set channels name
     let ids_repr = ids_repr(&client_ids);
-    rifl_acks_tx.set_name(format!("client_server_rifl_acks_{}", ids_repr));
     executor_results_tx
         .set_name(format!("client_server_executor_results_{}", ids_repr));
 
     // register clients in all executors
-    if let Err(e) = client_to_executors
-        .broadcast(ClientToExecutor::Register(
-            client_ids.clone(),
-            rifl_acks_tx,
-            executor_results_tx,
-        ))
-        .await
-    {
+    let register =
+        ClientToExecutor::Register(client_ids.clone(), executor_results_tx);
+    if let Err(e) = client_to_executors.broadcast(register).await {
         println!(
             "[client_server] error while registering clients in executors: {:?}",
             e
@@ -176,27 +165,23 @@ async fn server_receive_hi(
     connection.send(&hi).await;
 
     // return client id and channel where client should read executor results
-    Some((client_ids, rifl_acks_rx, executor_results_rx))
+    Some((client_ids, executor_results_rx))
 }
 
 async fn client_server_task_handle_from_client(
     from_client: Option<ClientToServer>,
-    shard_id: ShardId,
     client_ids: &Vec<ClientId>,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
-    rifl_acks: &mut RiflAckReceiver,
     pending: &mut Pending,
 ) -> bool {
     if let Some(from_client) = from_client {
         client_server_task_handle_cmd(
             from_client,
-            shard_id,
             atomic_dot_gen,
             client_to_workers,
             client_to_executors,
-            rifl_acks,
             pending,
         )
         .await;
@@ -219,35 +204,21 @@ async fn client_server_task_handle_from_client(
 
 async fn client_server_task_handle_cmd(
     from_client: ClientToServer,
-    shard_id: ShardId,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
     client_to_executors: &mut ClientToExecutors,
-    rifl_acks: &mut RiflAckReceiver,
     pending: &mut Pending,
 ) {
     match from_client {
         ClientToServer::Register(cmd) => {
             // only register the command
-            client_server_task_register_cmd(
-                &cmd,
-                shard_id,
-                client_to_executors,
-                rifl_acks,
-                pending,
-            )
-            .await;
+            client_server_task_register_cmd(&cmd, client_to_executors, pending)
+                .await;
         }
         ClientToServer::Submit(cmd) => {
             // register the command and submit it
-            client_server_task_register_cmd(
-                &cmd,
-                shard_id,
-                client_to_executors,
-                rifl_acks,
-                pending,
-            )
-            .await;
+            client_server_task_register_cmd(&cmd, client_to_executors, pending)
+                .await;
 
             // create dot for this command (if we have a dot gen)
             let dot = atomic_dot_gen
@@ -266,61 +237,13 @@ async fn client_server_task_handle_cmd(
 
 async fn client_server_task_register_cmd(
     cmd: &Command,
-    shard_id: ShardId,
     client_to_executors: &mut ClientToExecutors,
-    rifl_acks: &mut RiflAckReceiver,
     pending: &mut Pending,
 ) {
-    let rifl = cmd.rifl();
     if client_to_executors.pool_size() > 1 {
         // if there's more than one executor, then we'll receive partial
         // results; in this case, register command in pending
         pending.wait_for(&cmd);
-
-        // TODO should we make the following two loops run in parallel?
-        for key in cmd.keys(shard_id) {
-            client_server_task_register_rifl(key, rifl, client_to_executors)
-                .await;
-        }
-        for _ in 0..cmd.key_count(shard_id) {
-            client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
-        }
-    } else {
-        debug_assert!(client_to_executors.pool_size() == 1);
-        // if there's a single executor, send a single `WaitForRifl`; since the
-        // selected key doesn't matter, find any
-        let key = cmd
-            .keys(shard_id)
-            .next()
-            .expect("command should have at least one key");
-
-        // register rifl and wait for ack
-        client_server_task_register_rifl(key, rifl, client_to_executors).await;
-        client_server_task_wait_rifl_register_ack(rifl, rifl_acks).await;
-    }
-}
-
-async fn client_server_task_register_rifl(
-    key: &Key,
-    rifl: Rifl,
-    client_to_executors: &mut ClientToExecutors,
-) {
-    let forward = client_to_executors.forward_map((key, rifl), |(_, rifl)| {
-        ClientToExecutor::WaitForRifl(rifl)
-    });
-    if let Err(e) = forward.await {
-        println!("[client_server] error while registering new command in executor: {:?}", e);
-    }
-}
-
-async fn client_server_task_wait_rifl_register_ack(
-    rifl: Rifl,
-    rifl_acks: &mut RiflAckReceiver,
-) {
-    if let Some(r) = rifl_acks.recv().await {
-        assert_eq!(r, rifl);
-    } else {
-        println!("[client_server] couldn't receive rifl ack from executor");
     }
 }
 

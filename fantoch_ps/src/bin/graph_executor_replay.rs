@@ -15,7 +15,7 @@ async fn main() {
     let shard_id = 0;
     let (config, execution_log) = parse_args();
     // create graph executor
-    let mut executor = GraphExecutor::new(process_id, shard_id, config, 0);
+    let mut executor = GraphExecutor::new(process_id, shard_id, config);
 
     // open execution log file
     let file = File::open(execution_log)

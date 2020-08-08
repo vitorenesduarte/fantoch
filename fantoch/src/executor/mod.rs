@@ -9,7 +9,7 @@ mod basic;
 pub use basic::{BasicExecutionInfo, BasicExecutor};
 pub use pending::Pending;
 
-use crate::command::{Command, CommandResult};
+use crate::command::CommandResult;
 use crate::config::Config;
 use crate::id::{ClientId, ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
@@ -34,13 +34,7 @@ pub trait Executor: Sized {
         process_id: ProcessId,
         shard_id: ShardId,
         config: Config,
-        executors: usize,
     ) -> Self;
-
-    fn wait_for(&mut self, cmd: &Command);
-
-    // Parallel executors may receive several waits for the same `Rifl`.
-    fn wait_for_rifl(&mut self, rifl: Rifl);
 
     fn handle(&mut self, infos: Self::ExecutionInfo);
 

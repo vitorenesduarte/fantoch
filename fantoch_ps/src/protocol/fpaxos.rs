@@ -518,12 +518,9 @@ mod tests {
 
         // executors
         let executors = 1;
-        let executor_1 =
-            SlotExecutor::new(process_id_1, shard_id, config, executors);
-        let executor_2 =
-            SlotExecutor::new(process_id_2, shard_id, config, executors);
-        let executor_3 =
-            SlotExecutor::new(process_id_3, shard_id, config, executors);
+        let executor_1 = SlotExecutor::new(process_id_1, shard_id, config);
+        let executor_2 = SlotExecutor::new(process_id_2, shard_id, config);
+        let executor_3 = SlotExecutor::new(process_id_3, shard_id, config);
 
         // fpaxos
         let (mut fpaxos_1, _) = FPaxos::new(process_id_1, shard_id, config);
@@ -594,8 +591,8 @@ mod tests {
         simulation.register_client(client_1);
 
         // register command in executor and submit it in fpaxos 1
-        let (process, executor, time) = simulation.get_process(target);
-        executor.wait_for(&cmd);
+        let (process, _, pending, time) = simulation.get_process(target);
+        pending.wait_for(&cmd);
         process.submit(None, cmd, time);
         let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
@@ -657,30 +654,35 @@ mod tests {
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
-        let (process, executor, _) = simulation.get_process(process_id_1);
+        let (process, executor, pending,_) = simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
 
-        // handle in executor and check there's a single command ready
+        // handle in executor and check there's a single command partial
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| {
                 executor.handle(info);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
-            .map(|result| result.unwrap_ready())
+            .map(|result| result.unwrap_partial())
             .collect();
         assert_eq!(ready.len(), 1);
 
         // get that command
-        let cmd_result = ready.pop().expect("there should a command ready");
+        let (rifl, key, result) =
+            ready.pop().expect("there should a command partial");
+        let cmd_result = pending
+            .add_partial(rifl, || (key, result))
+            .expect("there should be a command result")
+            .unwrap_ready();
 
         // handle the previous command result
         let (target, cmd) = simulation
             .forward_to_client(cmd_result)
             .expect("there should a new submit");
 
-        let (process, _, time) = simulation.get_process(target);
+        let (process, _, _, time) = simulation.get_process(target);
         process.submit(None, cmd, time);
         let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
