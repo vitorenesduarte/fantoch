@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 
 type Slot = u64;
 
-#[derive(Clone)]
 pub struct SlotExecutor {
     shard_id: ShardId,
     config: Config,

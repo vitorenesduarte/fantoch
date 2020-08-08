@@ -1012,6 +1012,14 @@ async fn cleanup_machine(
     vm: &Machine<'_>,
     binary: &'static str,
 ) -> Result<(), Report> {
+    // kill flamegraph and heaptrack
+    vm.exec("pkill flamegraph")
+        .await
+        .wrap_err("pkill flamegraph")?;
+    vm.exec("pkill heaptrack")
+        .await
+        .wrap_err("pkill heaptrack")?;
+
     // kill the binary
     let command = format!("pkill {}", binary);
     vm.exec(command).await.wrap_err("pkill binary")?;
@@ -1033,7 +1041,7 @@ async fn cleanup_machine(
 
     // remove files
     let command = format!(
-        "rm -f *.{} *.{} *.{} *.{} heaptrack.*.gz",
+        "rm -f *.{} *.{} *.{} *.{} heaptrack.*.gz *perf.data*",
         LOG_FILE_EXT, DSTAT_FILE_EXT, METRICS_FILE_EXT, FLAMEGRAPH_FILE_EXT
     );
     vm.exec(command).await.wrap_err("rm files")?;

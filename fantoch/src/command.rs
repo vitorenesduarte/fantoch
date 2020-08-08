@@ -123,13 +123,11 @@ impl Command {
     ) -> CommandResult {
         let rifl = self.rifl;
         let key_count = self.shard_to_ops.len();
-        let results = self
-            .into_iter(shard_id)
-            .map(|(key, op)| {
-                let partial_result = store.execute(&key, op);
-                (key, partial_result)
-            })
-            .collect();
+        let mut results = HashMap::with_capacity(key_count);
+        for (key, op) in self.into_iter(shard_id) {
+            let partial_result = store.execute(&key, op);
+            results.insert(key, partial_result);
+        }
         CommandResult {
             rifl,
             key_count,

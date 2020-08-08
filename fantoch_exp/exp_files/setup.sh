@@ -94,7 +94,18 @@ setup() {
         fi
 
         # install flamegraph
-        cargo install flamegraph
+        # TODO go back to 'cargo install flamegraph' once https://github.com/flamegraph-rs/flamegraph/pull/95 gets merged
+        if [[ ! -d ~/flamegraph ]]; then
+            until git clone https://github.com/vitorenesduarte/flamegraph ~/flamegraph; do
+                echo "git clone failed; trying again"
+                rm -rf ~/flamegraph
+            done
+        fi
+        cd ~/flamegraph
+        git checkout perf.data
+        cargo install --path .
+        cd -
+
         flamegraph --help
         ;;
     "heaptrack")
@@ -128,7 +139,7 @@ setup() {
     # install htop, dstat and lsof
     sudo apt-get install -y htop dstat lsof
     dstat --help
-    lsof --help
+    lsof -h
 
     # clean up
     sudo apt-get autoremove -y

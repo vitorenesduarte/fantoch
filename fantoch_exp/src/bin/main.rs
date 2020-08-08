@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../partial_replication";
+const RESULTS_DIR: &str = "../graph_executor";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -46,11 +46,19 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "partial_atlas";
+const BRANCH: &str = "graph_executor";
+
+// release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Release;
+
+// heaptrack run
 // const FEATURES: &[FantochFeature] = &[];
 // const RUN_MODE: RunMode = RunMode::Heaptrack;
+
+// flamegraph run
+// const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
+// const RUN_MODE: RunMode = RunMode::Flamegraph;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] =
@@ -142,17 +150,17 @@ async fn main() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
-        // 1024 * 4, // 1
-        // 1024 * 8, // 1
+        1024 * 4, // 1
+        1024 * 8, // 1
         1024 * 16,
-        // 1024 * 24, // 1
+        1024 * 24, // 1
         1024 * 32,
-        // 1024 * 36, // 1
+        1024 * 36, // 1
         1024 * 40,
         1024 * 48,
         1024 * 56,
@@ -169,7 +177,7 @@ async fn main() -> Result<(), Report> {
         */
     ];
     let shards_per_command = 1;
-    let shard_count = 2;
+    let shard_count = 1;
     let keys_per_shard = 1;
     /*
     let zipf_coefficient = 1.0;
@@ -179,7 +187,7 @@ async fn main() -> Result<(), Report> {
         key_count: zipf_key_count,
     };
     */
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 1 };
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
 
     let skip = |_, _, _| false;
 

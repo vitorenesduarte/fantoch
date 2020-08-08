@@ -2,7 +2,6 @@ use crate::log;
 use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
 use color_eyre::Report;
-use futures::stream::{FuturesUnordered, StreamExt};
 use std::fmt::Debug;
 
 pub trait PoolIndex {
@@ -95,19 +94,14 @@ where
     where
         M: Clone,
     {
-        let mut broadcast = self
-            .pool
-            .iter_mut()
-            .map(|tx| tx.send(msg.clone()))
-            .collect::<FuturesUnordered<_>>();
-
-        // if there was an error, return one of them
-        while let Some(res) = broadcast.next().await {
-            if res.is_err() {
-                return res;
+        if self.pool.len() == 1 {
+            self.pool[0].send(msg).await
+        } else {
+            for tx in self.pool.iter_mut() {
+                tx.send(msg.clone()).await?;
             }
+            Ok(())
         }
-        Ok(())
     }
 
     fn index<T>(&self, msg: &T) -> Option<usize>

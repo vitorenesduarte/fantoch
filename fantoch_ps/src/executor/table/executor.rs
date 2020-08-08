@@ -10,9 +10,7 @@ use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-#[derive(Clone)]
 pub struct TableExecutor {
-    process_id: ProcessId,
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
@@ -46,7 +44,6 @@ impl Executor for TableExecutor {
         let to_clients = Vec::new();
 
         Self {
-            process_id,
             execute_at_commit: config.execute_at_commit(),
             table,
             store,

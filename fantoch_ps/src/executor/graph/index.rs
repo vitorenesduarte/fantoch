@@ -1,11 +1,11 @@
 use super::tarjan::Vertex;
 use fantoch::id::Dot;
 use fantoch::{HashMap, HashSet};
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct VertexIndex {
-    index: HashMap<Dot, RefCell<Vertex>>,
+    index: HashMap<Dot, UnsafeCell<Vertex>>,
 }
 
 impl VertexIndex {
@@ -16,12 +16,12 @@ impl VertexIndex {
     /// Indexes a new vertex, returning whether a vertex with this dot was
     /// already indexed or not.
     pub fn index(&mut self, vertex: Vertex) -> bool {
-        let res = self.index.insert(vertex.dot(), RefCell::new(vertex));
+        let res = self.index.insert(vertex.dot(), UnsafeCell::new(vertex));
         res.is_none()
     }
 
-    pub fn find(&self, dot: &Dot) -> Option<&RefCell<Vertex>> {
-        self.index.get(dot).map(|cell| cell)
+    pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
+        self.index.get(dot).map(|cell| unsafe { &mut *cell.get() })
     }
 
     /// Removes a vertex from the index.
@@ -45,10 +45,7 @@ impl PendingIndex {
     ///   was a dependency and maybe now `dot` can be executed
     pub fn index(&mut self, dep_dot: Dot, dot: Dot) {
         // get current list of pending dots
-        let pending = match self.index.get_mut(&dep_dot) {
-            Some(pending) => pending,
-            None => self.index.entry(dep_dot).or_insert_with(HashSet::new),
-        };
+        let pending = self.index.entry(dep_dot).or_insert_with(HashSet::new);
         // add new `dot` to pending
         pending.insert(dot);
     }

@@ -20,16 +20,14 @@ use fantoch::log;
 use fantoch::util;
 use fantoch::HashSet;
 use std::fmt;
-use std::mem;
 use threshold::{AEClock, VClock};
 
-#[derive(Clone)]
 pub struct DependencyGraph {
     process_id: ProcessId,
-    transitive_conflicts: bool,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
+    finder: TarjanSCCFinder,
     to_execute: Vec<Command>,
 }
 
@@ -57,22 +55,30 @@ impl DependencyGraph {
         // create indexes
         let vertex_index = VertexIndex::new();
         let pending_index = PendingIndex::new();
+        // create finder
+        let finder =
+            TarjanSCCFinder::new(process_id, config.transitive_conflicts());
         // create to execute
         let to_execute = Vec::new();
         DependencyGraph {
             process_id,
-            transitive_conflicts: config.transitive_conflicts(),
             executed_clock,
             vertex_index,
             pending_index,
+            finder,
             to_execute,
         }
     }
 
-    /// Returns new commands ready to be executed.
+    /// Returns a new command ready to be executed.
     #[must_use]
-    pub fn commands_to_execute(&mut self) -> Vec<Command> {
-        mem::take(&mut self.to_execute)
+    pub fn command_to_execute(&mut self) -> Option<Command> {
+        self.to_execute.pop()
+    }
+
+    #[cfg(test)]
+    fn commands_to_execute(&mut self) -> Vec<Command> {
+        std::mem::take(&mut self.to_execute)
     }
 
     /// Add a new command with its clock to the queue.
@@ -86,42 +92,39 @@ impl DependencyGraph {
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
-        let mut newly_ready_commands = 0;
+        let mut total_found = 0;
 
         // try to find new SCCs
-        match self.find_scc(dot, &mut newly_ready_commands) {
+        match self.find_scc(dot, &mut total_found) {
             FinderInfo::Found(dots) => {
                 // try to execute other commands if new SCCs were found
-                self.try_pending(dots, &mut newly_ready_commands);
+                self.try_pending(dots, &mut total_found);
             }
             FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
                 // update the pending
                 self.pending_index.index(dep_dot, dot);
                 // try to execute other commands if new SCCs were found
-                self.try_pending(dots, &mut newly_ready_commands);
+                self.try_pending(dots, &mut total_found);
             }
             FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
 
         // check that all newly ready commands have been incorporated
-        assert_eq!(self.to_execute.len(), initial_ready + newly_ready_commands);
+        assert_eq!(self.to_execute.len(), initial_ready + total_found);
     }
 
     #[must_use]
-    fn find_scc(
-        &mut self,
-        dot: Dot,
-        newly_ready_commands: &mut usize,
-    ) -> FinderInfo {
+    fn find_scc(&mut self, dot: Dot, total_found: &mut usize) -> FinderInfo {
         log!("p{}: Graph:find_scc {:?}", self.process_id, dot);
         // execute tarjan's algorithm
-        let mut finder =
-            TarjanSCCFinder::new(self.process_id, self.transitive_conflicts);
-        let finder_result =
-            self.strong_connect(&mut finder, dot, newly_ready_commands);
+        let mut found = 0;
+        let finder_result = self.strong_connect(dot, &mut found);
+
+        // update total found
+        *total_found += found;
 
         // get sccs
-        let (sccs, visited) = finder.finalize(&self.vertex_index);
+        let (sccs, visited) = self.finder.finalize(&self.vertex_index);
 
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that
@@ -129,7 +132,7 @@ impl DependencyGraph {
         // another dots, even though the find for this dot `X` failed!
 
         // save new SCCs
-        let mut dots = Vec::new();
+        let mut dots = Vec::with_capacity(found);
         sccs.into_iter().for_each(|scc| {
             self.save_scc(scc, &mut dots);
         });
@@ -169,11 +172,7 @@ impl DependencyGraph {
         })
     }
 
-    fn try_pending(
-        &mut self,
-        mut dots: Vec<Dot>,
-        newly_ready_commands: &mut usize,
-    ) {
+    fn try_pending(&mut self, mut dots: Vec<Dot>, total_found: &mut usize) {
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
@@ -189,7 +188,7 @@ impl DependencyGraph {
                 for dot in pending {
                     // only try to find new SCCs from non-visited commands
                     if !visited.contains(&dot) {
-                        match self.find_scc(dot, newly_ready_commands) {
+                        match self.find_scc(dot, total_found) {
                             FinderInfo::Found(new_dots) => {
                                 // reset visited
                                 visited.clear();
@@ -233,20 +232,15 @@ impl DependencyGraph {
         // possible to be executed, so we give up!
     }
 
-    fn strong_connect(
-        &mut self,
-        finder: &mut TarjanSCCFinder,
-        dot: Dot,
-        newly_ready_commands: &mut usize,
-    ) -> FinderResult {
+    fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
         // get the vertex
-        match self.vertex_index.find(&dot) {
-            Some(vertex) => finder.strong_connect(
+        match self.vertex_index.get_mut(&dot) {
+            Some(vertex) => self.finder.strong_connect(
                 dot,
                 vertex,
                 &mut self.executed_clock,
                 &self.vertex_index,
-                newly_ready_commands,
+                found,
             ),
             None => {
                 // in this case this `dot` is no longer pending
