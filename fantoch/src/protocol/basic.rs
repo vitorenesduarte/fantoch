@@ -562,17 +562,15 @@ mod tests {
                 executor.handle(info);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
-            .map(|result| result.unwrap_partial())
             .collect();
         assert_eq!(ready.len(), 1);
 
         // get that command
-        let (rifl, key, result) =
-            ready.pop().expect("there should a command partial");
+        let executor_result =
+            ready.pop().expect("there should an executor result");
         let cmd_result = pending
-            .add_partial(rifl, || (key, result))
-            .expect("there should be a command result")
-            .unwrap_ready();
+            .add_executor_result(executor_result)
+            .expect("there should be a command result");
 
         // handle the previous command result
         let (target, cmd) = simulation

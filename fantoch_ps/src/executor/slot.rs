@@ -168,14 +168,12 @@ mod tests {
                     executor.handle(info);
                     executor
                         .to_clients_iter()
-                        .map(|result| {
-                            let (rifl, result_key, result) =
-                                result.unwrap_partial();
+                        .map(|executor_result| {
                             assert_eq!(
-                                key, result_key,
+                                key, executor_result.key,
                                 "expected key not in partial"
                             );
-                            (rifl, result)
+                            (executor_result.rifl, executor_result.op_result)
                         })
                         .collect::<Vec<_>>()
                 })

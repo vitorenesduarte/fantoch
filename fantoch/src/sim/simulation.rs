@@ -1,6 +1,6 @@
 use crate::client::Client;
 use crate::command::{Command, CommandResult};
-use crate::executor::Pending;
+use crate::executor::AggregatePending;
 use crate::id::{ClientId, ProcessId};
 use crate::protocol::{Action, Protocol};
 use crate::time::SimTime;
@@ -9,7 +9,7 @@ use std::cell::Cell;
 
 pub struct Simulation<P: Protocol> {
     time: SimTime,
-    processes: HashMap<ProcessId, Cell<(P, P::Executor, Pending)>>,
+    processes: HashMap<ProcessId, Cell<(P, P::Executor, AggregatePending)>>,
     clients: HashMap<ClientId, Cell<Client>>,
 }
 
@@ -39,8 +39,7 @@ where
         let shard_id = process.shard_id();
 
         // create pending
-        let aggregate = true;
-        let pending = Pending::new(aggregate, process_id, shard_id);
+        let pending = AggregatePending::new(process_id, shard_id);
 
         // register process and check it has never been registered before
         let res = self
@@ -154,7 +153,7 @@ where
     pub fn get_process(
         &mut self,
         process_id: ProcessId,
-    ) -> (&mut P, &mut P::Executor, &mut Pending, &SimTime) {
+    ) -> (&mut P, &mut P::Executor, &mut AggregatePending, &SimTime) {
         let (process, executor, pending) = self
             .processes
             .get_mut(&process_id)

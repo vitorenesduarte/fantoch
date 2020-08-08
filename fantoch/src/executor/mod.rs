@@ -1,17 +1,16 @@
 // This module contains the definition of `Pending`.
-mod pending;
+mod aggregate;
 
 // This module contains the implementation of a basic executor that executes
 // operations as soon as it receives them.
 mod basic;
 
 // Re-exports.
+pub use aggregate::AggregatePending;
 pub use basic::{BasicExecutionInfo, BasicExecutor};
-pub use pending::Pending;
 
-use crate::command::CommandResult;
 use crate::config::Config;
-use crate::id::{ClientId, ProcessId, Rifl, ShardId};
+use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 use crate::metrics::Metrics;
 use serde::de::DeserializeOwned;
@@ -89,58 +88,18 @@ pub trait MessageKey {
 }
 
 #[derive(Debug, Clone)]
-pub enum ExecutorResult {
-    /// this contains a complete command result
-    Ready(CommandResult),
-    /// this contains a partial command result
-    Partial(Rifl, Key, KVOpResult),
+pub struct ExecutorResult {
+    pub rifl: Rifl,
+    pub key: Key,
+    pub op_result: KVOpResult,
 }
 
 impl ExecutorResult {
-    /// Check which client should receive this result.
-    pub fn client(&self) -> ClientId {
-        match self {
-            ExecutorResult::Ready(cmd_result) => cmd_result.rifl().source(),
-            ExecutorResult::Partial(rifl, _, _) => rifl.source(),
+    pub fn new(rifl: Rifl, key: Key, op_result: KVOpResult) -> Self {
+        ExecutorResult {
+            rifl,
+            key,
+            op_result,
         }
-    }
-
-    /// Extracts a ready results from self. Panics if not ready.
-    pub fn unwrap_ready(self) -> CommandResult {
-        match self {
-            ExecutorResult::Ready(cmd_result) => cmd_result,
-            ExecutorResult::Partial(_, _, _) => panic!(
-                "called `ExecutorResult::unwrap_ready()` on a `ExecutorResult::Partial` value"
-            ),
-        }
-    }
-    /// Extracts a partial result from self. Panics if not partial.
-    pub fn unwrap_partial(self) -> (Rifl, Key, KVOpResult) {
-        match self {
-            ExecutorResult::Partial(rifl, key, result) => (rifl, key, result),
-            ExecutorResult::Ready(_) => panic!(
-                "called `ExecutorResult::unwrap_partial()` on a `ExecutorResult::Ready` value"
-            ),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[should_panic]
-    fn unwrap_ready_on_partial() {
-        let _ =
-            ExecutorResult::Partial(Rifl::new(1, 1), String::from("key"), None)
-                .unwrap_ready();
-    }
-
-    #[test]
-    #[should_panic]
-    fn unwrap_partial_on_ready() {
-        let _ = ExecutorResult::Ready(CommandResult::new(Rifl::new(1, 1), 0))
-            .unwrap_partial();
     }
 }

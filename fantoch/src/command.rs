@@ -126,7 +126,7 @@ impl Command {
         let rifl = self.rifl;
         self.into_iter(shard_id).map(move |(key, op)| {
             let partial_result = store.execute(&key, op);
-            ExecutorResult::Partial(rifl, key, partial_result)
+            ExecutorResult::new(rifl, key, partial_result)
         })
     }
 

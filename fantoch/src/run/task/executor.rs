@@ -101,7 +101,7 @@ async fn handle_execution_info<P>(
     executor.handle(execution_info);
     for executor_result in executor.to_clients_iter() {
         // get client id
-        let client_id = executor_result.client();
+        let client_id = executor_result.rifl.source();
 
         // send executor result to client (in case it is registered)
         if let Some(executor_results_tx) = to_clients.to_client(&client_id) {

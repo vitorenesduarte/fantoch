@@ -329,12 +329,10 @@ where
                 // TODO remove collect
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
-            .map(|result| result.unwrap_partial())
             // handle all partial results in pending
-            .filter_map(|(rifl, key, result)| {
-                pending.add_partial(rifl, || (key, result))
+            .filter_map(|executor_result| {
+                pending.add_executor_result(executor_result)
             })
-            .map(|executor_result| executor_result.unwrap_ready())
             .collect();
 
         // schedule new messages

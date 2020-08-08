@@ -93,7 +93,7 @@ impl TableExecutor {
         to_execute.for_each(|(rifl, op)| {
             // execute op in the `KVStore`
             let op_result = self.store.execute(&key, op);
-            self.to_clients.push(ExecutorResult::Partial(
+            self.to_clients.push(ExecutorResult::new(
                 rifl,
                 key.clone(),
                 op_result,

@@ -34,7 +34,7 @@ impl Executor for BasicExecutor {
         // execute op in the `KVStore`
         let op_result = self.store.execute(&key, op);
         self.to_clients
-            .push(ExecutorResult::Partial(rifl, key, op_result));
+            .push(ExecutorResult::new(rifl, key, op_result));
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
