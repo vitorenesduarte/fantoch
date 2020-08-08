@@ -829,9 +829,11 @@ impl ShardsPending {
     }
 
     fn register(&mut self, cmd: &Command) {
+        let rifl = cmd.rifl();
+        log!("c{}: register {:?}", rifl.source(), rifl);
         let shard_count = cmd.shard_count();
         let results = Vec::with_capacity(shard_count);
-        let res = self.pending.insert(cmd.rifl(), (shard_count, results));
+        let res = self.pending.insert(rifl, (shard_count, results));
         assert!(res.is_none());
     }
 
@@ -842,12 +844,20 @@ impl ShardsPending {
         result: CommandResult,
     ) -> Option<(ClientId, Vec<CommandResult>)> {
         let rifl = result.rifl();
-        log!("c{}: rifl received {:?}", rifl.source(), rifl);
+        log!("c{}: received {:?}", rifl.source(), rifl);
         match self.pending.entry(rifl) {
             Entry::Occupied(mut entry) => {
                 let (shard_count, results) = entry.get_mut();
                 // add new result
                 results.push(result);
+
+                log!(
+                    "c{}: {:?} {}/{}",
+                    rifl.source(),
+                    rifl,
+                    results.len(),
+                    *shard_count
+                );
 
                 // return results if we have one `CommandResult` per shard
                 // - TODO: add an assert checking that indeed these

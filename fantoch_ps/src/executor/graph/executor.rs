@@ -6,11 +6,13 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::KVStore;
+use fantoch::log;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
 pub struct GraphExecutor {
+    process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
     graph: DependencyGraph,
@@ -37,6 +39,7 @@ impl Executor for GraphExecutor {
         let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
         Self {
+            process_id,
             shard_id,
             config,
             graph,
@@ -52,6 +55,11 @@ impl Executor for GraphExecutor {
     }
 
     fn wait_for_rifl(&mut self, rifl: Rifl) {
+        log!(
+            "p{}: GraphExecutor::wait_for_rifl {:?}",
+            self.process_id,
+            rifl
+        );
         // start command in pending
         assert!(self.pending.insert(rifl));
     }
@@ -92,7 +100,18 @@ impl GraphExecutor {
         // if it was pending locally, then it's from a client of this
         // process
         if self.pending.remove(&rifl) {
+            log!(
+                "p{}: GraphExecutor::execute {:?} was pending",
+                self.process_id,
+                rifl
+            );
             self.to_clients.push(ExecutorResult::Ready(result));
+        } else {
+            log!(
+                "p{}: GraphExecutor::execute {:?} was not pending",
+                self.process_id,
+                rifl
+            );
         }
     }
 

@@ -24,6 +24,7 @@ use threshold::{AEClock, VClock};
 
 pub struct DependencyGraph {
     process_id: ProcessId,
+    shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
@@ -50,7 +51,8 @@ impl DependencyGraph {
         config: &Config,
     ) -> Self {
         // create bottom executed clock
-        let ids = util::process_ids(shard_id, config.n());
+        let ids = util::all_process_ids(config.shards(), config.n())
+            .map(|(process_id, _)| process_id);
         let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new();
@@ -62,6 +64,7 @@ impl DependencyGraph {
         let to_execute = Vec::new();
         DependencyGraph {
             process_id,
+            shard_id,
             executed_clock,
             vertex_index,
             pending_index,
@@ -108,6 +111,15 @@ impl DependencyGraph {
             }
             FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
+
+        log!(
+            "p{}: Graph::add completed! pending {:?} | executed {:?}",
+            self.process_id,
+            self.vertex_index
+                .dots()
+                .collect::<std::collections::BTreeSet<_>>(),
+            self.executed_clock
+        );
 
         // check that all newly ready commands have been incorporated
         assert_eq!(self.to_execute.len(), initial_ready + total_found);

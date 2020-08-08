@@ -119,7 +119,7 @@ impl Client {
 
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(rifl, time);
-        log!(
+        println!(
             "c{}: rifl {:?} ended after {} micros at {}",
             self.client_id,
             rifl,

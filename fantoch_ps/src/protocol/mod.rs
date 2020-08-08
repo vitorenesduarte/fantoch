@@ -444,7 +444,7 @@ mod tests {
 
     // ---- atlas (partial replication) tests ---- //
     #[test]
-    fn run_atlas_3_1_atomic_partial_replication_one_shard_per_command_test() {
+    fn run_atlas_3_1_locked_partial_replication_one_shard_per_command_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 1;
@@ -455,6 +455,25 @@ mod tests {
             workers,
             executors,
             SHARDS_PER_COMMAND,
+            commands_per_client,
+            clients_per_process,
+        );
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_test() {
+        let shard_count = 2;
+        let workers = 2;
+        let executors = 1;
+        let shards_per_command = 2;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
+        let slow_paths = run_test::<AtlasLocked>(
+            newt_config!(3, 1),
+            shard_count,
+            workers,
+            executors,
+            shards_per_command,
             commands_per_client,
             clients_per_process,
         );
