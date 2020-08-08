@@ -15,7 +15,7 @@ use self::index::{PendingIndex, VertexIndex};
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use fantoch::util;
 use fantoch::HashSet;
@@ -44,13 +44,10 @@ enum FinderInfo {
 
 impl DependencyGraph {
     /// Create a new `Graph`.
-    pub fn new(
-        process_id: ProcessId,
-        shard_id: ShardId,
-        config: &Config,
-    ) -> Self {
+    pub fn new(process_id: ProcessId, config: &Config) -> Self {
         // create bottom executed clock
-        let ids = util::process_ids(shard_id, config.n());
+        let ids = util::all_process_ids(config.shards(), config.n())
+            .map(|(process_id, _)| process_id);
         let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new();
@@ -108,6 +105,15 @@ impl DependencyGraph {
             }
             FinderInfo::NotPending => panic!("just added dot must be pending"),
         }
+
+        log!(
+            "p{}: Graph::add completed! pending {:?} | executed {:?}",
+            self.process_id,
+            self.vertex_index
+                .dots()
+                .collect::<std::collections::BTreeSet<_>>(),
+            self.executed_clock
+        );
 
         // check that all newly ready commands have been incorporated
         assert_eq!(self.to_execute.len(), initial_ready + total_found);
@@ -265,7 +271,7 @@ impl fmt::Debug for DependencyGraph {
 mod tests {
     use super::*;
     use crate::util;
-    use fantoch::id::{ClientId, Rifl};
+    use fantoch::id::{ClientId, Rifl, ShardId};
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use std::cell::RefCell;
@@ -275,11 +281,10 @@ mod tests {
     fn simple() {
         // create queue
         let process_id = 1;
-        let shard_id = 0;
         let n = 2;
         let f = 1;
         let config = Config::new(n, f);
-        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let mut queue = DependencyGraph::new(process_id, &config);
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -410,8 +415,6 @@ mod tests {
     /// executed it's because there's another missing dependency, and now it
     /// will wait for that one.
     fn pending_on_different_key_regression_test() {
-        let shard_id = 0;
-
         // create config
         let n = 1;
         let f = 1;
@@ -440,7 +443,7 @@ mod tests {
 
             // create queue
             let process_id = 1;
-            let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+            let mut queue = DependencyGraph::new(process_id, &config);
 
             // add cmd 2
             queue.add(dot_2, cmd_2.clone(), clock_2.clone());
@@ -809,12 +812,11 @@ mod tests {
         transitive_conflicts: bool,
     ) -> Vec<Rifl> {
         // create queue
-        let shard_id = 0;
         let process_id = 1;
         let f = 1;
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let mut queue = DependencyGraph::new(process_id, &config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 
@@ -892,14 +894,13 @@ mod tests {
         };
 
         // create queue
-        let shard_id = 0;
         let process_id = 4;
         let n = 5;
         let f = 1;
         let mut config = Config::new(n, f);
         let transitive_conflicts = false;
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let mut queue = DependencyGraph::new(process_id, &config);
 
         // // create vertex index and index all dots
         // let mut vertex_index = VertexIndex::new();

@@ -20,6 +20,10 @@ impl VertexIndex {
         res.is_none()
     }
 
+    pub fn dots(&self) -> impl Iterator<Item = &Dot> {
+        self.index.keys()
+    }
+
     pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
         self.index.get(dot).map(|cell| unsafe { &mut *cell.get() })
     }

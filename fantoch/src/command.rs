@@ -1,3 +1,4 @@
+use crate::executor::ExecutorResult;
 use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
 use crate::HashMap;
@@ -115,24 +116,18 @@ impl Command {
         self.shard_to_ops.keys()
     }
 
-    /// Executes self in a `KVStore`, returning the resulting `CommandResult`.
+    /// Executes self in a `KVStore`, returning the resulting an iterator of
+    /// `ExecutorResult`.
     pub fn execute(
         self,
         shard_id: ShardId,
         store: &mut KVStore,
-    ) -> CommandResult {
+    ) -> impl Iterator<Item = ExecutorResult> + '_ {
         let rifl = self.rifl;
-        let key_count = self.shard_to_ops.len();
-        let mut results = HashMap::with_capacity(key_count);
-        for (key, op) in self.into_iter(shard_id) {
+        self.into_iter(shard_id).map(move |(key, op)| {
             let partial_result = store.execute(&key, op);
-            results.insert(key, partial_result);
-        }
-        CommandResult {
-            rifl,
-            key_count,
-            results,
-        }
+            ExecutorResult::new(rifl, key, partial_result)
+        })
     }
 
     // Creates an iterator without ops on keys that do not belong to `shard`.
@@ -149,7 +144,14 @@ impl Command {
 
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?} -> {:?})", self.rifl, self.shard_to_ops.keys())
+        let keys: std::collections::BTreeSet<_> = self
+            .shard_to_ops
+            .iter()
+            .flat_map(|(shard_id, ops)| {
+                ops.keys().map(move |key| (shard_id, key))
+            })
+            .collect();
+        write!(f, "({:?} -> {:?})", self.rifl, keys)
     }
 }
 

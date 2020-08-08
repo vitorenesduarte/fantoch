@@ -61,6 +61,9 @@ fn partial_replication() -> Result<(), Report> {
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
+        1024 / 4,
+        1024 / 2,
+        1024,
         1024 * 4,
         1024 * 8,
         1024 * 16,

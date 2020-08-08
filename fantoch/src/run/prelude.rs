@@ -61,16 +61,12 @@ pub enum ClientToServer {
 #[derive(Debug, Clone)]
 pub enum ClientToExecutor {
     // clients can register
-    Register(Vec<ClientId>, RiflAckSender, ExecutorResultSender),
+    Register(Vec<ClientId>, ExecutorResultSender),
     // unregister
     Unregister(Vec<ClientId>),
-    // register for notifications on a partial about this `Rifl`.
-    WaitForRifl(Rifl),
 }
 
 // list of channels used to communicate between tasks
-pub type RiflAckReceiver = ChannelReceiver<Rifl>;
-pub type RiflAckSender = ChannelSender<Rifl>;
 pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;

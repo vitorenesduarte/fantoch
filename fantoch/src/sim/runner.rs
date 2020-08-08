@@ -119,12 +119,10 @@ where
             assert!(process.discover(sorted));
 
             // create executor for this process
-            let executors = 1;
             let executor = <P::Executor as Executor>::new(
                 process.id(),
                 process.shard_id(),
                 config,
-                executors,
             );
 
             // and register both
@@ -218,11 +216,11 @@ where
             match action {
                 ScheduleAction::SubmitToProc(process_id, cmd) => {
                     // get process and executor
-                    let (process, executor, time) =
+                    let (process, _executor, pending, time) =
                         self.simulation.get_process(process_id);
 
-                    // register command in the executor
-                    executor.wait_for(&cmd);
+                    // register command in pending
+                    pending.wait_for(&cmd);
 
                     // submit to process and schedule new actions
                     process.submit(None, cmd, time);
@@ -235,7 +233,7 @@ where
                     msg,
                 ) => {
                     // get process and executor
-                    let (process, _, time) =
+                    let (process, _, _, time) =
                         self.simulation.get_process(process_id);
 
                     // handle message and schedule new actions
@@ -274,7 +272,7 @@ where
                 }
                 ScheduleAction::PeriodicEvent(process_id, event, delay) => {
                     // get process
-                    let (process, _, time) =
+                    let (process, _, _, time) =
                         self.simulation.get_process(process_id);
 
                     // handle event adn schedule new actions
@@ -315,7 +313,7 @@ where
 
     fn send_to_processes_and_executors(&mut self, process_id: ProcessId) {
         // get process and executor
-        let (process, executor, _time) =
+        let (process, executor, pending, _time) =
             self.simulation.get_process(process_id);
         assert_eq!(process.id(), process_id);
         let shard_id = process.shard_id();
@@ -331,7 +329,10 @@ where
                 // TODO remove collect
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
-            .map(|result| result.unwrap_ready())
+            // handle all partial results in pending
+            .filter_map(|executor_result| {
+                pending.add_executor_result(executor_result)
+            })
             .collect();
 
         // schedule new messages
@@ -509,7 +510,7 @@ where
             .keys()
             .map(|&process_id| {
                 // get process from simulation
-                let (process, _executor, _) =
+                let (process, _executor, _, _) =
                     simulation.get_process(process_id);
 
                 // compute process result

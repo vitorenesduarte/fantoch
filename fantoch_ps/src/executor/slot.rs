@@ -3,9 +3,9 @@ use fantoch::config::Config;
 use fantoch::executor::{
     Executor, ExecutorMetrics, ExecutorResult, MessageKey,
 };
-use fantoch::id::{ProcessId, Rifl, ShardId};
+use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::KVStore;
-use fantoch::{HashMap, HashSet};
+use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
 
 type Slot = u64;
@@ -14,7 +14,6 @@ pub struct SlotExecutor {
     shard_id: ShardId,
     config: Config,
     store: KVStore,
-    pending: HashSet<Rifl>,
     next_slot: Slot,
     // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
@@ -25,16 +24,8 @@ pub struct SlotExecutor {
 impl Executor for SlotExecutor {
     type ExecutionInfo = SlotExecutionInfo;
 
-    fn new(
-        _process_id: ProcessId,
-        shard_id: ShardId,
-        config: Config,
-        executors: usize,
-    ) -> Self {
-        assert_eq!(executors, 1);
-
+    fn new(_process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         let store = KVStore::new();
-        let pending = HashSet::new();
         // the next slot to be executed is 1
         let next_slot = 1;
         // there's nothing to execute in the beginning
@@ -45,21 +36,11 @@ impl Executor for SlotExecutor {
             shard_id,
             config,
             store,
-            pending,
             next_slot,
             to_execute,
             metrics,
             to_clients,
         }
-    }
-
-    fn wait_for(&mut self, cmd: &Command) {
-        self.wait_for_rifl(cmd.rifl());
-    }
-
-    fn wait_for_rifl(&mut self, rifl: Rifl) {
-        // start command in pending
-        assert!(self.pending.insert(rifl));
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) {
@@ -107,14 +88,10 @@ impl SlotExecutor {
     }
 
     fn execute(&mut self, cmd: Command) {
-        // get command rifl
-        let rifl = cmd.rifl();
         // execute the command
-        let result = cmd.execute(self.shard_id, &mut self.store);
+        let results = cmd.execute(self.shard_id, &mut self.store);
         // update results if this rifl is pending
-        if self.pending.remove(&rifl) {
-            self.to_clients.push(ExecutorResult::Ready(result));
-        }
+        self.to_clients.extend(results);
     }
 }
 
@@ -135,6 +112,7 @@ impl MessageKey for SlotExecutionInfo {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fantoch::id::Rifl;
     use permutator::Permutation;
     use std::collections::BTreeMap;
 
@@ -167,6 +145,7 @@ mod tests {
         // - we don't expect rifl 1 because we will not wait for it in the
         //   executor
         let mut expected_results = BTreeMap::new();
+        expected_results.insert(rifl_1, None);
         expected_results.insert(rifl_2, Some(String::from("1")));
         expected_results.insert(rifl_3, Some(String::from("1")));
         expected_results.insert(rifl_4, Some(String::from("2")));
@@ -179,16 +158,8 @@ mod tests {
             let config = Config::new(0, 0);
             // there's a single shard
             let shard_id = 0;
-            // there's a single executor
-            let executor = 1;
             // create slot executor
-            let mut executor =
-                SlotExecutor::new(process_id, shard_id, config, executor);
-            // wait for all rifls with the exception of rifl 1
-            executor.wait_for_rifl(rifl_2);
-            executor.wait_for_rifl(rifl_3);
-            executor.wait_for_rifl(rifl_4);
-            executor.wait_for_rifl(rifl_5);
+            let mut executor = SlotExecutor::new(process_id, shard_id, config);
 
             let results: BTreeMap<_, _> = p
                 .clone()
@@ -197,15 +168,12 @@ mod tests {
                     executor.handle(info);
                     executor
                         .to_clients_iter()
-                        .map(|result| {
-                            let ready = result.unwrap_ready();
-                            let rifl = ready.rifl();
-                            let result = ready
-                                .results()
-                                .get(&key)
-                                .expect("key should be in results")
-                                .clone();
-                            (rifl, result)
+                        .map(|executor_result| {
+                            assert_eq!(
+                                key, executor_result.key,
+                                "expected key not in partial"
+                            );
+                            (executor_result.rifl, executor_result.op_result)
                         })
                         .collect::<Vec<_>>()
                 })
