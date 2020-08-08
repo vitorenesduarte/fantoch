@@ -211,13 +211,11 @@ async fn client_server_task_handle_cmd(
     match from_client {
         ClientToServer::Register(cmd) => {
             // only register the command
-            client_server_task_register_cmd(&cmd, client_to_executors, pending)
-                .await;
+            client_server_task_register_cmd(&cmd, pending).await;
         }
         ClientToServer::Submit(cmd) => {
             // register the command and submit it
-            client_server_task_register_cmd(&cmd, client_to_executors, pending)
-                .await;
+            client_server_task_register_cmd(&cmd, pending).await;
 
             // create dot for this command (if we have a dot gen)
             let dot = atomic_dot_gen
@@ -236,14 +234,11 @@ async fn client_server_task_handle_cmd(
 
 async fn client_server_task_register_cmd(
     cmd: &Command,
-    client_to_executors: &mut ClientToExecutors,
     pending: &mut AggregatePending,
 ) {
-    if client_to_executors.pool_size() > 1 {
-        // if there's more than one executor, then we'll receive partial
-        // results; in this case, register command in pending
-        pending.wait_for(&cmd);
-    }
+    // we'll receive partial
+    // results from the executor, thus  register command in pending
+    pending.wait_for(&cmd);
 }
 
 async fn client_server_task_handle_executor_result(

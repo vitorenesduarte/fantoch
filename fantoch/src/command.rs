@@ -144,7 +144,14 @@ impl Command {
 
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?} -> {:?})", self.rifl, self.shard_to_ops.keys())
+        let keys: std::collections::BTreeSet<_> = self
+            .shard_to_ops
+            .iter()
+            .flat_map(|(shard_id, ops)| {
+                ops.keys().map(move |key| (shard_id, key))
+            })
+            .collect();
+        write!(f, "({:?} -> {:?})", self.rifl, keys)
     }
 }
 

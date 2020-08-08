@@ -368,4 +368,52 @@ mod tests {
             assert_eq!(percentage.round() as usize, conflict_rate);
         }
     }
+
+    #[test]
+    fn two_shards() {
+        // create rilf gen
+        let client_id = 1;
+        let mut rifl_gen = RiflGen::new(client_id);
+
+        // general config
+        let shards_per_command = 2;
+        let shard_gen = ShardGen::Random { shard_count: 2 };
+        let keys_per_shard = 1;
+        let total_commands = 1;
+        let payload_size = 0;
+
+        // create workload
+        let conflict_rate = 100;
+        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let mut key_gen_state = key_gen.initial_state(client_id);
+        let mut workload = Workload::new(
+            shards_per_command,
+            shard_gen,
+            keys_per_shard,
+            key_gen,
+            total_commands,
+            payload_size,
+        );
+
+        let (target_shard, cmd) = workload
+            .next_cmd(&mut rifl_gen, &mut key_gen_state)
+            .expect("there should be at least one command");
+
+        assert!(
+            target_shard == 0 || target_shard == 1,
+            "target shard should be either 0 or 1"
+        );
+
+        assert_eq!(
+            cmd.key_count(0),
+            keys_per_shard,
+            "there should be 1 key in shard 0"
+        );
+
+        assert_eq!(
+            cmd.key_count(1),
+            keys_per_shard,
+            "there should be 1 key in shard 1"
+        );
+    }
 }
