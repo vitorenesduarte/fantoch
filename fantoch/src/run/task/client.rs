@@ -180,7 +180,6 @@ async fn client_server_task_handle_from_client(
             from_client,
             atomic_dot_gen,
             client_to_workers,
-            client_to_executors,
             pending,
         )
         .await;
@@ -205,7 +204,6 @@ async fn client_server_task_handle_cmd(
     from_client: ClientToServer,
     atomic_dot_gen: &Option<AtomicDotGen>,
     client_to_workers: &mut ClientToWorkers,
-    client_to_executors: &mut ClientToExecutors,
     pending: &mut AggregatePending,
 ) {
     match from_client {

@@ -462,6 +462,63 @@ mod tests {
     }
 
     #[test]
+    fn run_atlas_5_1_locked_partial_replication_two_shards_per_command_test() {
+        let shard_count = 2;
+        let workers = 2;
+        let executors = 1;
+        let shards_per_command = 2;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
+        let slow_paths = run_test::<AtlasLocked>(
+            newt_config!(5, 1),
+            shard_count,
+            workers,
+            executors,
+            shards_per_command,
+            commands_per_client,
+            clients_per_process,
+        );
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn run_atlas_5_1_locked_partial_replication_four_shards_per_command_test() {
+        let shard_count = 4;
+        let workers = 2;
+        let executors = 1;
+        let shards_per_command = 4;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
+        let slow_paths = run_test::<AtlasLocked>(
+            newt_config!(5, 1),
+            shard_count,
+            workers,
+            executors,
+            shards_per_command,
+            commands_per_client,
+            clients_per_process,
+        );
+        assert_eq!(slow_paths, 0);
+    }
+
+    #[test]
+    fn run_atlas_5_2_locked_partial_replication_two_shards_per_command_test() {
+        let shard_count = 2;
+        let workers = 2;
+        let executors = 1;
+        let shards_per_command = 2;
+        let (commands_per_client, clients_per_process) = small_load_in_ci();
+        let slow_paths = run_test::<AtlasLocked>(
+            newt_config!(5, 2),
+            shard_count,
+            workers,
+            executors,
+            shards_per_command,
+            commands_per_client,
+            clients_per_process,
+        );
+        assert!(slow_paths > 0);
+    }
+
+    #[test]
     fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_test() {
         let shard_count = 2;
         let workers = 2;
