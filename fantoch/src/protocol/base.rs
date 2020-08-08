@@ -1,9 +1,9 @@
+use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId, ShardId};
 use crate::log;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
-use crate::HashMap;
-use crate::HashSet;
+use crate::{HashMap, HashSet};
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
@@ -169,6 +169,31 @@ impl BaseProcess {
             .closest_shard_process
             .get(shard_id)
             .expect("closest shard process should be known")
+    }
+
+    // Checks if the process belongs to my shard.
+    pub fn belongs_to_my_shard(&self, process_id: &ProcessId) -> bool {
+        self.all
+            .as_ref()
+            .expect("the set of all processes should be known")
+            .contains(process_id)
+    }
+
+    // Returns all processes (but self) in my region.
+    pub fn all_in_region_but<'a>(&self, cmd: &Command) -> HashSet<ProcessId> {
+        // the total number of shards is the number of connected shards + self
+        let total_shards = self.closest_shard_process.len() + 1;
+        let mut in_region_but =
+            HashSet::with_capacity(total_shards - cmd.shard_count());
+
+        for (shard_id, process_id) in self.closest_shard_process.iter() {
+            // only include processes that *do not* replicate the command
+            if !cmd.replicated_by(shard_id) {
+                assert!(in_region_but.insert(*process_id));
+            }
+        }
+
+        in_region_but
     }
 
     // Return metrics.

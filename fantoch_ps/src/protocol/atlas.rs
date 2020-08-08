@@ -152,6 +152,9 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             Message::MShardAggregatedCommit { dot, clock } => {
                 self.handle_mshard_aggregated_commit(dot, clock, time)
             }
+            Message::MCommitExecutorInfo { dot, cmd, clock } => {
+                self.handle_mcommit_executor_info(dot, cmd, clock, time)
+            }
             // GC messages
             Message::MCommitDot { dot } => {
                 self.handle_mcommit_dot(from, dot, time)
@@ -429,9 +432,49 @@ impl<KC: KeyClocks> Atlas<KC> {
             "handling noop's is not implemented yet"
         );
 
+        // get command
+        let cmd = info
+            .cmd
+            .as_ref()
+            .expect("there should be a command payload");
+
+        // forward commit executor info to other processes in my region that *do
+        // not* replicate this command if:
+        // - I'm in the target shard (this makes sure that only one of the
+        //   processes that *do* replicate the command will send this
+        //   information)
+        // note that we may even have to do this for single-shard commands.
+        // consider for example that we have two shards, A and B, where A
+        // replicates key x and B replicates key y. consider also two commands,
+        // C1 = write(x) and C2 = write(x, y). it can happen that dep[C1] = { }
+        // and dep[C2] = {C1}. note that C1 will only be committed in shard
+        // A, while C2 will be committed in both shards. for this reason, only
+        // one of the shards (shard A) has all the dependencies of
+        // command C2 (i.e. C1). thus, the commit info of C1 also needs to be
+        // sent to shard B, even though C1 is a single-shard command.
+        //
+        // note that we're being pessimistic here since we're assuming that all
+        // committed commands may be needed in the other shards. I feel like
+        // this is a reasonable approach since the bottleneck in this protocol
+        // will always be in the non-parallel executor and if we were to request
+        // this information on demand (AKA partition chasing) it would be much
+        // more complex and not at all more efficient.
+        if self.bp.belongs_to_my_shard(&dot.source()) {
+            // ignore processes in region that already have this information
+            let target = self.bp.all_in_region_but(cmd);
+            self.to_processes.push(Action::ToSend {
+                target,
+                msg: Message::MCommitExecutorInfo {
+                    dot,
+                    cmd: cmd.clone(),
+                    clock: value.clock.clone(),
+                },
+            })
+        }
+
         // create execution info
-        let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
+        let execution_info =
+            ExecutionInfo::new(dot, cmd.clone(), value.clock.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -622,6 +665,27 @@ impl<KC: KeyClocks> Atlas<KC> {
             create_mcommit,
             &mut self.to_processes,
         )
+    }
+
+    #[instrument(skip(self, dot, cmd, clock, _time))]
+    fn handle_mcommit_executor_info(
+        &mut self,
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+        _time: &dyn SysTime,
+    ) {
+        log!(
+            "p{}: MCommitExecutorInfo({:?}, {:?}) | time={}",
+            self.id(),
+            dot,
+            clock,
+            _time.micros()
+        );
+
+        // create execution info
+        let execution_info = ExecutionInfo::new(dot, cmd, clock);
+        self.to_executors.push(execution_info);
     }
 
     #[instrument(skip(self, from, dot, _time))]
@@ -842,6 +906,11 @@ pub enum Message {
         dot: Dot,
         clock: VClock<ProcessId>,
     },
+    MCommitExecutorInfo {
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+    },
     // GC messages
     MCommitDot {
         dot: Dot,
@@ -870,6 +939,9 @@ impl MessageIndex for Message {
             Self::MForwardSubmit { dot, .. } => worker_dot_index_shift(&dot),
             Self::MShardCommit { dot, .. } => worker_dot_index_shift(&dot),
             Self::MShardAggregatedCommit { dot, .. } => {
+                worker_dot_index_shift(&dot)
+            }
+            Self::MCommitExecutorInfo { dot, .. } => {
                 worker_dot_index_shift(&dot)
             }
             // GC messages

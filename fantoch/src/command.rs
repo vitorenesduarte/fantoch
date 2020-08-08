@@ -43,7 +43,7 @@ impl Command {
     }
 
     /// Checks if the command is replicated by `shard_id`.
-    pub fn is_mine(&self, shard_id: ShardId) -> bool {
+    pub fn replicated_by(&self, shard_id: &ShardId) -> bool {
         self.shard_to_ops.contains_key(&shard_id)
     }
 

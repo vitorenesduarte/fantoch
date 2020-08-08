@@ -89,7 +89,7 @@ impl DependencyGraph {
 
     /// Add a new command with its clock to the queue.
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        let is_mine = cmd.is_mine(self.shard_id);
+        let is_mine = cmd.replicated_by(&self.shard_id);
         log!(
             "p{}: Graph::add {:?} {:?} | mine = {}",
             self.process_id,
