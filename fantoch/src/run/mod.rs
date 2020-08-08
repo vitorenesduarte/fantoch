@@ -671,7 +671,7 @@ where
                 .await?;
 
         // update set of processes to be discovered by the client
-        assert!(to_discover.insert(shard_id, process_id).is_none(), "client should try to connect to the same shard more than once, only to the closest one");
+        assert!(to_discover.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
 
         // update list of connected processes
         connections.push((process_id, connection));
@@ -1211,6 +1211,7 @@ pub mod tests {
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
+                let interval = None;
 
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);

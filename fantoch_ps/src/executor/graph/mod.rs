@@ -15,7 +15,7 @@ use self::index::{PendingIndex, VertexIndex};
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::util;
 use fantoch::HashSet;
@@ -24,8 +24,10 @@ use threshold::{AEClock, VClock};
 
 pub struct DependencyGraph {
     process_id: ProcessId,
+    shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
+    remote_vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
     to_execute: Vec<Command>,
@@ -44,13 +46,18 @@ enum FinderInfo {
 
 impl DependencyGraph {
     /// Create a new `Graph`.
-    pub fn new(process_id: ProcessId, config: &Config) -> Self {
+    pub fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: &Config,
+    ) -> Self {
         // create bottom executed clock
         let ids = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id);
         let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new();
+        let remote_vertex_index = VertexIndex::new();
         let pending_index = PendingIndex::new();
         // create finder
         let finder =
@@ -59,8 +66,10 @@ impl DependencyGraph {
         let to_execute = Vec::new();
         DependencyGraph {
             process_id,
+            shard_id,
             executed_clock,
             vertex_index,
+            remote_vertex_index,
             pending_index,
             finder,
             to_execute,
@@ -80,9 +89,22 @@ impl DependencyGraph {
 
     /// Add a new command with its clock to the queue.
     pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        log!("p{}: Graph::add {:?} {:?}", self.process_id, dot, clock);
+        let is_mine = cmd.is_mine(self.shard_id);
+        log!(
+            "p{}: Graph::add {:?} {:?} | mine = {}",
+            self.process_id,
+            dot,
+            clock,
+            is_mine
+        );
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
+
+        if !is_mine {
+            // if not mine, simply save it in the remote index
+            assert!(self.remote_vertex_index.index(vertex));
+            return;
+        }
 
         // index in vertex index and check if it hasn't been indexed before
         assert!(self.vertex_index.index(vertex));
@@ -281,10 +303,11 @@ mod tests {
     fn simple() {
         // create queue
         let process_id = 1;
+        let shard_id = 0;
         let n = 2;
         let f = 1;
         let config = Config::new(n, f);
-        let mut queue = DependencyGraph::new(process_id, &config);
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -443,7 +466,8 @@ mod tests {
 
             // create queue
             let process_id = 1;
-            let mut queue = DependencyGraph::new(process_id, &config);
+            let shard_id = 0;
+            let mut queue = DependencyGraph::new(process_id, shard_id, &config);
 
             // add cmd 2
             queue.add(dot_2, cmd_2.clone(), clock_2.clone());
@@ -813,10 +837,11 @@ mod tests {
     ) -> Vec<Rifl> {
         // create queue
         let process_id = 1;
+        let shard_id = 0;
         let f = 1;
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(process_id, &config);
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 
@@ -895,12 +920,13 @@ mod tests {
 
         // create queue
         let process_id = 4;
+        let shard_id = 0;
         let n = 5;
         let f = 1;
         let mut config = Config::new(n, f);
         let transitive_conflicts = false;
         config.set_transitive_conflicts(transitive_conflicts);
-        let mut queue = DependencyGraph::new(process_id, &config);
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
 
         // // create vertex index and index all dots
         // let mut vertex_index = VertexIndex::new();

@@ -307,7 +307,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
-        let value = ConsensusValue::with(false, clock.clone());
+        let value = ConsensusValue::with(clock.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
@@ -357,7 +357,7 @@ impl<KC: KeyClocks> Atlas<KC> {
                 info.quorum_clocks.threshold_union(self.bp.config.f());
 
             // create consensus value
-            let value = ConsensusValue::with(false, final_clock);
+            let value = ConsensusValue::with(final_clock);
 
             // fast path condition:
             // - each dependency was reported by at least f processes
@@ -490,7 +490,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             }
             Some(SynodMessage::MChosen(value)) => {
                 // the value has already been chosen: create `MCommit`
-                Message::MCommit { dot, value }
+                Message::MCommit { dot, value}
             }
             None => {
                 // ballot too low to be accepted: nothing to do
@@ -609,7 +609,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         // nothing else to extract
         let extract_mcommit_extra_data = |_| ();
         let create_mcommit = |dot, clock, ()| {
-            let value = ConsensusValue::with(false, clock);
+            let value = ConsensusValue::with(clock);
             Message::MCommit { dot, value }
         };
 
@@ -749,13 +749,14 @@ pub struct ConsensusValue {
 }
 
 impl ConsensusValue {
-    fn new(shard_id: ShardId, n: usize) -> Self {
+    fn bottom(shard_id: ShardId, n: usize) -> Self {
         let is_noop = false;
         let clock = VClock::with(util::process_ids(shard_id, n));
         Self { is_noop, clock }
     }
 
-    fn with(is_noop: bool, clock: VClock<ProcessId>) -> Self {
+    fn with(clock: VClock<ProcessId>) -> Self {
+        let is_noop = false;
         Self { is_noop, clock }
     }
 }
@@ -789,7 +790,7 @@ impl Info for AtlasInfo {
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::new(shard_id, n);
+        let initial_value = ConsensusValue::bottom(shard_id, n);
         Self {
             status: Status::START,
             quorum: HashSet::new(),

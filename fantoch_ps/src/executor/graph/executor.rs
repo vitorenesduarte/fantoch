@@ -22,7 +22,7 @@ impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
-        let graph = DependencyGraph::new(process_id, &config);
+        let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
         let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
