@@ -67,7 +67,7 @@ pub enum ClientToExecutor {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-// this bounds are explained here: https://github.com/serde-rs/serde/issues/1503#issuecomment-475059482
+// these bounds are explained here: https://github.com/serde-rs/serde/issues/1503#issuecomment-475059482
 #[serde(bound(
     serialize = "P::Message: Serialize",
     deserialize = "P::Message: Deserialize<'de>",

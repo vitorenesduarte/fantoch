@@ -57,6 +57,8 @@ impl DependencyGraph {
         let ids = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id);
         let executed_clock = AEClock::with(ids);
+        // only track executed dots in `executed` list if there's more than one
+        // shard
         let executed = if config.shards() == 1 {
             None
         } else {

@@ -47,7 +47,7 @@ impl Config {
         let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
-        // by default, there are no executor info messages
+        // by default, executor info messages are exchanged every 50ms
         let executor_info_interval = Duration::from_millis(50);
         // by default, commands are deleted at commit time
         let gc_interval = None;

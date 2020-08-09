@@ -9,7 +9,7 @@ pub use region::Region;
 
 use crate::planet::dat::Dat;
 use crate::HashMap;
-pub use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Write};
 
 // directory that contains all dat files for GCP

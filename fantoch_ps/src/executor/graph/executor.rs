@@ -42,7 +42,7 @@ impl Executor for GraphExecutor {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
-                    // handle each new info
+                    // handle new command
                     self.graph.add(dot, cmd, clock);
                     // get more commands that are ready to be executed
                     while let Some(cmd) = self.graph.command_to_execute() {

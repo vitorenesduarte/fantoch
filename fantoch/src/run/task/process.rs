@@ -561,9 +561,22 @@ async fn send_to_processes_and_executors<P>(
     while let Some(action) = process.to_processes() {
         match action {
             Action::ToSend { target, msg } => {
+                // check if should handle message locally
+                if target.contains(&process.id()) {
+                    // handle msg locally if self in `target`
+                    handle_message_from_self::<P>(
+                        worker_index,
+                        msg.clone(),
+                        process,
+                        reader_to_workers,
+                        time,
+                    )
+                    .await;
+                }
+
                 // prevent unnecessary cloning of messages, since send only
                 // requires a reference to the message
-                let msg_to_send = Arc::new(POEMessage::Protocol(msg.clone()));
+                let msg_to_send = Arc::new(POEMessage::Protocol(msg));
 
                 // send message to writers in target
                 for (to, channels) in to_writers.iter_mut() {
@@ -575,19 +588,6 @@ async fn send_to_processes_and_executors<P>(
                         )
                         .await
                     }
-                }
-
-                // check if should handle message locally
-                if target.contains(&process.id()) {
-                    // handle msg locally if self in `target`
-                    handle_message_from_self::<P>(
-                        worker_index,
-                        msg,
-                        process,
-                        reader_to_workers,
-                        time,
-                    )
-                    .await;
                 }
             }
             Action::ToForward { msg } => {
