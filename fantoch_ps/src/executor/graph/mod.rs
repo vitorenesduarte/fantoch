@@ -98,9 +98,14 @@ impl DependencyGraph {
     /// Returns the list of dots executed since this function was last called.
     pub fn executed_locally(&mut self) -> Option<Vec<Dot>> {
         if let Some(executed) = self.executed.take() {
-            // if self.executed is set, empty it and return its content
-            self.executed = Some(Vec::new());
-            Some(executed)
+            // if self.executed is set, empty it and return its content (if non-empty)
+            if executed.is_empty() {
+                self.executed = Some(executed);
+                None
+            } else {
+                self.executed = Some(Vec::new());
+                Some(executed)
+            }
         } else {
             None
         }
