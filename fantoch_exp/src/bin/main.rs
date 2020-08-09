@@ -46,7 +46,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "graph_executor";
+const BRANCH: &str = "non_genuine_atlas";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -151,24 +151,23 @@ async fn main() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
-        1024 / 4,
-        1024 / 2,
-        1024,
-        1024 * 2,
+        // 1024 / 4,
+        // 1024 / 2,
+        // 1024,
+        // 1024 * 2,
         1024 * 4, // 1
         1024 * 8, // 1
         1024 * 16,
-        /*
         1024 * 24, // 1
         1024 * 32,
-        1024 * 36, // 1
-        1024 * 40,
-        1024 * 48,
-        1024 * 56,
+        // 1024 * 36, // 1
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
         1024 * 64,
         1024 * 96,
         1024 * 128,
@@ -178,20 +177,17 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
-        */
     ];
     let shards_per_command = 1;
-    let shard_count = 1;
+    let shard_count = 4;
     let keys_per_shard = 1;
-    /*
-    let zipf_coefficient = 1.0;
+    let zipf_coefficient = 0.5;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
         coefficient: zipf_coefficient,
         key_count: zipf_key_count,
     };
-    */
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+    // let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
 
     let skip = |_, _, _| false;
 
