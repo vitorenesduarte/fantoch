@@ -37,20 +37,28 @@ impl Executor for GraphExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo) {
-        if self.config.execute_at_commit() {
-            self.execute(info.cmd);
-        } else {
-            // handle each new info
-            self.graph.add(info.dot, info.cmd, info.clock);
-            // get more commands that are ready to be executed
-            while let Some(cmd) = self.graph.command_to_execute() {
-                self.execute(cmd);
+        match info {
+            Self::ExecutionInfo::Add { dot, cmd, clock } => {
+                if self.config.execute_at_commit() {
+                    self.execute(cmd);
+                } else {
+                    // handle each new info
+                    self.graph.add(dot, cmd, clock);
+                    // get more commands that are ready to be executed
+                    while let Some(cmd) = self.graph.command_to_execute() {
+                        self.execute(cmd);
+                    }
+                }
             }
         }
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
         self.to_clients.pop()
+    }
+
+    fn to_executors(&mut self) -> Option<Self::ExecutionInfo> {
+        todo!()
     }
 
     fn parallel() -> bool {
@@ -75,15 +83,17 @@ impl GraphExecutor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphExecutionInfo {
-    dot: Dot,
-    cmd: Command,
-    clock: VClock<ProcessId>,
+pub enum GraphExecutionInfo {
+    Add {
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+    },
 }
 
 impl GraphExecutionInfo {
-    pub fn new(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
-        Self { dot, cmd, clock }
+    pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
+        Self::Add { dot, cmd, clock }
     }
 }
 

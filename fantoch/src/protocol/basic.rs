@@ -88,7 +88,10 @@ impl Protocol for Basic {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashSet<ProcessId>) {
         self.bp.discover(processes)
     }
 

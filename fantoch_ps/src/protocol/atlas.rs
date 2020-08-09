@@ -105,7 +105,10 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashSet<ProcessId>) {
         self.bp.discover(processes)
     }
 
@@ -474,7 +477,7 @@ impl<KC: KeyClocks> Atlas<KC> {
 
         // create execution info
         let execution_info =
-            ExecutionInfo::new(dot, cmd.clone(), value.clock.clone());
+            ExecutionInfo::add(dot, cmd.clone(), value.clock.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -684,7 +687,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         );
 
         // create execution info
-        let execution_info = ExecutionInfo::new(dot, cmd, clock);
+        let execution_info = ExecutionInfo::add(dot, cmd, clock);
         self.to_executors.push(execution_info);
     }
 

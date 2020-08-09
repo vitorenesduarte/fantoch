@@ -14,6 +14,8 @@ pub struct Config {
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
+    // defines the interval between executor info messages
+    executor_info_interval: Option<Duration>,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
     // starting leader process
@@ -45,6 +47,8 @@ impl Config {
         let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
+        // by default, there are no executor info messages
+        let executor_info_interval = None;
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader
@@ -63,6 +67,7 @@ impl Config {
             shards,
             transitive_conflicts,
             execute_at_commit,
+            executor_info_interval,
             gc_interval,
             leader,
             newt_tiny_quorums,
@@ -111,6 +116,16 @@ impl Config {
     /// Changes the value of `execute_at_commit`.
     pub fn set_execute_at_commit(&mut self, execute_at_commit: bool) {
         self.execute_at_commit = execute_at_commit;
+    }
+
+    /// Checks the executor info interval.
+    pub fn executor_info_interval(&self) -> Option<Duration> {
+        self.executor_info_interval
+    }
+
+    /// Sets the executor info interval.
+    pub fn set_executor_info_interval(&mut self, interval: Duration) {
+        self.executor_info_interval = Some(interval);
     }
 
     /// Checks the garbage collection interval.
@@ -283,6 +298,14 @@ mod tests {
         // but that can change
         config.set_execute_at_commit(true);
         assert!(config.execute_at_commit());
+
+        // by default, there's no executor info interval
+        assert_eq!(config.executor_info_interval(), None);
+
+        // change its value and check it has changed
+        let interval = Duration::from_millis(10);
+        config.set_executor_info_interval(interval);
+        assert_eq!(config.executor_info_interval(), Some(interval));
 
         // by default, there's no garbage collection interval
         assert_eq!(config.gc_interval(), None);

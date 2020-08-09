@@ -41,6 +41,12 @@ pub trait Executor: Sized {
         ToClientsIter { executor: self }
     }
 
+    #[must_use]
+    fn to_executors(&mut self) -> Option<Self::ExecutionInfo> {
+        // non-genuine protocols should overwrite this
+        None
+    }
+
     fn parallel() -> bool;
 
     fn metrics(&self) -> &ExecutorMetrics;

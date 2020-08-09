@@ -60,7 +60,7 @@ impl BaseProcess {
     pub fn discover(
         &mut self,
         all_processes: Vec<(ProcessId, ShardId)>,
-    ) -> bool {
+    ) -> (bool, HashSet<ProcessId>) {
         // reset closest shard process
         self.closest_shard_process =
             HashMap::with_capacity(self.config.shards() - 1);
@@ -118,16 +118,23 @@ impl BaseProcess {
             None
         };
 
+        // compute the set of processes that belong to my region
+        let processes_in_region: HashSet<_> =
+            self.closest_shard_process.values().cloned().collect();
+
         log!(
-            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?}",
+            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?} | processes in region {:?}",
             self.process_id,
             self.all_but_me,
             self.fast_quorum,
-            self.write_quorum
+            self.write_quorum,
+            processes_in_region
         );
 
         // connected if fast quorum and write quorum are set
-        self.fast_quorum.is_some() && self.write_quorum.is_some()
+        let connect_ok =
+            self.fast_quorum.is_some() && self.write_quorum.is_some();
+        (connect_ok, processes_in_region)
     }
 
     // Returns the next dot.
@@ -284,7 +291,9 @@ mod tests {
         // discover processes and check we're connected
         let sorted =
             util::sort_processes_by_distance(&region, &planet, processes);
-        assert!(bp.discover(sorted));
+        let (connect_ok, processes_in_region) = bp.discover(sorted);
+        assert!(connect_ok);
+        assert_eq!(processes_in_region, HashSet::new());
 
         // check set of all processes
         assert_eq!(
@@ -350,7 +359,9 @@ mod tests {
         // discover processes and check we're connected
         let sorted =
             util::sort_processes_by_distance(&region, &planet, processes);
-        assert!(bp.discover(sorted));
+        let (connect_ok, processes_in_region) = bp.discover(sorted);
+        assert!(connect_ok);
+        assert_eq!(processes_in_region, HashSet::new());
 
         // check set of all processes
         assert_eq!(
@@ -405,7 +416,9 @@ mod tests {
             (2, shard_id_0),
             (3, shard_id_0),
         ];
-        assert!(bp.discover(sorted));
+        let (connect_ok, processes_in_region) = bp.discover(sorted);
+        assert!(connect_ok);
+        assert_eq!(processes_in_region, HashSet::from_iter(vec![4]));
 
         // check belongs
         assert!(bp.belongs_to_my_shard(&1));

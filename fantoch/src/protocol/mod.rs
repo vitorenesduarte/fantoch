@@ -37,8 +37,8 @@ use std::time::Duration;
 pub trait Protocol: Debug + Clone {
     type Message: Debug
         + Clone
-        + Eq
         + PartialEq
+        + Eq
         + Serialize
         + DeserializeOwned
         + Send
@@ -58,7 +58,10 @@ pub trait Protocol: Debug + Clone {
 
     fn shard_id(&self) -> ShardId;
 
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool;
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashSet<ProcessId>);
 
     fn submit(&mut self, dot: Option<Dot>, cmd: Command, time: &dyn SysTime);
 

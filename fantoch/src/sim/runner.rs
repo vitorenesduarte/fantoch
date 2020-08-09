@@ -116,7 +116,8 @@ where
                 &planet,
                 to_discover.clone(),
             );
-            assert!(process.discover(sorted));
+            let (connect_ok, _) = process.discover(sorted);
+            assert!(connect_ok);
 
             // create executor for this process
             let executor = <P::Executor as Executor>::new(

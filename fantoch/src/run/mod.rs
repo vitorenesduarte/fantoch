@@ -226,6 +226,13 @@ where
         workers,
     );
 
+    // create forward channels: worker /readers -> executors
+    let (to_executors, to_executors_rxs) = ToExecutors::<P>::new(
+        "to_executors",
+        process_channel_buffer_size,
+        executors,
+    );
+
     // connect to all processes
     let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
@@ -234,6 +241,7 @@ where
         listener,
         addresses,
         reader_to_workers.clone(),
+        to_executors.clone(),
         CONNECT_RETRIES,
         tcp_nodelay,
         tcp_buffer_size,
@@ -349,38 +357,53 @@ where
             (None, None)
         };
 
-    // create forward channels: worker -> executors
-    let (worker_to_executors, worker_to_executors_rxs) =
-        WorkerToExecutors::<P>::new(
-            "worker_to_executors",
-            process_channel_buffer_size,
-            executors,
-        );
+    // create process
+    let (mut process, process_events) = P::new(process_id, shard_id, config);
+
+    // discover processes
+    let (connect_ok, processes_in_region) = process.discover(sorted_processes);
+    assert!(connect_ok, "process should have discovered successfully");
+
+    // spawn periodic task
+    task::spawn(task::periodic::periodic_task(
+        process_events,
+        periodic_to_workers,
+        inspect_chan,
+    ));
+
+    // select the writers of processes in my region
+    let region_writers = to_writers
+        .clone()
+        .into_iter()
+        .filter_map(|(peer_id, writers)| {
+            if processes_in_region.contains(&peer_id) {
+                Some(writers)
+            } else {
+                None
+            }
+        })
+        .collect();
 
     // start executors
     task::executor::start_executors::<P>(
         process_id,
         shard_id,
         config,
-        worker_to_executors_rxs,
+        to_executors_rxs,
         client_to_executors_rxs,
+        region_writers,
         executor_to_metrics_logger,
     );
 
     // start process workers
     let handles = task::process::start_processes::<P, R>(
-        process_id,
-        shard_id,
-        config,
-        sorted_processes,
+        process,
         reader_to_workers_rxs,
         client_to_workers_rxs,
-        periodic_to_workers,
         periodic_to_workers_rxs,
-        inspect_chan,
         to_writers,
         reader_to_workers,
-        worker_to_executors,
+        to_executors,
         process_channel_buffer_size,
         execution_log,
         worker_to_metrics_logger,
