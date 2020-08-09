@@ -119,12 +119,21 @@ impl DependencyGraph {
             self.process_id,
             executed
         );
-        for dot in executed {
+        for dot in executed.iter() {
             if self.vertex_index.remove_remote(&dot) {
                 // if the dot existed as remote, add it to `executed_clock`
                 self.executed_clock.add(&dot.source(), dot.sequence());
             }
         }
+
+        // get current command ready count and count newly ready commands
+        let initial_ready = self.to_execute.len();
+        let mut total_found = 0;
+        self.try_pending(executed, &mut total_found);
+
+        // check that all newly ready commands have been incorporated
+        assert_eq!(self.to_execute.len(), initial_ready + total_found);
+
         self.log();
     }
 
