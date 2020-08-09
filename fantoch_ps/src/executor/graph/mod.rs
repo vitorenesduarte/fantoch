@@ -97,18 +97,30 @@ impl DependencyGraph {
 
     /// Returns the list of dots executed since this function was last called.
     pub fn executed_locally(&mut self) -> Option<Vec<Dot>> {
-        std::mem::take(&mut self.executed)
+        if let Some(executed) = self.executed.take() {
+            // if self.executed is set, empty it and return its content
+            self.executed = Some(Vec::new());
+            Some(executed)
+        } else {
+            None
+        }
     }
 
     /// Updates executed clock with the dots in `executed` if they are pending
     /// as remote commands.
     pub fn executed_remotely(&mut self, executed: Vec<Dot>) {
+        log!(
+            "p{}: Graph::executed_remotely {:?}",
+            self.process_id,
+            executed
+        );
         for dot in executed {
             if self.vertex_index.remove_remote(&dot) {
                 // if the dot existed as remote, add it to `executed_clock`
                 self.executed_clock.add(&dot.source(), dot.sequence());
             }
         }
+        self.log();
     }
 
     /// Add a new command with its clock to the queue.
@@ -154,8 +166,15 @@ impl DependencyGraph {
             self.try_pending(vec![dot], &mut total_found);
         }
 
+        // check that all newly ready commands have been incorporated
+        assert_eq!(self.to_execute.len(), initial_ready + total_found);
+
+        self.log();
+    }
+
+    fn log(&self) {
         log!(
-            "p{}: Graph::add done | executed {:?} | pending {:?} | remote pending {:?}",
+            "p{}: Graph::log executed {:?} | pending {:?} | remote pending {:?}",
             self.process_id,
             self.executed_clock,
             self.vertex_index
@@ -165,9 +184,6 @@ impl DependencyGraph {
                 .remote_dots()
                 .collect::<std::collections::BTreeSet<_>>()
         );
-
-        // check that all newly ready commands have been incorporated
-        assert_eq!(self.to_execute.len(), initial_ready + total_found);
     }
 
     #[must_use]
