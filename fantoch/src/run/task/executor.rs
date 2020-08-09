@@ -6,6 +6,7 @@ use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::HashMap;
+use std::sync::Arc;
 use tokio::time;
 
 /// Starts executors.
@@ -52,7 +53,7 @@ async fn executor_task<P>(
     mut region_writers: Vec<Vec<WriterSender<P>>>,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     // create executor
     let mut executor = P::Executor::new(process_id, shard_id, config);
@@ -60,8 +61,13 @@ async fn executor_task<P>(
     // holder of all client info
     let mut to_clients = ToClients::new();
 
-    // create interval (for metrics notification)
-    let mut interval = time::interval(super::metrics_logger::METRICS_INTERVAL);
+    // create executors info interval
+    let mut to_executors_interval =
+        time::interval(config.executor_info_interval());
+
+    // create metrics interval
+    let mut metrics_interval =
+        time::interval(super::metrics_logger::METRICS_INTERVAL);
 
     loop {
         tokio::select! {
@@ -81,7 +87,15 @@ async fn executor_task<P>(
                     println!("[executor] error while receiving new command from clients");
                 }
             }
-            _ = interval.tick()  => {
+            _ = to_executors_interval.tick() => {
+                if let Some(execution_info) = executor.to_executors() {
+                    let msg = Arc::new(POEMessage::Executor(execution_info));
+                    for writers in region_writers.iter_mut() {
+                        crate::run::task::process::send_to_one_writer("executor", msg.clone(), writers).await;
+                    }
+                }
+            }
+            _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
                     // send metrics to logger (in case there's one)
                     let executor_metrics = executor.metrics().clone();

@@ -36,9 +36,9 @@ impl Executor for GraphExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: GraphExecutionInfo) {
         match info {
-            Self::ExecutionInfo::Add { dot, cmd, clock } => {
+            GraphExecutionInfo::Add { dot, cmd, clock } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
@@ -50,6 +50,9 @@ impl Executor for GraphExecutor {
                     }
                 }
             }
+            GraphExecutionInfo::Executed(executed) => {
+                self.graph.executed_remotely(executed);
+            }
         }
     }
 
@@ -57,8 +60,10 @@ impl Executor for GraphExecutor {
         self.to_clients.pop()
     }
 
-    fn to_executors(&mut self) -> Option<Self::ExecutionInfo> {
-        todo!()
+    fn to_executors(&mut self) -> Option<GraphExecutionInfo> {
+        self.graph
+            .executed_locally()
+            .map(GraphExecutionInfo::Executed)
     }
 
     fn parallel() -> bool {
@@ -89,6 +94,7 @@ pub enum GraphExecutionInfo {
         cmd: Command,
         clock: VClock<ProcessId>,
     },
+    Executed(Vec<Dot>),
 }
 
 impl GraphExecutionInfo {

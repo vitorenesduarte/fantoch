@@ -15,7 +15,7 @@ pub struct Config {
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
     // defines the interval between executor info messages
-    executor_info_interval: Option<Duration>,
+    executor_info_interval: Duration,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
     // starting leader process
@@ -48,7 +48,7 @@ impl Config {
         // by default, execution is not skipped
         let execute_at_commit = false;
         // by default, there are no executor info messages
-        let executor_info_interval = None;
+        let executor_info_interval = Duration::from_millis(50);
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader
@@ -119,13 +119,13 @@ impl Config {
     }
 
     /// Checks the executor info interval.
-    pub fn executor_info_interval(&self) -> Option<Duration> {
+    pub fn executor_info_interval(&self) -> Duration {
         self.executor_info_interval
     }
 
     /// Sets the executor info interval.
     pub fn set_executor_info_interval(&mut self, interval: Duration) {
-        self.executor_info_interval = Some(interval);
+        self.executor_info_interval = interval;
     }
 
     /// Checks the garbage collection interval.
@@ -299,13 +299,13 @@ mod tests {
         config.set_execute_at_commit(true);
         assert!(config.execute_at_commit());
 
-        // by default, there's no executor info interval
-        assert_eq!(config.executor_info_interval(), None);
+        // by default, the executor info interval is 50ms
+        assert_eq!(config.executor_info_interval(), Duration::from_millis(50));
 
         // change its value and check it has changed
         let interval = Duration::from_millis(10);
         config.set_executor_info_interval(interval);
-        assert_eq!(config.executor_info_interval(), Some(interval));
+        assert_eq!(config.executor_info_interval(), interval);
 
         // by default, there's no garbage collection interval
         assert_eq!(config.gc_interval(), None);

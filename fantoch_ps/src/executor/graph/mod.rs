@@ -26,6 +26,9 @@ pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
+    // growing list of executed dots used in partial replication to notify
+    // other shards of what we have executed
+    executed: Option<Vec<Dot>>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -54,6 +57,11 @@ impl DependencyGraph {
         let ids = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id);
         let executed_clock = AEClock::with(ids);
+        let executed = if config.shards() == 1 {
+            None
+        } else {
+            Some(Vec::new())
+        };
         // create indexes
         let vertex_index = VertexIndex::new();
         let pending_index = PendingIndex::new();
@@ -66,6 +74,7 @@ impl DependencyGraph {
             process_id,
             shard_id,
             executed_clock,
+            executed,
             vertex_index,
             pending_index,
             finder,
@@ -82,6 +91,22 @@ impl DependencyGraph {
     #[cfg(test)]
     fn commands_to_execute(&mut self) -> Vec<Command> {
         std::mem::take(&mut self.to_execute)
+    }
+
+    /// Returns the list of dots executed since this function was last called.
+    pub fn executed_locally(&mut self) -> Option<Vec<Dot>> {
+        std::mem::take(&mut self.executed)
+    }
+
+    /// Updates executed clock with the dots in `executed` if they are pending
+    /// as remote commands.
+    pub fn executed_remotely(&mut self, executed: Vec<Dot>) {
+        for dot in executed {
+            if self.vertex_index.remove_remote(&dot) {
+                // if the dot existed as remote, add it to `executed_clock`
+                self.executed_clock.add(&dot.source(), dot.sequence());
+            }
+        }
     }
 
     /// Add a new command with its clock to the queue.
@@ -196,6 +221,11 @@ impl DependencyGraph {
 
             // update the set of ready dots
             dots.push(dot);
+
+            // update `executed` in case it was defined
+            if let Some(executed) = self.executed.as_mut() {
+                executed.push(dot);
+            }
 
             // add vertex to commands to be executed
             self.to_execute.push(vertex.into_command())

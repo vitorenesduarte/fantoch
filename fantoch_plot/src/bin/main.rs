@@ -30,28 +30,26 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let keys_per_shard = 1;
-    /*
     let zipf_key_count = 1_000_000;
-    let zipf_coefficient = 1.0;
+    let zipf_coefficient = 0.5;
     let key_gen = KeyGen::Zipf {
         coefficient: zipf_coefficient,
         key_count: zipf_key_count,
     };
     let key_gens = vec![key_gen];
-    */
-    let key_gens = vec![KeyGen::ConflictRate { conflict_rate: 10 }];
+    // let key_gens = vec![KeyGen::ConflictRate { conflict_rate: 10 }];
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
 
     let shard_combinations = vec![
         // shards_per_command, shard_count
+        (1, 4),
+        /*
         (1, 1),
         (1, 2),
-        /*
         (2, 2),
         (1, 3),
         (2, 3),
-        (1, 4),
         (1, 5),
         (1, 6),
         */
@@ -61,30 +59,25 @@ fn partial_replication() -> Result<(), Report> {
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
-        1024 / 4,
-        1024 / 2,
-        1024,
+        // 1024 / 4,
+        // 1024 / 2,
+        // 1024,
+        // 1024 * 2,
         1024 * 4,
         1024 * 8,
         1024 * 16,
         1024 * 24,
         1024 * 32,
-        1024 * 36,
-        1024 * 40,
-        1024 * 48,
-        1024 * 56,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
         1024 * 64,
-        1024 * 80,
         1024 * 96,
-        1024 * 112,
         1024 * 128,
-        1024 * 144,
         1024 * 160,
-        1024 * 176,
         1024 * 192,
-        1024 * 208,
         1024 * 224,
-        1024 * 240,
         1024 * 256,
         1024 * 272,
     ];

@@ -568,8 +568,12 @@ async fn send_to_processes_and_executors<P>(
                 // send message to writers in target
                 for (to, channels) in to_writers.iter_mut() {
                     if target.contains(to) {
-                        send_to_one_writer::<P>(msg_to_send.clone(), channels)
-                            .await
+                        send_to_one_writer::<P>(
+                            "server",
+                            msg_to_send.clone(),
+                            channels,
+                        )
+                        .await
                     }
                 }
 
@@ -643,7 +647,8 @@ async fn handle_message_from_self<P>(
     }
 }
 
-async fn send_to_one_writer<P>(
+pub async fn send_to_one_writer<P>(
+    tag: &'static str,
     msg: Arc<POEMessage<P>>,
     writers: &mut Vec<WriterSender<P>>,
 ) where
@@ -654,8 +659,8 @@ async fn send_to_one_writer<P>(
 
     if let Err(e) = writers[writer_index].send(msg).await {
         println!(
-            "[server] error while sending to writer {}: {:?}",
-            writer_index, e
+            "[{}] error while sending to writer {}: {:?}",
+            tag, writer_index, e
         );
     }
 }

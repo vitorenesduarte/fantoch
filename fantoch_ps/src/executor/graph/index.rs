@@ -50,6 +50,11 @@ impl VertexIndex {
             .or_else(|| self.remote.remove(dot))
             .map(|cell| cell.into_inner())
     }
+
+    /// Removes a remote vertex from the index.
+    pub fn remove_remote(&mut self, dot: &Dot) -> bool {
+        self.remote.remove(dot).is_some()
+    }
 }
 
 #[derive(Default, Debug, Clone)]
