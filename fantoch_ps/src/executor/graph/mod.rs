@@ -27,7 +27,6 @@ pub struct DependencyGraph {
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
-    remote_vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
     to_execute: Vec<Command>,
@@ -57,7 +56,6 @@ impl DependencyGraph {
         let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new();
-        let remote_vertex_index = VertexIndex::new();
         let pending_index = PendingIndex::new();
         // create finder
         let finder =
@@ -69,7 +67,6 @@ impl DependencyGraph {
             shard_id,
             executed_clock,
             vertex_index,
-            remote_vertex_index,
             pending_index,
             finder,
             to_execute,
@@ -100,41 +97,46 @@ impl DependencyGraph {
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
-        if !is_mine {
-            // if not mine, simply save it in the remote index
-            assert!(self.remote_vertex_index.index(vertex));
-            return;
-        }
-
-        // index in vertex index and check if it hasn't been indexed before
-        assert!(self.vertex_index.index(vertex));
-
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
         let mut total_found = 0;
 
-        // try to find new SCCs
-        match self.find_scc(dot, &mut total_found) {
-            FinderInfo::Found(dots) => {
-                // try to execute other commands if new SCCs were found
-                self.try_pending(dots, &mut total_found);
+        // index in vertex index and check if it hasn't been indexed before
+        assert!(self.vertex_index.index(vertex, is_mine));
+
+        if is_mine {
+            // try to find new SCCs
+            match self.find_scc(dot, &mut total_found) {
+                FinderInfo::Found(dots) => {
+                    // try to execute other commands if new SCCs were found
+                    self.try_pending(dots, &mut total_found);
+                }
+                FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
+                    // update the pending
+                    self.pending_index.index(dep_dot, dot);
+                    // try to execute other commands if new SCCs were found
+                    self.try_pending(dots, &mut total_found);
+                }
+                FinderInfo::NotPending => {
+                    panic!("just added dot must be pending")
+                }
             }
-            FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
-                // update the pending
-                self.pending_index.index(dep_dot, dot);
-                // try to execute other commands if new SCCs were found
-                self.try_pending(dots, &mut total_found);
-            }
-            FinderInfo::NotPending => panic!("just added dot must be pending"),
+        } else {
+            // try to execute any pending commands that have declared this
+            // remote command as a dependency
+            self.try_pending(vec![dot], &mut total_found);
         }
 
         log!(
-            "p{}: Graph::add completed! pending {:?} | executed {:?}",
+            "p{}: Graph::add done | executed {:?} | pending {:?} | remote pending {:?}",
             self.process_id,
+            self.executed_clock,
             self.vertex_index
-                .dots()
+                .local_dots()
                 .collect::<std::collections::BTreeSet<_>>(),
-            self.executed_clock
+            self.vertex_index
+                .remote_dots()
+                .collect::<std::collections::BTreeSet<_>>()
         );
 
         // check that all newly ready commands have been incorporated
@@ -935,72 +937,105 @@ mod tests {
         let missing_dot = Dot::new(5, 61);
 
         let root_dot = Dot::new(5, 70);
-        queue.vertex_index.index(Vertex::new(
-            root_dot,
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 40, 61]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                root_dot,
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 40, 61]),
+            ),
+            true,
+        );
 
         // (4, 31)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 31),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 30, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 31),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 30, 60]),
+            ),
+            true,
+        );
         // (4, 32)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 32),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 31, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 32),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 31, 60]),
+            ),
+            true,
+        );
         // (4, 33)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 33),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 32, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 33),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 32, 60]),
+            ),
+            true,
+        );
         // (4, 34)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 34),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 33, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 34),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 33, 60]),
+            ),
+            true,
+        );
         // (4, 35)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 35),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 34, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 35),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 34, 60]),
+            ),
+            true,
+        );
         // (4, 36)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 36),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 35, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 36),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 35, 60]),
+            ),
+            true,
+        );
         // (4, 37)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 37),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 36, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 37),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 36, 60]),
+            ),
+            true,
+        );
         // (4, 38)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 38),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 37, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 38),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 37, 60]),
+            ),
+            true,
+        );
         // (4, 39)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 39),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 38, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 39),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 38, 60]),
+            ),
+            true,
+        );
         // (4, 40)
-        queue.vertex_index.index(Vertex::new(
-            Dot::new(4, 40),
-            conflicting_command(),
-            util::vclock(vec![60, 50, 50, 39, 60]),
-        ));
+        queue.vertex_index.index(
+            Vertex::new(
+                Dot::new(4, 40),
+                conflicting_command(),
+                util::vclock(vec![60, 50, 50, 39, 60]),
+            ),
+            true,
+        );
 
         // create executed clock
         queue.executed_clock = AEClock::from(

@@ -180,7 +180,7 @@ impl BaseProcess {
     }
 
     // Returns all processes (but self) in my region.
-    pub fn all_in_region_but<'a>(&self, cmd: &Command) -> HashSet<ProcessId> {
+    pub fn all_in_region_but(&self, cmd: &Command) -> HashSet<ProcessId> {
         // the total number of shards is the number of connected shards + self
         let total_shards = self.closest_shard_process.len() + 1;
         let mut in_region_but =
@@ -225,7 +225,11 @@ impl BaseProcess {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
+    use crate::id::Rifl;
+    use crate::kvs::KVOp;
     use crate::planet::{Planet, Region};
+    use crate::singleton;
     use crate::util;
     use std::collections::BTreeSet;
     use std::iter::FromIterator;
@@ -403,6 +407,12 @@ mod tests {
         ];
         assert!(bp.discover(sorted));
 
+        // check belongs
+        assert!(bp.belongs_to_my_shard(&1));
+        assert!(!bp.belongs_to_my_shard(&4));
+        assert!(bp.belongs_to_my_shard(&2));
+        assert!(bp.belongs_to_my_shard(&3));
+
         // check set of all processes
         assert_eq!(
             BTreeSet::from_iter(bp.all()),
@@ -430,5 +440,39 @@ mod tests {
         assert_eq!(bp.closest_shard_process.len(), 1);
         assert_eq!(bp.closest_shard_process.get(&shard_id_0), None);
         assert_eq!(bp.closest_shard_process.get(&shard_id_1), Some(&4));
+
+        // check replicated by
+        let mut ops = HashMap::new();
+        ops.insert(String::from("a"), KVOp::Get);
+
+        // create command replicated by shard 0
+        let rifl = Rifl::new(1, 1);
+        let mut shard_to_ops = HashMap::new();
+        shard_to_ops.insert(shard_id_0, ops.clone());
+        let cmd_shard_0 = Command::new(rifl, shard_to_ops);
+        assert!(cmd_shard_0.replicated_by(&shard_id_0));
+        assert!(!cmd_shard_0.replicated_by(&shard_id_1));
+
+        // create command replicated by shard 1
+        let rifl = Rifl::new(1, 2);
+        let mut shard_to_ops = HashMap::new();
+        shard_to_ops.insert(shard_id_1, ops.clone());
+        let cmd_shard_1 = Command::new(rifl, shard_to_ops);
+        assert!(!cmd_shard_1.replicated_by(&shard_id_0));
+        assert!(cmd_shard_1.replicated_by(&shard_id_1));
+
+        // create command replicated by both shards
+        let rifl = Rifl::new(1, 3);
+        let mut shard_to_ops = HashMap::new();
+        shard_to_ops.insert(shard_id_0, ops.clone());
+        shard_to_ops.insert(shard_id_1, ops.clone());
+        let cmd_both_shards = Command::new(rifl, shard_to_ops);
+        assert!(cmd_both_shards.replicated_by(&shard_id_0));
+        assert!(cmd_both_shards.replicated_by(&shard_id_1));
+
+        // process 4 does not replicate `cmd_shard_0`
+        assert_eq!(bp.all_in_region_but(&cmd_shard_0), singleton![4]);
+        // all processes replicate `cmd_both_shards`
+        assert_eq!(bp.all_in_region_but(&cmd_both_shards), HashSet::new());
     }
 }

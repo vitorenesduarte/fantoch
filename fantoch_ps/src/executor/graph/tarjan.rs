@@ -199,9 +199,6 @@ impl TarjanSCCFinder {
 
                             // min low with dep low
                             vertex.low = cmp::min(vertex.low, dep_vertex.low);
-
-                            // drop dep borrow
-                            drop(dep_vertex);
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack {
@@ -210,9 +207,6 @@ impl TarjanSCCFinder {
                                 vertex.low =
                                     cmp::min(vertex.low, dep_vertex.id);
                             }
-
-                            // drop dep borrow
-                            drop(dep_vertex);
                         }
                     }
                 }
@@ -224,9 +218,6 @@ impl TarjanSCCFinder {
         // - good news: the SCC members are on the stack
         if vertex.id == vertex.low {
             let mut scc = SCC::new();
-
-            // drop borrow
-            drop(vertex);
 
             loop {
                 // pop an element from the stack

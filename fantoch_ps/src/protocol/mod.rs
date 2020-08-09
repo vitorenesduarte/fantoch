@@ -500,7 +500,6 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
     #[test]
     fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_three_shards_test(
     ) {
