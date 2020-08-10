@@ -1,7 +1,8 @@
 use super::tarjan::Vertex;
-use fantoch::id::Dot;
+use fantoch::id::{Dot, ProcessId};
 use fantoch::{HashMap, HashSet};
 use std::cell::UnsafeCell;
+use threshold::AEClock;
 
 #[derive(Default, Debug)]
 pub struct VertexIndex {
@@ -14,17 +15,25 @@ impl VertexIndex {
         Default::default()
     }
 
-    /// Indexes a new vertex, returning whether a vertex with this dot was
-    /// already indexed or not.
-    pub fn index(&mut self, vertex: Vertex, is_mine: bool) -> bool {
+    /// Indexes a new vertex, returning true if it was already indexed.
+    pub fn index(
+        &mut self,
+        vertex: Vertex,
+        is_mine: bool,
+        executed_clock: &AEClock<ProcessId>,
+    ) -> bool {
         let dot = vertex.dot();
         let cell = UnsafeCell::new(vertex);
         if is_mine {
-            self.local.insert(dot, cell)
+            self.local.insert(dot, cell).is_some()
         } else {
-            self.remote.insert(dot, cell)
+            // if it's a remote command, only index it if we haven't been told already that it has been executed in a remote shard
+            if !executed_clock.contains(&dot.source(), dot.sequence()) {
+                self.remote.insert(dot, cell).is_some()
+            } else {
+                false
+            }
         }
-        .is_none()
     }
 
     pub fn local_dots(&self) -> impl Iterator<Item = &Dot> {
