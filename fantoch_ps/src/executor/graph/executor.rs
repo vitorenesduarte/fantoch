@@ -6,6 +6,7 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
+use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
@@ -94,7 +95,7 @@ pub enum GraphExecutionInfo {
         cmd: Command,
         clock: VClock<ProcessId>,
     },
-    Executed(Vec<Dot>),
+    Executed(Vec<(Dot, HashSet<ShardId>)>),
 }
 
 impl GraphExecutionInfo {

@@ -253,8 +253,14 @@ impl TarjanSCCFinder {
                 //   consulted to decide what are the dependencies of a
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
-                assert!(executed_clock
-                    .add(&member_dot.source(), member_dot.sequence()));
+                if !executed_clock
+                    .add(&member_dot.source(), member_dot.sequence())
+                {
+                    panic!(
+                        "p{}: Finder::strong_connect dot {:?} already executed",
+                        self.process_id, dot
+                    )
+                }
                 log!(
                     "p{}: Finder:strong_connect executed clock {:?}",
                     self.process_id,

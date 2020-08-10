@@ -28,7 +28,7 @@ pub struct DependencyGraph {
     executed_clock: AEClock<ProcessId>,
     // growing list of executed dots used in partial replication to notify
     // other shards of what we have executed
-    executed: Option<Vec<Dot>>,
+    executed: Option<Vec<(Dot, HashSet<ShardId>)>>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -96,9 +96,10 @@ impl DependencyGraph {
     }
 
     /// Returns the list of dots executed since this function was last called.
-    pub fn executed_locally(&mut self) -> Option<Vec<Dot>> {
+    pub fn executed_locally(&mut self) -> Option<Vec<(Dot, HashSet<ShardId>)>> {
         if let Some(executed) = self.executed.take() {
-            // if self.executed is set, empty it and return its content (if non-empty)
+            // if self.executed is set, empty it and return its content (if
+            // non-empty)
             if executed.is_empty() {
                 self.executed = Some(executed);
                 None
@@ -113,22 +114,39 @@ impl DependencyGraph {
 
     /// Updates executed clock with the dots in `executed` if they are pending
     /// as remote commands.
-    pub fn executed_remotely(&mut self, executed: Vec<Dot>) {
+    pub fn executed_remotely(
+        &mut self,
+        executed: Vec<(Dot, HashSet<ShardId>)>,
+    ) {
         log!(
             "p{}: Graph::executed_remotely {:?}",
             self.process_id,
             executed
         );
-        for dot in executed.iter() {
-            // remove the dot from the index (if it exists as remote) and add it to `executed_clock`
+        let mut dots = Vec::new();
+        for (dot, replicated_by) in executed {
+            // remove the dot from the index (if it exists as remote)
             self.vertex_index.remove_remote(&dot);
-            self.executed_clock.add(&dot.source(), dot.sequence());
+
+            // add it to `executed_clock` if it's not replicated by me:
+            // - even though shards only send these dots about commands that
+            //   they replicate, we could replicate the same command as another
+            //   shard, and in that case we should execute it locally and not
+            //   update the `executed_clock` here
+            if !replicated_by.contains(&self.shard_id) {
+                assert!(self.vertex_index.get_mut(&dot).is_none());
+                self.executed_clock.add(&dot.source(), dot.sequence());
+            }
+
+            // add dot to `dots` so that we try to execute other commands that
+            // depend on this dot
+            dots.push(dot);
         }
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
         let mut total_found = 0;
-        self.try_pending(executed, &mut total_found);
+        self.try_pending(dots, &mut total_found);
 
         // check that all newly ready commands have been incorporated
         assert_eq!(self.to_execute.len(), initial_ready + total_found);
@@ -254,16 +272,23 @@ impl DependencyGraph {
                 .remove(&dot)
                 .expect("dots from an SCC should exist");
 
+            // get command
+            let cmd = vertex.into_command();
+
             // update the set of ready dots
             dots.push(dot);
 
             // update `executed` in case it was defined
             if let Some(executed) = self.executed.as_mut() {
-                executed.push(dot);
+                // only notify other shards that I've executed this command if
+                // it's replicated by my shard
+                if cmd.replicated_by(&self.shard_id) {
+                    executed.push((dot, cmd.shards().cloned().collect()));
+                }
             }
 
-            // add vertex to commands to be executed
-            self.to_execute.push(vertex.into_command())
+            // add command to commands to be executed
+            self.to_execute.push(cmd)
         })
     }
 
