@@ -1233,7 +1233,6 @@ pub mod tests {
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
-                let interval = None;
 
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);

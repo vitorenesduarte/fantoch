@@ -45,10 +45,10 @@ fn partial_replication() -> Result<(), Report> {
         // shards_per_command, shard_count
         (1, 1),
         (1, 2),
+        (1, 4),
         /*
         (2, 2),
         (1, 3),
-        (1, 4),
         (2, 3),
         (1, 5),
         (1, 6),
