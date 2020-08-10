@@ -6,7 +6,6 @@ use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::HashMap;
-use std::sync::Arc;
 use tokio::time;
 
 /// Starts executors.
@@ -16,7 +15,6 @@ pub fn start_executors<P>(
     config: Config,
     to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
-    region_writers: Vec<Vec<WriterSender<P>>>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
@@ -39,7 +37,6 @@ pub fn start_executors<P>(
             config,
             from_workers_and_readers,
             from_clients,
-            region_writers.clone(),
             to_metrics_logger.clone(),
         ));
     }
@@ -51,17 +48,19 @@ async fn executor_task<P>(
     config: Config,
     mut from_workers_and_readers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
-    mut region_writers: Vec<Vec<WriterSender<P>>>,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
 {
+    // set executor index
+    executor.set_executor_index(executor_index);
+
     // holder of all client info
     let mut to_clients = ToClients::new();
 
     // create executors info interval
-    let mut to_executors_interval =
-        time::interval(config.executor_info_interval());
+    let mut cleanup_interval =
+        time::interval(config.executor_cleanup_interval());
 
     // create metrics interval
     let mut metrics_interval =
@@ -85,14 +84,9 @@ async fn executor_task<P>(
                     println!("[executor] error while receiving new command from clients");
                 }
             }
-            _ = to_executors_interval.tick() => {
-                if let Some(execution_info) = executor.to_executors() {
-                    log!("[executor] to executors {:?}", execution_info);
-                    let msg = Arc::new(POEMessage::Executor(execution_info));
-                    for writers in region_writers.iter_mut() {
-                        crate::run::task::process::send_to_one_writer("executor", msg.clone(), writers).await;
-                    }
-                }
+            _ = cleanup_interval.tick() => {
+                log!("[executor] cleanup");
+                executor.cleanup();
             }
             _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {

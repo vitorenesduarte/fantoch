@@ -24,11 +24,6 @@ where
         Self { shared }
     }
 
-    // Checks if the shared map is empty.
-    pub fn is_empty(&self) -> bool {
-        self.shared.is_empty()
-    }
-
     pub fn get(&self, key: &K) -> Option<Ref<'_, K, V>> {
         self.shared.get(key)
     }

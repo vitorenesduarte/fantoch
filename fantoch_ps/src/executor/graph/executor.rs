@@ -5,7 +5,6 @@ use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
-use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
@@ -37,6 +36,10 @@ impl Executor for GraphExecutor {
         }
     }
 
+    fn set_executor_index(&mut self, index: usize) {
+        self.graph.set_executor_index(index);
+    }
+
     fn handle(&mut self, info: GraphExecutionInfo) {
         match info {
             GraphExecutionInfo::Add { dot, cmd, clock } => {
@@ -51,20 +54,15 @@ impl Executor for GraphExecutor {
                     }
                 }
             }
-            GraphExecutionInfo::Executed(executed) => {
-                self.graph.executed_remotely(executed);
-            }
         }
+    }
+
+    fn cleanup(&mut self) {
+        self.graph.cleanup();
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
         self.to_clients.pop()
-    }
-
-    fn to_executors(&mut self) -> Option<GraphExecutionInfo> {
-        self.graph
-            .executed_locally()
-            .map(GraphExecutionInfo::Executed)
     }
 
     fn max_executors() -> Option<usize> {
@@ -95,7 +93,6 @@ pub enum GraphExecutionInfo {
         cmd: Command,
         clock: VClock<ProcessId>,
     },
-    Executed(Vec<(Dot, HashSet<ShardId>)>),
 }
 
 impl GraphExecutionInfo {
@@ -109,7 +106,6 @@ impl MessageIndex for GraphExecutionInfo {
         use fantoch::run::worker_index_no_shift;
         match self {
             Self::Add { .. } => worker_index_no_shift(0),
-            Self::Executed { .. } => worker_index_no_shift(1),
         }
     }
 }

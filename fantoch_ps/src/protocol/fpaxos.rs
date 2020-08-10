@@ -93,10 +93,7 @@ impl Protocol for FPaxos {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(
-        &mut self,
-        processes: Vec<(ProcessId, ShardId)>,
-    ) -> (bool, HashSet<ProcessId>) {
+    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
         self.bp.discover(processes)
     }
 

@@ -91,7 +91,8 @@ impl Protocol for Basic {
     fn discover(
         &mut self,
         processes: Vec<(ProcessId, ShardId)>,
-    ) -> (bool, HashSet<ProcessId>) {
+    ) -> bool
+     {
         self.bp.discover(processes)
     }
 

@@ -1,4 +1,4 @@
-use super::index::VertexIndex;
+use super::index::{VertexIndex, VertexRef};
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
@@ -70,10 +70,9 @@ impl TarjanSCCFinder {
             );
 
             // find vertex and reset its id
-            let vertex = vertex_index
-                .get_mut(&dot)
-                .expect("stack member should exist");
-            vertex.id = 0;
+            let vertex =
+                vertex_index.find(&dot).expect("stack member should exist");
+            vertex.write().id = 0;
 
             // add dot to set of visited
             visited.insert(dot);
@@ -86,7 +85,7 @@ impl TarjanSCCFinder {
     pub fn strong_connect(
         &mut self,
         dot: Dot,
-        vertex: &mut Vertex,
+        vertex_ref: &VertexRef<'_>,
         executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
         vertex_index: &VertexIndex,
         found: &mut usize,
@@ -101,6 +100,9 @@ impl TarjanSCCFinder {
             self.id
         );
 
+        // get vertex
+        let mut vertex = vertex_ref.write();
+
         // set id and low for vertex
         vertex.id = self.id;
         vertex.low = self.id;
@@ -113,7 +115,7 @@ impl TarjanSCCFinder {
         // - if rust understood mutability of struct fields, the clone wouldn't
         //   be necessary
         // compute non-executed deps for each process
-        for (process_id, to) in vertex.clock.iter() {
+        for (process_id, to) in vertex.clock.clone().iter() {
             // get min event from which we need to start checking for
             // dependencies
             let to = to.frontier();
@@ -158,7 +160,7 @@ impl TarjanSCCFinder {
                     continue;
                 }
 
-                match vertex_index.get_mut(&dep_dot) {
+                match vertex_index.find(&dep_dot) {
                     None => {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
@@ -170,10 +172,13 @@ impl TarjanSCCFinder {
                         );
                         return FinderResult::MissingDependency(dep_dot);
                     }
-                    Some(dep_vertex) => {
+                    Some(dep_vertex_ref) => {
+                        // get vertex
+                        let mut dep_vertex = dep_vertex_ref.read();
+
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
-                        //   that conflicts are trnasitive
+                        //   that conflicts are transitive
                         if !self.transitive_conflicts
                             && !vertex.conflicts(&dep_vertex)
                         {
@@ -193,12 +198,16 @@ impl TarjanSCCFinder {
                                 dep_dot
                             );
 
+                            // drop guards
+                            drop(vertex);
+                            drop(dep_vertex);
+
                             // OPTIMIZATION: passing the vertex as an argument
                             // to `strong_connect`
                             // is also essential to avoid double look-up
                             let result = self.strong_connect(
                                 dep_dot,
-                                dep_vertex,
+                                &dep_vertex_ref,
                                 executed_clock,
                                 vertex_index,
                                 found,
@@ -209,8 +218,15 @@ impl TarjanSCCFinder {
                                 return result;
                             }
 
+                            // get guards again
+                            vertex = vertex_ref.write();
+                            dep_vertex = dep_vertex_ref.read();
+
                             // min low with dep low
                             vertex.low = cmp::min(vertex.low, dep_vertex.low);
+
+                            // drop dep guard
+                            drop(dep_vertex);
                         } else {
                             // if visited and on the stack
                             if dep_vertex.on_stack {
@@ -219,6 +235,9 @@ impl TarjanSCCFinder {
                                 vertex.low =
                                     cmp::min(vertex.low, dep_vertex.id);
                             }
+
+                            // drop dep guard
+                            drop(dep_vertex);
                         }
                     }
                 }
@@ -230,6 +249,9 @@ impl TarjanSCCFinder {
         // - good news: the SCC members are on the stack
         if vertex.id == vertex.low {
             let mut scc = SCC::new();
+
+            // drop guard
+            drop(vertex);
 
             loop {
                 // pop an element from the stack
@@ -244,13 +266,16 @@ impl TarjanSCCFinder {
                     member_dot
                 );
 
+                // get its vertex and change its `on_stack` value
+                let member_vertex_ref = vertex_index
+                    .find(&member_dot)
+                    .expect("stack member should exist");
+
                 // increment number of commands found
                 *found += 1;
 
                 // get its vertex and change its `on_stack` value
-                let member_vertex = vertex_index
-                    .get_mut(&member_dot)
-                    .expect("stack member should exist");
+                let mut member_vertex = member_vertex_ref.write();
                 member_vertex.on_stack = false;
 
                 // add it to the SCC and check it wasn't there before
@@ -258,28 +283,21 @@ impl TarjanSCCFinder {
 
                 // update executed clock:
                 // - this is a nice optimization (that I think we missed in
-                //   Atlas); instead of waiting for the root-level recursion to
-                //   finish in order to update `executed_clock` (which is
+                //   Atlas); instead of waiting for the root-level recursion
+                //   to finish in order to update `executed_clock` (which is
                 //   consulted to decide what are the dependencies of a
-                //   command), we can update it right here, possibly reducing a
-                //   few iterations
+                //   command), we can update it right here, possibly
+                //   reducing a few iterations
                 if !executed_clock
                     .write()
                     .add(&member_dot.source(), member_dot.sequence())
-                    && member_vertex.cmd.replicated_by(&self.shard_id)
                 {
-                    // panic if we have already executed this command and we
-                    // replicated it; it's possible that here we add a dot to
-                    // the executed clock that is already there, but that dot
-                    // must be about a command we do not replicate; in this
-                    // case, this dot must have been added by the other executor
-                    // where it received information about remotely executed
-                    // dots
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",
                         self.process_id, dot
-                    )
+                    );
                 }
+
                 log!(
                     "p{}: Finder:strong_connect executed clock {:?}",
                     self.process_id,

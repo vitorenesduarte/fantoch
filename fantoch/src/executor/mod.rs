@@ -33,7 +33,15 @@ pub trait Executor: Clone {
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self;
 
+    fn set_executor_index(&mut self, _index: usize) {
+        // executors interested in the index should overwrite this
+    }
+
     fn handle(&mut self, infos: Self::ExecutionInfo);
+
+    fn cleanup(&mut self) {
+        // executors interested in a periodic cleanup should overwrite this
+    }
 
     #[must_use]
     fn to_clients(&mut self) -> Option<ExecutorResult>;
@@ -41,12 +49,6 @@ pub trait Executor: Clone {
     #[must_use]
     fn to_clients_iter(&mut self) -> ToClientsIter<'_, Self> {
         ToClientsIter { executor: self }
-    }
-
-    #[must_use]
-    fn to_executors(&mut self) -> Option<Self::ExecutionInfo> {
-        // non-genuine protocols should overwrite this
-        None
     }
 
     fn max_executors() -> Option<usize>;

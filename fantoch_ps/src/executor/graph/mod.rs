@@ -26,14 +26,11 @@ use threshold::{AEClock, VClock};
 
 #[derive(Clone)]
 pub struct DependencyGraph {
+    executor_index: usize,
     process_id: ProcessId,
     shard_id: ShardId,
     executed_clock: Arc<RwLock<AEClock<ProcessId>>>,
-    // growing list of executed dots used in partial replication to notify
-    // other shards of what we have executed
-    executed: Option<Vec<(Dot, HashSet<ShardId>)>>,
     // set of processes in my shard
-    shard_processes: HashSet<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -58,21 +55,13 @@ impl DependencyGraph {
         shard_id: ShardId,
         config: &Config,
     ) -> Self {
+        let executor_index = 0;
         // create bottom executed clock
         let ids = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id);
         let executed_clock = Arc::new(RwLock::new(AEClock::with(ids)));
-        // only track executed dots in `executed` list if there's more than one
-        // shard
-        let executed = if config.shards() == 1 {
-            None
-        } else {
-            Some(Vec::new())
-        };
-        // create shard processes
-        let shard_processes = util::process_ids(shard_id, config.n()).collect();
         // create indexes
-        let vertex_index = VertexIndex::new();
+        let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new();
         // create finder
         let finder = TarjanSCCFinder::new(
@@ -83,16 +72,19 @@ impl DependencyGraph {
         // create to execute
         let to_execute = Vec::new();
         DependencyGraph {
+            executor_index,
             process_id,
             shard_id,
             executed_clock,
-            executed,
-            shard_processes,
             vertex_index,
             pending_index,
             finder,
             to_execute,
         }
+    }
+
+    fn set_executor_index(&mut self, index: usize) {
+        self.executor_index = index;
     }
 
     /// Returns a new command ready to be executed.
@@ -106,65 +98,11 @@ impl DependencyGraph {
         std::mem::take(&mut self.to_execute)
     }
 
-    /// Returns the list of dots executed since this function was last called.
-    pub fn executed_locally(&mut self) -> Option<Vec<(Dot, HashSet<ShardId>)>> {
-        if let Some(executed) = self.executed.take() {
-            // if self.executed is set, empty it and return its content (if
-            // non-empty)
-            if executed.is_empty() {
-                self.executed = Some(executed);
-                None
-            } else {
-                self.executed = Some(Vec::new());
-                Some(executed)
-            }
-        } else {
-            None
+    fn cleanup(&mut self) {
+        // only do the cleanup in the second executor
+        if self.executor_index == 1 {
+            todo!()
         }
-    }
-
-    /// Updates executed clock with the dots in `executed` if they are pending
-    /// as remote commands.
-    pub fn executed_remotely(
-        &mut self,
-        executed: Vec<(Dot, HashSet<ShardId>)>,
-    ) {
-        log!(
-            "p{}: Graph::executed_remotely {:?}",
-            self.process_id,
-            executed
-        );
-        let mut dots = Vec::new();
-        for (dot, replicated_by) in executed {
-            // remove the dot from the index (if it exists as remote)
-            self.vertex_index.remove_remote(&dot);
-
-            // add it to `executed_clock` if it's not replicated by me:
-            // - even though shards only send these dots about commands that
-            //   they replicate, we could replicate the same command as another
-            //   shard, and in that case we should execute it locally and not
-            //   update the `executed_clock` here
-            if !replicated_by.contains(&self.shard_id) {
-                debug_assert!(self.vertex_index.get_mut(&dot).is_none());
-                self.executed_clock
-                    .write()
-                    .add(&dot.source(), dot.sequence());
-            }
-
-            // add dot to `dots` so that we try to execute other commands that
-            // depend on this dot
-            dots.push(dot);
-        }
-
-        // get current command ready count and count newly ready commands
-        let initial_ready = self.to_execute.len();
-        let mut total_found = 0;
-        self.try_pending(dots, &mut total_found);
-
-        // check that all newly ready commands have been incorporated
-        assert_eq!(self.to_execute.len(), initial_ready + total_found);
-
-        self.log();
     }
 
     /// Add a new command with its clock to the queue.
@@ -185,11 +123,7 @@ impl DependencyGraph {
         let mut total_found = 0;
 
         // index in vertex index and check if it hasn't been indexed before
-        assert!(!self.vertex_index.index(
-            vertex,
-            is_mine,
-            &self.executed_clock
-        ));
+        assert!(!self.vertex_index.index(vertex, is_mine));
 
         if is_mine {
             // try to find new SCCs
@@ -221,17 +155,19 @@ impl DependencyGraph {
     }
 
     fn log(&self) {
-        log!(
-            "p{}: Graph::log executed {:?} | pending {:?} | remote pending {:?}",
-            self.process_id,
-            self.executed_clock,
-            self.vertex_index
-                .local_dots()
-                .collect::<std::collections::BTreeSet<_>>(),
-            self.vertex_index
-                .remote_dots()
-                .collect::<std::collections::BTreeSet<_>>()
-        );
+        if self.executor_index == 0 {
+            log!(
+                "p{}: Graph::log executed {:?} | pending {:?} | remote pending {:?}",
+                self.process_id,
+                self.executed_clock.read(),
+                self.vertex_index
+                    .local_dots()
+                    .collect::<std::collections::BTreeSet<_>>(),
+                self.vertex_index
+                    .remote_dots()
+                    .collect::<std::collections::BTreeSet<_>>()
+            );
+        }
     }
 
     #[must_use]
@@ -290,18 +226,6 @@ impl DependencyGraph {
 
             // get command
             let cmd = vertex.into_command();
-
-            // update `executed` in case it was defined
-            if let Some(executed) = self.executed.as_mut() {
-                // only notify other shards that I've executed this command if
-                // my shard was the shard targetted by the client; this makes
-                // sure that only one of the shards that replicate a given
-                // command will notify the remaning shards that it has been
-                // executed
-                if self.shard_processes.contains(&dot.source()) {
-                    executed.push((dot, cmd.shards().cloned().collect()));
-                }
-            }
 
             // add command to commands to be executed
             self.to_execute.push(cmd);
@@ -370,10 +294,10 @@ impl DependencyGraph {
 
     fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
         // get the vertex
-        match self.vertex_index.get_mut(&dot) {
+        match self.vertex_index.find(&dot) {
             Some(vertex) => self.finder.strong_connect(
                 dot,
-                vertex,
+                &vertex,
                 &self.executed_clock,
                 &self.vertex_index,
                 found,
@@ -1050,7 +974,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 40, 61]),
             ),
             true,
-            &queue.executed_clock,
         );
 
         // (4, 31)
@@ -1061,7 +984,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 30, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 32)
         queue.vertex_index.index(
@@ -1071,7 +993,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 31, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 33)
         queue.vertex_index.index(
@@ -1081,7 +1002,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 32, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 34)
         queue.vertex_index.index(
@@ -1091,7 +1011,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 33, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 35)
         queue.vertex_index.index(
@@ -1101,7 +1020,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 34, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 36)
         queue.vertex_index.index(
@@ -1111,7 +1029,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 35, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 37)
         queue.vertex_index.index(
@@ -1121,7 +1038,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 36, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 38)
         queue.vertex_index.index(
@@ -1131,7 +1047,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 37, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 39)
         queue.vertex_index.index(
@@ -1141,7 +1056,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 38, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
         // (4, 40)
         queue.vertex_index.index(
@@ -1151,7 +1065,6 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 39, 60]),
             ),
             true,
-            &queue.executed_clock,
         );
 
         // create executed clock

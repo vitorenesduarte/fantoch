@@ -374,7 +374,7 @@ where
     let (mut process, process_events) = P::new(process_id, shard_id, config);
 
     // discover processes
-    let (connect_ok, processes_in_region) = process.discover(sorted_processes);
+    let connect_ok = process.discover(sorted_processes);
     assert!(connect_ok, "process should have discovered successfully");
 
     // spawn periodic task
@@ -384,19 +384,6 @@ where
         inspect_chan,
     ));
 
-    // select the writers of processes in my region
-    let region_writers = to_writers
-        .clone()
-        .into_iter()
-        .filter_map(|(peer_id, writers)| {
-            if processes_in_region.contains(&peer_id) {
-                Some(writers)
-            } else {
-                None
-            }
-        })
-        .collect();
-
     // start executors
     task::executor::start_executors::<P>(
         process_id,
@@ -404,7 +391,6 @@ where
         config,
         to_executors_rxs,
         client_to_executors_rxs,
-        region_writers,
         executor_to_metrics_logger,
     );
 

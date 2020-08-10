@@ -14,8 +14,8 @@ pub struct Config {
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
-    // defines the interval between executor info messages
-    executor_info_interval: Duration,
+    // defines the interval between executor cleanups
+    executor_cleanup_interval: Duration,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
     // starting leader process
@@ -47,8 +47,8 @@ impl Config {
         let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
-        // by default, executor info messages are exchanged every 50ms
-        let executor_info_interval = Duration::from_millis(50);
+        // by default, executor cleanups happen every second
+        let executor_cleanup_interval = Duration::from_secs(1);
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader
@@ -67,7 +67,7 @@ impl Config {
             shards,
             transitive_conflicts,
             execute_at_commit,
-            executor_info_interval,
+            executor_cleanup_interval,
             gc_interval,
             leader,
             newt_tiny_quorums,
@@ -118,14 +118,14 @@ impl Config {
         self.execute_at_commit = execute_at_commit;
     }
 
-    /// Checks the executor info interval.
-    pub fn executor_info_interval(&self) -> Duration {
-        self.executor_info_interval
+    /// Checks the executor cleanup interval.
+    pub fn executor_cleanup_interval(&self) -> Duration {
+        self.executor_cleanup_interval
     }
 
-    /// Sets the executor info interval.
-    pub fn set_executor_info_interval(&mut self, interval: Duration) {
-        self.executor_info_interval = interval;
+    /// Sets the executor cleanup interval.
+    pub fn set_executor_cleanup_interval(&mut self, interval: Duration) {
+        self.executor_cleanup_interval = interval;
     }
 
     /// Checks the garbage collection interval.
@@ -299,13 +299,13 @@ mod tests {
         config.set_execute_at_commit(true);
         assert!(config.execute_at_commit());
 
-        // by default, the executor info interval is 50ms
-        assert_eq!(config.executor_info_interval(), Duration::from_millis(50));
+        // by default, the executor cleanup interval is 1s
+        assert_eq!(config.executor_cleanup_interval(), Duration::from_secs(1));
 
         // change its value and check it has changed
-        let interval = Duration::from_millis(10);
-        config.set_executor_info_interval(interval);
-        assert_eq!(config.executor_info_interval(), interval);
+        let interval = Duration::from_secs(2);
+        config.set_executor_cleanup_interval(interval);
+        assert_eq!(config.executor_cleanup_interval(), interval);
 
         // by default, there's no garbage collection interval
         assert_eq!(config.gc_interval(), None);

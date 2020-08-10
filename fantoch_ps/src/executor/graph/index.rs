@@ -1,74 +1,53 @@
 use super::tarjan::Vertex;
 use crate::shared::Shared;
+use dashmap::mapref::one::Ref as DashMapRef;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLock;
-use std::cell::UnsafeCell;
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
-use threshold::AEClock;
 
-#[derive(Debug)]
-struct Cell(UnsafeCell<Vertex>);
+pub struct VertexRef<'a> {
+    r: DashMapRef<'a, Dot, RwLock<Vertex>>,
+}
 
-impl Clone for Cell {
-    fn clone(&self) -> Self {
-        panic!("impossible to clone a Cell");
+impl<'a> VertexRef<'a> {
+    fn new(r: DashMapRef<'a, Dot, RwLock<Vertex>>) -> Self {
+        Self { r }
+    }
+
+    pub fn read(&self) -> RwLockReadGuard<'_, Vertex> {
+        self.r.read()
+    }
+
+    pub fn write(&self) -> RwLockWriteGuard<'_, Vertex> {
+        self.r.write()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VertexIndex {
-    local: Shared<Dot, Cell>,
-    remote: Shared<Dot, Cell>,
-}
-
-impl Clone for VertexIndex {
-    fn clone(&self) -> Self {
-        assert!(
-            self.local.is_empty(),
-            "it's only possible to clone an empty VertexIndex"
-        );
-        assert!(
-            self.remote.is_empty(),
-            "it's only possible to clone an empty VertexIndex"
-        );
-        Self {
-            local: self.local.clone(),
-            remote: self.remote.clone(),
-        }
-    }
+    process_id: ProcessId,
+    local: Arc<Shared<Dot, RwLock<Vertex>>>,
+    remote: Arc<Shared<Dot, RwLock<Vertex>>>,
 }
 
 impl VertexIndex {
-    pub fn new() -> Self {
+    pub fn new(process_id: ProcessId) -> Self {
         Self {
-            local: Shared::new(),
-            remote: Shared::new(),
+            process_id,
+            local: Arc::new(Shared::new()),
+            remote: Arc::new(Shared::new()),
         }
     }
 
     /// Indexes a new vertex, returning true if it was already indexed.
-    pub fn index(
-        &mut self,
-        vertex: Vertex,
-        is_mine: bool,
-        executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
-    ) -> bool {
+    pub fn index(&mut self, vertex: Vertex, is_mine: bool) -> bool {
         let dot = vertex.dot();
-        let cell = Cell(UnsafeCell::new(vertex));
+        let cell = RwLock::new(vertex);
         if is_mine {
             self.local.insert(dot, cell).is_some()
         } else {
-            // if it's a remote command, only index it if we haven't been told
-            // already that it has been executed in a remote shard
-            if !executed_clock
-                .read()
-                .contains(&dot.source(), dot.sequence())
-            {
-                self.remote.insert(dot, cell).is_some()
-            } else {
-                false
-            }
+            self.remote.insert(dot, cell).is_some()
         }
     }
 
@@ -80,25 +59,25 @@ impl VertexIndex {
         self.remote.iter().map(|entry| *entry.key())
     }
 
-    pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
+    pub fn find(&self, dot: &Dot) -> Option<VertexRef<'_>> {
         // search first in the local index
         self.local
             .get(dot)
             .or_else(|| self.remote.get(dot))
-            .map(|cell| unsafe { &mut *cell.0.get() })
+            .map(VertexRef::new)
     }
 
     /// Removes a vertex from the index.
     pub fn remove(&mut self, dot: &Dot) -> Option<Vertex> {
         self.local
             .remove(dot)
-            .or_else(|| self.remote.remove(dot))
-            .map(|(_, cell)| cell.0.into_inner())
+            .map(|(_, cell)| cell.into_inner())
+            .or_else(|| self.remove_remote(dot))
     }
 
     /// Removes a remote vertex from the index.
-    pub fn remove_remote(&mut self, dot: &Dot) {
-        self.remote.remove(dot);
+    pub fn remove_remote(&mut self, dot: &Dot) -> Option<Vertex> {
+        self.remote.remove(dot).map(|(_, cell)| cell.into_inner())
     }
 }
 
