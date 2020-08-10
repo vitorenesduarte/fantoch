@@ -1,10 +1,10 @@
 use crate::db::{Dstat, DstatCompress, HistogramCompress};
 use fantoch::client::ClientData;
 use fantoch::id::ProcessId;
-use fantoch_prof::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::Testbed;
+use fantoch_prof::metrics::Histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;

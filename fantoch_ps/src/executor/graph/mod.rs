@@ -29,6 +29,8 @@ pub struct DependencyGraph {
     // growing list of executed dots used in partial replication to notify
     // other shards of what we have executed
     executed: Option<Vec<(Dot, HashSet<ShardId>)>>,
+    // set of processes in my shard
+    shard_processes: HashSet<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -64,6 +66,8 @@ impl DependencyGraph {
         } else {
             Some(Vec::new())
         };
+        // create shard processes
+        let shard_processes = util::process_ids(shard_id, config.n()).collect();
         // create indexes
         let vertex_index = VertexIndex::new();
         let pending_index = PendingIndex::new();
@@ -77,6 +81,7 @@ impl DependencyGraph {
             shard_id,
             executed_clock,
             executed,
+            shard_processes,
             vertex_index,
             pending_index,
             finder,
@@ -272,23 +277,26 @@ impl DependencyGraph {
                 .remove(&dot)
                 .expect("dots from an SCC should exist");
 
-            // get command
-            let cmd = vertex.into_command();
-
             // update the set of ready dots
             dots.push(dot);
+
+            // get command
+            let cmd = vertex.into_command();
 
             // update `executed` in case it was defined
             if let Some(executed) = self.executed.as_mut() {
                 // only notify other shards that I've executed this command if
-                // it's replicated by my shard
-                if cmd.replicated_by(&self.shard_id) {
+                // my shard was the shard targetted by the client; this makes
+                // sure that only one of the shards that replicate a given
+                // command will notify the remaning shards that it has been
+                // executed
+                if self.shard_processes.contains(&dot.source()) {
                     executed.push((dot, cmd.shards().cloned().collect()));
                 }
             }
 
             // add command to commands to be executed
-            self.to_execute.push(cmd)
+            self.to_execute.push(cmd);
         })
     }
 

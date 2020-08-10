@@ -33,6 +33,8 @@ pub struct Atlas<KC: KeyClocks> {
     cmds: CommandsInfo<AtlasInfo>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
+    // set of processes in my shard
+    shard_processes: HashSet<ProcessId>,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
@@ -70,6 +72,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         );
         let to_processes = Vec::new();
         let to_executors = Vec::new();
+        let shard_processes = util::process_ids(shard_id, config.n()).collect();
         let buffered_commits = HashMap::new();
 
         // create `Atlas`
@@ -79,6 +82,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             cmds,
             to_processes,
             to_executors,
+            shard_processes,
             buffered_commits,
         };
 
@@ -462,7 +466,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         // will always be in the non-parallel executor and if we were to request
         // this information on demand (AKA partition chasing) it would be much
         // more complex and not at all more efficient.
-        if self.bp.belongs_to_my_shard(&dot.source()) {
+        if self.shard_processes.contains(&dot.source()) {
             // ignore processes in region that already have this information
             let target = self.bp.all_in_region_but(cmd);
             self.to_processes.push(Action::ToSend {

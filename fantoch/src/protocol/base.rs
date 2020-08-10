@@ -178,14 +178,6 @@ impl BaseProcess {
             .expect("closest shard process should be known")
     }
 
-    // Checks if the process belongs to my shard.
-    pub fn belongs_to_my_shard(&self, process_id: &ProcessId) -> bool {
-        self.all
-            .as_ref()
-            .expect("the set of all processes should be known")
-            .contains(process_id)
-    }
-
     // Returns all processes (but self) in my region.
     pub fn all_in_region_but(&self, cmd: &Command) -> HashSet<ProcessId> {
         // the total number of shards is the number of connected shards + self
@@ -419,12 +411,6 @@ mod tests {
         let (connect_ok, processes_in_region) = bp.discover(sorted);
         assert!(connect_ok);
         assert_eq!(processes_in_region, HashSet::from_iter(vec![4]));
-
-        // check belongs
-        assert!(bp.belongs_to_my_shard(&1));
-        assert!(!bp.belongs_to_my_shard(&4));
-        assert!(bp.belongs_to_my_shard(&2));
-        assert!(bp.belongs_to_my_shard(&3));
 
         // check set of all processes
         assert_eq!(
