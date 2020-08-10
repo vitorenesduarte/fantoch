@@ -14,14 +14,14 @@ pub fn start_executors<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
-    to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
+    worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
 {
     // zip rxs'
-    let incoming = to_executors_rxs
+    let incoming = worker_to_executors_rxs
         .into_iter()
         .zip(client_to_executors_rxs.into_iter());
 
@@ -29,14 +29,14 @@ pub fn start_executors<P>(
     let executor = P::Executor::new(process_id, shard_id, config);
 
     // create executor workers
-    for (executor_index, (from_workers_and_readers, from_clients)) in
+    for (executor_index, (from_workers, from_clients)) in
         incoming.enumerate()
     {
         task::spawn(executor_task::<P>(
             executor_index,
             executor.clone(),
             config,
-            from_workers_and_readers,
+            from_workers,
             from_clients,
             to_metrics_logger.clone(),
         ));
@@ -47,7 +47,7 @@ async fn executor_task<P>(
     executor_index: usize,
     mut executor: P::Executor,
     config: Config,
-    mut from_workers_and_readers: ExecutionInfoReceiver<P>,
+    mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
@@ -72,7 +72,7 @@ async fn executor_task<P>(
 
     loop {
         tokio::select! {
-            execution_info = from_workers_and_readers.recv() => {
+            execution_info = from_workers.recv() => {
                 log!("[executor] from workers/readers: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     handle_execution_info::<P>(&time, execution_info, &mut executor, &mut to_clients).await;

@@ -239,13 +239,6 @@ where
         workers,
     );
 
-    // create forward channels: worker /readers -> executors
-    let (to_executors, to_executors_rxs) = ToExecutors::<P>::new(
-        "to_executors",
-        process_channel_buffer_size,
-        executors,
-    );
-
     // connect to all processes
     let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
@@ -254,7 +247,6 @@ where
         listener,
         addresses,
         reader_to_workers.clone(),
-        to_executors.clone(),
         CONNECT_RETRIES,
         tcp_nodelay,
         tcp_buffer_size,
@@ -384,12 +376,20 @@ where
         inspect_chan,
     ));
 
+    // create forward channels: worker /readers -> executors
+    let (worker_to_executors, worker_to_executors_rxs) =
+        WorkerToExecutors::<P>::new(
+            "worker_to_executors",
+            process_channel_buffer_size,
+            executors,
+        );
+
     // start executors
     task::executor::start_executors::<P>(
         process_id,
         shard_id,
         config,
-        to_executors_rxs,
+        worker_to_executors_rxs,
         client_to_executors_rxs,
         executor_to_metrics_logger,
     );
@@ -402,7 +402,7 @@ where
         periodic_to_workers_rxs,
         to_writers,
         reader_to_workers,
-        to_executors,
+        worker_to_executors,
         process_channel_buffer_size,
         execution_log,
         worker_to_metrics_logger,
