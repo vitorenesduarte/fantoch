@@ -120,10 +120,9 @@ impl DependencyGraph {
             executed
         );
         for dot in executed.iter() {
-            if self.vertex_index.remove_remote(&dot) {
-                // if the dot existed as remote, add it to `executed_clock`
-                self.executed_clock.add(&dot.source(), dot.sequence());
-            }
+            // remove the dot from the index (if it exists as remote) and add it to `executed_clock`
+            self.vertex_index.remove_remote(&dot);
+            self.executed_clock.add(&dot.source(), dot.sequence());
         }
 
         // get current command ready count and count newly ready commands

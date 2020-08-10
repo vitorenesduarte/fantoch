@@ -61,8 +61,8 @@ impl VertexIndex {
     }
 
     /// Removes a remote vertex from the index.
-    pub fn remove_remote(&mut self, dot: &Dot) -> bool {
-        self.remote.remove(dot).is_some()
+    pub fn remove_remote(&mut self, dot: &Dot) {
+        self.remote.remove(dot);
     }
 }
 
