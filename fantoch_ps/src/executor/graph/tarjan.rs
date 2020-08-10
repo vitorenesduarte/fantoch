@@ -3,8 +3,10 @@ use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use fantoch::HashSet;
+use parking_lot::RwLock;
 use std::cmp;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use threshold::{AEClock, EventSet, VClock};
 
 /// commands are sorted inside an SCC given their dot
@@ -79,7 +81,7 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         vertex: &mut Vertex,
-        executed_clock: &mut AEClock<ProcessId>,
+        executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
@@ -114,10 +116,12 @@ impl TarjanSCCFinder {
                 // to check for the highest dependency
                 to
             } else {
-                let executed = executed_clock
+                executed_clock
+                    .read()
                     .get(process_id)
-                    .expect("process should exist in the executed clock");
-                executed.frontier() + 1
+                    .expect("process should exist in the executed clock")
+                    .frontier()
+                    + 1
             };
 
             // OPTIMIZATION: start from the highest dep to the lowest:
@@ -131,7 +135,7 @@ impl TarjanSCCFinder {
                 // - we need this check because the clock may not be contiguous,
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed
-                if executed_clock.contains(process_id, dep) {
+                if executed_clock.read().contains(process_id, dep) {
                     continue;
                 }
 
@@ -254,6 +258,7 @@ impl TarjanSCCFinder {
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
                 if !executed_clock
+                    .write()
                     .add(&member_dot.source(), member_dot.sequence())
                 {
                     panic!(

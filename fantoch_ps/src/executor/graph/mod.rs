@@ -19,14 +19,16 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::util;
 use fantoch::HashSet;
+use parking_lot::RwLock;
 use std::fmt;
+use std::sync::Arc;
 use threshold::{AEClock, VClock};
 
 #[derive(Clone)]
 pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
-    executed_clock: AEClock<ProcessId>,
+    executed_clock: Arc<RwLock<AEClock<ProcessId>>>,
     // growing list of executed dots used in partial replication to notify
     // other shards of what we have executed
     executed: Option<Vec<(Dot, HashSet<ShardId>)>>,
@@ -59,7 +61,7 @@ impl DependencyGraph {
         // create bottom executed clock
         let ids = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id);
-        let executed_clock = AEClock::with(ids);
+        let executed_clock = Arc::new(RwLock::new(AEClock::with(ids)));
         // only track executed dots in `executed` list if there's more than one
         // shard
         let executed = if config.shards() == 1 {
@@ -141,7 +143,9 @@ impl DependencyGraph {
             //   update the `executed_clock` here
             if !replicated_by.contains(&self.shard_id) {
                 debug_assert!(self.vertex_index.get_mut(&dot).is_none());
-                self.executed_clock.add(&dot.source(), dot.sequence());
+                self.executed_clock
+                    .write()
+                    .add(&dot.source(), dot.sequence());
             }
 
             // add dot to `dots` so that we try to execute other commands that
@@ -372,7 +376,7 @@ impl DependencyGraph {
             Some(vertex) => self.finder.strong_connect(
                 dot,
                 vertex,
-                &mut self.executed_clock,
+                &self.executed_clock,
                 &self.vertex_index,
                 found,
             ),
@@ -1156,13 +1160,13 @@ mod tests {
         );
 
         // create executed clock
-        queue.executed_clock = AEClock::from(
+        queue.executed_clock = Arc::new(RwLock::new(AEClock::from(
             util::vclock(vec![60, 50, 50, 30, 60]).into_iter().map(
                 |(process_id, max_set)| {
                     (process_id, AboveExSet::from_events(max_set.event_iter()))
                 },
             ),
-        );
+        )));
 
         // create ready commands counter and try to find an SCC
         let mut ready_commands = 0;

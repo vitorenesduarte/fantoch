@@ -2,7 +2,9 @@ use super::tarjan::Vertex;
 use crate::shared::Shared;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::{HashMap, HashSet};
+use parking_lot::RwLock;
 use std::cell::UnsafeCell;
+use std::sync::Arc;
 use threshold::AEClock;
 
 #[derive(Debug)]
@@ -50,7 +52,7 @@ impl VertexIndex {
         &mut self,
         vertex: Vertex,
         is_mine: bool,
-        executed_clock: &AEClock<ProcessId>,
+        executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
     ) -> bool {
         let dot = vertex.dot();
         let cell = Cell(UnsafeCell::new(vertex));
@@ -59,7 +61,7 @@ impl VertexIndex {
         } else {
             // if it's a remote command, only index it if we haven't been told
             // already that it has been executed in a remote shard
-            if !executed_clock.contains(&dot.source(), dot.sequence()) {
+            if !executed_clock.read().contains(&dot.source(), dot.sequence()) {
                 self.remote.insert(dot, cell).is_some()
             } else {
                 false
