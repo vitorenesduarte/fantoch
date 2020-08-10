@@ -466,14 +466,16 @@ impl<KC: KeyClocks> Atlas<KC> {
         if self.shard_processes.contains(&dot.source()) {
             // ignore processes in region that already have this information
             let target = self.bp.all_in_region_but(cmd);
-            self.to_processes.push(Action::ToSend {
-                target,
-                msg: Message::MCommitExecutorInfo {
-                    dot,
-                    cmd: cmd.clone(),
-                    clock: value.clock.clone(),
-                },
-            })
+            if !target.is_empty() {
+                self.to_processes.push(Action::ToSend {
+                    target,
+                    msg: Message::MCommitExecutorInfo {
+                        dot,
+                        cmd: cmd.clone(),
+                        clock: value.clock.clone(),
+                    },
+                });
+            }
         }
 
         // create execution info
