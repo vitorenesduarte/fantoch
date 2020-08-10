@@ -283,11 +283,11 @@ impl TarjanSCCFinder {
 
                 // update executed clock:
                 // - this is a nice optimization (that I think we missed in
-                //   Atlas); instead of waiting for the root-level recursion
-                //   to finish in order to update `executed_clock` (which is
+                //   Atlas); instead of waiting for the root-level recursion to
+                //   finish in order to update `executed_clock` (which is
                 //   consulted to decide what are the dependencies of a
-                //   command), we can update it right here, possibly
-                //   reducing a few iterations
+                //   command), we can update it right here, possibly reducing a
+                //   few iterations
                 if !executed_clock
                     .write()
                     .add(&member_dot.source(), member_dot.sequence())

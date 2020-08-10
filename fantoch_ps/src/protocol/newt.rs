@@ -1480,7 +1480,7 @@ mod tests {
         }));
 
         // process 1 should have something to the executor
-        let (process, executor, pending, _) =
+        let (process, executor, pending, time) =
             simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
@@ -1489,7 +1489,7 @@ mod tests {
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
             .collect();

@@ -1,10 +1,10 @@
 mod common;
 
 use clap::{App, Arg};
-use fantoch::time::RunTime;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::run::rw::Rw;
+use fantoch::time::RunTime;
 use fantoch_ps::executor::GraphExecutor;
 use tokio::fs::File;
 

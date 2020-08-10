@@ -1,5 +1,4 @@
 use crate::executor::table::MultiVotesTable;
-use fantoch::time::SysTime;
 use crate::protocol::common::table::VoteRange;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -7,6 +6,7 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
+use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

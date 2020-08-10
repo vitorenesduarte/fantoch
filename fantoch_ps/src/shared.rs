@@ -24,6 +24,10 @@ where
         Self { shared }
     }
 
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.shared.contains_key(key)
+    }
+
     pub fn get(&self, key: &K) -> Option<Ref<'_, K, V>> {
         self.shared.get(key)
     }

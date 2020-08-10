@@ -104,6 +104,11 @@ impl DependencyGraph {
         if self.executor_index == 0 {
             return;
         }
+        self.vertex_index.maybe_cleanup(
+            &self.pending_index,
+            &self.executed_clock,
+            time,
+        );
     }
 
     /// Add a new command with its clock to the queue.
@@ -130,7 +135,7 @@ impl DependencyGraph {
         let mut total_found = 0;
 
         // index in vertex index and check if it hasn't been indexed before
-        assert!(!self.vertex_index.index(vertex, is_mine));
+        assert!(!self.vertex_index.index(vertex, is_mine, time));
 
         if is_mine {
             // try to find new SCCs
@@ -970,6 +975,7 @@ mod tests {
         let transitive_conflicts = false;
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let time = RunTime;
 
         // // create vertex index and index all dots
         // let mut vertex_index = VertexIndex::new();
@@ -985,6 +991,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 40, 61]),
             ),
             true,
+            &time,
         );
 
         // (4, 31)
@@ -995,6 +1002,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 30, 60]),
             ),
             true,
+            &time,
         );
         // (4, 32)
         queue.vertex_index.index(
@@ -1004,6 +1012,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 31, 60]),
             ),
             true,
+            &time,
         );
         // (4, 33)
         queue.vertex_index.index(
@@ -1013,6 +1022,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 32, 60]),
             ),
             true,
+            &time,
         );
         // (4, 34)
         queue.vertex_index.index(
@@ -1022,6 +1032,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 33, 60]),
             ),
             true,
+            &time,
         );
         // (4, 35)
         queue.vertex_index.index(
@@ -1031,6 +1042,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 34, 60]),
             ),
             true,
+            &time,
         );
         // (4, 36)
         queue.vertex_index.index(
@@ -1040,6 +1052,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 35, 60]),
             ),
             true,
+            &time,
         );
         // (4, 37)
         queue.vertex_index.index(
@@ -1049,6 +1062,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 36, 60]),
             ),
             true,
+            &time,
         );
         // (4, 38)
         queue.vertex_index.index(
@@ -1058,6 +1072,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 37, 60]),
             ),
             true,
+            &time,
         );
         // (4, 39)
         queue.vertex_index.index(
@@ -1067,6 +1082,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 38, 60]),
             ),
             true,
+            &time,
         );
         // (4, 40)
         queue.vertex_index.index(
@@ -1076,6 +1092,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 39, 60]),
             ),
             true,
+            &time,
         );
 
         // create executed clock
