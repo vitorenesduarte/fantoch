@@ -4,13 +4,13 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId, ShardId};
 use crate::log;
-use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SysTime;
 use crate::util;
 use crate::HashMap;
+use fantoch_prof::metrics::Histogram;
 use std::fmt;
 use std::time::Duration;
 
@@ -578,8 +578,8 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
 mod tests {
     use super::*;
     use crate::client::{KeyGen, ShardGen};
-    use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
+    use fantoch_prof::metrics::F64;
 
     fn run(f: usize, clients_per_process: usize) -> (Histogram, Histogram) {
         // planet

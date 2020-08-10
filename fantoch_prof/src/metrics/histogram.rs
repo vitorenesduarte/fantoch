@@ -30,6 +30,11 @@ impl Histogram {
         stats
     }
 
+    /// Returns the number of occurrences.
+    pub fn count(&self) -> usize {
+        self.values.iter().map(|(_, count)| count).sum::<usize>()
+    }
+
     /// Create string with values in the histogram.
     pub fn values(&self) -> impl Iterator<Item = u64> + '_ {
         self.values
@@ -179,10 +184,6 @@ impl Histogram {
                 (sum_acc + sum, count_acc + count)
             },
         )
-    }
-
-    fn count(&self) -> usize {
-        self.values.iter().map(|(_, count)| count).sum::<usize>()
     }
 
     fn compute_cov(&self) -> f64 {

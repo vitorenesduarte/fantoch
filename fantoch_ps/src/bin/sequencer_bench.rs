@@ -1,9 +1,9 @@
 use clap::{App, Arg};
-use fantoch::metrics::Histogram;
 use fantoch::run::task;
 use fantoch::run::task::chan::{ChannelReceiver, ChannelSender};
 use fantoch::time::{RunTime, SysTime};
 use fantoch::HashMap;
+use fantoch_prof::metrics::Histogram;
 use parking_lot::Mutex;
 use rand::Rng;
 use std::cmp::max;

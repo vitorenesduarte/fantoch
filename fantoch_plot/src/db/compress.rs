@@ -1,5 +1,5 @@
 use crate::db::Dstat;
-use fantoch::metrics::{Histogram, F64};
+use fantoch_prof::metrics::{Histogram, F64};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;

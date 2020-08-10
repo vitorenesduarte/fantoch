@@ -31,9 +31,6 @@ pub mod protocol;
 // implementations.
 pub mod time;
 
-// This module contains the definition of `F64`, `Stats` and `Metrics`.
-pub mod metrics;
-
 // This module contains the definition of `Simulation` and `Runner`.
 pub mod sim;
 

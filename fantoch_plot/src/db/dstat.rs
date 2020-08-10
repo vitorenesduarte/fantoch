@@ -1,7 +1,7 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use csv::ReaderBuilder;
-use fantoch::metrics::Histogram;
+use fantoch_prof::metrics::Histogram;
 use serde::{Deserialize, Deserializer};
 use std::fs::File;
 use std::io::{BufRead, BufReader};

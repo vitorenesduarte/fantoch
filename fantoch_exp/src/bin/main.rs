@@ -13,7 +13,8 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../graph_executor";
+// const RESULTS_DIR: &str = "../graph_executor";
+const RESULTS_DIR: &str = "../graph_executor_true";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {

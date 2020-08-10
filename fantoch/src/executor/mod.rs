@@ -12,7 +12,7 @@ pub use basic::{BasicExecutionInfo, BasicExecutor};
 use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
-use crate::metrics::Metrics;
+use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};

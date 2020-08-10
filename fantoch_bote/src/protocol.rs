@@ -1,4 +1,4 @@
-use fantoch::metrics::Histogram;
+use fantoch_prof::metrics::Histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

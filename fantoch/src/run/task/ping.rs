@@ -1,10 +1,10 @@
 use super::chan::ChannelSender;
 use crate::id::{ProcessId, ShardId};
 use crate::log;
-use crate::metrics::Histogram;
 use crate::run::prelude::*;
 use crate::run::ConnectionDelay;
 use crate::HashMap;
+use fantoch_prof::metrics::Histogram;
 use std::net::IpAddr;
 use tokio::time::{self, Duration};
 

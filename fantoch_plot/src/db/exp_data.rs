@@ -1,7 +1,7 @@
 use crate::db::{Dstat, DstatCompress, HistogramCompress};
 use fantoch::client::ClientData;
 use fantoch::id::ProcessId;
-use fantoch::metrics::Histogram;
+use fantoch_prof::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::Testbed;
