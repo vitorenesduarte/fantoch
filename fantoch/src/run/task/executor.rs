@@ -89,6 +89,7 @@ async fn executor_task<P>(
             }
             _ = to_executors_interval.tick() => {
                 if let Some(execution_info) = executor.to_executors() {
+                    log!("[executor] to executors {:?}", execution_info);
                     let msg = Arc::new(POEMessage::Executor(execution_info));
                     for writers in region_writers.iter_mut() {
                         crate::run::task::process::send_to_one_writer("executor", msg.clone(), writers).await;

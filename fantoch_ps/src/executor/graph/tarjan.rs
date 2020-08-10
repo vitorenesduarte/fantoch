@@ -47,6 +47,8 @@ impl TarjanSCCFinder {
         vertex_index: &VertexIndex,
     ) -> (Vec<SCC>, HashSet<Dot>) {
         let _process_id = self.process_id;
+        // reset id
+        self.id = 0;
         // take out sccs
         let sccs = std::mem::take(&mut self.sccs);
         // reset the id of each dot in the stack, while computing the set of

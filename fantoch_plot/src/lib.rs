@@ -860,6 +860,9 @@ fn set_log_scale(
                 n if n <= 1000 => (n as f64 / 50f64).round() as u64 * 50,
                 n if n <= 10000 => (n as f64 / 100f64).round() as u64 * 100,
                 n if n <= 100000 => (n as f64 / 1000f64).round() as u64 * 1000,
+                n if n <= 1000000 => {
+                    (n as f64 / 10000f64).round() as u64 * 10000
+                }
                 n => panic!("set_log_scale: unsupportted axis value: {}", n),
             }
         })
