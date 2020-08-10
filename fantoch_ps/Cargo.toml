@@ -16,7 +16,7 @@ parallel-sim = ["rayon"]
 ahash = "0.4.4"
 clap = "2.33.2"
 color-eyre = "0.5.1"
-dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "b8d83eec3179cf849ad4f2038001b46545daed1e" }
+dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "4cabdf423002be85fe5ecbf7308dbd9754d33011" }
 futures = { version = "0.3.5", default-features = false, features = [] }
 rand = "0.7.3"
 rayon = { version = "1.3.1", optional = true }

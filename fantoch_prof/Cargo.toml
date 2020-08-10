@@ -7,7 +7,7 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "b8d83eec3179cf849ad4f2038001b46545daed1e" }
+dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "4cabdf423002be85fe5ecbf7308dbd9754d33011" }
 jemallocator = "0.3.2"
 quanta = "0.6.3"
 serde = { version = "1.0.114", features = ["derive"] }
