@@ -1,6 +1,6 @@
 use super::index::VertexIndex;
 use fantoch::command::Command;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::HashSet;
 use parking_lot::RwLock;
@@ -23,6 +23,7 @@ pub enum FinderResult {
 #[derive(Clone)]
 pub struct TarjanSCCFinder {
     process_id: ProcessId,
+    shard_id: ShardId,
     transitive_conflicts: bool,
     id: usize,
     stack: Vec<Dot>,
@@ -31,9 +32,14 @@ pub struct TarjanSCCFinder {
 
 impl TarjanSCCFinder {
     /// Creates a new SCC finder that employs Tarjan's algorithm.
-    pub fn new(process_id: ProcessId, transitive_conflicts: bool) -> Self {
+    pub fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        transitive_conflicts: bool,
+    ) -> Self {
         Self {
             process_id,
+            shard_id,
             transitive_conflicts,
             id: 0,
             stack: Vec::new(),
@@ -260,7 +266,15 @@ impl TarjanSCCFinder {
                 if !executed_clock
                     .write()
                     .add(&member_dot.source(), member_dot.sequence())
+                    && member_vertex.cmd.replicated_by(&self.shard_id)
                 {
+                    // panic if we have already executed this command and we
+                    // replicated it; it's possible that here we add a dot to
+                    // the executed clock that is already there, but that dot
+                    // must be about a command we do not replicate; in this
+                    // case, this dot must have been added by the other executor
+                    // where it received information about remotely executed
+                    // dots
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",
                         self.process_id, dot

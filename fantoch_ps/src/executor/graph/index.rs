@@ -61,7 +61,10 @@ impl VertexIndex {
         } else {
             // if it's a remote command, only index it if we haven't been told
             // already that it has been executed in a remote shard
-            if !executed_clock.read().contains(&dot.source(), dot.sequence()) {
+            if !executed_clock
+                .read()
+                .contains(&dot.source(), dot.sequence())
+            {
                 self.remote.insert(dot, cell).is_some()
             } else {
                 false

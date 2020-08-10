@@ -75,8 +75,11 @@ impl DependencyGraph {
         let vertex_index = VertexIndex::new();
         let pending_index = PendingIndex::new();
         // create finder
-        let finder =
-            TarjanSCCFinder::new(process_id, config.transitive_conflicts());
+        let finder = TarjanSCCFinder::new(
+            process_id,
+            shard_id,
+            config.transitive_conflicts(),
+        );
         // create to execute
         let to_execute = Vec::new();
         DependencyGraph {
@@ -165,13 +168,8 @@ impl DependencyGraph {
     }
 
     /// Add a new command with its clock to the queue.
-    pub fn add(
-        &mut self,
-        dot: Dot,
-        cmd: Command,
-        clock: VClock<ProcessId>,
-        is_mine: bool,
-    ) {
+    pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
+        let is_mine = cmd.replicated_by(&self.shard_id);
         log!(
             "p{}: Graph::add {:?} {:?} | mine = {}",
             self.process_id,
@@ -238,7 +236,7 @@ impl DependencyGraph {
 
     #[must_use]
     fn find_scc(&mut self, dot: Dot, total_found: &mut usize) -> FinderInfo {
-        log!("p{}: Graph:find_scc {:?}", self.process_id, dot);
+        log!("p{}: Graph::find_scc {:?}", self.process_id, dot);
         // execute tarjan's algorithm
         let mut found = 0;
         let finder_result = self.strong_connect(dot, &mut found);
@@ -276,7 +274,7 @@ impl DependencyGraph {
     fn save_scc(&mut self, scc: SCC, dots: &mut Vec<Dot>) {
         scc.into_iter().for_each(|dot| {
             log!(
-                "p{}: Graph:save_scc removing {:?} from indexes",
+                "p{}: Graph::save_scc removing {:?} from indexes",
                 self.process_id,
                 dot
             );
@@ -418,7 +416,6 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-        let is_mine = true;
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -433,12 +430,12 @@ mod tests {
         let clock_1 = util::vclock(vec![1, 0]);
 
         // add cmd 0
-        queue.add(dot_0, cmd_0.clone(), clock_0, is_mine);
+        queue.add(dot_0, cmd_0.clone(), clock_0);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.add(dot_1, cmd_1.clone(), clock_1, is_mine);
+        queue.add(dot_1, cmd_1.clone(), clock_1);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -579,14 +576,13 @@ mod tests {
             let process_id = 1;
             let shard_id = 0;
             let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-            let is_mine = true;
 
             // add cmd 2
-            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), is_mine);
+            queue.add(dot_2, cmd_2.clone(), clock_2.clone());
             assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
 
             // add cmd 3
-            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), is_mine);
+            queue.add(dot_3, cmd_3.clone(), clock_3.clone());
             if transitive_conflicts {
                 // if we assume transitive conflicts, then cmd 3 can be executed
                 assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
@@ -596,7 +592,7 @@ mod tests {
             }
 
             // add cmd 1
-            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), is_mine);
+            queue.add(dot_1, cmd_1.clone(), clock_1.clone());
             // cmd 1 can always be executed
             if transitive_conflicts {
                 assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
@@ -954,7 +950,6 @@ mod tests {
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-        let is_mine = true;
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 
@@ -971,7 +966,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.add(dot, cmd, clock, is_mine);
+            queue.add(dot, cmd, clock);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();
