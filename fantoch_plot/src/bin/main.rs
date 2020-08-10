@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_true";
+const RESULTS_DIR: &str = "../graph_executor_0conf_v2";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -30,25 +30,25 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let keys_per_shard = 1;
-    let zipf_key_count = 1_000_000;
-    let zipf_coefficient = 0.5;
-    let key_gen = KeyGen::Zipf {
-        coefficient: zipf_coefficient,
-        key_count: zipf_key_count,
-    };
-    let key_gens = vec![key_gen];
-    // let key_gens = vec![KeyGen::ConflictRate { conflict_rate: 10 }];
+    // let zipf_key_count = 1_000_000;
+    // let zipf_coefficient = 0.5;
+    // let key_gen = KeyGen::Zipf {
+    //     coefficient: zipf_coefficient,
+    //     key_count: zipf_key_count,
+    // };
+    // let key_gens = vec![key_gen];
+    let key_gens = vec![KeyGen::ConflictRate { conflict_rate: 0 }];
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
 
     let shard_combinations = vec![
         // shards_per_command, shard_count
-        (1, 4),
+        (1, 2),
         /*
         (1, 1),
-        (1, 2),
         (2, 2),
         (1, 3),
+        (1, 4),
         (2, 3),
         (1, 5),
         (1, 6),
@@ -70,7 +70,7 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 32,
         // 1024 * 36,
         // 1024 * 40,
-        // 1024 * 48,
+        1024 * 48,
         // 1024 * 56,
         1024 * 64,
         1024 * 96,
