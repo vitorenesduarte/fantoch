@@ -134,7 +134,7 @@ impl DependencyGraph {
             //   shard, and in that case we should execute it locally and not
             //   update the `executed_clock` here
             if !replicated_by.contains(&self.shard_id) {
-                assert!(self.vertex_index.get_mut(&dot).is_none());
+                debug_assert!(self.vertex_index.get_mut(&dot).is_none());
                 self.executed_clock.add(&dot.source(), dot.sequence());
             }
 
