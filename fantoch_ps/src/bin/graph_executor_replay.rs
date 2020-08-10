@@ -1,6 +1,7 @@
 mod common;
 
 use clap::{App, Arg};
+use fantoch::time::RunTime;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::run::rw::Rw;
@@ -16,6 +17,7 @@ async fn main() {
     let (config, execution_log) = parse_args();
     // create graph executor
     let mut executor = GraphExecutor::new(process_id, shard_id, config);
+    let time = RunTime;
 
     // open execution log file
     let file = File::open(execution_log)
@@ -28,7 +30,7 @@ async fn main() {
     while let Some(execution_info) = rw.recv().await {
         println!("adding {:?}", execution_info);
         // result should be empty as we're not wait for any rifl
-        executor.handle(execution_info);
+        executor.handle(execution_info, &time);
         let res: Vec<_> = executor.to_clients_iter().collect();
         assert!(res.is_empty());
         executor.show_internal_status();

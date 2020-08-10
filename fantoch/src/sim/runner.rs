@@ -313,7 +313,7 @@ where
 
     fn send_to_processes_and_executors(&mut self, process_id: ProcessId) {
         // get process and executor
-        let (process, executor, pending, _time) =
+        let (process, executor, pending, time) =
             self.simulation.get_process(process_id);
         assert_eq!(process.id(), process_id);
         let shard_id = process.shard_id();
@@ -325,7 +325,7 @@ where
         let ready: Vec<_> = process
             .to_executors_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 // TODO remove collect
                 executor.to_clients_iter().collect::<Vec<_>>()
             })

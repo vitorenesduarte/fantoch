@@ -4,6 +4,7 @@ use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
+use fantoch::time::SysTime;
 use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +44,7 @@ impl Executor for SlotExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         let SlotExecutionInfo { slot, cmd } = info;
         // we shouldn't receive execution info about slots already executed
         // TODO actually, if recovery is involved, then this may not be
@@ -169,7 +170,7 @@ mod tests {
                 .clone()
                 .into_iter()
                 .flat_map(|info| {
-                    executor.handle(info);
+                    executor.handle(info, &fantoch::time::RunTime);
                     executor
                         .to_clients_iter()
                         .map(|executor_result| {

@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::time::SysTime;
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOp, KVStore, Key};
@@ -30,7 +31,7 @@ impl Executor for BasicExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         let BasicExecutionInfo { rifl, key, op } = info;
         // execute op in the `KVStore`
         let op_result = self.store.execute(&key, op);

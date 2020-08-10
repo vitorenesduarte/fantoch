@@ -5,6 +5,7 @@ use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
+use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
@@ -40,14 +41,18 @@ impl Executor for GraphExecutor {
         self.graph.set_executor_index(index);
     }
 
-    fn handle(&mut self, info: GraphExecutionInfo) {
+    fn cleanup(&mut self, time: &dyn SysTime) {
+        self.graph.cleanup(time);
+    }
+
+    fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
         match info {
             GraphExecutionInfo::Add { dot, cmd, clock } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.add(dot, cmd, clock);
+                    self.graph.add(dot, cmd, clock, time);
                     // get more commands that are ready to be executed
                     while let Some(cmd) = self.graph.command_to_execute() {
                         self.execute(cmd);
@@ -55,10 +60,6 @@ impl Executor for GraphExecutor {
                 }
             }
         }
-    }
-
-    fn cleanup(&mut self) {
-        self.graph.cleanup();
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {

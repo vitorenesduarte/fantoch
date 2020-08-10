@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 use crate::protocol::MessageIndex;
+use crate::time::SysTime;
 use crate::util;
 use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
@@ -37,11 +38,11 @@ pub trait Executor: Clone {
         // executors interested in the index should overwrite this
     }
 
-    fn handle(&mut self, infos: Self::ExecutionInfo);
-
-    fn cleanup(&mut self) {
+    fn cleanup(&mut self, _time: &dyn SysTime) {
         // executors interested in a periodic cleanup should overwrite this
     }
+
+    fn handle(&mut self, infos: Self::ExecutionInfo, time: &dyn SysTime);
 
     #[must_use]
     fn to_clients(&mut self) -> Option<ExecutorResult>;

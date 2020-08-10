@@ -5,6 +5,7 @@ use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
+use crate::time::RunTime;
 use crate::HashMap;
 use tokio::time;
 
@@ -55,6 +56,9 @@ async fn executor_task<P>(
     // set executor index
     executor.set_executor_index(executor_index);
 
+    // create time
+    let time = RunTime;
+
     // holder of all client info
     let mut to_clients = ToClients::new();
 
@@ -71,7 +75,7 @@ async fn executor_task<P>(
             execution_info = from_workers_and_readers.recv() => {
                 log!("[executor] from workers/readers: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(execution_info, &mut executor, &mut to_clients).await;
+                    handle_execution_info::<P>(&time, execution_info, &mut executor, &mut to_clients).await;
                 } else {
                     println!("[executor] error while receiving execution info from worker/readers");
                 }
@@ -86,7 +90,7 @@ async fn executor_task<P>(
             }
             _ = cleanup_interval.tick() => {
                 log!("[executor] cleanup");
-                executor.cleanup();
+                executor.cleanup(&time);
             }
             _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -102,6 +106,7 @@ async fn executor_task<P>(
 }
 
 async fn handle_execution_info<P>(
+    time: &RunTime,
     execution_info: <P::Executor as Executor>::ExecutionInfo,
     executor: &mut P::Executor,
     to_clients: &mut ToClients,
@@ -110,7 +115,7 @@ async fn handle_execution_info<P>(
 {
     // forward executor results (commands or partial commands) to clients that
     // are waiting for them
-    executor.handle(execution_info);
+    executor.handle(execution_info, time);
     for executor_result in executor.to_clients_iter() {
         // get client id
         let client_id = executor_result.rifl.source();

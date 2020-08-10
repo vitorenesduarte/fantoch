@@ -1,4 +1,5 @@
 use crate::executor::table::MultiVotesTable;
+use fantoch::time::SysTime;
 use crate::protocol::common::table::VoteRange;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -43,7 +44,7 @@ impl Executor for TableExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         // handle each new info by updating the votes table and execute ready
         // commands
         match info {
