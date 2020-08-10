@@ -43,9 +43,9 @@ fn partial_replication() -> Result<(), Report> {
 
     let shard_combinations = vec![
         // shards_per_command, shard_count
+        (1, 1),
         (1, 2),
         /*
-        (1, 1),
         (2, 2),
         (1, 3),
         (1, 4),
@@ -68,10 +68,10 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 16,
         1024 * 24,
         1024 * 32,
-        // 1024 * 36,
-        // 1024 * 40,
+        1024 * 36,
+        1024 * 40,
         1024 * 48,
-        // 1024 * 56,
+        1024 * 56,
         1024 * 64,
         1024 * 96,
         1024 * 128,

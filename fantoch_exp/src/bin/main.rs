@@ -165,10 +165,10 @@ async fn main() -> Result<(), Report> {
         1024 * 16,
         1024 * 24, // 1
         1024 * 32,
-        // 1024 * 36, // 1
-        // 1024 * 40,
+        1024 * 36, // 1
+        1024 * 40, // 1
         1024 * 48,
-        // 1024 * 56,
+        1024 * 56, // 1
         1024 * 64,
         1024 * 96,
         1024 * 128,
@@ -180,7 +180,7 @@ async fn main() -> Result<(), Report> {
         1024 * 272,
     ];
     let shards_per_command = 1;
-    let shard_count = 2;
+    let shard_count = 1;
     let keys_per_shard = 1;
     // let zipf_coefficient = 0.5;
     // let zipf_key_count = 1_000_000;
