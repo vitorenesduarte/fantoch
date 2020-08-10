@@ -9,6 +9,7 @@ use fantoch::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+#[derive(Clone)]
 pub struct TableExecutor {
     execute_at_commit: bool,
     table: MultiVotesTable,
@@ -75,8 +76,8 @@ impl Executor for TableExecutor {
         self.to_clients.pop()
     }
 
-    fn parallel() -> bool {
-        true
+    fn max_executors() -> Option<usize> {
+        None
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -142,11 +143,10 @@ impl TableExecutionInfo {
 }
 
 impl MessageKey for TableExecutionInfo {
-    fn key(&self) -> Option<&Key> {
-        let key = match self {
+    fn key(&self) -> &Key {
+        match self {
             TableExecutionInfo::Votes { key, .. } => key,
             TableExecutionInfo::DetachedVotes { key, .. } => key,
-        };
-        Some(&key)
+        }
     }
 }

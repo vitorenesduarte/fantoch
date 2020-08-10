@@ -1,13 +1,9 @@
 use super::pool;
 use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
-use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
-use crate::id::{ClientId, Dot, ProcessId, Rifl, ShardId};
-use crate::kvs::Key;
-use crate::protocol::{
-    MessageIndex, PeriodicEventIndex, Protocol, ProtocolMetrics,
-};
-use crate::util;
+use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use crate::id::{ClientId, Dot, ProcessId, ShardId};
+use crate::protocol::{MessageIndex, Protocol, ProtocolMetrics};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -167,7 +163,7 @@ where
 {
     fn index(&self) -> Option<(usize, usize)> {
         match self {
-            Self::Event(e) => e.index(),
+            Self::Event(e) => MessageIndex::index(e),
             Self::Inspect(_, _) => None, // send to all
         }
     }
@@ -175,12 +171,6 @@ where
 
 // 4. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<ClientToExecutor>;
-// The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
-impl pool::PoolIndex for (&Key, Rifl) {
-    fn index(&self) -> Option<(usize, usize)> {
-        Some(key_index(&self.0))
-    }
-}
 
 // 5. executors receive messages from workers and reader tasks
 pub type ToExecutors<P> =
@@ -189,16 +179,9 @@ pub type ToExecutors<P> =
 // to be forwarded
 impl<A> pool::PoolIndex for A
 where
-    A: MessageKey,
+    A: MessageIndex,
 {
     fn index(&self) -> Option<(usize, usize)> {
-        self.key().map(key_index)
+        self.index()
     }
-}
-
-// The index of a key is its hash
-#[allow(clippy::ptr_arg)]
-fn key_index(key: &Key) -> (usize, usize) {
-    let index = util::key_hash(key) as usize;
-    (0, index)
 }

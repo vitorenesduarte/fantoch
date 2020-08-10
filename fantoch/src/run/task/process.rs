@@ -192,11 +192,9 @@ fn start_readers<P>(
     P: Protocol + 'static,
 {
     for (process_id, shard_id, connection) in connections {
-        let to_workers_clone = to_workers.clone();
-        let to_executors_clone = to_executors.clone();
         task::spawn(reader_task::<P>(
-            to_workers_clone,
-            to_executors_clone,
+            to_workers.clone(),
+            to_executors.clone(),
             process_id,
             shard_id,
             connection,

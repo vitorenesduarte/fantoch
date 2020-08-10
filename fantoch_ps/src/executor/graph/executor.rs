@@ -1,15 +1,15 @@
 use crate::executor::graph::DependencyGraph;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{
-    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
-};
+use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
+use fantoch::protocol::MessageIndex;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
+#[derive(Clone)]
 pub struct GraphExecutor {
     shard_id: ShardId,
     config: Config,
@@ -39,12 +39,17 @@ impl Executor for GraphExecutor {
 
     fn handle(&mut self, info: GraphExecutionInfo) {
         match info {
-            GraphExecutionInfo::Add { dot, cmd, clock } => {
+            GraphExecutionInfo::Add {
+                dot,
+                cmd,
+                clock,
+                is_mine,
+            } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.add(dot, cmd, clock);
+                    self.graph.add(dot, cmd, clock, is_mine);
                     // get more commands that are ready to be executed
                     while let Some(cmd) = self.graph.command_to_execute() {
                         self.execute(cmd);
@@ -67,8 +72,8 @@ impl Executor for GraphExecutor {
             .map(GraphExecutionInfo::Executed)
     }
 
-    fn parallel() -> bool {
-        false
+    fn max_executors() -> Option<usize> {
+        Some(2)
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -94,14 +99,37 @@ pub enum GraphExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: VClock<ProcessId>,
+        is_mine: bool,
     },
     Executed(Vec<(Dot, HashSet<ShardId>)>),
 }
 
 impl GraphExecutionInfo {
-    pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
-        Self::Add { dot, cmd, clock }
+    pub fn add(
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+        shard_id: ShardId,
+    ) -> Self {
+        let is_mine = cmd.replicated_by(&shard_id);
+        Self::Add {
+            dot,
+            cmd,
+            clock,
+            is_mine,
+        }
     }
 }
 
-impl MessageKey for GraphExecutionInfo {}
+impl MessageIndex for GraphExecutionInfo {
+    fn index(&self) -> Option<(usize, usize)> {
+        use fantoch::run::worker_index_no_shift;
+        match self {
+            Self::Add { is_mine, .. } => {
+                let index = if *is_mine { 0 } else { 1 };
+                worker_index_no_shift(index)
+            }
+            Self::Executed { .. } => worker_index_no_shift(1),
+        }
+    }
+}

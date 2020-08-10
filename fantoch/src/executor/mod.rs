@@ -12,12 +12,14 @@ pub use basic::{BasicExecutionInfo, BasicExecutor};
 use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
+use crate::protocol::MessageIndex;
+use crate::util;
 use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 
-pub trait Executor: Sized {
+pub trait Executor: Clone {
     // TODO why is Send needed?
     type ExecutionInfo: Debug
         + Clone
@@ -27,7 +29,7 @@ pub trait Executor: Sized {
         + DeserializeOwned
         + Send
         + Sync
-        + MessageKey; // TODO why is Sync needed??
+        + MessageIndex; // TODO why is Sync needed??
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self;
 
@@ -47,7 +49,7 @@ pub trait Executor: Sized {
         None
     }
 
-    fn parallel() -> bool;
+    fn max_executors() -> Option<usize>;
 
     fn metrics(&self) -> &ExecutorMetrics;
 }
@@ -85,12 +87,24 @@ impl Debug for ExecutorMetricsKind {
 }
 
 pub trait MessageKey {
-    /// If `None` is returned, then the message is sent the *single* executor
-    /// process. If there's more than one executor, and this function
-    /// returns `None`, the runtime will panic.
-    fn key(&self) -> Option<&Key> {
-        None
+    /// Returns which `key` the execution info is about.
+    fn key(&self) -> &Key;
+}
+
+impl<A> MessageIndex for A
+where
+    A: MessageKey,
+{
+    fn index(&self) -> Option<(usize, usize)> {
+        Some(key_index(self.key()))
     }
+}
+
+// The index of a key is its hash
+#[allow(clippy::ptr_arg)]
+fn key_index(key: &Key) -> (usize, usize) {
+    let index = util::key_hash(key) as usize;
+    (0, index)
 }
 
 #[derive(Debug, Clone)]

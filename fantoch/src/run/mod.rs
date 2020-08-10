@@ -191,13 +191,26 @@ where
 {
     // panic if protocol is not parallel and we have more than one worker
     if workers > 1 && !P::parallel() {
-        panic!("running non-parallel protocol with {} workers", workers,)
+        panic!("running non-parallel protocol with {} workers", workers);
     }
 
-    // panic if executor is not parallel and we have more than one executor
-    if executors > 1 && !P::Executor::parallel() {
-        panic!("running non-parallel executor with {} executors", executors)
-    }
+    // panic if executor has a maximum number of executors and we have more
+    // executors than that
+    let executors = if let Some(max_executors) = P::Executor::max_executors() {
+        if executors > max_executors {
+            panic!("running executor with a maximum number of executors {} higher than the {} executors defined", max_executors, executors);
+        }
+        //  ------------------------------------
+        // | max_executors | executors | result |
+        //  ------------------------------------
+        // |       2       |    16     | panic  |
+        // |       2       |     2     |   2    |
+        // |       2       |     1     |   1    |
+        //  ------------------------------------
+        std::cmp::min(max_executors, executors)
+    } else {
+        executors
+    };
 
     // panic if protocol is leaderless and there's a leader
     if P::leaderless() && config.leader().is_some() {

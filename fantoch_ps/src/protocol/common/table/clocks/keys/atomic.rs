@@ -1,8 +1,9 @@
 use super::KeyClocks;
-use crate::protocol::common::shared::Shared;
 use crate::protocol::common::table::{VoteRange, Votes};
+use crate::shared::Shared;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, ShardId};
+use fantoch::kvs::Key;
 use fantoch::HashSet;
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,7 +13,7 @@ use std::sync::Arc;
 pub struct AtomicKeyClocks {
     id: ProcessId,
     shard_id: ShardId,
-    clocks: Arc<Shared<AtomicU64>>,
+    clocks: Arc<Shared<Key, AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
@@ -34,7 +35,7 @@ impl KeyClocks for AtomicKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // get initializes the key to the default value, and that's exactly
             // what we want
-            let _ = self.clocks.get(key);
+            let _ = self.clocks.get_or(key, || AtomicU64::default());
         });
     }
 
@@ -53,7 +54,7 @@ impl KeyClocks for AtomicKeyClocks {
         let mut up_to = min_clock;
         cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
-            let clock = self.clocks.get(key);
+            let clock = self.clocks.get_or(key, || AtomicU64::default());
             let previous_value = Self::bump(&clock, up_to);
 
             // create vote range and save it
@@ -70,7 +71,7 @@ impl KeyClocks for AtomicKeyClocks {
         //   `LockedKeyClocks`), try to make them match
         if clocks.len() > 1 {
             cmd.keys(self.shard_id).for_each(|key| {
-                let clock = self.clocks.get(key);
+                let clock = self.clocks.get_or(key, || AtomicU64::default());
                 if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
                     votes.add(key, vr);
                 }
@@ -82,7 +83,7 @@ impl KeyClocks for AtomicKeyClocks {
 
     fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         for key in cmd.keys(self.shard_id) {
-            let clock = self.clocks.get(key);
+            let clock = self.clocks.get_or(key, || AtomicU64::default());
             if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
                 votes.add(key, vr);
             }

@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    ProtocolMetrics,
 };
 use crate::time::SysTime;
 use crate::HashSet;
@@ -370,7 +370,7 @@ pub enum PeriodicEvent {
     GarbageCollection,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use crate::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {

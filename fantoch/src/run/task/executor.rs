@@ -26,14 +26,16 @@ pub fn start_executors<P>(
         .into_iter()
         .zip(client_to_executors_rxs.into_iter());
 
+    // create executor
+    let executor = P::Executor::new(process_id, shard_id, config);
+
     // create executor workers
     for (executor_index, (from_workers_and_readers, from_clients)) in
         incoming.enumerate()
     {
         task::spawn(executor_task::<P>(
             executor_index,
-            process_id,
-            shard_id,
+            executor.clone(),
             config,
             from_workers_and_readers,
             from_clients,
@@ -45,8 +47,7 @@ pub fn start_executors<P>(
 
 async fn executor_task<P>(
     executor_index: usize,
-    process_id: ProcessId,
-    shard_id: ShardId,
+    mut executor: P::Executor,
     config: Config,
     mut from_workers_and_readers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
@@ -55,9 +56,6 @@ async fn executor_task<P>(
 ) where
     P: Protocol + 'static,
 {
-    // create executor
-    let mut executor = P::Executor::new(process_id, shard_id, config);
-
     // holder of all client info
     let mut to_clients = ToClients::new();
 

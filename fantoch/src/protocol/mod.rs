@@ -44,7 +44,7 @@ pub trait Protocol: Debug + Clone {
         + Send
         + Sync
         + MessageIndex; // TODO why is Sync needed??
-    type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex + Eq;
+    type PeriodicEvent: Debug + Clone + Send + Sync + MessageIndex + Eq;
     type Executor: Executor + Send;
 
     /// Returns a new instance of the protocol and a list of periodic events.
@@ -160,11 +160,6 @@ pub trait MessageIndex {
     /// - Some((reserved, index)): `index` will be used to compute working index
     ///   making sure that index is higher than `reserved`
     /// - None: no indexing; message will be sent to all workers
-    fn index(&self) -> Option<(usize, usize)>;
-}
-
-pub trait PeriodicEventIndex {
-    /// Same as `MessageIndex`.
     fn index(&self) -> Option<(usize, usize)>;
 }
 

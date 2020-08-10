@@ -1,6 +1,6 @@
 use super::KeyClocks;
-use crate::protocol::common::shared::Shared;
 use crate::protocol::common::table::{VoteRange, Votes};
+use crate::shared::Shared;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::Key;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 // all clock's are protected by a mutex
 type Clock = Mutex<u64>;
-type Clocks = Arc<Shared<Clock>>;
+type Clocks = Arc<Shared<Key, Clock>>;
 
 /// `bump_and_vote` grabs all locks before any change
 #[derive(Debug, Clone)]
@@ -51,7 +51,8 @@ impl KeyClocks for LockedKeyClocks {
         let key_count = keys.len();
         // find all the locks
         let mut locks = Vec::with_capacity(key_count);
-        self.clocks.get_all(&keys, &mut locks);
+        self.clocks
+            .get_or_all(&keys, &mut locks, || Mutex::default());
 
         // keep track of which clock we should bump to
         let mut up_to = min_clock;
@@ -119,7 +120,7 @@ impl KeyClocks for FineLockedKeyClocks {
         let highest = cmd
             .keys(self.shard_id)
             .map(|key| {
-                let key_lock = self.clocks.get(key);
+                let key_lock = self.clocks.get_or(key, || Mutex::default());
                 let mut guard = key_lock.lock();
                 let previous_value = *guard;
                 let current_value = cmp::max(min_clock, previous_value + 1);
@@ -171,7 +172,7 @@ mod common {
         cmd.keys(shard_id).for_each(|key| {
             // get initializes the key to the default value, and that's exactly
             // what we want
-            let _ = clocks.get(key);
+            let _ = clocks.get_or(key, || Mutex::default());
         })
     }
 
@@ -184,7 +185,7 @@ mod common {
         votes: &mut Votes,
     ) {
         for key in cmd.keys(shard_id) {
-            let key_lock = clocks.get(key);
+            let key_lock = clocks.get_or(key, || Mutex::default());
             let mut guard = key_lock.lock();
             maybe_bump(id, key, &mut guard, up_to, votes);
             // release the lock

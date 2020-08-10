@@ -10,8 +10,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -1268,7 +1268,7 @@ pub enum PeriodicEvent {
     SendDetached,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         debug_assert_eq!(GC_WORKER_INDEX, 0);

@@ -1,18 +1,48 @@
 use super::tarjan::Vertex;
+use crate::shared::Shared;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::{HashMap, HashSet};
 use std::cell::UnsafeCell;
 use threshold::AEClock;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
+struct Cell(UnsafeCell<Vertex>);
+
+impl Clone for Cell {
+    fn clone(&self) -> Self {
+        panic!("impossible to clone a Cell");
+    }
+}
+
+#[derive(Debug)]
 pub struct VertexIndex {
-    local: HashMap<Dot, UnsafeCell<Vertex>>,
-    remote: HashMap<Dot, UnsafeCell<Vertex>>,
+    local: Shared<Dot, Cell>,
+    remote: Shared<Dot, Cell>,
+}
+
+impl Clone for VertexIndex {
+    fn clone(&self) -> Self {
+        assert!(
+            self.local.is_empty(),
+            "it's only possible to clone an empty VertexIndex"
+        );
+        assert!(
+            self.remote.is_empty(),
+            "it's only possible to clone an empty VertexIndex"
+        );
+        Self {
+            local: self.local.clone(),
+            remote: self.remote.clone(),
+        }
+    }
 }
 
 impl VertexIndex {
     pub fn new() -> Self {
-        Default::default()
+        Self {
+            local: Shared::new(),
+            remote: Shared::new(),
+        }
     }
 
     /// Indexes a new vertex, returning true if it was already indexed.
@@ -23,7 +53,7 @@ impl VertexIndex {
         executed_clock: &AEClock<ProcessId>,
     ) -> bool {
         let dot = vertex.dot();
-        let cell = UnsafeCell::new(vertex);
+        let cell = Cell(UnsafeCell::new(vertex));
         if is_mine {
             self.local.insert(dot, cell).is_some()
         } else {
@@ -37,12 +67,12 @@ impl VertexIndex {
         }
     }
 
-    pub fn local_dots(&self) -> impl Iterator<Item = &Dot> {
-        self.local.keys()
+    pub fn local_dots(&self) -> impl Iterator<Item = Dot> + '_ {
+        self.local.iter().map(|entry| *entry.key())
     }
 
-    pub fn remote_dots(&self) -> impl Iterator<Item = &Dot> {
-        self.remote.keys()
+    pub fn remote_dots(&self) -> impl Iterator<Item = Dot> + '_ {
+        self.remote.iter().map(|entry| *entry.key())
     }
 
     pub fn get_mut(&self, dot: &Dot) -> Option<&mut Vertex> {
@@ -50,7 +80,7 @@ impl VertexIndex {
         self.local
             .get(dot)
             .or_else(|| self.remote.get(dot))
-            .map(|cell| unsafe { &mut *cell.get() })
+            .map(|cell| unsafe { &mut *cell.0.get() })
     }
 
     /// Removes a vertex from the index.
@@ -58,7 +88,7 @@ impl VertexIndex {
         self.local
             .remove(dot)
             .or_else(|| self.remote.remove(dot))
-            .map(|cell| cell.into_inner())
+            .map(|(_, cell)| cell.0.into_inner())
     }
 
     /// Removes a remote vertex from the index.

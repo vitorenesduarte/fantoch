@@ -244,12 +244,15 @@ fn workers_executors_and_leader(
 ) -> (usize, usize) {
     // for all protocol but newt, create a single executor
     match protocol {
-        Protocol::AtlasLocked => (WORKERS + EXECUTORS, 1),
-        Protocol::EPaxosLocked => (WORKERS + EXECUTORS, 1),
+        // 1 extra executor for partial replication
+        Protocol::AtlasLocked => (WORKERS + EXECUTORS - 1, 2),
+        // 1 extra executor for partial replication (although, not implemented
+        // yet)
+        Protocol::EPaxosLocked => (WORKERS + EXECUTORS - 1, 2),
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);
-            (WORKERS + EXECUTORS, 1)
+            (WORKERS + EXECUTORS - 1, 1)
         }
         Protocol::NewtAtomic => (WORKERS, EXECUTORS),
         Protocol::NewtLocked => (WORKERS, EXECUTORS),

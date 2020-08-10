@@ -1,7 +1,8 @@
 use super::KeyClocks;
-use crate::protocol::common::shared::Shared;
+use crate::shared::Shared;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::kvs::Key;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use threshold::VClock;
@@ -13,7 +14,7 @@ type Clock = RwLock<VClock<ProcessId>>;
 pub struct LockedKeyClocks {
     shard_id: ShardId,
     n: usize, // number of processes
-    clocks: Arc<Shared<Clock>>,
+    clocks: Arc<Shared<Key, Clock>>,
     noop_clock: Arc<Clock>,
 }
 
@@ -103,7 +104,7 @@ impl LockedKeyClocks {
         // current clock and add ourselves to it
         cmd.keys(self.shard_id).for_each(|key| {
             // get current clock
-            let clock_entry = self.clocks.get(key);
+            let clock_entry = self.clocks.get_or(key, || RwLock::default());
             // grab a write lock
             let mut current_clock = clock_entry.write();
             // merge it with our clock
@@ -166,7 +167,7 @@ impl LockedKeyClocks {
         // current clock in the final `clock`
         cmd.keys(self.shard_id).for_each(|key| {
             // get current clock
-            let clock_entry = self.clocks.get(key);
+            let clock_entry = self.clocks.get_or(key, || RwLock::default());
             // grab a read lock
             let current_clock = clock_entry.read();
             // merge it with our clock

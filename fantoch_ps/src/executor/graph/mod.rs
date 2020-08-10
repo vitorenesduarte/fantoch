@@ -22,6 +22,7 @@ use fantoch::HashSet;
 use std::fmt;
 use threshold::{AEClock, VClock};
 
+#[derive(Clone)]
 pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
@@ -160,8 +161,13 @@ impl DependencyGraph {
     }
 
     /// Add a new command with its clock to the queue.
-    pub fn add(&mut self, dot: Dot, cmd: Command, clock: VClock<ProcessId>) {
-        let is_mine = cmd.replicated_by(&self.shard_id);
+    pub fn add(
+        &mut self,
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+        is_mine: bool,
+    ) {
         log!(
             "p{}: Graph::add {:?} {:?} | mine = {}",
             self.process_id,
@@ -408,6 +414,7 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let is_mine = true;
 
         // cmd 0
         let dot_0 = Dot::new(1, 1);
@@ -422,12 +429,12 @@ mod tests {
         let clock_1 = util::vclock(vec![1, 0]);
 
         // add cmd 0
-        queue.add(dot_0, cmd_0.clone(), clock_0);
+        queue.add(dot_0, cmd_0.clone(), clock_0, is_mine);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.add(dot_1, cmd_1.clone(), clock_1);
+        queue.add(dot_1, cmd_1.clone(), clock_1, is_mine);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -568,13 +575,14 @@ mod tests {
             let process_id = 1;
             let shard_id = 0;
             let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+            let is_mine = true;
 
             // add cmd 2
-            queue.add(dot_2, cmd_2.clone(), clock_2.clone());
+            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), is_mine);
             assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
 
             // add cmd 3
-            queue.add(dot_3, cmd_3.clone(), clock_3.clone());
+            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), is_mine);
             if transitive_conflicts {
                 // if we assume transitive conflicts, then cmd 3 can be executed
                 assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
@@ -584,7 +592,7 @@ mod tests {
             }
 
             // add cmd 1
-            queue.add(dot_1, cmd_1.clone(), clock_1.clone());
+            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), is_mine);
             // cmd 1 can always be executed
             if transitive_conflicts {
                 assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
@@ -942,6 +950,7 @@ mod tests {
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let is_mine = true;
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 
@@ -958,7 +967,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.add(dot, cmd, clock);
+            queue.add(dot, cmd, clock, is_mine);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();

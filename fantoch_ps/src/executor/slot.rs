@@ -1,15 +1,15 @@
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{
-    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
-};
+use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::KVStore;
+use fantoch::protocol::MessageIndex;
 use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
 
 type Slot = u64;
 
+#[derive(Clone)]
 pub struct SlotExecutor {
     shard_id: ShardId,
     config: Config,
@@ -68,8 +68,8 @@ impl Executor for SlotExecutor {
         self.to_clients.pop()
     }
 
-    fn parallel() -> bool {
-        false
+    fn max_executors() -> Option<usize> {
+        Some(1)
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -107,7 +107,11 @@ impl SlotExecutionInfo {
     }
 }
 
-impl MessageKey for SlotExecutionInfo {}
+impl MessageIndex for SlotExecutionInfo {
+    fn index(&self) -> Option<(usize, usize)> {
+        None
+    }
+}
 
 #[cfg(test)]
 mod tests {

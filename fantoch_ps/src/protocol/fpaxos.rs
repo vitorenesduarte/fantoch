@@ -5,8 +5,7 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
-    ProtocolMetrics,
+    Action, BaseProcess, MessageIndex, Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::HashSet;
@@ -460,7 +459,7 @@ pub enum PeriodicEvent {
     GarbageCollection,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::worker_index_no_shift;
         match self {

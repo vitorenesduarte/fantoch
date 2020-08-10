@@ -4,6 +4,7 @@ use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOp, KVStore, Key};
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone)]
 pub struct BasicExecutor {
     store: KVStore,
     metrics: ExecutorMetrics,
@@ -41,8 +42,8 @@ impl Executor for BasicExecutor {
         self.to_clients.pop()
     }
 
-    fn parallel() -> bool {
-        true
+    fn max_executors() -> Option<usize> {
+        None
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -64,7 +65,7 @@ impl BasicExecutionInfo {
 }
 
 impl MessageKey for BasicExecutionInfo {
-    fn key(&self) -> Option<&Key> {
-        Some(&self.key)
+    fn key(&self) -> &Key {
+        &self.key
     }
 }

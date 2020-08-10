@@ -10,8 +10,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::{log, singleton};
@@ -480,8 +480,12 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
 
         // create execution info
-        let execution_info =
-            ExecutionInfo::add(dot, cmd.clone(), value.clock.clone());
+        let execution_info = ExecutionInfo::add(
+            dot,
+            cmd.clone(),
+            value.clock.clone(),
+            self.bp.shard_id,
+        );
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -691,7 +695,8 @@ impl<KC: KeyClocks> Atlas<KC> {
         );
 
         // create execution info
-        let execution_info = ExecutionInfo::add(dot, cmd, clock);
+        let execution_info =
+            ExecutionInfo::add(dot, cmd, clock, self.bp.shard_id);
         self.to_executors.push(execution_info);
     }
 
@@ -966,7 +971,7 @@ pub enum PeriodicEvent {
     GarbageCollection,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {

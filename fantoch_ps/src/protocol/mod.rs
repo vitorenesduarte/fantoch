@@ -475,7 +475,7 @@ mod tests {
     fn run_atlas_3_1_locked_partial_replication_one_shard_per_command_test() {
         let shard_count = 2;
         let workers = 2;
-        let executors = 1;
+        let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
             newt_config!(3, 1),
@@ -494,7 +494,7 @@ mod tests {
         if !ci() {
             let shard_count = 2;
             let workers = 2;
-            let executors = 1;
+            let executors = 2; // atlas executor can be parallel in partial replication
             let shards_per_command = 2;
             let (commands_per_client, clients_per_process) = small_load_in_ci();
             let slow_paths = run_test::<AtlasLocked>(
@@ -516,7 +516,7 @@ mod tests {
         if !ci() {
             let shard_count = 3;
             let workers = 2;
-            let executors = 1;
+            let executors = 2; // atlas executor can be parallel in partial replication
             let shards_per_command = 2;
             let (commands_per_client, clients_per_process) = small_load_in_ci();
             let slow_paths = run_test::<AtlasLocked>(
@@ -537,7 +537,7 @@ mod tests {
         if !ci() {
             let shard_count = 2;
             let workers = 2;
-            let executors = 1;
+            let executors = 2; // atlas executor can be parallel in partial replication
             let shards_per_command = 2;
             let (commands_per_client, clients_per_process) = small_load_in_ci();
             let slow_paths = run_test::<AtlasLocked>(
