@@ -12,7 +12,8 @@ use threshold::AEClock;
 
 // epoch length is 1 second
 const EPOCH_MILLIS: u64 = 1000;
-const EPOCH_CLEANUP_AGE: u64 = 10;
+// commands may be GCed after 3 seconds
+const EPOCH_CLEANUP_AGE: u64 = 3;
 
 pub struct VertexRef<'a> {
     r: DashMapRef<'a, Dot, Mutex<Vertex>>,
