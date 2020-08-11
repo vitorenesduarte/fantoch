@@ -10,10 +10,10 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use threshold::AEClock;
 
-// epoch length is 1 second
-const EPOCH_MILLIS: u64 = 1000;
-// commands may be GCed after 3 seconds
-const EPOCH_CLEANUP_AGE: u64 = 3;
+// epoch length is 500ms
+const EPOCH_MILLIS: u64 = 500;
+// commands may be GCed after 1 second
+const EPOCH_CLEANUP_AGE: u64 = 2;
 
 pub struct VertexRef<'a> {
     r: DashMapRef<'a, Dot, Mutex<Vertex>>,
