@@ -71,11 +71,11 @@ async fn executor_task<P>(
     loop {
         tokio::select! {
             execution_info = from_workers.recv() => {
-                log!("[executor] from workers/readers: {:?}", execution_info);
+                log!("[executor] from workers: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     handle_execution_info::<P>(&time, execution_info, &mut executor, &mut to_clients).await;
                 } else {
-                    println!("[executor] error while receiving execution info from worker/readers");
+                    println!("[executor] error while receiving execution info from worker");
                 }
             }
             from_client = from_clients.recv() => {

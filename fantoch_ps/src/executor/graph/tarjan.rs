@@ -79,7 +79,7 @@ impl TarjanSCCFinder {
                     self.process_id, dot
                 );
             };
-            vertex.write().id = 0;
+            vertex.lock().id = 0;
 
             // add dot to set of visited
             visited.insert(dot);
@@ -97,8 +97,16 @@ impl TarjanSCCFinder {
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
-        // update id
-        self.id += 1;
+        // get vertex
+        let mut vertex = vertex_ref.lock();
+
+        // set id and low for vertex
+        self.set_id(&mut vertex);
+        vertex.low = vertex.id;
+
+        // add to the stack
+        vertex.on_stack = true;
+        self.stack.push(dot);
 
         log!(
             "p{}: Finder::strong_connect {:?} with id {}",
@@ -106,17 +114,6 @@ impl TarjanSCCFinder {
             dot,
             self.id
         );
-
-        // get vertex
-        let mut vertex = vertex_ref.write();
-
-        // set id and low for vertex
-        vertex.id = self.id;
-        vertex.low = self.id;
-
-        // add to the stack
-        vertex.on_stack = true;
-        self.stack.push(dot);
 
         // TODO can we avoid vertex.clock().clone()
         // - if rust understood mutability of struct fields, the clone wouldn't
@@ -181,7 +178,7 @@ impl TarjanSCCFinder {
                     }
                     Some(dep_vertex_ref) => {
                         // get vertex
-                        let mut dep_vertex = dep_vertex_ref.read();
+                        let mut dep_vertex = dep_vertex_ref.lock();
 
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
@@ -205,6 +202,12 @@ impl TarjanSCCFinder {
                                 dep_dot
                             );
 
+                            // setting the id here while we hold the lock makes
+                            // sure that this vertex doesn't get removed in the
+                            // background process by worker 1 (see
+                            // VertexIndex::do_cleanup)
+                            self.set_id(&mut dep_vertex);
+
                             // drop guards
                             drop(vertex);
                             drop(dep_vertex);
@@ -226,8 +229,8 @@ impl TarjanSCCFinder {
                             }
 
                             // get guards again
-                            vertex = vertex_ref.write();
-                            dep_vertex = dep_vertex_ref.read();
+                            vertex = vertex_ref.lock();
+                            dep_vertex = dep_vertex_ref.lock();
 
                             // min low with dep low
                             vertex.low = cmp::min(vertex.low, dep_vertex.low);
@@ -282,7 +285,7 @@ impl TarjanSCCFinder {
                 *found += 1;
 
                 // get its vertex and change its `on_stack` value
-                let mut member_vertex = member_vertex_ref.write();
+                let mut member_vertex = member_vertex_ref.lock();
                 member_vertex.on_stack = false;
 
                 // add it to the SCC and check it wasn't there before
@@ -306,9 +309,9 @@ impl TarjanSCCFinder {
                 }
 
                 log!(
-                    "p{}: Finder:strong_connect executed clock {:?}",
+                    "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
-                    executed_clock
+                    executed_clock.read()
                 );
 
                 // quit if root is found
@@ -321,6 +324,14 @@ impl TarjanSCCFinder {
             FinderResult::Found
         } else {
             FinderResult::NotFound
+        }
+    }
+
+    fn set_id(&mut self, vertex: &mut Vertex) {
+        if vertex.id == 0 {
+            // update id
+            self.id += 1;
+            vertex.id = self.id;
         }
     }
 }

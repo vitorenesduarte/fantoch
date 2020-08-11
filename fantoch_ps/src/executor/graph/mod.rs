@@ -101,14 +101,32 @@ impl DependencyGraph {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         // only do the cleanup in the second executor
-        if self.executor_index == 0 {
-            return;
+        match self.executor_index {
+            0 => {
+                // since `check_pending_to_try` is only called when a new
+                // command is added, if there are no new commands added, we may
+                // endup with some commands pending forever; for that reason, we
+                // also try those pending commands here in this periodic task
+                let mut total_found = 0;
+                self.check_pending_to_try(&mut total_found);
+            }
+            1 => {
+                self.vertex_index.maybe_cleanup(
+                    self.executor_index,
+                    &self.pending_index,
+                    &self.executed_clock,
+                    time,
+                );
+            }
+            _ => panic!("invalid executor index {}", self.executor_index),
         }
-        self.vertex_index.maybe_cleanup(
-            &self.pending_index,
-            &self.executed_clock,
-            time,
-        );
+    }
+
+    fn check_pending_to_try(&mut self, total_found: &mut usize) {
+        let pending = self.pending_index.get_to_try();
+        let mut dots = Vec::new();
+        self.try_pending(pending, &mut dots, total_found);
+        self.check_pending(dots, total_found);
     }
 
     /// Add a new command with its clock to the queue.
@@ -132,6 +150,7 @@ impl DependencyGraph {
 
         // index in vertex index and check if it hasn't been indexed before
         assert!(!self.vertex_index.index(
+            self.executor_index,
             vertex,
             is_mine,
             &self.pending_index,
@@ -139,16 +158,14 @@ impl DependencyGraph {
         ));
 
         if is_mine {
+            assert_eq!(self.executor_index, 0);
             // get current command ready count and count newly ready commands
             let initial_ready = self.to_execute.len();
             let mut total_found = 0;
 
             // try to first any new pending commands that we got from worker 1
             // (see `self.vertex_index.index`)
-            let pending = self.pending_index.get_to_try();
-            let mut dots = Vec::new();
-            self.try_pending(pending, &mut dots, &mut total_found);
-            self.check_pending(dots, &mut total_found);
+            self.check_pending_to_try(&mut total_found);
 
             // try to find new SCCs
             match self.find_scc(dot, &mut total_found) {
@@ -194,6 +211,7 @@ impl DependencyGraph {
 
     #[must_use]
     fn find_scc(&mut self, dot: Dot, total_found: &mut usize) -> FinderInfo {
+        assert_eq!(self.executor_index, 0);
         log!("p{}: Graph::find_scc {:?}", self.process_id, dot);
         // execute tarjan's algorithm
         let mut found = 0;
@@ -233,6 +251,7 @@ impl DependencyGraph {
     }
 
     fn save_scc(&mut self, scc: SCC, dots: &mut Vec<Dot>) {
+        assert_eq!(self.executor_index, 0);
         scc.into_iter().for_each(|dot| {
             log!(
                 "p{}: Graph::save_scc removing {:?} from indexes",
@@ -258,6 +277,7 @@ impl DependencyGraph {
     }
 
     fn check_pending(&mut self, mut dots: Vec<Dot>, total_found: &mut usize) {
+        assert_eq!(self.executor_index, 0);
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
@@ -280,6 +300,7 @@ impl DependencyGraph {
         dots: &mut Vec<Dot>,
         total_found: &mut usize,
     ) {
+        assert_eq!(self.executor_index, 0);
         // try to find new SCCs for each of those commands
         let mut visited = HashSet::new();
 
@@ -327,6 +348,7 @@ impl DependencyGraph {
     }
 
     fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
+        assert_eq!(self.executor_index, 0);
         // get the vertex
         match self.vertex_index.find(&dot) {
             Some(vertex) => self.finder.strong_connect(
@@ -1010,6 +1032,7 @@ mod tests {
 
         let root_dot = Dot::new(5, 70);
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 root_dot,
                 conflicting_command(),
@@ -1022,6 +1045,7 @@ mod tests {
 
         // (4, 31)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 31),
                 conflicting_command(),
@@ -1033,6 +1057,7 @@ mod tests {
         );
         // (4, 32)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 32),
                 conflicting_command(),
@@ -1044,6 +1069,7 @@ mod tests {
         );
         // (4, 33)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 33),
                 conflicting_command(),
@@ -1055,6 +1081,7 @@ mod tests {
         );
         // (4, 34)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 34),
                 conflicting_command(),
@@ -1066,6 +1093,7 @@ mod tests {
         );
         // (4, 35)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 35),
                 conflicting_command(),
@@ -1077,6 +1105,7 @@ mod tests {
         );
         // (4, 36)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 36),
                 conflicting_command(),
@@ -1088,6 +1117,7 @@ mod tests {
         );
         // (4, 37)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 37),
                 conflicting_command(),
@@ -1099,6 +1129,7 @@ mod tests {
         );
         // (4, 38)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 38),
                 conflicting_command(),
@@ -1110,6 +1141,7 @@ mod tests {
         );
         // (4, 39)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 39),
                 conflicting_command(),
@@ -1121,6 +1153,7 @@ mod tests {
         );
         // (4, 40)
         queue.vertex_index.index(
+            queue.executor_index,
             Vertex::new(
                 Dot::new(4, 40),
                 conflicting_command(),

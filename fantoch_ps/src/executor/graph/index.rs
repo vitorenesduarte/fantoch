@@ -5,7 +5,7 @@ use fantoch::id::{Dot, ProcessId};
 use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{Mutex, MutexGuard, RwLock};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use threshold::AEClock;
@@ -15,28 +15,24 @@ const EPOCH_MILLIS: u64 = 1000;
 const EPOCH_CLEANUP_AGE: u64 = 10;
 
 pub struct VertexRef<'a> {
-    r: DashMapRef<'a, Dot, RwLock<Vertex>>,
+    r: DashMapRef<'a, Dot, Mutex<Vertex>>,
 }
 
 impl<'a> VertexRef<'a> {
-    fn new(r: DashMapRef<'a, Dot, RwLock<Vertex>>) -> Self {
+    fn new(r: DashMapRef<'a, Dot, Mutex<Vertex>>) -> Self {
         Self { r }
     }
 
-    pub fn read(&self) -> RwLockReadGuard<'_, Vertex> {
-        self.r.read()
-    }
-
-    pub fn write(&self) -> RwLockWriteGuard<'_, Vertex> {
-        self.r.write()
+    pub fn lock(&self) -> MutexGuard<'_, Vertex> {
+        self.r.lock()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
     process_id: ProcessId,
-    local: Arc<Shared<Dot, RwLock<Vertex>>>,
-    remote: Arc<Shared<Dot, RwLock<Vertex>>>,
+    local: Arc<Shared<Dot, Mutex<Vertex>>>,
+    remote: Arc<Shared<Dot, Mutex<Vertex>>>,
     // local to worker 1:
     // - current epoch number
     // - list of remote dots that were indexed in the current epoch
@@ -66,17 +62,19 @@ impl VertexIndex {
     /// Indexes a new vertex, returning true if it was already indexed.
     pub fn index(
         &mut self,
+        executor_index: usize,
         vertex: Vertex,
         is_mine: bool,
         pending_index: &PendingIndex,
         time: &dyn SysTime,
     ) -> bool {
         let dot = vertex.dot();
-        let cell = RwLock::new(vertex);
+        let cell = Mutex::new(vertex);
         if is_mine {
             self.local.insert(dot, cell).is_some()
         } else {
-            self.maybe_update_epoch(time);
+            assert_eq!(executor_index, 1);
+            self.maybe_update_epoch(executor_index, time);
             self.remote_indexed_current_epoch.push(dot);
             let res = self.remote.insert(dot, cell).is_some();
             // at this point, the dot is in the remote index; this means that if
@@ -92,7 +90,12 @@ impl VertexIndex {
         }
     }
 
-    fn maybe_update_epoch(&mut self, time: &dyn SysTime) {
+    fn maybe_update_epoch(
+        &mut self,
+        executor_index: usize,
+        time: &dyn SysTime,
+    ) {
+        assert_eq!(executor_index, 1);
         let now = time.millis() / EPOCH_MILLIS;
         match self.current_epoch {
             Some(current_epoch) => {
@@ -127,13 +130,15 @@ impl VertexIndex {
 
     pub fn maybe_cleanup(
         &mut self,
+        executor_index: usize,
         pending_index: &PendingIndex,
         executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
         time: &dyn SysTime,
     ) {
+        assert_eq!(executor_index, 1);
         // cleanup previous cleanups that failed
         let failed = std::mem::take(&mut self.failed_cleanup);
-        self.do_cleanup(failed, pending_index, executed_clock);
+        self.do_cleanup(executor_index, failed, pending_index, executed_clock);
 
         let now = time.millis() / EPOCH_MILLIS;
         if let Some((epoch, _)) = self.to_cleanup.get(0) {
@@ -156,37 +161,46 @@ impl VertexIndex {
                     .expect("there should be a front to cleanup");
 
                 // try to cleanup
-                self.do_cleanup(dots, pending_index, executed_clock);
+                self.do_cleanup(
+                    executor_index,
+                    dots,
+                    pending_index,
+                    executed_clock,
+                );
             }
         }
     }
 
     fn do_cleanup(
         &mut self,
+        executor_index: usize,
         dots: Vec<Dot>,
         pending_index: &PendingIndex,
         executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
     ) {
+        assert_eq!(executor_index, 1);
+        log!("p{}: VertexIndex::do_cleanup {:?}", self.process_id, dots);
         for dot in dots {
+            // cleanup previous cleanups that failed
             if pending_index.contains(&dot) {
+                log!("p{}: VertexIndex::do_cleanup cleanup failed for {:?} as there are pending commands", self.process_id, dot);
                 // if there are commands waiting on this command, do not cleanup
                 self.failed_cleanup.push(dot);
             } else {
                 if let Some(vertex) = self.remote.get(&dot) {
                     // if the dot exists as remote, check that it's not being
                     // used by tarjan's finder
-                    let vertex = vertex.write();
+                    let vertex = vertex.lock();
                     if vertex.id == 0 {
                         // in this case, it's not being used and thus it is safe
-                        // to remove it TODO: in fact
-                        // this is not true; for example, when we check if a
-                        // dependency hasn't been visited, we only have a read
-                        // lock and don't change it's id until a write lock in
-                        // acquired in the next recursive call
+                        // to remove it
                         self.remote.remove(&dot);
                         assert!(executed_clock
                             .write()
                             .add(&dot.source(), dot.sequence()));
+                    } else {
+                        log!("p{}: VertexIndex::do_cleanup cleanup failed for {:?} as it's being used in finder", self.process_id, dot);
+                        self.failed_cleanup.push(dot);
                     }
                 }
             }
