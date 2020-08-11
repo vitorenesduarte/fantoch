@@ -73,7 +73,8 @@ async fn executor_task<P>(
             execution_info = from_workers.recv() => {
                 log!("[executor] from workers: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(&time, execution_info, &mut executor, &mut to_clients).await;
+                    executor.handle(execution_info, &time);
+                    fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
                 } else {
                     println!("[executor] error while receiving execution info from worker");
                 }
@@ -89,6 +90,7 @@ async fn executor_task<P>(
             _ = cleanup_interval.tick() => {
                 log!("[executor] cleanup");
                 executor.cleanup(&time);
+                fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
             }
             _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -103,9 +105,7 @@ async fn executor_task<P>(
     }
 }
 
-async fn handle_execution_info<P>(
-    time: &RunTime,
-    execution_info: <P::Executor as Executor>::ExecutionInfo,
+async fn fetch_new_command_results<P>(
     executor: &mut P::Executor,
     to_clients: &mut ToClients,
 ) where
@@ -113,7 +113,6 @@ async fn handle_execution_info<P>(
 {
     // forward executor results (commands or partial commands) to clients that
     // are waiting for them
-    executor.handle(execution_info, time);
     for executor_result in executor.to_clients_iter() {
         // get client id
         let client_id = executor_result.rifl.source();
