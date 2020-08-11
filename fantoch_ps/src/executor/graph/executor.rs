@@ -47,12 +47,17 @@ impl Executor for GraphExecutor {
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
         match info {
-            GraphExecutionInfo::Add { dot, cmd, clock } => {
+            GraphExecutionInfo::Add {
+                dot,
+                cmd,
+                clock,
+                is_mine,
+            } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.add(dot, cmd, clock, time);
+                    self.graph.add(dot, cmd, clock, is_mine, time);
                     // get more commands that are ready to be executed
                     while let Some(cmd) = self.graph.command_to_execute() {
                         self.execute(cmd);
@@ -93,12 +98,24 @@ pub enum GraphExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: VClock<ProcessId>,
+        is_mine: bool,
     },
 }
 
 impl GraphExecutionInfo {
-    pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
-        Self::Add { dot, cmd, clock }
+    pub fn add(
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+        shard_id: &ShardId,
+    ) -> Self {
+        let is_mine = cmd.replicated_by(shard_id);
+        Self::Add {
+            dot,
+            cmd,
+            clock,
+            is_mine,
+        }
     }
 }
 
@@ -106,7 +123,10 @@ impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::worker_index_no_shift;
         match self {
-            Self::Add { .. } => worker_index_no_shift(0),
+            Self::Add { is_mine, .. } => {
+                let index = if *is_mine { 0 } else { 1 };
+                worker_index_no_shift(index)
+            }
         }
     }
 }

@@ -415,7 +415,12 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::add(dot, cmd, value.clock.clone());
+        let execution_info = ExecutionInfo::add(
+            dot,
+            cmd,
+            value.clock.clone(),
+            &self.bp.shard_id,
+        );
         self.to_executors.push(execution_info);
 
         // update command info:

@@ -479,8 +479,12 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
 
         // create execution info
-        let execution_info =
-            ExecutionInfo::add(dot, cmd.clone(), value.clock.clone());
+        let execution_info = ExecutionInfo::add(
+            dot,
+            cmd.clone(),
+            value.clock.clone(),
+            &self.bp.shard_id,
+        );
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -690,7 +694,8 @@ impl<KC: KeyClocks> Atlas<KC> {
         );
 
         // create execution info
-        let execution_info = ExecutionInfo::add(dot, cmd, clock);
+        let execution_info =
+            ExecutionInfo::add(dot, cmd, clock, &self.bp.shard_id);
         self.to_executors.push(execution_info);
     }
 

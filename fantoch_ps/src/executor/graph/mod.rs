@@ -117,9 +117,9 @@ impl DependencyGraph {
         dot: Dot,
         cmd: Command,
         clock: VClock<ProcessId>,
+        is_mine: bool,
         time: &dyn SysTime,
     ) {
-        let is_mine = cmd.replicated_by(&self.shard_id);
         log!(
             "p{}: Graph::add {:?} {:?} | mine = {}",
             self.process_id,
@@ -130,44 +130,54 @@ impl DependencyGraph {
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
-        // get current command ready count and count newly ready commands
-        let initial_ready = self.to_execute.len();
-        let mut total_found = 0;
-
         // index in vertex index and check if it hasn't been indexed before
-        assert!(!self.vertex_index.index(vertex, is_mine, time));
+        assert!(!self.vertex_index.index(
+            vertex,
+            is_mine,
+            &self.pending_index,
+            time
+        ));
 
         if is_mine {
+            // get current command ready count and count newly ready commands
+            let initial_ready = self.to_execute.len();
+            let mut total_found = 0;
+
+            // try to first any new pending commands that we got from worker 1
+            // (see `self.vertex_index.index`)
+            let pending = self.pending_index.get_to_try();
+            let mut dots = Vec::new();
+            self.try_pending(pending, &mut dots, &mut total_found);
+            self.check_pending(dots, &mut total_found);
+
             // try to find new SCCs
             match self.find_scc(dot, &mut total_found) {
                 FinderInfo::Found(dots) => {
                     // try to execute other commands if new SCCs were found
-                    self.try_pending(dots, &mut total_found);
+                    self.check_pending(dots, &mut total_found);
                 }
                 FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
                     // update the pending
                     self.pending_index.index(dep_dot, dot);
                     // try to execute other commands if new SCCs were found
-                    self.try_pending(dots, &mut total_found);
+                    self.check_pending(dots, &mut total_found);
                 }
                 FinderInfo::NotPending => {
-                    panic!("just added dot must be pending")
+                    // it could happen that we add a dot that is executed when
+                    // trying pending commands, before even calling this dot's
+                    // `find_scc`
+                    assert!(
+                        self.executed_clock
+                            .read()
+                            .contains(&dot.source(), dot.sequence()),
+                        "just added dot must be pending or executed"
+                    );
                 }
             }
-        } else {
-            // try to execute any pending commands that have declared this
-            // remote command as a dependency
-            self.try_pending(vec![dot], &mut total_found);
-        }
 
-        // check that all newly ready commands have been incorporated
-        assert_eq!(self.to_execute.len(), initial_ready + total_found);
+            // check that all newly ready commands have been incorporated
+            assert_eq!(self.to_execute.len(), initial_ready + total_found);
 
-        self.log();
-    }
-
-    fn log(&self) {
-        if self.executor_index == 0 {
             log!(
                 "p{}: Graph::log executed {:?} | pending {:?} | remote pending {:?}",
                 self.process_id,
@@ -193,18 +203,21 @@ impl DependencyGraph {
         *total_found += found;
 
         // get sccs
-        let (sccs, visited) = self.finder.finalize(&self.vertex_index);
-
-        // NOTE: what follows must be done even if
-        // `FinderResult::MissingDependency` was returned - it's possible that
-        // while running the finder for some dot `X` we actually found SCCs with
-        // another dots, even though the find for this dot `X` failed!
+        let sccs = self.finder.sccs();
 
         // save new SCCs
         let mut dots = Vec::with_capacity(found);
         sccs.into_iter().for_each(|scc| {
             self.save_scc(scc, &mut dots);
         });
+
+        // reset finder state and get visited dots
+        let visited = self.finder.finalize(&self.vertex_index);
+
+        // NOTE: what follows must be done even if
+        // `FinderResult::MissingDependency` was returned - it's possible that
+        // while running the finder for some dot `X` we actually found SCCs with
+        // another dots, even though the find for this dot `X` failed!
 
         // save new SCCs if any were found
         match finder_result {
@@ -244,7 +257,7 @@ impl DependencyGraph {
         })
     }
 
-    fn try_pending(&mut self, mut dots: Vec<Dot>, total_found: &mut usize) {
+    fn check_pending(&mut self, mut dots: Vec<Dot>, total_found: &mut usize) {
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
@@ -254,54 +267,63 @@ impl DependencyGraph {
                     pending,
                     dot
                 );
-                // try to find new SCCs for each of those commands
-                let mut visited = HashSet::new();
-
-                for dot in pending {
-                    // only try to find new SCCs from non-visited commands
-                    if !visited.contains(&dot) {
-                        match self.find_scc(dot, total_found) {
-                            FinderInfo::Found(new_dots) => {
-                                // reset visited
-                                visited.clear();
-
-                                // if new SCCs were found, now there are more
-                                // child dots to check
-                                dots.extend(new_dots);
-                            }
-                            FinderInfo::MissingDependency(
-                                new_dots,
-                                dep_dot,
-                                new_visited,
-                            ) => {
-                                if !new_dots.is_empty() {
-                                    // if we found a new SCC, reset visited;
-                                    visited.clear();
-                                } else {
-                                    // otherwise, try other pending commands,
-                                    // but don't try those that were visited in
-                                    // this search
-                                    visited.extend(new_visited);
-                                }
-
-                                // if new SCCs were found, now there are more
-                                // child dots to check
-                                dots.extend(new_dots);
-
-                                // update pending
-                                self.pending_index.index(dep_dot, dot);
-                            }
-                            FinderInfo::NotPending => {
-                                // this happens if the pending dot is no longer
-                                // pending
-                            }
-                        }
-                    }
-                }
+                self.try_pending(pending, &mut dots, total_found);
             }
         }
         // once there are no more dots to try, no command in pending should be
         // possible to be executed, so we give up!
+    }
+
+    fn try_pending(
+        &mut self,
+        pending: HashSet<Dot>,
+        dots: &mut Vec<Dot>,
+        total_found: &mut usize,
+    ) {
+        // try to find new SCCs for each of those commands
+        let mut visited = HashSet::new();
+
+        for dot in pending {
+            // only try to find new SCCs from non-visited commands
+            if !visited.contains(&dot) {
+                match self.find_scc(dot, total_found) {
+                    FinderInfo::Found(new_dots) => {
+                        // reset visited
+                        visited.clear();
+
+                        // if new SCCs were found, now there are more
+                        // child dots to check
+                        dots.extend(new_dots);
+                    }
+                    FinderInfo::MissingDependency(
+                        new_dots,
+                        dep_dot,
+                        new_visited,
+                    ) => {
+                        if !new_dots.is_empty() {
+                            // if we found a new SCC, reset visited;
+                            visited.clear();
+                        } else {
+                            // otherwise, try other pending commands,
+                            // but don't try those that were visited in
+                            // this search
+                            visited.extend(new_visited);
+                        }
+
+                        // if new SCCs were found, now there are more
+                        // child dots to check
+                        dots.extend(new_dots);
+
+                        // update pending
+                        self.pending_index.index(dep_dot, dot);
+                    }
+                    FinderInfo::NotPending => {
+                        // this happens if the pending dot is no longer
+                        // pending
+                    }
+                }
+            }
+        }
     }
 
     fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
@@ -353,6 +375,7 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let is_mine = true;
         let time = RunTime;
 
         // cmd 0
@@ -368,12 +391,12 @@ mod tests {
         let clock_1 = util::vclock(vec![1, 0]);
 
         // add cmd 0
-        queue.add(dot_0, cmd_0.clone(), clock_0, &time);
+        queue.add(dot_0, cmd_0.clone(), clock_0, is_mine, &time);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.add(dot_1, cmd_1.clone(), clock_1, &time);
+        queue.add(dot_1, cmd_1.clone(), clock_1, is_mine, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -514,14 +537,15 @@ mod tests {
             let process_id = 1;
             let shard_id = 0;
             let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+            let is_mine = true;
             let time = RunTime;
 
             // add cmd 2
-            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
+            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), is_mine, &time);
             assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
 
             // add cmd 3
-            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
+            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), is_mine, &time);
             if transitive_conflicts {
                 // if we assume transitive conflicts, then cmd 3 can be executed
                 assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
@@ -531,7 +555,7 @@ mod tests {
             }
 
             // add cmd 1
-            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
+            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), is_mine, &time);
             // cmd 1 can always be executed
             if transitive_conflicts {
                 assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
@@ -889,6 +913,7 @@ mod tests {
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let is_mine = true;
         let time = RunTime;
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
@@ -906,7 +931,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.add(dot, cmd, clock, &time);
+            queue.add(dot, cmd, clock, is_mine, &time);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();
@@ -991,6 +1016,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 40, 61]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
 
@@ -1002,6 +1028,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 30, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 32)
@@ -1012,6 +1039,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 31, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 33)
@@ -1022,6 +1050,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 32, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 34)
@@ -1032,6 +1061,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 33, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 35)
@@ -1042,6 +1072,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 34, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 36)
@@ -1052,6 +1083,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 35, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 37)
@@ -1062,6 +1094,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 36, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 38)
@@ -1072,6 +1105,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 37, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 39)
@@ -1082,6 +1116,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 38, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
         // (4, 40)
@@ -1092,6 +1127,7 @@ mod tests {
                 util::vclock(vec![60, 50, 50, 39, 60]),
             ),
             true,
+            &queue.pending_index,
             &time,
         );
 

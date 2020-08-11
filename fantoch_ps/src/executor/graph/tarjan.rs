@@ -47,18 +47,19 @@ impl TarjanSCCFinder {
         }
     }
 
-    /// Returns a list with the SCCs found and a set with all dots visited.
+    /// Returns a list with the SCCs found.
+    #[must_use]
+    pub fn sccs(&mut self) -> Vec<SCC> {
+        std::mem::take(&mut self.sccs)
+    }
+
+    /// Returns a set with all dots visited.
     /// It also resets the ids of all vertices still on the stack.
     #[must_use]
-    pub fn finalize(
-        &mut self,
-        vertex_index: &VertexIndex,
-    ) -> (Vec<SCC>, HashSet<Dot>) {
+    pub fn finalize(&mut self, vertex_index: &VertexIndex) -> HashSet<Dot> {
         let _process_id = self.process_id;
         // reset id
         self.id = 0;
-        // take out sccs
-        let sccs = std::mem::take(&mut self.sccs);
         // reset the id of each dot in the stack, while computing the set of
         // visited dots
         let mut visited = HashSet::new();
@@ -70,15 +71,21 @@ impl TarjanSCCFinder {
             );
 
             // find vertex and reset its id
-            let vertex =
-                vertex_index.find(&dot).expect("stack member should exist");
+            let vertex = if let Some(vertex) = vertex_index.find(&dot) {
+                vertex
+            } else {
+                panic!(
+                    "p{}: stack member {:?} should exist",
+                    self.process_id, dot
+                );
+            };
             vertex.write().id = 0;
 
             // add dot to set of visited
             visited.insert(dot);
         }
-        // return SCCs found and visited dots
-        (sccs, visited)
+        // return visited dots
+        visited
     }
 
     /// Tries to find an SCC starting from root `dot`.
@@ -324,7 +331,7 @@ pub struct Vertex {
     cmd: Command,
     clock: VClock<ProcessId>,
     // specific to tarjan's algorithm
-    id: usize,
+    pub id: usize,
     low: usize,
     on_stack: bool,
 }
