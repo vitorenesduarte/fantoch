@@ -29,9 +29,7 @@ pub fn start_executors<P>(
     let executor = P::Executor::new(process_id, shard_id, config);
 
     // create executor workers
-    for (executor_index, (from_workers, from_clients)) in
-        incoming.enumerate()
-    {
+    for (executor_index, (from_workers, from_clients)) in incoming.enumerate() {
         task::spawn(executor_task::<P>(
             executor_index,
             executor.clone(),

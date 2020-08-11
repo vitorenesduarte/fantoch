@@ -2,7 +2,6 @@ use super::chan::ChannelSender;
 use crate::id::{ProcessId, ShardId};
 use crate::log;
 use crate::run::prelude::*;
-use crate::run::ConnectionDelay;
 use crate::HashMap;
 use fantoch_prof::metrics::Histogram;
 use std::net::IpAddr;
@@ -12,10 +11,10 @@ const PING_SHOW_INTERVAL: u64 = 5000; // millis
 const ITERATIONS_PER_PING: u64 = 5;
 
 pub async fn ping_task(
-    ping_interval: Option<usize>,
+    ping_interval: Option<Duration>,
     process_id: ProcessId,
     shard_id: ShardId,
-    ips: HashMap<ProcessId, (ShardId, IpAddr, ConnectionDelay)>,
+    ips: HashMap<ProcessId, (ShardId, IpAddr, Option<Duration>)>,
     parent: Option<SortedProcessesReceiver>,
 ) {
     // if no interval, do not ping
@@ -25,9 +24,8 @@ pub async fn ping_task(
     let ping_interval = ping_interval.unwrap();
 
     // create tokio interval
-    let millis = Duration::from_millis(ping_interval as u64);
-    log!("[ping_task] interval {:?}", millis);
-    let mut ping_interval = time::interval(millis);
+    log!("[ping_task] interval {:?}", ping_interval);
+    let mut ping_interval = time::interval(ping_interval);
 
     // create another tokio interval
     let millis = Duration::from_millis(PING_SHOW_INTERVAL);
@@ -64,7 +62,7 @@ pub async fn ping_task(
 async fn ping_task_ping(
     ping_stats: &mut HashMap<
         ProcessId,
-        (ShardId, IpAddr, ConnectionDelay, Histogram),
+        (ShardId, IpAddr, Option<Duration>, Histogram),
     >,
 ) {
     for (_shard_id, ip, delay, histogram) in ping_stats.values_mut() {
@@ -99,7 +97,7 @@ async fn ping_task_ping(
             // add two times the delay (since delay should be half the ping
             // latency), if there's one
             let rounded_latency = if let Some(delay) = delay {
-                let delay = *delay as u64;
+                let delay = delay.as_millis() as u64;
                 rounded_latency + 2 * delay
             } else {
                 rounded_latency
@@ -112,7 +110,7 @@ async fn ping_task_ping(
 fn ping_task_show(
     ping_stats: &HashMap<
         ProcessId,
-        (ShardId, IpAddr, ConnectionDelay, Histogram),
+        (ShardId, IpAddr, Option<Duration>, Histogram),
     >,
 ) {
     for (process_id, (_, _, _, histogram)) in ping_stats {
@@ -125,7 +123,7 @@ async fn ping_task_sort(
     shard_id: ShardId,
     ping_stats: &HashMap<
         ProcessId,
-        (ShardId, IpAddr, ConnectionDelay, Histogram),
+        (ShardId, IpAddr, Option<Duration>, Histogram),
     >,
     sort_request: Option<ChannelSender<Vec<(ProcessId, ShardId)>>>,
 ) {
@@ -153,7 +151,7 @@ fn sort_by_distance(
     shard_id: ShardId,
     ping_stats: &HashMap<
         ProcessId,
-        (ShardId, IpAddr, ConnectionDelay, Histogram),
+        (ShardId, IpAddr, Option<Duration>, Histogram),
     >,
 ) -> Vec<(ProcessId, ShardId)> {
     // sort processes by ping time

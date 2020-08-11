@@ -7,7 +7,6 @@ use crate::protocol::{Action, Protocol};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
-use crate::run::ConnectionDelay;
 use crate::time::RunTime;
 use crate::HashMap;
 use color_eyre::Report;
@@ -24,17 +23,17 @@ pub async fn connect_to_all<A, P>(
     shard_id: ShardId,
     config: Config,
     listener: TcpListener,
-    addresses: Vec<(A, ConnectionDelay)>,
+    addresses: Vec<(A, Option<Duration>)>,
     to_workers: ReaderToWorkers<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     channel_buffer_size: usize,
     multiplexing: usize,
 ) -> Result<
     (
-        HashMap<ProcessId, (ShardId, IpAddr, Option<usize>)>,
+        HashMap<ProcessId, (ShardId, IpAddr, Option<Duration>)>,
         HashMap<ProcessId, Vec<WriterSender<P>>>,
     ),
     Report,
@@ -113,12 +112,12 @@ async fn handshake<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     to_workers: ReaderToWorkers<P>,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
     mut connections_1: Vec<Connection>,
 ) -> (
-    HashMap<ProcessId, (ShardId, IpAddr, ConnectionDelay)>,
+    HashMap<ProcessId, (ShardId, IpAddr, Option<Duration>)>,
     HashMap<ProcessId, Vec<WriterSender<P>>>,
 )
 where
@@ -198,11 +197,11 @@ fn start_readers<P>(
 }
 
 async fn start_writers<P>(
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, ShardId, Connection)>,
 ) -> (
-    HashMap<ProcessId, (ShardId, IpAddr, ConnectionDelay)>,
+    HashMap<ProcessId, (ShardId, IpAddr, Option<Duration>)>,
     HashMap<ProcessId, Vec<WriterSender<P>>>,
 )
 where
@@ -254,11 +253,7 @@ where
             ));
 
             // spawn delay task
-            task::spawn(super::delay::delay_task(
-                delay_rx,
-                writer_tx,
-                delay as u64,
-            ));
+            task::spawn(super::delay::delay_task(delay_rx, writer_tx, delay));
 
             // in this case, messages are first forward to the delay task, which
             // then forwards them to the writer task
@@ -305,7 +300,7 @@ async fn reader_task<P>(
 
 /// Writer task.
 async fn writer_task<P>(
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     mut connection: Connection,
     mut parent: WriterReceiver<P>,
 ) where
@@ -315,8 +310,7 @@ async fn writer_task<P>(
     // flush on every write
     if let Some(tcp_flush_interval) = tcp_flush_interval {
         // create interval
-        let mut interval =
-            time::interval(Duration::from_millis(tcp_flush_interval as u64));
+        let mut interval = time::interval(tcp_flush_interval);
         loop {
             tokio::select! {
                 msg = parent.recv() => {

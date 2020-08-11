@@ -2,11 +2,12 @@ use super::Rw;
 use std::net::IpAddr;
 use std::ops::{Deref, DerefMut};
 use tokio::net::TcpStream;
+use tokio::time::Duration;
 
 #[derive(Debug)]
 pub struct Connection {
     ip_addr: Option<IpAddr>,
-    delay: Option<usize>,
+    delay: Option<Duration>,
     rw: Rw<TcpStream>,
 }
 
@@ -33,11 +34,11 @@ impl Connection {
         self.ip_addr
     }
 
-    pub fn delay(&self) -> Option<usize> {
+    pub fn delay(&self) -> Option<Duration> {
         self.delay
     }
 
-    pub fn set_delay(&mut self, delay: usize) {
+    pub fn set_delay(&mut self, delay: Duration) {
         self.delay = Some(delay)
     }
 }

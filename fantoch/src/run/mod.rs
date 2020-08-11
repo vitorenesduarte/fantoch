@@ -74,7 +74,6 @@ pub mod rw;
 pub mod task;
 
 const CONNECT_RETRIES: usize = 100;
-type ConnectionDelay = Option<usize>;
 
 // Re-exports.
 pub use prelude::{
@@ -110,19 +109,19 @@ pub async fn process<P, A>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<(A, ConnectionDelay)>,
+    addresses: Vec<(A, Option<Duration>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     process_channel_buffer_size: usize,
     client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<usize>,
-    ping_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
+    ping_interval: Option<Duration>,
     metrics_file: Option<String>,
 ) -> Result<(), Report>
 where
@@ -167,19 +166,19 @@ async fn process_with_notify_and_inspect<P, A, R>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<(A, ConnectionDelay)>,
+    addresses: Vec<(A, Option<Duration>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     process_channel_buffer_size: usize,
     client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<usize>,
-    ping_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
+    ping_interval: Option<Duration>,
     metrics_file: Option<String>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
@@ -970,7 +969,7 @@ pub mod tests {
         let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
-        let tracer_show_interval = None;
+        let tracer_show_interval = Some(Duration::from_secs(1));
         let extra_run_time = Some(Duration::from_secs(5));
 
         // run test and get total stable commands
@@ -1016,7 +1015,7 @@ pub mod tests {
         clients_per_process: usize,
         workers: usize,
         executors: usize,
-        tracer_show_interval: Option<usize>,
+        tracer_show_interval: Option<Duration>,
         inspect_fun: Option<fn(&P) -> R>,
         extra_run_time: Option<Duration>,
     ) -> Result<HashMap<ProcessId, Vec<R>>, Report>
@@ -1032,11 +1031,11 @@ pub mod tests {
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
-        let tcp_flush_interval = Some(1); // millis
+        let tcp_flush_interval = Some(Duration::from_millis(1));
         let process_channel_buffer_size = 10000;
         let client_channel_buffer_size = 10000;
         let multiplexing = 2;
-        let ping_interval = Some(1000); // millis
+        let ping_interval = Some(Duration::from_secs(1));
 
         // create processes ports and client ports
         let n = config.n();
@@ -1150,7 +1149,7 @@ pub mod tests {
                 .map(|(process_id, address)| {
                     let delay = if process_id % 2 == 1 {
                         // add 0 delay to odd processes
-                        Some(0)
+                        Some(Duration::from_secs(0))
                     } else {
                         None
                     };

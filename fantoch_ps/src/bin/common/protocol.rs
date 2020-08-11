@@ -40,19 +40,19 @@ type ProtocolArgs = (
     IpAddr,
     u16,
     u16,
-    Vec<(String, Option<usize>)>,
+    Vec<(String, Option<Duration>)>,
     Config,
     bool,
     usize,
-    Option<usize>,
+    Option<Duration>,
     usize,
     usize,
     usize,
     usize,
     usize,
     Option<String>,
-    Option<usize>,
-    Option<usize>,
+    Option<Duration>,
+    Option<Duration>,
     Option<String>,
     usize,
     Option<usize>,
@@ -511,7 +511,7 @@ fn parse_client_port(port: Option<&str>) -> u16 {
     .unwrap_or(DEFAULT_CLIENT_PORT)
 }
 
-fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
+fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<Duration>)> {
     addresses
         .expect("addresses should be set")
         .split(LIST_SEP)
@@ -524,9 +524,10 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
                     (address, None)
                 }
                 2 => {
-                    let delay = parts[1]
-                        .parse::<usize>()
+                    let millis = parts[1]
+                        .parse::<u64>()
                         .expect("address delay should be a number");
+                    let delay = Duration::from_millis(millis);
                     (address, Some(delay))
                 }
                 _ => {
@@ -706,19 +707,21 @@ pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
 
 fn parse_tracer_show_interval(
     tracer_show_interval: Option<&str>,
-) -> Option<usize> {
+) -> Option<Duration> {
     tracer_show_interval.map(|tracer_show_interval| {
-        tracer_show_interval
-            .parse::<usize>()
-            .expect("tracer_show_interval should be a number")
+        let millis = tracer_show_interval
+            .parse::<u64>()
+            .expect("tracer_show_interval should be a number");
+        Duration::from_millis(millis)
     })
 }
 
-fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
+fn parse_ping_interval(ping_interval: Option<&str>) -> Option<Duration> {
     ping_interval.map(|ping_interval| {
-        ping_interval
-            .parse::<usize>()
-            .expect("ping_interval should be a number")
+        let millis = ping_interval
+            .parse::<u64>()
+            .expect("ping_interval should be a number");
+        Duration::from_millis(millis)
     })
 }
 

@@ -230,10 +230,10 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
 
 fn parse_interval(interval: Option<&str>) -> Option<Duration> {
     interval.map(|interval| {
-        let ms = interval
+        let millis = interval
             .parse::<u64>()
             .expect("interval should be a number");
-        Duration::from_millis(ms)
+        Duration::from_millis(millis)
     })
 }
 
