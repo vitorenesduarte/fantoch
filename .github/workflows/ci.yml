@@ -18,6 +18,15 @@ jobs:
           toolchain: nightly-2020-06-10
           override: true
 
+      - name: Test fantoch_prof
+        run: cd fantoch_prof/ && cargo test
+        env:
+          QUICKCHECK_TESTS: '10000'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
+        timeout-minutes: 60
+
       - name: Test fantoch
         run: cd fantoch/ && cargo test
         env:
