@@ -11,6 +11,7 @@ use threshold::VClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
+    process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
     graph: DependencyGraph,
@@ -28,6 +29,7 @@ impl Executor for GraphExecutor {
         let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
         Self {
+            process_id,
             shard_id,
             config,
             graph,
@@ -43,6 +45,7 @@ impl Executor for GraphExecutor {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         self.graph.cleanup(time);
+        self.fetch_to_execute();
     }
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
@@ -58,10 +61,7 @@ impl Executor for GraphExecutor {
                 } else {
                     // handle new command
                     self.graph.add(dot, cmd, clock, is_mine, time);
-                    // get more commands that are ready to be executed
-                    while let Some(cmd) = self.graph.command_to_execute() {
-                        self.execute(cmd);
-                    }
+                    self.fetch_to_execute();
                 }
             }
         }
@@ -81,6 +81,13 @@ impl Executor for GraphExecutor {
 }
 
 impl GraphExecutor {
+    fn fetch_to_execute(&mut self) {
+        // get more commands that are ready to be executed
+        while let Some(cmd) = self.graph.command_to_execute() {
+            self.execute(cmd);
+        }
+    }
+
     fn execute(&mut self, cmd: Command) {
         // execute the command
         let results = cmd.execute(self.shard_id, &mut self.store);
