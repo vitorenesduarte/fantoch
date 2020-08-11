@@ -83,6 +83,14 @@ where
         self.shared.remove(key)
     }
 
+    pub fn remove_if(
+        &self,
+        key: &K,
+        f: impl FnOnce(&K, &V) -> bool,
+    ) -> Option<(K, V)> {
+        self.shared.remove_if(key, f)
+    }
+
     pub fn iter(&self) -> SharedIter<'_, K, V> {
         self.shared.iter()
     }

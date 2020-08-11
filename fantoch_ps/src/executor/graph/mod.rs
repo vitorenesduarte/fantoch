@@ -105,8 +105,8 @@ impl DependencyGraph {
             0 => {
                 // since `check_pending_to_try` is only called when a new
                 // command is added, if there are no new commands added, we may
-                // end up with some commands pending forever; for that reason, we
-                // also try those pending commands here in this periodic task
+                // end up with some commands pending forever; for that reason,
+                // we also try those pending commands here in this periodic task
                 let mut total_found = 0;
                 self.check_pending_to_try(&mut total_found);
             }

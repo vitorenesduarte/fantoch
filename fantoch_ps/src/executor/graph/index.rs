@@ -182,28 +182,46 @@ impl VertexIndex {
         assert_eq!(executor_index, 1);
         log!("p{}: VertexIndex::do_cleanup {:?}", self.process_id, dots);
         for dot in dots {
-            // cleanup previous cleanups that failed
-            if pending_index.contains(&dot) {
-                log!("p{}: VertexIndex::do_cleanup cleanup failed for {:?} as there are pending commands", self.process_id, dot);
-                // if there are commands waiting on this command, do not cleanup
-                self.failed_cleanup.push(dot);
-            } else {
-                if let Some(vertex) = self.remote.get(&dot) {
+            log!("p{}: VertexIndex::do_cleanup of {:?}", self.process_id, dot);
+            let res = self.remote.remove_if(&dot, |_, vertex| {
+                if pending_index.contains(&dot) {
+                    log!("p{}: VertexIndex::do_cleanup cleanup failed for {:?} as there are pending commands", self.process_id, dot);
+                    // if there are commands waiting on this command, do not cleanup
+                    false
+                } else {
                     // if the dot exists as remote, check that it's not being
                     // used by tarjan's finder
-                    let vertex = vertex.lock();
-                    if vertex.id == 0 {
-                        // in this case, it's not being used and thus it is safe
-                        // to remove it
-                        self.remote.remove(&dot);
-                        assert!(executed_clock
-                            .write()
-                            .add(&dot.source(), dot.sequence()));
-                    } else {
-                        log!("p{}: VertexIndex::do_cleanup cleanup failed for {:?} as it's being used in finder", self.process_id, dot);
-                        self.failed_cleanup.push(dot);
+                    if let Some(vertex) = vertex.try_lock() {
+                        if vertex.id == 0 {
+                            // in this case, it's not being used and thus it is safe
+                            // to remove it
+                            log!(
+                                "p{}: VertexIndex::do_cleanup {:?} successfully removed",
+                                self.process_id,
+                                dot
+                            );
+                            return true;
+                        }
                     }
+                    log!("p{}: VertexIndex::do_cleanup cleanup failed for {:?} as it's being used in finder", self.process_id, dot);
+                    false
                 }
+            });
+
+            // if indeed the command was removed, we add it to the executed
+            // clock; note that this must be done outside of `remove_if` to
+            // avoid the possibility of a deadlock
+            if res.is_some() {
+                assert!(executed_clock
+                    .write()
+                    .add(&dot.source(), dot.sequence()));
+            }
+
+            if self.remote.contains_key(&dot) {
+                // if key dot still exists, it's because the clean up has
+                // failed
+                log!("p{}: VertexIndex::do_cleanup add {:?} to be cleaned up again as cleanup has failed", self.process_id, dot);
+                self.failed_cleanup.push(dot);
             }
         }
     }

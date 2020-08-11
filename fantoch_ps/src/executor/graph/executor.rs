@@ -4,6 +4,7 @@ use fantoch::config::Config;
 use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
+use fantoch::log;
 use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
@@ -84,6 +85,11 @@ impl GraphExecutor {
     fn fetch_to_execute(&mut self) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
+            log!(
+                "p{}: GraphExecutor::fetch_to_execute {:?}",
+                self.process_id,
+                cmd.rifl()
+            );
             self.execute(cmd);
         }
     }
