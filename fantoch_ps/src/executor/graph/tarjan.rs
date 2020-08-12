@@ -298,6 +298,7 @@ impl TarjanSCCFinder {
                 if !executed_clock
                     .write()
                     .add(&member_dot.source(), member_dot.sequence())
+                    && member_vertex.cmd.replicated_by(&self.shard_id)
                 {
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",

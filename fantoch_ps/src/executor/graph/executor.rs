@@ -62,18 +62,16 @@ impl Executor for GraphExecutor {
                 } else {
                     // handle new command
                     self.graph.add(dot, cmd, clock, time);
-                    self.fetch_commands_to_execute();
-                    self.fetch_requests();
+                    self.fetch_actions();
                 }
             }
             GraphExecutionInfo::Request { from, dots } => {
                 self.graph.request(from, dots);
-                self.fetch_request_replies();
+                self.fetch_actions();
             }
             GraphExecutionInfo::RequestReply { infos } => {
                 self.graph.request_reply(infos, time);
-                self.fetch_commands_to_execute();
-                self.fetch_requests();
+                self.fetch_actions();
             }
         }
     }
@@ -96,6 +94,12 @@ impl Executor for GraphExecutor {
 }
 
 impl GraphExecutor {
+    fn fetch_actions(&mut self) {
+        self.fetch_commands_to_execute();
+        self.fetch_requests();
+        self.fetch_request_replies();
+    }
+
     fn fetch_commands_to_execute(&mut self) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {

@@ -34,11 +34,11 @@ impl VertexIndex {
         }
     }
 
-    /// Indexes a new vertex, returning true if it was already indexed.
-    pub fn index(&mut self, vertex: Vertex) -> bool {
+    /// Indexes a new vertex, returning any previous vertex indexed.
+    pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
         let dot = vertex.dot();
         let cell = Mutex::new(vertex);
-        self.local.insert(dot, cell).is_some()
+        self.local.insert(dot, cell).map(|cell| cell.into_inner())
     }
 
     pub fn dots(&self) -> impl Iterator<Item = Dot> + '_ {

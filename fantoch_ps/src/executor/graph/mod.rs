@@ -20,7 +20,7 @@ use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -49,6 +49,7 @@ pub struct DependencyGraph {
     finder: TarjanSCCFinder,
     to_execute: Vec<Command>,
     requests: HashMap<ShardId, HashSet<Dot>>,
+    buffered_requests: Arc<Mutex<HashMap<Dot, Vec<ShardId>>>>,
     request_replies: HashMap<ShardId, Vec<RequestReply>>,
 }
 
@@ -88,6 +89,7 @@ impl DependencyGraph {
         let to_execute = Vec::new();
         // create requests and request replies
         let requests = HashMap::new();
+        let buffered_requests = Arc::new(Mutex::new(HashMap::new()));
         let request_replies = HashMap::new();
         DependencyGraph {
             executor_index,
@@ -99,6 +101,7 @@ impl DependencyGraph {
             finder,
             to_execute,
             requests,
+            buffered_requests,
             request_replies,
         }
     }
@@ -144,11 +147,34 @@ impl DependencyGraph {
         _time: &dyn SysTime,
     ) {
         log!("p{}: Graph::add {:?} {:?}", self.process_id, dot, clock);
+
+        // first check if we have any buffered requests for this command
+        if let Some(shards) = self.buffered_requests.lock().remove(&dot) {
+            for to in shards {
+                // only send the vertex if the shard that requested this vertex
+                // does not replicate it
+                if !cmd.replicated_by(&to) {
+                    self.request_replies.entry(to).or_default().push(
+                        RequestReply::Info {
+                            dot,
+                            cmd: cmd.clone(),
+                            clock: clock.clone(),
+                        },
+                    );
+                }
+            }
+        }
+
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
-        // index in vertex index and check if it hasn't been indexed before
-        assert!(!self.vertex_index.index(vertex));
+        if self.vertex_index.index(vertex).is_some() {
+            // give up if already indexed
+            panic!(
+                "p{}: Graph::add tried to index already indexed {:?}",
+                self.process_id, dot
+            );
+        }
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
@@ -187,14 +213,19 @@ impl DependencyGraph {
     pub fn request(&mut self, from: ShardId, dots: HashSet<Dot>) {
         let replies = self.request_replies.entry(from).or_default();
         for dot in dots {
+            log!("p{}: Graph::request {:?}", self.process_id, dot);
             if let Some(vertex) = self.vertex_index.find(&dot) {
-                // if we have it, simply send it back
                 let vertex = vertex.lock();
-                replies.push(RequestReply::Info {
-                    dot,
-                    cmd: vertex.cmd.clone(),
-                    clock: vertex.clock.clone(),
-                })
+
+                // only send the vertex if the shard that requested this vertex
+                // does not replicate it
+                if !vertex.cmd.replicated_by(&from) {
+                    replies.push(RequestReply::Info {
+                        dot,
+                        cmd: vertex.cmd.clone(),
+                        clock: vertex.clock.clone(),
+                    })
+                }
             } else {
                 // if we don't have it, then check if it's executed
                 if self
@@ -204,10 +235,15 @@ impl DependencyGraph {
                 {
                     replies.push(RequestReply::Executed { dot });
                 } else {
-                    panic!(
-                        "p{}: Graph::request for a dot {:?} we don't have",
-                        self.process_id, dot
+                    log!(
+                        "p{}: Graph::request from {:?} for a dot {:?} we don't have",
+                        self.process_id, from, dot
                     );
+                    self.buffered_requests
+                        .lock()
+                        .entry(dot)
+                        .or_default()
+                        .push(from);
                 }
             }
         }
@@ -219,6 +255,7 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         for info in infos {
+            log!("p{}: Graph::request_reply {:?}", self.process_id, info);
             match info {
                 RequestReply::Info { dot, cmd, clock } => {
                     self.add(dot, cmd, clock, time)
