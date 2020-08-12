@@ -1,8 +1,9 @@
 use super::tarjan::Vertex;
 use crate::shared::Shared;
 use dashmap::mapref::one::Ref as DashMapRef;
+use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::{HashMap, HashSet};
+use fantoch::HashSet;
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::Arc;
 
@@ -77,27 +78,29 @@ impl PendingIndex {
     ///   was a dependency and maybe now `dot` can be executed
     #[must_use]
     pub fn index(&mut self, dep_dot: Dot, dot: Dot) -> Option<ShardId> {
-        match self.index.get_mut(&dep_dot) {
-            None => {
+        match self.index.entry(dep_dot) {
+            Entry::Vacant(vacant) => {
+                let mut dots = HashSet::new();
+                dots.insert(dot);
+                vacant.insert(dots);
+
                 // this is the first time we detect `dep_dot` as a missing
-                // dependency; in this case, we may have to request another
-                // shard for its info; from the identifier we can know if our
-                // shard was the target shard, but maybe we were not the target
-                // shard and yet replicate the command; however, as we don't
-                // have the command, only its identifier, we will be pessimistic
-                // and send a request for all commands that:
+                // dependency; in this case, we may have to ask another
+                // shard for its info; from the identifier we can't know if we
+                // replicate the command, but can know who the target shard is.
+                // since we don't have the command, only its identifier, we will
+                // be pessimistic and send a request for all commands that:
                 // - are missing dependencies *and*
                 // - we were not its target shard
-                self.index.entry(dep_dot).or_default().insert(dot);
                 let target = dep_dot.target_shard(self.n);
                 if target != self.shard_id {
                     return Some(target);
                 }
             }
-            Some(dots) => {
+            Entry::Occupied(mut dots) => {
                 // in this case, `dep_dot` has already been a missing dependency
                 // of another command, so simply save `dot` as a child
-                dots.insert(dot);
+                dots.get_mut().insert(dot);
             }
         }
         None
