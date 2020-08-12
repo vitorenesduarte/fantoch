@@ -7,6 +7,7 @@ use crate::run::prelude::*;
 use crate::run::task;
 use crate::time::RunTime;
 use crate::HashMap;
+use std::sync::Arc;
 use tokio::time;
 
 /// Starts executors.
@@ -14,14 +15,15 @@ pub fn start_executors<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
-    worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
+    to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
+    shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
 {
     // zip rxs'
-    let incoming = worker_to_executors_rxs
+    let incoming = to_executors_rxs
         .into_iter()
         .zip(client_to_executors_rxs.into_iter());
 
@@ -36,6 +38,7 @@ pub fn start_executors<P>(
             config,
             from_workers,
             from_clients,
+            shard_writers.clone(),
             to_metrics_logger.clone(),
         ));
     }
@@ -47,6 +50,7 @@ async fn executor_task<P>(
     config: Config,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
+    mut shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
@@ -75,6 +79,7 @@ async fn executor_task<P>(
                 if let Some(execution_info) = execution_info {
                     executor.handle(execution_info, &time);
                     fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
+                    fetch_info_to_executors::<P>(&mut executor, &mut shard_writers).await;
                 } else {
                     println!("[executor] error while receiving execution info from worker");
                 }
@@ -91,6 +96,7 @@ async fn executor_task<P>(
                 log!("[executor] cleanup");
                 executor.cleanup(&time);
                 fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
+                fetch_info_to_executors::<P>(&mut executor, &mut shard_writers).await;
             }
             _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -125,6 +131,30 @@ async fn fetch_new_command_results<P>(
                     client_id, e
                 );
             }
+        }
+    }
+}
+
+async fn fetch_info_to_executors<P>(
+    executor: &mut P::Executor,
+    shard_writers: &mut HashMap<ShardId, Vec<WriterSender<P>>>,
+) where
+    P: Protocol + 'static,
+{
+    // forward execution info to other shards
+    for (shard_id, execution_info) in executor.to_executors_iter() {
+        let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
+        if let Some(channels) = shard_writers.get_mut(&shard_id) {
+            crate::run::task::process::send_to_one_writer::<P>(
+                "executors",
+                msg_to_send.clone(),
+                channels,
+            )
+            .await
+        } else {
+            panic!(
+                "[executor] tried to send a message to a non-connected shard"
+            );
         }
     }
 }

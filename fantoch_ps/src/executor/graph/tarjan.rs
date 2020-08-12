@@ -97,11 +97,14 @@ impl TarjanSCCFinder {
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
+        // update id
+        self.id += 1;
+
         // get vertex
         let mut vertex = vertex_ref.lock();
 
         // set id and low for vertex
-        self.set_id(&mut vertex);
+        vertex.id = self.id;
         vertex.low = vertex.id;
 
         // add to the stack
@@ -201,12 +204,6 @@ impl TarjanSCCFinder {
                                 self.process_id,
                                 dep_dot
                             );
-
-                            // setting the id here while we hold the lock makes
-                            // sure that this vertex doesn't get removed in the
-                            // background process by worker 1 (see
-                            // VertexIndex::do_cleanup)
-                            self.set_id(&mut dep_vertex);
 
                             // drop guards
                             drop(vertex);
@@ -326,23 +323,15 @@ impl TarjanSCCFinder {
             FinderResult::NotFound
         }
     }
-
-    fn set_id(&mut self, vertex: &mut Vertex) {
-        if vertex.id == 0 {
-            // update id
-            self.id += 1;
-            vertex.id = self.id;
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Vertex {
     dot: Dot,
-    cmd: Command,
-    clock: VClock<ProcessId>,
+    pub cmd: Command,
+    pub clock: VClock<ProcessId>,
     // specific to tarjan's algorithm
-    pub id: usize,
+    id: usize,
     low: usize,
     on_stack: bool,
 }

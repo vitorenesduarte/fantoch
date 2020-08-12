@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_0conf_parallel";
+const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_v3";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -46,12 +46,12 @@ fn partial_replication() -> Result<(), Report> {
         (1, 1),
         (1, 2),
         (1, 4),
+        (1, 6),
         /*
         (2, 2),
         (1, 3),
         (2, 3),
         (1, 5),
-        (1, 6),
         */
     ];
 
@@ -151,7 +151,7 @@ fn partial_replication() -> Result<(), Report> {
                 let mut style = HashMap::new();
                 style.insert(
                     Style::Label,
-                    format!("t = {} | s = {}", shard_count, shards_per_command),
+                    format!("({}, {})", shard_count, shards_per_command),
                 );
                 style.insert(Style::Color, color.to_string());
                 style.insert(Style::Marker, marker.to_string());

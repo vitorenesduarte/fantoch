@@ -119,11 +119,12 @@ impl BaseProcess {
         };
 
         log!(
-            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?}",
+            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?} | closest_shard_process {:?}",
             self.process_id,
             self.all_but_me,
             self.fast_quorum,
-            self.write_quorum
+            self.write_quorum,
+            self.closest_shard_process
         );
 
         // connected if fast quorum and write quorum are set
@@ -164,11 +165,16 @@ impl BaseProcess {
     }
 
     // Returns the closest process for this shard.
-    pub fn closest_shard_process(&self, shard_id: &ShardId) -> ProcessId {
+    pub fn closest_process(&self, shard_id: &ShardId) -> ProcessId {
         *self
             .closest_shard_process
             .get(shard_id)
             .expect("closest shard process should be known")
+    }
+
+    // Returns the closest process mapping.
+    pub fn closest_shard_process(&self) -> &HashMap<ShardId, ProcessId> {
+        &self.closest_shard_process
     }
 
     // Returns all processes (but self) in my region.

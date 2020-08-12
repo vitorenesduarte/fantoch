@@ -800,6 +800,8 @@ fn add_legend(
         4 => (2, two_rows),
         5 => (3, two_rows),
         6 => (3, two_rows),
+        7 => (4, two_rows),
+        8 => (4, two_rows),
         _ => panic!(
             "add_legend: unsupported number of plotted instances: {}",
             plotted

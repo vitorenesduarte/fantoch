@@ -52,6 +52,18 @@ pub trait Executor: Clone {
         ToClientsIter { executor: self }
     }
 
+    #[must_use]
+    fn to_executors(&mut self) -> Option<(ShardId, Self::ExecutionInfo)> {
+        // non-genuine protocols should overwrite this
+        None
+    }
+
+    #[must_use]
+    fn to_executors_iter(&mut self) -> ToExecutorsIter<'_, Self> {
+        ToExecutorsIter { executor: self }
+    }
+
+    // TODO fix me
     fn max_executors() -> Option<usize>;
 
     fn metrics(&self) -> &ExecutorMetrics;
@@ -69,6 +81,21 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.executor.to_clients()
+    }
+}
+
+pub struct ToExecutorsIter<'a, E> {
+    executor: &'a mut E,
+}
+
+impl<'a, E> Iterator for ToExecutorsIter<'a, E>
+where
+    E: Executor,
+{
+    type Item = (ShardId, E::ExecutionInfo);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.executor.to_executors()
     }
 }
 

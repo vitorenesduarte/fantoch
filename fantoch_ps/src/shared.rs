@@ -24,10 +24,6 @@ where
         Self { shared }
     }
 
-    pub fn contains_key(&self, key: &K) -> bool {
-        self.shared.contains_key(key)
-    }
-
     pub fn get(&self, key: &K) -> Option<Ref<'_, K, V>> {
         self.shared.get(key)
     }
@@ -81,14 +77,6 @@ where
 
     pub fn remove(&self, key: &K) -> Option<(K, V)> {
         self.shared.remove(key)
-    }
-
-    pub fn remove_if(
-        &self,
-        key: &K,
-        f: impl FnOnce(&K, &V) -> bool,
-    ) -> Option<(K, V)> {
-        self.shared.remove_if(key, f)
     }
 
     pub fn iter(&self) -> SharedIter<'_, K, V> {

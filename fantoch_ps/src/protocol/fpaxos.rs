@@ -8,8 +8,8 @@ use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
-use fantoch::HashSet;
 use fantoch::{log, singleton};
+use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::instrument;
@@ -93,8 +93,12 @@ impl Protocol for FPaxos {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.

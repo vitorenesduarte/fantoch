@@ -7,6 +7,7 @@ use fantoch::kvs::KVStore;
 use fantoch::log;
 use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
+use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
@@ -19,6 +20,7 @@ pub struct GraphExecutor {
     store: KVStore,
     metrics: ExecutorMetrics,
     to_clients: Vec<ExecutorResult>,
+    to_executors: Vec<(ShardId, GraphExecutionInfo)>,
 }
 
 impl Executor for GraphExecutor {
@@ -29,6 +31,7 @@ impl Executor for GraphExecutor {
         let store = KVStore::new();
         let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
+        let to_executors = Vec::new();
         Self {
             process_id,
             shard_id,
@@ -37,6 +40,7 @@ impl Executor for GraphExecutor {
             store,
             metrics,
             to_clients,
+            to_executors,
         }
     }
 
@@ -46,30 +50,40 @@ impl Executor for GraphExecutor {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         self.graph.cleanup(time);
-        self.fetch_to_execute();
+        self.fetch_commands_to_execute();
+        self.fetch_requests();
     }
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
         match info {
-            GraphExecutionInfo::Add {
-                dot,
-                cmd,
-                clock,
-                is_mine,
-            } => {
+            GraphExecutionInfo::Add { dot, cmd, clock } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.add(dot, cmd, clock, is_mine, time);
-                    self.fetch_to_execute();
+                    self.graph.add(dot, cmd, clock, time);
+                    self.fetch_commands_to_execute();
+                    self.fetch_requests();
                 }
+            }
+            GraphExecutionInfo::Request { from, dots } => {
+                self.graph.request(from, dots);
+                self.fetch_request_replies();
+            }
+            GraphExecutionInfo::RequestReply { infos } => {
+                self.graph.request_reply(infos, time);
+                self.fetch_commands_to_execute();
+                self.fetch_requests();
             }
         }
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
         self.to_clients.pop()
+    }
+
+    fn to_executors(&mut self) -> Option<(ShardId, GraphExecutionInfo)> {
+        self.to_executors.pop()
     }
 
     fn max_executors() -> Option<usize> {
@@ -82,15 +96,41 @@ impl Executor for GraphExecutor {
 }
 
 impl GraphExecutor {
-    fn fetch_to_execute(&mut self) {
+    fn fetch_commands_to_execute(&mut self) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
             log!(
-                "p{}: GraphExecutor::fetch_to_execute {:?}",
+                "p{}: GraphExecutor::fetch_comands_to_execute {:?}",
                 self.process_id,
                 cmd.rifl()
             );
             self.execute(cmd);
+        }
+    }
+
+    fn fetch_requests(&mut self) {
+        for (to, dots) in self.graph.requests() {
+            log!(
+                "p{}: GraphExecutor::fetch_requests_info {:?} {:?}",
+                self.process_id,
+                to,
+                dots
+            );
+            let request = GraphExecutionInfo::request(self.shard_id, dots);
+            self.to_executors.push((to, request));
+        }
+    }
+
+    fn fetch_request_replies(&mut self) {
+        for (to, infos) in self.graph.request_replies() {
+            log!(
+                "p{}: Graph::fetch_request_replies {:?} {:?}",
+                self.process_id,
+                to,
+                infos
+            );
+            let reply = GraphExecutionInfo::request_reply(infos);
+            self.to_executors.push((to, reply));
         }
     }
 
@@ -111,24 +151,27 @@ pub enum GraphExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: VClock<ProcessId>,
-        is_mine: bool,
+    },
+    Request {
+        from: ShardId,
+        dots: HashSet<Dot>,
+    },
+    RequestReply {
+        infos: Vec<super::RequestReply>,
     },
 }
 
 impl GraphExecutionInfo {
-    pub fn add(
-        dot: Dot,
-        cmd: Command,
-        clock: VClock<ProcessId>,
-        shard_id: &ShardId,
-    ) -> Self {
-        let is_mine = cmd.replicated_by(shard_id);
-        Self::Add {
-            dot,
-            cmd,
-            clock,
-            is_mine,
-        }
+    pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
+        Self::Add { dot, cmd, clock }
+    }
+
+    fn request(from: ShardId, dots: HashSet<Dot>) -> Self {
+        Self::Request { from, dots }
+    }
+
+    fn request_reply(infos: Vec<super::RequestReply>) -> Self {
+        Self::RequestReply { infos }
     }
 }
 
@@ -136,10 +179,9 @@ impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::worker_index_no_shift;
         match self {
-            Self::Add { is_mine, .. } => {
-                let index = if *is_mine { 0 } else { 1 };
-                worker_index_no_shift(index)
-            }
+            Self::Add { .. } => worker_index_no_shift(0),
+            Self::Request { .. } => worker_index_no_shift(1),
+            Self::RequestReply { .. } => worker_index_no_shift(0),
         }
     }
 }

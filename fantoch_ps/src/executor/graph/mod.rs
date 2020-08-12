@@ -19,11 +19,24 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
-use fantoch::HashSet;
+use fantoch::{HashMap, HashSet};
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 use threshold::{AEClock, VClock};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RequestReply {
+    Info {
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+    },
+    Executed {
+        dot: Dot,
+    },
+}
 
 #[derive(Clone)]
 pub struct DependencyGraph {
@@ -31,11 +44,12 @@ pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
     executed_clock: Arc<RwLock<AEClock<ProcessId>>>,
-    // set of processes in my shard
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
     to_execute: Vec<Command>,
+    requests: HashMap<ShardId, HashSet<Dot>>,
+    request_replies: HashMap<ShardId, Vec<RequestReply>>,
 }
 
 enum FinderInfo {
@@ -63,7 +77,7 @@ impl DependencyGraph {
         let executed_clock = Arc::new(RwLock::new(AEClock::with(ids)));
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
-        let pending_index = PendingIndex::new();
+        let pending_index = PendingIndex::new(shard_id, config.n());
         // create finder
         let finder = TarjanSCCFinder::new(
             process_id,
@@ -72,6 +86,9 @@ impl DependencyGraph {
         );
         // create to execute
         let to_execute = Vec::new();
+        // create requests and request replies
+        let requests = HashMap::new();
+        let request_replies = HashMap::new();
         DependencyGraph {
             executor_index,
             process_id,
@@ -81,10 +98,13 @@ impl DependencyGraph {
             pending_index,
             finder,
             to_execute,
+            requests,
+            request_replies,
         }
     }
 
     fn set_executor_index(&mut self, index: usize) {
+        // TODO remove me
         self.executor_index = index;
     }
 
@@ -94,39 +114,25 @@ impl DependencyGraph {
         self.to_execute.pop()
     }
 
+    /// Returns a set of requests.
+    #[must_use]
+    pub fn requests(&mut self) -> HashMap<ShardId, HashSet<Dot>> {
+        std::mem::take(&mut self.requests)
+    }
+
+    /// Returns a set of request replies.
+    #[must_use]
+    pub fn request_replies(&mut self) -> HashMap<ShardId, Vec<RequestReply>> {
+        std::mem::take(&mut self.request_replies)
+    }
+
     #[cfg(test)]
     fn commands_to_execute(&mut self) -> Vec<Command> {
         std::mem::take(&mut self.to_execute)
     }
 
-    fn cleanup(&mut self, time: &dyn SysTime) {
-        // only do the cleanup in the second executor
-        match self.executor_index {
-            0 => {
-                // since `check_pending_to_try` is only called when a new
-                // command is added, if there are no new commands added, we may
-                // end up with some commands pending forever; for that reason,
-                // we also try those pending commands here in this periodic task
-                let mut total_found = 0;
-                self.check_pending_to_try(&mut total_found);
-            }
-            1 => {
-                self.vertex_index.maybe_cleanup(
-                    self.executor_index,
-                    &self.pending_index,
-                    &self.executed_clock,
-                    time,
-                );
-            }
-            _ => panic!("invalid executor index {}", self.executor_index),
-        }
-    }
-
-    fn check_pending_to_try(&mut self, total_found: &mut usize) {
-        let pending = self.pending_index.get_to_try();
-        let mut dots = Vec::new();
-        self.try_pending(pending, &mut dots, total_found);
-        self.check_pending(dots, total_found);
+    fn cleanup(&mut self, _time: &dyn SysTime) {
+        // TODO remove me
     }
 
     /// Add a new command with its clock to the queue.
@@ -135,77 +141,98 @@ impl DependencyGraph {
         dot: Dot,
         cmd: Command,
         clock: VClock<ProcessId>,
-        is_mine: bool,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) {
-        log!(
-            "p{}: Graph::add {:?} {:?} | mine = {}",
-            self.process_id,
-            dot,
-            clock,
-            is_mine
-        );
+        log!("p{}: Graph::add {:?} {:?}", self.process_id, dot, clock);
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
         // index in vertex index and check if it hasn't been indexed before
-        assert!(!self.vertex_index.index(
-            self.executor_index,
-            vertex,
-            is_mine,
-            &self.pending_index,
-            time
-        ));
+        assert!(!self.vertex_index.index(vertex));
 
-        if is_mine {
-            assert_eq!(self.executor_index, 0);
-            // get current command ready count and count newly ready commands
-            let initial_ready = self.to_execute.len();
-            let mut total_found = 0;
+        // get current command ready count and count newly ready commands
+        let initial_ready = self.to_execute.len();
+        let mut total_found = 0;
 
-            // try to first any new pending commands that we got from worker 1
-            // (see `self.vertex_index.index`)
-            self.check_pending_to_try(&mut total_found);
+        // try to find new SCCs
+        match self.find_scc(dot, &mut total_found) {
+            FinderInfo::Found(dots) => {
+                // try to execute other commands if new SCCs were found
+                self.check_pending(dots, &mut total_found);
+            }
+            FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
+                // update the pending
+                self.index_pending(dep_dot, dot);
+                // try to execute other commands if new SCCs were found
+                self.check_pending(dots, &mut total_found);
+            }
+            FinderInfo::NotPending => {
+                panic!("just added dot must be pending");
+            }
+        }
 
-            // try to find new SCCs
-            match self.find_scc(dot, &mut total_found) {
-                FinderInfo::Found(dots) => {
-                    // try to execute other commands if new SCCs were found
-                    self.check_pending(dots, &mut total_found);
-                }
-                FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
-                    // update the pending
-                    self.pending_index.index(dep_dot, dot);
-                    // try to execute other commands if new SCCs were found
-                    self.check_pending(dots, &mut total_found);
-                }
-                FinderInfo::NotPending => {
-                    // it could happen that we add a dot that is executed when
-                    // trying pending commands, before even calling this dot's
-                    // `find_scc`
-                    assert!(
-                        self.executed_clock
-                            .read()
-                            .contains(&dot.source(), dot.sequence()),
-                        "just added dot must be pending or executed"
+        // check that all newly ready commands have been incorporated
+        assert_eq!(self.to_execute.len(), initial_ready + total_found);
+
+        log!(
+            "p{}: Graph::log executed {:?} | pending {:?}",
+            self.process_id,
+            self.executed_clock.read(),
+            self.vertex_index
+                .dots()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+    }
+
+    pub fn request(&mut self, from: ShardId, dots: HashSet<Dot>) {
+        let replies = self.request_replies.entry(from).or_default();
+        for dot in dots {
+            if let Some(vertex) = self.vertex_index.find(&dot) {
+                // if we have it, simply send it back
+                let vertex = vertex.lock();
+                replies.push(RequestReply::Info {
+                    dot,
+                    cmd: vertex.cmd.clone(),
+                    clock: vertex.clock.clone(),
+                })
+            } else {
+                // if we don't have it, then check if it's executed
+                if self
+                    .executed_clock
+                    .read()
+                    .contains(&dot.source(), dot.sequence())
+                {
+                    replies.push(RequestReply::Executed { dot });
+                } else {
+                    panic!(
+                        "p{}: Graph::request for a dot {:?} we don't have",
+                        self.process_id, dot
                     );
                 }
             }
+        }
+    }
 
-            // check that all newly ready commands have been incorporated
-            assert_eq!(self.to_execute.len(), initial_ready + total_found);
-
-            log!(
-                "p{}: Graph::log executed {:?} | pending {:?} | remote pending {:?}",
-                self.process_id,
-                self.executed_clock.read(),
-                self.vertex_index
-                    .local_dots()
-                    .collect::<std::collections::BTreeSet<_>>(),
-                self.vertex_index
-                    .remote_dots()
-                    .collect::<std::collections::BTreeSet<_>>()
-            );
+    pub fn request_reply(
+        &mut self,
+        infos: Vec<RequestReply>,
+        time: &dyn SysTime,
+    ) {
+        for info in infos {
+            match info {
+                RequestReply::Info { dot, cmd, clock } => {
+                    self.add(dot, cmd, clock, time)
+                }
+                RequestReply::Executed { dot } => {
+                    // add to executed and check pending
+                    self.executed_clock
+                        .write()
+                        .add(&dot.source(), dot.sequence());
+                    let dots = vec![dot];
+                    let mut total_found = 0;
+                    self.check_pending(dots, &mut total_found);
+                }
+            }
         }
     }
 
@@ -276,6 +303,15 @@ impl DependencyGraph {
         })
     }
 
+    fn index_pending(&mut self, dep_dot: Dot, dot: Dot) {
+        if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
+            self.requests
+                .entry(target_shard)
+                .or_default()
+                .insert(dep_dot);
+        }
+    }
+
     fn check_pending(&mut self, mut dots: Vec<Dot>, total_found: &mut usize) {
         assert_eq!(self.executor_index, 0);
         while let Some(dot) = dots.pop() {
@@ -336,7 +372,7 @@ impl DependencyGraph {
                         dots.extend(new_dots);
 
                         // update pending
-                        self.pending_index.index(dep_dot, dot);
+                        self.index_pending(dep_dot, dot);
                     }
                     FinderInfo::NotPending => {
                         // this happens if the pending dot is no longer
@@ -397,7 +433,6 @@ mod tests {
         let f = 1;
         let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-        let is_mine = true;
         let time = RunTime;
 
         // cmd 0
@@ -413,12 +448,12 @@ mod tests {
         let clock_1 = util::vclock(vec![1, 0]);
 
         // add cmd 0
-        queue.add(dot_0, cmd_0.clone(), clock_0, is_mine, &time);
+        queue.add(dot_0, cmd_0.clone(), clock_0, &time);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.add(dot_1, cmd_1.clone(), clock_1, is_mine, &time);
+        queue.add(dot_1, cmd_1.clone(), clock_1, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -559,15 +594,14 @@ mod tests {
             let process_id = 1;
             let shard_id = 0;
             let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-            let is_mine = true;
             let time = RunTime;
 
             // add cmd 2
-            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), is_mine, &time);
+            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
             assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
 
             // add cmd 3
-            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), is_mine, &time);
+            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
             if transitive_conflicts {
                 // if we assume transitive conflicts, then cmd 3 can be executed
                 assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
@@ -577,7 +611,7 @@ mod tests {
             }
 
             // add cmd 1
-            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), is_mine, &time);
+            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
             // cmd 1 can always be executed
             if transitive_conflicts {
                 assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
@@ -935,7 +969,6 @@ mod tests {
         let mut config = Config::new(n, f);
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-        let is_mine = true;
         let time = RunTime;
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
@@ -953,7 +986,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.add(dot, cmd, clock, is_mine, &time);
+            queue.add(dot, cmd, clock, &time);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();
@@ -1022,7 +1055,6 @@ mod tests {
         let transitive_conflicts = false;
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-        let time = RunTime;
 
         // // create vertex index and index all dots
         // let mut vertex_index = VertexIndex::new();
@@ -1031,138 +1063,72 @@ mod tests {
         let missing_dot = Dot::new(5, 61);
 
         let root_dot = Dot::new(5, 70);
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                root_dot,
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 40, 61]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            root_dot,
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 40, 61]),
+        ));
 
         // (4, 31)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 31),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 30, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 31),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 30, 60]),
+        ));
         // (4, 32)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 32),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 31, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 32),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 31, 60]),
+        ));
         // (4, 33)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 33),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 32, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 33),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 32, 60]),
+        ));
         // (4, 34)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 34),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 33, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 34),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 33, 60]),
+        ));
         // (4, 35)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 35),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 34, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 35),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 34, 60]),
+        ));
         // (4, 36)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 36),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 35, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 36),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 35, 60]),
+        ));
         // (4, 37)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 37),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 36, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 37),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 36, 60]),
+        ));
         // (4, 38)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 38),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 37, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 38),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 37, 60]),
+        ));
         // (4, 39)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 39),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 38, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 39),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 38, 60]),
+        ));
         // (4, 40)
-        queue.vertex_index.index(
-            queue.executor_index,
-            Vertex::new(
-                Dot::new(4, 40),
-                conflicting_command(),
-                util::vclock(vec![60, 50, 50, 39, 60]),
-            ),
-            true,
-            &queue.pending_index,
-            &time,
-        );
+        queue.vertex_index.index(Vertex::new(
+            Dot::new(4, 40),
+            conflicting_command(),
+            util::vclock(vec![60, 50, 50, 39, 60]),
+        ));
 
         // create executed clock
         queue.executed_clock = Arc::new(RwLock::new(AEClock::from(

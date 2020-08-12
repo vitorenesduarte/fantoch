@@ -27,7 +27,7 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::time::SysTime;
-use crate::HashSet;
+use crate::{HashMap, HashSet};
 use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,10 @@ pub trait Protocol: Debug + Clone {
 
     fn shard_id(&self) -> ShardId;
 
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool;
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>);
 
     fn submit(&mut self, dot: Option<Dot>, cmd: Command, time: &dyn SysTime);
 

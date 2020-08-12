@@ -25,7 +25,7 @@ pub fn submit_actions<P>(
             cmd.shards().filter(|shard_id| **shard_id != my_shard_id)
         {
             let mforward_submit = create_mforward_submit(dot, cmd.clone());
-            let target = singleton![bp.closest_shard_process(shard_id)];
+            let target = singleton![bp.closest_process(shard_id)];
             to_processes.push(Action::ToSend {
                 target,
                 msg: mforward_submit,

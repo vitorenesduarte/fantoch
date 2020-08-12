@@ -106,8 +106,12 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.
@@ -415,12 +419,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::add(
-            dot,
-            cmd,
-            value.clock.clone(),
-            &self.bp.shard_id,
-        );
+        let execution_info = ExecutionInfo::add(dot, cmd, value.clock.clone());
         self.to_executors.push(execution_info);
 
         // update command info:

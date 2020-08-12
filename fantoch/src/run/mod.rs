@@ -238,6 +238,13 @@ where
         workers,
     );
 
+    // create forward channels: worker /readers -> executors
+    let (to_executors, to_executors_rxs) = ToExecutors::<P>::new(
+        "to_executors",
+        process_channel_buffer_size,
+        executors,
+    );
+
     // connect to all processes
     let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
@@ -246,6 +253,7 @@ where
         listener,
         addresses,
         reader_to_workers.clone(),
+        to_executors.clone(),
         CONNECT_RETRIES,
         tcp_nodelay,
         tcp_buffer_size,
@@ -365,7 +373,8 @@ where
     let (mut process, process_events) = P::new(process_id, shard_id, config);
 
     // discover processes
-    let connect_ok = process.discover(sorted_processes);
+    let (connect_ok, closest_shard_process) =
+        process.discover(sorted_processes);
     assert!(connect_ok, "process should have discovered successfully");
 
     // spawn periodic task
@@ -375,21 +384,24 @@ where
         inspect_chan,
     ));
 
-    // create forward channels: worker /readers -> executors
-    let (worker_to_executors, worker_to_executors_rxs) =
-        WorkerToExecutors::<P>::new(
-            "worker_to_executors",
-            process_channel_buffer_size,
-            executors,
-        );
+    // create mapping from shard id to writers
+    let mut shard_writers = HashMap::with_capacity(closest_shard_process.len());
+    for (shard_id, peer_id) in closest_shard_process {
+        let writers = to_writers
+            .get(&peer_id)
+            .expect("closest shard process should be connected")
+            .clone();
+        shard_writers.insert(shard_id, writers);
+    }
 
     // start executors
     task::executor::start_executors::<P>(
         process_id,
         shard_id,
         config,
-        worker_to_executors_rxs,
+        to_executors_rxs,
         client_to_executors_rxs,
+        shard_writers,
         executor_to_metrics_logger,
     );
 
@@ -401,7 +413,7 @@ where
         periodic_to_workers_rxs,
         to_writers,
         reader_to_workers,
-        worker_to_executors,
+        to_executors,
         process_channel_buffer_size,
         execution_log,
         worker_to_metrics_logger,
@@ -1232,6 +1244,7 @@ pub mod tests {
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
+                let interval = None;
 
                 // spawn client
                 let metrics_file = format!(".metrics_client_{}", process_id);

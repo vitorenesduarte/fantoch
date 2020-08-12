@@ -25,6 +25,7 @@ pub async fn connect_to_all<A, P>(
     listener: TcpListener,
     addresses: Vec<(A, Option<Duration>)>,
     to_workers: ReaderToWorkers<P>,
+    to_executors: ToExecutors<P>,
     connect_retries: usize,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
@@ -99,6 +100,7 @@ where
         process_id,
         shard_id,
         to_workers,
+        to_executors,
         tcp_flush_interval,
         channel_buffer_size,
         incoming,
@@ -112,6 +114,7 @@ async fn handshake<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     to_workers: ReaderToWorkers<P>,
+    to_executors: ToExecutors<P>,
     tcp_flush_interval: Option<Duration>,
     channel_buffer_size: usize,
     mut connections_0: Vec<Connection>,
@@ -133,7 +136,7 @@ where
     let id_to_connection_1 = receive_hi(connections_1).await;
 
     // start readers and writers
-    start_readers::<P>(to_workers, id_to_connection_0);
+    start_readers::<P>(to_workers, to_executors, id_to_connection_0);
     start_writers::<P>(
         tcp_flush_interval,
         channel_buffer_size,
@@ -182,6 +185,7 @@ async fn receive_hi(
 /// process.
 fn start_readers<P>(
     to_workers: ReaderToWorkers<P>,
+    to_executors: ToExecutors<P>,
     connections: Vec<(ProcessId, ShardId, Connection)>,
 ) where
     P: Protocol + 'static,
@@ -189,6 +193,7 @@ fn start_readers<P>(
     for (process_id, shard_id, connection) in connections {
         task::spawn(reader_task::<P>(
             to_workers.clone(),
+            to_executors.clone(),
             process_id,
             shard_id,
             connection,
@@ -274,6 +279,7 @@ where
 /// Reader task.
 async fn reader_task<P>(
     mut reader_to_workers: ReaderToWorkers<P>,
+    mut to_executors: ToExecutors<P>,
     process_id: ProcessId,
     shard_id: ShardId,
     mut connection: Connection,
@@ -281,15 +287,23 @@ async fn reader_task<P>(
     P: Protocol + 'static,
 {
     loop {
-        match connection.recv().await {
-            Some(msg) => {
-                let forward = reader_to_workers
-                    .forward((process_id, shard_id, msg))
-                    .await;
-                if let Err(e) = forward {
-                    println!("[reader] error notifying process task with new msg: {:?}",e);
+        match connection.recv::<POEMessage<P>>().await {
+            Some(msg) => match msg {
+                POEMessage::Protocol(msg) => {
+                    let forward = reader_to_workers
+                        .forward((process_id, shard_id, msg))
+                        .await;
+                    if let Err(e) = forward {
+                        println!("[reader] error notifying process task with new msg: {:?}",e);
+                    }
                 }
-            }
+                POEMessage::Executor(execution_info) => {
+                    // notify executor
+                    if let Err(e) = to_executors.forward(execution_info).await {
+                        println!("[reader] error while notifying executor with new execution info: {:?}", e);
+                    }
+                }
+            },
             None => {
                 println!("[reader] error receiving message from connection");
                 break;
@@ -350,7 +364,7 @@ pub fn start_processes<P, R>(
     periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P, R>>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
-    worker_to_executors: WorkerToExecutors<P>,
+    to_executors: ToExecutors<P>,
     process_channel_buffer_size: usize,
     execution_log: Option<String>,
     to_metrics_logger: Option<ProtocolMetricsSender>,
@@ -388,7 +402,7 @@ where
                     from_periodic,
                     to_writers.clone(),
                     reader_to_workers.clone(),
-                    worker_to_executors.clone(),
+                    to_executors.clone(),
                     to_execution_logger.clone(),
                     to_metrics_logger.clone(),
                 );
@@ -424,7 +438,7 @@ async fn process_task<P, R>(
     mut from_periodic: PeriodicEventReceiver<P, R>,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut reader_to_workers: ReaderToWorkers<P>,
-    mut worker_to_executors: WorkerToExecutors<P>,
+    mut to_executors: ToExecutors<P>,
     mut to_execution_logger: Option<ExecutionInfoSender<P>>,
     mut to_metrics_logger: Option<ProtocolMetricsSender>,
 ) where
@@ -441,13 +455,13 @@ async fn process_task<P, R>(
         // TODO maybe used select_biased
         tokio::select! {
             msg = from_readers.recv() => {
-                selected_from_processes(worker_index, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
+                selected_from_processes(worker_index, msg, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
             }
             event = from_periodic.recv() => {
-                selected_from_periodic_task(worker_index, event, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
+                selected_from_periodic_task(worker_index, event, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
             }
             cmd = from_clients.recv() => {
-                selected_from_client(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &mut worker_to_executors, &mut to_execution_logger, &time).await
+                selected_from_client(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
             }
             _ = interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -468,7 +482,7 @@ async fn selected_from_processes<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -484,7 +498,7 @@ async fn selected_from_processes<P>(
             process,
             to_writers,
             reader_to_workers,
-            worker_to_executors,
+            to_executors,
             to_execution_logger,
             time,
         )
@@ -504,7 +518,7 @@ async fn handle_from_processes<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -517,7 +531,7 @@ async fn handle_from_processes<P>(
         process,
         to_writers,
         reader_to_workers,
-        worker_to_executors,
+        to_executors,
         to_execution_logger,
         time,
     )
@@ -530,7 +544,7 @@ async fn send_to_processes_and_executors<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -554,7 +568,7 @@ async fn send_to_processes_and_executors<P>(
 
                 // prevent unnecessary cloning of messages, since send only
                 // requires a reference to the message
-                let msg_to_send = Arc::new(msg);
+                let msg_to_send = Arc::new(POEMessage::Protocol(msg));
 
                 // send message to writers in target
                 for (to, channels) in to_writers.iter_mut() {
@@ -593,7 +607,7 @@ async fn send_to_processes_and_executors<P>(
             }
         }
         // notify executor
-        if let Err(e) = worker_to_executors.forward(execution_info).await {
+        if let Err(e) = to_executors.forward(execution_info).await {
             println!(
                 "[server] error while sending new execution info to executor: {:?}",
                 e
@@ -627,7 +641,7 @@ async fn handle_message_from_self<P>(
 
 pub async fn send_to_one_writer<P>(
     tag: &'static str,
-    msg: Arc<P::Message>,
+    msg: Arc<POEMessage<P>>,
     writers: &mut Vec<WriterSender<P>>,
 ) where
     P: Protocol + 'static,
@@ -649,7 +663,7 @@ async fn selected_from_client<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -664,7 +678,7 @@ async fn selected_from_client<P>(
             process,
             to_writers,
             reader_to_workers,
-            worker_to_executors,
+            to_executors,
             to_execution_logger,
             time,
         )
@@ -681,7 +695,7 @@ async fn handle_from_client<P>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -694,7 +708,7 @@ async fn handle_from_client<P>(
         process,
         to_writers,
         reader_to_workers,
-        worker_to_executors,
+        to_executors,
         to_execution_logger,
         time,
     )
@@ -707,7 +721,7 @@ async fn selected_from_periodic_task<P, R>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -722,7 +736,7 @@ async fn selected_from_periodic_task<P, R>(
             process,
             to_writers,
             reader_to_workers,
-            worker_to_executors,
+            to_executors,
             to_execution_logger,
             time,
         )
@@ -738,7 +752,7 @@ async fn handle_from_periodic_task<P, R>(
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
-    worker_to_executors: &mut WorkerToExecutors<P>,
+    to_executors: &mut ToExecutors<P>,
     to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
     time: &RunTime,
 ) where
@@ -754,7 +768,7 @@ async fn handle_from_periodic_task<P, R>(
                 process,
                 to_writers,
                 reader_to_workers,
-                worker_to_executors,
+                to_executors,
                 to_execution_logger,
                 time,
             )

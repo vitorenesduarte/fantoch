@@ -62,22 +62,22 @@ pub enum ClientToExecutor {
     Unregister(Vec<ClientId>),
 }
 
-// #[derive(Debug, Serialize, Deserialize)]
-// // these bounds are explained here: https://github.com/serde-rs/serde/issues/1503#issuecomment-475059482
-// #[serde(bound(
-//     serialize = "P::Message: Serialize",
-//     deserialize = "P::Message: Deserialize<'de>",
-// ))]
-// pub enum POEMessage<P: Protocol> {
-//     Protocol(<P as Protocol>::Message),
-//     Executor(<<P as Protocol>::Executor as Executor>::ExecutionInfo),
-// }
+#[derive(Debug, Serialize, Deserialize)]
+// these bounds are explained here: https://github.com/serde-rs/serde/issues/1503#issuecomment-475059482
+#[serde(bound(
+    serialize = "P::Message: Serialize",
+    deserialize = "P::Message: Deserialize<'de>",
+))]
+pub enum POEMessage<P: Protocol> {
+    Protocol(<P as Protocol>::Message),
+    Executor(<<P as Protocol>::Executor as Executor>::ExecutionInfo),
+}
 
 // list of channels used to communicate between tasks
 pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
-pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
-pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
+pub type WriterReceiver<P> = ChannelReceiver<Arc<POEMessage<P>>>;
+pub type WriterSender<P> = ChannelSender<Arc<POEMessage<P>>>;
 pub type ClientToExecutorReceiver = ChannelReceiver<ClientToExecutor>;
 pub type ClientToServerReceiver = ChannelReceiver<ClientToServer>;
 pub type ClientToServerSender = ChannelSender<ClientToServer>;
@@ -172,8 +172,8 @@ where
 // 4. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<ClientToExecutor>;
 
-// 5. executors receive messages from workers
-pub type WorkerToExecutors<P> =
+// 5. executors receive messages from workers and reader tasks
+pub type ToExecutors<P> =
     pool::ToPool<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 // The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo
 // to be forwarded

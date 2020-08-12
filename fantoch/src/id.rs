@@ -55,6 +55,12 @@ where
     }
 }
 
+impl Dot {
+    pub fn target_shard(&self, n: usize) -> ShardId {
+        ((self.source() - 1) as usize / n) as ShardId
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdGen<S> {
     source: S,

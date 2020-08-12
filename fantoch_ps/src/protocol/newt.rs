@@ -143,8 +143,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.
@@ -1037,8 +1041,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 cmd.shards().filter(|shard_id| **shard_id != my_shard_id)
             {
                 let mbump_to = Message::MBumpTo { dot, clock };
-                let target =
-                    singleton![self.bp.closest_shard_process(shard_id)];
+                let target = singleton![self.bp.closest_process(shard_id)];
                 self.to_processes.push(Action::ToSend {
                     target,
                     msg: mbump_to,
