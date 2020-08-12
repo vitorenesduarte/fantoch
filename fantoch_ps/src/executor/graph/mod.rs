@@ -20,7 +20,7 @@ use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -47,9 +47,15 @@ pub struct DependencyGraph {
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
+    // worker 0 (handles commands):
+    // - adds new commands `to_execute`
+    // - `requests` dependencies to be able to order commands
     to_execute: Vec<Command>,
     requests: HashMap<ShardId, HashSet<Dot>>,
-    buffered_requests: Arc<Mutex<HashMap<Dot, Vec<ShardId>>>>,
+    // worker 1 (handles requests):
+    // - may have `buffered_requests` when doesn't have the command yet
+    // - produces `request_replies` when it has the command
+    buffered_requests: HashMap<Dot, Vec<ShardId>>,
     request_replies: HashMap<ShardId, Vec<RequestReply>>,
 }
 
@@ -89,7 +95,7 @@ impl DependencyGraph {
         let to_execute = Vec::new();
         // create requests and request replies
         let requests = HashMap::new();
-        let buffered_requests = Arc::new(Mutex::new(HashMap::new()));
+        let buffered_requests = HashMap::new();
         let request_replies = HashMap::new();
         DependencyGraph {
             executor_index,
@@ -135,7 +141,12 @@ impl DependencyGraph {
     }
 
     fn cleanup(&mut self, _time: &dyn SysTime) {
-        // TODO remove me
+        log!(
+            "p{}: Graph::cleanup at {}",
+            self.process_id,
+            self.executor_index
+        );
+        self.check_pending_requests();
     }
 
     /// Add a new command with its clock to the queue.
@@ -158,10 +169,6 @@ impl DependencyGraph {
                 self.process_id, dot
             );
         }
-
-        // check if we have any buffered requests for this command:
-        // - note that this must be done after indexing so that the command is not missed by worker 1 when processing remote requests
-        self.check_requests(dot);
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
@@ -203,10 +210,18 @@ impl DependencyGraph {
     }
 
     pub fn request(&mut self, from: ShardId, dots: HashSet<Dot>) {
+        self.handle_request(from, dots.into_iter());
+    }
+
+    fn handle_request(
+        &mut self,
+        from: ShardId,
+        dots: impl Iterator<Item = Dot>,
+    ) {
         let replies = self.request_replies.entry(from).or_default();
         for dot in dots {
             log!(
-                "p{}: Graph::request {:?} from {:?}",
+                "p{}: Graph::handle_request {:?} from {:?}",
                 self.process_id,
                 dot,
                 from
@@ -237,17 +252,18 @@ impl DependencyGraph {
                     .read()
                     .contains(&dot.source(), dot.sequence())
                 {
+                    log!(
+                        "p{}: Graph::handle_request {:?} is already executed",
+                        self.process_id,
+                        dot
+                    );
                     replies.push(RequestReply::Executed { dot });
                 } else {
                     log!(
-                        "p{}: Graph::request from {:?} for a dot {:?} we don't have",
-                        self.process_id, from, dot
-                    );
-                    self.buffered_requests
-                        .lock()
-                        .entry(dot)
-                        .or_default()
-                        .push(from);
+                    "p{}: Graph::request from {:?} for a dot {:?} we don't have",
+                    self.process_id, from, dot
+                );
+                    self.buffered_requests.entry(dot).or_default().push(from);
                 }
             }
         }
@@ -445,36 +461,12 @@ impl DependencyGraph {
         }
     }
 
-    fn check_requests(&mut self, dot: Dot) {
-        if let Some(shards) = self.buffered_requests.lock().remove(&dot) {
-            if let Some(vertex) = self.vertex_index.find(&dot) {
-                let vertex = vertex.lock();
-                for to in shards {
-                    // only send the vertex if the shard that requested this vertex
-                    // does not replicate it
-                    if vertex.cmd.replicated_by(&to) {
-                        log!(
-                            "p{}: Graph::add {:?} was requested but it is replicated by {:?} (WARN)",
-                            self.process_id,
-                            dot,
-                            to
-                        )
-                    } else {
-                        self.request_replies.entry(to).or_default().push(
-                            RequestReply::Info {
-                                dot,
-                                cmd: vertex.cmd.clone(),
-                                clock: vertex.clock.clone(),
-                            },
-                        );
-                    }
-                }
-            } else {
-                panic!(
-                    "p{}: Graph:add just added {:?} must exist",
-                    self.process_id, dot
-                );
-            };
+    fn check_pending_requests(&mut self) {
+        let buffered = std::mem::take(&mut self.buffered_requests);
+        for (dot, shards) in buffered {
+            for from in shards {
+                self.handle_request(from, std::iter::once(dot));
+            }
         }
     }
 }

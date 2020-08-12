@@ -47,8 +47,8 @@ impl Config {
         let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
-        // by default, executor cleanups happen every 50ms
-        let executor_cleanup_interval = Duration::from_millis(50);
+        // by default, executor cleanups happen every 100ms
+        let executor_cleanup_interval = Duration::from_millis(100);
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader

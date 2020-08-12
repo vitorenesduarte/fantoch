@@ -50,8 +50,7 @@ impl Executor for GraphExecutor {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         self.graph.cleanup(time);
-        self.fetch_commands_to_execute();
-        self.fetch_requests();
+        self.fetch_actions();
     }
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
