@@ -62,6 +62,7 @@ pub struct PendingIndex {
     shard_id: ShardId,
     n: usize,
     index: HashMap<Dot, HashSet<Dot>>,
+    mine: HashSet<Dot>,
 }
 
 impl PendingIndex {
@@ -70,7 +71,16 @@ impl PendingIndex {
             shard_id,
             n,
             index: HashMap::new(),
+            mine: HashSet::new(),
         }
+    }
+
+    pub fn add_mine(&mut self, dot: Dot) {
+        assert!(self.mine.insert(dot));
+    }
+
+    pub fn is_mine(&mut self, dot: &Dot) -> bool {
+        self.mine.contains(dot)
     }
 
     /// Indexes a new `dot` as a child of `dep_dot`:
@@ -88,12 +98,16 @@ impl PendingIndex {
                 // dependency; in this case, we may have to ask another
                 // shard for its info; from the identifier we can't know if we
                 // replicate the command, but can know who the target shard is.
-                // since we don't have the command, only its identifier, we will
-                // be pessimistic and send a request for all commands that:
-                // - are missing dependencies *and*
-                // - we were not its target shard
+                // since we don't have the command, we try our best by tracking
+                // in `self.mine` commands that we replicate but we are not
+                // their target shard.
+                // NOTE: this is a best effort only; it's totally possible that
+                // we replicate a command but don't have it *yet* in `self.mine`
+                // when such command is first declared as a dependency
                 let target = dep_dot.target_shard(self.n);
-                if target != self.shard_id {
+                if target != self.shard_id && !self.mine.contains(&dep_dot) {
+                    // if we don't replicate the command, ask its target shard
+                    // for its info
                     return Some(target);
                 }
             }
@@ -108,6 +122,7 @@ impl PendingIndex {
 
     /// Finds all pending dots for a given dependency dot.
     pub fn remove(&mut self, dep_dot: &Dot) -> Option<HashSet<Dot>> {
+        self.mine.remove(dep_dot);
         self.index.remove(dep_dot)
     }
 }

@@ -281,6 +281,14 @@ impl<KC: KeyClocks> Atlas<KC> {
             return;
         }
 
+        // notify executor that we replicate this dot, in case we're not the
+        // target shard
+        if dot.target_shard(self.bp.config.n()) != self.bp.shard_id {
+            // create execution info
+            let execution_info = ExecutionInfo::add_mine(dot);
+            self.to_executors.push(execution_info);
+        }
+
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
             // if not:

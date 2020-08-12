@@ -15,7 +15,6 @@ macro_rules! singleton {
 }
 
 /*
-TODO add me back
 // Debug version
 #[cfg(debug_assertions)]
 #[macro_export]

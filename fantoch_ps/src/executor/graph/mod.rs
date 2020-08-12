@@ -148,23 +148,6 @@ impl DependencyGraph {
     ) {
         log!("p{}: Graph::add {:?} {:?}", self.process_id, dot, clock);
 
-        // first check if we have any buffered requests for this command
-        if let Some(shards) = self.buffered_requests.lock().remove(&dot) {
-            for to in shards {
-                // only send the vertex if the shard that requested this vertex
-                // does not replicate it
-                if !cmd.replicated_by(&to) {
-                    self.request_replies.entry(to).or_default().push(
-                        RequestReply::Info {
-                            dot,
-                            cmd: cmd.clone(),
-                            clock: clock.clone(),
-                        },
-                    );
-                }
-            }
-        }
-
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock);
 
@@ -175,6 +158,10 @@ impl DependencyGraph {
                 self.process_id, dot
             );
         }
+
+        // check if we have any buffered requests for this command:
+        // - note that this must be done after indexing so that the command is not missed by worker 1 when processing remote requests
+        self.check_requests(dot);
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
@@ -210,16 +197,33 @@ impl DependencyGraph {
         );
     }
 
+    pub fn add_mine(&mut self, dot: Dot) {
+        log!("p{}: Graph::add_mine {:?}", self.process_id, dot);
+        self.pending_index.add_mine(dot);
+    }
+
     pub fn request(&mut self, from: ShardId, dots: HashSet<Dot>) {
         let replies = self.request_replies.entry(from).or_default();
         for dot in dots {
-            log!("p{}: Graph::request {:?}", self.process_id, dot);
+            log!(
+                "p{}: Graph::request {:?} from {:?}",
+                self.process_id,
+                dot,
+                from
+            );
             if let Some(vertex) = self.vertex_index.find(&dot) {
                 let vertex = vertex.lock();
 
                 // only send the vertex if the shard that requested this vertex
                 // does not replicate it
-                if !vertex.cmd.replicated_by(&from) {
+                if vertex.cmd.replicated_by(&from) {
+                    log!(
+                        "p{}: Graph::request {:?} is replicated by {:?} (WARN)",
+                        self.process_id,
+                        dot,
+                        from
+                    )
+                } else {
                     replies.push(RequestReply::Info {
                         dot,
                         cmd: vertex.cmd.clone(),
@@ -261,13 +265,16 @@ impl DependencyGraph {
                     self.add(dot, cmd, clock, time)
                 }
                 RequestReply::Executed { dot } => {
-                    // add to executed and check pending
-                    self.executed_clock
-                        .write()
-                        .add(&dot.source(), dot.sequence());
-                    let dots = vec![dot];
-                    let mut total_found = 0;
-                    self.check_pending(dots, &mut total_found);
+                    // add to executed if not mine
+                    if !self.pending_index.is_mine(&dot) {
+                        self.executed_clock
+                            .write()
+                            .add(&dot.source(), dot.sequence());
+                        // check pending
+                        let dots = vec![dot];
+                        let mut total_found = 0;
+                        self.check_pending(dots, &mut total_found);
+                    }
                 }
             }
         }
@@ -435,6 +442,39 @@ impl DependencyGraph {
                 // in this case this `dot` is no longer pending
                 FinderResult::NotPending
             }
+        }
+    }
+
+    fn check_requests(&mut self, dot: Dot) {
+        if let Some(shards) = self.buffered_requests.lock().remove(&dot) {
+            if let Some(vertex) = self.vertex_index.find(&dot) {
+                let vertex = vertex.lock();
+                for to in shards {
+                    // only send the vertex if the shard that requested this vertex
+                    // does not replicate it
+                    if vertex.cmd.replicated_by(&to) {
+                        log!(
+                            "p{}: Graph::add {:?} was requested but it is replicated by {:?} (WARN)",
+                            self.process_id,
+                            dot,
+                            to
+                        )
+                    } else {
+                        self.request_replies.entry(to).or_default().push(
+                            RequestReply::Info {
+                                dot,
+                                cmd: vertex.cmd.clone(),
+                                clock: vertex.clock.clone(),
+                            },
+                        );
+                    }
+                }
+            } else {
+                panic!(
+                    "p{}: Graph:add just added {:?} must exist",
+                    self.process_id, dot
+                );
+            };
         }
     }
 }

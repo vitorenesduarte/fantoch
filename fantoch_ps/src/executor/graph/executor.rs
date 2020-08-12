@@ -65,6 +65,9 @@ impl Executor for GraphExecutor {
                     self.fetch_actions();
                 }
             }
+            GraphExecutionInfo::AddMine { dot } => {
+                self.graph.add_mine(dot);
+            }
             GraphExecutionInfo::Request { from, dots } => {
                 self.graph.request(from, dots);
                 self.fetch_actions();
@@ -115,7 +118,7 @@ impl GraphExecutor {
     fn fetch_requests(&mut self) {
         for (to, dots) in self.graph.requests() {
             log!(
-                "p{}: GraphExecutor::fetch_requests_info {:?} {:?}",
+                "p{}: GraphExecutor::fetch_requests {:?} {:?}",
                 self.process_id,
                 to,
                 dots
@@ -156,6 +159,9 @@ pub enum GraphExecutionInfo {
         cmd: Command,
         clock: VClock<ProcessId>,
     },
+    AddMine {
+        dot: Dot,
+    },
     Request {
         from: ShardId,
         dots: HashSet<Dot>,
@@ -168,6 +174,10 @@ pub enum GraphExecutionInfo {
 impl GraphExecutionInfo {
     pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
         Self::Add { dot, cmd, clock }
+    }
+
+    pub fn add_mine(dot: Dot) -> Self {
+        Self::AddMine { dot }
     }
 
     fn request(from: ShardId, dots: HashSet<Dot>) -> Self {
@@ -184,6 +194,7 @@ impl MessageIndex for GraphExecutionInfo {
         use fantoch::run::worker_index_no_shift;
         match self {
             Self::Add { .. } => worker_index_no_shift(0),
+            Self::AddMine { .. } => worker_index_no_shift(0),
             Self::Request { .. } => worker_index_no_shift(1),
             Self::RequestReply { .. } => worker_index_no_shift(0),
         }
