@@ -57,19 +57,19 @@ impl Executor for GraphExecutor {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.add(dot, cmd, clock, time);
+                    self.graph.handle_add(dot, cmd, clock, time);
                     self.fetch_actions();
                 }
             }
             GraphExecutionInfo::AddMine { dot } => {
-                self.graph.add_mine(dot);
+                self.graph.handle_add_mine(dot);
             }
             GraphExecutionInfo::Request { from, dots } => {
-                self.graph.request(from, dots);
+                self.graph.handle_request(from, dots.into_iter());
                 self.fetch_actions();
             }
             GraphExecutionInfo::RequestReply { infos } => {
-                self.graph.request_reply(infos, time);
+                self.graph.handle_request_reply(infos, time);
                 self.fetch_actions();
             }
         }

@@ -154,11 +154,13 @@ impl DependencyGraph {
             self.process_id,
             self.executor_index
         );
-        self.check_pending_requests();
+        if self.executor_index > 0 {
+            self.check_pending_requests();
+        }
     }
 
     /// Add a new command with its clock to the queue.
-    pub fn add(
+    pub fn handle_add(
         &mut self,
         dot: Dot,
         cmd: Command,
@@ -211,13 +213,9 @@ impl DependencyGraph {
         );
     }
 
-    pub fn add_mine(&mut self, dot: Dot) {
+    pub fn handle_add_mine(&mut self, dot: Dot) {
         log!("p{}: Graph::add_mine {:?}", self.process_id, dot);
         self.pending_index.add_mine(dot);
-    }
-
-    pub fn request(&mut self, from: ShardId, dots: HashSet<Dot>) {
-        self.handle_request(from, dots.into_iter());
     }
 
     fn handle_request(
@@ -276,7 +274,7 @@ impl DependencyGraph {
         }
     }
 
-    pub fn request_reply(
+    pub fn handle_request_reply(
         &mut self,
         infos: Vec<RequestReply>,
         time: &dyn SysTime,
@@ -289,7 +287,7 @@ impl DependencyGraph {
                     // count number of accepted replies
                     accepted_replies += 1;
 
-                    self.add(dot, cmd, clock, time)
+                    self.handle_add(dot, cmd, clock, time)
                 }
                 RequestReply::Executed { dot } => {
                     // add to executed if not mine
@@ -558,12 +556,12 @@ mod tests {
         let clock_1 = util::vclock(vec![1, 0]);
 
         // add cmd 0
-        queue.add(dot_0, cmd_0.clone(), clock_0, &time);
+        queue.handle_add(dot_0, cmd_0.clone(), clock_0, &time);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.add(dot_1, cmd_1.clone(), clock_1, &time);
+        queue.handle_add(dot_1, cmd_1.clone(), clock_1, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -707,11 +705,11 @@ mod tests {
             let time = RunTime;
 
             // add cmd 2
-            queue.add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
+            queue.handle_add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
             assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
 
             // add cmd 3
-            queue.add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
+            queue.handle_add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
             if transitive_conflicts {
                 // if we assume transitive conflicts, then cmd 3 can be executed
                 assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
@@ -721,7 +719,7 @@ mod tests {
             }
 
             // add cmd 1
-            queue.add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
+            queue.handle_add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
             // cmd 1 can always be executed
             if transitive_conflicts {
                 assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
@@ -1096,7 +1094,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.add(dot, cmd, clock, &time);
+            queue.handle_add(dot, cmd, clock, &time);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();
