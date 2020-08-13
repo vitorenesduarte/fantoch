@@ -193,7 +193,7 @@ pub fn latency_plot<R>(
                         timestamp.path().display().to_string()
                     })
                     .collect();
-                panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+                panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
             }
         };
         let (_timestamp, exp_data) = exp_data.pop().unwrap();
@@ -436,7 +436,7 @@ fn inner_cdf_plot(
                 .into_iter()
                 .map(|(timestamp, _)| timestamp.path().display().to_string())
                 .collect();
-            panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+            panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
         }
     };
     let (_timestamp, exp_data) = exp_data.pop().unwrap();
@@ -518,7 +518,7 @@ pub fn throughput_latency_plot(
                             timestamp.path().display().to_string()
                         })
                         .collect();
-                    panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+                    panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
                 }
             };
             let (_timestamp, exp_data) = exp_data.pop().unwrap();
@@ -627,7 +627,7 @@ pub fn dstat_table(
                         timestamp.path().display().to_string()
                     })
                     .collect();
-                panic!("found more than 1 matching experiment for this search criteria: {:?}", matches);
+                panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
             }
         };
         let (_timestamp, exp_data) = exp_data.pop().unwrap();

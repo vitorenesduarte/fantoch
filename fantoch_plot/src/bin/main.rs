@@ -30,28 +30,28 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let keys_per_shard = 1;
-    // let zipf_key_count = 1_000_000;
-    // let zipf_coefficient = 0.5;
-    // let key_gen = KeyGen::Zipf {
-    //     coefficient: zipf_coefficient,
-    //     key_count: zipf_key_count,
-    // };
-    // let key_gens = vec![key_gen];
-    let key_gens = vec![KeyGen::ConflictRate { conflict_rate: 0 }];
+    let zipf_key_count = 1_000_000;
+    let zipf_coefficient = 0.5;
+    let zipf_key_gen = KeyGen::Zipf {
+        coefficient: zipf_coefficient,
+        key_count: zipf_key_count,
+    };
+    let conflict_key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
+    let key_gens = vec![zipf_key_gen, conflict_key_gen];
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
 
     let shard_combinations = vec![
-        // shards_per_command, shard_count
+        // shard_count, shards_per_command
         (1, 1),
-        (1, 2),
-        (1, 4),
-        (1, 6),
+        (4, 1),
+        (4, 2),
         /*
         (2, 2),
-        (1, 3),
-        (2, 3),
-        (1, 5),
+        (3, 1),
+        (3, 2),
+        (5, 1),
+        (6, 1),
         */
     ];
 
@@ -99,7 +99,7 @@ fn partial_replication() -> Result<(), Report> {
             let searches = shard_combinations
                 .clone()
                 .into_iter()
-                .flat_map(|(shards_per_command, shard_count)| {
+                .flat_map(|(shard_count, shards_per_command)| {
                     let shard_gen = ShardGen::Random { shard_count };
                     protocol_combinations(n, protocols.clone()).into_iter().map(
                         move |(protocol, f)| {
@@ -122,13 +122,13 @@ fn partial_replication() -> Result<(), Report> {
                 // create styles
                 let mut styles = HashMap::new();
                 styles.insert((1, 1), ("#1abc9c", "s"));
-                styles.insert((1, 2), ("#218c74", "D"));
+                styles.insert((2, 1), ("#218c74", "D"));
                 styles.insert((2, 2), ("#227093", "."));
-                styles.insert((1, 3), ("#bdc3c7", "+"));
-                styles.insert((2, 3), ("#34495e", "x"));
-                styles.insert((1, 4), ("#ffa726", "v"));
-                styles.insert((1, 5), ("#227093", "."));
-                styles.insert((1, 6), ("#34495e", "x"));
+                styles.insert((3, 1), ("#bdc3c7", "v"));
+                styles.insert((4, 1), ("#ffa726", "+"));
+                styles.insert((4, 2), ("#34495e", "x"));
+                styles.insert((5, 1), ("#227093", "."));
+                styles.insert((6, 1), ("#34495e", "x"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();
@@ -137,13 +137,13 @@ fn partial_replication() -> Result<(), Report> {
 
                 // find color and marker for this search
                 let (color, marker) = if let Some(entry) =
-                    styles.get(&(shards_per_command, shard_count))
+                    styles.get(&(shard_count, shards_per_command))
                 {
                     entry
                 } else {
                     panic!(
                         "unsupported shards config pair: {:?}",
-                        (shards_per_command, shard_count)
+                        (shard_count, shards_per_command)
                     );
                 };
 

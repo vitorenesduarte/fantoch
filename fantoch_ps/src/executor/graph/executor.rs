@@ -18,7 +18,6 @@ pub struct GraphExecutor {
     config: Config,
     graph: DependencyGraph,
     store: KVStore,
-    metrics: ExecutorMetrics,
     to_clients: Vec<ExecutorResult>,
     to_executors: Vec<(ShardId, GraphExecutionInfo)>,
 }
@@ -29,7 +28,6 @@ impl Executor for GraphExecutor {
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
-        let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
         let to_executors = Vec::new();
         Self {
@@ -38,7 +36,6 @@ impl Executor for GraphExecutor {
             config,
             graph,
             store,
-            metrics,
             to_clients,
             to_executors,
         }
@@ -91,7 +88,7 @@ impl Executor for GraphExecutor {
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
-        &self.metrics
+        &self.graph.metrics()
     }
 }
 

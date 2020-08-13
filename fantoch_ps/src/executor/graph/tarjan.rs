@@ -2,6 +2,7 @@ use super::index::{VertexIndex, VertexRef};
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
+use fantoch::time::SysTime;
 use fantoch::HashSet;
 use parking_lot::RwLock;
 use std::cmp;
@@ -331,6 +332,7 @@ pub struct Vertex {
     dot: Dot,
     pub cmd: Command,
     pub clock: VClock<ProcessId>,
+    start_time: u64,
     // specific to tarjan's algorithm
     id: usize,
     low: usize,
@@ -338,11 +340,18 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn new(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
+    pub fn new(
+        dot: Dot,
+        cmd: Command,
+        clock: VClock<ProcessId>,
+        time: &dyn SysTime,
+    ) -> Self {
+        let start_time = time.millis();
         Self {
             dot,
             cmd,
             clock,
+            start_time,
             id: 0,
             low: 0,
             on_stack: false,
@@ -350,8 +359,10 @@ impl Vertex {
     }
 
     /// Consumes the vertex, returning its command.
-    pub fn into_command(self) -> Command {
-        self.cmd
+    pub fn into_command(self, time: &dyn SysTime) -> (u64, Command) {
+        let end_time = time.millis();
+        let duration = end_time - self.start_time;
+        (duration, self.cmd)
     }
 
     /// Retrieves vertex's dot.

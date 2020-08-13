@@ -102,15 +102,23 @@ pub type ExecutorMetrics = Metrics<ExecutorMetricsKind, u64>;
 
 #[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutorMetricsKind {
-    ChainSize,
     ExecutionDelay,
+    ChainSize,
+    OutRequests,
+    InRequestReplies,
 }
 
 impl Debug for ExecutorMetricsKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
+            // general metric
             ExecutorMetricsKind::ExecutionDelay => write!(f, "execution_delay"),
+            // graph executor specific
+            ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
+            ExecutorMetricsKind::OutRequests => write!(f, "out_requests"),
+            ExecutorMetricsKind::InRequestReplies => {
+                write!(f, "in_request_replies")
+            }
         }
     }
 }

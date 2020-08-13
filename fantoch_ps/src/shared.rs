@@ -1,6 +1,5 @@
 use ahash::RandomState;
 use dashmap::iter::Iter;
-use dashmap::mapref::entry::Entry;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use std::collections::BTreeSet;
