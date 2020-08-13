@@ -14,15 +14,14 @@ use std::fmt;
 use std::hash::Hash;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Metrics<K: Eq + Hash, V> {
+pub struct Metrics<K: Eq + Hash> {
     collected: HashMap<K, Histogram>,
-    aggregated: HashMap<K, V>,
+    aggregated: HashMap<K, u64>,
 }
 
-impl<K, V> Metrics<K, V>
+impl<K> Metrics<K>
 where
-    K: Eq + Hash,
-    V: Default,
+    K: Eq + Hash + Copy,
 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -40,30 +39,37 @@ where
         stats.increment(value);
     }
 
-    pub fn aggregate<F>(&mut self, kind: K, update: F)
-    where
-        F: FnOnce(&mut V),
-    {
+    pub fn aggregate(&mut self, kind: K, by: u64) {
         let current = match self.aggregated.get_mut(&kind) {
             Some(current) => current,
-            None => self.aggregated.entry(kind).or_insert_with(V::default),
+            None => self.aggregated.entry(kind).or_default(),
         };
-        update(current);
+        *current += by;
     }
 
     pub fn get_collected(&self, kind: K) -> Option<&Histogram> {
         self.collected.get(&kind)
     }
 
-    pub fn get_aggregated(&self, kind: K) -> Option<&V> {
+    pub fn get_aggregated(&self, kind: K) -> Option<&u64> {
         self.aggregated.get(&kind)
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        for (k, hist) in other.collected.iter() {
+            let current = self.collected.entry(*k).or_default();
+            current.merge(hist);
+        }
+        for (k, v) in other.aggregated.iter() {
+            let current = self.aggregated.entry(*k).or_default();
+            *current += v;
+        }
     }
 }
 
-impl<K, V> fmt::Debug for Metrics<K, V>
+impl<K> fmt::Debug for Metrics<K>
 where
     K: Eq + Hash + fmt::Debug,
-    V: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (kind, histogram) in self.collected.iter() {

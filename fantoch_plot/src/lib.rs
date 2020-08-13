@@ -10,7 +10,9 @@ pub use fmt::PlotFmt;
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
+use fantoch::protocol::ProtocolMetricsKind;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
@@ -69,13 +71,13 @@ pub enum Style {
     LineWidth,
 }
 
-pub enum DstatType {
+pub enum MetricsType {
     Process(ProcessId),
     ProcessGlobal,
     ClientGlobal,
 }
 
-impl DstatType {
+impl MetricsType {
     pub fn name(&self) -> String {
         match self {
             Self::Process(process_id) => format!("process_{}", process_id),
@@ -586,7 +588,7 @@ pub fn throughput_latency_plot(
 
 pub fn dstat_table(
     searches: Vec<Search>,
-    dstat_type: DstatType,
+    metrics_type: MetricsType,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -599,13 +601,14 @@ pub fn dstat_table(
         "net_send (MB/s)",
         "mem_used (MB)",
     ];
+    let col_labels = col_labels.into_iter().map(String::from).collect();
     let col_widths = vec![0.13, 0.13, 0.13, 0.20, 0.20, 0.20];
-
-    // protocol labels
-    let mut row_labels = Vec::with_capacity(searches.len());
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
+
+    // protocol labels
+    let mut row_labels = Vec::with_capacity(searches.len());
 
     let mut plotted = 0;
     for search in searches {
@@ -632,17 +635,9 @@ pub fn dstat_table(
         };
         let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
-        // create row label
-        let row_label = format!(
-            "{} f = {}",
-            PlotFmt::protocol_name(search.protocol),
-            search.f
-        );
-        row_labels.push(row_label);
-
-        // select the correct dstats depending on the `DstatType` chosen
-        let dstats = match dstat_type {
-            DstatType::Process(process_id) => {
+        // select the correct dstats depending on the `MetricsType` chosen
+        let dstats = match metrics_type {
+            MetricsType::Process(process_id) => {
                 match exp_data.process_dstats.get(&process_id) {
                     Some(dstats) => dstats,
                     None => {
@@ -650,8 +645,8 @@ pub fn dstat_table(
                     }
                 }
             }
-            DstatType::ProcessGlobal => &exp_data.global_process_dstats,
-            DstatType::ClientGlobal => &exp_data.global_client_dstats,
+            MetricsType::ProcessGlobal => &exp_data.global_process_dstats,
+            MetricsType::ClientGlobal => &exp_data.global_client_dstats,
         };
         // fetch all cell data
         let cpu_usr = dstats.cpu_usr_mad();
@@ -670,10 +665,164 @@ pub fn dstat_table(
         // save cell
         cells.push(cell);
 
+        // create row label
+        let row_label = format!(
+            "{} f = {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f
+        );
+        row_labels.push(row_label);
+
         // mark that there's data to be plotted
         plotted += 1;
     }
 
+    table(
+        plotted,
+        col_labels,
+        col_widths,
+        row_labels,
+        cells,
+        output_dir,
+        output_file,
+    )
+}
+
+pub fn process_metrics_table(
+    searches: Vec<Search>,
+    metrics_type: MetricsType,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report> {
+    let col_labels =
+        vec!["fast", "slow", "gc", "delay (ms)", "chains", "out", "in"];
+    let col_labels = col_labels.into_iter().map(String::from).collect();
+    let col_widths = vec![0.15, 0.15, 0.15, 0.22, 0.22, 0.15, 0.15];
+
+    // actual data
+    let mut cells = Vec::with_capacity(searches.len());
+
+    // protocol labels
+    let mut row_labels = Vec::with_capacity(searches.len());
+
+    let mut plotted = 0;
+    for search in searches {
+        let mut exp_data = db.find(search)?;
+        match exp_data.len() {
+            0 => {
+                eprintln!(
+                    "missing data for {} f = {}",
+                    PlotFmt::protocol_name(search.protocol),
+                    search.f
+                );
+                continue;
+            }
+            1 => (),
+            _ => {
+                let matches: Vec<_> = exp_data
+                    .into_iter()
+                    .map(|(timestamp, _)| {
+                        timestamp.path().display().to_string()
+                    })
+                    .collect();
+                panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
+            }
+        };
+        let (_timestamp, exp_data) = exp_data.pop().unwrap();
+
+        // select the correct metrics depending on the `MetricsType` chosen
+        let (protocol_metrics, executor_metrics) = match metrics_type {
+            MetricsType::Process(_) => panic!("unsupported metrics type Process in process_metrics_table"),
+            MetricsType::ProcessGlobal => (&exp_data.global_protocol_metrics, &exp_data.global_executor_metrics),
+            MetricsType::ClientGlobal => panic!("unsupported metrics type ClientGlobal in process_metrics_table"),
+        };
+        // fetch all cell data
+        let fast_path = protocol_metrics
+            .get_aggregated(ProtocolMetricsKind::FastPath)
+            .map(|fast_path| format!("{}M", fast_path / 1_000_000));
+        let slow_path = protocol_metrics
+            .get_aggregated(ProtocolMetricsKind::SlowPath)
+            .map(|slow_path| format!("{}M", slow_path / 1_000_000));
+        let gced = protocol_metrics
+            .get_aggregated(ProtocolMetricsKind::Stable)
+            .map(|gced| format!("{}M", gced / 1_000_000));
+        let execution_delay = executor_metrics
+            .get_collected(ExecutorMetricsKind::ExecutionDelay)
+            .map(|execution_delay| {
+                format!(
+                    "{} ± {}",
+                    execution_delay.mean().round(),
+                    execution_delay.stddev().round()
+                )
+            });
+        let chain_size = executor_metrics
+            .get_collected(ExecutorMetricsKind::ChainSize)
+            .map(|chain_size| {
+                format!(
+                    "{} ± {}",
+                    chain_size.mean().round(),
+                    chain_size.stddev().round()
+                )
+            });
+        let out_requests = executor_metrics
+            .get_aggregated(ExecutorMetricsKind::OutRequests)
+            .map(|out_requests| format!("{}M", out_requests / 1_000_000));
+        let in_request_replies = executor_metrics
+            .get_aggregated(ExecutorMetricsKind::InRequestReplies)
+            .map(|in_request_replies| {
+                format!("{}M", in_request_replies / 1_000_000)
+            });
+        // create cell
+        let cell = vec![
+            fast_path,
+            slow_path,
+            gced,
+            execution_delay,
+            chain_size,
+            out_requests,
+            in_request_replies,
+        ];
+        // format cell
+        let fmt_cell_data =
+            |data: Option<String>| data.unwrap_or(String::from("NA"));
+        let cell: Vec<_> = cell.into_iter().map(fmt_cell_data).collect();
+
+        // save cell
+        cells.push(cell);
+
+        // create row label
+        let row_label = format!(
+            "{} f = {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f
+        );
+        row_labels.push(row_label);
+
+        // mark that there's data to be plotted
+        plotted += 1;
+    }
+
+    table(
+        plotted,
+        col_labels,
+        col_widths,
+        row_labels,
+        cells,
+        output_dir,
+        output_file,
+    )
+}
+
+fn table(
+    plotted: usize,
+    col_labels: Vec<String>,
+    col_widths: Vec<f64>,
+    row_labels: Vec<String>,
+    cells: Vec<Vec<String>>,
+    output_dir: Option<&str>,
+    output_file: &str,
+) -> Result<(), Report> {
     if plotted > 0 {
         // start python
         let gil = Python::acquire_gil();
@@ -706,7 +855,6 @@ pub fn dstat_table(
         // end plot
         end_plot(plotted, output_dir, output_file, py, &plt, None)?;
     }
-
     Ok(())
 }
 

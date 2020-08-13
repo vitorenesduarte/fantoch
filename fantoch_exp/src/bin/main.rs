@@ -14,7 +14,7 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 // const RESULTS_DIR: &str = "../graph_executor";
-const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new";
+const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new_metrics";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -160,7 +160,7 @@ async fn main() -> Result<(), Report> {
         // 1024 / 2,
         // 1024,
         // 1024 * 2,
-        // 1024 * 4, // 1
+        1024 * 4, // 1
         1024 * 8, // 1
         1024 * 16,
         1024 * 24, // 1

@@ -311,9 +311,7 @@ impl DependencyGraph {
         }
         // save in request replies metric
         self.metrics
-            .aggregate(ExecutorMetricsKind::InRequestReplies, |v| {
-                *v += accepted_replies
-            });
+            .aggregate(ExecutorMetricsKind::InRequestReplies, accepted_replies);
     }
 
     #[must_use]
@@ -400,8 +398,8 @@ impl DependencyGraph {
     fn index_pending(&mut self, dep_dot: Dot, dot: Dot) {
         if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
             // save out requests metric
-            self.metrics
-                .aggregate(ExecutorMetricsKind::OutRequests, |v| *v += 1);
+            self.metrics.aggregate(ExecutorMetricsKind::OutRequests, 1);
+
             self.requests
                 .entry(target_shard)
                 .or_default()

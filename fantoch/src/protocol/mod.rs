@@ -130,9 +130,9 @@ where
     }
 }
 
-pub type ProtocolMetrics = Metrics<ProtocolMetricsKind, u64>;
+pub type ProtocolMetrics = Metrics<ProtocolMetricsKind>;
 
-#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolMetricsKind {
     FastPath,
     SlowPath,

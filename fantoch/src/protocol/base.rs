@@ -202,21 +202,18 @@ impl BaseProcess {
     // Increment fast path count.
     // TODO  rename
     pub fn fast_path(&mut self) {
-        self.inc_by_metric(ProtocolMetricsKind::FastPath, 1);
+        self.metrics.aggregate(ProtocolMetricsKind::FastPath, 1);
     }
 
     // Increment slow path count.
     pub fn slow_path(&mut self) {
-        self.inc_by_metric(ProtocolMetricsKind::SlowPath, 1);
+        self.metrics.aggregate(ProtocolMetricsKind::SlowPath, 1);
     }
 
     // Accumulate more stable commands.
     pub fn stable(&mut self, len: usize) {
-        self.inc_by_metric(ProtocolMetricsKind::Stable, len as u64);
-    }
-
-    fn inc_by_metric(&mut self, kind: ProtocolMetricsKind, by: u64) {
-        self.metrics.aggregate(kind, |v| *v += by)
+        self.metrics
+            .aggregate(ProtocolMetricsKind::Stable, len as u64);
     }
 }
 

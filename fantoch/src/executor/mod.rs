@@ -98,9 +98,9 @@ where
     }
 }
 
-pub type ExecutorMetrics = Metrics<ExecutorMetricsKind, u64>;
+pub type ExecutorMetrics = Metrics<ExecutorMetricsKind>;
 
-#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutorMetricsKind {
     ExecutionDelay,
     ChainSize,

@@ -4,13 +4,13 @@ use fantoch::client::{KeyGen, ShardGen};
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
-    DstatType, ErrorBar, ExperimentData, LatencyMetric, PlotFmt, ResultsDB,
+    ErrorBar, ExperimentData, LatencyMetric, MetricsType, PlotFmt, ResultsDB,
     Search, Style,
 };
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new";
+const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new_metrics";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -30,14 +30,16 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let keys_per_shard = 1;
+    let mut key_gens = Vec::new();
     let zipf_key_count = 1_000_000;
     let zipf_coefficient = 0.5;
     let zipf_key_gen = KeyGen::Zipf {
         coefficient: zipf_coefficient,
         key_count: zipf_key_count,
     };
+    // key_gens.push(zipf_key_gen);
     let conflict_key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
-    let key_gens = vec![zipf_key_gen, conflict_key_gen];
+    key_gens.push(conflict_key_gen);
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
 
@@ -169,7 +171,7 @@ fn partial_replication() -> Result<(), Report> {
             )?;
         }
 
-        for (shards_per_command, shard_count) in shard_combinations.clone() {
+        for (shard_count, shards_per_command) in shard_combinations.clone() {
             let shard_gen = ShardGen::Random { shard_count };
 
             // generate throughput-latency plot
@@ -242,7 +244,7 @@ fn partial_replication() -> Result<(), Report> {
                         .collect();
 
                 // generate dstat table
-                for dstat_type in dstat_combinations(shard_count, n) {
+                for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
                         "dstat_n{}_ts{}_s{}_c{}_{}_{}.pdf",
                         n,
@@ -250,11 +252,32 @@ fn partial_replication() -> Result<(), Report> {
                         shards_per_command,
                         clients_per_region,
                         key_gen,
-                        dstat_type.name(),
+                        metrics_type.name(),
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
-                        dstat_type,
+                        metrics_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate process metrics table
+                for metrics_type in process_metrics_combinations(shard_count, n)
+                {
+                    let path = format!(
+                        "metrics_n{}_ts{}_s{}_c{}_{}_{}.pdf",
+                        n,
+                        shard_count,
+                        shards_per_command,
+                        clients_per_region,
+                        key_gen,
+                        metrics_type.name(),
+                    );
+                    fantoch_plot::process_metrics_table(
+                        searches.clone(),
+                        metrics_type,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -415,18 +438,38 @@ fn multi_key() -> Result<(), Report> {
                         .collect();
 
                 // generate dstat table
-                for dstat_type in dstat_combinations(shard_count, n) {
+                for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
                         "dstat_n{}_k{}_c{}_{}_{}.pdf",
                         n,
                         keys_per_shard,
                         clients_per_region,
                         key_gen,
-                        dstat_type.name(),
+                        metrics_type.name(),
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
-                        dstat_type,
+                        metrics_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate process metrics table
+                for metrics_type in process_metrics_combinations(shard_count, n)
+                {
+                    let path = format!(
+                        "metrics_n{}_k{}_c{}_{}_{}.pdf",
+                        n,
+                        keys_per_shard,
+                        clients_per_region,
+                        key_gen,
+                        metrics_type.name(),
+                    );
+                    fantoch_plot::process_metrics_table(
+                        searches.clone(),
+                        metrics_type,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -706,12 +749,20 @@ fn protocol_combinations(
     combinations
 }
 
-fn dstat_combinations(shard_count: usize, n: usize) -> Vec<DstatType> {
-    let global_dstats = vec![DstatType::ProcessGlobal, DstatType::ClientGlobal];
+fn dstat_combinations(shard_count: usize, n: usize) -> Vec<MetricsType> {
+    let global_metrics =
+        vec![MetricsType::ProcessGlobal, MetricsType::ClientGlobal];
     fantoch::util::all_process_ids(shard_count, n)
-        .map(|(process_id, _)| DstatType::Process(process_id))
-        .chain(global_dstats)
+        .map(|(process_id, _)| MetricsType::Process(process_id))
+        .chain(global_metrics)
         .collect()
+}
+
+fn process_metrics_combinations(
+    _shard_count: usize,
+    _n: usize,
+) -> Vec<MetricsType> {
+    vec![MetricsType::ProcessGlobal]
 }
 
 fn fmt_exp_data(exp_data: &ExperimentData) -> String {
