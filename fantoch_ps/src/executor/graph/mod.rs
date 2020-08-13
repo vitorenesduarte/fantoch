@@ -150,7 +150,8 @@ impl DependencyGraph {
 
     fn cleanup(&mut self, _time: &dyn SysTime) {
         log!(
-            "p{}: Graph::cleanup at {}",
+            "p{}: @{} Graph::cleanup at {}",
+            self.executor_index,
             self.process_id,
             self.executor_index
         );
@@ -167,15 +168,21 @@ impl DependencyGraph {
         clock: VClock<ProcessId>,
         time: &dyn SysTime,
     ) {
-        log!("p{}: Graph::add {:?} {:?}", self.process_id, dot, clock);
+        log!(
+            "p{}: @{} Graph::add {:?} {:?}",
+            self.process_id,
+            self.executor_index,
+            dot,
+            clock
+        );
 
         // create new vertex for this command
         let vertex = Vertex::new(dot, cmd, clock, time);
 
         if self.vertex_index.index(vertex).is_some() {
             panic!(
-                "p{}: Graph::add tried to index already indexed {:?}",
-                self.process_id, dot
+                "p{}: @{} Graph::add tried to index already indexed {:?}",
+                self.process_id, self.executor_index, dot
             );
         }
 
@@ -204,8 +211,9 @@ impl DependencyGraph {
         assert_eq!(self.to_execute.len(), initial_ready + total_found);
 
         log!(
-            "p{}: Graph::log executed {:?} | pending {:?}",
+            "p{}: @{} Graph::log executed {:?} | pending {:?}",
             self.process_id,
+            self.executor_index,
             self.executed_clock.read(),
             self.vertex_index
                 .dots()
@@ -214,7 +222,12 @@ impl DependencyGraph {
     }
 
     pub fn handle_add_mine(&mut self, dot: Dot) {
-        log!("p{}: Graph::add_mine {:?}", self.process_id, dot);
+        log!(
+            "p{}: @{} Graph::add_mine {:?}",
+            self.process_id,
+            self.executor_index,
+            dot
+        );
         self.pending_index.add_mine(dot);
     }
 
@@ -226,8 +239,9 @@ impl DependencyGraph {
         let replies = self.request_replies.entry(from).or_default();
         for dot in dots {
             log!(
-                "p{}: Graph::handle_request {:?} from {:?}",
+                "p{}: @{} Graph::handle_request {:?} from {:?}",
                 self.process_id,
+                self.executor_index,
                 dot,
                 from
             );
@@ -238,8 +252,9 @@ impl DependencyGraph {
                 // does not replicate it
                 if vertex.cmd.replicated_by(&from) {
                     log!(
-                        "p{}: Graph::request {:?} is replicated by {:?} (WARN)",
+                        "p{}: @{} Graph::request {:?} is replicated by {:?} (WARN)",
                         self.process_id,
+                        self.executor_index,
                         dot,
                         from
                     )
@@ -258,16 +273,20 @@ impl DependencyGraph {
                     .contains(&dot.source(), dot.sequence())
                 {
                     log!(
-                        "p{}: Graph::handle_request {:?} is already executed",
+                        "p{}: @{} Graph::handle_request {:?} is already executed",
                         self.process_id,
+                        self.executor_index,
                         dot
                     );
                     replies.push(RequestReply::Executed { dot });
                 } else {
                     log!(
-                    "p{}: Graph::request from {:?} for a dot {:?} we don't have",
-                    self.process_id, from, dot
-                );
+                        "p{}: @{} Graph::request from {:?} for a dot {:?} we don't have",
+                        self.process_id,
+                        self.executor_index,
+                        from,
+                        dot
+                    );
                     self.buffered_requests.entry(dot).or_default().push(from);
                 }
             }
@@ -281,7 +300,12 @@ impl DependencyGraph {
     ) {
         let mut accepted_replies = 0;
         for info in infos {
-            log!("p{}: Graph::request_reply {:?}", self.process_id, info);
+            log!(
+                "p{}: @{} Graph::request_reply {:?}",
+                self.process_id,
+                self.executor_index,
+                info
+            );
             match info {
                 RequestReply::Info { dot, cmd, clock } => {
                     // count number of accepted replies
@@ -320,7 +344,12 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) -> FinderInfo {
         assert_eq!(self.executor_index, 0);
-        log!("p{}: Graph::find_scc {:?}", self.process_id, dot);
+        log!(
+            "p{}: @{} Graph::find_scc {:?}",
+            self.process_id,
+            self.executor_index,
+            dot
+        );
         // execute tarjan's algorithm
         let mut found = 0;
         let finder_result = self.strong_connect(dot, &mut found);
@@ -367,8 +396,9 @@ impl DependencyGraph {
 
         scc.into_iter().for_each(|dot| {
             log!(
-                "p{}: Graph::save_scc removing {:?} from indexes",
+                "p{}: @{} Graph::save_scc removing {:?} from indexes",
                 self.process_id,
+                self.executor_index,
                 dot
             );
 
@@ -416,8 +446,9 @@ impl DependencyGraph {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
                 log!(
-                    "p{}: Graph::try_pending {:?} depended on {:?}",
+                    "p{}: @{} Graph::try_pending {:?} depended on {:?}",
                     self.process_id,
+                    self.executor_index,
                     pending,
                     dot
                 );
