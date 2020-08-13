@@ -69,8 +69,8 @@ impl Executor for SlotExecutor {
         self.to_clients.pop()
     }
 
-    fn max_executors() -> Option<usize> {
-        Some(1)
+    fn parallel() -> bool {
+        true
     }
 
     fn metrics(&self) -> &ExecutorMetrics {

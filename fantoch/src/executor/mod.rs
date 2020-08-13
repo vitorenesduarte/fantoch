@@ -63,8 +63,7 @@ pub trait Executor: Clone {
         ToExecutorsIter { executor: self }
     }
 
-    // TODO fix me
-    fn max_executors() -> Option<usize>;
+    fn parallel() -> bool;
 
     fn metrics(&self) -> &ExecutorMetrics;
 }

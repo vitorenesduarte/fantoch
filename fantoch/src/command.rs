@@ -121,6 +121,12 @@ impl Command {
         self.shard_to_ops.keys()
     }
 
+    pub fn all_keys(&self) -> impl Iterator<Item = (&ShardId, &Key)> {
+        self.shard_to_ops.iter().flat_map(|(shard_id, shard_ops)| {
+            shard_ops.iter().map(move |(key, _)| (shard_id, key))
+        })
+    }
+
     /// Executes self in a `KVStore`, returning the resulting an iterator of
     /// `ExecutorResult`.
     pub fn execute(

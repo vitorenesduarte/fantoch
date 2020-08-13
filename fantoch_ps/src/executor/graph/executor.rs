@@ -86,8 +86,8 @@ impl Executor for GraphExecutor {
         self.to_executors.pop()
     }
 
-    fn max_executors() -> Option<usize> {
-        Some(2)
+    fn parallel() -> bool {
+        true
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -190,12 +190,27 @@ impl GraphExecutionInfo {
 
 impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::worker_index_no_shift;
+        const MAX_EXECUTORS: usize = 100;
+        const fn executor_index_no_shift() -> Option<(usize, usize)> {
+            // when there's no shift, the index must be 0
+            let shift = 0;
+            let index = 0;
+            Some((shift, index))
+        }
+
+        fn executor_random_index_shift() -> Option<(usize, usize)> {
+            use rand::Rng;
+            // if there's a shift, we select a random worker
+            let shift = 1;
+            let index = rand::thread_rng().gen_range(0, MAX_EXECUTORS);
+            Some((shift, index))
+        }
+
         match self {
-            Self::Add { .. } => worker_index_no_shift(0),
-            Self::AddMine { .. } => worker_index_no_shift(0),
-            Self::Request { .. } => worker_index_no_shift(1),
-            Self::RequestReply { .. } => worker_index_no_shift(0),
+            Self::Add { .. } => executor_index_no_shift(),
+            Self::AddMine { .. } => executor_index_no_shift(),
+            Self::Request { .. } => executor_random_index_shift(),
+            Self::RequestReply { .. } => executor_index_no_shift(),
         }
     }
 }

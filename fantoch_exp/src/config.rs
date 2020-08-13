@@ -245,10 +245,10 @@ fn workers_executors_and_leader(
     // for all protocol but newt, create a single executor
     match protocol {
         // 1 extra executor for partial replication
-        Protocol::AtlasLocked => (WORKERS + EXECUTORS - 1, 2),
+        Protocol::AtlasLocked => (WORKERS, EXECUTORS),
         // 1 extra executor for partial replication (although, not implemented
         // yet)
-        Protocol::EPaxosLocked => (WORKERS + EXECUTORS - 1, 2),
+        Protocol::EPaxosLocked => (WORKERS, EXECUTORS),
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);

@@ -83,7 +83,7 @@ impl DependencyGraph {
             .map(|(process_id, _)| process_id);
         let executed_clock = Arc::new(RwLock::new(AEClock::with(ids)));
         // create indexes
-        let vertex_index = VertexIndex::new(process_id);
+        let vertex_index = VertexIndex::new(process_id, config.shards());
         let pending_index = PendingIndex::new(shard_id, config.n());
         // create finder
         let finder = TarjanSCCFinder::new(

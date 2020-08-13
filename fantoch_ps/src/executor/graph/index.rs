@@ -3,6 +3,7 @@ use crate::shared::Shared;
 use dashmap::mapref::one::Ref as DashMapRef;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::kvs::Key;
 use fantoch::HashSet;
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::Arc;
@@ -24,19 +25,26 @@ impl<'a> VertexRef<'a> {
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
     process_id: ProcessId,
+    shards: usize,
     local: Arc<Shared<Dot, Mutex<Vertex>>>,
+    per_key: Arc<Shared<(ShardId, Key), HashSet<Dot>>>,
 }
 
 impl VertexIndex {
-    pub fn new(process_id: ProcessId) -> Self {
+    pub fn new(process_id: ProcessId, shards: usize) -> Self {
         Self {
             process_id,
+            shards,
             local: Arc::new(Shared::new()),
+            per_key: Arc::new(Shared::new()),
         }
     }
 
     /// Indexes a new vertex, returning any previous vertex indexed.
     pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
+        // for entry in vertex.cmd.all_keys() {
+        //     self.per_key.entry(entry.clone())
+        // }
         let dot = vertex.dot();
         let cell = Mutex::new(vertex);
         self.local.insert(dot, cell).map(|cell| cell.into_inner())

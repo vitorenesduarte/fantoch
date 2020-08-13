@@ -77,8 +77,8 @@ impl Executor for TableExecutor {
         self.to_clients.pop()
     }
 
-    fn max_executors() -> Option<usize> {
-        None
+    fn parallel() -> bool {
+        true
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
