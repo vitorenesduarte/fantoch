@@ -137,6 +137,7 @@ impl<'a> Machine<'a> {
             from,
             to,
         );
+        tracing::debug!("{}", scp_command);
         Self::create_command(scp_command).status().await?;
         Ok(())
     }

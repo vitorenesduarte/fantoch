@@ -132,6 +132,7 @@ async fn baremetal_setup(
     )
     .await
     .wrap_err("hostname -I")?;
+    tracing::debug!("hostname -I: {:?}", ips);
 
     // hostname should return at least one ip like so "10.10.5.61 172.17.0.1"
     let parts: Vec<_> = ips.split(' ').collect();
@@ -140,6 +141,7 @@ async fn baremetal_setup(
     // append ssh port
     // - TODO: I think this should be fixed in tsunami, not here
     let addr = format!("{}:22", ip);
+    tracing::debug!("hostname -I: extracted {:?}", ip);
 
     let setup =
         tsunami::providers::baremetal::Setup::new(addr, Some(username))?

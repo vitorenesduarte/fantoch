@@ -72,10 +72,6 @@ where
         }
     }
 
-    pub fn entry(&self, key: K) -> Entry<'_, K, V> {
-        self.shared.entry(key)
-    }
-
     pub fn insert(&self, key: K, value: V) -> Option<V> {
         self.shared.insert(key, value)
     }

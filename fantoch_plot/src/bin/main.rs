@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_v3";
+const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
