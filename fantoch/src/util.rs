@@ -14,7 +14,6 @@ macro_rules! singleton {
     }};
 }
 
-/*
 // Debug version
 #[cfg(debug_assertions)]
 #[macro_export]
@@ -24,6 +23,23 @@ macro_rules! log {
 
 // Non-debug version
 #[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! log {
+    ($( $args:expr ),*) => {
+        ()
+    };
+}
+
+/*
+// Debug version
+#[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! log {
+    ($( $args:expr ),*) => { println!( $( $args ),* ); }
+}
+
+// Non-debug version
+#[cfg(debug_assertions)]
 #[macro_export]
 macro_rules! log {
     ($( $args:expr ),*) => {
@@ -31,22 +47,6 @@ macro_rules! log {
     };
 }
 */
-
-// Debug version
-#[cfg(not(debug_assertions))]
-#[macro_export]
-macro_rules! log {
-    ($( $args:expr ),*) => { println!( $( $args ),* ); }
-}
-
-// Non-debug version
-#[cfg(debug_assertions)]
-#[macro_export]
-macro_rules! log {
-    ($( $args:expr ),*) => {
-        ()
-    };
-}
 
 type DefaultHasher = ahash::AHasher;
 
