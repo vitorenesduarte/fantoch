@@ -1406,7 +1406,8 @@ mod tests {
         // create client 1 that is connected to newt 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, workload);
+        let status_frequency = None;
+        let mut client_1 = Client::new(client_id, workload, status_frequency);
 
         // discover processes in client 1
         let closest =
