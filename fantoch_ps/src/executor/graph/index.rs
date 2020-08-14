@@ -7,7 +7,6 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::HashSet;
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::Arc;
-use threshold::AEClock;
 
 pub struct VertexRef<'a> {
     r: DashMapRef<'a, Dot, Mutex<Vertex>>,
@@ -65,8 +64,7 @@ pub struct PendingIndex {
     shard_id: ShardId,
     config: Config,
     index: HashMap<Dot, HashSet<Dot>>,
-    // `committed_clock` and `mine` are only used in partial replication
-    committed_clock: AEClock<ProcessId>,
+    // `mine` is only used in partial replication
     mine: HashSet<Dot>,
 }
 
@@ -75,14 +73,12 @@ impl PendingIndex {
         process_id: ProcessId,
         shard_id: ShardId,
         config: Config,
-        committed_clock: AEClock<ProcessId>,
     ) -> Self {
         Self {
             process_id,
             shard_id,
             config,
             index: HashMap::new(),
-            committed_clock,
             mine: HashSet::new(),
         }
     }
@@ -95,27 +91,11 @@ impl PendingIndex {
         self.mine.contains(dot)
     }
 
-    pub fn commit(&mut self, dot: Dot) {
-        // update set of committed commands if partial replication
-        if self.config.shards() > 1 {
-            if !self.committed_clock.add(&dot.source(), dot.sequence()) {
-                panic!(
-                    "p{}: PendingIndex::committed {:?} already committed",
-                    self.process_id, dot
-                );
-            }
-        }
-    }
-
     /// Indexes a new `dot` as a child of `dep_dot`:
     /// - when `dep_dot` is executed, we'll try to execute `dot` as `dep_dot`
     ///   was a dependency and maybe now `dot` can be executed
     #[must_use]
-    pub fn index(
-        &mut self,
-        dep_dot: Dot,
-        dot: Dot,
-    ) -> Option<(ShardId, HashSet<Dot>)> {
+    pub fn index(&mut self, dep_dot: Dot, dot: Dot) -> Option<ShardId> {
         match self.index.entry(dep_dot) {
             Entry::Vacant(vacant) => {
                 // save `dot`
@@ -137,45 +117,7 @@ impl PendingIndex {
                 // for that reason, the following is a noop
                 let target = dep_dot.target_shard(self.config.n());
                 if target != self.shard_id && !self.mine.contains(&dep_dot) {
-                    // if we don't replicate the command, ask its target shard
-                    // for its info
-                    if let Some(event_set) =
-                        self.committed_clock.get(&dep_dot.source())
-                    {
-                        let dots_to_request: HashSet<_> = event_set
-                            .missing_below(dep_dot.sequence())
-                            .map(|event| Dot::new(dep_dot.source(), event))
-                            // don't ask for dots we havent' asked for and don't have
-                            .filter(|dot| {
-                                !self.index.contains_key(&dot)
-                                    && !self
-                                        .committed_clock
-                                        .contains(&dot.source(), dot.sequence())
-                            })
-                            // missing below doesn't include
-                            // `dep_dot.sequence()`; thus, include `dep_dot` as
-                            // well
-                            .chain(std::iter::once(dep_dot))
-                            .collect();
-
-                        // make `dot` a child of all these dots to be requested;
-                        // this makes sure that we don't request the same dot
-                        // twice
-                        for dot_to_request in dots_to_request.iter() {
-                            self.index
-                                .entry(*dot_to_request)
-                                .or_default()
-                                .insert(dot);
-                        }
-                        return Some((target, dots_to_request));
-                    } else {
-                        panic!(
-                            "p{}: PendingIndex::index {:?} not found in committed clock {:?}", 
-                            self.process_id,
-                            dep_dot.source(),
-                            self.committed_clock,
-                        );
-                    }
+                    return Some(target);
                 }
             }
             Entry::Occupied(mut dots) => {
