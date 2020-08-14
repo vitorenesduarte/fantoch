@@ -224,25 +224,25 @@ impl DependencyGraph {
         );
     }
 
-    pub fn handle_add_mine(&mut self, dot: Dot, time: &dyn SysTime) {
+    pub fn handle_add_mine(&mut self, dot: Dot, _time: &dyn SysTime) {
         log!(
             "p{}: @{} Graph::handle_add_mine {:?} | time = {}",
             self.process_id,
             self.executor_index,
             dot,
-            time.millis()
+            _time.millis()
         );
         self.pending_index.add_mine(dot);
     }
 
-    fn handle_request(&mut self, from: ShardId, dot: Dot, time: &dyn SysTime) {
+    fn handle_request(&mut self, from: ShardId, dot: Dot, _time: &dyn SysTime) {
         log!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
             self.executor_index,
             dot,
             from,
-            time.millis()
+            _time.millis()
         );
         // simply buffer the request
         self.buffered_in_requests
@@ -256,7 +256,7 @@ impl DependencyGraph {
         from: ShardId,
         dots: impl Iterator<Item = Dot>,
         executed_clock: &AEClock<ProcessId>,
-        time: &dyn SysTime,
+        _time: &dyn SysTime,
     ) {
         let replies = self.out_request_replies.entry(from).or_default();
         let requests = self.buffered_in_requests.entry(from).or_default();
@@ -267,7 +267,7 @@ impl DependencyGraph {
                 self.executor_index,
                 dot,
                 from,
-                time.millis()
+                _time.millis()
             );
             if let Some(vertex) = self.vertex_index.find(&dot) {
                 let vertex = vertex.read();
@@ -281,7 +281,7 @@ impl DependencyGraph {
                         self.executor_index,
                         dot,
                         from,
-                        time.millis()
+                        _time.millis()
                     )
                 } else {
                     replies.push(RequestReply::Info {
@@ -301,7 +301,7 @@ impl DependencyGraph {
                         self.process_id,
                         self.executor_index,
                         dot,
-                        time.millis()
+                        _time.millis()
                     );
                     replies.push(RequestReply::Executed { dot });
                 } else {
@@ -311,7 +311,7 @@ impl DependencyGraph {
                         self.executor_index,
                         from,
                         dot,
-                        time.millis()
+                        _time.millis()
                     );
                     // buffer request again
                     requests.insert(dot);
