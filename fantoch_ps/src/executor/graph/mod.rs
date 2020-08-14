@@ -57,7 +57,7 @@ pub struct DependencyGraph {
     // worker 1 (handles requests):
     // - may have `buffered_in_requests` when doesn't have the command yet
     // - produces `out_request_replies` when it has the command
-    buffered_in_requests: Vec<(ShardId, Dot)>,
+    buffered_in_requests: HashMap<ShardId, HashSet<Dot>>,
     out_request_replies: HashMap<ShardId, Vec<RequestReply>>,
 }
 
@@ -236,7 +236,6 @@ impl DependencyGraph {
     }
 
     fn handle_request(&mut self, from: ShardId, dot: Dot, time: &dyn SysTime) {
-        let replies = self.out_request_replies.entry(from).or_default();
         log!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
@@ -245,52 +244,78 @@ impl DependencyGraph {
             from,
             time.millis()
         );
-        if let Some(vertex) = self.vertex_index.find(&dot) {
-            let vertex = vertex.read();
+        // simply buffer the request
+        self.buffered_in_requests
+            .entry(from)
+            .or_default()
+            .insert(dot);
+    }
 
-            // only send the vertex if the shard that requested this vertex
-            // does not replicate it
-            if vertex.cmd.replicated_by(&from) {
-                log!(
-                    "p{}: @{} Graph::handle_request {:?} is replicated by {:?} (WARN) | time = {}",
-                    self.process_id,
-                    self.executor_index,
-                    dot,
-                    from,
-                    time.millis()
-                )
+    fn process_requests(
+        &mut self,
+        from: ShardId,
+        dots: impl Iterator<Item = Dot>,
+        executed_clock: &AEClock<ProcessId>,
+        time: &dyn SysTime,
+    ) {
+        let replies = self.out_request_replies.entry(from).or_default();
+        let requests = self.buffered_in_requests.entry(from).or_default();
+        for dot in dots {
+            log!(
+                "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
+                self.process_id,
+                self.executor_index,
+                dot,
+                from,
+                time.millis()
+            );
+            if let Some(vertex) = self.vertex_index.find(&dot) {
+                let vertex = vertex.read();
+
+                // only send the vertex if the shard that requested this vertex
+                // does not replicate it
+                if vertex.cmd.replicated_by(&from) {
+                    log!(
+                        "p{}: @{} Graph::process_requests {:?} is replicated by {:?} (WARN) | time = {}",
+                        self.process_id,
+                        self.executor_index,
+                        dot,
+                        from,
+                        time.millis()
+                    )
+                } else {
+                    replies.push(RequestReply::Info {
+                        dot,
+                        cmd: vertex.cmd.clone(),
+                        clock: vertex.clock.clone(),
+                    })
+                }
             } else {
-                replies.push(RequestReply::Info {
-                    dot,
-                    cmd: vertex.cmd.clone(),
-                    clock: vertex.clock.clone(),
-                })
-            }
-        } else {
-            // if we don't have it, then check if it's executed
-            if self
-                .executed_clock
-                .read()
-                .contains(&dot.source(), dot.sequence())
-            {
-                log!(
-                    "p{}: @{} Graph::handle_request {:?} is already executed | time = {}",
-                    self.process_id,
-                    self.executor_index,
-                    dot,
-                    time.millis()
-                );
-                replies.push(RequestReply::Executed { dot });
-            } else {
-                log!(
-                    "p{}: @{} Graph::handle_request from {:?} for a dot {:?} we don't have | time = {}",
-                    self.process_id,
-                    self.executor_index,
-                    from,
-                    dot,
-                    time.millis()
-                );
-                self.buffered_in_requests.push((from, dot));
+                // if we don't have it, then check if it's executed
+                // NOTE: this `executed_clock` is a snapshot of the clock, so we
+                // may endup buffering a request for the next cleanup step, even
+                // though the command is already executed
+                if executed_clock.contains(&dot.source(), dot.sequence()) {
+                    log!(
+                        "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
+                        self.process_id,
+                        self.executor_index,
+                        dot,
+                        time.millis()
+                    );
+                    replies.push(RequestReply::Executed { dot });
+                } else {
+                    log!(
+                        "p{}: @{} Graph::process_requests from {:?} for a dot {:?} we don't have | time = {}",
+                        self.process_id,
+                        self.executor_index,
+                        from,
+                        dot,
+                        time.millis()
+                    );
+                    // buffer request again
+                    requests.insert(dot);
+                }
             }
         }
     }
@@ -534,8 +559,17 @@ impl DependencyGraph {
     }
 
     fn check_pending_requests(&mut self, time: &dyn SysTime) {
-        while let Some((from, dot)) = self.buffered_in_requests.pop() {
-            self.handle_request(from, dot, time);
+        let buffered = std::mem::take(&mut self.buffered_in_requests);
+        // take a snapshot of the executed clock: this reduces the contention of
+        // the lock
+        let executed_clock = self.executed_clock.read().clone();
+        for (from, dots) in buffered {
+            self.process_requests(
+                from,
+                dots.into_iter(),
+                &executed_clock,
+                time,
+            );
         }
     }
 }
