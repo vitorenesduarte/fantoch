@@ -138,7 +138,8 @@ where
                 // create client
                 client_id += 1;
                 let status_frequency = None;
-                let mut client = Client::new(client_id, workload, status_frequency);
+                let mut client =
+                    Client::new(client_id, workload, status_frequency);
                 // discover
                 let closest = util::closest_process_per_shard(
                     &region,
