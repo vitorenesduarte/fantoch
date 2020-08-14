@@ -47,7 +47,7 @@ impl Executor for GraphExecutor {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         self.graph.cleanup(time);
-        self.fetch_actions();
+        self.fetch_actions(time);
     }
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
@@ -58,19 +58,19 @@ impl Executor for GraphExecutor {
                 } else {
                     // handle new command
                     self.graph.handle_add(dot, cmd, clock, time);
-                    self.fetch_actions();
+                    self.fetch_actions(time);
                 }
             }
             GraphExecutionInfo::AddMine { dot } => {
-                self.graph.handle_add_mine(dot);
+                self.graph.handle_add_mine(dot, time);
             }
             GraphExecutionInfo::Request { from, dots } => {
-                self.graph.handle_request(from, dots.into_iter());
-                self.fetch_actions();
+                self.graph.handle_request(from, dots.into_iter(), time);
+                self.fetch_actions(time);
             }
             GraphExecutionInfo::RequestReply { infos } => {
                 self.graph.handle_request_reply(infos, time);
-                self.fetch_actions();
+                self.fetch_actions(time);
             }
         }
     }
@@ -93,46 +93,49 @@ impl Executor for GraphExecutor {
 }
 
 impl GraphExecutor {
-    fn fetch_actions(&mut self) {
-        self.fetch_commands_to_execute();
-        if self.config.shards() > 0 {
-            self.fetch_requests();
-            self.fetch_request_replies();
+    fn fetch_actions(&mut self, time: &dyn SysTime) {
+        self.fetch_commands_to_execute(time);
+        if self.config.shards() > 1 {
+            self.fetch_requests(time);
+            self.fetch_request_replies(time);
         }
     }
 
-    fn fetch_commands_to_execute(&mut self) {
+    fn fetch_commands_to_execute(&mut self, time: &dyn SysTime) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
             log!(
-                "p{}: GraphExecutor::fetch_comands_to_execute {:?}",
+                "p{}: GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
                 self.process_id,
-                cmd.rifl()
+                cmd.rifl(),
+                time.millis()
             );
             self.execute(cmd);
         }
     }
 
-    fn fetch_requests(&mut self) {
+    fn fetch_requests(&mut self, time: &dyn SysTime) {
         for (to, dots) in self.graph.requests() {
             log!(
-                "p{}: GraphExecutor::fetch_requests {:?} {:?}",
+                "p{}: GraphExecutor::fetch_requests {:?} {:?} | time = {}",
                 self.process_id,
                 to,
-                dots
+                dots,
+                time.millis()
             );
             let request = GraphExecutionInfo::request(self.shard_id, dots);
             self.to_executors.push((to, request));
         }
     }
 
-    fn fetch_request_replies(&mut self) {
+    fn fetch_request_replies(&mut self, time: &dyn SysTime) {
         for (to, infos) in self.graph.request_replies() {
             log!(
-                "p{}: Graph::fetch_request_replies {:?} {:?}",
+                "p{}: Graph::fetch_request_replies {:?} {:?} | time = {}",
                 self.process_id,
                 to,
-                infos
+                infos,
+                time.millis()
             );
             let reply = GraphExecutionInfo::request_reply(infos);
             self.to_executors.push((to, reply));
