@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_zipf01";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_transitive";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 

@@ -5,27 +5,31 @@ use fantoch::config::Config;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::HashSet;
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
 
 pub struct VertexRef<'a> {
-    r: DashMapRef<'a, Dot, Mutex<Vertex>>,
+    r: DashMapRef<'a, Dot, RwLock<Vertex>>,
 }
 
 impl<'a> VertexRef<'a> {
-    fn new(r: DashMapRef<'a, Dot, Mutex<Vertex>>) -> Self {
+    fn new(r: DashMapRef<'a, Dot, RwLock<Vertex>>) -> Self {
         Self { r }
     }
 
-    pub fn lock(&self) -> MutexGuard<'_, Vertex> {
-        self.r.lock()
+    pub fn read(&self) -> RwLockReadGuard<'_, Vertex> {
+        self.r.read()
+    }
+
+    pub fn write(&self) -> RwLockWriteGuard<'_, Vertex> {
+        self.r.write()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
     process_id: ProcessId,
-    local: Arc<Shared<Dot, Mutex<Vertex>>>,
+    local: Arc<Shared<Dot, RwLock<Vertex>>>,
 }
 
 impl VertexIndex {
@@ -39,7 +43,7 @@ impl VertexIndex {
     /// Indexes a new vertex, returning any previous vertex indexed.
     pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
         let dot = vertex.dot();
-        let cell = Mutex::new(vertex);
+        let cell = RwLock::new(vertex);
         self.local.insert(dot, cell).map(|cell| cell.into_inner())
     }
 

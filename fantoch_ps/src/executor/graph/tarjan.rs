@@ -80,7 +80,7 @@ impl TarjanSCCFinder {
                     self.process_id, dot
                 );
             };
-            vertex.lock().id = 0;
+            vertex.write().id = 0;
 
             // add dot to set of visited
             visited.insert(dot);
@@ -102,7 +102,7 @@ impl TarjanSCCFinder {
         self.id += 1;
 
         // get vertex
-        let mut vertex = vertex_ref.lock();
+        let mut vertex = vertex_ref.write();
 
         // set id and low for vertex
         vertex.id = self.id;
@@ -182,7 +182,7 @@ impl TarjanSCCFinder {
                     }
                     Some(dep_vertex_ref) => {
                         // get vertex
-                        let mut dep_vertex = dep_vertex_ref.lock();
+                        let mut dep_vertex = dep_vertex_ref.read();
 
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
@@ -227,8 +227,8 @@ impl TarjanSCCFinder {
                             }
 
                             // get guards again
-                            vertex = vertex_ref.lock();
-                            dep_vertex = dep_vertex_ref.lock();
+                            vertex = vertex_ref.write();
+                            dep_vertex = dep_vertex_ref.read();
 
                             // min low with dep low
                             vertex.low = cmp::min(vertex.low, dep_vertex.low);
@@ -283,7 +283,7 @@ impl TarjanSCCFinder {
                 *found += 1;
 
                 // get its vertex and change its `on_stack` value
-                let mut member_vertex = member_vertex_ref.lock();
+                let mut member_vertex = member_vertex_ref.write();
                 member_vertex.on_stack = false;
 
                 // add it to the SCC and check it wasn't there before
