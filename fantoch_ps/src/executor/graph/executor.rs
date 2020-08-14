@@ -100,41 +100,41 @@ impl GraphExecutor {
         }
     }
 
-    fn fetch_commands_to_execute(&mut self, time: &dyn SysTime) {
+    fn fetch_commands_to_execute(&mut self, _time: &dyn SysTime) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
             log!(
                 "p{}: GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
                 self.process_id,
                 cmd.rifl(),
-                time.millis()
+                _time.millis()
             );
             self.execute(cmd);
         }
     }
 
-    fn fetch_requests(&mut self, time: &dyn SysTime) {
+    fn fetch_requests(&mut self, _time: &dyn SysTime) {
         for (to, dot) in self.graph.requests() {
             log!(
                 "p{}: GraphExecutor::fetch_requests {:?} {:?} | time = {}",
                 self.process_id,
                 to,
                 dot,
-                time.millis()
+                _time.millis()
             );
             let request = GraphExecutionInfo::request(self.shard_id, dot);
             self.to_executors.push((to, request));
         }
     }
 
-    fn fetch_request_replies(&mut self, time: &dyn SysTime) {
+    fn fetch_request_replies(&mut self, _time: &dyn SysTime) {
         for (to, infos) in self.graph.request_replies() {
             log!(
                 "p{}: Graph::fetch_request_replies {:?} {:?} | time = {}",
                 self.process_id,
                 to,
                 infos,
-                time.millis()
+                _time.millis()
             );
             let reply = GraphExecutionInfo::request_reply(infos);
             self.to_executors.push((to, reply));
