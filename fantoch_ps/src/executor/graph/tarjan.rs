@@ -288,6 +288,14 @@ impl TarjanSCCFinder {
                 let mut member_vertex = member_vertex_ref.write();
                 member_vertex.on_stack = false;
 
+                // check if this command is replicated by our shard so that we
+                // can later drop the guards
+                let is_mine = member_vertex.cmd.replicated_by(&self.shard_id);
+
+                // drop guards to avoid a deadlock
+                drop(member_vertex);
+                drop(member_vertex_ref);
+
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
 
@@ -301,7 +309,7 @@ impl TarjanSCCFinder {
                 if !executed_clock
                     .write("Finder::strong_connect add SCC member")
                     .add(&member_dot.source(), member_dot.sequence())
-                    && member_vertex.cmd.replicated_by(&self.shard_id)
+                    && is_mine
                 {
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",
