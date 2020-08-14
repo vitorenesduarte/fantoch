@@ -55,6 +55,7 @@ const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
 #[cfg(feature = "exp")]
 const STATUS_FREQUENCY: Option<usize> = None;
+// const STATUS_FREQUENCY: Option<usize> = Some(1);
 
 // if paxos, set process 1 as the leader
 const LEADER: ProcessId = 1;

@@ -182,7 +182,7 @@ async fn main() -> Result<(), Report> {
     let shards_per_command = 2;
     let shard_count = 4;
     let keys_per_shard = 1;
-    let zipf_coefficient = 0.00001;
+    let zipf_coefficient = 0.1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
         coefficient: zipf_coefficient,

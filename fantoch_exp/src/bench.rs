@@ -121,6 +121,7 @@ pub async fn bench_experiment(
                         }
                     }
                 }
+
                 loop {
                     let exp_dir = create_exp_dir(&results_dir)
                         .await
