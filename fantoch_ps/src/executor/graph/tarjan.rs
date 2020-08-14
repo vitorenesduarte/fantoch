@@ -1,14 +1,13 @@
+use super::executed::ExecutedClock;
 use super::index::{VertexIndex, VertexRef};
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
-use parking_lot::RwLock;
 use std::cmp;
 use std::collections::BTreeSet;
-use std::sync::Arc;
-use threshold::{AEClock, EventSet, VClock};
+use threshold::{EventSet, VClock};
 
 /// commands are sorted inside an SCC given their dot
 pub type SCC = BTreeSet<Dot>;
@@ -94,7 +93,7 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
-        executed_clock: &Arc<RwLock<AEClock<ProcessId>>>,
+        executed_clock: &ExecutedClock,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
@@ -133,7 +132,7 @@ impl TarjanSCCFinder {
                 to
             } else {
                 executed_clock
-                    .read()
+                    .read("Finder::strong_connect frontier")
                     .get(process_id)
                     .expect("process should exist in the executed clock")
                     .frontier()
@@ -151,7 +150,10 @@ impl TarjanSCCFinder {
                 // - we need this check because the clock may not be contiguous,
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed
-                if executed_clock.read().contains(process_id, dep) {
+                if executed_clock
+                    .read("Finder::strong_connect check dep")
+                    .contains(process_id, dep)
+                {
                     continue;
                 }
 
@@ -297,7 +299,7 @@ impl TarjanSCCFinder {
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
                 if !executed_clock
-                    .write()
+                    .write("Finder::strong_connect add SCC member")
                     .add(&member_dot.source(), member_dot.sequence())
                     && member_vertex.cmd.replicated_by(&self.shard_id)
                 {
@@ -310,7 +312,7 @@ impl TarjanSCCFinder {
                 log!(
                     "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
-                    executed_clock.read()
+                    executed_clock.read("Finder::strong_connect log")
                 );
 
                 // quit if root is found
