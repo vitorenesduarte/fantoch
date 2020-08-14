@@ -1,11 +1,13 @@
 use super::tarjan::Vertex;
 use crate::shared::Shared;
 use dashmap::mapref::one::Ref as DashMapRef;
+use fantoch::config::Config;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::HashSet;
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::Arc;
+use threshold::AEClock;
 
 pub struct VertexRef<'a> {
     r: DashMapRef<'a, Dot, Mutex<Vertex>>,
@@ -59,18 +61,28 @@ impl VertexIndex {
 
 #[derive(Debug, Clone)]
 pub struct PendingIndex {
+    process_id: ProcessId,
     shard_id: ShardId,
-    n: usize,
+    config: Config,
     index: HashMap<Dot, HashSet<Dot>>,
+    // `committed_clock` and `mine` are only used in partial replication
+    committed_clock: AEClock<ProcessId>,
     mine: HashSet<Dot>,
 }
 
 impl PendingIndex {
-    pub fn new(shard_id: ShardId, n: usize) -> Self {
+    pub fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        config: Config,
+        committed_clock: AEClock<ProcessId>,
+    ) -> Self {
         Self {
+            process_id,
             shard_id,
-            n,
+            config,
             index: HashMap::new(),
+            committed_clock,
             mine: HashSet::new(),
         }
     }
@@ -83,13 +95,30 @@ impl PendingIndex {
         self.mine.contains(dot)
     }
 
+    pub fn committed(&mut self, dot: Dot) {
+        // update set of committed commands if partial replication
+        if self.config.shards() > 1 {
+            if !self.committed_clock.add(&dot.source(), dot.sequence()) {
+                panic!(
+                    "p{}: PendingIndex::committed {:?} already committed",
+                    self.process_id, dot
+                );
+            }
+        }
+    }
+
     /// Indexes a new `dot` as a child of `dep_dot`:
     /// - when `dep_dot` is executed, we'll try to execute `dot` as `dep_dot`
     ///   was a dependency and maybe now `dot` can be executed
     #[must_use]
-    pub fn index(&mut self, dep_dot: Dot, dot: Dot) -> Option<ShardId> {
+    pub fn index(
+        &mut self,
+        dep_dot: Dot,
+        dot: Dot,
+    ) -> Option<(ShardId, HashSet<Dot>)> {
         match self.index.entry(dep_dot) {
             Entry::Vacant(vacant) => {
+                // save `dot`
                 let mut dots = HashSet::new();
                 dots.insert(dot);
                 vacant.insert(dots);
@@ -104,11 +133,44 @@ impl PendingIndex {
                 // NOTE: this is a best effort only; it's totally possible that
                 // we replicate a command but don't have it *yet* in `self.mine`
                 // when such command is first declared as a dependency
-                let target = dep_dot.target_shard(self.n);
+                // NOTE: we're always the target shard in full replication, and
+                // for that reason, the following is a noop
+                let target = dep_dot.target_shard(self.config.n());
                 if target != self.shard_id && !self.mine.contains(&dep_dot) {
                     // if we don't replicate the command, ask its target shard
                     // for its info
-                    return Some(target);
+                    if let Some(event_set) =
+                        self.committed_clock.get(&dep_dot.source())
+                    {
+                        let dots_to_request: HashSet<_> = event_set
+                            .missing_below(dep_dot.sequence())
+                            .map(|event| Dot::new(dep_dot.source(), event))
+                            // don't ask for dots we have already asked for
+                            .filter(|dot| !self.index.contains_key(dot))
+                            // missing below doesn't include
+                            // `dep_dot.sequence()`; thus, include `dep_dot` as
+                            // well
+                            .chain(std::iter::once(dep_dot))
+                            .collect();
+
+                        // make `dot` a child of all these dots to be requested;
+                        // this makes sure that we don't request the same dot
+                        // twice
+                        for dot_to_request in dots_to_request.iter() {
+                            self.index
+                                .entry(*dot_to_request)
+                                .or_default()
+                                .insert(dot);
+                        }
+                        return Some((target, dots_to_request));
+                    } else {
+                        panic!(
+                            "p{}: PendingIndex::index {:?} not found in committed clock {:?}", 
+                            self.process_id,
+                            dep_dot.source(),
+                            self.committed_clock,
+                        );
+                    }
                 }
             }
             Entry::Occupied(mut dots) => {

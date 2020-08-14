@@ -95,8 +95,10 @@ impl Executor for GraphExecutor {
 impl GraphExecutor {
     fn fetch_actions(&mut self) {
         self.fetch_commands_to_execute();
-        self.fetch_requests();
-        self.fetch_request_replies();
+        if self.config.shards() > 0 {
+            self.fetch_requests();
+            self.fetch_request_replies();
+        }
     }
 
     fn fetch_commands_to_execute(&mut self) {

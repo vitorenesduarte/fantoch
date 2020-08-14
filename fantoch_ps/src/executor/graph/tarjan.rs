@@ -76,7 +76,7 @@ impl TarjanSCCFinder {
                 vertex
             } else {
                 panic!(
-                    "p{}: stack member {:?} should exist",
+                    "p{}: Finder::finalize stack member {:?} should exist",
                     self.process_id, dot
                 );
             };

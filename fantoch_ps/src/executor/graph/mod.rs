@@ -51,14 +51,14 @@ pub struct DependencyGraph {
     metrics: ExecutorMetrics,
     // worker 0 (handles commands):
     // - adds new commands `to_execute`
-    // - `requests` dependencies to be able to order commands
+    // - `out_requests` dependencies to be able to order commands
     to_execute: Vec<Command>,
-    requests: HashMap<ShardId, HashSet<Dot>>,
+    out_requests: HashMap<ShardId, HashSet<Dot>>,
     // worker 1 (handles requests):
-    // - may have `buffered_requests` when doesn't have the command yet
-    // - produces `request_replies` when it has the command
-    buffered_requests: HashMap<Dot, Vec<ShardId>>,
-    request_replies: HashMap<ShardId, Vec<RequestReply>>,
+    // - may have `buffered_in_requests` when doesn't have the command yet
+    // - produces `out_request_replies` when it has the command
+    buffered_in_requests: HashMap<ShardId, HashSet<Dot>>,
+    out_request_replies: HashMap<ShardId, Vec<RequestReply>>,
 }
 
 enum FinderInfo {
@@ -81,12 +81,16 @@ impl DependencyGraph {
     ) -> Self {
         let executor_index = 0;
         // create bottom executed clock
-        let ids = util::all_process_ids(config.shards(), config.n())
-            .map(|(process_id, _)| process_id);
-        let executed_clock = Arc::new(RwLock::new(AEClock::with(ids)));
+        let ids: Vec<_> = util::all_process_ids(config.shards(), config.n())
+            .map(|(process_id, _)| process_id)
+            .collect();
+        let executed_clock = Arc::new(RwLock::new(AEClock::with(ids.clone())));
+        // create committed clock
+        let committed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
-        let pending_index = PendingIndex::new(shard_id, config.n());
+        let pending_index =
+            PendingIndex::new(process_id, shard_id, *config, committed_clock);
         // create finder
         let finder = TarjanSCCFinder::new(
             process_id,
@@ -97,9 +101,9 @@ impl DependencyGraph {
         // create to execute
         let to_execute = Vec::new();
         // create requests and request replies
-        let requests = HashMap::new();
-        let buffered_requests = HashMap::new();
-        let request_replies = HashMap::new();
+        let out_requests = Default::default();
+        let buffered_in_requests = Default::default();
+        let out_request_replies = Default::default();
         DependencyGraph {
             executor_index,
             process_id,
@@ -110,9 +114,9 @@ impl DependencyGraph {
             finder,
             metrics,
             to_execute,
-            requests,
-            buffered_requests,
-            request_replies,
+            out_requests,
+            buffered_in_requests,
+            out_request_replies,
         }
     }
 
@@ -127,16 +131,16 @@ impl DependencyGraph {
         self.to_execute.pop()
     }
 
-    /// Returns a set of requests.
+    /// Returns a request.
     #[must_use]
     pub fn requests(&mut self) -> HashMap<ShardId, HashSet<Dot>> {
-        std::mem::take(&mut self.requests)
+        std::mem::take(&mut self.out_requests)
     }
 
     /// Returns a set of request replies.
     #[must_use]
     pub fn request_replies(&mut self) -> HashMap<ShardId, Vec<RequestReply>> {
-        std::mem::take(&mut self.request_replies)
+        std::mem::take(&mut self.out_request_replies)
     }
 
     #[cfg(test)]
@@ -150,8 +154,7 @@ impl DependencyGraph {
 
     fn cleanup(&mut self, _time: &dyn SysTime) {
         log!(
-            "p{}: @{} Graph::cleanup at {}",
-            self.executor_index,
+            "p{}: @{} Graph::cleanup",
             self.process_id,
             self.executor_index
         );
@@ -185,6 +188,9 @@ impl DependencyGraph {
                 self.process_id, self.executor_index, dot
             );
         }
+
+        // notify pending that this command has been committed
+        self.pending_index.committed(dot);
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
@@ -236,7 +242,7 @@ impl DependencyGraph {
         from: ShardId,
         dots: impl Iterator<Item = Dot>,
     ) {
-        let replies = self.request_replies.entry(from).or_default();
+        let replies = self.out_request_replies.entry(from).or_default();
         for dot in dots {
             log!(
                 "p{}: @{} Graph::handle_request {:?} from {:?}",
@@ -287,7 +293,10 @@ impl DependencyGraph {
                         from,
                         dot
                     );
-                    self.buffered_requests.entry(dot).or_default().push(from);
+                    self.buffered_in_requests
+                        .entry(from)
+                        .or_default()
+                        .insert(dot);
                 }
             }
         }
@@ -424,14 +433,15 @@ impl DependencyGraph {
     }
 
     fn index_pending(&mut self, dep_dot: Dot, dot: Dot) {
-        if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
+        if let Some((target_shard, dots_to_request)) =
+            self.pending_index.index(dep_dot, dot)
+        {
             // save out requests metric
             self.metrics.aggregate(ExecutorMetricsKind::OutRequests, 1);
-
-            self.requests
+            self.out_requests
                 .entry(target_shard)
                 .or_default()
-                .insert(dep_dot);
+                .extend(dots_to_request);
         }
     }
 
@@ -532,11 +542,9 @@ impl DependencyGraph {
     }
 
     fn check_pending_requests(&mut self) {
-        let buffered = std::mem::take(&mut self.buffered_requests);
-        for (dot, shards) in buffered {
-            for from in shards {
-                self.handle_request(from, std::iter::once(dot));
-            }
+        let buffered = std::mem::take(&mut self.buffered_in_requests);
+        for (from, dots) in buffered {
+            self.handle_request(from, dots.into_iter());
         }
     }
 }
