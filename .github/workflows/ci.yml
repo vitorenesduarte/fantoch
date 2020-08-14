@@ -28,7 +28,7 @@ jobs:
         timeout-minutes: 60
 
       - name: Test fantoch
-        run: cd fantoch/ && cargo test
+        run: cd fantoch/ && cargo test --features prof
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
