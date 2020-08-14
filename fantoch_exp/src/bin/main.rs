@@ -14,7 +14,7 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 // const RESULTS_DIR: &str = "../graph_executor";
-const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new_metrics";
+const RESULTS_DIR: &str = "../graph_executor_zipf01";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -36,7 +36,7 @@ const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 // processes config
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
-const TRANSITIVE_CONFLICTS: bool = true;
+const TRANSITIVE_CONFLICTS: bool = false;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
@@ -182,13 +182,13 @@ async fn main() -> Result<(), Report> {
     let shards_per_command = 2;
     let shard_count = 4;
     let keys_per_shard = 1;
-    // let zipf_coefficient = 0.5;
-    // let zipf_key_count = 1_000_000;
-    // let key_gen = KeyGen::Zipf {
-    //     coefficient: zipf_coefficient,
-    //     key_count: zipf_key_count,
-    // };
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
+    let zipf_coefficient = 0.00001;
+    let zipf_key_count = 1_000_000;
+    let key_gen = KeyGen::Zipf {
+        coefficient: zipf_coefficient,
+        key_count: zipf_key_count,
+    };
+    // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
 
     let skip = |_, _, _| false;
 

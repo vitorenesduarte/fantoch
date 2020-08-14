@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_0conf_parallel_new_metrics";
+const RESULTS_DIR: &str = "../graph_executor_zipf01";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -32,14 +32,14 @@ fn partial_replication() -> Result<(), Report> {
     let keys_per_shard = 1;
     let mut key_gens = Vec::new();
     let zipf_key_count = 1_000_000;
-    let zipf_coefficient = 0.5;
+    let zipf_coefficient = 0.1;
     let zipf_key_gen = KeyGen::Zipf {
         coefficient: zipf_coefficient,
         key_count: zipf_key_count,
     };
-    // key_gens.push(zipf_key_gen);
-    let conflict_key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
-    key_gens.push(conflict_key_gen);
+    key_gens.push(zipf_key_gen);
+    // let conflict_key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
+    // key_gens.push(conflict_key_gen);
     let payload_size = 0;
     let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
 

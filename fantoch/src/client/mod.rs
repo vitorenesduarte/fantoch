@@ -44,11 +44,18 @@ pub struct Client {
     pending: Pending,
     /// mapping from
     data: ClientData,
+    /// frequency of status messages; if set with Some(1), a status message
+    /// will be shown after each command completes
+    status_frequency: Option<usize>,
 }
 
 impl Client {
     /// Creates a new client.
-    pub fn new(client_id: ClientId, workload: Workload) -> Self {
+    pub fn new(
+        client_id: ClientId,
+        workload: Workload,
+        status_frequency: Option<usize>,
+    ) -> Self {
         // create client
         Self {
             client_id,
@@ -58,6 +65,7 @@ impl Client {
             key_gen_state: workload.key_gen().initial_state(client_id),
             pending: Pending::new(),
             data: ClientData::new(),
+            status_frequency,
         }
     }
 
@@ -128,6 +136,17 @@ impl Client {
         );
         self.data.record(latency, end_time);
 
+        if let Some(frequency) = self.status_frequency {
+            if self.workload.issued_commands() % frequency == 0 {
+                println!(
+                    "c{:?}: {} of {}",
+                    self.client_id,
+                    self.workload.issued_commands(),
+                    self.workload.commands_per_client()
+                );
+            }
+        }
+
         // we're done once:
         // - the workload is finished and
         // - pending is empty
@@ -174,7 +193,8 @@ mod tests {
 
         // client
         let id = 1;
-        Client::new(id, workload)
+        let status_frequency = None;
+        Client::new(id, workload, status_frequency)
     }
 
     #[test]

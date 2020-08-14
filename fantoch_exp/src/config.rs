@@ -53,6 +53,9 @@ const TRACER_SHOW_INTERVAL: Option<usize> = None;
 #[cfg(feature = "exp")]
 const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
 
+#[cfg(feature = "exp")]
+const STATUS_FREQUENCY: Option<usize> = None;
+
 // if paxos, set process 1 as the leader
 const LEADER: ProcessId = 1;
 
@@ -269,6 +272,7 @@ pub struct ClientConfig {
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
     metrics_file: String,
     stack_size: Option<usize>,
     cpus: Option<usize>,
@@ -291,6 +295,7 @@ impl ClientConfig {
             workload,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
+            status_frequency: STATUS_FREQUENCY,
             metrics_file,
             stack_size: CLIENT_STACK_SIZE,
             cpus,
@@ -337,6 +342,9 @@ impl ClientConfig {
             "--metrics_file",
             self.metrics_file,
         ];
+        if let Some(status_frequency) = self.status_frequency {
+            args.extend(args!["--status_frequency", status_frequency]);
+        }
         if let Some(stack_size) = self.stack_size {
             args.extend(args!["--stack_size", stack_size]);
         }

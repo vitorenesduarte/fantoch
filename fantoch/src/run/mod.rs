@@ -440,6 +440,7 @@ pub async fn client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
     metrics_file: Option<String>,
 ) -> Result<(), Report>
 where
@@ -470,6 +471,7 @@ where
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
+                    status_frequency,
                 ))
             } else {
                 task::spawn(closed_loop_client::<A>(
@@ -478,6 +480,7 @@ where
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
+                    status_frequency,
                 ))
             };
             Some(handle)
@@ -514,6 +517,7 @@ async fn closed_loop_client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
 ) -> Option<Vec<Client>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -528,6 +532,7 @@ where
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
     )
     .await?;
 
@@ -592,6 +597,7 @@ async fn open_loop_client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
 ) -> Option<Vec<Client>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -606,6 +612,7 @@ where
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
     )
     .await?;
 
@@ -652,6 +659,7 @@ async fn client_setup<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
 ) -> Option<(
     HashMap<ClientId, Client>,
     ServerToClientReceiver,
@@ -708,7 +716,7 @@ where
     let clients = client_ids
         .into_iter()
         .map(|client_id| {
-            let mut client = Client::new(client_id, workload);
+            let mut client = Client::new(client_id, workload, status_frequency);
             // discover processes
             client.connect(to_discover.clone());
             (client_id, client)
@@ -1234,7 +1242,9 @@ pub mod tests {
                 let interval = None;
 
                 // spawn client
-                let metrics_file = format!(".metrics_client_{}", process_id);
+                let status_frequency = None;
+                let metrics_file =
+                    Some(format!(".metrics_client_{}", process_id));
                 tokio::task::spawn(client(
                     client_ids,
                     addresses,
@@ -1242,7 +1252,8 @@ pub mod tests {
                     workload,
                     tcp_nodelay,
                     client_channel_buffer_size,
-                    Some(metrics_file),
+                    status_frequency,
+                    metrics_file,
                 ))
             })
             .collect();
