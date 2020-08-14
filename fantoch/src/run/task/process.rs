@@ -138,6 +138,7 @@ where
     // start readers and writers
     start_readers::<P>(to_workers, to_executors, id_to_connection_0);
     start_writers::<P>(
+        shard_id,
         tcp_flush_interval,
         channel_buffer_size,
         id_to_connection_1,
@@ -202,6 +203,7 @@ fn start_readers<P>(
 }
 
 async fn start_writers<P>(
+    shard_id: ShardId,
     tcp_flush_interval: Option<Duration>,
     channel_buffer_size: usize,
     connections: Vec<(ProcessId, ShardId, Connection)>,
@@ -217,27 +219,35 @@ where
     let mut writers = HashMap::with_capacity(connections.len());
 
     // start on writer task per connection
-    for (process_id, shard_id, connection) in connections {
+    for (peer_id, peer_shard_id, connection) in connections {
         // save shard id, ip and connection delay
         let ip = connection
             .ip_addr()
             .expect("ip address should be set for outgoing connection");
         let delay = connection.delay();
-        ips.insert(process_id, (shard_id, ip, delay));
+        ips.insert(peer_id, (peer_shard_id, ip, delay));
 
         // get connection delay
         let connection_delay = connection.delay();
 
         // get list set of writers to this process and create writer channels
-        let txs = writers.entry(process_id).or_insert_with(Vec::new);
+        let txs = writers.entry(peer_id).or_insert_with(Vec::new);
         let (mut writer_tx, writer_rx) = task::channel(channel_buffer_size);
 
         // name the channel accordingly
         writer_tx.set_name(format!(
             "to_writer_{}_process_{}",
             txs.len(),
-            process_id
+            peer_id
         ));
+
+        // don't use a flush interval if this peer is in my region: a peer is in
+        // my region if it has a different shard id
+        let tcp_flush_interval = if peer_shard_id != shard_id {
+            None
+        } else {
+            tcp_flush_interval
+        };
 
         // spawn the writer task
         task::spawn(writer_task::<P>(
@@ -254,7 +264,7 @@ where
             delay_tx.set_name(format!(
                 "to_delay_{}_process_{}",
                 txs.len(),
-                process_id
+                peer_id
             ));
 
             // spawn delay task
