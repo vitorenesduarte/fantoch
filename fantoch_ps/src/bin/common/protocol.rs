@@ -17,6 +17,7 @@ const DEFAULT_CLIENT_PORT: u16 = 4000;
 
 const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
+const DEFAULT_EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
@@ -209,6 +210,13 @@ fn parse_args() -> ProtocolArgs {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("executor_cleanup_interval")
+                .long("executor_cleanup_interva")
+                .value_name("EXECUTOR_CLEANUP_INTERVAL")
+                .help("executor cleanup interval (in milliseconds); default: 5")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("gc_interval")
                 .long("gc_interval")
                 .value_name("GC_INTERVAL")
@@ -371,6 +379,9 @@ fn parse_args() -> ProtocolArgs {
         parse_shards(matches.value_of("shards")),
         parse_transitive_conflicts(matches.value_of("transitive_conflicts")),
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
+        parse_executor_cleanup_interval(
+            matches.value_of("executor_cleanup_interval"),
+        ),
         parse_gc_interval(matches.value_of("gc_interval")),
         parse_leader(matches.value_of("leader")),
         parse_newt_tiny_quorums(matches.value_of("newt_tiny_quorums")),
@@ -544,6 +555,7 @@ pub fn build_config(
     shards: usize,
     transitive_conflicts: bool,
     execute_at_commit: bool,
+    executor_cleanup_interval: Duration,
     gc_interval: Option<Duration>,
     leader: Option<ProcessId>,
     newt_tiny_quorums: bool,
@@ -556,6 +568,7 @@ pub fn build_config(
     config.set_shards(shards);
     config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
+    config.set_executor_cleanup_interval(executor_cleanup_interval);
     if let Some(gc_interval) = gc_interval {
         config.set_gc_interval(gc_interval);
     }
@@ -612,6 +625,19 @@ pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {
                 .expect("execute_at_commit should be a bool")
         })
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT)
+}
+
+pub fn parse_executor_cleanup_interval(
+    executor_cleanup_interval: Option<&str>,
+) -> Duration {
+    executor_cleanup_interval
+        .map(|executor_cleanup_interval| {
+            let ms = executor_cleanup_interval
+                .parse::<u64>()
+                .expect("executor_cleanup_interval should be a number");
+            Duration::from_millis(ms)
+        })
+        .unwrap_or(DEFAULT_EXECUTOR_CLEANUP_INTERVAL)
 }
 
 pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<Duration> {

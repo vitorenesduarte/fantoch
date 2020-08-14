@@ -34,6 +34,7 @@ const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
+const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRANSITIVE_CONFLICTS: bool = false;
@@ -73,6 +74,7 @@ macro_rules! config {
             config.set_newt_clock_bump_interval(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
+        config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
