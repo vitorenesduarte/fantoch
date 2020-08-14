@@ -1,4 +1,3 @@
-use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId, ShardId};
 use crate::log;
@@ -177,23 +176,6 @@ impl BaseProcess {
         &self.closest_shard_process
     }
 
-    // Returns all processes (but self) in my region.
-    pub fn all_in_region_but(&self, cmd: &Command) -> HashSet<ProcessId> {
-        // the total number of shards is the number of connected shards + self
-        let total_shards = self.closest_shard_process.len() + 1;
-        let mut in_region_but =
-            HashSet::with_capacity(total_shards - cmd.shard_count());
-
-        for (shard_id, process_id) in self.closest_shard_process.iter() {
-            // only include processes that *do not* replicate the command
-            if !cmd.replicated_by(shard_id) {
-                assert!(in_region_but.insert(*process_id));
-            }
-        }
-
-        in_region_but
-    }
-
     // Return metrics.
     pub fn metrics(&self) -> &ProtocolMetrics {
         &self.metrics
@@ -224,7 +206,6 @@ mod tests {
     use crate::id::Rifl;
     use crate::kvs::KVOp;
     use crate::planet::{Planet, Region};
-    use crate::singleton;
     use crate::util;
     use std::collections::BTreeSet;
     use std::iter::FromIterator;
@@ -458,10 +439,5 @@ mod tests {
         let cmd_both_shards = Command::new(rifl, shard_to_ops);
         assert!(cmd_both_shards.replicated_by(&shard_id_0));
         assert!(cmd_both_shards.replicated_by(&shard_id_1));
-
-        // process 4 does not replicate `cmd_shard_0`
-        assert_eq!(bp.all_in_region_but(&cmd_shard_0), singleton![4]);
-        // all processes replicate `cmd_both_shards`
-        assert_eq!(bp.all_in_region_but(&cmd_both_shards), HashSet::new());
     }
 }

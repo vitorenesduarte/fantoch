@@ -192,7 +192,7 @@ impl DependencyGraph {
         }
 
         // notify pending that this command has been committed
-        self.pending_index.committed(dot);
+        self.pending_index.commit(dot);
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();

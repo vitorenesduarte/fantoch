@@ -95,7 +95,7 @@ impl PendingIndex {
         self.mine.contains(dot)
     }
 
-    pub fn committed(&mut self, dot: Dot) {
+    pub fn commit(&mut self, dot: Dot) {
         // update set of committed commands if partial replication
         if self.config.shards() > 1 {
             if !self.committed_clock.add(&dot.source(), dot.sequence()) {
@@ -145,8 +145,13 @@ impl PendingIndex {
                         let dots_to_request: HashSet<_> = event_set
                             .missing_below(dep_dot.sequence())
                             .map(|event| Dot::new(dep_dot.source(), event))
-                            // don't ask for dots we have already asked for
-                            .filter(|dot| !self.index.contains_key(dot))
+                            // don't ask for dots we havent' asked for and don't have
+                            .filter(|dot| {
+                                !self.index.contains_key(&dot)
+                                    && !self
+                                        .committed_clock
+                                        .contains(&dot.source(), dot.sequence())
+                            })
                             // missing below doesn't include
                             // `dep_dot.sequence()`; thus, include `dep_dot` as
                             // well
