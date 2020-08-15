@@ -301,6 +301,13 @@ impl TarjanSCCFinder {
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
 
+                // check if the command is replicated by my shard
+                let is_mine = member_vertex.cmd.replicated_by(&self.shard_id);
+
+                // drop guards
+                drop(member_vertex);
+                drop(member_vertex_ref);
+
                 // update executed clock:
                 // - this is a nice optimization (that I think we missed in
                 //   Atlas); instead of waiting for the root-level recursion to
@@ -310,7 +317,8 @@ impl TarjanSCCFinder {
                 //   few iterations
                 if !executed_clock.write("Finder::strong_connect", |clock| {
                     clock.add(&dot.source(), dot.sequence())
-                }) {
+                }) && is_mine
+                {
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",
                         self.process_id, dot
