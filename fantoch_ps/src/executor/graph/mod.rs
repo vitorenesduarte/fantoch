@@ -167,6 +167,7 @@ impl DependencyGraph {
         clock: VClock<ProcessId>,
         time: &dyn SysTime,
     ) {
+        assert_eq!(self.executor_index, 0);
         log!(
             "p{}: @{} Graph::handle_add {:?} {:?} | time = {}",
             self.process_id,
@@ -223,6 +224,7 @@ impl DependencyGraph {
     }
 
     pub fn handle_add_mine(&mut self, dot: Dot, _time: &dyn SysTime) {
+        assert_eq!(self.executor_index, 0);
         log!(
             "p{}: @{} Graph::handle_add_mine {:?} | time = {}",
             self.process_id,
@@ -234,6 +236,7 @@ impl DependencyGraph {
     }
 
     fn handle_request(&mut self, from: ShardId, dot: Dot, _time: &dyn SysTime) {
+        assert!(self.executor_index > 0);
         log!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
@@ -256,6 +259,7 @@ impl DependencyGraph {
         executed_clock: &AEClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
+        assert!(self.executor_index > 0);
         let replies = self.out_request_replies.entry(from).or_default();
         let requests = self.buffered_in_requests.entry(from).or_default();
         for dot in dots {
@@ -323,6 +327,7 @@ impl DependencyGraph {
         infos: Vec<RequestReply>,
         time: &dyn SysTime,
     ) {
+        assert_eq!(self.executor_index, 0);
         let mut accepted_replies = 0;
         for info in infos {
             log!(
