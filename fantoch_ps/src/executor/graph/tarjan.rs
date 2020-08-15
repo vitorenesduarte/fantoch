@@ -312,19 +312,24 @@ impl TarjanSCCFinder {
                 //   consulted to decide what are the dependencies of a
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
-                if executed_clock.write("Finder::strong_connect", |clock| {
-                    clock.add(&member_dot.source(), member_dot.sequence())
-                }) 
-                // && is_mine
-                // TODO add the check above where:
+
+                // TODO add this check back:
                 // check if the command is replicated by my shard
                 // let is_mine = member_vertex.cmd.replicated_by(&self.shard_id);
-                {
-                    panic!(
-                        "p{}: Finder::strong_connect dot {:?} already executed",
-                        self.process_id, member_dot
-                    );
-                }
+                // if executed_clock.write("Finder::strong_connect", |clock| {
+                //     clock.add(&member_dot.source(), member_dot.sequence())
+                // })
+                // && is_mine
+                // {
+                //     panic!(
+                //         "p{}: Finder::strong_connect dot {:?} already executed",
+                //         self.process_id, member_dot
+                //     );
+                // }
+                executed_clock.write("Finder::strong_connect", |clock| {
+                    clock.add(&member_dot.source(), member_dot.sequence())
+                });
+
                 log!(
                     "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
