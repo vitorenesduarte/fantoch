@@ -300,10 +300,8 @@ impl TarjanSCCFinder {
                 }
             }
 
-            println!("E");
             let mut executed_clock =
                 executed_clock.write("Finder::strong_connect add SCC member");
-            println!("E1");
             for dot in scc.iter() {
                 // update executed clock:
                 // - this is a nice optimization (that I think we missed in
@@ -324,6 +322,7 @@ impl TarjanSCCFinder {
                 self.process_id,
                 executed_clock
             );
+            // ExecutedClock::fair_unlock_write(executed_clock);
 
             // add scc to to the set of sccs
             self.sccs.push(scc);

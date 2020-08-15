@@ -53,4 +53,12 @@ impl ExecutedClock {
         //     )
         // })
     }
+
+    pub fn fair_unlock_read(guard: RwLockReadGuard<'_, AEClock<ProcessId>>) {
+        RwLockReadGuard::unlock_fair(guard)
+    }
+
+    // pub fn fair_unlock_write(guard: RwLockWriteGuard<'_, AEClock<ProcessId>>) {
+    //     RwLockWriteGuard::unlock_fair(guard)
+    // }
 }
