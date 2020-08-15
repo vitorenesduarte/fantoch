@@ -26,7 +26,7 @@ use fantoch::time::SysTime;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use threshold::{AEClock, VClock};
+use threshold::VClock;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -262,7 +262,7 @@ impl DependencyGraph {
     ) {
         assert!(self.executor_index > 0);
         let replies = self.out_request_replies.entry(from).or_default();
-        let requests = self.buffered_in_requests.entry(from).or_default();
+        // let requests = self.buffered_in_requests.entry(from).or_default();
         for dot in dots {
             replies.push(RequestReply::Executed { dot });
             /*
