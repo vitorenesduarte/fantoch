@@ -32,23 +32,25 @@ impl ExecutedClock {
         &self,
         tag: &'static str,
     ) -> RwLockReadGuard<'_, AEClock<ProcessId>> {
-        self.clock.try_read().unwrap_or_else(|| {
-            panic!(
-                "p{}: ExecutedClock::read failed at {}",
-                self.process_id, tag
-            )
-        })
+        self.clock.read()
+        // self.clock.try_read().unwrap_or_else(|| {
+        //     panic!(
+        //         "p{}: ExecutedClock::read failed at {}",
+        //         self.process_id, tag
+        //     )
+        // })
     }
 
     pub fn write(
         &self,
         tag: &'static str,
     ) -> RwLockWriteGuard<'_, AEClock<ProcessId>> {
-        self.clock.try_write().unwrap_or_else(|| {
-            panic!(
-                "p{}: ExecutedClock::write failed at {}",
-                self.process_id, tag
-            )
-        })
+        self.clock.write()
+        // self.clock.try_write().unwrap_or_else(|| {
+        //     panic!(
+        //         "p{}: ExecutedClock::write failed at {}",
+        //         self.process_id, tag
+        //     )
+        // })
     }
 }

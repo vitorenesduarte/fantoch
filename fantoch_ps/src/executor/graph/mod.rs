@@ -271,9 +271,9 @@ impl DependencyGraph {
                 from,
                 _time.millis()
             );
-            println!("@{} A", self.executor_index);
+            println!("@{} P", self.executor_index);
             if let Some(vertex) = self.vertex_index.find(&dot) {
-                println!("@{} B1", self.executor_index);
+                println!("@{} P1", self.executor_index);
                 let vertex = vertex.read("Graph::process_requests");
 
                 // only send the vertex if the shard that requested this vertex
@@ -295,7 +295,7 @@ impl DependencyGraph {
                     })
                 }
             } else {
-                println!("@{} B2", self.executor_index);
+                println!("@{} P2", self.executor_index);
                 // if we don't have it, then check if it's executed
                 // NOTE: this `executed_clock` is a snapshot of the clock, so we
                 // may endup buffering a request for the next cleanup step, even
@@ -568,10 +568,12 @@ impl DependencyGraph {
         let buffered = std::mem::take(&mut self.buffered_in_requests);
         // take a snapshot of the executed clock: this reduces the contention of
         // the lock
+        println!("@{} C", self.executor_index);
         let executed_clock: AEClock<ProcessId> = self
             .executed_clock
             .read("Graph::check_pending_requests")
             .clone();
+        println!("@{} C1", self.executor_index);
         for (from, dots) in buffered {
             self.process_requests(
                 from,
