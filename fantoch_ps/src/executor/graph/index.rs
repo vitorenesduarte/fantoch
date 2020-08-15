@@ -17,12 +17,16 @@ impl<'a> VertexRef<'a> {
         Self { r }
     }
 
-    pub fn read(&self) -> RwLockReadGuard<'_, Vertex> {
-        self.r.read()
+    pub fn read(&self, tag: &'static str) -> RwLockReadGuard<'_, Vertex> {
+        self.r
+            .try_read()
+            .unwrap_or_else(|| panic!("VertexRef::read failed at {}", tag))
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<'_, Vertex> {
-        self.r.write()
+    pub fn write(&self, tag: &'static str) -> RwLockWriteGuard<'_, Vertex> {
+        self.r
+            .try_write()
+            .unwrap_or_else(|| panic!("VertexRef::write failed at {}", tag))
     }
 }
 
