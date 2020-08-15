@@ -4,9 +4,6 @@ mod tarjan;
 /// This module contains the definition of `VertexIndex` and `PendingIndex`.
 mod index;
 
-/// This module contains the definition of `ExecutedClock`.
-mod executed;
-
 /// This modules contains the definition of `GraphExecutor` and
 /// `GraphExecutionInfo`.
 mod executor;
@@ -14,7 +11,6 @@ mod executor;
 // Re-exports.
 pub use executor::{GraphExecutionInfo, GraphExecutor};
 
-use self::executed::ExecutedClock;
 use self::index::{PendingIndex, VertexIndex};
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use fantoch::command::Command;
@@ -23,10 +19,11 @@ use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::time::SysTime;
+use fantoch::util;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use threshold::VClock;
+use threshold::{AEClock, VClock};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -45,7 +42,7 @@ pub struct DependencyGraph {
     executor_index: usize,
     process_id: ProcessId,
     shard_id: ShardId,
-    executed_clock: ExecutedClock,
+    executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -82,7 +79,10 @@ impl DependencyGraph {
     ) -> Self {
         let executor_index = 0;
         // create executed clock
-        let executed_clock = ExecutedClock::new(process_id, config);
+        let ids: Vec<_> = util::all_process_ids(config.shards(), config.n())
+            .map(|(process_id, _)| process_id)
+            .collect();
+        let executed_clock = AEClock::with(ids);
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new(process_id, shard_id, *config);
@@ -215,8 +215,7 @@ impl DependencyGraph {
             "p{}: @{} Graph::log executed {:?} | pending {:?} | time = {}",
             self.process_id,
             self.executor_index,
-            self.executed_clock
-                .read("Graph::log", |clock| format!("{:?}", clock)),
+            self.executed_clock,
             self.vertex_index
                 .dots()
                 .collect::<std::collections::BTreeSet<_>>(),
@@ -355,10 +354,7 @@ impl DependencyGraph {
                         accepted_replies += 1;
 
                         // update executed clock
-                        self.executed_clock
-                            .write("Graph::handle_request_reply", |clock| {
-                                clock.add(&dot.source(), dot.sequence())
-                            });
+                        self.executed_clock.add(&dot.source(), dot.sequence());
                         // check pending
                         let dots = vec![dot];
                         let mut total_found = 0;
@@ -1325,14 +1321,13 @@ mod tests {
         ));
 
         // create executed clock
-        let clock = AEClock::from(
+        queue.executed_clock = AEClock::from(
             util::vclock(vec![60, 50, 50, 30, 60]).into_iter().map(
                 |(process_id, max_set)| {
                     (process_id, AboveExSet::from_events(max_set.event_iter()))
                 },
             ),
         );
-        queue.executed_clock = ExecutedClock::from(process_id, clock);
 
         // create ready commands counter and try to find an SCC
         let mut ready_commands = 0;

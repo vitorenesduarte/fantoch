@@ -1,4 +1,3 @@
-use super::executed::ExecutedClock;
 use super::index::{VertexIndex, VertexRef};
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
@@ -7,7 +6,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
 use std::collections::BTreeSet;
-use threshold::{EventSet, VClock};
+use threshold::{AEClock, EventSet, VClock};
 
 /// commands are sorted inside an SCC given their dot
 pub type SCC = BTreeSet<Dot>;
@@ -93,7 +92,7 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
-        executed_clock: &mut ExecutedClock,
+        executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
@@ -129,18 +128,11 @@ impl TarjanSCCFinder {
                 // to check for the highest dependency
                 to
             } else {
-                executed_clock.read(
-                    "Finder::strong_connect frontier",
-                    |clock| {
-                        clock
-                            .get(process_id)
-                            .expect(
-                                "process should exist in the executed clock",
-                            )
-                            .frontier()
-                            + 1
-                    },
-                )
+                executed_clock
+                    .get(process_id)
+                    .expect("process should exist in the executed clock")
+                    .frontier()
+                    + 1
             };
 
             // OPTIMIZATION: start from the highest dep to the lowest:
@@ -154,11 +146,7 @@ impl TarjanSCCFinder {
                 // - we need this check because the clock may not be contiguous,
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed
-                if executed_clock
-                    .read("Finder::strong_connect check dep", |clock| {
-                        clock.contains(process_id, dep)
-                    })
-                {
+                if executed_clock.contains(process_id, dep) {
                     continue;
                 }
 
@@ -326,9 +314,7 @@ impl TarjanSCCFinder {
                 //         self.process_id, member_dot
                 //     );
                 // }
-                executed_clock.write("Finder::strong_connect", |clock| {
-                    clock.add(&member_dot.source(), member_dot.sequence())
-                });
+                executed_clock.add(&member_dot.source(), member_dot.sequence());
 
                 log!(
                     "p{}: Finder::strong_connect executed clock {:?}",
