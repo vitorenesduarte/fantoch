@@ -215,7 +215,8 @@ impl DependencyGraph {
             "p{}: @{} Graph::log executed {:?} | pending {:?} | time = {}",
             self.process_id,
             self.executor_index,
-            self.executed_clock.read("Graph::log"),
+            self.executed_clock
+                .read("Graph::log", |clock| format!("{:?}", clock)),
             self.vertex_index
                 .dots()
                 .collect::<std::collections::BTreeSet<_>>(),
@@ -352,8 +353,9 @@ impl DependencyGraph {
 
                         // update executed clock
                         self.executed_clock
-                            .write("Graph::handle_request_reply")
-                            .add(&dot.source(), dot.sequence());
+                            .write("Graph::handle_request_reply", |clock| {
+                                clock.add(&dot.source(), dot.sequence())
+                            });
                         // check pending
                         let dots = vec![dot];
                         let mut total_found = 0;
@@ -567,8 +569,7 @@ impl DependencyGraph {
         // the lock
         let executed_clock = self
             .executed_clock
-            .read("Graph::check_pending_requests")
-            .clone();
+            .read("Graph::check_pending_requests", |clock| clock.clone());
         // ExecutedClock::fair_unlock_read(guard);
         for (from, dots) in buffered {
             self.process_requests(

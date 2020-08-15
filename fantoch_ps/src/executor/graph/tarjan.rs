@@ -129,12 +129,18 @@ impl TarjanSCCFinder {
                 // to check for the highest dependency
                 to
             } else {
-                executed_clock
-                    .read("Finder::strong_connect frontier")
-                    .get(process_id)
-                    .expect("process should exist in the executed clock")
-                    .frontier()
-                    + 1
+                executed_clock.read(
+                    "Finder::strong_connect frontier",
+                    |clock| {
+                        clock
+                            .get(process_id)
+                            .expect(
+                                "process should exist in the executed clock",
+                            )
+                            .frontier()
+                            + 1
+                    },
+                )
             };
 
             // OPTIMIZATION: start from the highest dep to the lowest:
@@ -149,8 +155,9 @@ impl TarjanSCCFinder {
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed
                 if executed_clock
-                    .read("Finder::strong_connect check dep")
-                    .contains(process_id, dep)
+                    .read("Finder::strong_connect check dep", |clock| {
+                        clock.contains(process_id, dep)
+                    })
                 {
                     continue;
                 }
@@ -294,15 +301,6 @@ impl TarjanSCCFinder {
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
 
-                // quit if root is found
-                if member_dot == dot {
-                    break;
-                }
-            }
-
-            let mut executed_clock =
-                executed_clock.write("Finder::strong_connect add SCC member");
-            for dot in scc.iter() {
                 // update executed clock:
                 // - this is a nice optimization (that I think we missed in
                 //   Atlas); instead of waiting for the root-level recursion to
@@ -310,19 +308,25 @@ impl TarjanSCCFinder {
                 //   consulted to decide what are the dependencies of a
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
-                if !executed_clock.add(&dot.source(), dot.sequence()) {
+                if !executed_clock.write("Finder::strong_connect", |clock| {
+                    clock.add(&dot.source(), dot.sequence())
+                }) {
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",
                         self.process_id, dot
                     );
                 }
+                log!(
+                    "p{}: Finder::strong_connect executed clock {:?}",
+                    self.process_id,
+                    executed_clock
+                );
+
+                // quit if root is found
+                if member_dot == dot {
+                    break;
+                }
             }
-            log!(
-                "p{}: Finder::strong_connect executed clock {:?}",
-                self.process_id,
-                executed_clock
-            );
-            // ExecutedClock::fair_unlock_write(executed_clock);
 
             // add scc to to the set of sccs
             self.sccs.push(scc);
