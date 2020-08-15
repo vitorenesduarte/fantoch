@@ -604,7 +604,7 @@ mod tests {
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use std::cell::RefCell;
-    use threshold::{AboveExSet, EventSet};
+    use threshold::{AEClock, AboveExSet, EventSet};
 
     #[test]
     fn simple() {
