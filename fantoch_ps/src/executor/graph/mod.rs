@@ -257,7 +257,7 @@ impl DependencyGraph {
         &mut self,
         from: ShardId,
         dots: impl Iterator<Item = Dot>,
-        executed_clock: &AEClock<ProcessId>,
+        // executed_clock: &AEClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
@@ -294,6 +294,8 @@ impl DependencyGraph {
                     })
                 }
             } else {
+                replies.push(RequestReply::Executed { dot });
+                /*
                 // if we don't have it, then check if it's executed
                 // NOTE: this `executed_clock` is a snapshot of the clock, so we
                 // may endup buffering a request for the next cleanup step, even
@@ -319,6 +321,7 @@ impl DependencyGraph {
                     // buffer request again
                     requests.insert(dot);
                 }
+                */
             }
         }
     }
@@ -567,15 +570,14 @@ impl DependencyGraph {
         let buffered = std::mem::take(&mut self.buffered_in_requests);
         // take a snapshot of the executed clock: this reduces the contention of
         // the lock
-        let executed_clock = self
-            .executed_clock
-            .read("Graph::check_pending_requests", |clock| clock.clone());
-        // ExecutedClock::fair_unlock_read(guard);
+        // let executed_clock = self
+        //     .executed_clock
+        //     .read("Graph::check_pending_requests", |clock| clock.clone());
         for (from, dots) in buffered {
             self.process_requests(
                 from,
                 dots.into_iter(),
-                &executed_clock,
+                // &executed_clock,
                 time,
             );
         }
