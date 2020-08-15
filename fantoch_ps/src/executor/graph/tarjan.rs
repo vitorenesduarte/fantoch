@@ -265,6 +265,7 @@ impl TarjanSCCFinder {
 
             // drop guard
             drop(vertex);
+            drop(vertex_ref);
 
             loop {
                 // pop an element from the stack
