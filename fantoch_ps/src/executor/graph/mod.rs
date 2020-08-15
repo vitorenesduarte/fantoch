@@ -555,7 +555,7 @@ impl DependencyGraph {
             Some(vertex) => self.finder.strong_connect(
                 dot,
                 &vertex,
-                &self.executed_clock,
+                &mut self.executed_clock,
                 &self.vertex_index,
                 found,
             ),

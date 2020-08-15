@@ -93,7 +93,7 @@ impl TarjanSCCFinder {
         &mut self,
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
-        executed_clock: &ExecutedClock,
+        executed_clock: &mut ExecutedClock,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
