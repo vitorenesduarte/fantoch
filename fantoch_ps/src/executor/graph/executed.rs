@@ -1,8 +1,8 @@
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::util;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use threshold::AEClock;
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ impl ExecutedClock {
         &self,
         tag: &'static str,
     ) -> RwLockReadGuard<'_, AEClock<ProcessId>> {
-        self.clock.read()
+        self.clock.read().expect("ExecutedClock::read should work")
         // self.clock.try_read().unwrap_or_else(|| {
         //     panic!(
         //         "p{}: ExecutedClock::read failed at {}",
@@ -45,7 +45,7 @@ impl ExecutedClock {
         &self,
         tag: &'static str,
     ) -> RwLockWriteGuard<'_, AEClock<ProcessId>> {
-        self.clock.write()
+        self.clock.write().expect("ExecutedClock::read should work")
         // self.clock.try_write().unwrap_or_else(|| {
         //     panic!(
         //         "p{}: ExecutedClock::write failed at {}",
@@ -54,9 +54,9 @@ impl ExecutedClock {
         // })
     }
 
-    pub fn fair_unlock_read(guard: RwLockReadGuard<'_, AEClock<ProcessId>>) {
-        RwLockReadGuard::unlock_fair(guard)
-    }
+    // pub fn fair_unlock_read(guard: RwLockReadGuard<'_, AEClock<ProcessId>>) {
+    //     RwLockReadGuard::unlock_fair(guard)
+    // }
 
     // pub fn fair_unlock_write(guard: RwLockWriteGuard<'_, AEClock<ProcessId>>) {
     //     RwLockWriteGuard::unlock_fair(guard)
