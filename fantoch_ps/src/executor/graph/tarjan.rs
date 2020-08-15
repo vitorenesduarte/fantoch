@@ -301,6 +301,9 @@ impl TarjanSCCFinder {
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
 
+                // check if the command is replicated by my shard
+                let is_mine = member_vertex.cmd.replicated_by(&self.shard_id);
+
                 // drop guards
                 drop(member_vertex);
                 drop(member_vertex_ref);
@@ -312,13 +315,15 @@ impl TarjanSCCFinder {
                 //   consulted to decide what are the dependencies of a
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
-
-                // TODO: here we should check that we're not executing a command
-                // that we were told by another partition that it has been
-                // executed
-                executed_clock.write("Finder::strong_connect", |clock| {
-                    clock.add(&dot.source(), dot.sequence())
-                });
+                if executed_clock.write("Finder::strong_connect", |clock| {
+                    clock.add(&member_dot.source(), member_dot.sequence())
+                }) && is_mine
+                {
+                    panic!(
+                        "p{}: Finder::strong_connect dot {:?} already executed",
+                        self.process_id, member_dot
+                    );
+                }
                 log!(
                     "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
