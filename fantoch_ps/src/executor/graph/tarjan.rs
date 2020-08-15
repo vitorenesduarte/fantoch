@@ -105,7 +105,7 @@ impl TarjanSCCFinder {
 
         // set id and low for vertex
         vertex.id = self.id;
-        vertex.low = vertex.id;
+        vertex.low = self.id;
 
         // add to the stack
         vertex.on_stack = true;
@@ -119,8 +119,6 @@ impl TarjanSCCFinder {
         );
 
         // TODO can we avoid vertex.clock().clone()
-        // - if rust understood mutability of struct fields, the clone wouldn't
-        //   be necessary
         // compute non-executed deps for each process
         for (process_id, to) in vertex.clock.clone().iter() {
             // get min event from which we need to start checking for
@@ -263,7 +261,7 @@ impl TarjanSCCFinder {
         if vertex.id == vertex.low {
             let mut scc = SCC::new();
 
-            // drop guard
+            // drop guards
             drop(vertex);
             drop(vertex_ref);
 
@@ -293,17 +291,18 @@ impl TarjanSCCFinder {
                     .write("Finder::strong_connect SCC member");
                 member_vertex.on_stack = false;
 
-                // check if this command is replicated by our shard so that we
-                // can later drop the guards
-                let is_mine = member_vertex.cmd.replicated_by(&self.shard_id);
-
-                // drop guards to avoid a deadlock
-                drop(member_vertex);
-                drop(member_vertex_ref);
-
                 // add it to the SCC and check it wasn't there before
                 assert!(scc.insert(member_dot));
 
+                // quit if root is found
+                if member_dot == dot {
+                    break;
+                }
+            }
+
+            let mut executed_clock =
+                executed_clock.write("Finder::strong_connect add SCC member");
+            for dot in scc.iter() {
                 // update executed clock:
                 // - this is a nice optimization (that I think we missed in
                 //   Atlas); instead of waiting for the root-level recursion to
@@ -311,28 +310,19 @@ impl TarjanSCCFinder {
                 //   consulted to decide what are the dependencies of a
                 //   command), we can update it right here, possibly reducing a
                 //   few iterations
-                if !executed_clock
-                    .write("Finder::strong_connect add SCC member")
-                    .add(&member_dot.source(), member_dot.sequence())
-                    && is_mine
-                {
+                if !executed_clock.add(&dot.source(), dot.sequence()) {
                     panic!(
                         "p{}: Finder::strong_connect dot {:?} already executed",
                         self.process_id, dot
                     );
                 }
-
-                log!(
-                    "p{}: Finder::strong_connect executed clock {:?}",
-                    self.process_id,
-                    executed_clock.read("Finder::strong_connect log")
-                );
-
-                // quit if root is found
-                if member_dot == dot {
-                    break;
-                }
             }
+            log!(
+                "p{}: Finder::strong_connect executed clock {:?}",
+                self.process_id,
+                executed_clock
+            );
+
             // add scc to to the set of sccs
             self.sccs.push(scc);
             FinderResult::Found
