@@ -105,6 +105,7 @@ pub enum ExecutorMetricsKind {
     ExecutionDelay,
     ChainSize,
     OutRequests,
+    InRequests,
     InRequestReplies,
 }
 
@@ -116,6 +117,7 @@ impl Debug for ExecutorMetricsKind {
             // graph executor specific
             ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
             ExecutorMetricsKind::OutRequests => write!(f, "out_requests"),
+            ExecutorMetricsKind::InRequests => write!(f, "in_requests"),
             ExecutorMetricsKind::InRequestReplies => {
                 write!(f, "in_request_replies")
             }
