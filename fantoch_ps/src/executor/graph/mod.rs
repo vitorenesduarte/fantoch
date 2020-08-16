@@ -51,7 +51,7 @@ pub struct DependencyGraph {
     // - adds new commands `to_execute`
     // - `out_requests` dependencies to be able to order commands
     to_execute: Vec<Command>,
-    out_requests: Vec<(ShardId, Dot)>,
+    out_requests: HashMap<ShardId, HashSet<Dot>>,
     // worker 1 (handles requests):
     // - may have `buffered_in_requests` when doesn't have the command yet
     // - produces `out_request_replies` when it has the command
@@ -63,9 +63,9 @@ enum FinderInfo {
     // set of dots in found SCCs
     Found(Vec<Dot>),
     // set of dots in found SCCs (it's possible to find SCCs even though the
-    // search for another dot failed), the missing dependency and set of dots
+    // search for another dot failed), missing dependencies and set of dots
     // visited while searching for SCCs
-    MissingDependency(Vec<Dot>, Dot, HashSet<Dot>),
+    MissingDependencies(Vec<Dot>, HashSet<Dot>, HashSet<Dot>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -128,8 +128,8 @@ impl DependencyGraph {
 
     /// Returns a request.
     #[must_use]
-    pub fn requests(&mut self) -> Option<(ShardId, Dot)> {
-        self.out_requests.pop()
+    pub fn requests(&mut self) -> HashMap<ShardId, HashSet<Dot>> {
+        std::mem::take(&mut self.out_requests)
     }
 
     /// Returns a set of request replies.
@@ -197,7 +197,7 @@ impl DependencyGraph {
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
-            FinderInfo::MissingDependency(dots, dep_dot, _visited) => {
+            FinderInfo::MissingDependencies(dots, dep_dot, _visited) => {
                 // update the pending
                 self.index_pending(dep_dot, dot);
                 // try to execute other commands if new SCCs were found
@@ -235,21 +235,28 @@ impl DependencyGraph {
         self.pending_index.add_mine(dot);
     }
 
-    fn handle_request(&mut self, from: ShardId, dot: Dot, _time: &dyn SysTime) {
+    fn handle_request(
+        &mut self,
+        from: ShardId,
+        dots: HashSet<Dot>,
+        _time: &dyn SysTime,
+    ) {
         assert!(self.executor_index > 0);
         log!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
             self.executor_index,
-            dot,
+            dots,
             from,
             _time.millis()
         );
+        // save in requests metric
+        self.metrics.aggregate(ExecutorMetricsKind::InRequests, 1);
         // simply buffer the request
         self.buffered_in_requests
             .entry(from)
             .or_default()
-            .insert(dot);
+            .extend(dots);
     }
 
     fn process_requests(
@@ -410,8 +417,8 @@ impl DependencyGraph {
         // save new SCCs if any were found
         match finder_result {
             FinderResult::Found => FinderInfo::Found(dots),
-            FinderResult::MissingDependency(dep_dot) => {
-                FinderInfo::MissingDependency(dots, dep_dot, visited)
+            FinderResult::MissingDependencies(deps) => {
+                FinderInfo::MissingDependencies(dots, deps, visited)
             }
             FinderResult::NotPending => FinderInfo::NotPending,
             FinderResult::NotFound => panic!(
@@ -457,12 +464,20 @@ impl DependencyGraph {
         })
     }
 
-    fn index_pending(&mut self, dep_dot: Dot, dot: Dot) {
-        if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
-            // save out requests metric
-            self.metrics.aggregate(ExecutorMetricsKind::OutRequests, 1);
-            self.out_requests.push((target_shard, dep_dot));
+    fn index_pending(&mut self, missing_deps: HashSet<Dot>, dot: Dot) {
+        let mut requests = 0;
+        for dep_dot in missing_deps {
+            if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
+                requests += 1;
+                self.out_requests
+                    .entry(target_shard)
+                    .or_default()
+                    .insert(dep_dot);
+            }
         }
+        // save out requests metric
+        self.metrics
+            .aggregate(ExecutorMetricsKind::OutRequests, requests);
     }
 
     fn check_pending(
@@ -513,9 +528,9 @@ impl DependencyGraph {
                         // child dots to check
                         dots.extend(new_dots);
                     }
-                    FinderInfo::MissingDependency(
+                    FinderInfo::MissingDependencies(
                         new_dots,
-                        dep_dot,
+                        missing_deps,
                         new_visited,
                     ) => {
                         if !new_dots.is_empty() {
@@ -533,7 +548,7 @@ impl DependencyGraph {
                         dots.extend(new_dots);
 
                         // update pending
-                        self.index_pending(dep_dot, dot);
+                        self.index_pending(missing_deps, dot);
                     }
                     FinderInfo::NotPending => {
                         // this happens if the pending dot is no longer
@@ -1333,11 +1348,14 @@ mod tests {
         let mut ready_commands = 0;
         let finder_info = queue.find_scc(root_dot, &mut ready_commands, &time);
 
-        if let FinderInfo::MissingDependency(to_be_executed, missing, _) =
-            finder_info
+        if let FinderInfo::MissingDependencies(
+            to_be_executed,
+            missing_deps,
+            _,
+        ) = finder_info
         {
             // check the missing dot
-            assert_eq!(missing, missing_dot);
+            assert_eq!(missing_deps.into_iter().next().unwrap(), missing_dot);
 
             // check that ready commands are actually delivered
             assert_eq!(ready_commands, to_be_executed.len());

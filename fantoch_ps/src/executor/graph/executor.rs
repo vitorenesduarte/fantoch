@@ -7,6 +7,7 @@ use fantoch::kvs::KVStore;
 use fantoch::log;
 use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
+use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use threshold::VClock;
 
@@ -63,8 +64,8 @@ impl Executor for GraphExecutor {
             GraphExecutionInfo::AddMine { dot } => {
                 self.graph.handle_add_mine(dot, time);
             }
-            GraphExecutionInfo::Request { from, dot } => {
-                self.graph.handle_request(from, dot, time);
+            GraphExecutionInfo::Request { from, dots } => {
+                self.graph.handle_request(from, dots, time);
                 self.fetch_actions(time);
             }
             GraphExecutionInfo::RequestReply { infos } => {
@@ -114,15 +115,15 @@ impl GraphExecutor {
     }
 
     fn fetch_requests(&mut self, _time: &dyn SysTime) {
-        for (to, dot) in self.graph.requests() {
+        for (to, dots) in self.graph.requests() {
             log!(
                 "p{}: GraphExecutor::fetch_requests {:?} {:?} | time = {}",
                 self.process_id,
                 to,
-                dot,
+                dots,
                 _time.millis()
             );
-            let request = GraphExecutionInfo::request(self.shard_id, dot);
+            let request = GraphExecutionInfo::request(self.shard_id, dots);
             self.to_executors.push((to, request));
         }
     }
@@ -164,7 +165,7 @@ pub enum GraphExecutionInfo {
     },
     Request {
         from: ShardId,
-        dot: Dot,
+        dots: HashSet<Dot>,
     },
     RequestReply {
         infos: Vec<super::RequestReply>,
@@ -180,8 +181,8 @@ impl GraphExecutionInfo {
         Self::AddMine { dot }
     }
 
-    fn request(from: ShardId, dot: Dot) -> Self {
-        Self::Request { from, dot }
+    fn request(from: ShardId, dots: HashSet<Dot>) -> Self {
+        Self::Request { from, dots }
     }
 
     fn request_reply(infos: Vec<super::RequestReply>) -> Self {

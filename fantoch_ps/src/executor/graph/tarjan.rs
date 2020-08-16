@@ -14,7 +14,7 @@ pub type SCC = BTreeSet<Dot>;
 #[derive(PartialEq)]
 pub enum FinderResult {
     Found,
-    MissingDependency(Dot),
+    MissingDependencies(HashSet<Dot>),
     NotPending,
     NotFound,
 }
@@ -117,9 +117,26 @@ impl TarjanSCCFinder {
             self.id
         );
 
-        // TODO can we avoid vertex.clock().clone()
+        let ignore_dep =
+            |process_id: ProcessId,
+             dep: u64,
+             executed_clock: &AEClock<ProcessId>| {
+                let dep_dot = Dot::new(process_id, dep);
+                // ignore if self or if already executed:
+
+                // - we need this check because the clock may not be contiguous,
+                //   i.e. `executed_clock_frontier` is simply a safe
+                //   approximation of what's been executed
+                let ignore =
+                    dot == dep_dot || executed_clock.contains(&process_id, dep);
+                (ignore, dep_dot)
+            };
+
+        // TODO can we avoid vertex.clock.clone()
         // compute non-executed deps for each process
-        for (process_id, to) in vertex.clock.clone().iter() {
+        let clock = vertex.clock.clone();
+        let mut deps_iter = clock.into_iter();
+        while let Some((process_id, to)) = deps_iter.next() {
             // get min event from which we need to start checking for
             // dependencies
             let to = to.frontier();
@@ -129,7 +146,7 @@ impl TarjanSCCFinder {
                 to
             } else {
                 executed_clock
-                    .get(process_id)
+                    .get(&process_id)
                     .expect("process should exist in the executed clock")
                     .frontier()
                     + 1
@@ -142,24 +159,14 @@ impl TarjanSCCFinder {
             //   conflicts are transitive
             // - when we can, the following loop has a single iteration
             for dep in (from..=to).rev() {
-                // ignore dependency if already executed:
-                // - we need this check because the clock may not be contiguous,
-                //   i.e. `executed_clock_frontier` is simply a safe
-                //   approximation of what's been executed
-                if executed_clock.contains(process_id, dep) {
-                    continue;
-                }
-
-                // create dot and find vertex
-                let dep_dot = Dot::new(*process_id, dep);
-                log!(
-                    "p{}: Finder::strong_connect non-executed {:?}",
-                    self.process_id,
-                    dep_dot
-                );
-
-                // ignore dependency if self
-                if dep_dot == dot {
+                let (ignore, dep_dot) =
+                    ignore_dep(process_id, dep, executed_clock);
+                if ignore {
+                    log!(
+                        "p{}: Finder::strong_connect {:?} dependency ignored",
+                        self.process_id,
+                        dep_dot
+                    );
                     continue;
                 }
 
@@ -173,7 +180,22 @@ impl TarjanSCCFinder {
                             self.process_id,
                             dep_dot
                         );
-                        return FinderResult::MissingDependency(dep_dot);
+                        let deps = std::iter::once(dep_dot)
+                            // add remaining frontier deps as missing dependencies
+                            .chain(deps_iter.filter_map(|(process_id, to)| {
+                                let (ignore, dep_dot) = ignore_dep(
+                                    process_id,
+                                    to.frontier(),
+                                    executed_clock,
+                                );
+                                if ignore {
+                                    None
+                                } else {
+                                    Some(dep_dot)
+                                }
+                            }))
+                            .collect();
+                        return FinderResult::MissingDependencies(deps);
                     }
                     Some(dep_vertex_ref) => {
                         // get vertex
@@ -218,7 +240,8 @@ impl TarjanSCCFinder {
                             );
 
                             // if missing dependency, give up
-                            if let FinderResult::MissingDependency(_) = result {
+                            if let FinderResult::MissingDependencies(_) = result
+                            {
                                 return result;
                             }
 
