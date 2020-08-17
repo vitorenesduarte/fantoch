@@ -37,6 +37,15 @@ pub enum RequestReply {
     },
 }
 
+impl RequestReply {
+    fn dot(&self) -> &Dot {
+        match self {
+            Self::Info { dot, .. } => dot,
+            Self::Executed { dot, .. } => dot,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct DependencyGraph {
     executor_index: usize,
@@ -347,6 +356,16 @@ impl DependencyGraph {
                 info,
                 time.millis()
             );
+            if self.pending_index.is_mine(info.dot()) {
+                log!(
+                    "p{}: @{} Graph::handle_request_reply ignore {:?} as it is mine | time = {}",
+                    self.process_id,
+                    self.executor_index,
+                    info,
+                    time.millis()
+                );
+                continue;
+            }
             match info {
                 RequestReply::Info { dot, cmd, clock } => {
                     // count number of accepted replies
