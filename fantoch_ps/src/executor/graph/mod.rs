@@ -284,7 +284,7 @@ impl DependencyGraph {
                 _time.millis()
             );
             if let Some(vertex) = self.vertex_index.find(&dot) {
-                let vertex = vertex.read("Graph::process_requests");
+                let vertex = vertex.read();
 
                 // only send the vertex if the shard that requested this vertex
                 // does not replicate it

@@ -79,7 +79,7 @@ impl TarjanSCCFinder {
                     self.process_id, dot
                 );
             };
-            vertex.write("Finder::finallize").id = 0;
+            vertex.write().id = 0;
 
             // add dot to set of visited
             visited.insert(dot);
@@ -101,7 +101,7 @@ impl TarjanSCCFinder {
         self.id += 1;
 
         // get vertex
-        let mut vertex = vertex_ref.write("Finder::strong_connect command 1/2");
+        let mut vertex = vertex_ref.write();
 
         // set id and low for vertex
         vertex.id = self.id;
@@ -210,8 +210,7 @@ impl TarjanSCCFinder {
                     }
                     Some(dep_vertex_ref) => {
                         // get vertex
-                        let mut dep_vertex = dep_vertex_ref
-                            .read("Finder::strong_connect dependency 1/2");
+                        let mut dep_vertex = dep_vertex_ref.read();
 
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
@@ -257,10 +256,8 @@ impl TarjanSCCFinder {
                             }
 
                             // get guards again
-                            vertex = vertex_ref
-                                .write("Finder::strong_connect command 2/2");
-                            dep_vertex = dep_vertex_ref
-                                .read("Finder::strong_connect dependency 2/2");
+                            vertex = vertex_ref.write();
+                            dep_vertex = dep_vertex_ref.read();
 
                             // min low with dep low
                             vertex.low = cmp::min(vertex.low, dep_vertex.low);
@@ -316,8 +313,7 @@ impl TarjanSCCFinder {
                 *found += 1;
 
                 // get its vertex and change its `on_stack` value
-                let mut member_vertex = member_vertex_ref
-                    .write("Finder::strong_connect SCC member");
+                let mut member_vertex = member_vertex_ref.write();
                 member_vertex.on_stack = false;
 
                 // add it to the SCC and check it wasn't there before
