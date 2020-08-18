@@ -121,7 +121,6 @@ impl DependencyGraph {
     }
 
     fn set_executor_index(&mut self, index: usize) {
-        // TODO remove me
         self.executor_index = index;
     }
 
@@ -152,15 +151,32 @@ impl DependencyGraph {
         &self.metrics
     }
 
-    fn cleanup(&mut self, time: &dyn SysTime) {
+    #[must_use]
+    fn cleanup(&mut self, time: &dyn SysTime) -> Option<GraphExecutionInfo> {
         log!(
             "p{}: @{} Graph::cleanup | time = {}",
             self.process_id,
             self.executor_index,
             time.millis()
         );
-        if self.executor_index > 0 {
+        if self.executor_index == 0 {
+            // if main executor, send snapshot of executed clock to other executors
+            Some(GraphExecutionInfo::ExecutedClock {
+                clock: self.executed_clock.clone(),
+            })
+        } else {
+            // otherwise, simply check pending remote requests
             self.check_pending_requests(time);
+            None
+        }
+    }
+
+    fn handle_executed_clock(&mut self, clock: AEClock<ProcessId>) {
+        if self.executor_index == 0 {
+            // if main executor, ignore this message
+        } else {
+            // otherwise, save the executed clock
+            self.executed_clock = clock;
         }
     }
 
@@ -268,12 +284,11 @@ impl DependencyGraph {
         &mut self,
         from: ShardId,
         dots: impl Iterator<Item = Dot>,
-        // executed_clock: &AEClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
         let replies = self.out_request_replies.entry(from).or_default();
-        // let requests = self.buffered_in_requests.entry(from).or_default();
+        let requests = self.buffered_in_requests.entry(from).or_default();
         for dot in dots {
             log!(
                 "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
@@ -305,13 +320,11 @@ impl DependencyGraph {
                     })
                 }
             } else {
-                replies.push(RequestReply::Executed { dot });
-                /*
                 // if we don't have it, then check if it's executed
                 // NOTE: this `executed_clock` is a snapshot of the clock, so we
                 // may endup buffering a request for the next cleanup step, even
                 // though the command is already executed
-                if executed_clock.contains(&dot.source(), dot.sequence()) {
+                if self.executed_clock.contains(&dot.source(), dot.sequence()) {
                     log!(
                         "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
                         self.process_id,
@@ -332,7 +345,6 @@ impl DependencyGraph {
                     // buffer request again
                     requests.insert(dot);
                 }
-                */
             }
         }
     }
@@ -594,18 +606,8 @@ impl DependencyGraph {
 
     fn check_pending_requests(&mut self, time: &dyn SysTime) {
         let buffered = std::mem::take(&mut self.buffered_in_requests);
-        // take a snapshot of the executed clock: this reduces the contention of
-        // the lock
-        // let executed_clock = self
-        //     .executed_clock
-        //     .read("Graph::check_pending_requests", |clock| clock.clone());
         for (from, dots) in buffered {
-            self.process_requests(
-                from,
-                dots.into_iter(),
-                // &executed_clock,
-                time,
-            );
+            self.process_requests(from, dots.into_iter(), time);
         }
     }
 }

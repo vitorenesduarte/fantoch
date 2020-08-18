@@ -389,6 +389,7 @@ where
         to_executors_rxs,
         client_to_executors_rxs,
         shard_writers,
+        to_executors.clone(),
         executor_to_metrics_logger,
     );
 

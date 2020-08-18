@@ -18,6 +18,7 @@ pub fn start_executors<P>(
     to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
     shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: ToExecutors<P>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
@@ -35,10 +36,12 @@ pub fn start_executors<P>(
         task::spawn(executor_task::<P>(
             executor_index,
             executor.clone(),
+            shard_id,
             config,
             from_workers,
             from_clients,
             shard_writers.clone(),
+            to_executors.clone(),
             to_metrics_logger.clone(),
         ));
     }
@@ -47,10 +50,12 @@ pub fn start_executors<P>(
 async fn executor_task<P>(
     executor_index: usize,
     mut executor: P::Executor,
+    shard_id: ShardId,
     config: Config,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
     mut shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
+    mut to_executors: ToExecutors<P>,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
@@ -79,7 +84,7 @@ async fn executor_task<P>(
                 if let Some(execution_info) = execution_info {
                     executor.handle(execution_info, &time);
                     fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
-                    fetch_info_to_executors::<P>(&mut executor, &mut shard_writers).await;
+                    fetch_info_to_executors::<P>(&mut executor, shard_id, &mut shard_writers, &mut to_executors).await;
                 } else {
                     println!("[executor] error while receiving execution info from worker");
                 }
@@ -96,7 +101,7 @@ async fn executor_task<P>(
                 log!("[executor] cleanup");
                 executor.cleanup(&time);
                 fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
-                fetch_info_to_executors::<P>(&mut executor, &mut shard_writers).await;
+                fetch_info_to_executors::<P>(&mut executor, shard_id, &mut shard_writers, &mut to_executors).await;
             }
             _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -137,24 +142,34 @@ async fn fetch_new_command_results<P>(
 
 async fn fetch_info_to_executors<P>(
     executor: &mut P::Executor,
+    shard_id: ShardId,
     shard_writers: &mut HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: &mut ToExecutors<P>,
 ) where
     P: Protocol + 'static,
 {
     // forward execution info to other shards
-    for (shard_id, execution_info) in executor.to_executors_iter() {
-        let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
-        if let Some(channels) = shard_writers.get_mut(&shard_id) {
-            crate::run::task::process::send_to_one_writer::<P>(
-                "executors",
-                msg_to_send.clone(),
-                channels,
-            )
-            .await
+    for (target_shard, execution_info) in executor.to_executors_iter() {
+        // check if it's a message to self
+        if shard_id == target_shard {
+            // notify executor
+            if let Err(e) = to_executors.forward(execution_info).await {
+                println!("[executor] error while notifying other executors with new execution info: {:?}", e);
+            }
         } else {
-            panic!(
-                "[executor] tried to send a message to a non-connected shard"
-            );
+            let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
+            if let Some(channels) = shard_writers.get_mut(&target_shard) {
+                crate::run::task::process::send_to_one_writer::<P>(
+                    "executors",
+                    msg_to_send.clone(),
+                    channels,
+                )
+                .await
+            } else {
+                panic!(
+                    "[executor] tried to send a message to a non-connected shard"
+                );
+            }
         }
     }
 }
