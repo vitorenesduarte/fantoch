@@ -70,7 +70,7 @@ impl Executor for SlotExecutor {
     }
 
     fn parallel() -> bool {
-        true
+        false
     }
 
     fn metrics(&self) -> &ExecutorMetrics {

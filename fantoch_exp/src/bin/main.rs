@@ -48,7 +48,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "parallel_graph_executor_v2";
+const BRANCH: &str = "non_genuine_atlas";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
