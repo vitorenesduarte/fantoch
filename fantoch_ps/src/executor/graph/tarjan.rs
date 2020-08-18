@@ -1,5 +1,6 @@
 use super::index::{VertexIndex, VertexRef};
 use fantoch::command::Command;
+use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::time::SysTime;
@@ -23,7 +24,7 @@ pub enum FinderResult {
 pub struct TarjanSCCFinder {
     process_id: ProcessId,
     shard_id: ShardId,
-    transitive_conflicts: bool,
+    config: Config,
     id: usize,
     stack: Vec<Dot>,
     sccs: Vec<SCC>,
@@ -34,12 +35,12 @@ impl TarjanSCCFinder {
     pub fn new(
         process_id: ProcessId,
         shard_id: ShardId,
-        transitive_conflicts: bool,
+        config: Config,
     ) -> Self {
         Self {
             process_id,
             shard_id,
-            transitive_conflicts,
+            config,
             id: 0,
             stack: Vec::new(),
             sccs: Vec::new(),
@@ -124,6 +125,7 @@ impl TarjanSCCFinder {
                 let dep_dot = Dot::new(process_id, dep);
                 // ignore if self or if already executed:
 
+                //
                 // - we need this check because the clock may not be contiguous,
                 //   i.e. `executed_clock_frontier` is simply a safe
                 //   approximation of what's been executed
@@ -140,7 +142,7 @@ impl TarjanSCCFinder {
             // get min event from which we need to start checking for
             // dependencies
             let to = to.frontier();
-            let from = if self.transitive_conflicts {
+            let from = if self.config.transitive_conflicts() {
                 // if we can assume that conflicts are transitive, it is enough
                 // to check for the highest dependency
                 to
@@ -180,21 +182,30 @@ impl TarjanSCCFinder {
                             self.process_id,
                             dep_dot
                         );
-                        let deps = std::iter::once(dep_dot)
-                            // add remaining frontier deps as missing dependencies
-                            .chain(deps_iter.filter_map(|(process_id, to)| {
-                                let (ignore, dep_dot) = ignore_dep(
-                                    process_id,
-                                    to.frontier(),
-                                    executed_clock,
-                                );
-                                if ignore {
-                                    None
-                                } else {
-                                    Some(dep_dot)
-                                }
-                            }))
-                            .collect();
+                        let deps = std::iter::once(dep_dot);
+                        let deps = if self.config.shards() == 1 {
+                            deps.collect()
+                        } else {
+                            // if partial replication, add remaining frontier
+                            // deps as missing dependencies; this makes sure
+                            // that we request all needed dependencies in a
+                            // single request
+                            deps.chain(deps_iter.filter_map(
+                                |(process_id, to)| {
+                                    let (ignore, dep_dot) = ignore_dep(
+                                        process_id,
+                                        to.frontier(),
+                                        executed_clock,
+                                    );
+                                    if ignore {
+                                        None
+                                    } else {
+                                        Some(dep_dot)
+                                    }
+                                },
+                            ))
+                            .collect()
+                        };
                         return FinderResult::MissingDependencies(deps);
                     }
                     Some(dep_vertex_ref) => {
@@ -205,7 +216,7 @@ impl TarjanSCCFinder {
                         // ignore non-conflicting commands:
                         // - this check is only necesssary if we can't assume
                         //   that conflicts are transitive
-                        if !self.transitive_conflicts
+                        if !self.config.transitive_conflicts()
                             && !vertex.conflicts(&dep_vertex)
                         {
                             log!(
@@ -326,16 +337,17 @@ impl TarjanSCCFinder {
 
                 // TODO add this check back:
                 // check if the command is replicated by my shard
-                // let is_mine = member_vertex.cmd.replicated_by(&self.shard_id);
+                // let is_mine =
+                // member_vertex.cmd.replicated_by(&self.shard_id);
                 // if executed_clock.write("Finder::strong_connect", |clock| {
                 //     clock.add(&member_dot.source(), member_dot.sequence())
                 // })
                 // && is_mine
                 // {
                 //     panic!(
-                //         "p{}: Finder::strong_connect dot {:?} already executed",
-                //         self.process_id, member_dot
-                //     );
+                //         "p{}: Finder::strong_connect dot {:?} already
+                // executed",         self.process_id,
+                // member_dot     );
                 // }
                 executed_clock.add(&member_dot.source(), member_dot.sequence());
 

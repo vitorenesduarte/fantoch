@@ -96,11 +96,7 @@ impl DependencyGraph {
         let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new(process_id, shard_id, *config);
         // create finder
-        let finder = TarjanSCCFinder::new(
-            process_id,
-            shard_id,
-            config.transitive_conflicts(),
-        );
+        let finder = TarjanSCCFinder::new(process_id, shard_id, *config);
         let metrics = ExecutorMetrics::new();
         // create to execute
         let to_execute = Vec::new();
@@ -630,9 +626,12 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::{ClientId, Rifl, ShardId};
+    use fantoch::kvs::KVOp;
+    use fantoch::singleton;
     use fantoch::time::RunTime;
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
+    use rand::seq::SliceRandom;
     use std::cell::RefCell;
     use threshold::{AEClock, AboveExSet, EventSet};
 
@@ -732,22 +731,99 @@ mod tests {
         let clock_5 = util::vclock(vec![4, 0, 0, 0, 0]);
 
         let order_a = vec![
-            (dot_3, clock_2.clone()),
-            (dot_4, clock_3.clone()),
-            (dot_5, clock_4.clone()),
-            (dot_1, clock_1.clone()),
-            (dot_2, clock_1.clone()),
+            (dot_3, None, clock_2.clone()),
+            (dot_4, None, clock_3.clone()),
+            (dot_5, None, clock_4.clone()),
+            (dot_1, None, clock_1.clone()),
+            (dot_2, None, clock_1.clone()),
         ];
         let order_b = vec![
-            (dot_3, clock_3),
-            (dot_4, clock_4),
-            (dot_5, clock_5),
-            (dot_2, clock_2),
-            (dot_1, clock_1),
+            (dot_3, None, clock_3),
+            (dot_4, None, clock_4),
+            (dot_5, None, clock_5),
+            (dot_2, None, clock_2),
+            (dot_1, None, clock_1),
         ];
         let order_a = check_termination(n, order_a, transitive_conflicts);
         let order_b = check_termination(n, order_b, transitive_conflicts);
         assert_eq!(order_a, order_b);
+    }
+
+    #[test]
+    fn self_cycle_test() {
+        // config
+        let n = 1;
+        let transitive_conflicts = false;
+
+        // cmd 1
+        let dot_1 = Dot::new(1, 1);
+        let clock_1 = util::vclock(vec![3]);
+
+        // cmd 2
+        let dot_2 = Dot::new(1, 2);
+        let clock_2 = util::vclock(vec![1]);
+
+        // cmd 3
+        let dot_3 = Dot::new(1, 3);
+        let clock_3 = util::vclock(vec![2]);
+
+        let args = vec![
+            (dot_1, None, clock_1),
+            (dot_2, None, clock_2),
+            (dot_3, None, clock_3),
+        ];
+        shuffle_it(n, transitive_conflicts, args);
+    }
+
+    #[test]
+    fn non_transitive_conflicts_regression_test() {
+        // config
+        let n = 2;
+        let transitive_conflicts = false;
+
+        let keys = |keys: Vec<&str>| {
+            keys.into_iter().map(|key| key.to_string()).collect()
+        };
+
+        // cmd 1,1
+        let dot_1_1 = Dot::new(1, 1);
+        let keys_1_1 = keys(vec!["B", "C"]);
+        let clock_1_1 = util::vclock(vec![3, 1]);
+
+        // cmd 1,2
+        let dot_1_2 = Dot::new(1, 2);
+        let keys_1_2 = keys(vec!["A", "C"]);
+        let clock_1_2 = util::vclock(vec![1, 2]);
+
+        // cmd 1,3
+        let dot_1_3 = Dot::new(1, 3);
+        let keys_1_3 = keys(vec!["A", "C"]);
+        let clock_1_3 = util::vclock(vec![2, 3]);
+
+        // cmd 2,1
+        let dot_2_1 = Dot::new(2, 1);
+        let keys_2_1 = keys(vec!["B", "C"]);
+        let clock_2_1 = util::vclock(vec![0, 0]);
+
+        // cmd 2,2
+        let dot_2_2 = Dot::new(2, 2);
+        let keys_2_2 = keys(vec!["A"]);
+        let clock_2_2 = util::vclock(vec![0, 0]);
+
+        // cmd 2,3
+        let dot_2_3 = Dot::new(2, 3);
+        let keys_2_3 = keys(vec!["A", "B"]);
+        let clock_2_3 = util::vclock(vec![1, 2]);
+
+        let args = vec![
+            (dot_1_1, Some(keys_1_1), clock_1_1),
+            (dot_1_2, Some(keys_1_2), clock_1_2),
+            (dot_1_3, Some(keys_1_3), clock_1_3),
+            (dot_2_1, Some(keys_2_1), clock_2_1),
+            (dot_2_2, Some(keys_2_2), clock_2_2),
+            (dot_2_3, Some(keys_2_3), clock_2_3),
+        ];
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
@@ -883,17 +959,18 @@ mod tests {
 
         // create args
         let args = vec![
-            (dot_a, clock_a),
-            (dot_b, clock_b),
-            (dot_c, clock_c),
-            (dot_d, clock_d),
-            (dot_e, clock_e),
-            (dot_f, clock_f),
-            (dot_g, clock_g),
+            (dot_a, None, clock_a),
+            (dot_b, None, clock_b),
+            (dot_c, None, clock_c),
+            (dot_d, None, clock_d),
+            (dot_e, None, clock_e),
+            (dot_f, None, clock_f),
+            (dot_g, None, clock_g),
         ];
 
         let n = 2;
-        shuffle_it(n, args);
+        let transitive_conflicts = false;
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
@@ -928,17 +1005,18 @@ mod tests {
 
         // create args
         let args = vec![
-            (dot_a, clock_a),
-            (dot_b, clock_b),
-            (dot_c, clock_c),
-            (dot_d, clock_d),
-            (dot_e, clock_e),
-            (dot_f, clock_f),
-            (dot_g, clock_g),
+            (dot_a, None, clock_a),
+            (dot_b, None, clock_b),
+            (dot_c, None, clock_c),
+            (dot_d, None, clock_d),
+            (dot_e, None, clock_e),
+            (dot_f, None, clock_f),
+            (dot_g, None, clock_g),
         ];
 
         let n = 2;
-        shuffle_it(n, args);
+        let transitive_conflicts = false;
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
@@ -965,15 +1043,16 @@ mod tests {
 
         // create args
         let args = vec![
-            (dot_a, clock_a),
-            (dot_b, clock_b),
-            (dot_c, clock_c),
-            (dot_d, clock_d),
-            (dot_e, clock_e),
+            (dot_a, None, clock_a),
+            (dot_b, None, clock_b),
+            (dot_c, None, clock_c),
+            (dot_d, None, clock_d),
+            (dot_e, None, clock_e),
         ];
 
         let n = 3;
-        shuffle_it(n, args);
+        let transitive_conflicts = false;
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
@@ -1004,16 +1083,17 @@ mod tests {
 
         // create args
         let args = vec![
-            (dot_a, clock_a),
-            (dot_b, clock_b),
-            (dot_c, clock_c),
-            (dot_d, clock_d),
-            (dot_e, clock_e),
-            (dot_f, clock_f),
+            (dot_a, None, clock_a),
+            (dot_b, None, clock_b),
+            (dot_c, None, clock_c),
+            (dot_d, None, clock_d),
+            (dot_e, None, clock_e),
+            (dot_f, None, clock_f),
         ];
 
         let n = 1;
-        shuffle_it(n, args);
+        let transitive_conflicts = false;
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
@@ -1031,10 +1111,15 @@ mod tests {
         let clock_c = util::vclock(vec![1, 1]);
 
         // create args
-        let args = vec![(dot_a, clock_a), (dot_b, clock_b), (dot_c, clock_c)];
+        let args = vec![
+            (dot_a, None, clock_a),
+            (dot_b, None, clock_b),
+            (dot_c, None, clock_c),
+        ];
 
         let n = 2;
-        shuffle_it(n, args);
+        let transitive_conflicts = false;
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
@@ -1065,28 +1150,30 @@ mod tests {
 
         // create args
         let args = vec![
-            (dot_a, clock_a),
-            (dot_b, clock_b),
-            (dot_c, clock_c),
-            (dot_d, clock_d),
-            (dot_e, clock_e),
-            (dot_f, clock_f),
+            (dot_a, None, clock_a),
+            (dot_b, None, clock_b),
+            (dot_c, None, clock_c),
+            (dot_d, None, clock_d),
+            (dot_e, None, clock_e),
+            (dot_f, None, clock_f),
         ];
 
         let n = 2;
-        shuffle_it(n, args);
+        let transitive_conflicts = false;
+        shuffle_it(n, transitive_conflicts, args);
     }
 
     #[test]
     fn test_add_random() {
         let shard_id = 0;
         let n = 2;
+        let transitive_conflicts = false;
         let iterations = 10;
         let events_per_process = 3;
 
         (0..iterations).for_each(|_| {
             let args = random_adds(shard_id, n, events_per_process);
-            shuffle_it(n, args);
+            shuffle_it(n, transitive_conflicts, args);
         });
     }
 
@@ -1094,7 +1181,10 @@ mod tests {
         shard_id: ShardId,
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, VClock<ProcessId>)> {
+    ) -> Vec<(Dot, Option<HashSet<String>>, VClock<ProcessId>)> {
+        let mut possible_keys: Vec<_> =
+            (0..4).map(|key| key.to_string()).collect();
+
         // create dots
         let dots: Vec<_> = util::process_ids(shard_id, n)
             .flat_map(|process_id| {
@@ -1103,13 +1193,21 @@ mod tests {
             })
             .collect();
 
-        // create bottom clocks
+        // compute keys and bottom clocks
         let clocks: HashMap<_, _> = dots
             .clone()
             .into_iter()
             .map(|dot| {
+                // select two random keys from the set of possible keys:
+                // - this makes sure that the conflict relation is not
+                //   transitive
+                possible_keys.shuffle(&mut rand::thread_rng());
+                let mut keys = HashSet::new();
+                assert!(keys.insert(possible_keys[0].clone()));
+                assert!(keys.insert(possible_keys[1].clone()));
+                // create bottom clock
                 let clock = VClock::with(util::process_ids(shard_id, n));
-                (dot, RefCell::new(clock))
+                (dot, (Some(keys), RefCell::new(clock)))
             })
             .collect();
 
@@ -1118,47 +1216,61 @@ mod tests {
             let left = dots[0];
             let right = dots[1];
 
-            // find their clocks
-            let mut left_clock = clocks
-                .get(left)
-                .expect("left clock must exist")
-                .borrow_mut();
-            let mut right_clock = clocks
-                .get(right)
-                .expect("right clock must exist")
-                .borrow_mut();
+            // find their data
+            let (left_keys, left_clock) =
+                clocks.get(left).expect("left dot data must exist");
+            let (right_keys, right_clock) =
+                clocks.get(right).expect("right dot data must exist");
 
-            // and make sure at least one is a dependency of the other
-            match rand::random::<usize>() % 3 {
-                0 => {
-                    // left depends on right
-                    left_clock.add(&right.source(), right.sequence());
+            // unwrap keys
+            let left_keys = left_keys.as_ref().expect("left keys should exist");
+            let right_keys =
+                right_keys.as_ref().expect("right keys should exist");
+
+            // check if the commands conflict (i.e. if the keys being accessed
+            // intersect)
+            let conflict = left_keys.intersection(&right_keys).next().is_some();
+
+            // if the commands conflict, then make sure at least one is a
+            // dependency of the other
+            if conflict {
+                // borrow their clocks mutably
+                let mut left_clock = left_clock.borrow_mut();
+                let mut right_clock = right_clock.borrow_mut();
+
+                match rand::random::<usize>() % 3 {
+                    0 => {
+                        // left depends on right
+                        left_clock.add(&right.source(), right.sequence());
+                    }
+                    1 => {
+                        // right depends on left
+                        right_clock.add(&left.source(), left.sequence());
+                    }
+                    2 => {
+                        // both
+                        left_clock.add(&right.source(), right.sequence());
+                        right_clock.add(&left.source(), left.sequence());
+                    }
+                    _ => panic!("usize % 3 must < 3"),
                 }
-                1 => {
-                    // right depends on left
-                    right_clock.add(&left.source(), left.sequence());
-                }
-                2 => {
-                    // both
-                    left_clock.add(&right.source(), right.sequence());
-                    right_clock.add(&left.source(), left.sequence());
-                }
-                _ => panic!("usize % 3 must < 3"),
             }
         });
 
-        // return mapping from dot to its clock
         clocks
             .into_iter()
-            .map(|(dot, clock_cell)| {
+            .map(|(dot, (keys, clock_cell))| {
                 let clock = clock_cell.into_inner();
-                (dot, clock)
+                (dot, keys, clock)
             })
             .collect()
     }
 
-    fn shuffle_it(n: usize, mut args: Vec<(Dot, VClock<ProcessId>)>) {
-        let transitive_conflicts = false;
+    fn shuffle_it(
+        n: usize,
+        transitive_conflicts: bool,
+        mut args: Vec<(Dot, Option<HashSet<String>>, VClock<ProcessId>)>,
+    ) {
         let total_order =
             check_termination(n, args.clone(), transitive_conflicts);
         args.permutation().for_each(|permutation| {
@@ -1171,7 +1283,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, VClock<ProcessId>)>,
+        args: Vec<(Dot, Option<HashSet<String>>, VClock<ProcessId>)>,
         transitive_conflicts: bool,
     ) -> Vec<Rifl> {
         // create queue
@@ -1185,14 +1297,18 @@ mod tests {
         let mut all_rifls = HashSet::new();
         let mut sorted = Vec::new();
 
-        args.into_iter().for_each(|(dot, clock)| {
+        args.into_iter().for_each(|(dot, keys, clock)| {
             // create command rifl from its dot
             let rifl = Rifl::new(dot.source() as ClientId, dot.sequence());
 
-            // create command
-            let key = String::from("CONF");
-            let value = String::from("");
-            let cmd = Command::put(rifl, key, value);
+            // create command:
+            // - set single CONF key if no keys were provided
+            let keys = keys.unwrap_or_else(|| singleton!(String::from("CONF")));
+            let ops = keys.into_iter().map(|key| {
+                let value = String::from("");
+                (key, KVOp::Put(value))
+            });
+            let cmd = Command::from(rifl, ops);
 
             // add to the set of all rifls
             assert!(all_rifls.insert(rifl));
@@ -1268,9 +1384,6 @@ mod tests {
         config.set_transitive_conflicts(transitive_conflicts);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
-
-        // // create vertex index and index all dots
-        // let mut vertex_index = VertexIndex::new();
 
         // (5, 70): only (5, 61) is missing
         let missing_dot = Dot::new(5, 61);
@@ -1374,6 +1487,11 @@ mod tests {
         ) = finder_info
         {
             // check the missing dot
+            assert_eq!(
+                missing_deps.len(),
+                1,
+                "there's a single missing dependency"
+            );
             assert_eq!(missing_deps.into_iter().next().unwrap(), missing_dot);
 
             // check that ready commands are actually delivered
