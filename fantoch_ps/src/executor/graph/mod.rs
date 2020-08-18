@@ -627,13 +627,14 @@ mod tests {
     use crate::util;
     use fantoch::id::{ClientId, Rifl, ShardId};
     use fantoch::kvs::{KVOp, Key};
-    use fantoch::singleton;
     use fantoch::time::RunTime;
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use rand::seq::SliceRandom;
     use std::cell::RefCell;
-    use std::collections::BTreeMap;
+    use std::cmp::Ordering;
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::iter::FromIterator;
     use threshold::{AEClock, AboveExSet, EventSet};
 
     #[test]
@@ -670,8 +671,6 @@ mod tests {
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
 
-    #[ignore]
-    #[test]
     /// We have 5 commands by the same process (process A) that access the same
     /// key. We have `n = 5` and `f = 1` and thus the fast quorum size of 3.
     /// The fast quorum used by process A is `{A, B, C}`. We have the
@@ -706,7 +705,9 @@ mod tests {
     /// that parallelizing the processing of messages needs to be on a
     /// per-process basis, i.e. commands by the same process are always
     /// processed by the same worker.
-    fn transitive_conflicts_assumption_regression_test() {
+    #[ignore]
+    #[test]
+    fn transitive_conflicts_assumption_regression_test_1() {
         // config
         let n = 5;
         let transitive_conflicts = true;
@@ -750,6 +751,78 @@ mod tests {
         assert_eq!(order_a, order_b);
     }
 
+    /// Simple example showing why encoding of dependencies matters for the
+    /// `transitive_conflicts` optimization to be correct (which, makes the name
+    /// of the optimization not great):
+    /// - 3 replicas (A, B, C), and 3 commands
+    ///   * command (A, 1), keys = {x}
+    ///   * command (A, 2), keys = {y}
+    ///   * command (B, 1), keys = {x, y}
+    ///
+    /// First, (A, 1) is submitted and gets no dependencies:
+    /// - {A -> 0, B -> 0, C -> 0}
+    /// Then, (A, 2) is submitted and also gets no dependencies:
+    /// - {A -> 0, B -> 0, C -> 0}
+    /// Finally, (B, 1) is submitted and gets (A, 2) as a dependency:
+    /// - {A -> 2, B -> 0, C -> 0}
+    /// It only gets (A, 2) because we only return the highest conflicting
+    /// command from each replica.
+    ///
+    /// With the optimization, the order in which commands are received by the
+    /// ordering component affects results:
+    /// - (A, 1), (A, 2), (B, 1): commands are executed in the order they're
+    ///   received, producing correct results
+    /// - (A, 2), (B, 1), (A, 1): (B, 1) is executed before (A, 1) and shouldn't
+    ///
+    /// Without the optimization, (B, 1) would be forced to wait for (A, 1) in
+    /// the last case, producing a correct result.
+    ///
+    /// It looks like the optimization would be correct if, instead of returning
+    /// the highest conflicting command per replica, we would return the highest
+    /// conflict command per replica *per key*.
+    #[ignore]
+    #[test]
+    fn transitive_conflicts_assumption_regression_test_2() {
+        // config
+        let n = 3;
+        let transitive_conflicts = true;
+
+        let keys = |keys: Vec<&str>| {
+            keys.into_iter()
+                .map(|key| key.to_string())
+                .collect::<BTreeSet<_>>()
+        };
+
+        // cmd 1,1
+        let dot_1_1 = Dot::new(1, 1);
+        let keys_1_1 = keys(vec!["A"]);
+        let clock_1_1 = util::vclock(vec![0, 0, 0]);
+
+        // cmd 1,2
+        let dot_1_2 = Dot::new(1, 2);
+        let keys_1_2 = keys(vec!["B"]);
+        let clock_1_2 = util::vclock(vec![0, 0, 0]);
+
+        // cmd 2,1
+        let dot_2_1 = Dot::new(2, 1);
+        let keys_2_1 = keys(vec!["A", "B"]);
+        let clock_2_1 = util::vclock(vec![2, 0, 0]);
+
+        let order_a = vec![
+            (dot_1_1, Some(keys_1_1.clone()), clock_1_1.clone()),
+            (dot_1_2, Some(keys_1_2.clone()), clock_1_2.clone()),
+            (dot_2_1, Some(keys_2_1.clone()), clock_2_1.clone()),
+        ];
+        let order_b = vec![
+            (dot_1_2, Some(keys_1_2), clock_1_2),
+            (dot_2_1, Some(keys_2_1), clock_2_1),
+            (dot_1_1, Some(keys_1_1), clock_1_1),
+        ];
+        let order_a = check_termination(n, order_a, transitive_conflicts);
+        let order_b = check_termination(n, order_b, transitive_conflicts);
+        assert_eq!(order_a, order_b);
+    }
+
     #[test]
     fn self_cycle_test() {
         // config
@@ -772,39 +845,6 @@ mod tests {
             (dot_1, None, clock_1),
             (dot_2, None, clock_2),
             (dot_3, None, clock_3),
-        ];
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    fn non_transitive_conflicts_regression_test() {
-        // config
-        let n = 2;
-        let transitive_conflicts = false;
-
-        let keys = |keys: Vec<&str>| {
-            keys.into_iter().map(|key| key.to_string()).collect()
-        };
-
-        // cmd 1,1
-        let dot_1_1 = Dot::new(1, 1);
-        let keys_1_1 = keys(vec!["A", "C"]);
-        let clock_1_1 = util::vclock(vec![0, 2]);
-
-        // cmd 2,1
-        let dot_2_1 = Dot::new(2, 1);
-        let keys_2_1 = keys(vec!["B", "C"]);
-        let clock_2_1 = util::vclock(vec![0, 0]);
-
-        // cmd 2,2
-        let dot_2_2 = Dot::new(2, 2);
-        let keys_2_2 = keys(vec!["A"]);
-        let clock_2_2 = util::vclock(vec![0, 0]);
-
-        let args = vec![
-            (dot_1_1, Some(keys_1_1), clock_1_1),
-            (dot_2_1, Some(keys_2_1), clock_2_1),
-            (dot_2_2, Some(keys_2_2), clock_2_2),
         ];
         shuffle_it(n, transitive_conflicts, args);
     }
@@ -1152,7 +1192,7 @@ mod tests {
         let n = 2;
         let transitive_conflicts = false;
         let iterations = 10;
-        let events_per_process = 3;
+        let events_per_process = 4;
 
         (0..iterations).for_each(|_| {
             let args = random_adds(shard_id, n, events_per_process);
@@ -1164,9 +1204,9 @@ mod tests {
         shard_id: ShardId,
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<HashSet<Key>>, VClock<ProcessId>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)> {
         let mut possible_keys: Vec<_> =
-            (0..4).map(|key| key.to_string()).collect();
+            ('A'..='D').map(|key| key.to_string()).collect();
 
         // create dots
         let dots: Vec<_> = util::process_ids(shard_id, n)
@@ -1185,7 +1225,7 @@ mod tests {
                 // - this makes sure that the conflict relation is not
                 //   transitive
                 possible_keys.shuffle(&mut rand::thread_rng());
-                let mut keys = HashSet::new();
+                let mut keys = BTreeSet::new();
                 assert!(keys.insert(possible_keys[0].clone()));
                 assert!(keys.insert(possible_keys[1].clone()));
                 // create bottom clock
@@ -1221,21 +1261,37 @@ mod tests {
                 let mut left_clock = left_clock.borrow_mut();
                 let mut right_clock = right_clock.borrow_mut();
 
-                match rand::random::<usize>() % 3 {
-                    0 => {
-                        // left depends on right
-                        left_clock.add(&right.source(), right.sequence());
+                if left.source() == right.source() {
+                    // if dots belong to the same process, make the latest
+                    // depend on the oldest
+                    match left.sequence().cmp(&right.sequence()) {
+                        Ordering::Less => {
+                            right_clock.add(&left.source(), left.sequence());
+                        }
+                        Ordering::Greater => {
+                            left_clock.add(&right.source(), right.sequence());
+                        }
+                        _ => unreachable!("dots must be different"),
+                    };
+                } else {
+                    // otherwise, make them depend on each other (maybe both
+                    // ways)
+                    match rand::random::<usize>() % 3 {
+                        0 => {
+                            // left depends on right
+                            left_clock.add(&right.source(), right.sequence());
+                        }
+                        1 => {
+                            // right depends on left
+                            right_clock.add(&left.source(), left.sequence());
+                        }
+                        2 => {
+                            // both
+                            left_clock.add(&right.source(), right.sequence());
+                            right_clock.add(&left.source(), left.sequence());
+                        }
+                        _ => panic!("usize % 3 must < 3"),
                     }
-                    1 => {
-                        // right depends on left
-                        right_clock.add(&left.source(), left.sequence());
-                    }
-                    2 => {
-                        // both
-                        left_clock.add(&right.source(), right.sequence());
-                        right_clock.add(&left.source(), left.sequence());
-                    }
-                    _ => panic!("usize % 3 must < 3"),
                 }
             }
         });
@@ -1252,10 +1308,11 @@ mod tests {
     fn shuffle_it(
         n: usize,
         transitive_conflicts: bool,
-        mut args: Vec<(Dot, Option<HashSet<Key>>, VClock<ProcessId>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
     ) {
         let total_order =
             check_termination(n, args.clone(), transitive_conflicts);
+        println!("transitive_conflicts = {:?}", transitive_conflicts);
         args.permutation().for_each(|permutation| {
             println!("permutation = {:?}", permutation);
             let sorted =
@@ -1266,7 +1323,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<HashSet<Key>>, VClock<ProcessId>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
         transitive_conflicts: bool,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
@@ -1286,7 +1343,9 @@ mod tests {
 
             // create command:
             // - set single CONF key if no keys were provided
-            let keys = keys.unwrap_or_else(|| singleton!(String::from("CONF")));
+            let keys = keys.unwrap_or_else(|| {
+                BTreeSet::from_iter(vec![String::from("CONF")])
+            });
             let ops = keys.into_iter().map(|key| {
                 let value = String::from("");
                 (key, KVOp::Put(value))
