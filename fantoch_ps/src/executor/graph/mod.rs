@@ -798,7 +798,7 @@ mod tests {
         // cmd 1,3
         let dot_1_3 = Dot::new(1, 3);
         let keys_1_3 = keys(vec!["A", "C"]);
-        let clock_1_3 = util::vclock(vec![2, 3]);
+        let clock_1_3 = util::vclock(vec![2, 2]);
 
         // cmd 2,1
         let dot_2_1 = Dot::new(2, 1);
@@ -810,18 +810,12 @@ mod tests {
         let keys_2_2 = keys(vec!["A"]);
         let clock_2_2 = util::vclock(vec![0, 0]);
 
-        // cmd 2,3
-        let dot_2_3 = Dot::new(2, 3);
-        let keys_2_3 = keys(vec!["A", "B"]);
-        let clock_2_3 = util::vclock(vec![1, 2]);
-
         let args = vec![
             (dot_1_1, Some(keys_1_1), clock_1_1),
             (dot_1_2, Some(keys_1_2), clock_1_2),
             (dot_1_3, Some(keys_1_3), clock_1_3),
             (dot_2_1, Some(keys_2_1), clock_2_1),
             (dot_2_2, Some(keys_2_2), clock_2_2),
-            (dot_2_3, Some(keys_2_3), clock_2_3),
         ];
         shuffle_it(n, transitive_conflicts, args);
     }
