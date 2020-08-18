@@ -1192,7 +1192,7 @@ mod tests {
         let n = 2;
         let transitive_conflicts = false;
         let iterations = 10;
-        let events_per_process = 4;
+        let events_per_process = 3;
 
         (0..iterations).for_each(|_| {
             let args = random_adds(shard_id, n, events_per_process);

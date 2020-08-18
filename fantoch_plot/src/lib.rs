@@ -695,10 +695,18 @@ pub fn process_metrics_table(
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    let col_labels =
-        vec!["fast", "slow", "gc", "delay (ms)", "chains", "out", "in"];
+    let col_labels = vec![
+        "fast",
+        "slow",
+        "gc",
+        "delay (ms)",
+        "chains",
+        "out",
+        "in_req",
+        "in_rep",
+    ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.15, 0.15, 0.15, 0.22, 0.22, 0.15, 0.15];
+    let col_widths = vec![0.14, 0.14, 0.14, 0.20, 0.20, 0.12, 0.13, 0.13];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -768,6 +776,9 @@ pub fn process_metrics_table(
         let out_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::OutRequests)
             .map(|out_requests| format!("{}M", out_requests / 1_000_000));
+        let in_requests = executor_metrics
+            .get_aggregated(ExecutorMetricsKind::InRequests)
+            .map(|in_requests| format!("{}M", in_requests / 1_000_000));
         let in_request_replies = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequestReplies)
             .map(|in_request_replies| {
@@ -781,6 +792,7 @@ pub fn process_metrics_table(
             execution_delay,
             chain_size,
             out_requests,
+            in_requests,
             in_request_replies,
         ];
         // format cell
@@ -950,6 +962,8 @@ fn add_legend(
         6 => (3, two_rows),
         7 => (4, two_rows),
         8 => (4, two_rows),
+        9 => (5, two_rows),
+        10 => (5, two_rows),
         _ => panic!(
             "add_legend: unsupported number of plotted instances: {}",
             plotted

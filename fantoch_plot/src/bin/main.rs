@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_zipf01_transitive";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_transitive_bulk";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -32,28 +32,30 @@ fn partial_replication() -> Result<(), Report> {
     let keys_per_shard = 1;
     let mut key_gens = Vec::new();
     let zipf_key_count = 1_000_000;
-    let zipf_coefficient = 0.1;
-    let zipf_key_gen = KeyGen::Zipf {
-        coefficient: zipf_coefficient,
+    key_gens.push(KeyGen::Zipf {
+        coefficient: 0.1,
         key_count: zipf_key_count,
-    };
-    key_gens.push(zipf_key_gen);
-    // let conflict_key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
-    // key_gens.push(conflict_key_gen);
+    });
+    // key_gens.push(KeyGen::ConflictRate { conflict_rate: 0 });
     let payload_size = 0;
-    let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
+    let protocols = vec![Protocol::AtlasLocked];
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
         (1, 1),
-        (4, 1),
+        // (2, 1),
+        (2, 2),
+        // (3, 1),
+        (3, 2),
+        // (4, 1),
         (4, 2),
+        // (5, 1),
+        (5, 2),
         /*
         (2, 2),
         (3, 1),
         (3, 2),
         (5, 1),
-        (6, 1),
         */
     ];
 
@@ -124,13 +126,14 @@ fn partial_replication() -> Result<(), Report> {
                 // create styles
                 let mut styles = HashMap::new();
                 styles.insert((1, 1), ("#1abc9c", "s"));
-                styles.insert((2, 1), ("#218c74", "D"));
-                styles.insert((2, 2), ("#227093", "."));
-                styles.insert((3, 1), ("#bdc3c7", "v"));
-                styles.insert((4, 1), ("#ffa726", "+"));
-                styles.insert((4, 2), ("#34495e", "x"));
-                styles.insert((5, 1), ("#227093", "."));
-                styles.insert((6, 1), ("#34495e", "x"));
+                styles.insert((2, 1), ("#218c74", "s"));
+                styles.insert((2, 2), ("#218c74", "+"));
+                styles.insert((3, 1), ("#bdc3c7", "s"));
+                styles.insert((3, 2), ("#bdc3c7", "+"));
+                styles.insert((4, 1), ("#ffa726", "s"));
+                styles.insert((4, 2), ("#ffa726", "+"));
+                styles.insert((5, 1), ("#227093", "s"));
+                styles.insert((5, 2), ("#227093", "+"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();

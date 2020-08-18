@@ -14,7 +14,7 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 // const RESULTS_DIR: &str = "../graph_executor";
-const RESULTS_DIR: &str = "../graph_executor_zipf01_transitive";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_transitive_bulk";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -182,12 +182,11 @@ async fn main() -> Result<(), Report> {
         1024 * 272,
     ];
     let shards_per_command = 2;
-    let shard_count = 4;
+    let shard_count = 5;
     let keys_per_shard = 1;
-    let zipf_coefficient = 0.1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: zipf_coefficient,
+        coefficient: 0.1,
         key_count: zipf_key_count,
     };
     // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
