@@ -626,13 +626,14 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::{ClientId, Rifl, ShardId};
-    use fantoch::kvs::KVOp;
+    use fantoch::kvs::{KVOp, Key};
     use fantoch::singleton;
     use fantoch::time::RunTime;
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use rand::seq::SliceRandom;
     use std::cell::RefCell;
+    use std::collections::BTreeMap;
     use threshold::{AEClock, AboveExSet, EventSet};
 
     #[test]
@@ -1163,7 +1164,7 @@ mod tests {
         shard_id: ShardId,
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<HashSet<String>>, VClock<ProcessId>)> {
+    ) -> Vec<(Dot, Option<HashSet<Key>>, VClock<ProcessId>)> {
         let mut possible_keys: Vec<_> =
             (0..4).map(|key| key.to_string()).collect();
 
@@ -1251,7 +1252,7 @@ mod tests {
     fn shuffle_it(
         n: usize,
         transitive_conflicts: bool,
-        mut args: Vec<(Dot, Option<HashSet<String>>, VClock<ProcessId>)>,
+        mut args: Vec<(Dot, Option<HashSet<Key>>, VClock<ProcessId>)>,
     ) {
         let total_order =
             check_termination(n, args.clone(), transitive_conflicts);
@@ -1265,9 +1266,9 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<HashSet<String>>, VClock<ProcessId>)>,
+        args: Vec<(Dot, Option<HashSet<Key>>, VClock<ProcessId>)>,
         transitive_conflicts: bool,
-    ) -> Vec<Rifl> {
+    ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
         let shard_id = 0;
@@ -1277,7 +1278,7 @@ mod tests {
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
         let mut all_rifls = HashSet::new();
-        let mut sorted = Vec::new();
+        let mut sorted = BTreeMap::new();
 
         args.into_iter().for_each(|(dot, keys, clock)| {
             // create command rifl from its dot
@@ -1310,7 +1311,12 @@ mod tests {
                 assert!(all_rifls.remove(&cmd.rifl()));
 
                 // and add it to the sorted results
-                sorted.push(rifl);
+                cmd.keys(shard_id).for_each(|key| {
+                    sorted
+                        .entry(key.clone())
+                        .or_insert_with(Vec::new)
+                        .push(rifl);
+                })
             });
         });
 
