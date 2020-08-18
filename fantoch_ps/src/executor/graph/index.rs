@@ -57,7 +57,6 @@ impl VertexIndex {
     }
 
     pub fn find(&self, dot: &Dot) -> Option<VertexRef<'_>> {
-        // search first in the local index
         self.local.get(dot).map(VertexRef::new)
     }
 

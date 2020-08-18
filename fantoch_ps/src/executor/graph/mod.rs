@@ -275,8 +275,6 @@ impl DependencyGraph {
         let replies = self.out_request_replies.entry(from).or_default();
         // let requests = self.buffered_in_requests.entry(from).or_default();
         for dot in dots {
-            replies.push(RequestReply::Executed { dot });
-            /*
             log!(
                 "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
                 self.process_id,
@@ -307,6 +305,8 @@ impl DependencyGraph {
                     })
                 }
             } else {
+                replies.push(RequestReply::Executed { dot });
+                /*
                 // if we don't have it, then check if it's executed
                 // NOTE: this `executed_clock` is a snapshot of the clock, so we
                 // may endup buffering a request for the next cleanup step, even
@@ -332,8 +332,8 @@ impl DependencyGraph {
                     // buffer request again
                     requests.insert(dot);
                 }
+                */
             }
-            */
         }
     }
 
