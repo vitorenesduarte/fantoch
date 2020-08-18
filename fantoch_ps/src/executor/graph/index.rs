@@ -5,30 +5,10 @@ use fantoch::config::Config;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::HashSet;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::RwLock;
 use std::sync::Arc;
 
-pub struct VertexRef<'a> {
-    r: DashMapRef<'a, Dot, RwLock<Vertex>>,
-}
-
-impl<'a> VertexRef<'a> {
-    fn new(r: DashMapRef<'a, Dot, RwLock<Vertex>>) -> Self {
-        Self { r }
-    }
-
-    pub fn read(&self, tag: &'static str) -> RwLockReadGuard<'_, Vertex> {
-        self.r
-            .try_read()
-            .unwrap_or_else(|| panic!("VertexRef::read failed at {}", tag))
-    }
-
-    pub fn write(&self, tag: &'static str) -> RwLockWriteGuard<'_, Vertex> {
-        self.r
-            .try_write()
-            .unwrap_or_else(|| panic!("VertexRef::write failed at {}", tag))
-    }
-}
+pub type VertexRef<'a> = DashMapRef<'a, Dot, RwLock<Vertex>>;
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
@@ -57,7 +37,7 @@ impl VertexIndex {
     }
 
     pub fn find(&self, dot: &Dot) -> Option<VertexRef<'_>> {
-        self.local.get(dot).map(VertexRef::new)
+        self.local.get(dot)
     }
 
     /// Removes a vertex from the index.
