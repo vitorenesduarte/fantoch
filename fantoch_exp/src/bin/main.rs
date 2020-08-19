@@ -14,7 +14,7 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 // const RESULTS_DIR: &str = "../graph_executor";
-const RESULTS_DIR: &str = "../graph_executor_zipf01_transitive_bulk";
+const RESULTS_DIR: &str = "../graph_executor_zipf01";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -63,8 +63,7 @@ const RUN_MODE: RunMode = RunMode::Release;
 // const RUN_MODE: RunMode = RunMode::Flamegraph;
 
 // list of protocol binaries to cleanup before running the experiment
-const PROTOCOLS_TO_CLEANUP: &[Protocol] =
-    &[Protocol::NewtAtomic, Protocol::AtlasLocked];
+const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[Protocol::AtlasLocked];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -165,6 +164,7 @@ async fn main() -> Result<(), Report> {
         1024 * 4, // 1
         1024 * 8, // 1
         1024 * 16,
+        1024 * 20,
         1024 * 24, // 1
         1024 * 32,
         1024 * 36, // 1
