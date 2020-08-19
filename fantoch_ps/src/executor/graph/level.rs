@@ -82,10 +82,9 @@ impl LevelExecutedClock {
                     .pop_front()
                     .expect("there should be a front to level");
 
-                log!(
+                println!(
                     "p{}: LevelExecutedClock::maybe_update_epoch before = {:?}",
-                    self.process_id,
-                    executed_clock
+                    self.process_id, executed_clock
                 );
 
                 // level all the entries that are not from my shard to what I've
@@ -94,7 +93,7 @@ impl LevelExecutedClock {
                     executed_clock.add_range(peer_id, 1, executed);
                 });
 
-                log!(
+                println!(
                     "p{}: LevelExecutedClock::maybe_update_epoch after {} = {:?}",
                     self.process_id,
                     executed,
