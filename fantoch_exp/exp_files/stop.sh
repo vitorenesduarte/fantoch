@@ -44,6 +44,10 @@ stop_fantoch() {
     cmd="ps -aux | grep dstat | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
+    # cargo build
+    cmd="ps -aux | grep cargo | grep -v grep | awk '{ print \"kill -SIGKILL \"\$2 }' | bash"
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+
     # remove files
     cmd="rm -f *.metrics *.log *.dstat.csv heaptrack.*.gz"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
