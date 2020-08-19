@@ -75,7 +75,7 @@ impl Executor for GraphExecutor {
                 self.fetch_actions(time);
             }
             GraphExecutionInfo::ExecutedClock { clock } => {
-                self.graph.handle_executed_clock(clock);
+                self.graph.handle_executed_clock(clock, time);
             }
         }
     }

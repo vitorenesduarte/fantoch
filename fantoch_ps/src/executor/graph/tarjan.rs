@@ -177,11 +177,6 @@ impl TarjanSCCFinder {
                         // not necesserarily a missing dependency, since it may
                         // not conflict with `dot` but
                         // we can't be sure until we have it locally
-                        log!(
-                            "p{}: Finder::strong_connect missing {:?}",
-                            self.process_id,
-                            dep_dot
-                        );
                         let deps = std::iter::once(dep_dot);
                         let deps = if self.config.shards() == 1 {
                             deps.collect()
@@ -206,6 +201,12 @@ impl TarjanSCCFinder {
                             ))
                             .collect()
                         };
+                        log!(
+                            "p{}: Finder::strong_connect missing {:?} | {:?}",
+                            self.process_id,
+                            dep_dot,
+                            deps
+                        );
                         return FinderResult::MissingDependencies(deps);
                     }
                     Some(dep_vertex_ref) => {

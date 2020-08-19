@@ -160,7 +160,8 @@ impl DependencyGraph {
             time.millis()
         );
         if self.executor_index == 0 {
-            // if main executor, send snapshot of executed clock to other executors
+            // if main executor, send snapshot of executed clock to other
+            // executors
             Some(GraphExecutionInfo::ExecutedClock {
                 clock: self.executed_clock.clone(),
             })
@@ -171,7 +172,18 @@ impl DependencyGraph {
         }
     }
 
-    fn handle_executed_clock(&mut self, clock: AEClock<ProcessId>) {
+    fn handle_executed_clock(
+        &mut self,
+        clock: AEClock<ProcessId>,
+        _time: &dyn SysTime,
+    ) {
+        log!(
+            "p{}: @{} Graph::handle_executed_clock {:?} | time = {}",
+            self.process_id,
+            self.executor_index,
+            clock,
+            _time.millis()
+        );
         if self.executor_index == 0 {
             // if main executor, ignore this message
         } else {
@@ -220,7 +232,7 @@ impl DependencyGraph {
             }
             FinderInfo::MissingDependencies(dots, dep_dot, _visited) => {
                 // update the pending
-                self.index_pending(dep_dot, dot);
+                self.index_pending(dep_dot, dot, time);
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
@@ -491,10 +503,23 @@ impl DependencyGraph {
         })
     }
 
-    fn index_pending(&mut self, missing_deps: HashSet<Dot>, dot: Dot) {
+    fn index_pending(
+        &mut self,
+        missing_deps: HashSet<Dot>,
+        dot: Dot,
+        _time: &dyn SysTime,
+    ) {
         let mut requests = 0;
         for dep_dot in missing_deps {
             if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
+                log!(
+                    "p{}: @{} Graph::index_pending will ask {:?} to {:?} | time = {}",
+                    self.process_id,
+                    self.executor_index,
+                    dep_dot,
+                    target_shard,
+                    _time.millis()
+                );
                 requests += 1;
                 self.out_requests
                     .entry(target_shard)
@@ -575,7 +600,7 @@ impl DependencyGraph {
                         dots.extend(new_dots);
 
                         // update pending
-                        self.index_pending(missing_deps, dot);
+                        self.index_pending(missing_deps, dot, time);
                     }
                     FinderInfo::NotPending => {
                         // this happens if the pending dot is no longer

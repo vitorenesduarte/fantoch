@@ -228,7 +228,7 @@ where
         assert!(self.participants.insert(from));
         add(&mut self.info);
         log!(
-            "p{}: ShardsCommits:add {} | current info = {:?} | participants = {:?} | shard count = {}",
+            "p{}: ShardsCommits::add {} | current info = {:?} | participants = {:?} | shard count = {}",
             self.process_id,
             from,
             self.info,
