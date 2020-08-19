@@ -8,10 +8,10 @@ use std::collections::VecDeque;
 use threshold::AEClock;
 use threshold::EventSet;
 
-// epoch length is 500ms
-const EPOCH_MILLIS: u64 = 500;
-// executed clock is leveled every second
-const EPOCH_LEVEL_AGE: u64 = 2;
+// epoch length is 1s
+const EPOCH_MILLIS: u64 = 1000;
+// executed clock is leveled every 3 seconds
+const EPOCH_LEVEL_AGE: u64 = 3;
 
 #[derive(Clone)]
 pub struct LevelExecutedClock {
@@ -82,9 +82,10 @@ impl LevelExecutedClock {
                     .pop_front()
                     .expect("there should be a front to level");
 
-                println!(
+                log!(
                     "p{}: LevelExecutedClock::maybe_update_epoch before = {:?}",
-                    self.process_id, executed_clock
+                    self.process_id,
+                    executed_clock
                 );
 
                 // level all the entries that are not from my shard to what I've
@@ -93,7 +94,7 @@ impl LevelExecutedClock {
                     executed_clock.add_range(peer_id, 1, executed);
                 });
 
-                println!(
+                log!(
                     "p{}: LevelExecutedClock::maybe_update_epoch after {} = {:?}",
                     self.process_id,
                     executed,
