@@ -308,6 +308,7 @@ async fn reader_task<P>(
                     }
                 }
                 POEMessage::Executor(execution_info) => {
+                    log!("[reader] to executor {:?}", execution_info);
                     // notify executor
                     if let Err(e) = to_executors.forward(execution_info).await {
                         println!("[reader] error while notifying executor with new execution info: {:?}", e);
@@ -341,6 +342,9 @@ async fn writer_task<P>(
                     if let Some(msg) = msg {
                         // connection write *doesn't* flush
                         connection.write(&*msg).await;
+                        if msg.to_executor() {
+                            log!("[writer] to executor: {:?}", msg);
+                        }
                     } else {
                         println!("[writer] error receiving message from parent");
                         break;
@@ -357,6 +361,9 @@ async fn writer_task<P>(
             if let Some(msg) = parent.recv().await {
                 // connection write *does* flush
                 connection.send(&*msg).await;
+                if msg.to_executor() {
+                    log!("[writer] to executor: {:?}", msg);
+                }
             } else {
                 println!("[writer] error receiving message from parent");
                 break;

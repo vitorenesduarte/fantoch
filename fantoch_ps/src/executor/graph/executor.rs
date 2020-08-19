@@ -13,6 +13,7 @@ use threshold::{AEClock, VClock};
 
 #[derive(Clone)]
 pub struct GraphExecutor {
+    executor_index: usize,
     process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
@@ -26,11 +27,14 @@ impl Executor for GraphExecutor {
     type ExecutionInfo = GraphExecutionInfo;
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
+        // this value will be overwritten
+        let executor_index = 0;
         let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
         let to_clients = Vec::new();
         let to_executors = Vec::new();
         Self {
+            executor_index,
             process_id,
             shard_id,
             config,
@@ -42,6 +46,7 @@ impl Executor for GraphExecutor {
     }
 
     fn set_executor_index(&mut self, index: usize) {
+        self.executor_index = index;
         self.graph.set_executor_index(index);
     }
 
@@ -112,8 +117,9 @@ impl GraphExecutor {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
             log!(
-                "p{}: GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
+                "p{}: @{} GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
                 self.process_id,
+                self.executor_index,
                 cmd.rifl(),
                 _time.millis()
             );
@@ -124,8 +130,9 @@ impl GraphExecutor {
     fn fetch_requests(&mut self, _time: &dyn SysTime) {
         for (to, dots) in self.graph.requests() {
             log!(
-                "p{}: GraphExecutor::fetch_requests {:?} {:?} | time = {}",
+                "p{}: @{} GraphExecutor::fetch_requests {:?} {:?} | time = {}",
                 self.process_id,
+                self.executor_index,
                 to,
                 dots,
                 _time.millis()
@@ -138,8 +145,9 @@ impl GraphExecutor {
     fn fetch_request_replies(&mut self, _time: &dyn SysTime) {
         for (to, infos) in self.graph.request_replies() {
             log!(
-                "p{}: Graph::fetch_request_replies {:?} {:?} | time = {}",
+                "p{}: @{} Graph::fetch_request_replies {:?} {:?} | time = {}",
                 self.process_id,
+                self.executor_index,
                 to,
                 infos,
                 _time.millis()

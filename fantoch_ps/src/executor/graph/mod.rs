@@ -312,8 +312,6 @@ impl DependencyGraph {
         _time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
-        let replies = self.out_request_replies.entry(from).or_default();
-        let requests = self.buffered_in_requests.entry(from).or_default();
         for dot in dots {
             log!(
                 "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
@@ -338,11 +336,13 @@ impl DependencyGraph {
                         _time.millis()
                     )
                 } else {
-                    replies.push(RequestReply::Info {
-                        dot,
-                        cmd: vertex.cmd.clone(),
-                        clock: vertex.clock.clone(),
-                    })
+                    self.out_request_replies.entry(from).or_default().push(
+                        RequestReply::Info {
+                            dot,
+                            cmd: vertex.cmd.clone(),
+                            clock: vertex.clock.clone(),
+                        },
+                    )
                 }
             } else {
                 // if we don't have it, then check if it's executed
@@ -357,7 +357,10 @@ impl DependencyGraph {
                         dot,
                         _time.millis()
                     );
-                    replies.push(RequestReply::Executed { dot });
+                    self.out_request_replies
+                        .entry(from)
+                        .or_default()
+                        .push(RequestReply::Executed { dot });
                 } else {
                     log!(
                         "p{}: @{} Graph::process_requests from {:?} for a dot {:?} we don't have | time = {}",
@@ -368,7 +371,10 @@ impl DependencyGraph {
                         _time.millis()
                     );
                     // buffer request again
-                    requests.insert(dot);
+                    self.buffered_in_requests
+                        .entry(from)
+                        .or_default()
+                        .insert(dot);
                 }
             }
         }

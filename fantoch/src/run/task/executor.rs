@@ -150,6 +150,11 @@ async fn fetch_info_to_executors<P>(
 {
     // forward execution info to other shards
     for (target_shard, execution_info) in executor.to_executors_iter() {
+        log!(
+            "[executor] info to executors in shard {}: {:?}",
+            target_shard,
+            execution_info
+        );
         // check if it's a message to self
         if shard_id == target_shard {
             // notify executor
@@ -160,7 +165,7 @@ async fn fetch_info_to_executors<P>(
             let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
             if let Some(channels) = shard_writers.get_mut(&target_shard) {
                 crate::run::task::process::send_to_one_writer::<P>(
-                    "executors",
+                    "executor",
                     msg_to_send.clone(),
                     channels,
                 )

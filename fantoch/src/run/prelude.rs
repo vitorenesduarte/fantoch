@@ -73,6 +73,15 @@ pub enum POEMessage<P: Protocol> {
     Executor(<<P as Protocol>::Executor as Executor>::ExecutionInfo),
 }
 
+impl<P: Protocol> POEMessage<P> {
+    pub fn to_executor(&self) -> bool {
+        match self {
+            Self::Protocol(_) => false,
+            Self::Executor(_) => true,
+        }
+    }
+}
+
 // list of channels used to communicate between tasks
 pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
