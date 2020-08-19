@@ -745,16 +745,27 @@ pub fn process_metrics_table(
             MetricsType::ProcessGlobal => (&exp_data.global_protocol_metrics, &exp_data.global_executor_metrics),
             MetricsType::ClientGlobal => panic!("unsupported metrics type ClientGlobal in process_metrics_table"),
         };
+
+        let fmt = |n: &u64| {
+            if *n > 1_000_000 {
+                format!("{}M", n / 1_000_000)
+            } else if *n > 1_000 {
+                format!("{}K", n / 1_000)
+            } else {
+                format!("{}", n)
+            }
+        };
+
         // fetch all cell data
         let fast_path = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::FastPath)
-            .map(|fast_path| format!("{}M", fast_path / 1_000_000));
+            .map(|fast_path| fmt(fast_path));
         let slow_path = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::SlowPath)
-            .map(|slow_path| format!("{}M", slow_path / 1_000_000));
+            .map(|slow_path| fmt(slow_path));
         let gced = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::Stable)
-            .map(|gced| format!("{}M", gced / 1_000_000));
+            .map(|gced| fmt(gced));
         let execution_delay = executor_metrics
             .get_collected(ExecutorMetricsKind::ExecutionDelay)
             .map(|execution_delay| {
@@ -775,15 +786,13 @@ pub fn process_metrics_table(
             });
         let out_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::OutRequests)
-            .map(|out_requests| format!("{}M", out_requests / 1_000_000));
+            .map(|out_requests| fmt(out_requests));
         let in_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequests)
-            .map(|in_requests| format!("{}M", in_requests / 1_000_000));
+            .map(|in_requests| fmt(in_requests));
         let in_request_replies = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequestReplies)
-            .map(|in_request_replies| {
-                format!("{}M", in_request_replies / 1_000_000)
-            });
+            .map(|in_request_replies| fmt(in_request_replies));
         // create cell
         let cell = vec![
             fast_path,
