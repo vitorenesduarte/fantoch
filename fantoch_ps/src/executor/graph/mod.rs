@@ -8,10 +8,14 @@ mod index;
 /// `GraphExecutionInfo`.
 mod executor;
 
+/// This module contains the definition of `LevelExecutedClock`.
+mod level;
+
 // Re-exports.
 pub use executor::{GraphExecutionInfo, GraphExecutor};
 
 use self::index::{PendingIndex, VertexIndex};
+use self::level::LevelExecutedClock;
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -52,6 +56,8 @@ pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
+    // only used in partial replication
+    level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -86,12 +92,16 @@ impl DependencyGraph {
         shard_id: ShardId,
         config: &Config,
     ) -> Self {
+        // this value will be overwritten
         let executor_index = 0;
         // create executed clock
         let ids: Vec<_> = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id)
             .collect();
         let executed_clock = AEClock::with(ids);
+        // create level executed clock
+        let level_executed_clock =
+            LevelExecutedClock::new(process_id, shard_id, config);
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new(process_id, shard_id, *config);
@@ -109,6 +119,7 @@ impl DependencyGraph {
             process_id,
             shard_id,
             executed_clock,
+            level_executed_clock,
             vertex_index,
             pending_index,
             finder,
@@ -160,6 +171,8 @@ impl DependencyGraph {
             time.millis()
         );
         if self.executor_index == 0 {
+            self.level_executed_clock
+                .maybe_level(&mut self.executed_clock, time);
             // if main executor, send snapshot of executed clock to other
             // executors
             Some(GraphExecutionInfo::ExecutedClock {
