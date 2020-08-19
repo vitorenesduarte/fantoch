@@ -1240,7 +1240,6 @@ pub mod tests {
                     1 => None,
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
-                let interval = None;
 
                 // spawn client
                 let status_frequency = None;
