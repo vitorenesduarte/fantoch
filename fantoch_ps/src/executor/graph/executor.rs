@@ -9,7 +9,7 @@ use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
-use threshold::{AEClock, VClock};
+use threshold::VClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
@@ -52,9 +52,7 @@ impl Executor for GraphExecutor {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         if self.config.shards() > 1 {
-            if let Some(self_execution_info) = self.graph.cleanup(time) {
-                self.to_executors.push((self.shard_id, self_execution_info))
-            }
+            self.graph.cleanup(time);
             self.fetch_actions(time);
         }
     }
@@ -80,9 +78,6 @@ impl Executor for GraphExecutor {
             GraphExecutionInfo::RequestReply { infos } => {
                 self.graph.handle_request_reply(infos, time);
                 self.fetch_actions(time);
-            }
-            GraphExecutionInfo::ExecutedClock { clock } => {
-                self.graph.handle_executed_clock(clock, time);
             }
         }
     }
@@ -185,9 +180,6 @@ pub enum GraphExecutionInfo {
     RequestReply {
         infos: Vec<super::RequestReply>,
     },
-    ExecutedClock {
-        clock: AEClock<ProcessId>,
-    },
 }
 
 impl GraphExecutionInfo {
@@ -231,7 +223,6 @@ impl MessageIndex for GraphExecutionInfo {
             Self::AddMine { .. } => executor_index_no_shift(),
             Self::Request { .. } => executor_random_index_shift(),
             Self::RequestReply { .. } => executor_index_no_shift(),
-            Self::ExecutedClock { .. } => None, // send to all workers
         }
     }
 }
