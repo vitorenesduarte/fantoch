@@ -46,10 +46,12 @@ impl Executor for GraphExecutor {
     }
 
     fn cleanup(&mut self, time: &dyn SysTime) {
-        if let Some(self_execution_info) = self.graph.cleanup(time) {
-            self.to_executors.push((self.shard_id, self_execution_info))
+        if self.config.shards() > 1 {
+            if let Some(self_execution_info) = self.graph.cleanup(time) {
+                self.to_executors.push((self.shard_id, self_execution_info))
+            }
+            self.fetch_actions(time);
         }
-        self.fetch_actions(time);
     }
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
