@@ -82,11 +82,24 @@ impl LevelExecutedClock {
                     .pop_front()
                     .expect("there should be a front to level");
 
+                log!(
+                    "p{}: LevelExecutedClock::maybe_update_epoch before = {:?}",
+                    self.process_id,
+                    executed_clock
+                );
+
                 // level all the entries that are not from my shard to what I've
                 // executed in that epoch
                 self.not_shard_process_ids.iter().for_each(|peer_id| {
                     executed_clock.add_range(peer_id, 1, executed);
-                })
+                });
+
+                log!(
+                    "p{}: LevelExecutedClock::maybe_update_epoch after {} = {:?}",
+                    self.process_id,
+                    executed,
+                    executed_clock
+                );
             }
         }
     }
@@ -101,12 +114,6 @@ impl LevelExecutedClock {
             Some(current_epoch) => {
                 // check if should update epoch
                 if now > current_epoch {
-                    log!(
-                        "p{}: LevelExecutedClock::maybe_update_epoch next epoch: {} | time = {}",
-                        self.process_id,
-                        now,
-                        time.millis()
-                    );
                     // compute what I've executed from my shard
                     let executed = self
                         .shard_process_ids
@@ -119,6 +126,13 @@ impl LevelExecutedClock {
                         })
                         .min()
                         .expect("min executed should exist");
+                    log!(
+                        "p{}: LevelExecutedClock::maybe_update_epoch next epoch = {} | executed = {} | time = {}",
+                        self.process_id,
+                        now,
+                        executed,
+                        time.millis()
+                    );
                     self.to_level.push_back((current_epoch, executed));
                     // update epoch
                     self.current_epoch = Some(now);
