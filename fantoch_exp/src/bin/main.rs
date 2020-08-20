@@ -151,8 +151,8 @@ async fn main() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -162,9 +162,9 @@ async fn main() -> Result<(), Report> {
         // 1024 * 2,
         1024 * 4, // 1
         1024 * 8, // 1
-        // 1024 * 12, // 1
+        1024 * 12, // 1
         1024 * 16,
-        // 1024 * 20,
+        1024 * 20,
         1024 * 24, // 1
         1024 * 32,
         1024 * 36, // 1
