@@ -123,8 +123,19 @@ impl TarjanSCCFinder {
         let mut deps_iter = deps.into_iter();
         while let Some(dep_dot) = deps_iter.next() {
             // TODO we should panic if we find a dependency highest than self
-            if dot == dep_dot {
-                // ignore self
+            let ignore = |dep_dot: Dot| {
+                // ignore self or if already executed
+                dep_dot == dot
+                    || executed_clock
+                        .contains(&dep_dot.source(), dep_dot.sequence())
+            };
+
+            if ignore(dep_dot) {
+                log!(
+                    "p{}: Finder::strong_connect ignoring dependency {:?}",
+                    self.process_id,
+                    dep_dot
+                );
                 continue;
             }
 
@@ -137,7 +148,12 @@ impl TarjanSCCFinder {
                         // deps as missing dependencies; this makes sure
                         // that we request all needed dependencies in a
                         // single request
-                        std::iter::once(dep_dot).chain(deps_iter).collect()
+                        std::iter::once(dep_dot)
+                            .chain(deps_iter.filter(|dep| {
+                                // only request non-executed dependencies
+                                !ignore(*dep)
+                            }))
+                            .collect()
                     };
                     log!(
                         "p{}: Finder::strong_connect missing {:?} | {:?}",

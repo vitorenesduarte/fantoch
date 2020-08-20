@@ -63,8 +63,9 @@ impl QuorumDeps {
     pub fn union(&self) -> (HashSet<Dot>, bool) {
         let (deps, counts): (HashSet<Dot>, HashSet<usize>) =
             self.threshold_deps.iter().unzip();
-        // we have equal deps reported if there's a single count
-        let equal_deps_reported = counts.len() == 1;
+        // we have equal deps reported if there's a single count (or no count,
+        // i.e. when no dependencies are reported)
+        let equal_deps_reported = counts.len() <= 1;
         (deps, equal_deps_reported)
     }
 }

@@ -63,7 +63,7 @@ mod tests {
     fn key_deps_flow<KD: KeyDeps>() {
         // create key deps
         let shard_id = 0;
-        let mut clocks = KD::new(shard_id);
+        let mut key_deps = KD::new(shard_id);
 
         // create dot gen
         let process_id = 1;
@@ -98,11 +98,11 @@ mod tests {
         let cmd_c = Command::put(cmd_c_rifl, key_c.clone(), value.clone());
 
         // empty conf for A
-        let conf = clocks.cmd_deps(&cmd_a);
+        let conf = key_deps.cmd_deps(&cmd_a);
         assert_eq!(conf, HashSet::new());
 
         // add A with {1,1}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_a, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_a, None);
 
         // 1. conf with {1,1} for A
         // 2. empty conf for B
@@ -110,123 +110,189 @@ mod tests {
         // 4. empty conf for C
         // 5. conf with {1,1} for noop
         let deps_1_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_1);
-        assert_eq!(clocks.cmd_deps(&cmd_b), HashSet::new());
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_1);
-        assert_eq!(clocks.cmd_deps(&cmd_c), HashSet::new());
-        assert_eq!(clocks.noop_deps(), deps_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), HashSet::new());
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), HashSet::new());
+        assert_eq!(key_deps.noop_deps(), deps_1_1);
 
         // add noop with {1,2}
-        clocks.add_noop(dot_gen.next_id());
+        key_deps.add_noop(dot_gen.next_id());
 
-        // conf with {1,2} for A, B, A-B, C and noop
+        // 1. conf with {1,2}|{1,1} for A
+        // 2. conf with {1,2}| for B
+        // 3. conf with {1,2}|{1,1} for A-B
+        // 4. conf with {1,2}| for C
+        // 5. conf with {1,2}|{1,1} for noop
         let deps_1_2 = HashSet::from_iter(vec![Dot::new(1, 2)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_2);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_2);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_2);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
-        assert_eq!(clocks.noop_deps(), deps_1_2);
+        let deps_1_2_and_1_1 =
+            HashSet::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_2_and_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_2);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_2_and_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(key_deps.noop_deps(), deps_1_2_and_1_1);
 
         // add B with {1,3}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_b, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_b, None);
 
-        // 1. conf with {1,2} for A
-        // 2. conf with {1,3} for B
-        // 3. conf with {1,3} for A-B
-        // 4. conf with {1,2} for C
-        // 5. conf with {1,3} for noop
-        let deps_1_3 = HashSet::from_iter(vec![Dot::new(1, 3)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_2);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_3);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_3);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
-        assert_eq!(clocks.noop_deps(), deps_1_3);
+        // 1. conf with {1,2}|{1,1} for A
+        // 2. conf with {1,2}|{1,3} for B
+        // 3. conf with {1,2}|{1,1} and {1,3} for A-B
+        // 4. conf with {1,2}| for C
+        // 5. conf with {1,2}|{1,1} and {1,3} for noop
+        let deps_1_2_and_1_3 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
+        let deps_1_2_and_1_1_and_1_3 = HashSet::from_iter(vec![
+            Dot::new(1, 1),
+            Dot::new(1, 2),
+            Dot::new(1, 3),
+        ]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_2_and_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_2_and_1_3);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_2_and_1_1_and_1_3);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(key_deps.noop_deps(), deps_1_2_and_1_1_and_1_3);
 
         // add B with {1,4}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_b, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_b, None);
 
-        // 1. conf with {1,2} for A
-        // 2. conf with {1,4} for B
-        // 3. conf with {1,4} for A-B
-        // 4. conf with {1,2} for C
-        // 5. conf with {1,4} for noop
-        let deps_1_4 = HashSet::from_iter(vec![Dot::new(1, 4)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_2);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_4);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_4);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
-        assert_eq!(clocks.noop_deps(), deps_1_4);
+        // 1. conf with {1,2}|{1,1} for A
+        // 2. conf with {1,2}|{1,4} for B
+        // 3. conf with {1,2}|{1,1} and {1,4} for A-B
+        // 4. conf with {1,2}| for C
+        // 5. conf with {1,2}|{1,1} and {1,4} for noop
+        let deps_1_2_and_1_4 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 4)]);
+        let deps_1_2_1_1_and_1_4 = HashSet::from_iter(vec![
+            Dot::new(1, 1),
+            Dot::new(1, 2),
+            Dot::new(1, 4),
+        ]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_2_and_1_1);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_2_and_1_4);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_2_1_1_and_1_4);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(key_deps.noop_deps(), deps_1_2_1_1_and_1_4);
 
         // add A-B with {1,5}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_ab, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_ab, None);
 
-        // 1. conf with {1,5} for A
-        // 2. conf with {1,5} for B
-        // 3. conf with {1,5} for A-B
-        // 4. conf with {1,2} for C
-        // 5. conf with {1,5} for noop
-        let deps_1_5 = HashSet::from_iter(vec![Dot::new(1, 5)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
-        assert_eq!(clocks.noop_deps(), deps_1_5);
+        // 1. conf with {1,2}|{1,5} for A
+        // 2. conf with {1,2}|{1,5} for B
+        // 3. conf with {1,2}|{1,5} for A-B
+        // 4. conf with {1,2}| for C
+        // 5. conf with {1,2}|{1,5} for noop
+        let deps_1_2_and_1_5 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 5)]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_2_and_1_5);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_2_and_1_5);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_2_and_1_5);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(key_deps.noop_deps(), deps_1_2_and_1_5);
 
         // add A with {1,6}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_a, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_a, None);
 
-        // 1. conf with {1,6} for A
-        // 2. conf with {1,5} for B
-        // 3. conf with {1,6} for A-B
-        // 4. conf with {1,2} for C
-        // 5. conf with {1,6} for noop
-        let deps_1_6 = HashSet::from_iter(vec![Dot::new(1, 6)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_6);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
-        assert_eq!(clocks.noop_deps(), deps_1_6);
+        // 1. conf with {1,2}|{1,6} for A
+        // 2. conf with {1,2}|{1,5} for B
+        // 3. conf with {1,2}|{1,6} and {1,5} for A-B
+        // 4. conf with {1,2}| for C
+        // 5. conf with {1,2}|{1,6} and {1,5} for noop
+        let deps_1_2_and_1_6 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 6)]);
+        let deps_1_2_and_1_5_and_1_6 = HashSet::from_iter(vec![
+            Dot::new(1, 2),
+            Dot::new(1, 5),
+            Dot::new(1, 6),
+        ]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_2_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_2_and_1_5);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_2_and_1_5_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(key_deps.noop_deps(), deps_1_2_and_1_5_and_1_6);
 
         // add C with {1,7}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_c, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_c, None);
 
-        // 1. conf with {1,6} for A
-        // 2. conf with {1,5} for B
-        // 3. conf with {1,1} for A-B
-        // 4. conf with {1,7} for C
-        // 5. conf with {1,7} for noop
-        let deps_1_7 = HashSet::from_iter(vec![Dot::new(1, 7)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_6);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_5);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_7);
-        assert_eq!(clocks.noop_deps(), deps_1_7);
+        // 1. conf with {1,2}|{1,6} for A
+        // 2. conf with {1,2}|{1,5} for B
+        // 3. conf with {1,2}|{1,6} and {1,5} for A-B
+        // 4. conf with {1,2}|{1,7} for C
+        // 5. conf with {1,2}|{1,6} and {1,5} and {1,7} for noop
+        let deps_1_2_and_1_7 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 7)]);
+        let deps_1_2_and_1_5_and_1_6_and_1_7 = HashSet::from_iter(vec![
+            Dot::new(1, 2),
+            Dot::new(1, 5),
+            Dot::new(1, 6),
+            Dot::new(1, 7),
+        ]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_2_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_2_and_1_5);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_2_and_1_5_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_2_and_1_7);
+        assert_eq!(key_deps.noop_deps(), deps_1_2_and_1_5_and_1_6_and_1_7);
 
         // add noop with {1,8}
-        clocks.add_noop(dot_gen.next_id());
+        key_deps.add_noop(dot_gen.next_id());
 
-        // conf with {1,8} for A, B, A-B, C and noop
-        let deps_1_8 = HashSet::from_iter(vec![Dot::new(1, 8)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_8);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_8);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_8);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_8);
-        assert_eq!(clocks.noop_deps(), deps_1_8);
+        // 1. conf with {1,8}|{1,6} for A
+        // 2. conf with {1,8}|{1,5} for B
+        // 3. conf with {1,8}|{1,6} and {1,5} for A-B
+        // 4. conf with {1,8}|{1,7} for C
+        // 5. conf with {1,8}|{1,6} and {1,5} and {1,7} for noop
+        let deps_1_8_and_1_5 =
+            HashSet::from_iter(vec![Dot::new(1, 8), Dot::new(1, 5)]);
+        let deps_1_8_and_1_6 =
+            HashSet::from_iter(vec![Dot::new(1, 8), Dot::new(1, 6)]);
+        let deps_1_8_and_1_7 =
+            HashSet::from_iter(vec![Dot::new(1, 8), Dot::new(1, 7)]);
+        let deps_1_8_and_1_5_and_1_6 = HashSet::from_iter(vec![
+            Dot::new(1, 8),
+            Dot::new(1, 5),
+            Dot::new(1, 6),
+        ]);
+        let deps_1_8_and_1_5_and_1_6_and_1_7 = HashSet::from_iter(vec![
+            Dot::new(1, 8),
+            Dot::new(1, 5),
+            Dot::new(1, 6),
+            Dot::new(1, 7),
+        ]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_8_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_8_and_1_5);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_8_and_1_5_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_8_and_1_7);
+        assert_eq!(key_deps.noop_deps(), deps_1_8_and_1_5_and_1_6_and_1_7);
 
         // add B with {1,9}
-        clocks.add_cmd(dot_gen.next_id(), &cmd_b, None);
+        key_deps.add_cmd(dot_gen.next_id(), &cmd_b, None);
 
-        // 1. conf with {1,8} for A
-        // 2. conf with {1,9} for B
-        // 3. conf with {1,9} for A-B
-        // 4. conf with {1,8} for C
-        // 5. conf with {1,9} for noop
-        let deps_1_9 = HashSet::from_iter(vec![Dot::new(1, 9)]);
-        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_8);
-        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_9);
-        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_9);
-        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_8);
-        assert_eq!(clocks.noop_deps(), deps_1_9);
+        // 1. conf with {1,8}|{1,6} for A
+        // 2. conf with {1,8}|{1,9} for B
+        // 3. conf with {1,8}|{1,6} and {1,9} for A-B
+        // 4. conf with {1,8}|{1,7} for C
+        // 5. conf with {1,8}|{1,6} and {1,9} and {1,7} for noop
+        let deps_1_8_and_1_6 =
+            HashSet::from_iter(vec![Dot::new(1, 8), Dot::new(1, 6)]);
+        let deps_1_8_and_1_9 =
+            HashSet::from_iter(vec![Dot::new(1, 8), Dot::new(1, 9)]);
+        let deps_1_8_and_1_6_and_1_9 = HashSet::from_iter(vec![
+            Dot::new(1, 8),
+            Dot::new(1, 6),
+            Dot::new(1, 9),
+        ]);
+        let deps_1_8_and_1_6_and_1_7_and_1_9 = HashSet::from_iter(vec![
+            Dot::new(1, 8),
+            Dot::new(1, 6),
+            Dot::new(1, 7),
+            Dot::new(1, 9),
+        ]);
+        assert_eq!(key_deps.cmd_deps(&cmd_a), deps_1_8_and_1_6);
+        assert_eq!(key_deps.cmd_deps(&cmd_b), deps_1_8_and_1_9);
+        assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_8_and_1_6_and_1_9);
+        assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_8_and_1_7);
+        assert_eq!(key_deps.noop_deps(), deps_1_8_and_1_6_and_1_7_and_1_9);
     }
 
     #[test]
