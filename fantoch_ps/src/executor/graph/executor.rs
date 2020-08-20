@@ -231,6 +231,7 @@ impl MessageIndex for GraphExecutionInfo {
             Self::AddMine { .. } => executor_index_no_shift(),
             Self::Request { .. } => executor_random_index_shift(),
             Self::RequestReply { .. } => executor_index_no_shift(),
+            Self::ExecutedClock { .. } => None, // send to all workers
         }
     }
 }
