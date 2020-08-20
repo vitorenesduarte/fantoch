@@ -63,7 +63,8 @@ const RUN_MODE: RunMode = RunMode::Release;
 // const RUN_MODE: RunMode = RunMode::Flamegraph;
 
 // list of protocol binaries to cleanup before running the experiment
-const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[Protocol::AtlasLocked];
+const PROTOCOLS_TO_CLEANUP: &[Protocol] =
+    &[Protocol::AtlasLocked, Protocol::NewtAtomic];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -152,8 +153,8 @@ async fn main() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -163,8 +164,9 @@ async fn main() -> Result<(), Report> {
         // 1024 * 2,
         1024 * 4, // 1
         1024 * 8, // 1
+        // 1024 * 12, // 1
         1024 * 16,
-        1024 * 20,
+        // 1024 * 20,
         1024 * 24, // 1
         1024 * 32,
         1024 * 36, // 1
@@ -182,7 +184,7 @@ async fn main() -> Result<(), Report> {
         1024 * 272,
     ];
     let shards_per_command = 2;
-    let shard_count = 5;
+    let shard_count = 6;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
