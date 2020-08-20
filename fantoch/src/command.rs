@@ -42,6 +42,11 @@ impl Command {
         Self::new(rifl, shard_to_ops)
     }
 
+    /// Checks if the command is replicated by `shard_id`.
+    pub fn replicated_by(&self, shard_id: &ShardId) -> bool {
+        self.shard_to_ops.contains_key(&shard_id)
+    }
+
     /// Creates a get command.
     pub fn get(rifl: Rifl, key: Key) -> Self {
         Self::from(rifl, iter::once((key, KVOp::Get)))

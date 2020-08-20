@@ -14,6 +14,8 @@ pub struct Config {
     transitive_conflicts: bool,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
+    // defines the interval between executor cleanups
+    executor_cleanup_interval: Duration,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
     // starting leader process
@@ -45,6 +47,8 @@ impl Config {
         let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
+        // by default, executor cleanups happen every 5ms
+        let executor_cleanup_interval = Duration::from_millis(5);
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader
@@ -63,6 +67,7 @@ impl Config {
             shards,
             transitive_conflicts,
             execute_at_commit,
+            executor_cleanup_interval,
             gc_interval,
             leader,
             newt_tiny_quorums,
@@ -111,6 +116,16 @@ impl Config {
     /// Changes the value of `execute_at_commit`.
     pub fn set_execute_at_commit(&mut self, execute_at_commit: bool) {
         self.execute_at_commit = execute_at_commit;
+    }
+
+    /// Checks the executor cleanup interval.
+    pub fn executor_cleanup_interval(&self) -> Duration {
+        self.executor_cleanup_interval
+    }
+
+    /// Sets the executor cleanup interval.
+    pub fn set_executor_cleanup_interval(&mut self, interval: Duration) {
+        self.executor_cleanup_interval = interval;
     }
 
     /// Checks the garbage collection interval.
@@ -283,6 +298,17 @@ mod tests {
         // but that can change
         config.set_execute_at_commit(true);
         assert!(config.execute_at_commit());
+
+        // by default, the executor cleanup interval is 5ms
+        assert_eq!(
+            config.executor_cleanup_interval(),
+            Duration::from_millis(5)
+        );
+
+        // change its value and check it has changed
+        let interval = Duration::from_secs(2);
+        config.set_executor_cleanup_interval(interval);
+        assert_eq!(config.executor_cleanup_interval(), interval);
 
         // by default, there's no garbage collection interval
         assert_eq!(config.gc_interval(), None);

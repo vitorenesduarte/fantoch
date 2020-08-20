@@ -5,7 +5,9 @@ use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
+use crate::time::RunTime;
 use crate::HashMap;
+use std::sync::Arc;
 use tokio::time;
 
 /// Starts executors.
@@ -13,26 +15,33 @@ pub fn start_executors<P>(
     process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
-    worker_to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
+    to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
+    shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: ToExecutors<P>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
     P: Protocol + 'static,
 {
     // zip rxs'
-    let incoming = worker_to_executors_rxs
+    let incoming = to_executors_rxs
         .into_iter()
         .zip(client_to_executors_rxs.into_iter());
+
+    // create executor
+    let executor = P::Executor::new(process_id, shard_id, config);
 
     // create executor workers
     for (executor_index, (from_workers, from_clients)) in incoming.enumerate() {
         task::spawn(executor_task::<P>(
             executor_index,
-            process_id,
+            executor.clone(),
             shard_id,
             config,
             from_workers,
             from_clients,
+            shard_writers.clone(),
+            to_executors.clone(),
             to_metrics_logger.clone(),
         ));
     }
@@ -40,32 +49,44 @@ pub fn start_executors<P>(
 
 async fn executor_task<P>(
     executor_index: usize,
-    process_id: ProcessId,
+    mut executor: P::Executor,
     shard_id: ShardId,
     config: Config,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
+    mut shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
+    mut to_executors: ToExecutors<P>,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
 ) where
-    P: Protocol,
+    P: Protocol + 'static,
 {
-    // create executor
-    let mut executor = P::Executor::new(process_id, shard_id, config);
+    // set executor index
+    executor.set_executor_index(executor_index);
+
+    // create time
+    let time = RunTime;
 
     // holder of all client info
     let mut to_clients = ToClients::new();
 
-    // create interval (for metrics notification)
-    let mut interval = time::interval(super::metrics_logger::METRICS_INTERVAL);
+    // create executors info interval
+    let mut cleanup_interval =
+        time::interval(config.executor_cleanup_interval());
+
+    // create metrics interval
+    let mut metrics_interval =
+        time::interval(super::metrics_logger::METRICS_INTERVAL);
 
     loop {
         tokio::select! {
             execution_info = from_workers.recv() => {
-                log!("[executor] from parent: {:?}", execution_info);
+                log!("[executor] from workers: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
-                    handle_execution_info::<P>(execution_info, &mut executor, &mut to_clients).await;
+                    executor.handle(execution_info, &time);
+                    fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
+                    fetch_info_to_executors::<P>(&mut executor, shard_id, &mut shard_writers, &mut to_executors).await;
                 } else {
-                    println!("[executor] error while receiving execution info from parent");
+                    println!("[executor] error while receiving execution info from worker");
                 }
             }
             from_client = from_clients.recv() => {
@@ -76,7 +97,13 @@ async fn executor_task<P>(
                     println!("[executor] error while receiving new command from clients");
                 }
             }
-            _ = interval.tick()  => {
+            _ = cleanup_interval.tick() => {
+                log!("[executor] cleanup");
+                executor.cleanup(&time);
+                fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
+                fetch_info_to_executors::<P>(&mut executor, shard_id, &mut shard_writers, &mut to_executors).await;
+            }
+            _ = metrics_interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
                     // send metrics to logger (in case there's one)
                     let executor_metrics = executor.metrics().clone();
@@ -89,8 +116,7 @@ async fn executor_task<P>(
     }
 }
 
-async fn handle_execution_info<P>(
-    execution_info: <P::Executor as Executor>::ExecutionInfo,
+async fn fetch_new_command_results<P>(
     executor: &mut P::Executor,
     to_clients: &mut ToClients,
 ) where
@@ -98,7 +124,6 @@ async fn handle_execution_info<P>(
 {
     // forward executor results (commands or partial commands) to clients that
     // are waiting for them
-    executor.handle(execution_info);
     for executor_result in executor.to_clients_iter() {
         // get client id
         let client_id = executor_result.rifl.source();
@@ -109,6 +134,45 @@ async fn handle_execution_info<P>(
                 println!(
                     "[executor] error while sending executor result to client {}: {:?}",
                     client_id, e
+                );
+            }
+        }
+    }
+}
+
+async fn fetch_info_to_executors<P>(
+    executor: &mut P::Executor,
+    shard_id: ShardId,
+    shard_writers: &mut HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: &mut ToExecutors<P>,
+) where
+    P: Protocol + 'static,
+{
+    // forward execution info to other shards
+    for (target_shard, execution_info) in executor.to_executors_iter() {
+        log!(
+            "[executor] info to executors in shard {}: {:?}",
+            target_shard,
+            execution_info
+        );
+        // check if it's a message to self
+        if shard_id == target_shard {
+            // notify executor
+            if let Err(e) = to_executors.forward(execution_info).await {
+                println!("[executor] error while notifying other executors with new execution info: {:?}", e);
+            }
+        } else {
+            let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
+            if let Some(channels) = shard_writers.get_mut(&target_shard) {
+                crate::run::task::process::send_to_one_writer::<P>(
+                    "executor",
+                    msg_to_send.clone(),
+                    channels,
+                )
+                .await
+            } else {
+                panic!(
+                    "[executor] tried to send a message to a non-connected shard"
                 );
             }
         }

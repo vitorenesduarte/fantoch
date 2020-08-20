@@ -21,6 +21,22 @@ impl ProcessMetrics {
             executors: HashMap::new(),
         }
     }
+
+    pub fn protocol_metrics(&self) -> ProtocolMetrics {
+        let mut metrics = ProtocolMetrics::new();
+        for worker_metrics in self.workers.values() {
+            metrics.merge(worker_metrics);
+        }
+        metrics
+    }
+
+    pub fn executor_metrics(&self) -> ExecutorMetrics {
+        let mut metrics = ExecutorMetrics::new();
+        for executor_metrics in self.executors.values() {
+            metrics.merge(executor_metrics);
+        }
+        metrics
+    }
 }
 
 pub async fn metrics_logger_task(

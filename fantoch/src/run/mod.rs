@@ -74,12 +74,11 @@ pub mod rw;
 pub mod task;
 
 const CONNECT_RETRIES: usize = 100;
-type ConnectionDelay = Option<usize>;
 
 // Re-exports.
 pub use prelude::{
     worker_dot_index_shift, worker_index_no_shift, worker_index_shift,
-    GC_WORKER_INDEX, INDEXES_RESERVED, LEADER_WORKER_INDEX,
+    GC_WORKER_INDEX, LEADER_WORKER_INDEX, WORKERS_INDEXES_RESERVED,
 };
 
 use crate::client::{Client, ClientData, Workload};
@@ -110,19 +109,19 @@ pub async fn process<P, A>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<(A, ConnectionDelay)>,
+    addresses: Vec<(A, Option<Duration>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     process_channel_buffer_size: usize,
     client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<usize>,
-    ping_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
+    ping_interval: Option<Duration>,
     metrics_file: Option<String>,
 ) -> Result<(), Report>
 where
@@ -167,19 +166,19 @@ async fn process_with_notify_and_inspect<P, A, R>(
     ip: IpAddr,
     port: u16,
     client_port: u16,
-    addresses: Vec<(A, ConnectionDelay)>,
+    addresses: Vec<(A, Option<Duration>)>,
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     process_channel_buffer_size: usize,
     client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<usize>,
-    ping_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
+    ping_interval: Option<Duration>,
     metrics_file: Option<String>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
@@ -191,7 +190,7 @@ where
 {
     // panic if protocol is not parallel and we have more than one worker
     if workers > 1 && !P::parallel() {
-        panic!("running non-parallel protocol with {} workers", workers,)
+        panic!("running non-parallel protocol with {} workers", workers);
     }
 
     // panic if executor is not parallel and we have more than one executor
@@ -226,6 +225,13 @@ where
         workers,
     );
 
+    // create forward channels: worker /readers -> executors
+    let (to_executors, to_executors_rxs) = ToExecutors::<P>::new(
+        "to_executors",
+        process_channel_buffer_size,
+        executors,
+    );
+
     // connect to all processes
     let (ips, to_writers) = task::process::connect_to_all::<A, P>(
         process_id,
@@ -234,6 +240,7 @@ where
         listener,
         addresses,
         reader_to_workers.clone(),
+        to_executors.clone(),
         CONNECT_RETRIES,
         tcp_nodelay,
         tcp_buffer_size,
@@ -349,38 +356,52 @@ where
             (None, None)
         };
 
-    // create forward channels: worker -> executors
-    let (worker_to_executors, worker_to_executors_rxs) =
-        WorkerToExecutors::<P>::new(
-            "worker_to_executors",
-            process_channel_buffer_size,
-            executors,
-        );
+    // create process
+    let (mut process, process_events) = P::new(process_id, shard_id, config);
+
+    // discover processes
+    let (connect_ok, closest_shard_process) =
+        process.discover(sorted_processes);
+    assert!(connect_ok, "process should have discovered successfully");
+
+    // spawn periodic task
+    task::spawn(task::periodic::periodic_task(
+        process_events,
+        periodic_to_workers,
+        inspect_chan,
+    ));
+
+    // create mapping from shard id to writers
+    let mut shard_writers = HashMap::with_capacity(closest_shard_process.len());
+    for (shard_id, peer_id) in closest_shard_process {
+        let writers = to_writers
+            .get(&peer_id)
+            .expect("closest shard process should be connected")
+            .clone();
+        shard_writers.insert(shard_id, writers);
+    }
 
     // start executors
     task::executor::start_executors::<P>(
         process_id,
         shard_id,
         config,
-        worker_to_executors_rxs,
+        to_executors_rxs,
         client_to_executors_rxs,
+        shard_writers,
+        to_executors.clone(),
         executor_to_metrics_logger,
     );
 
     // start process workers
     let handles = task::process::start_processes::<P, R>(
-        process_id,
-        shard_id,
-        config,
-        sorted_processes,
+        process,
         reader_to_workers_rxs,
         client_to_workers_rxs,
-        periodic_to_workers,
         periodic_to_workers_rxs,
-        inspect_chan,
         to_writers,
         reader_to_workers,
-        worker_to_executors,
+        to_executors,
         process_channel_buffer_size,
         execution_log,
         worker_to_metrics_logger,
@@ -420,6 +441,7 @@ pub async fn client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
     metrics_file: Option<String>,
 ) -> Result<(), Report>
 where
@@ -450,6 +472,7 @@ where
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
+                    status_frequency,
                 ))
             } else {
                 task::spawn(closed_loop_client::<A>(
@@ -458,6 +481,7 @@ where
                     workload,
                     tcp_nodelay,
                     channel_buffer_size,
+                    status_frequency,
                 ))
             };
             Some(handle)
@@ -494,6 +518,7 @@ async fn closed_loop_client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
 ) -> Option<Vec<Client>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -508,6 +533,7 @@ where
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
     )
     .await?;
 
@@ -572,6 +598,7 @@ async fn open_loop_client<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
 ) -> Option<Vec<Client>>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
@@ -586,6 +613,7 @@ where
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
     )
     .await?;
 
@@ -632,6 +660,7 @@ async fn client_setup<A>(
     workload: Workload,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
+    status_frequency: Option<usize>,
 ) -> Option<(
     HashMap<ClientId, Client>,
     ServerToClientReceiver,
@@ -671,7 +700,7 @@ where
                 .await?;
 
         // update set of processes to be discovered by the client
-        assert!(to_discover.insert(shard_id, process_id).is_none(), "client should try to connect to the same shard more than once, only to the closest one");
+        assert!(to_discover.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
 
         // update list of connected processes
         connections.push((process_id, connection));
@@ -688,7 +717,7 @@ where
     let clients = client_ids
         .into_iter()
         .map(|client_id| {
-            let mut client = Client::new(client_id, workload);
+            let mut client = Client::new(client_id, workload, status_frequency);
             // discover processes
             client.connect(to_discover.clone());
             (client_id, client)
@@ -948,7 +977,7 @@ pub mod tests {
         let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
-        let tracer_show_interval = None;
+        let tracer_show_interval = Some(Duration::from_secs(1));
         let extra_run_time = Some(Duration::from_secs(5));
 
         // run test and get total stable commands
@@ -994,7 +1023,7 @@ pub mod tests {
         clients_per_process: usize,
         workers: usize,
         executors: usize,
-        tracer_show_interval: Option<usize>,
+        tracer_show_interval: Option<Duration>,
         inspect_fun: Option<fn(&P) -> R>,
         extra_run_time: Option<Duration>,
     ) -> Result<HashMap<ProcessId, Vec<R>>, Report>
@@ -1010,11 +1039,11 @@ pub mod tests {
             .expect("127.0.0.1 should be a valid ip");
         let tcp_nodelay = true;
         let tcp_buffer_size = 1024;
-        let tcp_flush_interval = Some(1); // millis
+        let tcp_flush_interval = Some(Duration::from_millis(1));
         let process_channel_buffer_size = 10000;
         let client_channel_buffer_size = 10000;
         let multiplexing = 2;
-        let ping_interval = Some(1000); // millis
+        let ping_interval = Some(Duration::from_secs(1));
 
         // create processes ports and client ports
         let n = config.n();
@@ -1128,7 +1157,7 @@ pub mod tests {
                 .map(|(process_id, address)| {
                     let delay = if process_id % 2 == 1 {
                         // add 0 delay to odd processes
-                        Some(0)
+                        Some(Duration::from_secs(0))
                     } else {
                         None
                     };
@@ -1213,7 +1242,9 @@ pub mod tests {
                 };
 
                 // spawn client
-                let metrics_file = format!(".metrics_client_{}", process_id);
+                let status_frequency = None;
+                let metrics_file =
+                    Some(format!(".metrics_client_{}", process_id));
                 tokio::task::spawn(client(
                     client_ids,
                     addresses,
@@ -1221,7 +1252,8 @@ pub mod tests {
                     workload,
                     tcp_nodelay,
                     client_channel_buffer_size,
-                    Some(metrics_file),
+                    status_frequency,
+                    metrics_file,
                 ))
             })
             .collect();

@@ -6,9 +6,11 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
+use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+#[derive(Clone)]
 pub struct TableExecutor {
     execute_at_commit: bool,
     table: MultiVotesTable,
@@ -42,7 +44,7 @@ impl Executor for TableExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         // handle each new info by updating the votes table and execute ready
         // commands
         match info {
@@ -142,11 +144,10 @@ impl TableExecutionInfo {
 }
 
 impl MessageKey for TableExecutionInfo {
-    fn key(&self) -> Option<&Key> {
-        let key = match self {
+    fn key(&self) -> &Key {
+        match self {
             TableExecutionInfo::Votes { key, .. } => key,
             TableExecutionInfo::DetachedVotes { key, .. } => key,
-        };
-        Some(&key)
+        }
     }
 }

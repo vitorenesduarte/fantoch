@@ -10,8 +10,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -143,8 +143,12 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.
@@ -1037,8 +1041,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 cmd.shards().filter(|shard_id| **shard_id != my_shard_id)
             {
                 let mbump_to = Message::MBumpTo { dot, clock };
-                let target =
-                    singleton![self.bp.closest_shard_process(shard_id)];
+                let target = singleton![self.bp.closest_process(shard_id)];
                 self.to_processes.push(Action::ToSend {
                     target,
                     msg: mbump_to,
@@ -1265,7 +1268,7 @@ pub enum PeriodicEvent {
     SendDetached,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         debug_assert_eq!(GC_WORKER_INDEX, 0);
@@ -1403,7 +1406,8 @@ mod tests {
         // create client 1 that is connected to newt 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, workload);
+        let status_frequency = None;
+        let mut client_1 = Client::new(client_id, workload, status_frequency);
 
         // discover processes in client 1
         let closest =
@@ -1480,7 +1484,7 @@ mod tests {
         }));
 
         // process 1 should have something to the executor
-        let (process, executor, pending, _) =
+        let (process, executor, pending, time) =
             simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
@@ -1489,7 +1493,7 @@ mod tests {
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
             .collect();

@@ -12,7 +12,7 @@ pub use results_db::ResultsDB;
 use fantoch::client::{KeyGen, ShardGen};
 use fantoch_exp::Protocol;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Search {
     pub n: usize,
     pub f: usize,

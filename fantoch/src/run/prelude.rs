@@ -1,13 +1,9 @@
 use super::pool;
 use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
-use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
-use crate::id::{ClientId, Dot, ProcessId, Rifl, ShardId};
-use crate::kvs::Key;
-use crate::protocol::{
-    MessageIndex, PeriodicEventIndex, Protocol, ProtocolMetrics,
-};
-use crate::util;
+use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use crate::id::{ClientId, Dot, ProcessId, ShardId};
+use crate::protocol::{MessageIndex, Protocol, ProtocolMetrics};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -21,17 +17,17 @@ pub const LEADER_WORKER_INDEX: usize = 0;
 // - e.g. in fpaxos, the gc only runs in the acceptor worker
 pub const GC_WORKER_INDEX: usize = 0;
 
-pub const INDEXES_RESERVED: usize = 2;
+pub const WORKERS_INDEXES_RESERVED: usize = 2;
 
 pub fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
     // when there's no shift, the index must be either 0 or 1
-    assert!(index < INDEXES_RESERVED);
+    assert!(index < WORKERS_INDEXES_RESERVED);
     Some((0, index))
 }
 
 // note: reserved indexing always reserve the first two workers
 pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
-    Some((INDEXES_RESERVED, index))
+    Some((WORKERS_INDEXES_RESERVED, index))
 }
 
 pub fn worker_dot_index_shift(dot: &Dot) -> Option<(usize, usize)> {
@@ -66,11 +62,31 @@ pub enum ClientToExecutor {
     Unregister(Vec<ClientId>),
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+// these bounds are explained here: https://github.com/serde-rs/serde/issues/1503#issuecomment-475059482
+#[serde(bound(
+    serialize = "P::Message: Serialize",
+    deserialize = "P::Message: Deserialize<'de>",
+))]
+pub enum POEMessage<P: Protocol> {
+    Protocol(<P as Protocol>::Message),
+    Executor(<<P as Protocol>::Executor as Executor>::ExecutionInfo),
+}
+
+impl<P: Protocol> POEMessage<P> {
+    pub fn to_executor(&self) -> bool {
+        match self {
+            Self::Protocol(_) => false,
+            Self::Executor(_) => true,
+        }
+    }
+}
+
 // list of channels used to communicate between tasks
 pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
-pub type WriterReceiver<P> = ChannelReceiver<Arc<<P as Protocol>::Message>>;
-pub type WriterSender<P> = ChannelSender<Arc<<P as Protocol>::Message>>;
+pub type WriterReceiver<P> = ChannelReceiver<Arc<POEMessage<P>>>;
+pub type WriterSender<P> = ChannelSender<Arc<POEMessage<P>>>;
 pub type ClientToExecutorReceiver = ChannelReceiver<ClientToExecutor>;
 pub type ClientToServerReceiver = ChannelReceiver<ClientToServer>;
 pub type ClientToServerSender = ChannelSender<ClientToServer>;
@@ -156,7 +172,7 @@ where
 {
     fn index(&self) -> Option<(usize, usize)> {
         match self {
-            Self::Event(e) => e.index(),
+            Self::Event(e) => MessageIndex::index(e),
             Self::Inspect(_, _) => None, // send to all
         }
     }
@@ -164,30 +180,17 @@ where
 
 // 4. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<ClientToExecutor>;
-// The following allows e.g. (&Key, Rifl) to be `ToPool::forward_after`
-impl pool::PoolIndex for (&Key, Rifl) {
-    fn index(&self) -> Option<(usize, usize)> {
-        Some(key_index(&self.0))
-    }
-}
 
-// 5. executors receive messages from workers
-pub type WorkerToExecutors<P> =
+// 5. executors receive messages from workers and reader tasks
+pub type ToExecutors<P> =
     pool::ToPool<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 // The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo
 // to be forwarded
 impl<A> pool::PoolIndex for A
 where
-    A: MessageKey,
+    A: MessageIndex,
 {
     fn index(&self) -> Option<(usize, usize)> {
-        self.key().map(key_index)
+        self.index()
     }
-}
-
-// The index of a key is its hash
-#[allow(clippy::ptr_arg)]
-fn key_index(key: &Key) -> (usize, usize) {
-    let index = util::key_hash(key) as usize;
-    (0, index)
 }

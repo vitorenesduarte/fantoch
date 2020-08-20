@@ -1,10 +1,12 @@
 use crate::db::{Dstat, DstatCompress, HistogramCompress};
 use fantoch::client::ClientData;
+use fantoch::executor::ExecutorMetrics;
 use fantoch::id::ProcessId;
-use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
+use fantoch::protocol::ProtocolMetrics;
 use fantoch::run::task::metrics_logger::ProcessMetrics;
 use fantoch_exp::Testbed;
+use fantoch_prof::metrics::Histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -12,6 +14,8 @@ use std::time::Duration;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentData {
     pub process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
+    pub global_protocol_metrics: ProtocolMetrics,
+    pub global_executor_metrics: ExecutorMetrics,
     pub process_dstats: HashMap<ProcessId, DstatCompress>,
     pub global_process_dstats: DstatCompress,
     pub global_client_dstats: DstatCompress,
@@ -29,6 +33,14 @@ impl ExperimentData {
         client_dstats: HashMap<Region, Dstat>,
         global_client_metrics: ClientData,
     ) -> Self {
+        // create global protocol and executor metrics
+        let mut global_protocol_metrics = ProtocolMetrics::new();
+        let mut global_executor_metrics = ExecutorMetrics::new();
+        for (_, (_, process_metrics)) in process_metrics.iter() {
+            global_protocol_metrics.merge(&process_metrics.protocol_metrics());
+            global_executor_metrics.merge(&process_metrics.executor_metrics());
+        }
+
         // compress process dstats and create global process dstat
         let mut global_process_dstats = Dstat::new();
         let process_dstats = process_dstats
@@ -97,6 +109,8 @@ impl ExperimentData {
 
         Self {
             process_metrics,
+            global_protocol_metrics,
+            global_executor_metrics,
             process_dstats,
             global_process_dstats,
             client_latency,

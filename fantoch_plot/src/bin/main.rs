@@ -4,13 +4,13 @@ use fantoch::client::{KeyGen, ShardGen};
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
-    DstatType, ErrorBar, ExperimentData, LatencyMetric, PlotFmt, ResultsDB,
+    ErrorBar, ExperimentData, LatencyMetric, MetricsType, PlotFmt, ResultsDB,
     Search, Style,
 };
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor";
+const RESULTS_DIR: &str = "../graph_executor_zipf01";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -30,30 +30,32 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let keys_per_shard = 1;
-    /*
+    let mut key_gens = Vec::new();
     let zipf_key_count = 1_000_000;
-    let zipf_coefficient = 1.0;
-    let key_gen = KeyGen::Zipf {
-        coefficient: zipf_coefficient,
+    key_gens.push(KeyGen::Zipf {
+        coefficient: 0.1,
         key_count: zipf_key_count,
-    };
-    let key_gens = vec![key_gen];
-    */
-    let key_gens = vec![KeyGen::ConflictRate { conflict_rate: 10 }];
+    });
+    // key_gens.push(KeyGen::ConflictRate { conflict_rate: 0 });
     let payload_size = 0;
-    let protocols = vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
+    let protocols = vec![Protocol::AtlasLocked];
 
     let shard_combinations = vec![
-        // shards_per_command, shard_count
+        // shard_count, shards_per_command
         (1, 1),
-        (1, 2),
+        // (2, 1),
+        (2, 2),
+        // (3, 1),
+        (3, 2),
+        // (4, 1),
+        (4, 2),
+        // (5, 1),
+        (5, 2),
         /*
         (2, 2),
-        (1, 3),
-        (2, 3),
-        (1, 4),
-        (1, 5),
-        (1, 6),
+        (3, 1),
+        (3, 2),
+        (5, 1),
         */
     ];
 
@@ -61,9 +63,10 @@ fn partial_replication() -> Result<(), Report> {
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
-        1024 / 4,
-        1024 / 2,
-        1024,
+        // 1024 / 4,
+        // 1024 / 2,
+        // 1024,
+        // 1024 * 2,
         1024 * 4,
         1024 * 8,
         1024 * 16,
@@ -74,17 +77,11 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 48,
         1024 * 56,
         1024 * 64,
-        1024 * 80,
         1024 * 96,
-        1024 * 112,
         1024 * 128,
-        1024 * 144,
         1024 * 160,
-        1024 * 176,
         1024 * 192,
-        1024 * 208,
         1024 * 224,
-        1024 * 240,
         1024 * 256,
         1024 * 272,
     ];
@@ -106,7 +103,7 @@ fn partial_replication() -> Result<(), Report> {
             let searches = shard_combinations
                 .clone()
                 .into_iter()
-                .flat_map(|(shards_per_command, shard_count)| {
+                .flat_map(|(shard_count, shards_per_command)| {
                     let shard_gen = ShardGen::Random { shard_count };
                     protocol_combinations(n, protocols.clone()).into_iter().map(
                         move |(protocol, f)| {
@@ -129,13 +126,14 @@ fn partial_replication() -> Result<(), Report> {
                 // create styles
                 let mut styles = HashMap::new();
                 styles.insert((1, 1), ("#1abc9c", "s"));
-                styles.insert((1, 2), ("#218c74", "D"));
-                styles.insert((2, 2), ("#227093", "."));
-                styles.insert((1, 3), ("#bdc3c7", "+"));
-                styles.insert((2, 3), ("#34495e", "x"));
-                styles.insert((1, 4), ("#ffa726", "v"));
-                styles.insert((1, 5), ("#227093", "."));
-                styles.insert((1, 6), ("#34495e", "x"));
+                styles.insert((2, 1), ("#218c74", "s"));
+                styles.insert((2, 2), ("#218c74", "+"));
+                styles.insert((3, 1), ("#bdc3c7", "s"));
+                styles.insert((3, 2), ("#bdc3c7", "+"));
+                styles.insert((4, 1), ("#ffa726", "s"));
+                styles.insert((4, 2), ("#ffa726", "+"));
+                styles.insert((5, 1), ("#227093", "s"));
+                styles.insert((5, 2), ("#227093", "+"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();
@@ -144,13 +142,13 @@ fn partial_replication() -> Result<(), Report> {
 
                 // find color and marker for this search
                 let (color, marker) = if let Some(entry) =
-                    styles.get(&(shards_per_command, shard_count))
+                    styles.get(&(shard_count, shards_per_command))
                 {
                     entry
                 } else {
                     panic!(
                         "unsupported shards config pair: {:?}",
-                        (shards_per_command, shard_count)
+                        (shard_count, shards_per_command)
                     );
                 };
 
@@ -158,7 +156,7 @@ fn partial_replication() -> Result<(), Report> {
                 let mut style = HashMap::new();
                 style.insert(
                     Style::Label,
-                    format!("t = {} | s = {}", shard_count, shards_per_command),
+                    format!("({}, {})", shard_count, shards_per_command),
                 );
                 style.insert(Style::Color, color.to_string());
                 style.insert(Style::Marker, marker.to_string());
@@ -176,7 +174,7 @@ fn partial_replication() -> Result<(), Report> {
             )?;
         }
 
-        for (shards_per_command, shard_count) in shard_combinations.clone() {
+        for (shard_count, shards_per_command) in shard_combinations.clone() {
             let shard_gen = ShardGen::Random { shard_count };
 
             // generate throughput-latency plot
@@ -249,7 +247,7 @@ fn partial_replication() -> Result<(), Report> {
                         .collect();
 
                 // generate dstat table
-                for dstat_type in dstat_combinations(shard_count, n) {
+                for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
                         "dstat_n{}_ts{}_s{}_c{}_{}_{}.pdf",
                         n,
@@ -257,11 +255,32 @@ fn partial_replication() -> Result<(), Report> {
                         shards_per_command,
                         clients_per_region,
                         key_gen,
-                        dstat_type.name(),
+                        metrics_type.name(),
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
-                        dstat_type,
+                        metrics_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate process metrics table
+                for metrics_type in process_metrics_combinations(shard_count, n)
+                {
+                    let path = format!(
+                        "metrics_n{}_ts{}_s{}_c{}_{}_{}.pdf",
+                        n,
+                        shard_count,
+                        shards_per_command,
+                        clients_per_region,
+                        key_gen,
+                        metrics_type.name(),
+                    );
+                    fantoch_plot::process_metrics_table(
+                        searches.clone(),
+                        metrics_type,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -422,18 +441,38 @@ fn multi_key() -> Result<(), Report> {
                         .collect();
 
                 // generate dstat table
-                for dstat_type in dstat_combinations(shard_count, n) {
+                for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
                         "dstat_n{}_k{}_c{}_{}_{}.pdf",
                         n,
                         keys_per_shard,
                         clients_per_region,
                         key_gen,
-                        dstat_type.name(),
+                        metrics_type.name(),
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
-                        dstat_type,
+                        metrics_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate process metrics table
+                for metrics_type in process_metrics_combinations(shard_count, n)
+                {
+                    let path = format!(
+                        "metrics_n{}_k{}_c{}_{}_{}.pdf",
+                        n,
+                        keys_per_shard,
+                        clients_per_region,
+                        key_gen,
+                        metrics_type.name(),
+                    );
+                    fantoch_plot::process_metrics_table(
+                        searches.clone(),
+                        metrics_type,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -713,12 +752,20 @@ fn protocol_combinations(
     combinations
 }
 
-fn dstat_combinations(shard_count: usize, n: usize) -> Vec<DstatType> {
-    let global_dstats = vec![DstatType::ProcessGlobal, DstatType::ClientGlobal];
+fn dstat_combinations(shard_count: usize, n: usize) -> Vec<MetricsType> {
+    let global_metrics =
+        vec![MetricsType::ProcessGlobal, MetricsType::ClientGlobal];
     fantoch::util::all_process_ids(shard_count, n)
-        .map(|(process_id, _)| DstatType::Process(process_id))
-        .chain(global_dstats)
+        .map(|(process_id, _)| MetricsType::Process(process_id))
+        .chain(global_metrics)
         .collect()
+}
+
+fn process_metrics_combinations(
+    _shard_count: usize,
+    _n: usize,
+) -> Vec<MetricsType> {
+    vec![MetricsType::ProcessGlobal]
 }
 
 fn fmt_exp_data(exp_data: &ExperimentData) -> String {

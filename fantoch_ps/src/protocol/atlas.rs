@@ -10,8 +10,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::{log, singleton};
@@ -33,6 +33,8 @@ pub struct Atlas<KC: KeyClocks> {
     cmds: CommandsInfo<AtlasInfo>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
+    // set of processes in my shard
+    shard_processes: HashSet<ProcessId>,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
@@ -70,6 +72,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         );
         let to_processes = Vec::new();
         let to_executors = Vec::new();
+        let shard_processes = util::process_ids(shard_id, config.n()).collect();
         let buffered_commits = HashMap::new();
 
         // create `Atlas`
@@ -79,6 +82,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             cmds,
             to_processes,
             to_executors,
+            shard_processes,
             buffered_commits,
         };
 
@@ -105,8 +109,12 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.
@@ -273,6 +281,14 @@ impl<KC: KeyClocks> Atlas<KC> {
             return;
         }
 
+        // notify executor that we replicate this dot, in case we're not the
+        // target shard
+        if dot.target_shard(self.bp.config.n()) != self.bp.shard_id {
+            // create execution info
+            let execution_info = ExecutionInfo::add_mine(dot);
+            self.to_executors.push(execution_info);
+        }
+
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
             // if not:
@@ -307,7 +323,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
-        let value = ConsensusValue::with(false, clock.clone());
+        let value = ConsensusValue::with(clock.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
@@ -357,7 +373,7 @@ impl<KC: KeyClocks> Atlas<KC> {
                 info.quorum_clocks.threshold_union(self.bp.config.f());
 
             // create consensus value
-            let value = ConsensusValue::with(false, final_clock);
+            let value = ConsensusValue::with(final_clock);
 
             // fast path condition:
             // - each dependency was reported by at least f processes
@@ -429,9 +445,15 @@ impl<KC: KeyClocks> Atlas<KC> {
             "handling noop's is not implemented yet"
         );
 
+        // get command
+        let cmd = info
+            .cmd
+            .as_ref()
+            .expect("there should be a command payload");
+
         // create execution info
-        let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
+        let execution_info =
+            ExecutionInfo::add(dot, cmd.clone(), value.clock.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -490,7 +512,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             }
             Some(SynodMessage::MChosen(value)) => {
                 // the value has already been chosen: create `MCommit`
-                Message::MCommit { dot, value }
+                Message::MCommit { dot, value}
             }
             None => {
                 // ballot too low to be accepted: nothing to do
@@ -609,7 +631,7 @@ impl<KC: KeyClocks> Atlas<KC> {
         // nothing else to extract
         let extract_mcommit_extra_data = |_| ();
         let create_mcommit = |dot, clock, ()| {
-            let value = ConsensusValue::with(false, clock);
+            let value = ConsensusValue::with(clock);
             Message::MCommit { dot, value }
         };
 
@@ -749,13 +771,14 @@ pub struct ConsensusValue {
 }
 
 impl ConsensusValue {
-    fn new(shard_id: ShardId, n: usize) -> Self {
+    fn bottom(shard_id: ShardId, n: usize) -> Self {
         let is_noop = false;
         let clock = VClock::with(util::process_ids(shard_id, n));
         Self { is_noop, clock }
     }
 
-    fn with(is_noop: bool, clock: VClock<ProcessId>) -> Self {
+    fn with(clock: VClock<ProcessId>) -> Self {
+        let is_noop = false;
         Self { is_noop, clock }
     }
 }
@@ -789,7 +812,7 @@ impl Info for AtlasInfo {
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::new(shard_id, n);
+        let initial_value = ConsensusValue::bottom(shard_id, n);
         Self {
             status: Status::START,
             quorum: HashSet::new(),
@@ -886,7 +909,7 @@ pub enum PeriodicEvent {
     GarbageCollection,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
@@ -1011,7 +1034,8 @@ mod tests {
         // create client 1 that is connected to atlas 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, workload);
+        let status_frequency = None;
+        let mut client_1 = Client::new(client_id, workload, status_frequency);
 
         // discover processes in client 1
         let closest =
@@ -1083,7 +1107,7 @@ mod tests {
         }));
 
         // process 1 should have something to the executor
-        let (process, executor, pending, _) =
+        let (process, executor, pending, time) =
             simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
@@ -1092,7 +1116,7 @@ mod tests {
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
             .collect();

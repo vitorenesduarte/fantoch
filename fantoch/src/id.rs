@@ -55,6 +55,12 @@ where
     }
 }
 
+impl Dot {
+    pub fn target_shard(&self, n: usize) -> ShardId {
+        ((self.source() - 1) as usize / n) as ShardId
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdGen<S> {
     source: S,
@@ -166,5 +172,16 @@ mod tests {
             assert_eq!(id.source(), source);
             assert_eq!(id.sequence(), seq);
         }
+    }
+
+    #[test]
+    fn dot_target() {
+        let shard_count = 5;
+        let n = 3;
+        crate::util::all_process_ids(shard_count, n).for_each(
+            |(process_id, shard_id)| {
+                assert_eq!(Dot::new(process_id, 1).target_shard(n), shard_id)
+            },
+        );
     }
 }

@@ -5,14 +5,13 @@ use tokio::time::{self, Duration, Instant};
 pub async fn delay_task<M>(
     mut from: ChannelReceiver<M>,
     mut to: ChannelSender<M>,
-    delay: u64,
+    delay: Duration,
 ) where
     M: std::fmt::Debug + 'static,
 {
     // important to use VecDeque here since we want to always pop the first
     // element
     let mut queue = VecDeque::new();
-    let delay = Duration::from_millis(delay);
     let mut error_shown = false;
     loop {
         match queue.front() {
@@ -72,7 +71,7 @@ mod tests {
 
     const OPERATIONS: usize = 1000;
     const MAX_SLEEP: u64 = 20;
-    const DELAY: u64 = 42;
+    const DELAY: Duration = Duration::from_millis(42);
 
     #[tokio::test]
     async fn delay_test() {
@@ -114,8 +113,9 @@ mod tests {
         writer.await.expect("writer finished");
         let latency = reader.await.expect("reader finished");
         // allow messages to be suffer an extra delay of 1/2ms
+        let delay = DELAY.as_millis() as u64;
         assert!(
-            latency == DELAY || latency == DELAY + 1 || latency == DELAY + 2
+            latency == delay || latency == delay + 1 || latency == delay + 2
         );
     }
 }

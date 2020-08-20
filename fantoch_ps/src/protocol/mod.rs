@@ -41,6 +41,7 @@ mod tests {
     const COMMANDS_PER_CLIENT: usize = 100;
     const CONFLICT_RATE: usize = 50;
     const CLIENTS_PER_PROCESS: usize = 10;
+    const TRANSITIVE_CONFILICTS: bool = true;
 
     macro_rules! config {
         ($n:expr, $f:expr) => {
@@ -49,6 +50,7 @@ mod tests {
         ($n:expr, $f:expr, $leader:expr) => {{
             let mut config = Config::new($n, $f);
             config.set_leader($leader);
+            config.set_transitive_conflicts(TRANSITIVE_CONFILICTS);
             config
         }};
     }
@@ -68,20 +70,28 @@ mod tests {
         }};
     }
 
-    /// Computes the number of commands per client and clients per process
-    /// according to "CI" env var; if set to true, run the tests with a smaller
-    /// load
-    fn small_load_in_ci() -> (usize, usize) {
+    fn ci() -> bool {
         if let Ok(value) = std::env::var("CI") {
             // if ci is set, it should be a bool
             let ci =
                 value.parse::<bool>().expect("CI env var should be a bool");
             if ci {
-                // 10 commands per client and 1 client per process
-                (10, 1)
+                true
             } else {
                 panic!("CI env var is set and it's not true");
             }
+        } else {
+            false
+        }
+    }
+
+    /// Computes the number of commands per client and clients per process
+    /// according to "CI" env var; if set to true, run the tests with a smaller
+    /// load
+    fn small_load_in_ci() -> (usize, usize) {
+        if ci() {
+            // 10 commands per client and 1 client per process
+            (10, 1)
         } else {
             (COMMANDS_PER_CLIENT, CLIENTS_PER_PROCESS)
         }
@@ -467,7 +477,7 @@ mod tests {
     fn run_atlas_3_1_locked_partial_replication_one_shard_per_command_test() {
         let shard_count = 2;
         let workers = 2;
-        let executors = 1;
+        let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
             newt_config!(3, 1),
@@ -485,7 +495,7 @@ mod tests {
     fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_test() {
         let shard_count = 2;
         let workers = 2;
-        let executors = 1;
+        let executors = 2; // atlas executor can be parallel in partial replication
         let shards_per_command = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
@@ -500,13 +510,12 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
-    #[ignore]
     #[test]
     fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_three_shards_test(
     ) {
         let shard_count = 3;
         let workers = 2;
-        let executors = 1;
+        let executors = 2; // atlas executor can be parallel in partial replication
         let shards_per_command = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
@@ -525,7 +534,7 @@ mod tests {
     fn run_atlas_5_2_locked_partial_replication_two_shards_per_command_test() {
         let shard_count = 2;
         let workers = 2;
-        let executors = 1;
+        let executors = 2; // atlas executor can be parallel in partial replication
         let shards_per_command = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(

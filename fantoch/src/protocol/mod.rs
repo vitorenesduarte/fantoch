@@ -26,9 +26,9 @@ use crate::command::Command;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{Dot, ProcessId, ShardId};
-use crate::metrics::Metrics;
 use crate::time::SysTime;
-use crate::HashSet;
+use crate::{HashMap, HashSet};
+use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
@@ -37,14 +37,14 @@ use std::time::Duration;
 pub trait Protocol: Debug + Clone {
     type Message: Debug
         + Clone
-        + Eq
         + PartialEq
+        + Eq
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
         + MessageIndex; // TODO why is Sync needed??
-    type PeriodicEvent: Debug + Clone + Send + Sync + PeriodicEventIndex + Eq;
+    type PeriodicEvent: Debug + Clone + Send + Sync + MessageIndex + Eq;
     type Executor: Executor + Send;
 
     /// Returns a new instance of the protocol and a list of periodic events.
@@ -58,7 +58,10 @@ pub trait Protocol: Debug + Clone {
 
     fn shard_id(&self) -> ShardId;
 
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool;
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>);
 
     fn submit(&mut self, dot: Option<Dot>, cmd: Command, time: &dyn SysTime);
 
@@ -127,9 +130,9 @@ where
     }
 }
 
-pub type ProtocolMetrics = Metrics<ProtocolMetricsKind, u64>;
+pub type ProtocolMetrics = Metrics<ProtocolMetricsKind>;
 
-#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolMetricsKind {
     FastPath,
     SlowPath,
@@ -157,11 +160,6 @@ pub trait MessageIndex {
     /// - Some((reserved, index)): `index` will be used to compute working index
     ///   making sure that index is higher than `reserved`
     /// - None: no indexing; message will be sent to all workers
-    fn index(&self) -> Option<(usize, usize)>;
-}
-
-pub trait PeriodicEventIndex {
-    /// Same as `MessageIndex`.
     fn index(&self) -> Option<(usize, usize)>;
 }
 

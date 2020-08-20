@@ -4,13 +4,13 @@ use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId, ShardId};
 use crate::log;
-use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SysTime;
 use crate::util;
 use crate::HashMap;
+use fantoch_prof::metrics::Histogram;
 use std::fmt;
 use std::time::Duration;
 
@@ -116,7 +116,8 @@ where
                 &planet,
                 to_discover.clone(),
             );
-            assert!(process.discover(sorted));
+            let (connect_ok, _) = process.discover(sorted);
+            assert!(connect_ok);
 
             // create executor for this process
             let executor = <P::Executor as Executor>::new(
@@ -136,7 +137,9 @@ where
             for _ in 1..=clients_per_process {
                 // create client
                 client_id += 1;
-                let mut client = Client::new(client_id, workload);
+                let status_frequency = None;
+                let mut client =
+                    Client::new(client_id, workload, status_frequency);
                 // discover
                 let closest = util::closest_process_per_shard(
                     &region,
@@ -313,7 +316,7 @@ where
 
     fn send_to_processes_and_executors(&mut self, process_id: ProcessId) {
         // get process and executor
-        let (process, executor, pending, _time) =
+        let (process, executor, pending, time) =
             self.simulation.get_process(process_id);
         assert_eq!(process.id(), process_id);
         let shard_id = process.shard_id();
@@ -325,7 +328,7 @@ where
         let ready: Vec<_> = process
             .to_executors_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 // TODO remove collect
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
@@ -577,8 +580,8 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
 mod tests {
     use super::*;
     use crate::client::{KeyGen, ShardGen};
-    use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
+    use fantoch_prof::metrics::F64;
 
     fn run(f: usize, clients_per_process: usize) -> (Histogram, Histogram) {
         // planet

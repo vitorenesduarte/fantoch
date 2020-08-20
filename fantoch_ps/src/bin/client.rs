@@ -21,6 +21,7 @@ type ClientArgs = (
     Workload,
     bool,
     usize,
+    Option<usize>,
     Option<String>,
     usize,
     Option<usize>,
@@ -34,6 +35,7 @@ fn main() -> Result<(), Report> {
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
         metrics_file,
         stack_size,
         cpus,
@@ -46,6 +48,7 @@ fn main() -> Result<(), Report> {
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
         metrics_file,
     ))
 }
@@ -135,6 +138,13 @@ fn parse_args() -> ClientArgs {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("status_frequency")
+                .long("status_frequency")
+                .value_name("STATUS_FREQUENCY")
+                .help("frequency of status messages; if set with 1, a status message will be shown for each completed command; default: no status messages are shown")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("metrics_file")
                 .long("metrics_file")
                 .value_name("METRICS_FILE")
@@ -174,6 +184,8 @@ fn parse_args() -> ClientArgs {
     let channel_buffer_size = common::parse_channel_buffer_size(
         matches.value_of("channel_buffer_size"),
     );
+    let status_frequency =
+        parse_status_frequency(matches.value_of("status_frequency"));
     let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
     let stack_size = common::parse_stack_size(matches.value_of("stack_size"));
     let cpus = common::parse_cpus(matches.value_of("cpus"));
@@ -184,6 +196,7 @@ fn parse_args() -> ClientArgs {
     println!("workload: {:?}", workload);
     println!("tcp_nodelay: {:?}", tcp_nodelay);
     println!("channel buffer size: {:?}", channel_buffer_size);
+    println!("status frequency: {:?}", status_frequency);
     println!("metrics file: {:?}", metrics_file);
     println!("stack size: {:?}", stack_size);
 
@@ -194,6 +207,7 @@ fn parse_args() -> ClientArgs {
         workload,
         tcp_nodelay,
         channel_buffer_size,
+        status_frequency,
         metrics_file,
         stack_size,
         cpus,
@@ -230,10 +244,10 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
 
 fn parse_interval(interval: Option<&str>) -> Option<Duration> {
     interval.map(|interval| {
-        let ms = interval
+        let millis = interval
             .parse::<u64>()
             .expect("interval should be a number");
-        Duration::from_millis(ms)
+        Duration::from_millis(millis)
     })
 }
 
@@ -366,6 +380,14 @@ fn parse_payload_size(number: Option<&str>) -> usize {
                 .expect("payload size should be a number")
         })
         .unwrap_or(DEFAULT_PAYLOAD_SIZE)
+}
+
+fn parse_status_frequency(status_frequency: Option<&str>) -> Option<usize> {
+    status_frequency.map(|status_frequency| {
+        status_frequency
+            .parse::<usize>()
+            .expect("status frequency should be a number")
+    })
 }
 
 pub fn parse_metrics_file(metrics_file: Option<&str>) -> Option<String> {

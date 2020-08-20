@@ -2,8 +2,7 @@ use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId, ShardId};
 use crate::log;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
-use crate::HashMap;
-use crate::HashSet;
+use crate::{HashMap, HashSet};
 use std::iter::FromIterator;
 
 // a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
@@ -119,11 +118,12 @@ impl BaseProcess {
         };
 
         log!(
-            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?}",
+            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?} | closest_shard_process {:?}",
             self.process_id,
             self.all_but_me,
             self.fast_quorum,
-            self.write_quorum
+            self.write_quorum,
+            self.closest_shard_process
         );
 
         // connected if fast quorum and write quorum are set
@@ -164,11 +164,16 @@ impl BaseProcess {
     }
 
     // Returns the closest process for this shard.
-    pub fn closest_shard_process(&self, shard_id: &ShardId) -> ProcessId {
+    pub fn closest_process(&self, shard_id: &ShardId) -> ProcessId {
         *self
             .closest_shard_process
             .get(shard_id)
             .expect("closest shard process should be known")
+    }
+
+    // Returns the closest process mapping.
+    pub fn closest_shard_process(&self) -> &HashMap<ShardId, ProcessId> {
+        &self.closest_shard_process
     }
 
     // Return metrics.
@@ -179,27 +184,27 @@ impl BaseProcess {
     // Increment fast path count.
     // TODO  rename
     pub fn fast_path(&mut self) {
-        self.inc_by_metric(ProtocolMetricsKind::FastPath, 1);
+        self.metrics.aggregate(ProtocolMetricsKind::FastPath, 1);
     }
 
     // Increment slow path count.
     pub fn slow_path(&mut self) {
-        self.inc_by_metric(ProtocolMetricsKind::SlowPath, 1);
+        self.metrics.aggregate(ProtocolMetricsKind::SlowPath, 1);
     }
 
     // Accumulate more stable commands.
     pub fn stable(&mut self, len: usize) {
-        self.inc_by_metric(ProtocolMetricsKind::Stable, len as u64);
-    }
-
-    fn inc_by_metric(&mut self, kind: ProtocolMetricsKind, by: u64) {
-        self.metrics.aggregate(kind, |v| *v += by)
+        self.metrics
+            .aggregate(ProtocolMetricsKind::Stable, len as u64);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
+    use crate::id::Rifl;
+    use crate::kvs::KVOp;
     use crate::planet::{Planet, Region};
     use crate::util;
     use std::collections::BTreeSet;
@@ -405,5 +410,34 @@ mod tests {
         assert_eq!(bp.closest_shard_process.len(), 1);
         assert_eq!(bp.closest_shard_process.get(&shard_id_0), None);
         assert_eq!(bp.closest_shard_process.get(&shard_id_1), Some(&4));
+
+        // check replicated by
+        let mut ops = HashMap::new();
+        ops.insert(String::from("a"), KVOp::Get);
+
+        // create command replicated by shard 0
+        let rifl = Rifl::new(1, 1);
+        let mut shard_to_ops = HashMap::new();
+        shard_to_ops.insert(shard_id_0, ops.clone());
+        let cmd_shard_0 = Command::new(rifl, shard_to_ops);
+        assert!(cmd_shard_0.replicated_by(&shard_id_0));
+        assert!(!cmd_shard_0.replicated_by(&shard_id_1));
+
+        // create command replicated by shard 1
+        let rifl = Rifl::new(1, 2);
+        let mut shard_to_ops = HashMap::new();
+        shard_to_ops.insert(shard_id_1, ops.clone());
+        let cmd_shard_1 = Command::new(rifl, shard_to_ops);
+        assert!(!cmd_shard_1.replicated_by(&shard_id_0));
+        assert!(cmd_shard_1.replicated_by(&shard_id_1));
+
+        // create command replicated by both shards
+        let rifl = Rifl::new(1, 3);
+        let mut shard_to_ops = HashMap::new();
+        shard_to_ops.insert(shard_id_0, ops.clone());
+        shard_to_ops.insert(shard_id_1, ops.clone());
+        let cmd_both_shards = Command::new(rifl, shard_to_ops);
+        assert!(cmd_both_shards.replicated_by(&shard_id_0));
+        assert!(cmd_both_shards.replicated_by(&shard_id_1));
     }
 }

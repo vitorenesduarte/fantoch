@@ -3,8 +3,6 @@ use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::protocol::Protocol;
-#[cfg(any(feature = "jemalloc", feature = "prof"))]
-use jemallocator::Jemalloc;
 use std::net::IpAddr;
 use std::time::Duration;
 
@@ -19,6 +17,7 @@ const DEFAULT_CLIENT_PORT: u16 = 4000;
 
 const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
+const DEFAULT_EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 
 const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
@@ -32,11 +31,8 @@ const DEFAULT_NEWT_DETACHED_SEND_INTERVAL: Duration = Duration::from_millis(5);
 const DEFAULT_SKIP_FAST_ACK: bool = false;
 
 #[global_allocator]
-#[cfg(all(feature = "jemalloc", not(feature = "prof")))]
-static ALLOC: Jemalloc = Jemalloc;
-#[cfg(feature = "prof")]
-static ALLOC: fantoch_prof::AllocProf<Jemalloc> =
-    fantoch_prof::AllocProf::new();
+#[cfg(feature = "jemalloc")]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 type ProtocolArgs = (
     ProcessId,
@@ -45,19 +41,19 @@ type ProtocolArgs = (
     IpAddr,
     u16,
     u16,
-    Vec<(String, Option<usize>)>,
+    Vec<(String, Option<Duration>)>,
     Config,
     bool,
     usize,
-    Option<usize>,
+    Option<Duration>,
     usize,
     usize,
     usize,
     usize,
     usize,
     Option<String>,
-    Option<usize>,
-    Option<usize>,
+    Option<Duration>,
+    Option<Duration>,
     Option<String>,
     usize,
     Option<usize>,
@@ -211,6 +207,13 @@ fn parse_args() -> ProtocolArgs {
                 .long("execute_at_commit")
                 .value_name("EXECUTE_AT_COMMIT")
                 .help("bool indicating whether execution should be skipped; default: false")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("executor_cleanup_interval")
+                .long("executor_cleanup_interva")
+                .value_name("EXECUTOR_CLEANUP_INTERVAL")
+                .help("executor cleanup interval (in milliseconds); default: 5")
                 .takes_value(true),
         )
         .arg(
@@ -376,6 +379,9 @@ fn parse_args() -> ProtocolArgs {
         parse_shards(matches.value_of("shards")),
         parse_transitive_conflicts(matches.value_of("transitive_conflicts")),
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
+        parse_executor_cleanup_interval(
+            matches.value_of("executor_cleanup_interval"),
+        ),
         parse_gc_interval(matches.value_of("gc_interval")),
         parse_leader(matches.value_of("leader")),
         parse_newt_tiny_quorums(matches.value_of("newt_tiny_quorums")),
@@ -516,7 +522,7 @@ fn parse_client_port(port: Option<&str>) -> u16 {
     .unwrap_or(DEFAULT_CLIENT_PORT)
 }
 
-fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
+fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<Duration>)> {
     addresses
         .expect("addresses should be set")
         .split(LIST_SEP)
@@ -529,9 +535,10 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<usize>)> {
                     (address, None)
                 }
                 2 => {
-                    let delay = parts[1]
-                        .parse::<usize>()
+                    let millis = parts[1]
+                        .parse::<u64>()
                         .expect("address delay should be a number");
+                    let delay = Duration::from_millis(millis);
                     (address, Some(delay))
                 }
                 _ => {
@@ -548,6 +555,7 @@ pub fn build_config(
     shards: usize,
     transitive_conflicts: bool,
     execute_at_commit: bool,
+    executor_cleanup_interval: Duration,
     gc_interval: Option<Duration>,
     leader: Option<ProcessId>,
     newt_tiny_quorums: bool,
@@ -560,6 +568,7 @@ pub fn build_config(
     config.set_shards(shards);
     config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
+    config.set_executor_cleanup_interval(executor_cleanup_interval);
     if let Some(gc_interval) = gc_interval {
         config.set_gc_interval(gc_interval);
     }
@@ -616,6 +625,19 @@ pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {
                 .expect("execute_at_commit should be a bool")
         })
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT)
+}
+
+pub fn parse_executor_cleanup_interval(
+    executor_cleanup_interval: Option<&str>,
+) -> Duration {
+    executor_cleanup_interval
+        .map(|executor_cleanup_interval| {
+            let ms = executor_cleanup_interval
+                .parse::<u64>()
+                .expect("executor_cleanup_interval should be a number");
+            Duration::from_millis(ms)
+        })
+        .unwrap_or(DEFAULT_EXECUTOR_CLEANUP_INTERVAL)
 }
 
 pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<Duration> {
@@ -711,19 +733,21 @@ pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
 
 fn parse_tracer_show_interval(
     tracer_show_interval: Option<&str>,
-) -> Option<usize> {
+) -> Option<Duration> {
     tracer_show_interval.map(|tracer_show_interval| {
-        tracer_show_interval
-            .parse::<usize>()
-            .expect("tracer_show_interval should be a number")
+        let millis = tracer_show_interval
+            .parse::<u64>()
+            .expect("tracer_show_interval should be a number");
+        Duration::from_millis(millis)
     })
 }
 
-fn parse_ping_interval(ping_interval: Option<&str>) -> Option<usize> {
+fn parse_ping_interval(ping_interval: Option<&str>) -> Option<Duration> {
     ping_interval.map(|ping_interval| {
-        ping_interval
-            .parse::<usize>()
-            .expect("ping_interval should be a number")
+        let millis = ping_interval
+            .parse::<u64>()
+            .expect("ping_interval should be a number");
+        Duration::from_millis(millis)
     })
 }
 

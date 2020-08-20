@@ -98,21 +98,12 @@ impl Workload {
     ) -> Option<(ShardId, Command)> {
         // check if we should generate more commands
         if self.command_count < self.commands_per_client {
-            if self.command_count % 1000 == 0 {
-                log!(
-                    "client {:?}: {} of {}",
-                    rifl_gen.source(),
-                    self.command_count,
-                    self.commands_per_client
-                );
-            }
-
             // increment command count
             self.command_count += 1;
             // generate new command
             Some(self.gen_cmd(rifl_gen, key_gen_state))
         } else {
-            log!("client {:?} is done!", rifl_gen.source());
+            log!("c{:?}: done!", rifl_gen.source());
             None
         }
     }

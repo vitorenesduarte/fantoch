@@ -12,12 +12,15 @@ pub use basic::{BasicExecutionInfo, BasicExecutor};
 use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
-use crate::metrics::Metrics;
+use crate::protocol::MessageIndex;
+use crate::time::SysTime;
+use crate::util;
+use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 
-pub trait Executor: Sized {
+pub trait Executor: Clone {
     // TODO why is Send needed?
     type ExecutionInfo: Debug
         + Clone
@@ -27,11 +30,19 @@ pub trait Executor: Sized {
         + DeserializeOwned
         + Send
         + Sync
-        + MessageKey; // TODO why is Sync needed??
+        + MessageIndex; // TODO why is Sync needed??
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self;
 
-    fn handle(&mut self, infos: Self::ExecutionInfo);
+    fn set_executor_index(&mut self, _index: usize) {
+        // executors interested in the index should overwrite this
+    }
+
+    fn cleanup(&mut self, _time: &dyn SysTime) {
+        // executors interested in a periodic cleanup should overwrite this
+    }
+
+    fn handle(&mut self, infos: Self::ExecutionInfo, time: &dyn SysTime);
 
     #[must_use]
     fn to_clients(&mut self) -> Option<ExecutorResult>;
@@ -39,6 +50,17 @@ pub trait Executor: Sized {
     #[must_use]
     fn to_clients_iter(&mut self) -> ToClientsIter<'_, Self> {
         ToClientsIter { executor: self }
+    }
+
+    #[must_use]
+    fn to_executors(&mut self) -> Option<(ShardId, Self::ExecutionInfo)> {
+        // non-genuine protocols should overwrite this
+        None
+    }
+
+    #[must_use]
+    fn to_executors_iter(&mut self) -> ToExecutorsIter<'_, Self> {
+        ToExecutorsIter { executor: self }
     }
 
     fn parallel() -> bool;
@@ -61,30 +83,67 @@ where
     }
 }
 
-pub type ExecutorMetrics = Metrics<ExecutorMetricsKind, u64>;
+pub struct ToExecutorsIter<'a, E> {
+    executor: &'a mut E,
+}
 
-#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+impl<'a, E> Iterator for ToExecutorsIter<'a, E>
+where
+    E: Executor,
+{
+    type Item = (ShardId, E::ExecutionInfo);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.executor.to_executors()
+    }
+}
+
+pub type ExecutorMetrics = Metrics<ExecutorMetricsKind>;
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutorMetricsKind {
-    ChainSize,
     ExecutionDelay,
+    ChainSize,
+    OutRequests,
+    InRequests,
+    InRequestReplies,
 }
 
 impl Debug for ExecutorMetricsKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
+            // general metric
             ExecutorMetricsKind::ExecutionDelay => write!(f, "execution_delay"),
+            // graph executor specific
+            ExecutorMetricsKind::ChainSize => write!(f, "chain_size"),
+            ExecutorMetricsKind::OutRequests => write!(f, "out_requests"),
+            ExecutorMetricsKind::InRequests => write!(f, "in_requests"),
+            ExecutorMetricsKind::InRequestReplies => {
+                write!(f, "in_request_replies")
+            }
         }
     }
 }
 
 pub trait MessageKey {
-    /// If `None` is returned, then the message is sent the *single* executor
-    /// process. If there's more than one executor, and this function
-    /// returns `None`, the runtime will panic.
-    fn key(&self) -> Option<&Key> {
-        None
+    /// Returns which `key` the execution info is about.
+    fn key(&self) -> &Key;
+}
+
+impl<A> MessageIndex for A
+where
+    A: MessageKey,
+{
+    fn index(&self) -> Option<(usize, usize)> {
+        Some(key_index(self.key()))
     }
+}
+
+// The index of a key is its hash
+#[allow(clippy::ptr_arg)]
+fn key_index(key: &Key) -> (usize, usize) {
+    let index = util::key_hash(key) as usize;
+    (0, index)
 }
 
 #[derive(Debug, Clone)]

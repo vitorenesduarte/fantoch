@@ -5,12 +5,11 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, MessageIndex, PeriodicEventIndex, Protocol,
-    ProtocolMetrics,
+    Action, BaseProcess, MessageIndex, Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
-use fantoch::HashSet;
 use fantoch::{log, singleton};
+use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::instrument;
@@ -94,8 +93,12 @@ impl Protocol for FPaxos {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.
@@ -457,7 +460,7 @@ pub enum PeriodicEvent {
     GarbageCollection,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::worker_index_no_shift;
         match self {
@@ -570,7 +573,8 @@ mod tests {
         // create client 1 that is connected to fpaxos 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, workload);
+        let status_frequency = None;
+        let mut client_1 = Client::new(client_id, workload, status_frequency);
 
         // discover processes in client 1
         let closest =
@@ -653,7 +657,7 @@ mod tests {
         assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
-        let (process, executor, pending, _) =
+        let (process, executor, pending, time) =
             simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
@@ -662,7 +666,7 @@ mod tests {
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
             .collect();

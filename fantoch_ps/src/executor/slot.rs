@@ -1,15 +1,16 @@
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{
-    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
-};
+use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::KVStore;
+use fantoch::protocol::MessageIndex;
+use fantoch::time::SysTime;
 use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
 
 type Slot = u64;
 
+#[derive(Clone)]
 pub struct SlotExecutor {
     shard_id: ShardId,
     config: Config,
@@ -43,7 +44,7 @@ impl Executor for SlotExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         let SlotExecutionInfo { slot, cmd } = info;
         // we shouldn't receive execution info about slots already executed
         // TODO actually, if recovery is involved, then this may not be
@@ -107,7 +108,11 @@ impl SlotExecutionInfo {
     }
 }
 
-impl MessageKey for SlotExecutionInfo {}
+impl MessageIndex for SlotExecutionInfo {
+    fn index(&self) -> Option<(usize, usize)> {
+        None
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -165,7 +170,7 @@ mod tests {
                 .clone()
                 .into_iter()
                 .flat_map(|info| {
-                    executor.handle(info);
+                    executor.handle(info, &fantoch::time::RunTime);
                     executor
                         .to_clients_iter()
                         .map(|executor_result| {

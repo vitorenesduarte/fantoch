@@ -8,8 +8,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, PeriodicEventIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -106,8 +106,12 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
 
     /// Updates the processes known by this process.
     /// The set of processes provided is already sorted by distance.
-    fn discover(&mut self, processes: Vec<(ProcessId, ShardId)>) -> bool {
-        self.bp.discover(processes)
+    fn discover(
+        &mut self,
+        processes: Vec<(ProcessId, ShardId)>,
+    ) -> (bool, HashMap<ShardId, ProcessId>) {
+        let connect_ok = self.bp.discover(processes);
+        (connect_ok, self.bp.closest_shard_process().clone())
     }
 
     /// Submits a command issued by some client.
@@ -285,7 +289,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
-        let value = ConsensusValue::with(false, clock.clone());
+        let value = ConsensusValue::with(clock.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
@@ -339,7 +343,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             let (final_clock, all_equal) = info.quorum_clocks.union();
 
             // create consensus value
-            let value = ConsensusValue::with(false, final_clock);
+            let value = ConsensusValue::with(final_clock);
 
             // fast path condition:
             // - all reported clocks if `max_clock` was reported by at least f
@@ -415,7 +419,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::new(dot, cmd, value.clock.clone());
+        let execution_info = ExecutionInfo::add(dot, cmd, value.clock.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -621,13 +625,14 @@ pub struct ConsensusValue {
 }
 
 impl ConsensusValue {
-    fn new(shard_id: ShardId, n: usize) -> Self {
+    fn bottom(shard_id: ShardId, n: usize) -> Self {
         let is_noop = false;
         let clock = VClock::with(util::process_ids(shard_id, n));
         Self { is_noop, clock }
     }
 
-    fn with(is_noop: bool, clock: VClock<ProcessId>) -> Self {
+    fn with(clock: VClock<ProcessId>) -> Self {
+        let is_noop = false;
         Self { is_noop, clock }
     }
 }
@@ -659,7 +664,7 @@ impl Info for EPaxosInfo {
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::new(shard_id, n);
+        let initial_value = ConsensusValue::bottom(shard_id, n);
 
         // although the fast quorum size is `fast_quorum_size`, we're going to
         // initialize `QuorumClocks` with `fast_quorum_size - 1` since
@@ -741,7 +746,7 @@ pub enum PeriodicEvent {
     GarbageCollection,
 }
 
-impl PeriodicEventIndex for PeriodicEvent {
+impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
         use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
@@ -869,7 +874,8 @@ mod tests {
         // create client 1 that is connected to epaxos 1
         let client_id = 1;
         let client_region = europe_west2.clone();
-        let mut client_1 = Client::new(client_id, workload);
+        let status_frequency = None;
+        let mut client_1 = Client::new(client_id, workload, status_frequency);
 
         // discover processes in client 1
         let closest =
@@ -936,7 +942,7 @@ mod tests {
         }));
 
         // process 1 should have something to the executor
-        let (process, executor, pending, _) =
+        let (process, executor, pending, time) =
             simulation.get_process(process_id_1);
         let to_executor: Vec<_> = process.to_executors_iter().collect();
         assert_eq!(to_executor.len(), 1);
@@ -945,7 +951,7 @@ mod tests {
         let mut ready: Vec<_> = to_executor
             .into_iter()
             .flat_map(|info| {
-                executor.handle(info);
+                executor.handle(info, time);
                 executor.to_clients_iter().collect::<Vec<_>>()
             })
             .collect();

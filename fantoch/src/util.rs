@@ -30,17 +30,6 @@ macro_rules! log {
     };
 }
 
-#[macro_export]
-macro_rules! elapsed {
-    ( $x:expr ) => {{
-        use std::time::Instant;
-        let start = Instant::now();
-        let result = $x;
-        let time = start.elapsed();
-        (time, result)
-    }};
-}
-
 type DefaultHasher = ahash::AHasher;
 
 /// Compute the hash of a key.

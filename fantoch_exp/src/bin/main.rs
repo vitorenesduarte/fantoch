@@ -13,7 +13,8 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../graph_executor";
+// const RESULTS_DIR: &str = "../graph_executor";
+const RESULTS_DIR: &str = "../graph_executor_zipf01";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -33,6 +34,7 @@ const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
+const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRANSITIVE_CONFLICTS: bool = true;
@@ -46,7 +48,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "graph_executor";
+const BRANCH: &str = "non_genuine_atlas";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -61,8 +63,7 @@ const RUN_MODE: RunMode = RunMode::Release;
 // const RUN_MODE: RunMode = RunMode::Flamegraph;
 
 // list of protocol binaries to cleanup before running the experiment
-const PROTOCOLS_TO_CLEANUP: &[Protocol] =
-    &[Protocol::NewtAtomic, Protocol::AtlasLocked];
+const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[Protocol::AtlasLocked];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -72,6 +73,7 @@ macro_rules! config {
             config.set_newt_clock_bump_interval(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
+        config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
@@ -151,24 +153,24 @@ async fn main() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
-        1024 / 4,
-        1024 / 2,
-        1024,
-        1024 * 2,
+        // 1024 / 4,
+        // 1024 / 2,
+        // 1024,
+        // 1024 * 2,
         1024 * 4, // 1
         1024 * 8, // 1
         1024 * 16,
-        /*
+        1024 * 20,
         1024 * 24, // 1
         1024 * 32,
         1024 * 36, // 1
-        1024 * 40,
+        1024 * 40, // 1
         1024 * 48,
-        1024 * 56,
+        1024 * 56, // 1
         1024 * 64,
         1024 * 96,
         1024 * 128,
@@ -178,20 +180,16 @@ async fn main() -> Result<(), Report> {
         1024 * 240,
         1024 * 256,
         1024 * 272,
-        */
     ];
-    let shards_per_command = 1;
-    let shard_count = 1;
+    let shards_per_command = 2;
+    let shard_count = 5;
     let keys_per_shard = 1;
-    /*
-    let zipf_coefficient = 1.0;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: zipf_coefficient,
+        coefficient: 0.1,
         key_count: zipf_key_count,
     };
-    */
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+    // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
 
     let skip = |_, _, _| false;
 

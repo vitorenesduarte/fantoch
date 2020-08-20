@@ -8,10 +8,11 @@ license = "MIT/Apache-2.0"
 
 [dependencies]
 pyo3 = "0.11.1"
-color-eyre = "0.5.0"
+color-eyre = "0.5.1"
 csv = "1.1.3"
 rayon = "1.3.1"
-serde = "1.0.114"
+serde = "1.0.115"
 
 fantoch = { path = "../fantoch" }
+fantoch_prof = { path = "../fantoch_prof" }
 fantoch_exp = { path = "../fantoch_exp", default-features = false }

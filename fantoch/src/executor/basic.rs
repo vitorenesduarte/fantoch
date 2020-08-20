@@ -2,8 +2,10 @@ use crate::config::Config;
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOp, KVStore, Key};
+use crate::time::SysTime;
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone)]
 pub struct BasicExecutor {
     store: KVStore,
     metrics: ExecutorMetrics,
@@ -29,7 +31,7 @@ impl Executor for BasicExecutor {
         }
     }
 
-    fn handle(&mut self, info: Self::ExecutionInfo) {
+    fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         let BasicExecutionInfo { rifl, key, op } = info;
         // execute op in the `KVStore`
         let op_result = self.store.execute(&key, op);
@@ -64,7 +66,7 @@ impl BasicExecutionInfo {
 }
 
 impl MessageKey for BasicExecutionInfo {
-    fn key(&self) -> Option<&Key> {
-        Some(&self.key)
+    fn key(&self) -> &Key {
+        &self.key
     }
 }

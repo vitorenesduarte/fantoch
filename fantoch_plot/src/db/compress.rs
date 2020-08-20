@@ -1,5 +1,5 @@
 use crate::db::Dstat;
-use fantoch::metrics::{Histogram, F64};
+use fantoch_prof::metrics::{Histogram, F64};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -70,10 +70,11 @@ impl fmt::Debug for HistogramCompress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "min={:<6} max={:<6} avg={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
+            "min={:<6} max={:<6} avg={:<6} p5={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
             self.min().value().round(),
             self.max().value().round(),
             self.mean().value().round(),
+            self.percentile(0.05).value().round(),
             self.percentile(0.95).value().round(),
             self.percentile(0.99).value().round(),
             self.percentile(0.999).value().round(),
