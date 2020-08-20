@@ -245,22 +245,23 @@ fn workers_executors_and_leader(
     config: &mut Config,
 ) -> (usize, usize) {
     // for all protocol but newt, create a single executor
-    match protocol {
-        // 1 extra executor for partial replication
-        Protocol::AtlasLocked => (WORKERS, EXECUTORS),
-        // 1 extra executor for partial replication (although, not implemented
+    let executors = match protocol {
+        // extra executors for partial replication
+        Protocol::AtlasLocked => EXECUTORS,
+        // extra executors for partial replication (although, not implemented
         // yet)
-        Protocol::EPaxosLocked => (WORKERS, EXECUTORS),
+        Protocol::EPaxosLocked => EXECUTORS,
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);
-            (WORKERS + EXECUTORS - 1, 1)
+            1
         }
-        Protocol::NewtAtomic => (WORKERS, EXECUTORS),
-        Protocol::NewtLocked => (WORKERS, EXECUTORS),
-        Protocol::NewtFineLocked => (WORKERS, EXECUTORS),
-        Protocol::Basic => (WORKERS, EXECUTORS),
-    }
+        Protocol::NewtAtomic => EXECUTORS,
+        Protocol::NewtLocked => EXECUTORS,
+        Protocol::NewtFineLocked => EXECUTORS,
+        Protocol::Basic => EXECUTORS,
+    };
+    (WORKERS + EXECUTORS - executors, executors)
 }
 
 #[cfg(feature = "exp")]

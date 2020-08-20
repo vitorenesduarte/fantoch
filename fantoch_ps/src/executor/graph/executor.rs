@@ -210,34 +210,34 @@ impl GraphExecutionInfo {
 
 impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        const MAX_EXECUTORS: usize = 120; // to avoid skew, this should be a multiple of the number of executors
-        const fn executor_index_no_shift() -> Option<(usize, usize)> {
-            // when there's no shift, the index must be 0
-            let shift = 0;
-            let index = 0;
-            Some((shift, index))
+        // to avoid skew, this should be a multiple of the number of extra
+        // executors
+        const MAX_EXTRA_EXECUTORS: usize = 14;
+        const MAIN_INDEX: usize = 0;
+        const SECONDARY_INDEX: usize = 1;
+        const SHIFT: usize = 2;
+
+        const fn executor_index_no_shift(
+            index: usize,
+        ) -> Option<(usize, usize)> {
+            Some((0, index))
         }
 
         fn executor_random_index_shift() -> Option<(usize, usize)> {
             use rand::Rng;
             // if there's a shift, we select a random worker
-            let shift = 1;
-            let index = rand::thread_rng().gen_range(0, MAX_EXECUTORS);
-            Some((shift, index))
-        }
-
-        fn executor_index_shift() -> Option<(usize, usize)> {
-            let shift = 1;
-            let index = 0;
-            Some((shift, index))
+            let index = rand::thread_rng().gen_range(0, MAX_EXTRA_EXECUTORS);
+            Some((SHIFT, index))
         }
 
         match self {
-            Self::Add { .. } => executor_index_no_shift(),
-            Self::AddMine { .. } => executor_index_no_shift(),
-            Self::Request { .. } => executor_index_shift(),
-            Self::RequestReply { .. } => executor_index_no_shift(),
-            Self::ExecutedClock { .. } => executor_index_shift(),
+            Self::Add { .. } => executor_index_no_shift(MAIN_INDEX),
+            Self::AddMine { .. } => executor_index_no_shift(MAIN_INDEX),
+            Self::Request { .. } => executor_random_index_shift(),
+            Self::RequestReply { .. } => executor_index_no_shift(MAIN_INDEX),
+            Self::ExecutedClock { .. } => {
+                executor_index_no_shift(SECONDARY_INDEX)
+            }
         }
     }
 }

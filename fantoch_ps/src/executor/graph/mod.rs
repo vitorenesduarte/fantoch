@@ -25,8 +25,10 @@ use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 use threshold::AEClock;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +58,8 @@ pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
+    // only used in partial replication
+    executed_clock_snapshot: Arc<RwLock<AEClock<ProcessId>>>,
     // only used in partial replication
     level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
@@ -94,11 +98,13 @@ impl DependencyGraph {
     ) -> Self {
         // this value will be overwritten
         let executor_index = 0;
-        // create executed clock
+        // create executed clock and its snapshot
         let ids: Vec<_> = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id)
             .collect();
         let executed_clock = AEClock::with(ids.clone());
+        let executed_clock_snapshot =
+            Arc::new(RwLock::new(executed_clock.clone()));
         // create level executed clock
         let level_executed_clock =
             LevelExecutedClock::new(process_id, shard_id, config);
@@ -119,6 +125,7 @@ impl DependencyGraph {
             process_id,
             shard_id,
             executed_clock,
+            executed_clock_snapshot,
             level_executed_clock,
             vertex_index,
             pending_index,
@@ -189,6 +196,7 @@ impl DependencyGraph {
         clock: AEClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
+        assert_eq!(self.executor_index, 1);
         log!(
             "p{}: @{} Graph::handle_executed_clock {:?} | time = {}",
             self.process_id,
@@ -196,12 +204,8 @@ impl DependencyGraph {
             clock,
             _time.millis()
         );
-        if self.executor_index == 0 {
-            // if main executor, ignore this message
-        } else {
-            // otherwise, save the executed clock
-            self.executed_clock = clock;
-        }
+        // update the snapshot to be used by the remaining auxiliary executors
+        *self.executed_clock_snapshot.write() = clock;
     }
 
     /// Add a new command with its clock to the queue.
@@ -347,7 +351,11 @@ impl DependencyGraph {
             } else {
                 // if we don't have it, then check if it's executed (in our
                 // snapshot)
-                if self.executed_clock.contains(&dot.source(), dot.sequence()) {
+                if self
+                    .executed_clock_snapshot
+                    .read()
+                    .contains(&dot.source(), dot.sequence())
+                {
                     log!(
                         "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
                         self.process_id,
