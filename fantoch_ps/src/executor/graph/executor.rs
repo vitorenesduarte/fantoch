@@ -226,12 +226,18 @@ impl MessageIndex for GraphExecutionInfo {
             Some((shift, index))
         }
 
+        fn executor_index_shift() -> Option<(usize, usize)> {
+            let shift = 1;
+            let index = 0;
+            Some((shift, index))
+        }
+
         match self {
             Self::Add { .. } => executor_index_no_shift(),
             Self::AddMine { .. } => executor_index_no_shift(),
-            Self::Request { .. } => executor_random_index_shift(),
+            Self::Request { .. } => executor_index_shift(),
             Self::RequestReply { .. } => executor_index_no_shift(),
-            Self::ExecutedClock { .. } => None, // send to all workers
+            Self::ExecutedClock { .. } => executor_index_shift(),
         }
     }
 }
