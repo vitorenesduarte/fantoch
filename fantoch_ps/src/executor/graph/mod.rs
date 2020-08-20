@@ -178,10 +178,10 @@ impl DependencyGraph {
         if self.executor_index == 0 {
             self.level_executed_clock
                 .maybe_level(&mut self.executed_clock, time);
-            // if main executor, update snapshot
+            // if main executor, update executed clock snapshot
             *self.executed_clock_snapshot.write() = self.executed_clock.clone();
         } else {
-            // otherwise, simply check pending remote requests
+            // if not main executor, simply check pending remote requests
             self.check_pending_requests(time);
         }
     }
@@ -317,6 +317,7 @@ impl DependencyGraph {
                         _time.millis()
                     )
                 } else {
+                    // if it doesn't replicate the command, send command info
                     self.out_request_replies.entry(from).or_default().push(
                         RequestReply::Info {
                             dot,
@@ -340,6 +341,10 @@ impl DependencyGraph {
                         dot,
                         _time.millis()
                     );
+                    // if it's executed, notify the shard that it has already
+                    // been executed
+                    // - TODO: the Janus paper says that in this case, we should
+                    //   send the full SCC; this will require a GC mechanism
                     self.out_request_replies
                         .entry(from)
                         .or_default()
@@ -369,7 +374,12 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        let mut accepted_replies = 0;
+        // save in request replies metric
+        self.metrics.aggregate(
+            ExecutorMetricsKind::InRequestReplies,
+            infos.len() as u64,
+        );
+
         for info in infos {
             log!(
                 "p{}: @{} Graph::handle_request_reply {:?} | time = {}",
@@ -378,42 +388,26 @@ impl DependencyGraph {
                 info,
                 time.millis()
             );
-            if self.pending_index.is_mine(info.dot()) {
-                log!(
-                    "p{}: @{} Graph::handle_request_reply ignore {:?} as it is mine | time = {}",
-                    self.process_id,
-                    self.executor_index,
-                    info,
-                    time.millis()
-                );
-                continue;
-            }
+            // we can't receive a reply about commands that are not mine, as the
+            // shards would ignore the request if we didn't replicate the
+            // command
+            debug_assert!(!self.pending_index.is_mine(info.dot()));
+
             match info {
                 RequestReply::Info { dot, cmd, clock } => {
-                    // count number of accepted replies
-                    accepted_replies += 1;
-
+                    // add requested command to our graph
                     self.handle_add(dot, cmd, clock, time)
                 }
                 RequestReply::Executed { dot } => {
-                    // add to executed if not mine
-                    if !self.pending_index.is_mine(&dot) {
-                        // count number of accepted replies
-                        accepted_replies += 1;
-
-                        // update executed clock
-                        self.executed_clock.add(&dot.source(), dot.sequence());
-                        // check pending
-                        let dots = vec![dot];
-                        let mut total_found = 0;
-                        self.check_pending(dots, &mut total_found, time);
-                    }
+                    // update executed clock
+                    self.executed_clock.add(&dot.source(), dot.sequence());
+                    // check pending
+                    let dots = vec![dot];
+                    let mut total_found = 0;
+                    self.check_pending(dots, &mut total_found, time);
                 }
             }
         }
-        // save in request replies metric
-        self.metrics
-            .aggregate(ExecutorMetricsKind::InRequestReplies, accepted_replies);
     }
 
     #[must_use]

@@ -121,16 +121,14 @@ impl TarjanSCCFinder {
         let ignore_dep =
             |process_id: ProcessId,
              dep: u64,
+             transitive_conflicts: bool,
              executed_clock: &AEClock<ProcessId>| {
                 let dep_dot = Dot::new(process_id, dep);
-                // ignore if self or if already executed:
-
-                //
-                // - we need this check because the clock may not be contiguous,
-                //   i.e. `executed_clock_frontier` is simply a safe
-                //   approximation of what's been executed
-                let ignore =
-                    dot == dep_dot || executed_clock.contains(&process_id, dep);
+                // ignore if self or if already executed (we need this second
+                // check because the executed clock may not be contiguous)
+                let ignore = dot == dep_dot
+                    || (!transitive_conflicts
+                        && executed_clock.contains(&process_id, dep));
                 (ignore, dep_dot)
             };
 
@@ -161,8 +159,12 @@ impl TarjanSCCFinder {
             //   conflicts are transitive
             // - when we can, the following loop has a single iteration
             for dep in (from..=to).rev() {
-                let (ignore, dep_dot) =
-                    ignore_dep(process_id, dep, executed_clock);
+                let (ignore, dep_dot) = ignore_dep(
+                    process_id,
+                    dep,
+                    self.config.transitive_conflicts(),
+                    executed_clock,
+                );
                 if ignore {
                     log!(
                         "p{}: Finder::strong_connect {:?} dependency ignored",
@@ -190,6 +192,7 @@ impl TarjanSCCFinder {
                                     let (ignore, dep_dot) = ignore_dep(
                                         process_id,
                                         to.frontier(),
+                                        self.config.transitive_conflicts(),
                                         executed_clock,
                                     );
                                     if ignore {

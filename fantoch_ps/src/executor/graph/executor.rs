@@ -202,7 +202,7 @@ impl GraphExecutionInfo {
 
 impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        const MAX_EXECUTORS: usize = 100;
+        const MAX_EXECUTORS: usize = 120; // to avoid skew, this should be a multiple of the number of executors
         const fn executor_index_no_shift() -> Option<(usize, usize)> {
             // when there's no shift, the index must be 0
             let shift = 0;

@@ -13,14 +13,14 @@ pub type VertexRef<'a> = DashMapRef<'a, Dot, RwLock<Vertex>>;
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
     process_id: ProcessId,
-    local: Arc<Shared<Dot, RwLock<Vertex>>>,
+    index: Arc<Shared<Dot, RwLock<Vertex>>>,
 }
 
 impl VertexIndex {
     pub fn new(process_id: ProcessId) -> Self {
         Self {
             process_id,
-            local: Arc::new(Shared::new()),
+            index: Arc::new(Shared::new()),
         }
     }
 
@@ -28,21 +28,21 @@ impl VertexIndex {
     pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
         let dot = vertex.dot();
         let cell = RwLock::new(vertex);
-        self.local.insert(dot, cell).map(|cell| cell.into_inner())
+        self.index.insert(dot, cell).map(|cell| cell.into_inner())
     }
 
     #[cfg(debug_assertions)]
     pub fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
-        self.local.iter().map(|entry| *entry.key())
+        self.index.iter().map(|entry| *entry.key())
     }
 
     pub fn find(&self, dot: &Dot) -> Option<VertexRef<'_>> {
-        self.local.get(dot)
+        self.index.get(dot)
     }
 
     /// Removes a vertex from the index.
     pub fn remove(&mut self, dot: &Dot) -> Option<Vertex> {
-        self.local.remove(dot).map(|(_, cell)| cell.into_inner())
+        self.index.remove(dot).map(|(_, cell)| cell.into_inner())
     }
 }
 
