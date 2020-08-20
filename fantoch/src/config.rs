@@ -10,8 +10,6 @@ pub struct Config {
     f: usize,
     /// number of shards
     shards: usize,
-    /// defines whether we can assume if the conflict relation is transitive
-    transitive_conflicts: bool,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
     // defines the interval between executor cleanups
@@ -43,8 +41,6 @@ impl Config {
         }
         // by default, `shards = 1`
         let shards = 1;
-        // by default, `transitive_conflicts = false`
-        let transitive_conflicts = false;
         // by default, execution is not skipped
         let execute_at_commit = false;
         // by default, executor cleanups happen every 5ms
@@ -65,7 +61,6 @@ impl Config {
             n,
             f,
             shards,
-            transitive_conflicts,
             execute_at_commit,
             executor_cleanup_interval,
             gc_interval,
@@ -96,16 +91,6 @@ impl Config {
     pub fn set_shards(&mut self, shards: usize) {
         assert!(shards >= 1);
         self.shards = shards;
-    }
-
-    /// Checks whether we can assume that conflicts are transitive.
-    pub fn transitive_conflicts(&self) -> bool {
-        self.transitive_conflicts
-    }
-
-    /// Changes the value of `transitive_conflicts`.
-    pub fn set_transitive_conflicts(&mut self, transitive_conflicts: bool) {
-        self.transitive_conflicts = transitive_conflicts;
     }
 
     /// Checks whether execution is to be skipped.
@@ -281,17 +266,6 @@ mod tests {
         let shards = 10;
         config.set_shards(shards);
         assert_eq!(config.shards(), shards);
-
-        // by default, transitive conflicts is false
-        assert!(!config.transitive_conflicts());
-
-        // if we change it to false, remains false
-        config.set_transitive_conflicts(false);
-        assert!(!config.transitive_conflicts());
-
-        // if we change it to true, it becomes true
-        config.set_transitive_conflicts(true);
-        assert!(config.transitive_conflicts());
 
         // by deafult, execute at commit is false
         assert!(!config.execute_at_commit());

@@ -148,8 +148,6 @@ impl ProtocolConfig {
             self.config.f(),
             "--shards",
             self.config.shards(),
-            "--transitive_conflicts",
-            self.config.transitive_conflicts(),
             "--execute_at_commit",
             self.config.execute_at_commit(),
         ];

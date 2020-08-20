@@ -733,7 +733,6 @@ mod tests {
     fn transitive_conflicts_assumption_regression_test_1() {
         // config
         let n = 5;
-        let transitive_conflicts = true;
 
         // cmd 1
         let dot_1 = Dot::new(1, 1);
@@ -769,8 +768,8 @@ mod tests {
             (dot_2, None, clock_2),
             (dot_1, None, clock_1),
         ];
-        let order_a = check_termination(n, order_a, transitive_conflicts);
-        let order_b = check_termination(n, order_b, transitive_conflicts);
+        let order_a = check_termination(n, order_a);
+        let order_b = check_termination(n, order_b);
         assert_eq!(order_a, order_b);
     }
 
@@ -808,7 +807,6 @@ mod tests {
     fn transitive_conflicts_assumption_regression_test_2() {
         // config
         let n = 3;
-        let transitive_conflicts = true;
 
         let keys = |keys: Vec<&str>| {
             keys.into_iter()
@@ -841,8 +839,8 @@ mod tests {
             (dot_2_1, Some(keys_2_1), clock_2_1),
             (dot_1_1, Some(keys_1_1), clock_1_1),
         ];
-        let order_a = check_termination(n, order_a, transitive_conflicts);
-        let order_b = check_termination(n, order_b, transitive_conflicts);
+        let order_a = check_termination(n, order_a);
+        let order_b = check_termination(n, order_b);
         assert_eq!(order_a, order_b);
     }
 
@@ -850,7 +848,6 @@ mod tests {
     fn self_cycle_test() {
         // config
         let n = 1;
-        let transitive_conflicts = false;
 
         // cmd 1
         let dot_1 = Dot::new(1, 1);
@@ -869,7 +866,7 @@ mod tests {
             (dot_2, None, clock_2),
             (dot_3, None, clock_3),
         ];
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
@@ -901,7 +898,7 @@ mod tests {
         // create config
         let n = 1;
         let f = 1;
-        let mut config = Config::new(n, f);
+        let config = Config::new(n, f);
 
         // cmd 1
         let dot_1 = Dot::new(1, 1);
@@ -921,44 +918,23 @@ mod tests {
             Command::put(Rifl::new(3, 1), String::from("B"), String::new());
         let clock_3 = util::vclock(vec![2]);
 
-        for transitive_conflicts in vec![false, true] {
-            config.set_transitive_conflicts(transitive_conflicts);
+        // create queue
+        let process_id = 1;
+        let shard_id = 0;
+        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
+        let time = RunTime;
 
-            // create queue
-            let process_id = 1;
-            let shard_id = 0;
-            let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-            let time = RunTime;
+        // add cmd 2
+        queue.handle_add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
+        assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
 
-            // add cmd 2
-            queue.handle_add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
-            assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
+        // add cmd 3
+        queue.handle_add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
+        assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
 
-            // add cmd 3
-            queue.handle_add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
-            if transitive_conflicts {
-                // if we assume transitive conflicts, then cmd 3 can be executed
-                assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
-            } else {
-                // otherwise, it can't as it also depends cmd 1
-                assert!(queue.commands_to_execute().is_empty());
-            }
-
-            // add cmd 1
-            queue.handle_add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
-            // cmd 1 can always be executed
-            if transitive_conflicts {
-                assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
-            } else {
-                // the following used to fail because our previous mechanism to
-                // track pending commands didn't work without the assumption of
-                // transitive conflicts
-                let ready = queue.commands_to_execute();
-                assert_eq!(ready.len(), 2);
-                assert!(ready.contains(&cmd_3));
-                assert!(ready.contains(&cmd_1));
-            }
-        }
+        // add cmd 1
+        queue.handle_add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
+        assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
     }
 
     #[test]
@@ -1015,8 +991,7 @@ mod tests {
         ];
 
         let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
@@ -1061,8 +1036,7 @@ mod tests {
         ];
 
         let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
@@ -1097,8 +1071,7 @@ mod tests {
         ];
 
         let n = 3;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
@@ -1138,8 +1111,7 @@ mod tests {
         ];
 
         let n = 1;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
@@ -1164,8 +1136,7 @@ mod tests {
         ];
 
         let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
@@ -1205,21 +1176,19 @@ mod tests {
         ];
 
         let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
     fn test_add_random() {
         let shard_id = 0;
         let n = 2;
-        let transitive_conflicts = false;
         let iterations = 10;
         let events_per_process = 3;
 
         (0..iterations).for_each(|_| {
             let args = random_adds(shard_id, n, events_per_process);
-            shuffle_it(n, transitive_conflicts, args);
+            shuffle_it(n, args);
         });
     }
 
@@ -1330,16 +1299,12 @@ mod tests {
 
     fn shuffle_it(
         n: usize,
-        transitive_conflicts: bool,
         mut args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
     ) {
-        let total_order =
-            check_termination(n, args.clone(), transitive_conflicts);
-        println!("transitive_conflicts = {:?}", transitive_conflicts);
+        let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
             println!("permutation = {:?}", permutation);
-            let sorted =
-                check_termination(n, permutation, transitive_conflicts);
+            let sorted = check_termination(n, permutation);
             assert_eq!(total_order, sorted);
         });
     }
@@ -1347,14 +1312,12 @@ mod tests {
     fn check_termination(
         n: usize,
         args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
-        transitive_conflicts: bool,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
         let shard_id = 0;
         let f = 1;
-        let mut config = Config::new(n, f);
-        config.set_transitive_conflicts(transitive_conflicts);
+        let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
         let mut all_rifls = HashSet::new();
@@ -1449,9 +1412,7 @@ mod tests {
         let shard_id = 0;
         let n = 5;
         let f = 1;
-        let mut config = Config::new(n, f);
-        let transitive_conflicts = false;
-        config.set_transitive_conflicts(transitive_conflicts);
+        let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
 

@@ -37,7 +37,6 @@ const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
-const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
@@ -79,7 +78,6 @@ macro_rules! config {
             config.set_gc_interval(interval);
         }
         config.set_newt_detached_send_interval(SEND_DETACHED_INTERVAL);
-        config.set_transitive_conflicts(TRANSITIVE_CONFLICTS);
         config
     }};
 }

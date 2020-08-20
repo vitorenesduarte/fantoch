@@ -41,7 +41,6 @@ mod tests {
     const COMMANDS_PER_CLIENT: usize = 100;
     const CONFLICT_RATE: usize = 50;
     const CLIENTS_PER_PROCESS: usize = 10;
-    const TRANSITIVE_CONFILICTS: bool = true;
 
     macro_rules! config {
         ($n:expr, $f:expr) => {
@@ -50,7 +49,6 @@ mod tests {
         ($n:expr, $f:expr, $leader:expr) => {{
             let mut config = Config::new($n, $f);
             config.set_leader($leader);
-            config.set_transitive_conflicts(TRANSITIVE_CONFILICTS);
             config
         }};
     }
