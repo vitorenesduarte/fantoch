@@ -1,6 +1,6 @@
 use crate::executor::GraphExecutor;
 use crate::protocol::common::graph::{
-    KeyClocks, LockedKeyClocks, QuorumClocks, SequentialKeyClocks,
+    KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::partial::{self, ShardsCommits};
@@ -21,15 +21,15 @@ use std::time::Duration;
 use threshold::VClock;
 use tracing::instrument;
 
-pub type AtlasSequential = Atlas<SequentialKeyClocks>;
-pub type AtlasLocked = Atlas<LockedKeyClocks>;
+pub type AtlasSequential = Atlas<SequentialKeyDeps>;
+pub type AtlasLocked = Atlas<LockedKeyDeps>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Atlas<KC: KeyClocks> {
+pub struct Atlas<KD: KeyDeps> {
     bp: BaseProcess,
-    keys_clocks: KC,
+    key_deps: KD,
     cmds: CommandsInfo<AtlasInfo>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -40,7 +40,7 @@ pub struct Atlas<KC: KeyClocks> {
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
 }
 
-impl<KC: KeyClocks> Protocol for Atlas<KC> {
+impl<KD: KeyDeps> Protocol for Atlas<KD> {
     type Message = Message;
     type PeriodicEvent = PeriodicEvent;
     type Executor = GraphExecutor;
@@ -62,7 +62,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KC::new(shard_id, config.n());
+        let key_deps = KD::new(shard_id);
         let cmds = CommandsInfo::new(
             process_id,
             shard_id,
@@ -78,7 +78,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
         // create `Atlas`
         let protocol = Self {
             bp,
-            keys_clocks,
+            key_deps,
             cmds,
             to_processes,
             to_executors,
@@ -136,10 +136,10 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
                 dot,
                 cmd,
                 quorum,
-                clock,
-            } => self.handle_mcollect(from, dot, cmd, quorum, clock, time),
-            Message::MCollectAck { dot, clock } => {
-                self.handle_mcollectack(from, dot, clock, time)
+                deps,
+            } => self.handle_mcollect(from, dot, cmd, quorum, deps, time),
+            Message::MCollectAck { dot, deps } => {
+                self.handle_mcollectack(from, dot, deps, time)
             }
             Message::MCommit { dot, value } => {
                 self.handle_mcommit(from, dot, value, time)
@@ -154,11 +154,11 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
             Message::MForwardSubmit { dot, cmd } => {
                 self.handle_submit(Some(dot), cmd, false)
             }
-            Message::MShardCommit { dot, clock } => {
-                self.handle_mshard_commit(from, from_shard_id, dot, clock, time)
+            Message::MShardCommit { dot, deps } => {
+                self.handle_mshard_commit(from, from_shard_id, dot, deps, time)
             }
-            Message::MShardAggregatedCommit { dot, clock } => {
-                self.handle_mshard_aggregated_commit(dot, clock, time)
+            Message::MShardAggregatedCommit { dot, deps } => {
+                self.handle_mshard_aggregated_commit(dot, deps, time)
             }
             // GC messages
             Message::MCommitDot { dot } => {
@@ -193,7 +193,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     }
 
     fn parallel() -> bool {
-        KC::parallel()
+        KD::parallel()
     }
 
     fn leaderless() -> bool {
@@ -205,7 +205,7 @@ impl<KC: KeyClocks> Protocol for Atlas<KC> {
     }
 }
 
-impl<KC: KeyClocks> Atlas<KC> {
+impl<KD: KeyDeps> Atlas<KD> {
     /// Handles a submit operation by a client.
     #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
@@ -229,19 +229,14 @@ impl<KC: KeyClocks> Atlas<KC> {
             &mut self.to_processes,
         );
 
-        // compute its clock
-        // - here we don't save the command in `keys_clocks`; if we did, it
-        //   would be declared as a dependency of itself when this message is
-        //   handled by its own coordinator, which prevents fast paths with f >
-        //   1; in fact we do, but since the coordinator does not recompute this
-        //   value in the MCollect handler, it's effectively the same
-        let clock = self.keys_clocks.add_cmd(dot, &cmd, None);
+        // compute its deps
+        let deps = self.key_deps.add_cmd(dot, &cmd, None);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
             dot,
             cmd,
-            clock,
+            deps,
             quorum: self.bp.fast_quorum(),
         };
         let target = self.bp.all();
@@ -253,14 +248,14 @@ impl<KC: KeyClocks> Atlas<KC> {
         });
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
         dot: Dot,
         cmd: Command,
         quorum: HashSet<ProcessId>,
-        remote_clock: VClock<ProcessId>,
+        remote_deps: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
         log!(
@@ -268,7 +263,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             dot,
             cmd,
-            remote_clock,
+            remote_deps,
             from,
             time.micros()
         );
@@ -310,12 +305,12 @@ impl<KC: KeyClocks> Atlas<KC> {
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
 
-        let clock = if message_from_self {
-            // if it is, do not recompute clock
-            remote_clock
+        let deps = if message_from_self {
+            // if it is, do not recompute deps
+            remote_deps
         } else {
-            // otherwise, compute clock with the remote clock as past
-            self.keys_clocks.add_cmd(dot, &cmd, Some(remote_clock))
+            // otherwise, compute deps with the remote deps as past
+            self.key_deps.add_cmd(dot, &cmd, Some(remote_deps))
         };
 
         // update command info
@@ -323,11 +318,11 @@ impl<KC: KeyClocks> Atlas<KC> {
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
-        let value = ConsensusValue::with(clock.clone());
+        let value = ConsensusValue::with(deps.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck { dot, clock };
+        let mcollectack = Message::MCollectAck { dot, deps };
         let target = singleton![from];
 
         // save new action
@@ -337,19 +332,19 @@ impl<KC: KeyClocks> Atlas<KC> {
         });
     }
 
-    #[instrument(skip(self, from, dot, clock, _time))]
+    #[instrument(skip(self, from, dot, deps, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
         _time: &dyn SysTime,
     ) {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
-            clock,
+            deps,
             from,
             _time.micros()
         );
@@ -362,18 +357,18 @@ impl<KC: KeyClocks> Atlas<KC> {
             return;
         }
 
-        // update quorum clocks
-        info.quorum_clocks.add(from, clock);
+        // update quorum deps
+        info.quorum_deps.add(from, deps);
 
         // check if we have all necessary replies
-        if info.quorum_clocks.all() {
+        if info.quorum_deps.all() {
             // compute the threshold union while checking whether it's equal to
             // their union
-            let (final_clock, equal_to_union) =
-                info.quorum_clocks.threshold_union(self.bp.config.f());
+            let (final_deps, equal_to_union) =
+                info.quorum_deps.threshold_union(self.bp.config.f());
 
             // create consensus value
-            let value = ConsensusValue::with(final_clock);
+            let value = ConsensusValue::with(final_deps);
 
             // fast path condition:
             // - each dependency was reported by at least f processes
@@ -417,7 +412,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
-            value.clock,
+            value.deps,
             _time.micros()
         );
 
@@ -453,7 +448,7 @@ impl<KC: KeyClocks> Atlas<KC> {
 
         // create execution info
         let execution_info =
-            ExecutionInfo::add(dot, cmd.clone(), value.clock.clone());
+            ExecutionInfo::add(dot, cmd.clone(), value.deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -494,7 +489,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             self.id(),
             dot,
             ballot,
-            value.clock,
+            value.deps,
             _time.micros()
         );
 
@@ -565,20 +560,20 @@ impl<KC: KeyClocks> Atlas<KC> {
         }
     }
 
-    #[instrument(skip(self, from, _from_shard_id, dot, clock, _time))]
+    #[instrument(skip(self, from, _from_shard_id, dot, deps, _time))]
     fn handle_mshard_commit(
         &mut self,
         from: ProcessId,
         _from_shard_id: ShardId,
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
         _time: &dyn SysTime,
     ) {
         log!(
             "p{}: MShardCommit({:?}, {:?}) from shard {} | time={}",
             self.id(),
             dot,
-            clock,
+            deps,
             _from_shard_id,
             _time.micros()
         );
@@ -588,12 +583,12 @@ impl<KC: KeyClocks> Atlas<KC> {
 
         let shard_count = info.cmd.as_ref().unwrap().shard_count();
         let add_shards_commits_info =
-            |max_clock: &mut VClock<ProcessId>, clock| max_clock.join(&clock);
+            |current_deps: &mut HashSet<Dot>, deps| current_deps.extend(deps);
         let create_mshard_aggregated_commit =
-            |dot, max_clock: &VClock<ProcessId>| {
+            |dot, current_deps: &HashSet<Dot>| {
                 Message::MShardAggregatedCommit {
                     dot,
-                    clock: max_clock.clone(),
+                    deps: current_deps.clone(),
                 }
             };
 
@@ -603,25 +598,25 @@ impl<KC: KeyClocks> Atlas<KC> {
             shard_count,
             from,
             dot,
-            clock,
+            deps,
             add_shards_commits_info,
             create_mshard_aggregated_commit,
             &mut self.to_processes,
         )
     }
 
-    #[instrument(skip(self, dot, clock, _time))]
+    #[instrument(skip(self, dot, deps, _time))]
     fn handle_mshard_aggregated_commit(
         &mut self,
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
         _time: &dyn SysTime,
     ) {
         log!(
             "p{}: MShardAggregatedCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
-            clock,
+            deps,
             _time.micros()
         );
 
@@ -630,8 +625,8 @@ impl<KC: KeyClocks> Atlas<KC> {
 
         // nothing else to extract
         let extract_mcommit_extra_data = |_| ();
-        let create_mcommit = |dot, clock, ()| {
-            let value = ConsensusValue::with(clock);
+        let create_mcommit = |dot, deps, ()| {
+            let value = ConsensusValue::with(deps);
             Message::MCommit { dot, value }
         };
 
@@ -639,7 +634,7 @@ impl<KC: KeyClocks> Atlas<KC> {
             &self.bp,
             &mut info.shards_commits,
             dot,
-            clock,
+            deps,
             extract_mcommit_extra_data,
             create_mcommit,
             &mut self.to_processes,
@@ -737,10 +732,10 @@ impl<KC: KeyClocks> Atlas<KC> {
         let create_mshard_commit =
             |dot, value: ConsensusValue| Message::MShardCommit {
                 dot,
-                clock: value.clock,
+                deps: value.deps,
             };
         // nothing to update
-        let update_shards_commit_info = |_: &mut VClock<ProcessId>, ()| {};
+        let update_shards_commit_info = |_: &mut HashSet<Dot>, ()| {};
 
         partial::mcommit_actions(
             bp,
@@ -762,24 +757,23 @@ impl<KC: KeyClocks> Atlas<KC> {
 }
 
 // consensus value is a pair where the first component is a flag indicating
-// whether this is a noop and the second component is the commands dependencies
-// represented as a vector clock.
+// whether this is a noop and the second component is the command's dependencies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     is_noop: bool,
-    clock: VClock<ProcessId>,
+    deps: HashSet<Dot>,
 }
 
 impl ConsensusValue {
-    fn bottom(shard_id: ShardId, n: usize) -> Self {
+    fn bottom() -> Self {
         let is_noop = false;
-        let clock = VClock::with(util::process_ids(shard_id, n));
-        Self { is_noop, clock }
+        let deps = HashSet::new();
+        Self { is_noop, deps }
     }
 
-    fn with(clock: VClock<ProcessId>) -> Self {
+    fn with(deps: HashSet<Dot>) -> Self {
         let is_noop = false;
-        Self { is_noop, clock }
+        Self { is_noop, deps }
     }
 }
 
@@ -796,29 +790,29 @@ struct AtlasInfo {
     synod: Synod<ConsensusValue>,
     // `None` if not set yet
     cmd: Option<Command>,
-    // `quorum_clocks` is used by the coordinator to compute the threshold
-    // clock when deciding whether to take the fast path
-    quorum_clocks: QuorumClocks,
+    // `quorum_deps` is used by the coordinator to compute the threshold
+    // deps when deciding whether to take the fast path
+    quorum_deps: QuorumDeps,
     // `shard_commits` is only used when commands accessed more than one shard
-    shards_commits: Option<ShardsCommits<VClock<ProcessId>>>,
+    shards_commits: Option<ShardsCommits<HashSet<Dot>>>,
 }
 
 impl Info for AtlasInfo {
     fn new(
         process_id: ProcessId,
-        shard_id: ShardId,
+        _shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::bottom(shard_id, n);
+        let initial_value = ConsensusValue::bottom();
         Self {
             status: Status::START,
             quorum: HashSet::new(),
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             cmd: None,
-            quorum_clocks: QuorumClocks::new(fast_quorum_size),
+            quorum_deps: QuorumDeps::new(fast_quorum_size),
             shards_commits: None,
         }
     }
@@ -831,12 +825,12 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
         quorum: HashSet<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
     },
     MCommit {
         dot: Dot,
@@ -858,11 +852,11 @@ pub enum Message {
     },
     MShardCommit {
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
     },
     MShardAggregatedCommit {
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
     },
     // GC messages
     MCommitDot {
@@ -937,15 +931,15 @@ mod tests {
 
     #[test]
     fn sequential_atlas_test() {
-        atlas_flow::<SequentialKeyClocks>()
+        atlas_flow::<SequentialKeyDeps>()
     }
 
     #[test]
     fn locked_atlas_test() {
-        atlas_flow::<LockedKeyClocks>()
+        atlas_flow::<LockedKeyDeps>()
     }
 
-    fn atlas_flow<KC: KeyClocks>() {
+    fn atlas_flow<KD: KeyDeps>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -986,9 +980,9 @@ mod tests {
         let executor_3 = GraphExecutor::new(process_id_3, shard_id, config);
 
         // atlas
-        let (mut atlas_1, _) = Atlas::<KC>::new(process_id_1, shard_id, config);
-        let (mut atlas_2, _) = Atlas::<KC>::new(process_id_2, shard_id, config);
-        let (mut atlas_3, _) = Atlas::<KC>::new(process_id_3, shard_id, config);
+        let (mut atlas_1, _) = Atlas::<KD>::new(process_id_1, shard_id, config);
+        let (mut atlas_2, _) = Atlas::<KD>::new(process_id_2, shard_id, config);
+        let (mut atlas_3, _) = Atlas::<KD>::new(process_id_3, shard_id, config);
 
         // discover processes in all atlas
         let sorted = util::sort_processes_by_distance(

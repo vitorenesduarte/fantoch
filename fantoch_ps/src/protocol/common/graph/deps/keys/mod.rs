@@ -1,77 +1,69 @@
-// This module contains the definition of `SequentialKeyClocks`.
+// This module contains the definition of `SequentialKeyDeps`.
 mod sequential;
 
-// This module contains the definition of `LockedKeyClocks`.
+// This module contains the definition of `LockedKeyDeps`.
 mod locked;
 
 // Re-exports.
-pub use locked::LockedKeyClocks;
-pub use sequential::SequentialKeyClocks;
+pub use locked::LockedKeyDeps;
+pub use sequential::SequentialKeyDeps;
 
 use fantoch::command::Command;
-use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::util;
+use fantoch::id::{Dot, ShardId};
+use fantoch::HashSet;
 use std::fmt::Debug;
-use threshold::VClock;
 
-pub trait KeyClocks: Debug + Clone {
-    /// Create a new `KeyClocks` instance given the number of processes.
-    fn new(shard_id: ShardId, n: usize) -> Self;
+pub trait KeyDeps: Debug + Clone {
+    /// Create a new `KeyClocks` instance.
+    fn new(shard_id: ShardId) -> Self;
 
-    /// Adds a command's `Dot` to the clock of each key touched by the command,
-    /// returning the set of local conflicting commands including past in them
-    /// in case there's a past.
+    /// Sets the command's `Dot` as the latest command on each key touched by
+    /// the command, returning the set of local conflicting commands
+    /// including past in them, in case there's a past.
     fn add_cmd(
         &mut self,
         dot: Dot,
         cmd: &Command,
-        past: Option<VClock<ProcessId>>,
-    ) -> VClock<ProcessId>;
+        past: Option<HashSet<Dot>>,
+    ) -> HashSet<Dot>;
 
     /// Adds a noop.
-    fn add_noop(&mut self, dot: Dot) -> VClock<ProcessId>;
+    fn add_noop(&mut self, dot: Dot) -> HashSet<Dot>;
 
-    /// Checks the current `clock` for some command.
-    /// Atlas and EPaxos implementation don't actually use this.
+    /// Checks the current dependencies for some command.
     #[cfg(test)]
-    fn cmd_clock(&self, cmd: &Command) -> VClock<ProcessId>;
+    fn cmd_deps(&self, cmd: &Command) -> HashSet<Dot>;
 
-    /// Checks the current `clock` for noops.
+    /// Checks the current dependencies for noops.
     #[cfg(test)]
-    fn noop_clock(&self) -> VClock<ProcessId>;
+    fn noop_deps(&self) -> HashSet<Dot>;
 
     fn parallel() -> bool;
-}
-
-// Creates a bottom clock of size `n`.
-fn bottom_clock(shard_id: ShardId, n: usize) -> VClock<ProcessId> {
-    let ids = util::process_ids(shard_id, n);
-    VClock::with(ids)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util;
-    use fantoch::id::{DotGen, Rifl};
+    use fantoch::id::{DotGen, ProcessId, Rifl};
     use fantoch::HashSet;
+    use std::iter::FromIterator;
     use std::thread;
 
     #[test]
-    fn sequential_key_clocks() {
-        keys_clocks_flow::<SequentialKeyClocks>();
+    fn sequential_key_deps() {
+        key_deps_flow::<SequentialKeyDeps>();
     }
 
     #[test]
-    fn locked_key_clocks() {
-        keys_clocks_flow::<LockedKeyClocks>();
+    fn locked_key_deps() {
+        key_deps_flow::<LockedKeyDeps>();
     }
 
-    fn keys_clocks_flow<KC: KeyClocks>() {
-        // create key clocks
+    fn key_deps_flow<KD: KeyDeps>() {
+        // create key deps
         let shard_id = 0;
-        let n = 1;
-        let mut clocks = KC::new(shard_id, n);
+        let mut clocks = KD::new(shard_id);
 
         // create dot gen
         let process_id = 1;
@@ -106,8 +98,8 @@ mod tests {
         let cmd_c = Command::put(cmd_c_rifl, key_c.clone(), value.clone());
 
         // empty conf for A
-        let conf = clocks.cmd_clock(&cmd_a);
-        assert_eq!(conf, util::vclock(vec![0]));
+        let conf = clocks.cmd_deps(&cmd_a);
+        assert_eq!(conf, HashSet::new());
 
         // add A with {1,1}
         clocks.add_cmd(dot_gen.next_id(), &cmd_a, None);
@@ -117,21 +109,23 @@ mod tests {
         // 3. conf with {1,1} for A-B
         // 4. empty conf for C
         // 5. conf with {1,1} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![1]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![0]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![1]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![0]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![1]));
+        let deps_1_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_1);
+        assert_eq!(clocks.cmd_deps(&cmd_b), HashSet::new());
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_1);
+        assert_eq!(clocks.cmd_deps(&cmd_c), HashSet::new());
+        assert_eq!(clocks.noop_deps(), deps_1_1);
 
         // add noop with {1,2}
         clocks.add_noop(dot_gen.next_id());
 
         // conf with {1,2} for A, B, A-B, C and noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![2]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![2]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![2]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![2]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![2]));
+        let deps_1_2 = HashSet::from_iter(vec![Dot::new(1, 2)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_2);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_2);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_2);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(clocks.noop_deps(), deps_1_2);
 
         // add B with {1,3}
         clocks.add_cmd(dot_gen.next_id(), &cmd_b, None);
@@ -141,11 +135,12 @@ mod tests {
         // 3. conf with {1,3} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,3} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![2]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![3]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![3]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![2]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![3]));
+        let deps_1_3 = HashSet::from_iter(vec![Dot::new(1, 3)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_2);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_3);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_3);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(clocks.noop_deps(), deps_1_3);
 
         // add B with {1,4}
         clocks.add_cmd(dot_gen.next_id(), &cmd_b, None);
@@ -155,11 +150,12 @@ mod tests {
         // 3. conf with {1,4} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,4} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![2]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![4]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![4]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![2]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![4]));
+        let deps_1_4 = HashSet::from_iter(vec![Dot::new(1, 4)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_2);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_4);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_4);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(clocks.noop_deps(), deps_1_4);
 
         // add A-B with {1,5}
         clocks.add_cmd(dot_gen.next_id(), &cmd_ab, None);
@@ -169,11 +165,12 @@ mod tests {
         // 3. conf with {1,5} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,5} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![5]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![5]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![5]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![2]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![5]));
+        let deps_1_5 = HashSet::from_iter(vec![Dot::new(1, 5)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(clocks.noop_deps(), deps_1_5);
 
         // add A with {1,6}
         clocks.add_cmd(dot_gen.next_id(), &cmd_a, None);
@@ -183,11 +180,12 @@ mod tests {
         // 3. conf with {1,6} for A-B
         // 4. conf with {1,2} for C
         // 5. conf with {1,6} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![6]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![5]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![6]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![2]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![6]));
+        let deps_1_6 = HashSet::from_iter(vec![Dot::new(1, 6)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_6);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_2);
+        assert_eq!(clocks.noop_deps(), deps_1_6);
 
         // add C with {1,7}
         clocks.add_cmd(dot_gen.next_id(), &cmd_c, None);
@@ -197,21 +195,23 @@ mod tests {
         // 3. conf with {1,1} for A-B
         // 4. conf with {1,7} for C
         // 5. conf with {1,7} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![6]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![5]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![6]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![7]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![7]));
+        let deps_1_7 = HashSet::from_iter(vec![Dot::new(1, 7)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_6);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_5);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_7);
+        assert_eq!(clocks.noop_deps(), deps_1_7);
 
         // add noop with {1,8}
         clocks.add_noop(dot_gen.next_id());
 
         // conf with {1,8} for A, B, A-B, C and noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![8]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![8]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![8]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![8]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![8]));
+        let deps_1_8 = HashSet::from_iter(vec![Dot::new(1, 8)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_8);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_8);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_8);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_8);
+        assert_eq!(clocks.noop_deps(), deps_1_8);
 
         // add B with {1,9}
         clocks.add_cmd(dot_gen.next_id(), &cmd_b, None);
@@ -221,22 +221,23 @@ mod tests {
         // 3. conf with {1,9} for A-B
         // 4. conf with {1,8} for C
         // 5. conf with {1,9} for noop
-        assert_eq!(clocks.cmd_clock(&cmd_a), util::vclock(vec![8]));
-        assert_eq!(clocks.cmd_clock(&cmd_b), util::vclock(vec![9]));
-        assert_eq!(clocks.cmd_clock(&cmd_ab), util::vclock(vec![9]));
-        assert_eq!(clocks.cmd_clock(&cmd_c), util::vclock(vec![8]));
-        assert_eq!(clocks.noop_clock(), util::vclock(vec![9]));
+        let deps_1_9 = HashSet::from_iter(vec![Dot::new(1, 9)]);
+        assert_eq!(clocks.cmd_deps(&cmd_a), deps_1_8);
+        assert_eq!(clocks.cmd_deps(&cmd_b), deps_1_9);
+        assert_eq!(clocks.cmd_deps(&cmd_ab), deps_1_9);
+        assert_eq!(clocks.cmd_deps(&cmd_c), deps_1_8);
+        assert_eq!(clocks.noop_deps(), deps_1_9);
     }
 
     #[test]
-    fn locked_clocks_test() {
+    fn locked_test() {
         let nthreads = 2;
         let ops_number = 3000;
         let max_keys_per_command = 2;
         let keys_number = 4;
         let noop_probability = 50;
         for _ in 0..10 {
-            concurrent_test::<LockedKeyClocks>(
+            concurrent_test::<LockedKeyDeps>(
                 nthreads,
                 ops_number,
                 max_keys_per_command,
@@ -246,18 +247,16 @@ mod tests {
         }
     }
 
-    fn concurrent_test<K: KeyClocks + Send + Sync + 'static>(
+    fn concurrent_test<KD: KeyDeps + Send + Sync + 'static>(
         nthreads: usize,
         ops_number: usize,
         max_keys_per_command: usize,
         keys_number: usize,
         noop_probability: usize,
     ) {
-        // create clocks:
-        // - clocks have on entry per worker and each worker has its own
-        //   `DotGen`
+        // create key deps
         let shard_id = 0;
-        let clocks = K::new(shard_id, nthreads);
+        let clocks = KD::new(shard_id);
 
         // spawn workers
         let handles: Vec<_> = (1..=nthreads)
@@ -322,25 +321,24 @@ mod tests {
             // check for each possible pair of operations if they conflict
             for i in 0..ops.len() {
                 for j in (i + 1)..ops.len() {
-                    let (dot_a, clock_a) = ops[i];
-                    let (dot_b, clock_b) = ops[j];
-                    let conflict = clock_a
-                        .contains(&dot_b.source(), dot_b.sequence())
-                        || clock_b.contains(&dot_a.source(), dot_a.sequence());
+                    let (dot_a, deps_a) = ops[i];
+                    let (dot_b, deps_b) = ops[j];
+                    let conflict =
+                        deps_a.contains(&dot_b) || deps_b.contains(&dot_a);
                     assert!(conflict);
                 }
             }
         }
     }
 
-    fn worker<K: KeyClocks>(
+    fn worker<K: KeyDeps>(
         process_id: ProcessId,
         mut clocks: K,
         ops_number: usize,
         max_keys_per_command: usize,
         keys_number: usize,
         noop_probability: usize,
-    ) -> Vec<(Dot, Option<Command>, VClock<ProcessId>)> {
+    ) -> Vec<(Dot, Option<Command>, HashSet<Dot>)> {
         // create dot gen
         let mut dot_gen = DotGen::new(process_id);
         // all clocks worker has generated

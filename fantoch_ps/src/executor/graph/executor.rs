@@ -9,7 +9,7 @@ use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
-use threshold::{AEClock, VClock};
+use threshold::AEClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
@@ -61,12 +61,12 @@ impl Executor for GraphExecutor {
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
         match info {
-            GraphExecutionInfo::Add { dot, cmd, clock } => {
+            GraphExecutionInfo::Add { dot, cmd, deps } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.handle_add(dot, cmd, clock, time);
+                    self.graph.handle_add(dot, cmd, deps, time);
                     self.fetch_actions(time);
                 }
             }
@@ -173,7 +173,7 @@ pub enum GraphExecutionInfo {
     Add {
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
     },
     AddMine {
         dot: Dot,
@@ -191,8 +191,8 @@ pub enum GraphExecutionInfo {
 }
 
 impl GraphExecutionInfo {
-    pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
-        Self::Add { dot, cmd, clock }
+    pub fn add(dot: Dot, cmd: Command, deps: HashSet<Dot>) -> Self {
+        Self::Add { dot, cmd, deps }
     }
 
     pub fn add_mine(dot: Dot) -> Self {

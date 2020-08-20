@@ -7,7 +7,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
 use std::collections::BTreeSet;
-use threshold::{AEClock, EventSet, VClock};
+use threshold::AEClock;
 
 /// commands are sorted inside an SCC given their dot
 pub type SCC = BTreeSet<Dot>;
@@ -118,13 +118,10 @@ impl TarjanSCCFinder {
             self.id
         );
 
-        // TODO can we avoid vertex.clock.clone()
-        // compute non-executed deps for each process
-        let clock = vertex.clock.clone();
-        let mut deps_iter = clock.into_iter();
-        while let Some((process_id, to)) = deps_iter.next() {
-            let dep_dot = Dot::new(process_id, to.frontier());
-
+        // TODO can we avoid vertex.deps.clone()
+        let deps = vertex.deps.clone();
+        let mut deps_iter = deps.into_iter();
+        while let Some(dep_dot) = deps_iter.next() {
             // TODO we should panic if we find a dependency highest than self
             if dot == dep_dot {
                 // ignore self
@@ -133,26 +130,22 @@ impl TarjanSCCFinder {
 
             match vertex_index.find(&dep_dot) {
                 None => {
-                    let deps = std::iter::once(dep_dot);
-                    let deps = if self.config.shards() == 1 {
-                        deps.collect()
+                    let missing_deps = if self.config.shards() == 1 {
+                        std::iter::once(dep_dot).collect()
                     } else {
                         // if partial replication, add remaining frontier
                         // deps as missing dependencies; this makes sure
                         // that we request all needed dependencies in a
                         // single request
-                        deps.chain(deps_iter.map(|(process_id, to)| {
-                            Dot::new(process_id, to.frontier())
-                        }))
-                        .collect()
+                        std::iter::once(dep_dot).chain(deps_iter).collect()
                     };
                     log!(
                         "p{}: Finder::strong_connect missing {:?} | {:?}",
                         self.process_id,
                         dep_dot,
-                        deps
+                        missing_deps
                     );
-                    return FinderResult::MissingDependencies(deps);
+                    return FinderResult::MissingDependencies(missing_deps);
                 }
                 Some(dep_vertex_ref) => {
                     // get vertex
@@ -300,7 +293,7 @@ impl TarjanSCCFinder {
 pub struct Vertex {
     dot: Dot,
     pub cmd: Command,
-    pub clock: VClock<ProcessId>,
+    pub deps: HashSet<Dot>,
     start_time: u64,
     // specific to tarjan's algorithm
     id: usize,
@@ -312,14 +305,14 @@ impl Vertex {
     pub fn new(
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time = time.millis();
         Self {
             dot,
             cmd,
-            clock,
+            deps,
             start_time,
             id: 0,
             low: 0,

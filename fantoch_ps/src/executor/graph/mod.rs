@@ -27,14 +27,14 @@ use fantoch::util;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use threshold::{AEClock, VClock};
+use threshold::AEClock;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
     Info {
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
     },
     Executed {
         dot: Dot,
@@ -209,7 +209,7 @@ impl DependencyGraph {
         &mut self,
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
@@ -218,12 +218,12 @@ impl DependencyGraph {
             self.process_id,
             self.executor_index,
             dot,
-            clock,
+            deps,
             time.millis()
         );
 
         // create new vertex for this command
-        let vertex = Vertex::new(dot, cmd, clock, time);
+        let vertex = Vertex::new(dot, cmd, deps, time);
 
         if self.vertex_index.index(vertex).is_some() {
             panic!(
@@ -340,7 +340,7 @@ impl DependencyGraph {
                         RequestReply::Info {
                             dot,
                             cmd: vertex.cmd.clone(),
-                            clock: vertex.clock.clone(),
+                            deps: vertex.deps.clone(),
                         },
                     )
                 }
@@ -408,9 +408,9 @@ impl DependencyGraph {
             debug_assert!(!self.pending_index.is_mine(info.dot()));
 
             match info {
-                RequestReply::Info { dot, cmd, clock } => {
+                RequestReply::Info { dot, cmd, deps } => {
                     // add requested command to our graph
-                    self.handle_add(dot, cmd, clock, time)
+                    self.handle_add(dot, cmd, deps, time)
                 }
                 RequestReply::Executed { dot } => {
                     // update executed clock
@@ -685,25 +685,27 @@ mod tests {
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
 
-        // cmd 0
+        // create dots
         let dot_0 = Dot::new(1, 1);
+        let dot_1 = Dot::new(2, 1);
+
+        // cmd 0
         let cmd_0 =
             Command::put(Rifl::new(1, 1), String::from("A"), String::new());
-        let clock_0 = util::vclock(vec![0, 1]);
+        let deps_0 = HashSet::from_iter(vec![dot_1]);
 
         // cmd 1
-        let dot_1 = Dot::new(2, 1);
         let cmd_1 =
             Command::put(Rifl::new(2, 1), String::from("A"), String::new());
-        let clock_1 = util::vclock(vec![1, 0]);
+        let deps_1 = HashSet::from_iter(vec![dot_0]);
 
         // add cmd 0
-        queue.handle_add(dot_0, cmd_0.clone(), clock_0, &time);
+        queue.handle_add(dot_0, cmd_0.clone(), deps_0, &time);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.handle_add(dot_1, cmd_1.clone(), clock_1, &time);
+        queue.handle_add(dot_1, cmd_1.clone(), deps_1, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -742,49 +744,42 @@ mod tests {
     /// that parallelizing the processing of messages needs to be on a
     /// per-process basis, i.e. commands by the same process are always
     /// processed by the same worker.
-    #[ignore]
     #[test]
     fn transitive_conflicts_assumption_regression_test_1() {
         // config
         let n = 5;
 
-        // cmd 1
+        // dots
         let dot_1 = Dot::new(1, 1);
-        let clock_1 = util::vclock(vec![4, 0, 0, 0, 0]);
-
-        // cmd 2
         let dot_2 = Dot::new(1, 2);
-        let clock_2 = util::vclock(vec![4, 0, 0, 0, 0]);
-
-        // cmd 3
         let dot_3 = Dot::new(1, 3);
-        let clock_3 = util::vclock(vec![5, 0, 0, 0, 0]);
-
-        // cmd 4
         let dot_4 = Dot::new(1, 4);
-        let clock_4 = util::vclock(vec![3, 0, 0, 0, 0]);
-
-        // cmd 5
         let dot_5 = Dot::new(1, 5);
-        let clock_5 = util::vclock(vec![4, 0, 0, 0, 0]);
+
+        // deps
+        let deps_1 = HashSet::from_iter(vec![dot_4]);
+        let deps_2 = HashSet::from_iter(vec![dot_4]);
+        let deps_3 = HashSet::from_iter(vec![dot_5]);
+        let deps_4 = HashSet::from_iter(vec![dot_3]);
+        let deps_5 = HashSet::from_iter(vec![dot_4]);
 
         let order_a = vec![
-            (dot_3, None, clock_2.clone()),
-            (dot_4, None, clock_3.clone()),
-            (dot_5, None, clock_4.clone()),
-            (dot_1, None, clock_1.clone()),
-            (dot_2, None, clock_1.clone()),
+            (dot_3, None, deps_3.clone()),
+            (dot_4, None, deps_4.clone()),
+            (dot_5, None, deps_5.clone()),
+            (dot_1, None, deps_1.clone()),
+            (dot_2, None, deps_2.clone()),
         ];
         let order_b = vec![
-            (dot_3, None, clock_3),
-            (dot_4, None, clock_4),
-            (dot_5, None, clock_5),
-            (dot_2, None, clock_2),
-            (dot_1, None, clock_1),
+            (dot_3, None, deps_3),
+            (dot_4, None, deps_4),
+            (dot_5, None, deps_5),
+            (dot_2, None, deps_2),
+            (dot_1, None, deps_1),
         ];
         let order_a = check_termination(n, order_a);
         let order_b = check_termination(n, order_b);
-        assert_eq!(order_a, order_b);
+        assert!(order_a != order_b);
     }
 
     /// Simple example showing why encoding of dependencies matters for the
@@ -816,7 +811,6 @@ mod tests {
     /// It looks like the optimization would be correct if, instead of returning
     /// the highest conflicting command per replica, we would return the highest
     /// conflict command per replica *per key*.
-    #[ignore]
     #[test]
     fn transitive_conflicts_assumption_regression_test_2() {
         // config
@@ -831,365 +825,53 @@ mod tests {
         // cmd 1,1
         let dot_1_1 = Dot::new(1, 1);
         let keys_1_1 = keys(vec!["A"]);
-        let clock_1_1 = util::vclock(vec![0, 0, 0]);
+        let deps_1_1 = HashSet::new();
 
         // cmd 1,2
         let dot_1_2 = Dot::new(1, 2);
         let keys_1_2 = keys(vec!["B"]);
-        let clock_1_2 = util::vclock(vec![0, 0, 0]);
+        let deps_1_2 = HashSet::new();
 
         // cmd 2,1
         let dot_2_1 = Dot::new(2, 1);
         let keys_2_1 = keys(vec!["A", "B"]);
-        let clock_2_1 = util::vclock(vec![2, 0, 0]);
+        let deps_2_1 = HashSet::from_iter(vec![dot_1_2]);
 
         let order_a = vec![
-            (dot_1_1, Some(keys_1_1.clone()), clock_1_1.clone()),
-            (dot_1_2, Some(keys_1_2.clone()), clock_1_2.clone()),
-            (dot_2_1, Some(keys_2_1.clone()), clock_2_1.clone()),
+            (dot_1_1, Some(keys_1_1.clone()), deps_1_1.clone()),
+            (dot_1_2, Some(keys_1_2.clone()), deps_1_2.clone()),
+            (dot_2_1, Some(keys_2_1.clone()), deps_2_1.clone()),
         ];
         let order_b = vec![
-            (dot_1_2, Some(keys_1_2), clock_1_2),
-            (dot_2_1, Some(keys_2_1), clock_2_1),
-            (dot_1_1, Some(keys_1_1), clock_1_1),
+            (dot_1_2, Some(keys_1_2), deps_1_2),
+            (dot_2_1, Some(keys_2_1), deps_2_1),
+            (dot_1_1, Some(keys_1_1), deps_1_1),
         ];
         let order_a = check_termination(n, order_a);
         let order_b = check_termination(n, order_b);
-        assert_eq!(order_a, order_b);
+        assert!(order_a != order_b);
     }
 
     #[test]
-    fn self_cycle_test() {
+    fn cycle() {
         // config
         let n = 1;
 
-        // cmd 1
+        // dots
         let dot_1 = Dot::new(1, 1);
-        let clock_1 = util::vclock(vec![3]);
+        let dot_2 = Dot::new(2, 1);
+        let dot_3 = Dot::new(3, 1);
 
-        // cmd 2
-        let dot_2 = Dot::new(1, 2);
-        let clock_2 = util::vclock(vec![1]);
-
-        // cmd 3
-        let dot_3 = Dot::new(1, 3);
-        let clock_3 = util::vclock(vec![2]);
+        // deps
+        let deps_1 = HashSet::from_iter(vec![dot_3]);
+        let deps_2 = HashSet::from_iter(vec![dot_1]);
+        let deps_3 = HashSet::from_iter(vec![dot_2]);
 
         let args = vec![
-            (dot_1, None, clock_1),
-            (dot_2, None, clock_2),
-            (dot_3, None, clock_3),
+            (dot_1, None, deps_1),
+            (dot_2, None, deps_2),
+            (dot_3, None, deps_3),
         ];
-        shuffle_it(n, args);
-    }
-
-    #[test]
-    /// We have 3 commands by the same process:
-    /// - the first (1,1) accesses key A and thus has no dependencies
-    /// - the second (1,2) accesses key B and thus has no dependencies
-    /// - the third (1,3) accesses key B and thus it depends on the second
-    ///   command (1,2)
-    ///
-    /// The commands are then received in the following order:
-    /// - (1,2) executed as it has no dependencies
-    /// - (1,3) can't be executed: this command depends on (1,2) and if we don't
-    ///   assume the transitivity of conflicts, it also depends on (1,1) that
-    ///   hasn't been executed
-    /// - (1,1) executed as it has no dependencies
-    ///
-    /// Now when (1,1) is executed, we would hope that (1,3) would also be.
-    /// However, since (1,1) accesses key A, when it is executed, the previous
-    /// pending mechanism doesn't try the pending operation (1,3) because it
-    /// accesses a different key (B). This means that such mechanism to
-    /// track pending commands per key does not work when we don't assume
-    /// the transitivity of conflicts.
-    ///
-    /// This was fixed by simply tracking one missing dependency per pending
-    /// command. When that dependency is executed, if the command still can't be
-    /// executed it's because there's another missing dependency, and now it
-    /// will wait for that one.
-    fn pending_on_different_key_regression_test() {
-        // create config
-        let n = 1;
-        let f = 1;
-        let config = Config::new(n, f);
-
-        // cmd 1
-        let dot_1 = Dot::new(1, 1);
-        let cmd_1 =
-            Command::put(Rifl::new(1, 1), String::from("A"), String::new());
-        let clock_1 = util::vclock(vec![0]);
-
-        // cmd 2
-        let dot_2 = Dot::new(1, 2);
-        let cmd_2 =
-            Command::put(Rifl::new(2, 1), String::from("B"), String::new());
-        let clock_2 = util::vclock(vec![0]);
-
-        // cmd 3
-        let dot_3 = Dot::new(1, 3);
-        let cmd_3 =
-            Command::put(Rifl::new(3, 1), String::from("B"), String::new());
-        let clock_3 = util::vclock(vec![2]);
-
-        // create queue
-        let process_id = 1;
-        let shard_id = 0;
-        let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-        let time = RunTime;
-
-        // add cmd 2
-        queue.handle_add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
-        assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
-
-        // add cmd 3
-        queue.handle_add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
-        assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
-
-        // add cmd 1
-        queue.handle_add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
-        assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
-    }
-
-    #[test]
-    fn simple_test_add_1() {
-        // the actual test_add_1 is:
-        // {1, 2}, [2, 2]
-        // {1, 1}, [3, 2]
-        // {1, 5}, [6, 2]
-        // {1, 6}, [6, 3]
-        // {1, 3}, [3, 3]
-        // {2, 2}, [0, 2]
-        // {2, 1}, [4, 3]
-        // {1, 4}, [6, 2]
-        // {2, 3}, [6, 3]
-        // in the simple version, {1, 5} and {1, 6} are removed
-
-        // {1, 2}, [2, 2]
-        let dot_a = Dot::new(1, 2);
-        let clock_a = util::vclock(vec![2, 2]);
-
-        // {1, 1}, [3, 2]
-        let dot_b = Dot::new(1, 1);
-        let clock_b = util::vclock(vec![3, 2]);
-
-        // {1, 3}, [3, 3]
-        let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![3, 3]);
-
-        // {2, 2}, [0, 2]
-        let dot_d = Dot::new(2, 2);
-        let clock_d = util::vclock(vec![0, 2]);
-
-        // {2, 1}, [4, 3]
-        let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![4, 3]);
-
-        // {1, 4}, [4, 2]
-        let dot_f = Dot::new(1, 4);
-        let clock_f = util::vclock(vec![4, 2]);
-
-        // {2, 3}, [4, 3]
-        let dot_g = Dot::new(2, 3);
-        let clock_g = util::vclock(vec![4, 3]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-            (dot_g, None, clock_g),
-        ];
-
-        let n = 2;
-        shuffle_it(n, args);
-    }
-
-    #[test]
-    fn test_add_2() {
-        // {2, 4}, [3, 4]
-        let dot_a = Dot::new(2, 4);
-        let clock_a = util::vclock(vec![3, 4]);
-
-        // {2, 3}, [0, 3]
-        let dot_b = Dot::new(2, 3);
-        let clock_b = util::vclock(vec![0, 3]);
-
-        // {1, 3}, [3, 3]
-        let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![3, 3]);
-
-        // {1, 1}, [3, 4]
-        let dot_d = Dot::new(1, 1);
-        let clock_d = util::vclock(vec![3, 4]);
-
-        // {2, 2}, [0, 2]
-        let dot_e = Dot::new(2, 2);
-        let clock_e = util::vclock(vec![0, 2]);
-
-        // {1, 2}, [3, 3]
-        let dot_f = Dot::new(1, 2);
-        let clock_f = util::vclock(vec![3, 3]);
-
-        // {2, 1}, [3, 3]
-        let dot_g = Dot::new(2, 1);
-        let clock_g = util::vclock(vec![3, 3]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-            (dot_g, None, clock_g),
-        ];
-
-        let n = 2;
-        shuffle_it(n, args);
-    }
-
-    #[test]
-    fn test_add_3() {
-        // {3, 2}, [1, 0, 2]
-        let dot_a = Dot::new(3, 2);
-        let clock_a = util::vclock(vec![1, 0, 2]);
-
-        // {3, 3}, [1, 1, 3]
-        let dot_b = Dot::new(3, 3);
-        let clock_b = util::vclock(vec![1, 1, 3]);
-
-        // {3, 1}, [1, 1, 3]
-        let dot_c = Dot::new(3, 1);
-        let clock_c = util::vclock(vec![1, 1, 3]);
-
-        // {1, 1}, [1, 0, 0]
-        let dot_d = Dot::new(1, 1);
-        let clock_d = util::vclock(vec![1, 0, 0]);
-
-        // {2, 1}, [1, 1, 2]
-        let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![1, 1, 2]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-        ];
-
-        let n = 3;
-        shuffle_it(n, args);
-    }
-
-    #[test]
-    fn test_add_4() {
-        // {1, 5}, [5]
-        let dot_a = Dot::new(1, 5);
-        let clock_a = util::vclock(vec![5]);
-
-        // {1, 4}, [6]
-        let dot_b = Dot::new(1, 4);
-        let clock_b = util::vclock(vec![6]);
-
-        // {1, 1}, [5]
-        let dot_c = Dot::new(1, 1);
-        let clock_c = util::vclock(vec![5]);
-
-        // {1, 2}, [6]
-        let dot_d = Dot::new(1, 2);
-        let clock_d = util::vclock(vec![6]);
-
-        // {1, 3}, [5]
-        let dot_e = Dot::new(1, 3);
-        let clock_e = util::vclock(vec![5]);
-
-        // {1, 6}, [6]
-        let dot_f = Dot::new(1, 6);
-        let clock_f = util::vclock(vec![6]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-        ];
-
-        let n = 1;
-        shuffle_it(n, args);
-    }
-
-    #[test]
-    fn test_add_5() {
-        // {1, 1}, [1, 1]
-        let dot_a = Dot::new(1, 1);
-        let clock_a = util::vclock(vec![1, 1]);
-
-        // {1, 2}, [2, 0]
-        let dot_b = Dot::new(1, 2);
-        let clock_b = util::vclock(vec![2, 0]);
-
-        // {2, 1}, [1, 1]
-        let dot_c = Dot::new(2, 1);
-        let clock_c = util::vclock(vec![1, 1]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-        ];
-
-        let n = 2;
-        shuffle_it(n, args);
-    }
-
-    #[test]
-    fn test_add_6() {
-        // {1, 1}, [1, 0]
-        let dot_a = Dot::new(1, 1);
-        let clock_a = util::vclock(vec![1, 0]);
-
-        // {1, 2}, [4, 1]
-        let dot_b = Dot::new(1, 2);
-        let clock_b = util::vclock(vec![4, 1]);
-
-        // {1, 3}, [3, 0]
-        let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![3, 0]);
-
-        // {1, 4}, [4, 0]
-        let dot_d = Dot::new(1, 4);
-        let clock_d = util::vclock(vec![4, 0]);
-
-        // {2, 1}, [1, 1]
-        let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![1, 1]);
-
-        // {2, 2}, [3, 2]
-        let dot_f = Dot::new(2, 2);
-        let clock_f = util::vclock(vec![3, 2]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-        ];
-
-        let n = 2;
         shuffle_it(n, args);
     }
 
@@ -1210,7 +892,7 @@ mod tests {
         shard_id: ShardId,
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, HashSet<Dot>)> {
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
 
@@ -1222,8 +904,8 @@ mod tests {
             })
             .collect();
 
-        // compute keys and bottom clocks
-        let clocks: HashMap<_, _> = dots
+        // compute keys and empty deps
+        let deps: HashMap<_, _> = dots
             .clone()
             .into_iter()
             .map(|dot| {
@@ -1234,9 +916,9 @@ mod tests {
                 let mut keys = BTreeSet::new();
                 assert!(keys.insert(possible_keys[0].clone()));
                 assert!(keys.insert(possible_keys[1].clone()));
-                // create bottom clock
-                let clock = VClock::with(util::process_ids(shard_id, n));
-                (dot, (Some(keys), RefCell::new(clock)))
+                // create empty deps
+                let deps = HashSet::new();
+                (dot, (Some(keys), RefCell::new(deps)))
             })
             .collect();
 
@@ -1247,9 +929,9 @@ mod tests {
 
             // find their data
             let (left_keys, left_clock) =
-                clocks.get(left).expect("left dot data must exist");
+                deps.get(left).expect("left dot data must exist");
             let (right_keys, right_clock) =
-                clocks.get(right).expect("right dot data must exist");
+                deps.get(right).expect("right dot data must exist");
 
             // unwrap keys
             let left_keys = left_keys.as_ref().expect("left keys should exist");
@@ -1264,19 +946,15 @@ mod tests {
             // dependency of the other
             if conflict {
                 // borrow their clocks mutably
-                let mut left_clock = left_clock.borrow_mut();
-                let mut right_clock = right_clock.borrow_mut();
+                let mut left_deps = left_clock.borrow_mut();
+                let mut right_deps = right_clock.borrow_mut();
 
                 if left.source() == right.source() {
                     // if dots belong to the same process, make the latest
                     // depend on the oldest
                     match left.sequence().cmp(&right.sequence()) {
-                        Ordering::Less => {
-                            right_clock.add(&left.source(), left.sequence());
-                        }
-                        Ordering::Greater => {
-                            left_clock.add(&right.source(), right.sequence());
-                        }
+                        Ordering::Less => right_deps.insert(*left),
+                        Ordering::Greater => left_deps.insert(*right),
                         _ => unreachable!("dots must be different"),
                     };
                 } else {
@@ -1285,16 +963,16 @@ mod tests {
                     match rand::random::<usize>() % 3 {
                         0 => {
                             // left depends on right
-                            left_clock.add(&right.source(), right.sequence());
+                            left_deps.insert(*right);
                         }
                         1 => {
                             // right depends on left
-                            right_clock.add(&left.source(), left.sequence());
+                            right_deps.insert(*left);
                         }
                         2 => {
                             // both
-                            left_clock.add(&right.source(), right.sequence());
-                            right_clock.add(&left.source(), left.sequence());
+                            left_deps.insert(*right);
+                            right_deps.insert(*left);
                         }
                         _ => panic!("usize % 3 must < 3"),
                     }
@@ -1302,18 +980,17 @@ mod tests {
             }
         });
 
-        clocks
-            .into_iter()
-            .map(|(dot, (keys, clock_cell))| {
-                let clock = clock_cell.into_inner();
-                (dot, keys, clock)
+        deps.into_iter()
+            .map(|(dot, (keys, deps_cell))| {
+                let deps = deps_cell.into_inner();
+                (dot, keys, deps)
             })
             .collect()
     }
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, HashSet<Dot>)>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -1325,7 +1002,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, HashSet<Dot>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
@@ -1337,7 +1014,7 @@ mod tests {
         let mut all_rifls = HashSet::new();
         let mut sorted = BTreeMap::new();
 
-        args.into_iter().for_each(|(dot, keys, clock)| {
+        args.into_iter().for_each(|(dot, keys, deps)| {
             // create command rifl from its dot
             let rifl = Rifl::new(dot.source() as ClientId, dot.sequence());
 
@@ -1356,7 +1033,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.handle_add(dot, cmd, clock, &time);
+            queue.handle_add(dot, cmd, deps, &time);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();
@@ -1437,7 +1114,13 @@ mod tests {
         queue.vertex_index.index(Vertex::new(
             root_dot,
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 40, 61]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 40),
+                Dot::new(5, 61),
+            ]),
             &time,
         ));
 
@@ -1445,70 +1128,130 @@ mod tests {
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 31),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 30, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 30),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 32)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 32),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 31, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 31),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 33)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 33),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 32, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 32),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 34)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 34),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 33, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 33),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 35)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 35),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 34, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 34),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 36)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 36),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 35, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 35),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 37)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 37),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 36, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 36),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 38)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 38),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 37, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 37),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 39)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 39),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 38, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 38),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
         // (4, 40)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 40),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 39, 60]),
+            HashSet::from_iter(vec![
+                Dot::new(1, 60),
+                Dot::new(2, 50),
+                Dot::new(3, 50),
+                Dot::new(4, 39),
+                Dot::new(5, 60),
+            ]),
             &time,
         ));
 
