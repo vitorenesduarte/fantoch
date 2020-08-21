@@ -396,11 +396,7 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        // save in request replies metric
-        self.metrics.aggregate(
-            ExecutorMetricsKind::InRequestReplies,
-            infos.len() as u64,
-        );
+        let mut accepted_replies = 0;
 
         for info in infos {
             log!(
@@ -410,26 +406,39 @@ impl DependencyGraph {
                 info,
                 time.millis()
             );
+
+            // check if the command is mine (or if we know, that the command is mine)
+            let is_mine = self.pending_index.is_mine(info.dot());
+
             match info {
                 RequestReply::Info { dot, cmd, deps } => {
                     // we can't receive a info reply about commands that are not
                     // mine, as the shards would ignore the request if we didn't
                     // replicate the command
-                    assert!(!self.pending_index.is_mine(&dot));
+                    assert!(!is_mine);
 
                     // add requested command to our graph
+                    accepted_replies += 1;
                     self.handle_add(dot, cmd, deps, time)
                 }
                 RequestReply::Executed { dot } => {
-                    // update executed clock
-                    self.executed_clock.add(&dot.source(), dot.sequence());
-                    // check pending
-                    let dots = vec![dot];
-                    let mut total_found = 0;
-                    self.check_pending(dots, &mut total_found, time);
+                    // only add to executed clock if it's not mine
+                    if !is_mine {
+                        accepted_replies += 1;
+                        // update executed clock
+                        self.executed_clock.add(&dot.source(), dot.sequence());
+                        // check pending
+                        let dots = vec![dot];
+                        let mut total_found = 0;
+                        self.check_pending(dots, &mut total_found, time);
+                    }
                 }
             }
         }
+
+        // save in request replies metric
+        self.metrics
+            .aggregate(ExecutorMetricsKind::InRequestReplies, accepted_replies);
     }
 
     #[must_use]
