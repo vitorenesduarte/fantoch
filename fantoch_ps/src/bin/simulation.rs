@@ -24,7 +24,6 @@ macro_rules! config {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(1000));
         config.set_skip_fast_ack($skip_fast_ack);
-        config.set_transitive_conflicts(true);
         config
     }};
 }
