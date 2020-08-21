@@ -217,28 +217,22 @@ impl GraphExecutionInfo {
 
 impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        // to avoid skew, this should be a multiple of the number of extra
-        // executors
-        const MAX_EXTRA_EXECUTORS: usize = 15;
         const MAIN_INDEX: usize = 0;
-        const SHIFT: usize = 1;
+        const SECONDARY_INDEX: usize = 1;
 
-        const fn executor_index_no_shift() -> Option<(usize, usize)> {
+        const fn main_executor() -> Option<(usize, usize)> {
             Some((0, MAIN_INDEX))
         }
 
-        fn executor_random_index_shift() -> Option<(usize, usize)> {
-            use rand::Rng;
-            // if there's a shift, we select a random worker
-            let index = rand::thread_rng().gen_range(0, MAX_EXTRA_EXECUTORS);
-            Some((SHIFT, index))
+        const fn secondary_executor() -> Option<(usize, usize)> {
+            Some((0, SECONDARY_INDEX))
         }
 
         match self {
-            Self::Add { .. } => executor_index_no_shift(),
-            Self::Request { .. } => executor_random_index_shift(),
-            Self::RequestReply { .. } => executor_index_no_shift(),
-            Self::Executed { .. } => None, // notify all workers
+            Self::Add { .. } => main_executor(),
+            Self::Request { .. } => secondary_executor(),
+            Self::RequestReply { .. } => main_executor(),
+            Self::Executed { .. } => secondary_executor(),
         }
     }
 }

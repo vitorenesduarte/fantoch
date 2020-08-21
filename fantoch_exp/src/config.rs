@@ -246,11 +246,11 @@ fn workers_executors_and_leader(
 ) -> (usize, usize) {
     // for all protocol but newt, create a single executor
     let executors = match protocol {
-        // extra executors for partial replication
-        Protocol::AtlasLocked => EXECUTORS,
-        // extra executors for partial replication (although, not implemented
+        // 1 extra executor for partial replication
+        Protocol::AtlasLocked => 1 + 1,
+        // 1 extra executor for partial replication (although, not implemented
         // yet)
-        Protocol::EPaxosLocked => EXECUTORS,
+        Protocol::EPaxosLocked => 1 + 1,
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);

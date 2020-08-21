@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_zipf01";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_direct_deps_dep_shards_3";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -42,7 +42,7 @@ fn partial_replication() -> Result<(), Report> {
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
-        // (1, 1),
+        (1, 1),
         // (2, 1),
         (2, 2),
         // (3, 1),
@@ -129,6 +129,7 @@ fn partial_replication() -> Result<(), Report> {
             > = Some(Box::new(|search| {
                 // create styles
                 let mut styles = HashMap::new();
+                styles.insert((1, 1), ("#111111", "s"));
                 styles.insert((2, 1), ("#218c74", "s"));
                 styles.insert((2, 2), ("#218c74", "+"));
                 styles.insert((3, 1), ("#bdc3c7", "s"));

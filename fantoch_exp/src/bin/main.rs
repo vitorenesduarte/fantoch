@@ -14,7 +14,7 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 // const RESULTS_DIR: &str = "../graph_executor";
-const RESULTS_DIR: &str = "../graph_executor_zipf01";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_direct_deps_dep_shards_3";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -47,7 +47,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "non_genuine_atlas";
+const BRANCH: &str = "direct_deps";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -160,8 +160,8 @@ async fn main() -> Result<(), Report> {
         // 1024 / 2,
         // 1024,
         // 1024 * 2,
-        1024 * 4, // 1
-        1024 * 8, // 1
+        1024 * 4,  // 1
+        1024 * 8,  // 1
         1024 * 12, // 1
         1024 * 16,
         1024 * 20,
@@ -182,7 +182,7 @@ async fn main() -> Result<(), Report> {
         1024 * 272,
     ];
     let shards_per_command = 2;
-    let shard_count = 6;
+    let shard_count = 5;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {

@@ -57,7 +57,7 @@ pub struct DependencyGraph {
     // worker 0 (handles commands):
     // - adds new commands `to_execute`
     // - `out_requests` dependencies to be able to order commands
-    // - notifies remaining workers about what's being executed through
+    // - notifies remaining workers about what's been executed through
     //   `added_to_executed_clock`
     to_execute: Vec<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
@@ -147,7 +147,8 @@ impl DependencyGraph {
     #[must_use]
     pub fn to_executors(&mut self) -> Option<HashSet<Dot>> {
         if let Some(added) = self.added_to_executed_clock.as_ref() {
-            // if it has been set and has something, take what's there and put a new empty set
+            // if it has been set and has something, take what's there and put a
+            // new empty set
             if !added.is_empty() {
                 return self.added_to_executed_clock.replace(HashSet::new());
             }
