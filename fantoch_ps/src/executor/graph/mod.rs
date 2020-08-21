@@ -410,13 +410,13 @@ impl DependencyGraph {
                 info,
                 time.millis()
             );
-            // we can't receive a reply about commands that are not mine, as the
-            // shards would ignore the request if we didn't replicate the
-            // command
-            debug_assert!(!self.pending_index.is_mine(info.dot()));
-
             match info {
                 RequestReply::Info { dot, cmd, deps } => {
+                    // we can't receive a info reply about commands that are not
+                    // mine, as the shards would ignore the request if we didn't
+                    // replicate the command
+                    assert!(!self.pending_index.is_mine(&dot));
+
                     // add requested command to our graph
                     self.handle_add(dot, cmd, deps, time)
                 }
