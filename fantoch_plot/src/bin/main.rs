@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../graph_executor_zipf01";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_direct_deps_dep_shards_3";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -38,7 +38,7 @@ fn partial_replication() -> Result<(), Report> {
     });
     // key_gens.push(KeyGen::ConflictRate { conflict_rate: 0 });
     let payload_size = 0;
-    let protocols = vec![Protocol::AtlasLocked];
+    let protocols = vec![Protocol::AtlasLocked, Protocol::NewtAtomic];
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
@@ -51,6 +51,8 @@ fn partial_replication() -> Result<(), Report> {
         (4, 2),
         // (5, 1),
         (5, 2),
+        // (6, 1),
+        (6, 2),
         /*
         (2, 2),
         (3, 1),
@@ -69,7 +71,9 @@ fn partial_replication() -> Result<(), Report> {
         // 1024 * 2,
         1024 * 4,
         1024 * 8,
+        1024 * 12,
         1024 * 16,
+        1024 * 20,
         1024 * 24,
         1024 * 32,
         1024 * 36,
@@ -125,7 +129,7 @@ fn partial_replication() -> Result<(), Report> {
             > = Some(Box::new(|search| {
                 // create styles
                 let mut styles = HashMap::new();
-                styles.insert((1, 1), ("#1abc9c", "s"));
+                styles.insert((1, 1), ("#111111", "s"));
                 styles.insert((2, 1), ("#218c74", "s"));
                 styles.insert((2, 2), ("#218c74", "+"));
                 styles.insert((3, 1), ("#bdc3c7", "s"));
@@ -134,6 +138,8 @@ fn partial_replication() -> Result<(), Report> {
                 styles.insert((4, 2), ("#ffa726", "+"));
                 styles.insert((5, 1), ("#227093", "s"));
                 styles.insert((5, 2), ("#227093", "+"));
+                styles.insert((6, 1), ("#1abc9c", "s"));
+                styles.insert((6, 2), ("#1abc9c", "+"));
 
                 // get shards config of this search
                 let shards_per_command = search.shards_per_command.unwrap();

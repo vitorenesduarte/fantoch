@@ -14,7 +14,7 @@ use tsunami::Tsunami;
 
 // folder where all results will be stored
 // const RESULTS_DIR: &str = "../graph_executor";
-const RESULTS_DIR: &str = "../graph_executor_zipf01";
+const RESULTS_DIR: &str = "../graph_executor_zipf01_direct_deps_dep_shards_3";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -37,7 +37,6 @@ const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
-const TRANSITIVE_CONFLICTS: bool = true;
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
@@ -48,7 +47,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "non_genuine_atlas";
+const BRANCH: &str = "direct_deps";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -63,7 +62,8 @@ const RUN_MODE: RunMode = RunMode::Release;
 // const RUN_MODE: RunMode = RunMode::Flamegraph;
 
 // list of protocol binaries to cleanup before running the experiment
-const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[Protocol::AtlasLocked];
+const PROTOCOLS_TO_CLEANUP: &[Protocol] =
+    &[Protocol::AtlasLocked, Protocol::NewtAtomic];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -78,7 +78,6 @@ macro_rules! config {
             config.set_gc_interval(interval);
         }
         config.set_newt_detached_send_interval(SEND_DETACHED_INTERVAL);
-        config.set_transitive_conflicts(TRANSITIVE_CONFLICTS);
         config
     }};
 }
@@ -161,8 +160,9 @@ async fn main() -> Result<(), Report> {
         // 1024 / 2,
         // 1024,
         // 1024 * 2,
-        1024 * 4, // 1
-        1024 * 8, // 1
+        1024 * 4,  // 1
+        1024 * 8,  // 1
+        1024 * 12, // 1
         1024 * 16,
         1024 * 20,
         1024 * 24, // 1

@@ -21,7 +21,7 @@ pub struct LevelExecutedClock {
     // ids of processes *not* in my shard
     not_shard_process_ids: HashSet<ProcessId>,
     // mapping from epoch to what's been executed from my shard at that
-    // timestamp
+    // epoch
     to_level: VecDeque<(u64, u64)>,
     current_epoch: Option<u64>,
 }
@@ -89,7 +89,7 @@ impl LevelExecutedClock {
                 );
 
                 // level all the entries that are not from my shard to what I've
-                // executed in that epoch
+                // executed from my shard at that epoch
                 self.not_shard_process_ids.iter().for_each(|peer_id| {
                     executed_clock.add_range(peer_id, 1, executed);
                 });

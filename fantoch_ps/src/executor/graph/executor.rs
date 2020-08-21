@@ -1,4 +1,5 @@
 use crate::executor::graph::DependencyGraph;
+use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
@@ -9,7 +10,6 @@ use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
-use threshold::VClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
@@ -59,17 +59,14 @@ impl Executor for GraphExecutor {
 
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
         match info {
-            GraphExecutionInfo::Add { dot, cmd, clock } => {
+            GraphExecutionInfo::Add { dot, cmd, deps } => {
                 if self.config.execute_at_commit() {
                     self.execute(cmd);
                 } else {
                     // handle new command
-                    self.graph.handle_add(dot, cmd, clock, time);
+                    self.graph.handle_add(dot, cmd, deps, time);
                     self.fetch_actions(time);
                 }
-            }
-            GraphExecutionInfo::AddMine { dot } => {
-                self.graph.handle_add_mine(dot, time);
             }
             GraphExecutionInfo::Request { from, dots } => {
                 self.graph.handle_request(from, dots, time);
@@ -78,6 +75,9 @@ impl Executor for GraphExecutor {
             GraphExecutionInfo::RequestReply { infos } => {
                 self.graph.handle_request_reply(infos, time);
                 self.fetch_actions(time);
+            }
+            GraphExecutionInfo::Executed { dots } => {
+                self.graph.handle_executed(dots, time);
             }
         }
     }
@@ -103,6 +103,7 @@ impl GraphExecutor {
     fn fetch_actions(&mut self, time: &dyn SysTime) {
         self.fetch_commands_to_execute(time);
         if self.config.shards() > 1 {
+            self.fetch_to_executors(time);
             self.fetch_requests(time);
             self.fetch_request_replies(time);
         }
@@ -119,6 +120,20 @@ impl GraphExecutor {
                 _time.millis()
             );
             self.execute(cmd);
+        }
+    }
+
+    fn fetch_to_executors(&mut self, _time: &dyn SysTime) {
+        if let Some(added) = self.graph.to_executors() {
+            log!(
+                "p{}: @{} GraphExecutor::to_executors {:?} | time = {}",
+                self.process_id,
+                self.executor_index,
+                added,
+                _time.millis()
+            );
+            let executed = GraphExecutionInfo::executed(added);
+            self.to_executors.push((self.shard_id, executed));
         }
     }
 
@@ -168,10 +183,7 @@ pub enum GraphExecutionInfo {
     Add {
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
-    },
-    AddMine {
-        dot: Dot,
+        deps: HashSet<Dependency>,
     },
     Request {
         from: ShardId,
@@ -180,15 +192,14 @@ pub enum GraphExecutionInfo {
     RequestReply {
         infos: Vec<super::RequestReply>,
     },
+    Executed {
+        dots: HashSet<Dot>,
+    },
 }
 
 impl GraphExecutionInfo {
-    pub fn add(dot: Dot, cmd: Command, clock: VClock<ProcessId>) -> Self {
-        Self::Add { dot, cmd, clock }
-    }
-
-    pub fn add_mine(dot: Dot) -> Self {
-        Self::AddMine { dot }
+    pub fn add(dot: Dot, cmd: Command, deps: HashSet<Dependency>) -> Self {
+        Self::Add { dot, cmd, deps }
     }
 
     fn request(from: ShardId, dots: HashSet<Dot>) -> Self {
@@ -198,31 +209,30 @@ impl GraphExecutionInfo {
     fn request_reply(infos: Vec<super::RequestReply>) -> Self {
         Self::RequestReply { infos }
     }
+
+    fn executed(dots: HashSet<Dot>) -> Self {
+        Self::Executed { dots }
+    }
 }
 
 impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        const MAX_EXECUTORS: usize = 100;
-        const fn executor_index_no_shift() -> Option<(usize, usize)> {
-            // when there's no shift, the index must be 0
-            let shift = 0;
-            let index = 0;
-            Some((shift, index))
+        const MAIN_INDEX: usize = 0;
+        const SECONDARY_INDEX: usize = 1;
+
+        const fn main_executor() -> Option<(usize, usize)> {
+            Some((0, MAIN_INDEX))
         }
 
-        fn executor_random_index_shift() -> Option<(usize, usize)> {
-            use rand::Rng;
-            // if there's a shift, we select a random worker
-            let shift = 1;
-            let index = rand::thread_rng().gen_range(0, MAX_EXECUTORS);
-            Some((shift, index))
+        const fn secondary_executor() -> Option<(usize, usize)> {
+            Some((0, SECONDARY_INDEX))
         }
 
         match self {
-            Self::Add { .. } => executor_index_no_shift(),
-            Self::AddMine { .. } => executor_index_no_shift(),
-            Self::Request { .. } => executor_random_index_shift(),
-            Self::RequestReply { .. } => executor_index_no_shift(),
+            Self::Add { .. } => main_executor(),
+            Self::Request { .. } => secondary_executor(),
+            Self::RequestReply { .. } => main_executor(),
+            Self::Executed { .. } => secondary_executor(),
         }
     }
 }

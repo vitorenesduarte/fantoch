@@ -1,7 +1,7 @@
-// This module contains the definition of `KeyClocks` and `QuorumClocks`.
-mod clocks;
+// This module contains the definition of `KeyDeps` and `QuorumDeps`.
+mod deps;
 
 // Re-exports.
-pub use clocks::{
-    KeyClocks, LockedKeyClocks, QuorumClocks, SequentialKeyClocks,
+pub use deps::{
+    Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };

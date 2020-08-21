@@ -15,7 +15,6 @@ const DEFAULT_IP: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_CLIENT_PORT: u16 = 4000;
 
-const DEFAULT_TRANSITIVE_CONFLICTS: bool = false;
 const DEFAULT_EXECUTE_AT_COMMIT: bool = false;
 const DEFAULT_EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
 
@@ -196,13 +195,6 @@ fn parse_args() -> ProtocolArgs {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("transitive_conflicts")
-                .long("transitive_conflicts")
-                .value_name("TRANSITIVE_CONFLICTS")
-                .help("bool indicating whether we can assume that the conflict relation is transitive; default: false")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("execute_at_commit")
                 .long("execute_at_commit")
                 .value_name("EXECUTE_AT_COMMIT")
@@ -377,7 +369,6 @@ fn parse_args() -> ProtocolArgs {
         parse_n(matches.value_of("n")),
         parse_f(matches.value_of("f")),
         parse_shards(matches.value_of("shards")),
-        parse_transitive_conflicts(matches.value_of("transitive_conflicts")),
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
         parse_executor_cleanup_interval(
             matches.value_of("executor_cleanup_interval"),
@@ -553,7 +544,6 @@ pub fn build_config(
     n: usize,
     f: usize,
     shards: usize,
-    transitive_conflicts: bool,
     execute_at_commit: bool,
     executor_cleanup_interval: Duration,
     gc_interval: Option<Duration>,
@@ -566,7 +556,6 @@ pub fn build_config(
     // create config
     let mut config = Config::new(n, f);
     config.set_shards(shards);
-    config.set_transitive_conflicts(transitive_conflicts);
     config.set_execute_at_commit(execute_at_commit);
     config.set_executor_cleanup_interval(executor_cleanup_interval);
     if let Some(gc_interval) = gc_interval {
@@ -605,16 +594,6 @@ pub fn parse_shards(shards: Option<&str>) -> usize {
             shards.parse::<usize>().expect("shards should be a number")
         })
         .unwrap_or(DEFAULT_SHARDS)
-}
-
-pub fn parse_transitive_conflicts(transitive_conflicts: Option<&str>) -> bool {
-    transitive_conflicts
-        .map(|transitive_conflicts| {
-            transitive_conflicts
-                .parse::<bool>()
-                .expect("transitive conflicts should be a bool")
-        })
-        .unwrap_or(DEFAULT_TRANSITIVE_CONFLICTS)
 }
 
 pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {

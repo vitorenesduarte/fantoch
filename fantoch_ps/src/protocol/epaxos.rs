@@ -1,6 +1,6 @@
 use crate::executor::GraphExecutor;
 use crate::protocol::common::graph::{
-    KeyClocks, LockedKeyClocks, QuorumClocks, SequentialKeyClocks,
+    Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use fantoch::command::Command;
@@ -12,7 +12,6 @@ use fantoch::protocol::{
     ProtocolMetrics,
 };
 use fantoch::time::SysTime;
-use fantoch::util;
 use fantoch::{log, singleton};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
@@ -20,15 +19,15 @@ use std::time::Duration;
 use threshold::VClock;
 use tracing::instrument;
 
-pub type EPaxosSequential = EPaxos<SequentialKeyClocks>;
-pub type EPaxosLocked = EPaxos<LockedKeyClocks>;
+pub type EPaxosSequential = EPaxos<SequentialKeyDeps>;
+pub type EPaxosLocked = EPaxos<LockedKeyDeps>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EPaxos<KC: KeyClocks> {
+pub struct EPaxos<KD: KeyDeps> {
     bp: BaseProcess,
-    keys_clocks: KC,
+    key_deps: KD,
     cmds: CommandsInfo<EPaxosInfo>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -37,7 +36,7 @@ pub struct EPaxos<KC: KeyClocks> {
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
 }
 
-impl<KC: KeyClocks> Protocol for EPaxos<KC> {
+impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     type Message = Message;
     type PeriodicEvent = PeriodicEvent;
     type Executor = GraphExecutor;
@@ -60,7 +59,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let keys_clocks = KC::new(shard_id, config.n());
+        let key_deps = KD::new(shard_id);
         let f = Self::allowed_faults(config.n());
         let cmds = CommandsInfo::new(
             process_id,
@@ -76,7 +75,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
         // create `EPaxos`
         let protocol = Self {
             bp,
-            keys_clocks,
+            key_deps,
             cmds,
             to_processes,
             to_executors,
@@ -132,10 +131,10 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
                 dot,
                 cmd,
                 quorum,
-                clock,
-            } => self.handle_mcollect(from, dot, cmd, quorum, clock, time),
-            Message::MCollectAck { dot, clock } => {
-                self.handle_mcollectack(from, dot, clock, time)
+                deps,
+            } => self.handle_mcollect(from, dot, cmd, quorum, deps, time),
+            Message::MCollectAck { dot, deps } => {
+                self.handle_mcollectack(from, dot, deps, time)
             }
             Message::MCommit { dot, value } => {
                 self.handle_mcommit(from, dot, value, time)
@@ -178,7 +177,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     }
 
     fn parallel() -> bool {
-        KC::parallel()
+        KD::parallel()
     }
 
     fn leaderless() -> bool {
@@ -190,7 +189,7 @@ impl<KC: KeyClocks> Protocol for EPaxos<KC> {
     }
 }
 
-impl<KC: KeyClocks> EPaxos<KC> {
+impl<KD: KeyDeps> EPaxos<KD> {
     /// EPaxos always tolerates a minority of faults.
     pub fn allowed_faults(n: usize) -> usize {
         n / 2
@@ -202,20 +201,14 @@ impl<KC: KeyClocks> EPaxos<KC> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // compute its clock
-        // - similarly to Atlas, here we don't save the command in
-        //   `keys_clocks`; if we did, it would be declared as a dependency of
-        //   itself when this message is handled by its own coordinator, which
-        //   prevents fast paths with f > 1; in fact we do, but since the
-        //   coordinator does not recompute this value in the MCollect handler,
-        //   it's effectively the same
-        let clock = self.keys_clocks.add_cmd(dot, &cmd, None);
+        // compute its deps
+        let deps = self.key_deps.add_cmd(dot, &cmd, None);
 
         // create `MCollect` and target
         let mcollect = Message::MCollect {
             dot,
             cmd,
-            clock,
+            deps,
             quorum: self.bp.fast_quorum(),
         };
         let target = self.bp.all();
@@ -227,14 +220,14 @@ impl<KC: KeyClocks> EPaxos<KC> {
         });
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_clock, time))]
+    #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
         dot: Dot,
         cmd: Command,
         quorum: HashSet<ProcessId>,
-        remote_clock: VClock<ProcessId>,
+        remote_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
         log!(
@@ -242,7 +235,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             dot,
             cmd,
-            remote_clock,
+            remote_deps,
             from,
             time.micros()
         );
@@ -276,12 +269,12 @@ impl<KC: KeyClocks> EPaxos<KC> {
         // check if it's a message from self
         let message_from_self = from == self.bp.process_id;
 
-        let clock = if message_from_self {
-            // if it is, do not recompute clock
-            remote_clock
+        let deps = if message_from_self {
+            // if it is, do not recompute deps
+            remote_deps
         } else {
-            // otherwise, compute clock with the remote clock as past
-            self.keys_clocks.add_cmd(dot, &cmd, Some(remote_clock))
+            // otherwise, compute deps with the remote deps as past
+            self.key_deps.add_cmd(dot, &cmd, Some(remote_deps))
         };
 
         // update command info
@@ -289,11 +282,11 @@ impl<KC: KeyClocks> EPaxos<KC> {
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
-        let value = ConsensusValue::with(clock.clone());
+        let value = ConsensusValue::with(deps.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
         // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck { dot, clock };
+        let mcollectack = Message::MCollectAck { dot, deps };
         let target = singleton![from];
 
         // save new action
@@ -303,19 +296,19 @@ impl<KC: KeyClocks> EPaxos<KC> {
         });
     }
 
-    #[instrument(skip(self, from, dot, clock, _time))]
+    #[instrument(skip(self, from, dot, deps, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
         log!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
-            clock,
+            deps,
             from,
             _time.micros()
         );
@@ -333,27 +326,22 @@ impl<KC: KeyClocks> EPaxos<KC> {
             return;
         }
 
-        // update quorum clocks
-        info.quorum_clocks.add(from, clock);
+        // update quorum deps
+        info.quorum_deps.add(from, deps);
 
         // check if we have all necessary replies
-        if info.quorum_clocks.all() {
-            // compute the union while checking whether all clocks reported are
+        if info.quorum_deps.all() {
+            // compute the union while checking whether all deps reported are
             // equal
-            let (final_clock, all_equal) = info.quorum_clocks.union();
+            let (final_deps, all_equal) = info.quorum_deps.union();
 
             // create consensus value
-            let value = ConsensusValue::with(final_clock);
+            let value = ConsensusValue::with(final_deps);
 
-            // fast path condition:
-            // - all reported clocks if `max_clock` was reported by at least f
-            //   processes
+            // fast path condition: all reported deps were equal
             if all_equal {
                 self.bp.fast_path();
                 // fast path: create `MCommit`
-                // TODO create a slim-MCommit that only sends the payload to the
-                // non-fast-quorum members, or send the payload
-                // to all in a slim-MConsensus
                 let mcommit = Message::MCommit { dot, value };
                 let target = self.bp.all();
 
@@ -389,7 +377,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
-            value.clock,
+            value.deps,
             _time.micros()
         );
 
@@ -419,7 +407,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
 
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::add(dot, cmd, value.clock.clone());
+        let execution_info = ExecutionInfo::add(dot, cmd, value.deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -454,7 +442,7 @@ impl<KC: KeyClocks> EPaxos<KC> {
             self.id(),
             dot,
             ballot,
-            value.clock,
+            value.deps,
             _time.micros()
         );
 
@@ -616,24 +604,23 @@ impl<KC: KeyClocks> EPaxos<KC> {
 }
 
 // consensus value is a pair where the first component is a flag indicating
-// whether this is a noop and the second component is the commands dependencies
-// represented as a vector clock.
+// whether this is a noop and the second component is the command's dependencies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     is_noop: bool,
-    clock: VClock<ProcessId>,
+    deps: HashSet<Dependency>,
 }
 
 impl ConsensusValue {
-    fn bottom(shard_id: ShardId, n: usize) -> Self {
+    fn bottom() -> Self {
         let is_noop = false;
-        let clock = VClock::with(util::process_ids(shard_id, n));
-        Self { is_noop, clock }
+        let deps = HashSet::new();
+        Self { is_noop, deps }
     }
 
-    fn with(clock: VClock<ProcessId>) -> Self {
+    fn with(deps: HashSet<Dependency>) -> Self {
         let is_noop = false;
-        Self { is_noop, clock }
+        Self { is_noop, deps }
     }
 }
 
@@ -652,19 +639,19 @@ struct EPaxosInfo {
     cmd: Option<Command>,
     // `quorum_clocks` is used by the coordinator to compute the threshold
     // clock when deciding whether to take the fast path
-    quorum_clocks: QuorumClocks,
+    quorum_deps: QuorumDeps,
 }
 
 impl Info for EPaxosInfo {
     fn new(
         process_id: ProcessId,
-        shard_id: ShardId,
+        _shard_id: ShardId,
         n: usize,
         f: usize,
         fast_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
-        let initial_value = ConsensusValue::bottom(shard_id, n);
+        let initial_value = ConsensusValue::bottom();
 
         // although the fast quorum size is `fast_quorum_size`, we're going to
         // initialize `QuorumClocks` with `fast_quorum_size - 1` since
@@ -677,7 +664,7 @@ impl Info for EPaxosInfo {
             quorum: HashSet::new(),
             synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
             cmd: None,
-            quorum_clocks: QuorumClocks::new(fast_quorum_size - 1),
+            quorum_deps: QuorumDeps::new(fast_quorum_size - 1),
         }
     }
 }
@@ -688,12 +675,12 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dependency>,
         quorum: HashSet<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dependency>,
     },
     MCommit {
         dot: Dot,
@@ -771,18 +758,19 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
+    use fantoch::util;
 
     #[test]
     fn sequential_epaxos_test() {
-        epaxos_flow::<SequentialKeyClocks>();
+        epaxos_flow::<SequentialKeyDeps>();
     }
 
     #[test]
     fn locked_epaxos_test() {
-        epaxos_flow::<LockedKeyClocks>();
+        epaxos_flow::<LockedKeyDeps>();
     }
 
-    fn epaxos_flow<KC: KeyClocks>() {
+    fn epaxos_flow<KD: KeyDeps>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -824,11 +812,11 @@ mod tests {
 
         // epaxos
         let (mut epaxos_1, _) =
-            EPaxos::<KC>::new(process_id_1, shard_id, config);
+            EPaxos::<KD>::new(process_id_1, shard_id, config);
         let (mut epaxos_2, _) =
-            EPaxos::<KC>::new(process_id_2, shard_id, config);
+            EPaxos::<KD>::new(process_id_2, shard_id, config);
         let (mut epaxos_3, _) =
-            EPaxos::<KC>::new(process_id_3, shard_id, config);
+            EPaxos::<KD>::new(process_id_3, shard_id, config);
 
         // discover processes in all epaxos
         let sorted = util::sort_processes_by_distance(

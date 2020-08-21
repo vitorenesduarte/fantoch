@@ -1,4 +1,5 @@
 use super::index::{VertexIndex, VertexRef};
+use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
@@ -7,7 +8,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
 use std::collections::BTreeSet;
-use threshold::{AEClock, EventSet, VClock};
+use threshold::AEClock;
 
 /// commands are sorted inside an SCC given their dot
 pub type SCC = BTreeSet<Dot>;
@@ -15,7 +16,7 @@ pub type SCC = BTreeSet<Dot>;
 #[derive(PartialEq)]
 pub enum FinderResult {
     Found,
-    MissingDependencies(HashSet<Dot>),
+    MissingDependencies(HashSet<Dependency>),
     NotPending,
     NotFound,
 }
@@ -94,6 +95,7 @@ impl TarjanSCCFinder {
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
         executed_clock: &mut AEClock<ProcessId>,
+        added_to_executed_clock: &mut Option<HashSet<Dot>>,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
@@ -118,165 +120,105 @@ impl TarjanSCCFinder {
             self.id
         );
 
-        let ignore_dep =
-            |process_id: ProcessId,
-             dep: u64,
-             executed_clock: &AEClock<ProcessId>| {
-                let dep_dot = Dot::new(process_id, dep);
-                // ignore if self or if already executed:
-
-                //
-                // - we need this check because the clock may not be contiguous,
-                //   i.e. `executed_clock_frontier` is simply a safe
-                //   approximation of what's been executed
-                let ignore =
-                    dot == dep_dot || executed_clock.contains(&process_id, dep);
-                (ignore, dep_dot)
+        // TODO can we avoid vertex.deps.clone()
+        let deps = vertex.deps.clone();
+        let mut deps_iter = deps.into_iter();
+        while let Some(dep) = deps_iter.next() {
+            // TODO we should panic if we find a dependency highest than self
+            let ignore = |dep_dot: Dot| {
+                // ignore self or if already executed
+                dep_dot == dot
+                    || executed_clock
+                        .contains(&dep_dot.source(), dep_dot.sequence())
             };
 
-        // TODO can we avoid vertex.clock.clone()
-        // compute non-executed deps for each process
-        let clock = vertex.clock.clone();
-        let mut deps_iter = clock.into_iter();
-        while let Some((process_id, to)) = deps_iter.next() {
-            // get min event from which we need to start checking for
-            // dependencies
-            let to = to.frontier();
-            let from = if self.config.transitive_conflicts() {
-                // if we can assume that conflicts are transitive, it is enough
-                // to check for the highest dependency
-                to
-            } else {
-                executed_clock
-                    .get(&process_id)
-                    .expect("process should exist in the executed clock")
-                    .frontier()
-                    + 1
-            };
+            // get dep dot
+            let dep_dot = dep.dot;
 
-            // OPTIMIZATION: start from the highest dep to the lowest:
-            // - assuming we will give up, we give up faster this way
-            // THE BENEFITS ARE HUGE!!!
-            // - obviously, this is only relevant when we can't assume that
-            //   conflicts are transitive
-            // - when we can, the following loop has a single iteration
-            for dep in (from..=to).rev() {
-                let (ignore, dep_dot) =
-                    ignore_dep(process_id, dep, executed_clock);
-                if ignore {
-                    log!(
-                        "p{}: Finder::strong_connect {:?} dependency ignored",
-                        self.process_id,
-                        dep_dot
-                    );
-                    continue;
-                }
+            if ignore(dep_dot) {
+                log!(
+                    "p{}: Finder::strong_connect ignoring dependency {:?}",
+                    self.process_id,
+                    dep
+                );
+                continue;
+            }
 
-                match vertex_index.find(&dep_dot) {
-                    None => {
-                        // not necesserarily a missing dependency, since it may
-                        // not conflict with `dot` but
-                        // we can't be sure until we have it locally
-                        let deps = std::iter::once(dep_dot);
-                        let deps = if self.config.shards() == 1 {
-                            deps.collect()
-                        } else {
-                            // if partial replication, add remaining frontier
-                            // deps as missing dependencies; this makes sure
-                            // that we request all needed dependencies in a
-                            // single request
-                            deps.chain(deps_iter.filter_map(
-                                |(process_id, to)| {
-                                    let (ignore, dep_dot) = ignore_dep(
-                                        process_id,
-                                        to.frontier(),
-                                        executed_clock,
-                                    );
-                                    if ignore {
-                                        None
-                                    } else {
-                                        Some(dep_dot)
-                                    }
-                                },
-                            ))
+            match vertex_index.find(&dep.dot) {
+                None => {
+                    let missing_deps = if self.config.shards() == 1 {
+                        std::iter::once(dep).collect()
+                    } else {
+                        // if partial replication, add remaining frontier
+                        // deps as missing dependencies; this makes sure
+                        // that we request all needed dependencies in a
+                        // single request
+                        std::iter::once(dep)
+                            .chain(deps_iter.filter(|extra_dep| {
+                                // only request non-executed dependencies
+                                !ignore(extra_dep.dot)
+                            }))
                             .collect()
-                        };
+                    };
+                    log!(
+                        "p{}: Finder::strong_connect missing {:?} | {:?}",
+                        self.process_id,
+                        dep_dot,
+                        missing_deps
+                    );
+                    return FinderResult::MissingDependencies(missing_deps);
+                }
+                Some(dep_vertex_ref) => {
+                    // get vertex
+                    let mut dep_vertex = dep_vertex_ref.read();
+
+                    // if not visited, visit
+                    if dep_vertex.id == 0 {
                         log!(
-                            "p{}: Finder::strong_connect missing {:?} | {:?}",
+                            "p{}: Finder::strong_connect non-visited {:?}",
                             self.process_id,
-                            dep_dot,
-                            deps
+                            dep
                         );
-                        return FinderResult::MissingDependencies(deps);
-                    }
-                    Some(dep_vertex_ref) => {
-                        // get vertex
-                        let mut dep_vertex = dep_vertex_ref.read();
 
-                        // ignore non-conflicting commands:
-                        // - this check is only necesssary if we can't assume
-                        //   that conflicts are transitive
-                        if !self.config.transitive_conflicts()
-                            && !vertex.conflicts(&dep_vertex)
-                        {
-                            log!(
-                                "p{}: Finder::strong_connect non-conflicting {:?}",
-                                self.process_id,
-                                dep_dot
-                            );
-                            continue;
+                        // drop guards
+                        drop(vertex);
+                        drop(dep_vertex);
+
+                        // OPTIMIZATION: passing the dep vertex ref as an
+                        // argument to `strong_connect` avoids double look-up
+                        let result = self.strong_connect(
+                            dep.dot,
+                            &dep_vertex_ref,
+                            executed_clock,
+                            added_to_executed_clock,
+                            vertex_index,
+                            found,
+                        );
+
+                        // if missing dependency, give up
+                        if let FinderResult::MissingDependencies(_) = result {
+                            return result;
                         }
 
-                        // if not visited, visit
-                        if dep_vertex.id == 0 {
-                            log!(
-                                "p{}: Finder::strong_connect non-visited {:?}",
-                                self.process_id,
-                                dep_dot
-                            );
+                        // get guards again
+                        vertex = vertex_ref.write();
+                        dep_vertex = dep_vertex_ref.read();
 
-                            // drop guards
-                            drop(vertex);
-                            drop(dep_vertex);
+                        // min low with dep low
+                        vertex.low = cmp::min(vertex.low, dep_vertex.low);
 
-                            // OPTIMIZATION: passing the vertex as an argument
-                            // to `strong_connect`
-                            // is also essential to avoid double look-up
-                            let result = self.strong_connect(
-                                dep_dot,
-                                &dep_vertex_ref,
-                                executed_clock,
-                                vertex_index,
-                                found,
-                            );
-
-                            // if missing dependency, give up
-                            if let FinderResult::MissingDependencies(_) = result
-                            {
-                                return result;
-                            }
-
-                            // get guards again
-                            vertex = vertex_ref.write();
-                            dep_vertex = dep_vertex_ref.read();
-
-                            // min low with dep low
-                            vertex.low = cmp::min(vertex.low, dep_vertex.low);
-
-                            // drop dep guard
-                            drop(dep_vertex);
-                        } else {
-                            // if visited and on the stack
-                            if dep_vertex.on_stack {
-                                log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
-                                // min low with dep id
-                                vertex.low =
-                                    cmp::min(vertex.low, dep_vertex.id);
-                            }
-
-                            // drop dep guard
-                            drop(dep_vertex);
+                        // drop dep guard
+                        drop(dep_vertex);
+                    } else {
+                        // if visited and on the stack
+                        if dep_vertex.on_stack {
+                            log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep);
+                            // min low with dep id
+                            vertex.low = cmp::min(vertex.low, dep_vertex.id);
                         }
+
+                        // drop dep guard
+                        drop(dep_vertex);
                     }
                 }
             }
@@ -347,6 +289,9 @@ impl TarjanSCCFinder {
                 // member_dot     );
                 // }
                 executed_clock.add(&member_dot.source(), member_dot.sequence());
+                if let Some(added) = added_to_executed_clock.as_mut() {
+                    added.insert(member_dot);
+                }
 
                 log!(
                     "p{}: Finder::strong_connect executed clock {:?}",
@@ -373,7 +318,7 @@ impl TarjanSCCFinder {
 pub struct Vertex {
     dot: Dot,
     pub cmd: Command,
-    pub clock: VClock<ProcessId>,
+    pub deps: HashSet<Dependency>,
     start_time: u64,
     // specific to tarjan's algorithm
     id: usize,
@@ -385,14 +330,14 @@ impl Vertex {
     pub fn new(
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time = time.millis();
         Self {
             dot,
             cmd,
-            clock,
+            deps,
             start_time,
             id: 0,
             low: 0,
@@ -410,11 +355,5 @@ impl Vertex {
     /// Retrieves vertex's dot.
     pub fn dot(&self) -> Dot {
         self.dot
-    }
-
-    /// This vertex conflicts with another vertex by checking if their commands
-    /// conflict.
-    fn conflicts(&self, other: &Vertex) -> bool {
-        self.cmd.conflicts(&other.cmd)
     }
 }

@@ -59,13 +59,6 @@ fn parse_args() -> (Config, String) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("transitive_conflicts")
-                .long("transitive_conflicts")
-                .value_name("TRANSITIVE_CONFLICTS")
-                .help("bool indicating whether we can assume that the conflict relation is transitive; default: false")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("execution_log")
                 .long("execution_log")
                 .value_name("EXECUTION_LOG")
@@ -78,11 +71,7 @@ fn parse_args() -> (Config, String) {
     // parse arguments
     let n = common::protocol::parse_n(matches.value_of("n"));
     let f = common::protocol::parse_f(matches.value_of("f"));
-    let transitive_conflicts = common::protocol::parse_transitive_conflicts(
-        matches.value_of("transitive_conflicts"),
-    );
-    let mut config = Config::new(n, f);
-    config.set_transitive_conflicts(transitive_conflicts);
+    let config = Config::new(n, f);
     let execution_log = common::protocol::parse_execution_log(
         matches.value_of("execution_log"),
     )

@@ -148,8 +148,6 @@ impl ProtocolConfig {
             self.config.f(),
             "--shards",
             self.config.shards(),
-            "--transitive_conflicts",
-            self.config.transitive_conflicts(),
             "--execute_at_commit",
             self.config.execute_at_commit(),
         ];
@@ -247,22 +245,23 @@ fn workers_executors_and_leader(
     config: &mut Config,
 ) -> (usize, usize) {
     // for all protocol but newt, create a single executor
-    match protocol {
+    let executors = match protocol {
         // 1 extra executor for partial replication
-        Protocol::AtlasLocked => (WORKERS, EXECUTORS),
+        Protocol::AtlasLocked => 1 + 1,
         // 1 extra executor for partial replication (although, not implemented
         // yet)
-        Protocol::EPaxosLocked => (WORKERS, EXECUTORS),
+        Protocol::EPaxosLocked => 1 + 1,
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);
-            (WORKERS + EXECUTORS - 1, 1)
+            1
         }
-        Protocol::NewtAtomic => (WORKERS, EXECUTORS),
-        Protocol::NewtLocked => (WORKERS, EXECUTORS),
-        Protocol::NewtFineLocked => (WORKERS, EXECUTORS),
-        Protocol::Basic => (WORKERS, EXECUTORS),
-    }
+        Protocol::NewtAtomic => EXECUTORS,
+        Protocol::NewtLocked => EXECUTORS,
+        Protocol::NewtFineLocked => EXECUTORS,
+        Protocol::Basic => EXECUTORS,
+    };
+    (WORKERS + EXECUTORS - executors, executors)
 }
 
 #[cfg(feature = "exp")]

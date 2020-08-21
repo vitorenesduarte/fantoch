@@ -17,6 +17,7 @@ pub use executor::{GraphExecutionInfo, GraphExecutor};
 use self::index::{PendingIndex, VertexIndex};
 use self::level::LevelExecutedClock;
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
+use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
@@ -25,31 +26,20 @@ use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::Arc;
-use threshold::{AEClock, VClock};
+use threshold::AEClock;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
     Info {
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dependency>,
     },
     Executed {
         dot: Dot,
     },
-}
-
-impl RequestReply {
-    fn dot(&self) -> &Dot {
-        match self {
-            Self::Info { dot, .. } => dot,
-            Self::Executed { dot, .. } => dot,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -59,8 +49,6 @@ pub struct DependencyGraph {
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
     // only used in partial replication
-    executed_clock_snapshot: Arc<RwLock<AEClock<ProcessId>>>,
-    // only used in partial replication
     level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
@@ -69,9 +57,12 @@ pub struct DependencyGraph {
     // worker 0 (handles commands):
     // - adds new commands `to_execute`
     // - `out_requests` dependencies to be able to order commands
+    // - notifies remaining workers about what's been executed through
+    //   `added_to_executed_clock`
     to_execute: Vec<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
-    // worker 1 (handles requests):
+    added_to_executed_clock: Option<HashSet<Dot>>,
+    // auxiliary workers (handles requests):
     // - may have `buffered_in_requests` when doesn't have the command yet
     // - produces `out_request_replies` when it has the command
     buffered_in_requests: HashMap<ShardId, HashSet<Dot>>,
@@ -84,7 +75,7 @@ enum FinderInfo {
     // set of dots in found SCCs (it's possible to find SCCs even though the
     // search for another dot failed), missing dependencies and set of dots
     // visited while searching for SCCs
-    MissingDependencies(Vec<Dot>, HashSet<Dot>, HashSet<Dot>),
+    MissingDependencies(Vec<Dot>, HashSet<Dependency>, HashSet<Dot>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -98,12 +89,11 @@ impl DependencyGraph {
     ) -> Self {
         // this value will be overwritten
         let executor_index = 0;
-        // create executed clock
+        // create executed clock and its snapshot
         let ids: Vec<_> = util::all_process_ids(config.shards(), config.n())
             .map(|(process_id, _)| process_id)
             .collect();
         let executed_clock = AEClock::with(ids.clone());
-        let executed_clock_snapshot = Arc::new(RwLock::new(AEClock::with(ids)));
         // create level executed clock
         let level_executed_clock =
             LevelExecutedClock::new(process_id, shard_id, config);
@@ -117,6 +107,12 @@ impl DependencyGraph {
         let to_execute = Vec::new();
         // create requests and request replies
         let out_requests = Default::default();
+        // only track what's added to the executed clock if partial replication
+        let added_to_executed_clock = if config.shards() == 1 {
+            None
+        } else {
+            Some(HashSet::new())
+        };
         let buffered_in_requests = Default::default();
         let out_request_replies = Default::default();
         DependencyGraph {
@@ -124,7 +120,6 @@ impl DependencyGraph {
             process_id,
             shard_id,
             executed_clock,
-            executed_clock_snapshot,
             level_executed_clock,
             vertex_index,
             pending_index,
@@ -132,6 +127,7 @@ impl DependencyGraph {
             metrics,
             to_execute,
             out_requests,
+            added_to_executed_clock,
             buffered_in_requests,
             out_request_replies,
         }
@@ -145,6 +141,19 @@ impl DependencyGraph {
     #[must_use]
     pub fn command_to_execute(&mut self) -> Option<Command> {
         self.to_execute.pop()
+    }
+
+    /// Returns which dots have been added to the executed clock.
+    #[must_use]
+    pub fn to_executors(&mut self) -> Option<HashSet<Dot>> {
+        if let Some(added) = self.added_to_executed_clock.as_ref() {
+            // if it has been set and has something, take what's there and put a
+            // new empty set
+            if !added.is_empty() {
+                return self.added_to_executed_clock.replace(HashSet::new());
+            }
+        }
+        None
     }
 
     /// Returns a request.
@@ -175,14 +184,26 @@ impl DependencyGraph {
             self.executor_index,
             time.millis()
         );
-        if self.executor_index == 0 {
-            self.level_executed_clock
-                .maybe_level(&mut self.executed_clock, time);
-            // if main executor, update snapshot
-            *self.executed_clock_snapshot.write() = self.executed_clock.clone();
-        } else {
-            // otherwise, simply check pending remote requests
+        self.level_executed_clock
+            .maybe_level(&mut self.executed_clock, time);
+        if self.executor_index > 0 {
+            // if not main executor, check pending remote requests
             self.check_pending_requests(time);
+        }
+    }
+
+    fn handle_executed(&mut self, dots: HashSet<Dot>, _time: &dyn SysTime) {
+        log!(
+            "p{}: @{} Graph::handle_executed {:?} | time = {}",
+            self.process_id,
+            self.executor_index,
+            dots,
+            _time.millis()
+        );
+        if self.executor_index > 0 {
+            for dot in dots {
+                self.executed_clock.add(&dot.source(), dot.sequence());
+            }
         }
     }
 
@@ -191,7 +212,7 @@ impl DependencyGraph {
         &mut self,
         dot: Dot,
         cmd: Command,
-        clock: VClock<ProcessId>,
+        deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
@@ -200,12 +221,12 @@ impl DependencyGraph {
             self.process_id,
             self.executor_index,
             dot,
-            clock,
+            deps,
             time.millis()
         );
 
         // create new vertex for this command
-        let vertex = Vertex::new(dot, cmd, clock, time);
+        let vertex = Vertex::new(dot, cmd, deps, time);
 
         if self.vertex_index.index(vertex).is_some() {
             panic!(
@@ -224,9 +245,9 @@ impl DependencyGraph {
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
-            FinderInfo::MissingDependencies(dots, dep_dot, _visited) => {
+            FinderInfo::MissingDependencies(dots, deps, _visited) => {
                 // update the pending
-                self.index_pending(dep_dot, dot, time);
+                self.index_pending(deps, dot, time);
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
@@ -248,18 +269,6 @@ impl DependencyGraph {
                 .collect::<std::collections::BTreeSet<_>>(),
             time.millis()
         );
-    }
-
-    pub fn handle_add_mine(&mut self, dot: Dot, _time: &dyn SysTime) {
-        assert_eq!(self.executor_index, 0);
-        log!(
-            "p{}: @{} Graph::handle_add_mine {:?} | time = {}",
-            self.process_id,
-            self.executor_index,
-            dot,
-            _time.millis()
-        );
-        self.pending_index.add_mine(dot);
     }
 
     fn handle_request(
@@ -317,22 +326,19 @@ impl DependencyGraph {
                         _time.millis()
                     )
                 } else {
+                    // if it doesn't replicate the command, send command info
                     self.out_request_replies.entry(from).or_default().push(
                         RequestReply::Info {
                             dot,
                             cmd: vertex.cmd.clone(),
-                            clock: vertex.clock.clone(),
+                            deps: vertex.deps.clone(),
                         },
                     )
                 }
             } else {
                 // if we don't have it, then check if it's executed (in our
                 // snapshot)
-                if self
-                    .executed_clock_snapshot
-                    .read()
-                    .contains(&dot.source(), dot.sequence())
-                {
+                if self.executed_clock.contains(&dot.source(), dot.sequence()) {
                     log!(
                         "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
                         self.process_id,
@@ -340,6 +346,10 @@ impl DependencyGraph {
                         dot,
                         _time.millis()
                     );
+                    // if it's executed, notify the shard that it has already
+                    // been executed
+                    // - TODO: the Janus paper says that in this case, we should
+                    //   send the full SCC; this will require a GC mechanism
                     self.out_request_replies
                         .entry(from)
                         .or_default()
@@ -369,7 +379,12 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        let mut accepted_replies = 0;
+        // save in request replies metric
+        self.metrics.aggregate(
+            ExecutorMetricsKind::InRequestReplies,
+            infos.len() as u64,
+        );
+
         for info in infos {
             log!(
                 "p{}: @{} Graph::handle_request_reply {:?} | time = {}",
@@ -378,42 +393,23 @@ impl DependencyGraph {
                 info,
                 time.millis()
             );
-            if self.pending_index.is_mine(info.dot()) {
-                log!(
-                    "p{}: @{} Graph::handle_request_reply ignore {:?} as it is mine | time = {}",
-                    self.process_id,
-                    self.executor_index,
-                    info,
-                    time.millis()
-                );
-                continue;
-            }
-            match info {
-                RequestReply::Info { dot, cmd, clock } => {
-                    // count number of accepted replies
-                    accepted_replies += 1;
 
-                    self.handle_add(dot, cmd, clock, time)
+            match info {
+                RequestReply::Info { dot, cmd, deps } => {
+                    // add requested command to our graph
+                    self.handle_add(dot, cmd, deps, time)
                 }
                 RequestReply::Executed { dot } => {
-                    // add to executed if not mine
-                    if !self.pending_index.is_mine(&dot) {
-                        // count number of accepted replies
-                        accepted_replies += 1;
-
-                        // update executed clock
-                        self.executed_clock.add(&dot.source(), dot.sequence());
-                        // check pending
-                        let dots = vec![dot];
-                        let mut total_found = 0;
-                        self.check_pending(dots, &mut total_found, time);
-                    }
+                    // update executed clock
+                    self.executed_clock.add(&dot.source(), dot.sequence());
+                    self.added_to_executed_clock.as_mut().expect("added_to_executed_clock should be set in partial replication").insert(dot);
+                    // check pending
+                    let dots = vec![dot];
+                    let mut total_found = 0;
+                    self.check_pending(dots, &mut total_found, time);
                 }
             }
         }
-        // save in request replies metric
-        self.metrics
-            .aggregate(ExecutorMetricsKind::InRequestReplies, accepted_replies);
     }
 
     #[must_use]
@@ -507,13 +503,15 @@ impl DependencyGraph {
 
     fn index_pending(
         &mut self,
-        missing_deps: HashSet<Dot>,
+        missing_deps: HashSet<Dependency>,
         dot: Dot,
         _time: &dyn SysTime,
     ) {
         let mut requests = 0;
-        for dep_dot in missing_deps {
-            if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
+        for dep in missing_deps {
+            if let Some((dep_dot, target_shard)) =
+                self.pending_index.index(dep, dot)
+            {
                 log!(
                     "p{}: @{} Graph::index_pending will ask {:?} to {:?} | time = {}",
                     self.process_id,
@@ -621,6 +619,7 @@ impl DependencyGraph {
                 dot,
                 &vertex,
                 &mut self.executed_clock,
+                &mut self.added_to_executed_clock,
                 &self.vertex_index,
                 found,
             ),
@@ -666,6 +665,13 @@ mod tests {
     use std::iter::FromIterator;
     use threshold::{AEClock, AboveExSet, EventSet};
 
+    fn dep(dot: Dot, shard_id: ShardId) -> Dependency {
+        Dependency {
+            dot,
+            shards: Some(BTreeSet::from_iter(vec![shard_id])),
+        }
+    }
+
     #[test]
     fn simple() {
         // create queue
@@ -677,25 +683,27 @@ mod tests {
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
 
-        // cmd 0
+        // create dots
         let dot_0 = Dot::new(1, 1);
+        let dot_1 = Dot::new(2, 1);
+
+        // cmd 0
         let cmd_0 =
             Command::put(Rifl::new(1, 1), String::from("A"), String::new());
-        let clock_0 = util::vclock(vec![0, 1]);
+        let deps_0 = HashSet::from_iter(vec![dep(dot_1, shard_id)]);
 
         // cmd 1
-        let dot_1 = Dot::new(2, 1);
         let cmd_1 =
             Command::put(Rifl::new(2, 1), String::from("A"), String::new());
-        let clock_1 = util::vclock(vec![1, 0]);
+        let deps_1 = HashSet::from_iter(vec![dep(dot_0, shard_id)]);
 
         // add cmd 0
-        queue.handle_add(dot_0, cmd_0.clone(), clock_0, &time);
+        queue.handle_add(dot_0, cmd_0.clone(), deps_0, &time);
         // check commands ready to be executed
         assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
-        queue.handle_add(dot_1, cmd_1.clone(), clock_1, &time);
+        queue.handle_add(dot_1, cmd_1.clone(), deps_1, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
     }
@@ -734,50 +742,42 @@ mod tests {
     /// that parallelizing the processing of messages needs to be on a
     /// per-process basis, i.e. commands by the same process are always
     /// processed by the same worker.
-    #[ignore]
     #[test]
     fn transitive_conflicts_assumption_regression_test_1() {
         // config
         let n = 5;
-        let transitive_conflicts = true;
 
-        // cmd 1
+        // dots
         let dot_1 = Dot::new(1, 1);
-        let clock_1 = util::vclock(vec![4, 0, 0, 0, 0]);
-
-        // cmd 2
         let dot_2 = Dot::new(1, 2);
-        let clock_2 = util::vclock(vec![4, 0, 0, 0, 0]);
-
-        // cmd 3
         let dot_3 = Dot::new(1, 3);
-        let clock_3 = util::vclock(vec![5, 0, 0, 0, 0]);
-
-        // cmd 4
         let dot_4 = Dot::new(1, 4);
-        let clock_4 = util::vclock(vec![3, 0, 0, 0, 0]);
-
-        // cmd 5
         let dot_5 = Dot::new(1, 5);
-        let clock_5 = util::vclock(vec![4, 0, 0, 0, 0]);
+
+        // deps
+        let deps_1 = HashSet::from_iter(vec![dot_4]);
+        let deps_2 = HashSet::from_iter(vec![dot_4]);
+        let deps_3 = HashSet::from_iter(vec![dot_5]);
+        let deps_4 = HashSet::from_iter(vec![dot_3]);
+        let deps_5 = HashSet::from_iter(vec![dot_4]);
 
         let order_a = vec![
-            (dot_3, None, clock_2.clone()),
-            (dot_4, None, clock_3.clone()),
-            (dot_5, None, clock_4.clone()),
-            (dot_1, None, clock_1.clone()),
-            (dot_2, None, clock_1.clone()),
+            (dot_3, None, deps_3.clone()),
+            (dot_4, None, deps_4.clone()),
+            (dot_5, None, deps_5.clone()),
+            (dot_1, None, deps_1.clone()),
+            (dot_2, None, deps_2.clone()),
         ];
         let order_b = vec![
-            (dot_3, None, clock_3),
-            (dot_4, None, clock_4),
-            (dot_5, None, clock_5),
-            (dot_2, None, clock_2),
-            (dot_1, None, clock_1),
+            (dot_3, None, deps_3),
+            (dot_4, None, deps_4),
+            (dot_5, None, deps_5),
+            (dot_2, None, deps_2),
+            (dot_1, None, deps_1),
         ];
-        let order_a = check_termination(n, order_a, transitive_conflicts);
-        let order_b = check_termination(n, order_b, transitive_conflicts);
-        assert_eq!(order_a, order_b);
+        let order_a = check_termination(n, order_a);
+        let order_b = check_termination(n, order_b);
+        assert!(order_a != order_b);
     }
 
     /// Simple example showing why encoding of dependencies matters for the
@@ -809,12 +809,10 @@ mod tests {
     /// It looks like the optimization would be correct if, instead of returning
     /// the highest conflicting command per replica, we would return the highest
     /// conflict command per replica *per key*.
-    #[ignore]
     #[test]
     fn transitive_conflicts_assumption_regression_test_2() {
         // config
         let n = 3;
-        let transitive_conflicts = true;
 
         let keys = |keys: Vec<&str>| {
             keys.into_iter()
@@ -825,407 +823,66 @@ mod tests {
         // cmd 1,1
         let dot_1_1 = Dot::new(1, 1);
         let keys_1_1 = keys(vec!["A"]);
-        let clock_1_1 = util::vclock(vec![0, 0, 0]);
+        let deps_1_1 = HashSet::new();
 
         // cmd 1,2
         let dot_1_2 = Dot::new(1, 2);
         let keys_1_2 = keys(vec!["B"]);
-        let clock_1_2 = util::vclock(vec![0, 0, 0]);
+        let deps_1_2 = HashSet::new();
 
         // cmd 2,1
         let dot_2_1 = Dot::new(2, 1);
         let keys_2_1 = keys(vec!["A", "B"]);
-        let clock_2_1 = util::vclock(vec![2, 0, 0]);
+        let deps_2_1 = HashSet::from_iter(vec![dot_1_2]);
 
         let order_a = vec![
-            (dot_1_1, Some(keys_1_1.clone()), clock_1_1.clone()),
-            (dot_1_2, Some(keys_1_2.clone()), clock_1_2.clone()),
-            (dot_2_1, Some(keys_2_1.clone()), clock_2_1.clone()),
+            (dot_1_1, Some(keys_1_1.clone()), deps_1_1.clone()),
+            (dot_1_2, Some(keys_1_2.clone()), deps_1_2.clone()),
+            (dot_2_1, Some(keys_2_1.clone()), deps_2_1.clone()),
         ];
         let order_b = vec![
-            (dot_1_2, Some(keys_1_2), clock_1_2),
-            (dot_2_1, Some(keys_2_1), clock_2_1),
-            (dot_1_1, Some(keys_1_1), clock_1_1),
+            (dot_1_2, Some(keys_1_2), deps_1_2),
+            (dot_2_1, Some(keys_2_1), deps_2_1),
+            (dot_1_1, Some(keys_1_1), deps_1_1),
         ];
-        let order_a = check_termination(n, order_a, transitive_conflicts);
-        let order_b = check_termination(n, order_b, transitive_conflicts);
-        assert_eq!(order_a, order_b);
+        let order_a = check_termination(n, order_a);
+        let order_b = check_termination(n, order_b);
+        assert!(order_a != order_b);
     }
 
     #[test]
-    fn self_cycle_test() {
+    fn cycle() {
         // config
         let n = 1;
-        let transitive_conflicts = false;
 
-        // cmd 1
+        // dots
         let dot_1 = Dot::new(1, 1);
-        let clock_1 = util::vclock(vec![3]);
+        let dot_2 = Dot::new(2, 1);
+        let dot_3 = Dot::new(3, 1);
 
-        // cmd 2
-        let dot_2 = Dot::new(1, 2);
-        let clock_2 = util::vclock(vec![1]);
-
-        // cmd 3
-        let dot_3 = Dot::new(1, 3);
-        let clock_3 = util::vclock(vec![2]);
+        // deps
+        let deps_1 = HashSet::from_iter(vec![dot_3]);
+        let deps_2 = HashSet::from_iter(vec![dot_1]);
+        let deps_3 = HashSet::from_iter(vec![dot_2]);
 
         let args = vec![
-            (dot_1, None, clock_1),
-            (dot_2, None, clock_2),
-            (dot_3, None, clock_3),
+            (dot_1, None, deps_1),
+            (dot_2, None, deps_2),
+            (dot_3, None, deps_3),
         ];
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    /// We have 3 commands by the same process:
-    /// - the first (1,1) accesses key A and thus has no dependencies
-    /// - the second (1,2) accesses key B and thus has no dependencies
-    /// - the third (1,3) accesses key B and thus it depends on the second
-    ///   command (1,2)
-    ///
-    /// The commands are then received in the following order:
-    /// - (1,2) executed as it has no dependencies
-    /// - (1,3) can't be executed: this command depends on (1,2) and if we don't
-    ///   assume the transitivity of conflicts, it also depends on (1,1) that
-    ///   hasn't been executed
-    /// - (1,1) executed as it has no dependencies
-    ///
-    /// Now when (1,1) is executed, we would hope that (1,3) would also be.
-    /// However, since (1,1) accesses key A, when it is executed, the previous
-    /// pending mechanism doesn't try the pending operation (1,3) because it
-    /// accesses a different key (B). This means that such mechanism to
-    /// track pending commands per key does not work when we don't assume
-    /// the transitivity of conflicts.
-    ///
-    /// This was fixed by simply tracking one missing dependency per pending
-    /// command. When that dependency is executed, if the command still can't be
-    /// executed it's because there's another missing dependency, and now it
-    /// will wait for that one.
-    fn pending_on_different_key_regression_test() {
-        // create config
-        let n = 1;
-        let f = 1;
-        let mut config = Config::new(n, f);
-
-        // cmd 1
-        let dot_1 = Dot::new(1, 1);
-        let cmd_1 =
-            Command::put(Rifl::new(1, 1), String::from("A"), String::new());
-        let clock_1 = util::vclock(vec![0]);
-
-        // cmd 2
-        let dot_2 = Dot::new(1, 2);
-        let cmd_2 =
-            Command::put(Rifl::new(2, 1), String::from("B"), String::new());
-        let clock_2 = util::vclock(vec![0]);
-
-        // cmd 3
-        let dot_3 = Dot::new(1, 3);
-        let cmd_3 =
-            Command::put(Rifl::new(3, 1), String::from("B"), String::new());
-        let clock_3 = util::vclock(vec![2]);
-
-        for transitive_conflicts in vec![false, true] {
-            config.set_transitive_conflicts(transitive_conflicts);
-
-            // create queue
-            let process_id = 1;
-            let shard_id = 0;
-            let mut queue = DependencyGraph::new(process_id, shard_id, &config);
-            let time = RunTime;
-
-            // add cmd 2
-            queue.handle_add(dot_2, cmd_2.clone(), clock_2.clone(), &time);
-            assert_eq!(queue.commands_to_execute(), vec![cmd_2.clone()]);
-
-            // add cmd 3
-            queue.handle_add(dot_3, cmd_3.clone(), clock_3.clone(), &time);
-            if transitive_conflicts {
-                // if we assume transitive conflicts, then cmd 3 can be executed
-                assert_eq!(queue.commands_to_execute(), vec![cmd_3.clone()]);
-            } else {
-                // otherwise, it can't as it also depends cmd 1
-                assert!(queue.commands_to_execute().is_empty());
-            }
-
-            // add cmd 1
-            queue.handle_add(dot_1, cmd_1.clone(), clock_1.clone(), &time);
-            // cmd 1 can always be executed
-            if transitive_conflicts {
-                assert_eq!(queue.commands_to_execute(), vec![cmd_1.clone()]);
-            } else {
-                // the following used to fail because our previous mechanism to
-                // track pending commands didn't work without the assumption of
-                // transitive conflicts
-                let ready = queue.commands_to_execute();
-                assert_eq!(ready.len(), 2);
-                assert!(ready.contains(&cmd_3));
-                assert!(ready.contains(&cmd_1));
-            }
-        }
-    }
-
-    #[test]
-    fn simple_test_add_1() {
-        // the actual test_add_1 is:
-        // {1, 2}, [2, 2]
-        // {1, 1}, [3, 2]
-        // {1, 5}, [6, 2]
-        // {1, 6}, [6, 3]
-        // {1, 3}, [3, 3]
-        // {2, 2}, [0, 2]
-        // {2, 1}, [4, 3]
-        // {1, 4}, [6, 2]
-        // {2, 3}, [6, 3]
-        // in the simple version, {1, 5} and {1, 6} are removed
-
-        // {1, 2}, [2, 2]
-        let dot_a = Dot::new(1, 2);
-        let clock_a = util::vclock(vec![2, 2]);
-
-        // {1, 1}, [3, 2]
-        let dot_b = Dot::new(1, 1);
-        let clock_b = util::vclock(vec![3, 2]);
-
-        // {1, 3}, [3, 3]
-        let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![3, 3]);
-
-        // {2, 2}, [0, 2]
-        let dot_d = Dot::new(2, 2);
-        let clock_d = util::vclock(vec![0, 2]);
-
-        // {2, 1}, [4, 3]
-        let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![4, 3]);
-
-        // {1, 4}, [4, 2]
-        let dot_f = Dot::new(1, 4);
-        let clock_f = util::vclock(vec![4, 2]);
-
-        // {2, 3}, [4, 3]
-        let dot_g = Dot::new(2, 3);
-        let clock_g = util::vclock(vec![4, 3]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-            (dot_g, None, clock_g),
-        ];
-
-        let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    fn test_add_2() {
-        // {2, 4}, [3, 4]
-        let dot_a = Dot::new(2, 4);
-        let clock_a = util::vclock(vec![3, 4]);
-
-        // {2, 3}, [0, 3]
-        let dot_b = Dot::new(2, 3);
-        let clock_b = util::vclock(vec![0, 3]);
-
-        // {1, 3}, [3, 3]
-        let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![3, 3]);
-
-        // {1, 1}, [3, 4]
-        let dot_d = Dot::new(1, 1);
-        let clock_d = util::vclock(vec![3, 4]);
-
-        // {2, 2}, [0, 2]
-        let dot_e = Dot::new(2, 2);
-        let clock_e = util::vclock(vec![0, 2]);
-
-        // {1, 2}, [3, 3]
-        let dot_f = Dot::new(1, 2);
-        let clock_f = util::vclock(vec![3, 3]);
-
-        // {2, 1}, [3, 3]
-        let dot_g = Dot::new(2, 1);
-        let clock_g = util::vclock(vec![3, 3]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-            (dot_g, None, clock_g),
-        ];
-
-        let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    fn test_add_3() {
-        // {3, 2}, [1, 0, 2]
-        let dot_a = Dot::new(3, 2);
-        let clock_a = util::vclock(vec![1, 0, 2]);
-
-        // {3, 3}, [1, 1, 3]
-        let dot_b = Dot::new(3, 3);
-        let clock_b = util::vclock(vec![1, 1, 3]);
-
-        // {3, 1}, [1, 1, 3]
-        let dot_c = Dot::new(3, 1);
-        let clock_c = util::vclock(vec![1, 1, 3]);
-
-        // {1, 1}, [1, 0, 0]
-        let dot_d = Dot::new(1, 1);
-        let clock_d = util::vclock(vec![1, 0, 0]);
-
-        // {2, 1}, [1, 1, 2]
-        let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![1, 1, 2]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-        ];
-
-        let n = 3;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    fn test_add_4() {
-        // {1, 5}, [5]
-        let dot_a = Dot::new(1, 5);
-        let clock_a = util::vclock(vec![5]);
-
-        // {1, 4}, [6]
-        let dot_b = Dot::new(1, 4);
-        let clock_b = util::vclock(vec![6]);
-
-        // {1, 1}, [5]
-        let dot_c = Dot::new(1, 1);
-        let clock_c = util::vclock(vec![5]);
-
-        // {1, 2}, [6]
-        let dot_d = Dot::new(1, 2);
-        let clock_d = util::vclock(vec![6]);
-
-        // {1, 3}, [5]
-        let dot_e = Dot::new(1, 3);
-        let clock_e = util::vclock(vec![5]);
-
-        // {1, 6}, [6]
-        let dot_f = Dot::new(1, 6);
-        let clock_f = util::vclock(vec![6]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-        ];
-
-        let n = 1;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    fn test_add_5() {
-        // {1, 1}, [1, 1]
-        let dot_a = Dot::new(1, 1);
-        let clock_a = util::vclock(vec![1, 1]);
-
-        // {1, 2}, [2, 0]
-        let dot_b = Dot::new(1, 2);
-        let clock_b = util::vclock(vec![2, 0]);
-
-        // {2, 1}, [1, 1]
-        let dot_c = Dot::new(2, 1);
-        let clock_c = util::vclock(vec![1, 1]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-        ];
-
-        let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
-    }
-
-    #[test]
-    fn test_add_6() {
-        // {1, 1}, [1, 0]
-        let dot_a = Dot::new(1, 1);
-        let clock_a = util::vclock(vec![1, 0]);
-
-        // {1, 2}, [4, 1]
-        let dot_b = Dot::new(1, 2);
-        let clock_b = util::vclock(vec![4, 1]);
-
-        // {1, 3}, [3, 0]
-        let dot_c = Dot::new(1, 3);
-        let clock_c = util::vclock(vec![3, 0]);
-
-        // {1, 4}, [4, 0]
-        let dot_d = Dot::new(1, 4);
-        let clock_d = util::vclock(vec![4, 0]);
-
-        // {2, 1}, [1, 1]
-        let dot_e = Dot::new(2, 1);
-        let clock_e = util::vclock(vec![1, 1]);
-
-        // {2, 2}, [3, 2]
-        let dot_f = Dot::new(2, 2);
-        let clock_f = util::vclock(vec![3, 2]);
-
-        // create args
-        let args = vec![
-            (dot_a, None, clock_a),
-            (dot_b, None, clock_b),
-            (dot_c, None, clock_c),
-            (dot_d, None, clock_d),
-            (dot_e, None, clock_e),
-            (dot_f, None, clock_f),
-        ];
-
-        let n = 2;
-        let transitive_conflicts = false;
-        shuffle_it(n, transitive_conflicts, args);
+        shuffle_it(n, args);
     }
 
     #[test]
     fn test_add_random() {
         let shard_id = 0;
         let n = 2;
-        let transitive_conflicts = false;
         let iterations = 10;
         let events_per_process = 3;
 
         (0..iterations).for_each(|_| {
             let args = random_adds(shard_id, n, events_per_process);
-            shuffle_it(n, transitive_conflicts, args);
+            shuffle_it(n, args);
         });
     }
 
@@ -1233,7 +890,7 @@ mod tests {
         shard_id: ShardId,
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, HashSet<Dot>)> {
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
 
@@ -1245,8 +902,8 @@ mod tests {
             })
             .collect();
 
-        // compute keys and bottom clocks
-        let clocks: HashMap<_, _> = dots
+        // compute keys and empty deps
+        let deps: HashMap<_, _> = dots
             .clone()
             .into_iter()
             .map(|dot| {
@@ -1257,9 +914,9 @@ mod tests {
                 let mut keys = BTreeSet::new();
                 assert!(keys.insert(possible_keys[0].clone()));
                 assert!(keys.insert(possible_keys[1].clone()));
-                // create bottom clock
-                let clock = VClock::with(util::process_ids(shard_id, n));
-                (dot, (Some(keys), RefCell::new(clock)))
+                // create empty deps
+                let deps = HashSet::new();
+                (dot, (Some(keys), RefCell::new(deps)))
             })
             .collect();
 
@@ -1270,9 +927,9 @@ mod tests {
 
             // find their data
             let (left_keys, left_clock) =
-                clocks.get(left).expect("left dot data must exist");
+                deps.get(left).expect("left dot data must exist");
             let (right_keys, right_clock) =
-                clocks.get(right).expect("right dot data must exist");
+                deps.get(right).expect("right dot data must exist");
 
             // unwrap keys
             let left_keys = left_keys.as_ref().expect("left keys should exist");
@@ -1287,19 +944,15 @@ mod tests {
             // dependency of the other
             if conflict {
                 // borrow their clocks mutably
-                let mut left_clock = left_clock.borrow_mut();
-                let mut right_clock = right_clock.borrow_mut();
+                let mut left_deps = left_clock.borrow_mut();
+                let mut right_deps = right_clock.borrow_mut();
 
                 if left.source() == right.source() {
                     // if dots belong to the same process, make the latest
                     // depend on the oldest
                     match left.sequence().cmp(&right.sequence()) {
-                        Ordering::Less => {
-                            right_clock.add(&left.source(), left.sequence());
-                        }
-                        Ordering::Greater => {
-                            left_clock.add(&right.source(), right.sequence());
-                        }
+                        Ordering::Less => right_deps.insert(*left),
+                        Ordering::Greater => left_deps.insert(*right),
                         _ => unreachable!("dots must be different"),
                     };
                 } else {
@@ -1308,16 +961,16 @@ mod tests {
                     match rand::random::<usize>() % 3 {
                         0 => {
                             // left depends on right
-                            left_clock.add(&right.source(), right.sequence());
+                            left_deps.insert(*right);
                         }
                         1 => {
                             // right depends on left
-                            right_clock.add(&left.source(), left.sequence());
+                            right_deps.insert(*left);
                         }
                         2 => {
                             // both
-                            left_clock.add(&right.source(), right.sequence());
-                            right_clock.add(&left.source(), left.sequence());
+                            left_deps.insert(*right);
+                            right_deps.insert(*left);
                         }
                         _ => panic!("usize % 3 must < 3"),
                     }
@@ -1325,48 +978,46 @@ mod tests {
             }
         });
 
-        clocks
-            .into_iter()
-            .map(|(dot, (keys, clock_cell))| {
-                let clock = clock_cell.into_inner();
-                (dot, keys, clock)
+        deps.into_iter()
+            .map(|(dot, (keys, deps_cell))| {
+                let deps = deps_cell.into_inner();
+                (dot, keys, deps)
             })
             .collect()
     }
 
     fn shuffle_it(
         n: usize,
-        transitive_conflicts: bool,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, HashSet<Dot>)>,
     ) {
-        let total_order =
-            check_termination(n, args.clone(), transitive_conflicts);
-        println!("transitive_conflicts = {:?}", transitive_conflicts);
+        let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
             println!("permutation = {:?}", permutation);
-            let sorted =
-                check_termination(n, permutation, transitive_conflicts);
+            let sorted = check_termination(n, permutation);
             assert_eq!(total_order, sorted);
         });
     }
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, VClock<ProcessId>)>,
-        transitive_conflicts: bool,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, HashSet<Dot>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
         let shard_id = 0;
         let f = 1;
-        let mut config = Config::new(n, f);
-        config.set_transitive_conflicts(transitive_conflicts);
+        let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
         let mut all_rifls = HashSet::new();
         let mut sorted = BTreeMap::new();
 
-        args.into_iter().for_each(|(dot, keys, clock)| {
+        args.into_iter().for_each(|(dot, keys, dep_dots)| {
+            // transform dep dots into deps
+            let deps = dep_dots
+                .into_iter()
+                .map(|dep_dot| dep(dep_dot, shard_id))
+                .collect();
             // create command rifl from its dot
             let rifl = Rifl::new(dot.source() as ClientId, dot.sequence());
 
@@ -1385,7 +1036,7 @@ mod tests {
             assert!(all_rifls.insert(rifl));
 
             // add it to the queue
-            queue.handle_add(dot, cmd, clock, &time);
+            queue.handle_add(dot, cmd, deps, &time);
 
             // get ready to execute
             let to_execute = queue.commands_to_execute();
@@ -1455,9 +1106,7 @@ mod tests {
         let shard_id = 0;
         let n = 5;
         let f = 1;
-        let mut config = Config::new(n, f);
-        let transitive_conflicts = false;
-        config.set_transitive_conflicts(transitive_conflicts);
+        let config = Config::new(n, f);
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
 
@@ -1468,7 +1117,13 @@ mod tests {
         queue.vertex_index.index(Vertex::new(
             root_dot,
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 40, 61]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 40), shard_id),
+                dep(Dot::new(5, 61), shard_id),
+            ]),
             &time,
         ));
 
@@ -1476,70 +1131,130 @@ mod tests {
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 31),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 30, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 30), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 32)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 32),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 31, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 31), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 33)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 33),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 32, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 32), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 34)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 34),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 33, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 33), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 35)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 35),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 34, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 34), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 36)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 36),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 35, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 35), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 37)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 37),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 36, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 36), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 38)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 38),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 37, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 37), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 39)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 39),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 38, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 38), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
         // (4, 40)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 40),
             conflicting_command(),
-            util::vclock(vec![60, 50, 50, 39, 60]),
+            HashSet::from_iter(vec![
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 39), shard_id),
+                dep(Dot::new(5, 60), shard_id),
+            ]),
             &time,
         ));
 
@@ -1568,7 +1283,10 @@ mod tests {
                 1,
                 "there's a single missing dependency"
             );
-            assert_eq!(missing_deps.into_iter().next().unwrap(), missing_dot);
+            assert_eq!(
+                missing_deps.into_iter().next().unwrap().dot,
+                missing_dot
+            );
 
             // check that ready commands are actually delivered
             assert_eq!(ready_commands, to_be_executed.len());
