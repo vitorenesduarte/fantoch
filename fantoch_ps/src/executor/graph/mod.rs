@@ -146,12 +146,13 @@ impl DependencyGraph {
     /// Returns which dots have been added to the executed clock.
     #[must_use]
     pub fn to_executors(&mut self) -> Option<HashSet<Dot>> {
-        if self.added_to_executed_clock.is_some() {
-            // if it has been set, take what's there and put a new empty set
-            self.added_to_executed_clock.replace(HashSet::new())
-        } else {
-            None
+        if let Some(added) = self.added_to_executed_clock.as_ref() {
+            // if it has been set and has something, take what's there and put a new empty set
+            if !added.is_empty() {
+                return self.added_to_executed_clock.replace(HashSet::new());
+            }
         }
+        None
     }
 
     /// Returns a request.
