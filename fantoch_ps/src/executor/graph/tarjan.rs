@@ -95,6 +95,7 @@ impl TarjanSCCFinder {
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
         executed_clock: &mut AEClock<ProcessId>,
+        added_to_executed_clock: &mut Option<HashSet<Dot>>,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
@@ -189,6 +190,7 @@ impl TarjanSCCFinder {
                             dep.dot,
                             &dep_vertex_ref,
                             executed_clock,
+                            added_to_executed_clock,
                             vertex_index,
                             found,
                         );
@@ -287,6 +289,9 @@ impl TarjanSCCFinder {
                 // member_dot     );
                 // }
                 executed_clock.add(&member_dot.source(), member_dot.sequence());
+                if let Some(added) = added_to_executed_clock.as_mut() {
+                    added.insert(member_dot);
+                }
 
                 log!(
                     "p{}: Finder::strong_connect executed clock {:?}",

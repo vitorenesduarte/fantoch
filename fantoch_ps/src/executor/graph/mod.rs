@@ -26,10 +26,8 @@ use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::Arc;
 use threshold::AEClock;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,8 +49,6 @@ pub struct DependencyGraph {
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
     // only used in partial replication
-    executed_clock_snapshot: Arc<RwLock<AEClock<ProcessId>>>,
-    // only used in partial replication
     level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
@@ -61,9 +57,12 @@ pub struct DependencyGraph {
     // worker 0 (handles commands):
     // - adds new commands `to_execute`
     // - `out_requests` dependencies to be able to order commands
+    // - notifies remaining workers about what's being executed through
+    //   `added_to_executed_clock`
     to_execute: Vec<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
-    // worker 1 (handles requests):
+    added_to_executed_clock: Option<HashSet<Dot>>,
+    // auxiliary workers (handles requests):
     // - may have `buffered_in_requests` when doesn't have the command yet
     // - produces `out_request_replies` when it has the command
     buffered_in_requests: HashMap<ShardId, HashSet<Dot>>,
@@ -95,8 +94,6 @@ impl DependencyGraph {
             .map(|(process_id, _)| process_id)
             .collect();
         let executed_clock = AEClock::with(ids.clone());
-        let executed_clock_snapshot =
-            Arc::new(RwLock::new(executed_clock.clone()));
         // create level executed clock
         let level_executed_clock =
             LevelExecutedClock::new(process_id, shard_id, config);
@@ -110,6 +107,12 @@ impl DependencyGraph {
         let to_execute = Vec::new();
         // create requests and request replies
         let out_requests = Default::default();
+        // only track what's added to the executed clock if partial replication
+        let added_to_executed_clock = if config.shards() == 1 {
+            None
+        } else {
+            Some(HashSet::new())
+        };
         let buffered_in_requests = Default::default();
         let out_request_replies = Default::default();
         DependencyGraph {
@@ -117,7 +120,6 @@ impl DependencyGraph {
             process_id,
             shard_id,
             executed_clock,
-            executed_clock_snapshot,
             level_executed_clock,
             vertex_index,
             pending_index,
@@ -125,6 +127,7 @@ impl DependencyGraph {
             metrics,
             to_execute,
             out_requests,
+            added_to_executed_clock,
             buffered_in_requests,
             out_request_replies,
         }
@@ -138,6 +141,17 @@ impl DependencyGraph {
     #[must_use]
     pub fn command_to_execute(&mut self) -> Option<Command> {
         self.to_execute.pop()
+    }
+
+    /// Returns which dots have been added to the executed clock.
+    #[must_use]
+    pub fn to_executors(&mut self) -> Option<HashSet<Dot>> {
+        if self.added_to_executed_clock.is_some() {
+            // if it has been set, take what's there and put a new empty set
+            self.added_to_executed_clock.replace(HashSet::new())
+        } else {
+            None
+        }
     }
 
     /// Returns a request.
@@ -161,43 +175,34 @@ impl DependencyGraph {
         &self.metrics
     }
 
-    fn cleanup(&mut self, time: &dyn SysTime) -> Option<GraphExecutionInfo> {
+    fn cleanup(&mut self, time: &dyn SysTime) {
         log!(
             "p{}: @{} Graph::cleanup | time = {}",
             self.process_id,
             self.executor_index,
             time.millis()
         );
-        if self.executor_index == 0 {
-            self.level_executed_clock
-                .maybe_level(&mut self.executed_clock, time);
-            // if main executor, send snapshot of executed clock to other
-            // executors
-            Some(GraphExecutionInfo::ExecutedClock {
-                clock: self.executed_clock.clone(),
-            })
-        } else {
-            // if not main executor, simply check pending remote requests
+        self.level_executed_clock
+            .maybe_level(&mut self.executed_clock, time);
+        if self.executor_index > 0 {
+            // if not main executor, check pending remote requests
             self.check_pending_requests(time);
-            None
         }
     }
 
-    fn handle_executed_clock(
-        &mut self,
-        clock: AEClock<ProcessId>,
-        _time: &dyn SysTime,
-    ) {
-        assert_eq!(self.executor_index, 1);
+    fn handle_executed(&mut self, dots: HashSet<Dot>, _time: &dyn SysTime) {
         log!(
-            "p{}: @{} Graph::handle_executed_clock {:?} | time = {}",
+            "p{}: @{} Graph::handle_executed {:?} | time = {}",
             self.process_id,
             self.executor_index,
-            clock,
+            dots,
             _time.millis()
         );
-        // update the snapshot to be used by the remaining auxiliary executors
-        *self.executed_clock_snapshot.write() = clock;
+        if self.executor_index > 0 {
+            for dot in dots {
+                self.executed_clock.add(&dot.source(), dot.sequence());
+            }
+        }
     }
 
     /// Add a new command with its clock to the queue.
@@ -331,11 +336,7 @@ impl DependencyGraph {
             } else {
                 // if we don't have it, then check if it's executed (in our
                 // snapshot)
-                if self
-                    .executed_clock_snapshot
-                    .read()
-                    .contains(&dot.source(), dot.sequence())
-                {
+                if self.executed_clock.contains(&dot.source(), dot.sequence()) {
                     log!(
                         "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
                         self.process_id,
@@ -399,6 +400,7 @@ impl DependencyGraph {
                 RequestReply::Executed { dot } => {
                     // update executed clock
                     self.executed_clock.add(&dot.source(), dot.sequence());
+                    self.added_to_executed_clock.as_mut().expect("added_to_executed_clock should be set in partial replication").insert(dot);
                     // check pending
                     let dots = vec![dot];
                     let mut total_found = 0;
@@ -615,6 +617,7 @@ impl DependencyGraph {
                 dot,
                 &vertex,
                 &mut self.executed_clock,
+                &mut self.added_to_executed_clock,
                 &self.vertex_index,
                 found,
             ),

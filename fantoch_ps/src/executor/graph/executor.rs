@@ -10,7 +10,6 @@ use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
-use threshold::AEClock;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
@@ -53,9 +52,7 @@ impl Executor for GraphExecutor {
 
     fn cleanup(&mut self, time: &dyn SysTime) {
         if self.config.shards() > 1 {
-            if let Some(self_execution_info) = self.graph.cleanup(time) {
-                self.to_executors.push((self.shard_id, self_execution_info));
-            }
+            self.graph.cleanup(time);
             self.fetch_actions(time);
         }
     }
@@ -79,8 +76,8 @@ impl Executor for GraphExecutor {
                 self.graph.handle_request_reply(infos, time);
                 self.fetch_actions(time);
             }
-            GraphExecutionInfo::ExecutedClock { clock } => {
-                self.graph.handle_executed_clock(clock, time);
+            GraphExecutionInfo::Executed { dots } => {
+                self.graph.handle_executed(dots, time);
             }
         }
     }
@@ -106,6 +103,7 @@ impl GraphExecutor {
     fn fetch_actions(&mut self, time: &dyn SysTime) {
         self.fetch_commands_to_execute(time);
         if self.config.shards() > 1 {
+            self.fetch_to_executors(time);
             self.fetch_requests(time);
             self.fetch_request_replies(time);
         }
@@ -122,6 +120,20 @@ impl GraphExecutor {
                 _time.millis()
             );
             self.execute(cmd);
+        }
+    }
+
+    fn fetch_to_executors(&mut self, _time: &dyn SysTime) {
+        if let Some(added) = self.graph.to_executors() {
+            log!(
+                "p{}: @{} GraphExecutor::to_executors {:?} | time = {}",
+                self.process_id,
+                self.executor_index,
+                added,
+                _time.millis()
+            );
+            let executed = GraphExecutionInfo::executed(added);
+            self.to_executors.push((self.shard_id, executed));
         }
     }
 
@@ -180,8 +192,8 @@ pub enum GraphExecutionInfo {
     RequestReply {
         infos: Vec<super::RequestReply>,
     },
-    ExecutedClock {
-        clock: AEClock<ProcessId>,
+    Executed {
+        dots: HashSet<Dot>,
     },
 }
 
@@ -197,21 +209,22 @@ impl GraphExecutionInfo {
     fn request_reply(infos: Vec<super::RequestReply>) -> Self {
         Self::RequestReply { infos }
     }
+
+    fn executed(dots: HashSet<Dot>) -> Self {
+        Self::Executed { dots }
+    }
 }
 
 impl MessageIndex for GraphExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
         // to avoid skew, this should be a multiple of the number of extra
         // executors
-        const MAX_EXTRA_EXECUTORS: usize = 14;
+        const MAX_EXTRA_EXECUTORS: usize = 15;
         const MAIN_INDEX: usize = 0;
-        const SECONDARY_INDEX: usize = 1;
-        const SHIFT: usize = 2;
+        const SHIFT: usize = 1;
 
-        const fn executor_index_no_shift(
-            index: usize,
-        ) -> Option<(usize, usize)> {
-            Some((0, index))
+        const fn executor_index_no_shift() -> Option<(usize, usize)> {
+            Some((0, MAIN_INDEX))
         }
 
         fn executor_random_index_shift() -> Option<(usize, usize)> {
@@ -222,12 +235,10 @@ impl MessageIndex for GraphExecutionInfo {
         }
 
         match self {
-            Self::Add { .. } => executor_index_no_shift(MAIN_INDEX),
+            Self::Add { .. } => executor_index_no_shift(),
             Self::Request { .. } => executor_random_index_shift(),
-            Self::RequestReply { .. } => executor_index_no_shift(MAIN_INDEX),
-            Self::ExecutedClock { .. } => {
-                executor_index_no_shift(SECONDARY_INDEX)
-            }
+            Self::RequestReply { .. } => executor_index_no_shift(),
+            Self::Executed { .. } => None, // notify all workers
         }
     }
 }
