@@ -10,6 +10,7 @@ use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
+use std::iter::FromIterator;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
@@ -64,6 +65,7 @@ impl Executor for GraphExecutor {
                     self.execute(cmd);
                 } else {
                     // handle new command
+                    let deps = Vec::from_iter(deps);
                     self.graph.handle_add(dot, cmd, deps, time);
                     self.fetch_actions(time);
                 }

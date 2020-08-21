@@ -35,7 +35,7 @@ pub enum RequestReply {
     Info {
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dependency>,
+        deps: Vec<Dependency>,
     },
     Executed {
         dot: Dot,
@@ -212,7 +212,7 @@ impl DependencyGraph {
         &mut self,
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dependency>,
+        deps: Vec<Dependency>,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
@@ -690,12 +690,12 @@ mod tests {
         // cmd 0
         let cmd_0 =
             Command::put(Rifl::new(1, 1), String::from("A"), String::new());
-        let deps_0 = HashSet::from_iter(vec![dep(dot_1, shard_id)]);
+        let deps_0 = vec![dep(dot_1, shard_id)];
 
         // cmd 1
         let cmd_1 =
             Command::put(Rifl::new(2, 1), String::from("A"), String::new());
-        let deps_1 = HashSet::from_iter(vec![dep(dot_0, shard_id)]);
+        let deps_1 = vec![dep(dot_0, shard_id)];
 
         // add cmd 0
         queue.handle_add(dot_0, cmd_0.clone(), deps_0, &time);
@@ -1117,13 +1117,13 @@ mod tests {
         queue.vertex_index.index(Vertex::new(
             root_dot,
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 40), shard_id),
                 dep(Dot::new(5, 61), shard_id),
-            ]),
+            ],
             &time,
         ));
 
@@ -1131,130 +1131,130 @@ mod tests {
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 31),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 30), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 32)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 32),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 31), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 33)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 33),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 32), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 34)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 34),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 33), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 35)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 35),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 34), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 36)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 36),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 35), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 37)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 37),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 36), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 38)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 38),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 37), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 39)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 39),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 38), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
         // (4, 40)
         queue.vertex_index.index(Vertex::new(
             Dot::new(4, 40),
             conflicting_command(),
-            HashSet::from_iter(vec![
+            vec![
                 dep(Dot::new(1, 60), shard_id),
                 dep(Dot::new(2, 50), shard_id),
                 dep(Dot::new(3, 50), shard_id),
                 dep(Dot::new(4, 39), shard_id),
                 dep(Dot::new(5, 60), shard_id),
-            ]),
+            ],
             &time,
         ));
 
