@@ -14,7 +14,7 @@ use fantoch::HashSet;
 use std::fmt::Debug;
 
 pub trait KeyDeps: Debug + Clone {
-    /// Create a new `KeyClocks` instance.
+    /// Create a new `KeyDeps` instance.
     fn new(shard_id: ShardId) -> Self;
 
     /// Sets the command's `Dot` as the latest command on each key touched by
@@ -46,7 +46,7 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::{DotGen, ProcessId, Rifl};
-    use fantoch::HashSet;
+    use fantoch::{HashMap, HashSet};
     use std::iter::FromIterator;
     use std::thread;
 
@@ -296,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn locked_test() {
+    fn concurrent_locked_test() {
         let nthreads = 2;
         let ops_number = 3000;
         let max_keys_per_command = 2;
@@ -322,16 +322,16 @@ mod tests {
     ) {
         // create key deps
         let shard_id = 0;
-        let clocks = KD::new(shard_id);
+        let key_deps = KD::new(shard_id);
 
         // spawn workers
         let handles: Vec<_> = (1..=nthreads)
             .map(|process_id| {
-                let clocks_clone = clocks.clone();
+                let key_deps_clone = key_deps.clone();
                 thread::spawn(move || {
                     worker(
                         process_id as ProcessId,
-                        clocks_clone,
+                        key_deps_clone,
                         ops_number,
                         max_keys_per_command,
                         keys_number,
@@ -341,65 +341,65 @@ mod tests {
             })
             .collect();
 
-        // wait for all workers and aggregate their clocks
-        let mut all_clocks = Vec::new();
-        let mut all_keys = HashSet::new();
+        // wait for all workers and aggregate their deps
+        let mut all_deps = HashMap::new();
         for handle in handles {
-            let clocks = handle.join().expect("worker should finish");
-            for (dot, cmd, clock) in clocks {
-                if let Some(cmd) = &cmd {
-                    all_keys.extend(
-                        cmd.keys(shard_id).cloned().map(|key| Some(key)),
-                    );
-                } else {
-                    all_keys.insert(None);
-                }
-                all_clocks.push((dot, cmd, clock));
+            let results = handle.join().expect("worker should finish");
+            for (dot, cmd, deps) in results {
+                let res = all_deps.insert(dot, (cmd, deps));
+                assert!(res.is_none());
             }
         }
 
-        // for each key, check that for every two operations that access that
-        // key, one is a dependency of the other
-        for key in all_keys {
-            // get all operations with this color
-            let ops: Vec<_> = all_clocks
-                .iter()
-                .filter_map(|(dot, cmd, clock)| match (&key, cmd) {
-                    (Some(key), Some(cmd)) => {
-                        // if we have a key and not a noop, include command if
-                        // it accesses the key
-                        if cmd.contains_key(shard_id, &key) {
-                            Some((dot, clock))
-                        } else {
-                            None
-                        }
+        // get all dots
+        let dots: Vec<_> = all_deps.keys().cloned().collect();
+
+        // check for each possible pair of operations if they conflict
+        for i in 0..dots.len() {
+            for j in (i + 1)..dots.len() {
+                let dot_a = dots[i];
+                let dot_b = dots[j];
+                let (cmd_a, _) =
+                    all_deps.get(&dot_a).expect("dot_a must exist");
+                let (cmd_b, _) =
+                    all_deps.get(&dot_b).expect("dot_b must exist");
+
+                let should_conflict = match (cmd_a, cmd_b) {
+                    (Some(cmd_a), Some(cmd_b)) => {
+                        // neither command is a noop
+                        cmd_a.conflicts(&cmd_b)
                     }
                     _ => {
-                        // otherwise, i.e.:
-                        // - a key and a noop
-                        // - the noop color and an op or noop
-                        // always include
-                        Some((dot, clock))
+                        // at least one of the command is a noop, and thus they
+                        // conflict
+                        true
                     }
-                })
-                .collect();
+                };
 
-            // check for each possible pair of operations if they conflict
-            for i in 0..ops.len() {
-                for j in (i + 1)..ops.len() {
-                    let (dot_a, deps_a) = ops[i];
-                    let (dot_b, deps_b) = ops[j];
-                    let conflict =
-                        deps_a.contains(&dot_b) || deps_b.contains(&dot_a);
-                    assert!(conflict);
+                if should_conflict {
+                    let conflict = is_dep(dot_a, dot_b, &all_deps)
+                        || is_dep(dot_b, dot_a, &all_deps);
+                    assert!(conflict, format!("dot {:?} should be a dependency of {:?} (or the other way around); but that was not the case: {:?}", dot_a, dot_b, all_deps));
                 }
             }
         }
     }
 
+    fn is_dep(
+        dot: Dot,
+        dep: Dot,
+        all_deps: &HashMap<Dot, (Option<Command>, HashSet<Dot>)>,
+    ) -> bool {
+        // check if it's direct dependency, and if it's not a direct dependency,
+        // do depth-first-search
+        let (_, deps) = all_deps.get(&dot).expect("dot must exist");
+        deps.contains(&dep)
+            || deps.iter().any(|dep| is_dep(dot, *dep, all_deps))
+    }
+
     fn worker<K: KeyDeps>(
         process_id: ProcessId,
-        mut clocks: K,
+        mut key_deps: K,
         ops_number: usize,
         max_keys_per_command: usize,
         keys_number: usize,
@@ -407,34 +407,33 @@ mod tests {
     ) -> Vec<(Dot, Option<Command>, HashSet<Dot>)> {
         // create dot gen
         let mut dot_gen = DotGen::new(process_id);
-        // all clocks worker has generated
-        let mut all_clocks = Vec::new();
+        // all deps worker has generated
+        let mut all_deps = Vec::new();
 
         for _ in 0..ops_number {
             // generate dot
             let dot = dot_gen.next_id();
             // generate command
-            // TODO here we should also generate noops
             let cmd = util::gen_cmd(
                 max_keys_per_command,
                 keys_number,
                 noop_probability,
             );
-            // get clock
-            let clock = match cmd.as_ref() {
+            // compute deps
+            let deps = match cmd.as_ref() {
                 Some(cmd) => {
                     // add as command
-                    clocks.add_cmd(dot, &cmd, None)
+                    key_deps.add_cmd(dot, &cmd, None)
                 }
                 None => {
                     // add as noop
-                    clocks.add_noop(dot)
+                    key_deps.add_noop(dot)
                 }
             };
-            // save clock
-            all_clocks.push((dot, cmd, clock));
+            // save deps
+            all_deps.push((dot, cmd, deps));
         }
 
-        all_clocks
+        all_deps
     }
 }
