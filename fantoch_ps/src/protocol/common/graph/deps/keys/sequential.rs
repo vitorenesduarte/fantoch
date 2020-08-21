@@ -1,4 +1,4 @@
-use super::KeyDeps;
+use super::{Dependency, KeyDeps};
 use fantoch::command::Command;
 use fantoch::id::{Dot, ShardId};
 use fantoch::kvs::Key;
@@ -7,8 +7,8 @@ use fantoch::{HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyDeps {
     shard_id: ShardId,
-    latest_dots: HashMap<Key, Dot>,
-    noop_latest_dot: Option<Dot>,
+    latest_deps: HashMap<Key, Dependency>,
+    noop_latest_dep: Option<Dependency>,
 }
 
 impl KeyDeps for SequentialKeyDeps {
@@ -16,8 +16,8 @@ impl KeyDeps for SequentialKeyDeps {
     fn new(shard_id: ShardId) -> Self {
         Self {
             shard_id,
-            latest_dots: HashMap::new(),
-            noop_latest_dot: None,
+            latest_deps: HashMap::new(),
+            noop_latest_dep: None,
         }
     }
 
@@ -25,8 +25,8 @@ impl KeyDeps for SequentialKeyDeps {
         &mut self,
         dot: Dot,
         cmd: &Command,
-        past: Option<HashSet<Dot>>,
-    ) -> HashSet<Dot> {
+        past: Option<HashSet<Dependency>>,
+    ) -> HashSet<Dependency> {
         // we start with past in case there's one, or bottom otherwise
         let deps = match past {
             Some(past) => past,
@@ -35,7 +35,7 @@ impl KeyDeps for SequentialKeyDeps {
         self.do_add_cmd(dot, cmd, deps)
     }
 
-    fn add_noop(&mut self, dot: Dot) -> HashSet<Dot> {
+    fn add_noop(&mut self, dot: Dot) -> HashSet<Dependency> {
         // start with an empty set of dependencies
         let deps = HashSet::new();
         self.do_add_noop(dot, deps)
@@ -46,7 +46,7 @@ impl KeyDeps for SequentialKeyDeps {
         let mut deps = HashSet::new();
         self.maybe_add_noop_latest(&mut deps);
         self.do_cmd_deps(cmd, &mut deps);
-        deps
+        super::extract_dots(deps)
     }
 
     #[cfg(test)]
@@ -54,7 +54,7 @@ impl KeyDeps for SequentialKeyDeps {
         let mut deps = HashSet::new();
         self.maybe_add_noop_latest(&mut deps);
         self.do_noop_deps(&mut deps);
-        deps
+        super::extract_dots(deps)
     }
 
     fn parallel() -> bool {
@@ -63,9 +63,9 @@ impl KeyDeps for SequentialKeyDeps {
 }
 
 impl SequentialKeyDeps {
-    fn maybe_add_noop_latest(&self, deps: &mut HashSet<Dot>) {
-        if let Some(dot) = self.noop_latest_dot {
-            deps.insert(dot);
+    fn maybe_add_noop_latest(&self, deps: &mut HashSet<Dependency>) {
+        if let Some(dep) = self.noop_latest_dep.as_ref() {
+            deps.insert(dep.clone());
         }
     }
 
@@ -73,22 +73,25 @@ impl SequentialKeyDeps {
         &mut self,
         dot: Dot,
         cmd: &Command,
-        mut deps: HashSet<Dot>,
-    ) -> HashSet<Dot> {
+        mut deps: HashSet<Dependency>,
+    ) -> HashSet<Dependency> {
         // iterate through all command keys, get their current latest and set
         // ourselves to be the new latest
+        let new_dep = Dependency::from_cmd(dot, cmd);
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest command on this key
-            match self.latest_dots.get_mut(key) {
+            match self.latest_deps.get_mut(key) {
                 Some(dep) => {
                     // if there was a previous latest, then it's a dependency
-                    deps.insert(*dep);
+                    deps.insert(dep.clone());
                     // set self to be the new latest
-                    *dep = dot;
+                    *dep = new_dep.clone();
                 }
                 None => {
                     // set self to be the new latest
-                    self.latest_dots.entry(key.clone()).or_insert(dot);
+                    self.latest_deps
+                        .entry(key.clone())
+                        .or_insert(new_dep.clone());
                 }
             };
         });
@@ -103,10 +106,12 @@ impl SequentialKeyDeps {
     fn do_add_noop(
         &mut self,
         dot: Dot,
-        mut deps: HashSet<Dot>,
-    ) -> HashSet<Dot> {
+        mut deps: HashSet<Dependency>,
+    ) -> HashSet<Dependency> {
         // set self to be the new latest
-        if let Some(dep) = self.noop_latest_dot.replace(dot) {
+        if let Some(dep) =
+            self.noop_latest_dep.replace(Dependency::from_noop(dot))
+        {
             // if there was a previous latest, then it's a dependency
             deps.insert(dep);
         }
@@ -117,22 +122,22 @@ impl SequentialKeyDeps {
         deps
     }
 
-    fn do_noop_deps(&self, deps: &mut HashSet<Dot>) {
+    fn do_noop_deps(&self, deps: &mut HashSet<Dependency>) {
         // iterate through all keys, grab a read lock, and include their latest
         // in the final `deps`
-        self.latest_dots.values().for_each(|dep| {
+        self.latest_deps.values().for_each(|dep| {
             // take the dot as a dependency
-            deps.insert(*dep);
+            deps.insert(dep.clone());
         });
     }
 
     #[cfg(test)]
-    fn do_cmd_deps(&self, cmd: &Command, deps: &mut HashSet<Dot>) {
+    fn do_cmd_deps(&self, cmd: &Command, deps: &mut HashSet<Dependency>) {
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest command on this key
-            if let Some(dep) = self.latest_dots.get(key) {
+            if let Some(dep) = self.latest_deps.get(key) {
                 // if there is a latest, then it's a dependency
-                deps.insert(*dep);
+                deps.insert(dep.clone());
             }
         });
     }

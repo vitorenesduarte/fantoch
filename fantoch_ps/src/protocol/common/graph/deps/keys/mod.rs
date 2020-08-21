@@ -11,7 +11,28 @@ pub use sequential::SequentialKeyDeps;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ShardId};
 use fantoch::HashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Dependency {
+    pub dot: Dot,
+    pub shards: Option<BTreeSet<ShardId>>,
+}
+
+impl Dependency {
+    pub fn from_cmd(dot: Dot, cmd: &Command) -> Self {
+        Self {
+            dot,
+            shards: Some(cmd.shards().cloned().collect()),
+        }
+    }
+
+    pub fn from_noop(dot: Dot) -> Self {
+        Self { dot, shards: None }
+    }
+}
 
 pub trait KeyDeps: Debug + Clone {
     /// Create a new `KeyDeps` instance.
@@ -24,11 +45,11 @@ pub trait KeyDeps: Debug + Clone {
         &mut self,
         dot: Dot,
         cmd: &Command,
-        past: Option<HashSet<Dot>>,
-    ) -> HashSet<Dot>;
+        past: Option<HashSet<Dependency>>,
+    ) -> HashSet<Dependency>;
 
     /// Adds a noop.
-    fn add_noop(&mut self, dot: Dot) -> HashSet<Dot>;
+    fn add_noop(&mut self, dot: Dot) -> HashSet<Dependency>;
 
     /// Checks the current dependencies for some command.
     #[cfg(test)]
@@ -39,6 +60,11 @@ pub trait KeyDeps: Debug + Clone {
     fn noop_deps(&self) -> HashSet<Dot>;
 
     fn parallel() -> bool;
+}
+
+#[cfg(test)]
+fn extract_dots(deps: HashSet<Dependency>) -> HashSet<Dot> {
+    deps.into_iter().map(|dep| dep.dot).collect()
 }
 
 #[cfg(test)]
@@ -431,7 +457,7 @@ mod tests {
                 }
             };
             // save deps
-            all_deps.push((dot, cmd, deps));
+            all_deps.push((dot, cmd, extract_dots(deps)));
         }
 
         all_deps

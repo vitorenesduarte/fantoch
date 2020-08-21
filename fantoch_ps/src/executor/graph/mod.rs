@@ -17,6 +17,7 @@ pub use executor::{GraphExecutionInfo, GraphExecutor};
 use self::index::{PendingIndex, VertexIndex};
 use self::level::LevelExecutedClock;
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
+use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
@@ -36,20 +37,11 @@ pub enum RequestReply {
     Info {
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
     },
     Executed {
         dot: Dot,
     },
-}
-
-impl RequestReply {
-    fn dot(&self) -> &Dot {
-        match self {
-            Self::Info { dot, .. } => dot,
-            Self::Executed { dot, .. } => dot,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -84,7 +76,7 @@ enum FinderInfo {
     // set of dots in found SCCs (it's possible to find SCCs even though the
     // search for another dot failed), missing dependencies and set of dots
     // visited while searching for SCCs
-    MissingDependencies(Vec<Dot>, HashSet<Dot>, HashSet<Dot>),
+    MissingDependencies(Vec<Dot>, HashSet<Dependency>, HashSet<Dot>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -213,7 +205,7 @@ impl DependencyGraph {
         &mut self,
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
@@ -246,9 +238,9 @@ impl DependencyGraph {
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
-            FinderInfo::MissingDependencies(dots, dep_dot, _visited) => {
+            FinderInfo::MissingDependencies(dots, deps, _visited) => {
                 // update the pending
-                self.index_pending(dep_dot, dot, time);
+                self.index_pending(deps, dot, time);
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
@@ -270,18 +262,6 @@ impl DependencyGraph {
                 .collect::<std::collections::BTreeSet<_>>(),
             time.millis()
         );
-    }
-
-    pub fn handle_add_mine(&mut self, dot: Dot, _time: &dyn SysTime) {
-        assert_eq!(self.executor_index, 0);
-        log!(
-            "p{}: @{} Graph::handle_add_mine {:?} | time = {}",
-            self.process_id,
-            self.executor_index,
-            dot,
-            _time.millis()
-        );
-        self.pending_index.add_mine(dot);
     }
 
     fn handle_request(
@@ -396,7 +376,11 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        let mut accepted_replies = 0;
+        // save in request replies metric
+        self.metrics.aggregate(
+            ExecutorMetricsKind::InRequestReplies,
+            infos.len() as u64,
+        );
 
         for info in infos {
             log!(
@@ -407,38 +391,21 @@ impl DependencyGraph {
                 time.millis()
             );
 
-            // check if the command is mine (or if we know, that the command is mine)
-            let is_mine = self.pending_index.is_mine(info.dot());
-
             match info {
                 RequestReply::Info { dot, cmd, deps } => {
-                    // we can't receive a info reply about commands that are not
-                    // mine, as the shards would ignore the request if we didn't
-                    // replicate the command
-                    assert!(!is_mine);
-
                     // add requested command to our graph
-                    accepted_replies += 1;
                     self.handle_add(dot, cmd, deps, time)
                 }
                 RequestReply::Executed { dot } => {
-                    // only add to executed clock if it's not mine
-                    if !is_mine {
-                        accepted_replies += 1;
-                        // update executed clock
-                        self.executed_clock.add(&dot.source(), dot.sequence());
-                        // check pending
-                        let dots = vec![dot];
-                        let mut total_found = 0;
-                        self.check_pending(dots, &mut total_found, time);
-                    }
+                    // update executed clock
+                    self.executed_clock.add(&dot.source(), dot.sequence());
+                    // check pending
+                    let dots = vec![dot];
+                    let mut total_found = 0;
+                    self.check_pending(dots, &mut total_found, time);
                 }
             }
         }
-
-        // save in request replies metric
-        self.metrics
-            .aggregate(ExecutorMetricsKind::InRequestReplies, accepted_replies);
     }
 
     #[must_use]
@@ -532,13 +499,15 @@ impl DependencyGraph {
 
     fn index_pending(
         &mut self,
-        missing_deps: HashSet<Dot>,
+        missing_deps: HashSet<Dependency>,
         dot: Dot,
         _time: &dyn SysTime,
     ) {
         let mut requests = 0;
-        for dep_dot in missing_deps {
-            if let Some(target_shard) = self.pending_index.index(dep_dot, dot) {
+        for dep in missing_deps {
+            if let Some((dep_dot, target_shard)) =
+                self.pending_index.index(dep, dot)
+            {
                 log!(
                     "p{}: @{} Graph::index_pending will ask {:?} to {:?} | time = {}",
                     self.process_id,
@@ -691,6 +660,13 @@ mod tests {
     use std::iter::FromIterator;
     use threshold::{AEClock, AboveExSet, EventSet};
 
+    fn dep(dot: Dot, shard_id: ShardId) -> Dependency {
+        Dependency {
+            dot,
+            shards: Some(BTreeSet::from_iter(vec![shard_id])),
+        }
+    }
+
     #[test]
     fn simple() {
         // create queue
@@ -709,12 +685,12 @@ mod tests {
         // cmd 0
         let cmd_0 =
             Command::put(Rifl::new(1, 1), String::from("A"), String::new());
-        let deps_0 = HashSet::from_iter(vec![dot_1]);
+        let deps_0 = HashSet::from_iter(vec![dep(dot_1, shard_id)]);
 
         // cmd 1
         let cmd_1 =
             Command::put(Rifl::new(2, 1), String::from("A"), String::new());
-        let deps_1 = HashSet::from_iter(vec![dot_0]);
+        let deps_1 = HashSet::from_iter(vec![dep(dot_0, shard_id)]);
 
         // add cmd 0
         queue.handle_add(dot_0, cmd_0.clone(), deps_0, &time);
@@ -1031,7 +1007,12 @@ mod tests {
         let mut all_rifls = HashSet::new();
         let mut sorted = BTreeMap::new();
 
-        args.into_iter().for_each(|(dot, keys, deps)| {
+        args.into_iter().for_each(|(dot, keys, dep_dots)| {
+            // transform dep dots into deps
+            let deps = dep_dots
+                .into_iter()
+                .map(|dep_dot| dep(dep_dot, shard_id))
+                .collect();
             // create command rifl from its dot
             let rifl = Rifl::new(dot.source() as ClientId, dot.sequence());
 
@@ -1132,11 +1113,11 @@ mod tests {
             root_dot,
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 40),
-                Dot::new(5, 61),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 40), shard_id),
+                dep(Dot::new(5, 61), shard_id),
             ]),
             &time,
         ));
@@ -1146,11 +1127,11 @@ mod tests {
             Dot::new(4, 31),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 30),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 30), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1159,11 +1140,11 @@ mod tests {
             Dot::new(4, 32),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 31),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 31), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1172,11 +1153,11 @@ mod tests {
             Dot::new(4, 33),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 32),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 32), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1185,11 +1166,11 @@ mod tests {
             Dot::new(4, 34),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 33),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 33), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1198,11 +1179,11 @@ mod tests {
             Dot::new(4, 35),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 34),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 34), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1211,11 +1192,11 @@ mod tests {
             Dot::new(4, 36),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 35),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 35), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1224,11 +1205,11 @@ mod tests {
             Dot::new(4, 37),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 36),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 36), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1237,11 +1218,11 @@ mod tests {
             Dot::new(4, 38),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 37),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 37), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1250,11 +1231,11 @@ mod tests {
             Dot::new(4, 39),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 38),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 38), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1263,11 +1244,11 @@ mod tests {
             Dot::new(4, 40),
             conflicting_command(),
             HashSet::from_iter(vec![
-                Dot::new(1, 60),
-                Dot::new(2, 50),
-                Dot::new(3, 50),
-                Dot::new(4, 39),
-                Dot::new(5, 60),
+                dep(Dot::new(1, 60), shard_id),
+                dep(Dot::new(2, 50), shard_id),
+                dep(Dot::new(3, 50), shard_id),
+                dep(Dot::new(4, 39), shard_id),
+                dep(Dot::new(5, 60), shard_id),
             ]),
             &time,
         ));
@@ -1297,7 +1278,10 @@ mod tests {
                 1,
                 "there's a single missing dependency"
             );
-            assert_eq!(missing_deps.into_iter().next().unwrap(), missing_dot);
+            assert_eq!(
+                missing_deps.into_iter().next().unwrap().dot,
+                missing_dot
+            );
 
             // check that ready commands are actually delivered
             assert_eq!(ready_commands, to_be_executed.len());

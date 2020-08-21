@@ -1,4 +1,5 @@
 use super::tarjan::Vertex;
+use crate::protocol::common::graph::Dependency;
 use crate::shared::Shared;
 use dashmap::mapref::one::Ref as DashMapRef;
 use fantoch::config::Config;
@@ -52,8 +53,6 @@ pub struct PendingIndex {
     shard_id: ShardId,
     config: Config,
     index: HashMap<Dot, HashSet<Dot>>,
-    // `mine` is only used in partial replication
-    mine: HashSet<Dot>,
 }
 
 impl PendingIndex {
@@ -67,49 +66,41 @@ impl PendingIndex {
             shard_id,
             config,
             index: HashMap::new(),
-            mine: HashSet::new(),
         }
     }
 
-    pub fn add_mine(&mut self, dot: Dot) {
-        assert!(self.mine.insert(dot));
-    }
-
-    pub fn is_mine(&mut self, dot: &Dot) -> bool {
-        self.mine.contains(dot)
-    }
-
-    /// Indexes a new `dot` as a child of `dep_dot`:
-    /// - when `dep_dot` is executed, we'll try to execute `dot` as `dep_dot`
+    /// Indexes a new `dot` as a child of `dep`:
+    /// - when `dep.dot` is executed, we'll try to execute `dot` as `dep.dot`
     ///   was a dependency and maybe now `dot` can be executed
     #[must_use]
-    pub fn index(&mut self, dep_dot: Dot, dot: Dot) -> Option<ShardId> {
-        match self.index.entry(dep_dot) {
+    pub fn index(
+        &mut self,
+        dep: Dependency,
+        dot: Dot,
+    ) -> Option<(Dot, ShardId)> {
+        match self.index.entry(dep.dot) {
             Entry::Vacant(vacant) => {
                 // save `dot`
                 let mut dots = HashSet::new();
                 dots.insert(dot);
                 vacant.insert(dots);
 
-                // this is the first time we detect `dep_dot` as a missing
+                // this is the first time we detect `dep.dot` as a missing
                 // dependency; in this case, we may have to ask another
-                // shard for its info; from the identifier we can't know if we
-                // replicate the command, but can know who the target shard is.
-                // since we don't have the command, we try our best by tracking
-                // in `self.mine` commands that we replicate but we are not
-                // their target shard.
-                // NOTE: this is a best effort only; it's totally possible that
-                // we replicate a command but don't have it *yet* in `self.mine`
-                // when such command is first declared as a dependency
-                // NOTE: we're always the target shard in full replication, and
-                // for that reason, the following is a noop
-                let target = dep_dot.target_shard(self.config.n());
-                if target != self.shard_id && !self.mine.contains(&dep_dot) {
-                    return Some(target);
+                // shard for its info if we don't replicate it; we can know if
+                // we replicate it by inspecting `dep.shards`
+                let is_mine = dep
+                    .shards
+                    .as_ref()
+                    .expect("dep shards should be set if it's not a noop")
+                    .contains(&self.shard_id);
+                if !is_mine {
+                    let target = dep.dot.target_shard(self.config.n());
+                    return Some((dep.dot, target));
                 }
             }
             Entry::Occupied(mut dots) => {
-                // in this case, `dep_dot` has already been a missing dependency
+                // in this case, `dep.dot` has already been a missing dependency
                 // of another command, so simply save `dot` as a child
                 dots.get_mut().insert(dot);
             }
@@ -119,7 +110,6 @@ impl PendingIndex {
 
     /// Finds all pending dots for a given dependency dot.
     pub fn remove(&mut self, dep_dot: &Dot) -> Option<HashSet<Dot>> {
-        self.mine.remove(dep_dot);
         self.index.remove(dep_dot)
     }
 }

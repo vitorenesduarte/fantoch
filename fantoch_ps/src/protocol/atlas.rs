@@ -1,6 +1,6 @@
 use crate::executor::GraphExecutor;
 use crate::protocol::common::graph::{
-    KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
+    Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::partial::{self, ShardsCommits};
@@ -255,7 +255,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         dot: Dot,
         cmd: Command,
         quorum: HashSet<ProcessId>,
-        remote_deps: HashSet<Dot>,
+        remote_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
         log!(
@@ -274,14 +274,6 @@ impl<KD: KeyDeps> Atlas<KD> {
         // discard message if no longer in START
         if info.status != Status::START {
             return;
-        }
-
-        // notify executor that we replicate this dot, in case we're not the
-        // target shard
-        if dot.target_shard(self.bp.config.n()) != self.bp.shard_id {
-            // create execution info
-            let execution_info = ExecutionInfo::add_mine(dot);
-            self.to_executors.push(execution_info);
         }
 
         // check if part of fast quorum
@@ -337,7 +329,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
         log!(
@@ -566,7 +558,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         from: ProcessId,
         _from_shard_id: ShardId,
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
         log!(
@@ -583,9 +575,11 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         let shard_count = info.cmd.as_ref().unwrap().shard_count();
         let add_shards_commits_info =
-            |current_deps: &mut HashSet<Dot>, deps| current_deps.extend(deps);
+            |current_deps: &mut HashSet<Dependency>, deps| {
+                current_deps.extend(deps)
+            };
         let create_mshard_aggregated_commit =
-            |dot, current_deps: &HashSet<Dot>| {
+            |dot, current_deps: &HashSet<Dependency>| {
                 Message::MShardAggregatedCommit {
                     dot,
                     deps: current_deps.clone(),
@@ -609,7 +603,7 @@ impl<KD: KeyDeps> Atlas<KD> {
     fn handle_mshard_aggregated_commit(
         &mut self,
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
         log!(
@@ -735,7 +729,7 @@ impl<KD: KeyDeps> Atlas<KD> {
                 deps: value.deps,
             };
         // nothing to update
-        let update_shards_commit_info = |_: &mut HashSet<Dot>, ()| {};
+        let update_shards_commit_info = |_: &mut HashSet<Dependency>, ()| {};
 
         partial::mcommit_actions(
             bp,
@@ -761,7 +755,7 @@ impl<KD: KeyDeps> Atlas<KD> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     is_noop: bool,
-    deps: HashSet<Dot>,
+    deps: HashSet<Dependency>,
 }
 
 impl ConsensusValue {
@@ -771,7 +765,7 @@ impl ConsensusValue {
         Self { is_noop, deps }
     }
 
-    fn with(deps: HashSet<Dot>) -> Self {
+    fn with(deps: HashSet<Dependency>) -> Self {
         let is_noop = false;
         Self { is_noop, deps }
     }
@@ -794,7 +788,7 @@ struct AtlasInfo {
     // deps when deciding whether to take the fast path
     quorum_deps: QuorumDeps,
     // `shard_commits` is only used when commands accessed more than one shard
-    shards_commits: Option<ShardsCommits<HashSet<Dot>>>,
+    shards_commits: Option<ShardsCommits<HashSet<Dependency>>>,
 }
 
 impl Info for AtlasInfo {
@@ -825,12 +819,12 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         quorum: HashSet<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
     },
     MCommit {
         dot: Dot,
@@ -852,11 +846,11 @@ pub enum Message {
     },
     MShardCommit {
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
     },
     MShardAggregatedCommit {
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
     },
     // GC messages
     MCommitDot {

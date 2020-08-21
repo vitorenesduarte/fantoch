@@ -2,4 +2,6 @@
 mod deps;
 
 // Re-exports.
-pub use deps::{KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps};
+pub use deps::{
+    Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
+};

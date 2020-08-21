@@ -5,5 +5,5 @@ mod keys;
 mod quorum;
 
 // Re-exports.
-pub use keys::{KeyDeps, LockedKeyDeps, SequentialKeyDeps};
+pub use keys::{Dependency, KeyDeps, LockedKeyDeps, SequentialKeyDeps};
 pub use quorum::QuorumDeps;

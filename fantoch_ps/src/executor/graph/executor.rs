@@ -1,4 +1,5 @@
 use crate::executor::graph::DependencyGraph;
+use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
@@ -69,9 +70,6 @@ impl Executor for GraphExecutor {
                     self.graph.handle_add(dot, cmd, deps, time);
                     self.fetch_actions(time);
                 }
-            }
-            GraphExecutionInfo::AddMine { dot } => {
-                self.graph.handle_add_mine(dot, time);
             }
             GraphExecutionInfo::Request { from, dots } => {
                 self.graph.handle_request(from, dots, time);
@@ -173,10 +171,7 @@ pub enum GraphExecutionInfo {
     Add {
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dot>,
-    },
-    AddMine {
-        dot: Dot,
+        deps: HashSet<Dependency>,
     },
     Request {
         from: ShardId,
@@ -191,12 +186,8 @@ pub enum GraphExecutionInfo {
 }
 
 impl GraphExecutionInfo {
-    pub fn add(dot: Dot, cmd: Command, deps: HashSet<Dot>) -> Self {
+    pub fn add(dot: Dot, cmd: Command, deps: HashSet<Dependency>) -> Self {
         Self::Add { dot, cmd, deps }
-    }
-
-    pub fn add_mine(dot: Dot) -> Self {
-        Self::AddMine { dot }
     }
 
     fn request(from: ShardId, dots: HashSet<Dot>) -> Self {
@@ -232,7 +223,6 @@ impl MessageIndex for GraphExecutionInfo {
 
         match self {
             Self::Add { .. } => executor_index_no_shift(MAIN_INDEX),
-            Self::AddMine { .. } => executor_index_no_shift(MAIN_INDEX),
             Self::Request { .. } => executor_random_index_shift(),
             Self::RequestReply { .. } => executor_index_no_shift(MAIN_INDEX),
             Self::ExecutedClock { .. } => {

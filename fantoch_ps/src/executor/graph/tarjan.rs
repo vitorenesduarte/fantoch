@@ -1,4 +1,5 @@
 use super::index::{VertexIndex, VertexRef};
+use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
@@ -15,7 +16,7 @@ pub type SCC = BTreeSet<Dot>;
 #[derive(PartialEq)]
 pub enum FinderResult {
     Found,
-    MissingDependencies(HashSet<Dot>),
+    MissingDependencies(HashSet<Dependency>),
     NotPending,
     NotFound,
 }
@@ -121,7 +122,7 @@ impl TarjanSCCFinder {
         // TODO can we avoid vertex.deps.clone()
         let deps = vertex.deps.clone();
         let mut deps_iter = deps.into_iter();
-        while let Some(dep_dot) = deps_iter.next() {
+        while let Some(dep) = deps_iter.next() {
             // TODO we should panic if we find a dependency highest than self
             let ignore = |dep_dot: Dot| {
                 // ignore self or if already executed
@@ -130,28 +131,31 @@ impl TarjanSCCFinder {
                         .contains(&dep_dot.source(), dep_dot.sequence())
             };
 
+            // get dep dot
+            let dep_dot = dep.dot;
+
             if ignore(dep_dot) {
                 log!(
                     "p{}: Finder::strong_connect ignoring dependency {:?}",
                     self.process_id,
-                    dep_dot
+                    dep
                 );
                 continue;
             }
 
-            match vertex_index.find(&dep_dot) {
+            match vertex_index.find(&dep.dot) {
                 None => {
                     let missing_deps = if self.config.shards() == 1 {
-                        std::iter::once(dep_dot).collect()
+                        std::iter::once(dep).collect()
                     } else {
                         // if partial replication, add remaining frontier
                         // deps as missing dependencies; this makes sure
                         // that we request all needed dependencies in a
                         // single request
-                        std::iter::once(dep_dot)
-                            .chain(deps_iter.filter(|dep| {
+                        std::iter::once(dep)
+                            .chain(deps_iter.filter(|extra_dep| {
                                 // only request non-executed dependencies
-                                !ignore(*dep)
+                                !ignore(extra_dep.dot)
                             }))
                             .collect()
                     };
@@ -172,7 +176,7 @@ impl TarjanSCCFinder {
                         log!(
                             "p{}: Finder::strong_connect non-visited {:?}",
                             self.process_id,
-                            dep_dot
+                            dep
                         );
 
                         // drop guards
@@ -182,7 +186,7 @@ impl TarjanSCCFinder {
                         // OPTIMIZATION: passing the dep vertex ref as an
                         // argument to `strong_connect` avoids double look-up
                         let result = self.strong_connect(
-                            dep_dot,
+                            dep.dot,
                             &dep_vertex_ref,
                             executed_clock,
                             vertex_index,
@@ -206,7 +210,7 @@ impl TarjanSCCFinder {
                     } else {
                         // if visited and on the stack
                         if dep_vertex.on_stack {
-                            log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
+                            log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep);
                             // min low with dep id
                             vertex.low = cmp::min(vertex.low, dep_vertex.id);
                         }
@@ -309,7 +313,7 @@ impl TarjanSCCFinder {
 pub struct Vertex {
     dot: Dot,
     pub cmd: Command,
-    pub deps: HashSet<Dot>,
+    pub deps: HashSet<Dependency>,
     start_time: u64,
     // specific to tarjan's algorithm
     id: usize,
@@ -321,7 +325,7 @@ impl Vertex {
     pub fn new(
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time = time.millis();

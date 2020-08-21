@@ -1,6 +1,6 @@
 use crate::executor::GraphExecutor;
 use crate::protocol::common::graph::{
-    KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
+    Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use fantoch::command::Command;
@@ -227,7 +227,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         dot: Dot,
         cmd: Command,
         quorum: HashSet<ProcessId>,
-        remote_deps: HashSet<Dot>,
+        remote_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
         log!(
@@ -301,7 +301,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
         log!(
@@ -608,7 +608,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusValue {
     is_noop: bool,
-    deps: HashSet<Dot>,
+    deps: HashSet<Dependency>,
 }
 
 impl ConsensusValue {
@@ -618,7 +618,7 @@ impl ConsensusValue {
         Self { is_noop, deps }
     }
 
-    fn with(deps: HashSet<Dot>) -> Self {
+    fn with(deps: HashSet<Dependency>) -> Self {
         let is_noop = false;
         Self { is_noop, deps }
     }
@@ -675,12 +675,12 @@ pub enum Message {
     MCollect {
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
         quorum: HashSet<ProcessId>,
     },
     MCollectAck {
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: HashSet<Dependency>,
     },
     MCommit {
         dot: Dot,
