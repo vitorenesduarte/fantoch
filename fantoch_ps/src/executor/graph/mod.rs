@@ -33,7 +33,7 @@ use threshold::AEClock;
 
 // every 200 cleanups (which should be every second if the cleanup interval is
 // 5ms)
-const CLEANUPS_PER_SHOW_PENDING: Option<usize> = Some(200);
+const CLEANUPS_PER_SHOW_PENDING: Option<usize> = None; // Some(200)
 const PENDING_FOR_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,9 +193,18 @@ impl DependencyGraph {
             self.executor_index,
             time.millis()
         );
-        self.level_executed_clock
+        // try to level the executed clock
+        let maybe_executed = self
+            .level_executed_clock
             .maybe_level(&mut self.executed_clock, time);
+
         if self.executor_index == 0 {
+            // try commands that maybe were waiting on these newly executed
+            // commands
+            let mut total_found = 0;
+            self.check_pending(maybe_executed, &mut total_found, time);
+
+            // maybe show pending commands
             if let Some(cleanups_per_show_pending) = CLEANUPS_PER_SHOW_PENDING {
                 // increase the number of cleanups
                 self.cleanups += 1;

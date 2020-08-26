@@ -1,5 +1,5 @@
 use fantoch::config::Config;
-use fantoch::id::{ProcessId, ShardId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -62,7 +62,7 @@ impl LevelExecutedClock {
         &mut self,
         executed_clock: &mut AEClock<ProcessId>,
         time: &dyn SysTime,
-    ) {
+    ) -> Vec<Dot> {
         let now = self.maybe_update_epoch(executed_clock, time);
         if let Some((epoch, _)) = self.to_level.get(0) {
             // compute age of this epoch
@@ -90,6 +90,7 @@ impl LevelExecutedClock {
 
                 // level all the entries that are not from my shard to what I've
                 // executed from my shard at that epoch
+                let prior_frontier = executed_clock.frontier();
                 self.not_shard_process_ids.iter().for_each(|peer_id| {
                     executed_clock.add_range(peer_id, 1, executed);
                 });
@@ -100,8 +101,19 @@ impl LevelExecutedClock {
                     executed,
                     executed_clock
                 );
+
+                // return a set of dots that may have been leveled (maybe they
+                // were not if they already existed as above exceptions)
+                return prior_frontier
+                    .into_iter()
+                    .flat_map(|(peer_id, peer_prior_frontier)| {
+                        (peer_prior_frontier.frontier()..=executed)
+                            .map(move |event| Dot::new(peer_id, event))
+                    })
+                    .collect();
             }
         }
+        Vec::new()
     }
 
     fn maybe_update_epoch(
