@@ -8,6 +8,7 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use parking_lot::RwLock;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 use threshold::AEClock;
@@ -52,7 +53,7 @@ impl VertexIndex {
     pub fn show_pending(
         &self,
         executed_clock: &AEClock<ProcessId>,
-        pending_for: Duration,
+        pending_for_threshold: Duration,
         time: &dyn SysTime,
     ) {
         // first show executed clock
@@ -61,18 +62,32 @@ impl VertexIndex {
             self.process_id, executed_clock
         );
 
-        // show pending commands
+        // collect pending commands
         let now_ms = time.millis();
-        let pending_for_ms = pending_for.as_millis() as u64;
+        let pending_for_threshold_ms = pending_for_threshold.as_millis() as u64;
+        let mut pending = BTreeMap::new();
         self.index.iter().for_each(|vertex_ref| {
             let vertex = vertex_ref.read();
-            if now_ms - vertex.start_time_ms >= pending_for_ms {
-                println!(
-                    "p{}: {:?} is pending with deps {:?}",
-                    self.process_id, vertex.dot, vertex.deps
-                );
+            let pending_for_ms = now_ms - vertex.start_time_ms;
+            if pending_for_ms >= pending_for_threshold_ms {
+                pending.entry(pending_for_ms).or_insert_with(Vec::new).push(
+                    format!(
+                        "p{}: {:?} is pending for {:?}ms with deps {:?}",
+                        self.process_id,
+                        vertex.dot,
+                        pending_for_ms,
+                        vertex.deps
+                    ),
+                )
             }
-        })
+        });
+
+        // show pending commands: pending longest first
+        for (_pending_for_ms, pending) in pending.into_iter().rev() {
+            for fmt in pending {
+                println!("{}", fmt);
+            }
+        }
     }
 }
 

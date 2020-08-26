@@ -31,9 +31,10 @@ use std::fmt;
 use std::time::Duration;
 use threshold::AEClock;
 
-// every 200 cleanups (which should be every second if the cleanup interval is 5ms)
+// every 200 cleanups (which should be every second if the cleanup interval is
+// 5ms)
 const CLEANUPS_PER_SHOW_PENDING: Option<usize> = Some(200);
-const PENDING_FOR: Duration = Duration::from_secs(1);
+const PENDING_FOR_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -200,8 +201,13 @@ impl DependencyGraph {
                 self.cleanups += 1;
 
                 if self.cleanups % cleanups_per_show_pending == 0 {
-                    // show requests that have been committed at least 1 second ago
-                    self.vertex_index.show_pending(&self.executed_clock, PENDING_FOR, time)
+                    // show requests that have been committed at least 1 second
+                    // ago
+                    self.vertex_index.show_pending(
+                        &self.executed_clock,
+                        PENDING_FOR_THRESHOLD,
+                        time,
+                    )
                 }
             }
         } else {
