@@ -33,8 +33,8 @@ use threshold::AEClock;
 
 // every 200 cleanups (which should be every second if the cleanup interval is
 // 5ms)
-const CLEANUPS_PER_SHOW_PENDING: Option<usize> = None; // Some(200)
-const PENDING_FOR_THRESHOLD: Duration = Duration::from_secs(1);
+const CLEANUPS_PER_SHOW_PENDING: Option<usize> = Some(200);
+const SHOW_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -214,7 +214,7 @@ impl DependencyGraph {
                     // ago
                     self.vertex_index.show_pending(
                         &self.executed_clock,
-                        PENDING_FOR_THRESHOLD,
+                        SHOW_PENDING_THRESHOLD,
                         time,
                     )
                 }

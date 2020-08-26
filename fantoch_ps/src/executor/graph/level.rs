@@ -10,8 +10,8 @@ use threshold::EventSet;
 
 // epoch length is 1s
 const EPOCH_MILLIS: u64 = 1000;
-// executed clock is leveled every 3 seconds
-const EPOCH_LEVEL_AGE: u64 = 3;
+// executed clock is leveled every 10 seconds
+const EPOCH_LEVEL_AGE: u64 = 10;
 
 #[derive(Clone)]
 pub struct LevelExecutedClock {
@@ -90,8 +90,20 @@ impl LevelExecutedClock {
 
                 // level all the entries that are not from my shard to what I've
                 // executed from my shard at that epoch
-                let prior_frontier = executed_clock.frontier();
+                let mut maybe_executed = Vec::new();
                 self.not_shard_process_ids.iter().for_each(|peer_id| {
+                    // add to the set of dots that may be leveled (maybe
+                    // they won't if they already exist
+                    // in the executed clock as above exceptions)
+                    let frontier = executed_clock
+                        .get(peer_id)
+                        .expect("peer should be in executed clock")
+                        .frontier();
+                    maybe_executed.extend(
+                        (frontier + 1..=executed)
+                            .map(move |event| Dot::new(*peer_id, event)),
+                    );
+                    // level the clock on this peer
                     executed_clock.add_range(peer_id, 1, executed);
                 });
 
@@ -102,15 +114,7 @@ impl LevelExecutedClock {
                     executed_clock
                 );
 
-                // return a set of dots that may have been leveled (maybe they
-                // were not if they already existed as above exceptions)
-                return prior_frontier
-                    .into_iter()
-                    .flat_map(|(peer_id, peer_prior_frontier)| {
-                        (peer_prior_frontier.frontier()..=executed)
-                            .map(move |event| Dot::new(peer_id, event))
-                    })
-                    .collect();
+                return maybe_executed;
             }
         }
         Vec::new()
