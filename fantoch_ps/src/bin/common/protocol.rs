@@ -203,7 +203,7 @@ fn parse_args() -> ProtocolArgs {
         )
         .arg(
             Arg::with_name("executor_cleanup_interval")
-                .long("executor_cleanup_interva")
+                .long("executor_cleanup_interval")
                 .value_name("EXECUTOR_CLEANUP_INTERVAL")
                 .help("executor cleanup interval (in milliseconds); default: 5")
                 .takes_value(true),

@@ -160,6 +160,17 @@ impl ProtocolConfig {
                 .join(",");
             args.extend(args!["--sorted", sorted]);
         }
+        args.extend(args![
+            "--executor_cleanup_interval",
+            self.config.executor_cleanup_interval().as_millis()
+        ]);
+        if let Some(interval) = self.config.executor_monitor_pending_interval()
+        {
+            args.extend(args![
+                "--executor_monitor_pending_interval",
+                interval.as_millis()
+            ]);
+        }
         if let Some(interval) = self.config.gc_interval() {
             args.extend(args!["--gc_interval", interval.as_millis()]);
         }
