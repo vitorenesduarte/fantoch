@@ -64,7 +64,7 @@ impl LevelExecutedClock {
         executed_clock: &mut AEClock<ProcessId>,
         vertex_index: &VertexIndex,
         time: &dyn SysTime,
-    ) {
+    ) -> Vec<Dot> {
         let now = self.maybe_update_epoch(executed_clock, time);
         if let Some((epoch, _)) = self.to_level.get(0) {
             // compute age of this epoch
@@ -90,28 +90,35 @@ impl LevelExecutedClock {
                     executed_clock
                 );
 
+                let mut maybe_executed = Vec::new();
+
                 // level all the entries that are not from my shard to what I've
                 // executed from my shard at that epoch (only if there are no
                 // pending commands on up to that)
                 self.not_shard_process_ids.iter().for_each(|peer_id| {
+                    let level_from = executed_clock
+                        .get(peer_id)
+                        .expect("peer should be in executed clock")
+                        .frontier() + 1;
                     // compute up to which value we can level; if there are no
                     // pending command up to `executed`, then level up to that;
                     // if there are, then level up to the command prior the old
                     // pending one
                     let mut level_up_to = executed;
-                    let frontier = executed_clock
-                        .get(peer_id)
-                        .expect("peer should be in executed clock")
-                        .frontier();
 
                         // check if we can level all command up to `executed`
-                    for event in frontier + 1..=executed {
+                    for event in level_from..=executed {
                         let dot = Dot::new(*peer_id, event);
                         if vertex_index.contains(&dot) {
                             // if this command is pending, then we can only level
                             // up to its prior command
                             level_up_to = event - 1;
                             break;
+                        } else {
+                            // update set of maybe executed dots (this is a maybe
+                            // since this dot may already exist as an above
+                            // exception in the executed clock)
+                            maybe_executed.push(dot);
                         }
                     }
 
@@ -131,8 +138,12 @@ impl LevelExecutedClock {
                     executed,
                     executed_clock
                 );
+
+                return maybe_executed;
             }
         }
+
+        Vec::new()
     }
 
     fn maybe_update_epoch(
