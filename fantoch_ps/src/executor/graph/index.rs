@@ -58,8 +58,9 @@ impl VertexIndex {
     ) {
         // first show executed clock
         println!(
-            "p{}: executed before showing pending {:?}",
-            self.process_id, executed_clock
+            "p{}: executed frontier before showing pending {:?}",
+            self.process_id,
+            executed_clock.frontier()
         );
 
         // collect pending commands
