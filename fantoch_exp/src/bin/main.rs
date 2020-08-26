@@ -34,6 +34,8 @@ const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
 const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
+const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> =
+    Some(Duration::from_secs(2));
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
@@ -73,6 +75,9 @@ macro_rules! config {
         }
         config.set_skip_fast_ack($skip_fast_ack);
         config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
+        if let Some(interval) = EXECUTOR_MONITOR_PENDING_INTERVAL {
+            config.set_executor_monitor_pending_interval(interval);
+        }
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }

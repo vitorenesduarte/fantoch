@@ -209,6 +209,13 @@ fn parse_args() -> ProtocolArgs {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("executor_monitor_pending_interval")
+                .long("executor_monitor_pending_interval")
+                .value_name("EXECUTOR_MONITOR_PENDING_INTERVAL")
+                .help("executor monitor pending interval (in milliseconds); if no value if set, pending commands are not monitored")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("gc_interval")
                 .long("gc_interval")
                 .value_name("GC_INTERVAL")
@@ -372,6 +379,9 @@ fn parse_args() -> ProtocolArgs {
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
         parse_executor_cleanup_interval(
             matches.value_of("executor_cleanup_interval"),
+        ),
+        parse_executor_monitor_pending_interval(
+            matches.value_of("executor_monitor_pending_interval"),
         ),
         parse_gc_interval(matches.value_of("gc_interval")),
         parse_leader(matches.value_of("leader")),
@@ -546,6 +556,7 @@ pub fn build_config(
     shards: usize,
     execute_at_commit: bool,
     executor_cleanup_interval: Duration,
+    executor_monitor_pending_interval: Option<Duration>,
     gc_interval: Option<Duration>,
     leader: Option<ProcessId>,
     newt_tiny_quorums: bool,
@@ -558,8 +569,11 @@ pub fn build_config(
     config.set_shards(shards);
     config.set_execute_at_commit(execute_at_commit);
     config.set_executor_cleanup_interval(executor_cleanup_interval);
-    if let Some(gc_interval) = gc_interval {
-        config.set_gc_interval(gc_interval);
+    if let Some(interval) = executor_monitor_pending_interval {
+        config.set_executor_monitor_pending_interval(interval);
+    }
+    if let Some(interval) = gc_interval {
+        config.set_gc_interval(interval);
     }
     // set leader if we have one
     if let Some(leader) = leader {
@@ -606,17 +620,26 @@ pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT)
 }
 
-pub fn parse_executor_cleanup_interval(
-    executor_cleanup_interval: Option<&str>,
-) -> Duration {
-    executor_cleanup_interval
-        .map(|executor_cleanup_interval| {
-            let ms = executor_cleanup_interval
+pub fn parse_executor_cleanup_interval(interval: Option<&str>) -> Duration {
+    interval
+        .map(|interval| {
+            let ms = interval
                 .parse::<u64>()
                 .expect("executor_cleanup_interval should be a number");
             Duration::from_millis(ms)
         })
         .unwrap_or(DEFAULT_EXECUTOR_CLEANUP_INTERVAL)
+}
+
+pub fn parse_executor_monitor_pending_interval(
+    interval: Option<&str>,
+) -> Option<Duration> {
+    interval.map(|interval| {
+        let ms = interval
+            .parse::<u64>()
+            .expect("executor_monitor_pending_interval should be a number");
+        Duration::from_millis(ms)
+    })
 }
 
 pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<Duration> {
@@ -642,23 +665,19 @@ fn parse_newt_tiny_quorums(newt_tiny_quorums: Option<&str>) -> bool {
         .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS)
 }
 
-fn parse_newt_clock_bump_interval(
-    newt_clock_bump_interval: Option<&str>,
-) -> Option<Duration> {
-    newt_clock_bump_interval.map(|newt_clock_bump_interval| {
-        let ms = newt_clock_bump_interval
+fn parse_newt_clock_bump_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let ms = interval
             .parse::<u64>()
             .expect("newt_clock_bump_interval should be a number");
         Duration::from_millis(ms)
     })
 }
 
-fn parse_newt_detached_send_interval(
-    newt_detached_send_interval: Option<&str>,
-) -> Duration {
-    newt_detached_send_interval
-        .map(|newt_detached_send_interval| {
-            let ms = newt_detached_send_interval
+fn parse_newt_detached_send_interval(interval: Option<&str>) -> Duration {
+    interval
+        .map(|interval| {
+            let ms = interval
                 .parse::<u64>()
                 .expect("newt_detached_send_interval should be a number");
             Duration::from_millis(ms)
@@ -710,20 +729,18 @@ pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
     execution_log.map(String::from)
 }
 
-fn parse_tracer_show_interval(
-    tracer_show_interval: Option<&str>,
-) -> Option<Duration> {
-    tracer_show_interval.map(|tracer_show_interval| {
-        let millis = tracer_show_interval
+fn parse_tracer_show_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let millis = interval
             .parse::<u64>()
             .expect("tracer_show_interval should be a number");
         Duration::from_millis(millis)
     })
 }
 
-fn parse_ping_interval(ping_interval: Option<&str>) -> Option<Duration> {
-    ping_interval.map(|ping_interval| {
-        let millis = ping_interval
+fn parse_ping_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let millis = interval
             .parse::<u64>()
             .expect("ping_interval should be a number");
         Duration::from_millis(millis)

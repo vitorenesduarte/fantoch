@@ -31,10 +31,7 @@ use std::fmt;
 use std::time::Duration;
 use threshold::AEClock;
 
-// every 200 cleanups (which should be every second if the cleanup interval is
-// 5ms)
-const CLEANUPS_PER_SHOW_PENDING: Option<usize> = Some(200);
-const SHOW_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
+const MONITOR_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -58,7 +55,6 @@ pub struct DependencyGraph {
     level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
-    cleanups: usize,
     finder: TarjanSCCFinder,
     metrics: ExecutorMetrics,
     // worker 0 (handles commands):
@@ -107,7 +103,6 @@ impl DependencyGraph {
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new(process_id, shard_id, *config);
-        let cleanups = 0;
         // create finder
         let finder = TarjanSCCFinder::new(process_id, shard_id, *config);
         let metrics = ExecutorMetrics::new();
@@ -131,7 +126,6 @@ impl DependencyGraph {
             level_executed_clock,
             vertex_index,
             pending_index,
-            cleanups,
             finder,
             metrics,
             to_execute,
@@ -200,25 +194,27 @@ impl DependencyGraph {
             time,
         );
 
-        if self.executor_index == 0 {
-            // maybe show pending commands
-            if let Some(cleanups_per_show_pending) = CLEANUPS_PER_SHOW_PENDING {
-                // increase the number of cleanups
-                self.cleanups += 1;
-
-                if self.cleanups % cleanups_per_show_pending == 0 {
-                    // show requests that have been committed at least 1 second
-                    // ago
-                    self.vertex_index.show_pending(
-                        &self.executed_clock,
-                        SHOW_PENDING_THRESHOLD,
-                        time,
-                    )
-                }
-            }
-        } else {
+        if self.executor_index > 0 {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
+        }
+    }
+
+    fn monitor_pending(&self, time: &dyn SysTime) {
+        log!(
+            "p{}: @{} Graph::cleanup | time = {}",
+            self.process_id,
+            self.executor_index,
+            time.millis()
+        );
+
+        if self.executor_index == 0 {
+            // check requests that have been committed at least 1 second ago
+            self.vertex_index.monitor_pending(
+                &self.executed_clock,
+                MONITOR_PENDING_THRESHOLD,
+                time,
+            )
         }
     }
 

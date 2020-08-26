@@ -54,10 +54,10 @@ impl VertexIndex {
         self.index.remove(dot).map(|(_, cell)| cell.into_inner())
     }
 
-    pub fn show_pending(
+    pub fn monitor_pending(
         &self,
         executed_clock: &AEClock<ProcessId>,
-        show_pending_threshold: Duration,
+        monitor_pending_threshold: Duration,
         time: &dyn SysTime,
     ) {
         // first show executed clock
@@ -69,8 +69,7 @@ impl VertexIndex {
 
         // collect pending commands
         let now_ms = time.millis();
-        let show_pending_threshold_ms =
-            show_pending_threshold.as_millis() as u64;
+        let threshold_ms = monitor_pending_threshold.as_millis() as u64;
         let mut pending = BTreeMap::new();
         let mut pending_without_missing_deps = HashSet::new();
 
@@ -79,7 +78,7 @@ impl VertexIndex {
             let vertex = vertex_ref.read();
             let pending_for_ms = now_ms - vertex.start_time_ms;
 
-            if pending_for_ms >= show_pending_threshold_ms {
+            if pending_for_ms >= threshold_ms {
                 // compute missing dependencies
                 let mut visited = HashSet::new();
                 let missing_deps = self.missing_dependencies(&vertex, executed_clock, &mut visited);

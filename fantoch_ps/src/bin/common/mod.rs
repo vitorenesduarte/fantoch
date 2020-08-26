@@ -45,11 +45,9 @@ pub fn parse_tcp_buffer_size(buffer_size: Option<&str>) -> usize {
     parse_buffer_size(buffer_size, DEFAULT_TCP_BUFFER_SIZE)
 }
 
-pub fn parse_tcp_flush_interval(
-    flush_interval: Option<&str>,
-) -> Option<Duration> {
-    flush_interval.map(|flush_interval| {
-        let millis = flush_interval
+pub fn parse_tcp_flush_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let millis = interval
             .parse::<u64>()
             .expect("flush interval should be a number");
         Duration::from_millis(millis)

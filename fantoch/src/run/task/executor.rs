@@ -77,42 +77,76 @@ async fn executor_task<P>(
     let mut metrics_interval =
         time::interval(super::metrics_logger::METRICS_INTERVAL);
 
-    loop {
-        tokio::select! {
-            execution_info = from_workers.recv() => {
-                log!("[executor] from workers: {:?}", execution_info);
-                if let Some(execution_info) = execution_info {
-                    executor.handle(execution_info, &time);
-                    fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
-                    fetch_info_to_executors::<P>(&mut executor, shard_id, &mut shard_writers, &mut to_executors).await;
-                } else {
-                    println!("[executor] error while receiving execution info from worker");
+    // check if executors monitor pending interval is set
+    if let Some(monitor_pending_interval) =
+        config.executor_monitor_pending_interval()
+    {
+        // create executors monitor pending interval
+        let mut monitor_pending_interval =
+            time::interval(monitor_pending_interval);
+        loop {
+            tokio::select! {
+                execution_info = from_workers.recv() => {
+                    handle_execution_info(execution_info, &mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
                 }
-            }
-            from_client = from_clients.recv() => {
-                log!("[executor] from client: {:?}", from_client);
-                if let Some(from_client) = from_client {
+                from_client = from_clients.recv() => {
                     handle_from_client::<P>(from_client, &mut to_clients).await;
-                } else {
-                    println!("[executor] error while receiving new command from clients");
                 }
-            }
-            _ = cleanup_interval.tick() => {
-                log!("[executor] cleanup");
-                executor.cleanup(&time);
-                fetch_new_command_results::<P>(&mut executor, &mut to_clients).await;
-                fetch_info_to_executors::<P>(&mut executor, shard_id, &mut shard_writers, &mut to_executors).await;
-            }
-            _ = metrics_interval.tick()  => {
-                if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
-                    // send metrics to logger (in case there's one)
-                    let executor_metrics = executor.metrics().clone();
-                    if let Err(e) = to_metrics_logger.send((executor_index, executor_metrics)).await {
-                        println!("[executor] error while sending metrics to metrics logger: {:?}", e);
-                    }
+                _ = cleanup_interval.tick() => {
+                    cleanup_tick(&mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
+                }
+                _ = monitor_pending_interval.tick() => {
+                    executor.monitor_pending(&time);
+                }
+                _ = metrics_interval.tick()  => {
+                    metrics_tick::<P>(executor_index, &mut executor, &mut to_metrics_logger).await;
                 }
             }
         }
+    } else {
+        loop {
+            tokio::select! {
+                execution_info = from_workers.recv() => {
+                    handle_execution_info(execution_info, &mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
+                }
+                from_client = from_clients.recv() => {
+                    handle_from_client::<P>(from_client, &mut to_clients).await;
+                }
+                _ = cleanup_interval.tick() => {
+                    cleanup_tick(&mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
+                }
+                _ = metrics_interval.tick()  => {
+                    metrics_tick::<P>(executor_index, &mut executor, &mut to_metrics_logger).await;
+                }
+            }
+        }
+    }
+}
+
+async fn handle_execution_info<P>(
+    execution_info: Option<<P::Executor as Executor>::ExecutionInfo>,
+    executor: &mut P::Executor,
+    shard_id: ShardId,
+    shard_writers: &mut HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: &mut ToExecutors<P>,
+    to_clients: &mut ToClients,
+    time: &RunTime,
+) where
+    P: Protocol + 'static,
+{
+    log!("[executor] from workers: {:?}", execution_info);
+    if let Some(execution_info) = execution_info {
+        executor.handle(execution_info, time);
+        fetch_new_command_results::<P>(executor, to_clients).await;
+        fetch_info_to_executors::<P>(
+            executor,
+            shard_id,
+            shard_writers,
+            to_executors,
+        )
+        .await;
+    } else {
+        println!("[executor] error while receiving execution info from worker");
     }
 }
 
@@ -180,17 +214,63 @@ async fn fetch_info_to_executors<P>(
 }
 
 async fn handle_from_client<P>(
-    from_client: ClientToExecutor,
+    from_client: Option<ClientToExecutor>,
     to_clients: &mut ToClients,
 ) where
     P: Protocol,
 {
-    match from_client {
-        ClientToExecutor::Register(client_ids, executor_results_tx) => {
-            to_clients.register(client_ids, executor_results_tx);
+    log!("[executor] from client: {:?}", from_client);
+    if let Some(from_client) = from_client {
+        match from_client {
+            ClientToExecutor::Register(client_ids, executor_results_tx) => {
+                to_clients.register(client_ids, executor_results_tx);
+            }
+            ClientToExecutor::Unregister(client_ids) => {
+                to_clients.unregister(client_ids);
+            }
         }
-        ClientToExecutor::Unregister(client_ids) => {
-            to_clients.unregister(client_ids);
+    } else {
+        println!("[executor] error while receiving new command from clients");
+    }
+}
+
+async fn cleanup_tick<P>(
+    executor: &mut P::Executor,
+    shard_id: ShardId,
+    shard_writers: &mut HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: &mut ToExecutors<P>,
+    to_clients: &mut ToClients,
+    time: &RunTime,
+) where
+    P: Protocol + 'static,
+{
+    log!("[executor] cleanup");
+    executor.cleanup(time);
+    fetch_new_command_results::<P>(executor, to_clients).await;
+    fetch_info_to_executors::<P>(
+        executor,
+        shard_id,
+        shard_writers,
+        to_executors,
+    )
+    .await;
+}
+
+async fn metrics_tick<P>(
+    executor_index: usize,
+    executor: &mut P::Executor,
+    to_metrics_logger: &mut Option<ExecutorMetricsSender>,
+) where
+    P: Protocol + 'static,
+{
+    if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
+        // send metrics to logger (in case there's one)
+        let executor_metrics = executor.metrics().clone();
+        if let Err(e) = to_metrics_logger
+            .send((executor_index, executor_metrics))
+            .await
+        {
+            println!("[executor] error while sending metrics to metrics logger: {:?}", e);
         }
     }
 }

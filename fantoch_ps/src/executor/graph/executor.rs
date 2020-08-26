@@ -58,6 +58,10 @@ impl Executor for GraphExecutor {
         }
     }
 
+    fn monitor_pending(&mut self, time: &dyn SysTime) {
+        self.graph.monitor_pending(time);
+    }
+
     fn handle(&mut self, info: GraphExecutionInfo, time: &dyn SysTime) {
         match info {
             GraphExecutionInfo::Add { dot, cmd, deps } => {
