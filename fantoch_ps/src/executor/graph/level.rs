@@ -102,11 +102,11 @@ impl LevelExecutedClock {
                         .frontier() + 1;
                     // compute up to which value we can level; if there are no
                     // pending command up to `executed`, then level up to that;
-                    // if there are, then level up to the command prior the old
-                    // pending one
+                    // if there are, then level up to the command prior the
+                    // oldest pending one
                     let mut level_up_to = executed;
 
-                        // check if we can level all command up to `executed`
+                    // check if we can level all command up to `executed`
                     for event in level_from..=executed {
                         let dot = Dot::new(*peer_id, event);
                         if vertex_index.contains(&dot) {
@@ -122,8 +122,8 @@ impl LevelExecutedClock {
                         }
                     }
 
-                    // level the this peer's entry in the executed clock
-                    executed_clock.add_range(peer_id, 1, level_up_to);
+                    // level this peer's entry in the executed clock
+                    executed_clock.add_range(peer_id, level_from, level_up_to);
                     log!(
                         "p{}: LevelExecutedClock::maybe_update_epoch peer {} leveled up to {}",
                         self.process_id,
