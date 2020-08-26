@@ -564,10 +564,12 @@ pub fn throughput_latency_plot(
             })
             .unzip();
 
-        // plot it!
-        let kwargs = line_style(py, search, &style_fun)?;
-        ax.plot(x, y, None, Some(kwargs))?;
-        plotted += 1;
+        // plot it! (if there's something to be plotted)
+        if !x.is_empty() {
+            let kwargs = line_style(py, search, &style_fun)?;
+            ax.plot(x, y, None, Some(kwargs))?;
+            plotted += 1;
+        }
     }
 
     // set log scale on y axis
