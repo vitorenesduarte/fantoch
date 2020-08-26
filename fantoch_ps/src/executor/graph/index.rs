@@ -5,9 +5,12 @@ use dashmap::mapref::one::Ref as DashMapRef;
 use fantoch::config::Config;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::time::SysTime;
 use fantoch::HashSet;
 use parking_lot::RwLock;
 use std::sync::Arc;
+use std::time::Duration;
+use threshold::AEClock;
 
 pub type VertexRef<'a> = DashMapRef<'a, Dot, RwLock<Vertex>>;
 
@@ -27,7 +30,7 @@ impl VertexIndex {
 
     /// Indexes a new vertex, returning any previous vertex indexed.
     pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
-        let dot = vertex.dot();
+        let dot = vertex.dot;
         let cell = RwLock::new(vertex);
         self.index.insert(dot, cell).map(|cell| cell.into_inner())
     }
@@ -44,6 +47,32 @@ impl VertexIndex {
     /// Removes a vertex from the index.
     pub fn remove(&mut self, dot: &Dot) -> Option<Vertex> {
         self.index.remove(dot).map(|(_, cell)| cell.into_inner())
+    }
+
+    pub fn show_pending(
+        &self,
+        executed_clock: &AEClock<ProcessId>,
+        pending_for: Duration,
+        time: &dyn SysTime,
+    ) {
+        // first show executed clock
+        println!(
+            "p{}: executed before showing pending {:?}",
+            self.process_id, executed_clock
+        );
+
+        // show pending commands
+        let now_ms = time.millis();
+        let pending_for_ms = pending_for.as_millis() as u64;
+        self.index.iter().for_each(|vertex_ref| {
+            let vertex = vertex_ref.read();
+            if now_ms - vertex.start_time_ms >= pending_for_ms {
+                println!(
+                    "p{}: {:?} is pending with deps {:?}",
+                    self.process_id, vertex.dot, vertex.deps
+                );
+            }
+        })
     }
 }
 

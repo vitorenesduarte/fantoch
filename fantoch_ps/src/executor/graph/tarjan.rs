@@ -319,10 +319,10 @@ impl TarjanSCCFinder {
 
 #[derive(Debug, Clone)]
 pub struct Vertex {
-    dot: Dot,
+    pub dot: Dot,
     pub cmd: Command,
     pub deps: Vec<Dependency>,
-    start_time: u64,
+    pub start_time_ms: u64,
     // specific to tarjan's algorithm
     id: usize,
     low: usize,
@@ -336,12 +336,12 @@ impl Vertex {
         deps: Vec<Dependency>,
         time: &dyn SysTime,
     ) -> Self {
-        let start_time = time.millis();
+        let start_time_ms = time.millis();
         Self {
             dot,
             cmd,
             deps,
-            start_time,
+            start_time_ms,
             id: 0,
             low: 0,
             on_stack: false,
@@ -350,13 +350,8 @@ impl Vertex {
 
     /// Consumes the vertex, returning its command.
     pub fn into_command(self, time: &dyn SysTime) -> (u64, Command) {
-        let end_time = time.millis();
-        let duration = end_time - self.start_time;
-        (duration, self.cmd)
-    }
-
-    /// Retrieves vertex's dot.
-    pub fn dot(&self) -> Dot {
-        self.dot
+        let end_time_ms = time.millis();
+        let duration_ms = end_time_ms - self.start_time_ms;
+        (duration_ms, self.cmd)
     }
 }

@@ -28,7 +28,12 @@ use fantoch::util;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::time::Duration;
 use threshold::AEClock;
+
+// every 200 cleanups (which should be every second if the cleanup interval is 5ms)
+const CLEANUPS_PER_SHOW_PENDING: Option<usize> = Some(200);
+const PENDING_FOR: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -52,6 +57,7 @@ pub struct DependencyGraph {
     level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
+    cleanups: usize,
     finder: TarjanSCCFinder,
     metrics: ExecutorMetrics,
     // worker 0 (handles commands):
@@ -100,6 +106,7 @@ impl DependencyGraph {
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new(process_id, shard_id, *config);
+        let cleanups = 0;
         // create finder
         let finder = TarjanSCCFinder::new(process_id, shard_id, *config);
         let metrics = ExecutorMetrics::new();
@@ -123,6 +130,7 @@ impl DependencyGraph {
             level_executed_clock,
             vertex_index,
             pending_index,
+            cleanups,
             finder,
             metrics,
             to_execute,
@@ -186,7 +194,17 @@ impl DependencyGraph {
         );
         self.level_executed_clock
             .maybe_level(&mut self.executed_clock, time);
-        if self.executor_index > 0 {
+        if self.executor_index == 0 {
+            if let Some(cleanups_per_show_pending) = CLEANUPS_PER_SHOW_PENDING {
+                // increase the number of cleanups
+                self.cleanups += 1;
+
+                if self.cleanups % cleanups_per_show_pending == 0 {
+                    // show requests that have been committed at least 1 second ago
+                    self.vertex_index.show_pending(&self.executed_clock, PENDING_FOR, time)
+                }
+            }
+        } else {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
         }
@@ -490,11 +508,11 @@ impl DependencyGraph {
             dots.push(dot);
 
             // get command
-            let (duration, cmd) = vertex.into_command(time);
+            let (duration_ms, cmd) = vertex.into_command(time);
 
             // save execution delay metric
             self.metrics
-                .collect(ExecutorMetricsKind::ExecutionDelay, duration);
+                .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
             // add command to commands to be executed
             self.to_execute.push(cmd);
