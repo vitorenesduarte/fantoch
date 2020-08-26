@@ -187,16 +187,20 @@ impl DependencyGraph {
             self.executor_index,
             time.millis()
         );
+        /*
         // try to level the executed clock
         let maybe_executed = self.level_executed_clock.maybe_level(
             &mut self.executed_clock,
             &self.vertex_index,
             time,
         );
+        */
 
         if self.executor_index == 0 {
+            /*
             let mut total_found = 0;
             self.check_pending(maybe_executed, &mut total_found, time);
+            */
         } else {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
