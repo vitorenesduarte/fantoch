@@ -194,16 +194,13 @@ impl DependencyGraph {
             time.millis()
         );
         // try to level the executed clock
-        let maybe_executed = self
-            .level_executed_clock
-            .maybe_level(&mut self.executed_clock, time);
+        self.level_executed_clock.maybe_level(
+            &mut self.executed_clock,
+            &self.vertex_index,
+            time,
+        );
 
         if self.executor_index == 0 {
-            // try commands that maybe were waiting on these newly executed
-            // commands
-            let mut total_found = 0;
-            self.check_pending(maybe_executed, &mut total_found, time);
-
             // maybe show pending commands
             if let Some(cleanups_per_show_pending) = CLEANUPS_PER_SHOW_PENDING {
                 // increase the number of cleanups
@@ -584,6 +581,14 @@ impl DependencyGraph {
                     time.millis()
                 );
                 self.try_pending(pending, &mut dots, total_found, time);
+            } else {
+                log!(
+                    "p{}: @{} Graph::try_pending nothing depended on {:?} | time = {}",
+                    self.process_id,
+                    self.executor_index,
+                    dot,
+                    time.millis()
+                );
             }
         }
         // once there are no more dots to try, no command in pending should be
