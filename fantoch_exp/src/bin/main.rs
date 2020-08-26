@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results_zipf0.5_debug";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -46,7 +46,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "hang";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -159,10 +159,10 @@ async fn main() -> Result<(), Report> {
         // 1024 / 2,
         // 1024,
         // 1024 * 2,
-        1024 * 4,  // 1
-        1024 * 8,  // 1
-        1024 * 12, // 1
-        1024 * 16,
+        // 1024 * 4,  // 1
+        // 1024 * 8,  // 1
+        // 1024 * 12, // 1
+        // 1024 * 16,
         1024 * 20,
         1024 * 24, // 1
         1024 * 32,
@@ -180,12 +180,12 @@ async fn main() -> Result<(), Report> {
         1024 * 256,
         1024 * 272,
     ];
-    let shards_per_command = 1;
-    let shard_count = 1;
+    let shards_per_command = 2;
+    let shard_count = 4;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: 0.1,
+        coefficient: 0.5,
         key_count: zipf_key_count,
     };
     // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
