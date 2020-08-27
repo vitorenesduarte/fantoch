@@ -291,7 +291,7 @@ impl DependencyGraph {
         // check that all newly ready commands have been incorporated
         assert_eq!(self.to_execute.len(), initial_ready + total_found);
 
-        tracing::debug!(
+        tracing::trace!(
             "p{}: @{} Graph::log executed {:?} | pending {:?} | time = {}",
             self.process_id,
             self.executor_index,
