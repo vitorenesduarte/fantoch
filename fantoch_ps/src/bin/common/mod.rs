@@ -46,7 +46,7 @@ pub fn init_tracing_subscriber(
         .with_ansi(false);
 
     let builder = tracing_appender::non_blocking::NonBlockingBuilder::default()
-        .buffered_lines_limit(0)
+        // .buffered_lines_limit(0)
         .lossy(false);
     let (non_blocking_appender, guard) = match log_file {
         Some(log_file) => {
