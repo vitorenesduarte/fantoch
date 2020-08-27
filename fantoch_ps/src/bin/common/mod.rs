@@ -2,7 +2,6 @@
 #[allow(dead_code)]
 pub mod protocol;
 
-use std::fs::File;
 use std::path::Path;
 use std::time::Duration;
 
@@ -31,30 +30,6 @@ pub fn tokio_runtime(
         .thread_name("runner")
         .build()
         .expect("tokio runtime build should work")
-}
-
-struct TestWriter {
-    file: File,
-}
-
-impl TestWriter {
-    fn new(log_file: impl AsRef<Path>) -> Self {
-        let file =
-            File::create(log_file).expect("creating log file should work");
-        Self { file }
-    }
-}
-
-impl std::io::Write for TestWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let buf_len = buf.len();
-        self.file.write_all(buf)?;
-        Ok(buf_len)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
 }
 
 #[must_use]

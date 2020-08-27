@@ -538,11 +538,10 @@ pub fn fantoch_bin_script(
     run_mode: RunMode,
     err_file: impl ToString,
 ) -> String {
-    // without the first info, some of the logs don't show up and it's not clear
-    // why that is
+    // binary=info makes sure that we also capture any logs in there
     let env_vars = format!(
-        "RUST_LOG=info,fantoch={},fantoch_ps={}",
-        LOG_LEVEL, LOG_LEVEL
+        "RUST_LOG={}=info,fantoch={},fantoch_ps={}",
+        binary, LOG_LEVEL, LOG_LEVEL
     );
     let run_command = run_mode.run_command(process_type, binary);
     let args = args.join(" ");
