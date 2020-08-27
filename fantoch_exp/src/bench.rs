@@ -1081,8 +1081,12 @@ async fn cleanup_machine(
 
     // remove files
     let command = format!(
-        "rm -f *.{} *.{} *.{} *.{} heaptrack.*.gz *perf.data*",
-        LOG_FILE_EXT, DSTAT_FILE_EXT, METRICS_FILE_EXT, FLAMEGRAPH_FILE_EXT
+        "rm -f *.{} *.{} *.{} *.{} *.{} heaptrack.*.gz *perf.data*",
+        LOG_FILE_EXT,
+        ERR_FILE_EXT,
+        DSTAT_FILE_EXT,
+        METRICS_FILE_EXT,
+        FLAMEGRAPH_FILE_EXT
     );
     vm.exec(command).await.wrap_err("rm files")?;
     Ok(())
