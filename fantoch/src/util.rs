@@ -14,22 +14,6 @@ macro_rules! singleton {
     }};
 }
 
-// Debug version
-#[cfg(debug_assertions)]
-#[macro_export]
-macro_rules! log {
-    ($( $args:expr ),*) => { println!( $( $args ),* ); }
-}
-
-// Non-debug version
-#[cfg(not(debug_assertions))]
-#[macro_export]
-macro_rules! log {
-    ($( $args:expr ),*) => {
-        ()
-    };
-}
-
 type DefaultHasher = ahash::AHasher;
 
 /// Compute the hash of a key.

@@ -1,4 +1,3 @@
-use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use tokio::time::{self, Duration, Instant, Interval};
@@ -42,7 +41,11 @@ where
     events
         .into_iter()
         .map(|(event, duration)| {
-            log!("[periodic] event: {:?} | interval {:?}", event, duration);
+            tracing::trace!(
+                "[periodic] event: {:?} | interval {:?}",
+                event,
+                duration
+            );
 
             // create event msg
             let event_msg = FromPeriodicMessage::Event(event);
@@ -208,7 +211,7 @@ async fn periodic_task_send_msg<P, R>(
     R: Clone + 'static,
 {
     if let Err(e) = periodic_to_workers.forward(msg).await {
-        println!("[periodic] error sending message to workers: {:?}", e);
+        tracing::warn!("[periodic] error sending message to workers: {:?}", e);
     }
 }
 
@@ -225,7 +228,9 @@ async fn periodic_task_inspect<P, R>(
         periodic_task_send_msg(periodic_to_workers, inspect_msg).await;
     } else {
         if !*error_shown {
-            println!("[periodic] error while receiving new inspect message");
+            tracing::warn!(
+                "[periodic] error while receiving new inspect message"
+            );
             *error_shown = true;
         }
     }

@@ -24,7 +24,7 @@ pub async fn delay_task<M>(
                     _ = time::delay_until(*next_instant) => {
                         let msg = dequeue(&mut queue);
                         if let Err(e) = to.send(msg).await {
-                            println!("[delay_task] error forwarding message: {:?}", e);
+                            tracing::warn!("[delay_task] error forwarding message: {:?}", e);
                             break;
                         }
                     }
@@ -48,7 +48,7 @@ fn enqueue<M>(
     } else {
         if !*error_shown {
             *error_shown = true;
-            println!("[delay_task] error receiving message from parent");
+            tracing::warn!("[delay_task] error receiving message from parent");
         }
     }
 }

@@ -3,6 +3,22 @@ pub use fantoch::util::{
     closest_process_per_shard, process_ids, sort_processes_by_distance,
 };
 
+// Debug version
+#[cfg(debug_assertions)]
+#[macro_export]
+macro_rules! log {
+    ($( $args:expr ),*) => { println!( $( $args ),* ); }
+}
+
+// Non-debug version
+#[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! log {
+    ($( $args:expr ),*) => {
+        ()
+    };
+}
+
 #[cfg(test)]
 pub use tests::{gen_cmd, vclock};
 

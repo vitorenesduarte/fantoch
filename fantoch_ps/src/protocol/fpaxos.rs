@@ -1,4 +1,5 @@
 use crate::executor::SlotExecutor;
+use crate::log;
 use crate::protocol::common::synod::{GCTrack, MultiSynod, MultiSynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -7,8 +8,8 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, Protocol, ProtocolMetrics,
 };
+use fantoch::singleton;
 use fantoch::time::SysTime;
-use fantoch::{log, singleton};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

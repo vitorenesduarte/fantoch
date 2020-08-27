@@ -1,4 +1,5 @@
 use crate::executor::GraphExecutor;
+use crate::log;
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
@@ -11,8 +12,8 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
+use fantoch::singleton;
 use fantoch::time::SysTime;
-use fantoch::{log, singleton};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

@@ -1,7 +1,6 @@
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId, ShardId};
-use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::task;
@@ -134,7 +133,7 @@ async fn handle_execution_info<P>(
 ) where
     P: Protocol + 'static,
 {
-    log!("[executor] from workers: {:?}", execution_info);
+    tracing::trace!("[executor] from workers: {:?}", execution_info);
     if let Some(execution_info) = execution_info {
         executor.handle(execution_info, time);
         fetch_new_command_results::<P>(executor, to_clients).await;
@@ -146,7 +145,9 @@ async fn handle_execution_info<P>(
         )
         .await;
     } else {
-        println!("[executor] error while receiving execution info from worker");
+        tracing::warn!(
+            "[executor] error while receiving execution info from worker"
+        );
     }
 }
 
@@ -165,7 +166,7 @@ async fn fetch_new_command_results<P>(
         // send executor result to client (in case it is registered)
         if let Some(executor_results_tx) = to_clients.to_client(&client_id) {
             if let Err(e) = executor_results_tx.send(executor_result).await {
-                println!(
+                tracing::warn!(
                     "[executor] error while sending executor result to client {}: {:?}",
                     client_id, e
                 );
@@ -184,7 +185,7 @@ async fn fetch_info_to_executors<P>(
 {
     // forward execution info to other shards
     for (target_shard, execution_info) in executor.to_executors_iter() {
-        log!(
+        tracing::trace!(
             "[executor] info to executors in shard {}: {:?}",
             target_shard,
             execution_info
@@ -193,7 +194,7 @@ async fn fetch_info_to_executors<P>(
         if shard_id == target_shard {
             // notify executor
             if let Err(e) = to_executors.forward(execution_info).await {
-                println!("[executor] error while notifying other executors with new execution info: {:?}", e);
+                tracing::warn!("[executor] error while notifying other executors with new execution info: {:?}", e);
             }
         } else {
             let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
@@ -219,7 +220,7 @@ async fn handle_from_client<P>(
 ) where
     P: Protocol,
 {
-    log!("[executor] from client: {:?}", from_client);
+    tracing::trace!("[executor] from client: {:?}", from_client);
     if let Some(from_client) = from_client {
         match from_client {
             ClientToExecutor::Register(client_ids, executor_results_tx) => {
@@ -230,7 +231,9 @@ async fn handle_from_client<P>(
             }
         }
     } else {
-        println!("[executor] error while receiving new command from clients");
+        tracing::warn!(
+            "[executor] error while receiving new command from clients"
+        );
     }
 }
 
@@ -244,7 +247,7 @@ async fn cleanup_tick<P>(
 ) where
     P: Protocol + 'static,
 {
-    log!("[executor] cleanup");
+    tracing::trace!("[executor] cleanup");
     executor.cleanup(time);
     fetch_new_command_results::<P>(executor, to_clients).await;
     fetch_info_to_executors::<P>(
@@ -270,7 +273,7 @@ async fn metrics_tick<P>(
             .send((executor_index, executor_metrics))
             .await
         {
-            println!("[executor] error while sending metrics to metrics logger: {:?}", e);
+            tracing::warn!("[executor] error while sending metrics to metrics logger: {:?}", e);
         }
     }
 }
@@ -304,7 +307,7 @@ impl ToClients {
 
         // map each `ClientId` to the computed id
         for client_id in client_ids {
-            log!("[executor] clients {} registered", client_id);
+            tracing::trace!("[executor] clients {} registered", client_id);
             assert!(
                 self.index.insert(client_id, id).is_none(),
                 "client already registered"
@@ -319,7 +322,10 @@ impl ToClients {
         let mut ids: Vec<_> = client_ids
             .into_iter()
             .filter_map(|client_id| {
-                log!("[executor] clients {} unregistered", client_id);
+                tracing::trace!(
+                    "[executor] clients {} unregistered",
+                    client_id
+                );
                 self.index.remove(&client_id)
             })
             .collect();

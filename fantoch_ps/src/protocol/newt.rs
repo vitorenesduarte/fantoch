@@ -1,4 +1,5 @@
 use crate::executor::TableExecutor;
+use crate::log;
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::common::table::{
     AtomicKeyClocks, FineLockedKeyClocks, KeyClocks, LockedKeyClocks,
@@ -13,9 +14,9 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
+use fantoch::singleton;
 use fantoch::time::SysTime;
 use fantoch::util;
-use fantoch::{log, singleton};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::mem;

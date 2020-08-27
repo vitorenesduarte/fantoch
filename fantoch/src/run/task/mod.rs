@@ -31,7 +31,6 @@ pub mod metrics_logger;
 // Re-exports.
 pub use chan::channel;
 
-use crate::log;
 use crate::run::rw::Connection;
 use chan::{ChannelReceiver, ChannelSender};
 use color_eyre::Report;
@@ -149,10 +148,11 @@ where
                 // attempts)
                 tries += 1;
                 if tries < connect_retries {
-                    println!("failed to connect to {:?}: {}", address, e);
-                    println!(
+                    tracing::info!("failed to connect to {:?}: {}", address, e);
+                    tracing::info!(
                         "will try again in 1 second ({} out of {})",
-                        tries, connect_retries,
+                        tries,
+                        connect_retries,
                     );
                     tokio::time::delay_for(Duration::from_secs(1)).await;
                 } else {
@@ -181,19 +181,20 @@ async fn listener_task(
     loop {
         match listener.accept().await {
             Ok((stream, _addr)) => {
-                log!("[listener] new connection: {:?}", _addr);
+                tracing::trace!("[listener] new connection: {:?}", _addr);
 
                 // create connection
                 let connection =
                     Connection::new(stream, tcp_nodelay, tcp_buffer_size);
 
                 if let Err(e) = parent.send(connection).await {
-                    println!("[listener] error sending stream to parent process: {:?}", e);
+                    tracing::warn!("[listener] error sending stream to parent process: {:?}", e);
                 }
             }
-            Err(e) => {
-                println!("[listener] couldn't accept new connection: {:?}", e)
-            }
+            Err(e) => tracing::warn!(
+                "[listener] couldn't accept new connection: {:?}",
+                e
+            ),
         }
     }
 }

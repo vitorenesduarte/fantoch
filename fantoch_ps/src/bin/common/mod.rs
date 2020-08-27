@@ -9,6 +9,22 @@ const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 const DEFAULT_STACK_SIZE: usize = 2 * 1024 * 1024; // 2MBs
 
+pub fn init_tracing_subscriber() {
+    let format = tracing_subscriber::fmt::format()
+        .without_time()
+        .with_target(false)
+        .with_level(false)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_ansi(true);
+
+    // init tracing subscriber
+    tracing_subscriber::fmt()
+        .event_format(format)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+}
+
 #[allow(dead_code)]
 pub fn tokio_runtime(
     stack_size: usize,
@@ -17,7 +33,7 @@ pub fn tokio_runtime(
     // get number of cpus
     let available = num_cpus::get();
     let cpus = cpus.unwrap_or(available);
-    println!("cpus: {} of {}", cpus, available);
+    tracing::info!("cpus: {} of {}", cpus, available);
 
     // create tokio runtime
     tokio::runtime::Builder::new()

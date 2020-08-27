@@ -1,4 +1,3 @@
-use crate::log;
 use crate::run::task;
 use crate::run::task::chan::{ChannelReceiver, ChannelSender};
 use color_eyre::Report;
@@ -129,7 +128,6 @@ where
         index: Option<usize>,
         msg: M,
     ) -> Result<(), Report> {
-        log!("index: {} {:?} of {}", self.name, index, self.pool_size());
         // send to the correct worker if an index was specified. otherwise, send
         // to all workers.
         match index {

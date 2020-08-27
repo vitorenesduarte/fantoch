@@ -1,6 +1,5 @@
 use super::chan::ChannelSender;
 use crate::id::{ProcessId, ShardId};
-use crate::log;
 use crate::run::prelude::*;
 use crate::HashMap;
 use fantoch_prof::metrics::Histogram;
@@ -24,12 +23,12 @@ pub async fn ping_task(
     let ping_interval = ping_interval.unwrap();
 
     // create tokio interval
-    log!("[ping_task] interval {:?}", ping_interval);
+    tracing::trace!("[ping_task] interval {:?}", ping_interval);
     let mut ping_interval = time::interval(ping_interval);
 
     // create another tokio interval
     let millis = Duration::from_millis(PING_SHOW_INTERVAL);
-    log!("[ping_task] show interval {:?}", millis);
+    tracing::trace!("[ping_task] show interval {:?}", millis);
     let mut ping_show_interval = time::interval(millis);
 
     //  create ping stats
@@ -82,7 +81,7 @@ async fn ping_task_ping(
                     .to_string();
 
                 if stdout.is_empty() {
-                    println!(
+                    tracing::warn!(
                         "[ping_task] ping output was empty; trying again..."
                     )
                 } else {
@@ -114,7 +113,7 @@ fn ping_task_show(
     >,
 ) {
     for (process_id, (_, _, _, histogram)) in ping_stats {
-        println!("[ping_task] {}: {:?}", process_id, histogram);
+        tracing::warn!("[ping_task] {}: {:?}", process_id, histogram);
     }
 }
 
@@ -132,14 +131,14 @@ async fn ping_task_sort(
             let sorted_processes =
                 sort_by_distance(process_id, shard_id, &ping_stats);
             if let Err(e) = sort_request.send(sorted_processes).await {
-                println!(
+                tracing::warn!(
                     "[ping_task] error sending message to parent: {:?}",
                     e
                 );
             }
         }
         None => {
-            println!("[ping_task] error receiving message from parent");
+            tracing::warn!("[ping_task] error receiving message from parent");
         }
     }
 }

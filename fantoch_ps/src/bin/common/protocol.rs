@@ -63,6 +63,8 @@ pub fn run<P>() -> Result<(), Report>
 where
     P: Protocol + Send + 'static,
 {
+    super::init_tracing_subscriber();
+
     let (
         process_id,
         shard_id,
@@ -110,22 +112,6 @@ where
         ping_interval,
         metrics_file,
     );
-
-    let format = tracing_subscriber::fmt::format()
-        // don't include timestamps
-        .without_time()
-        // don't include event targets.
-        .with_target(false)
-        // don't include event levels.
-        .with_level(false)
-        // use a more compact, abbreviated format.
-        .compact();
-
-    // init tracing subscriber
-    tracing_subscriber::fmt()
-        .event_format(format)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
 
     super::tokio_runtime(stack_size, cpus).block_on(process)
 }
@@ -435,32 +421,32 @@ fn parse_args() -> ProtocolArgs {
     let stack_size = super::parse_stack_size(matches.value_of("stack_size"));
     let cpus = super::parse_cpus(matches.value_of("cpus"));
 
-    println!("process id: {}", process_id);
-    println!("sorted processes: {:?}", sorted_processes);
-    println!("ip: {:?}", ip);
-    println!("port: {}", port);
-    println!("client port: {}", client_port);
-    println!("addresses: {:?}", addresses);
-    println!("config: {:?}", config);
-    println!("tcp_nodelay: {:?}", tcp_nodelay);
-    println!("tcp buffer size: {:?}", tcp_buffer_size);
-    println!("tcp flush interval: {:?}", tcp_flush_interval);
-    println!(
+    tracing::info!("process id: {}", process_id);
+    tracing::info!("sorted processes: {:?}", sorted_processes);
+    tracing::info!("ip: {:?}", ip);
+    tracing::info!("port: {}", port);
+    tracing::info!("client port: {}", client_port);
+    tracing::info!("addresses: {:?}", addresses);
+    tracing::info!("config: {:?}", config);
+    tracing::info!("tcp_nodelay: {:?}", tcp_nodelay);
+    tracing::info!("tcp buffer size: {:?}", tcp_buffer_size);
+    tracing::info!("tcp flush interval: {:?}", tcp_flush_interval);
+    tracing::info!(
         "process channel buffer size: {:?}",
         process_channel_buffer_size
     );
-    println!(
+    tracing::info!(
         "client channel buffer size: {:?}",
         client_channel_buffer_size
     );
-    println!("workers: {:?}", workers);
-    println!("executors: {:?}", executors);
-    println!("multiplexing: {:?}", multiplexing);
-    println!("execution log: {:?}", execution_log);
-    println!("trace_show_interval: {:?}", tracer_show_interval);
-    println!("ping_interval: {:?}", ping_interval);
-    println!("metrics file: {:?}", metrics_file);
-    println!("stack size: {:?}", stack_size);
+    tracing::info!("workers: {:?}", workers);
+    tracing::info!("executors: {:?}", executors);
+    tracing::info!("multiplexing: {:?}", multiplexing);
+    tracing::info!("execution log: {:?}", execution_log);
+    tracing::info!("trace_show_interval: {:?}", tracer_show_interval);
+    tracing::info!("ping_interval: {:?}", ping_interval);
+    tracing::info!("metrics file: {:?}", metrics_file);
+    tracing::info!("stack size: {:?}", stack_size);
 
     (
         process_id,

@@ -40,7 +40,7 @@ impl Config {
     /// system.
     pub fn new(n: usize, f: usize) -> Self {
         if f > n / 2 {
-            println!("WARNING: f={} is larger than a minority with n={}", f, n);
+            tracing::warn!("f={} is larger than a minority with n={}", f, n);
         }
         // by default, `shards = 1`
         let shards = 1;

@@ -43,7 +43,7 @@ where
                 Some(value)
             }
             Some(Err(e)) => {
-                println!("[rw] error while reading from stream: {:?}", e);
+                tracing::warn!("[rw] error while reading from stream: {:?}", e);
                 None
             }
             None => None,
@@ -56,7 +56,7 @@ where
     {
         let bytes = serialize(value);
         if let Err(e) = self.rw.send(bytes).await {
-            println!("[rw] error while writing to sink: {:?}", e);
+            tracing::warn!("[rw] error while writing to sink: {:?}", e);
         }
     }
 
@@ -69,11 +69,11 @@ where
             futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_ready(cx))
                 .await
         {
-            println!("[rw] error while polling sink ready: {:?}", e);
+            tracing::warn!("[rw] error while polling sink ready: {:?}", e);
         }
 
         if let Err(e) = Pin::new(&mut self.rw).start_send(bytes) {
-            println!("[rw] error while starting send to sink: {:?}", e);
+            tracing::warn!("[rw] error while starting send to sink: {:?}", e);
         }
     }
 
@@ -82,7 +82,7 @@ where
             futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_flush(cx))
                 .await
         {
-            println!("[rw] error while flushing sink: {:?}", e);
+            tracing::warn!("[rw] error while flushing sink: {:?}", e);
         }
     }
 }

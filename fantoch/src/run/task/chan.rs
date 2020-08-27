@@ -41,8 +41,10 @@ where
             Err(TrySendError::Full(value)) => {
                 // if it's full, use `send` and `await` on it
                 match &self.name {
-                    Some(name) => println!("named channel {} is full", name),
-                    None => println!("unnamed channel is full"),
+                    Some(name) => {
+                        tracing::warn!("named channel {} is full", name)
+                    }
+                    None => tracing::warn!("unnamed channel is full"),
                 }
                 self.sender
                     .send(value)

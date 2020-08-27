@@ -28,6 +28,8 @@ type ClientArgs = (
 );
 
 fn main() -> Result<(), Report> {
+    common::init_tracing_subscriber();
+
     let (
         ids,
         addresses,
@@ -190,15 +192,15 @@ fn parse_args() -> ClientArgs {
     let stack_size = common::parse_stack_size(matches.value_of("stack_size"));
     let cpus = common::parse_cpus(matches.value_of("cpus"));
 
-    println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
-    println!("client number: {}", ids.len());
-    println!("addresses: {:?}", addresses);
-    println!("workload: {:?}", workload);
-    println!("tcp_nodelay: {:?}", tcp_nodelay);
-    println!("channel buffer size: {:?}", channel_buffer_size);
-    println!("status frequency: {:?}", status_frequency);
-    println!("metrics file: {:?}", metrics_file);
-    println!("stack size: {:?}", stack_size);
+    tracing::info!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
+    tracing::info!("client number: {}", ids.len());
+    tracing::info!("addresses: {:?}", addresses);
+    tracing::info!("workload: {:?}", workload);
+    tracing::info!("tcp_nodelay: {:?}", tcp_nodelay);
+    tracing::info!("channel buffer size: {:?}", channel_buffer_size);
+    tracing::info!("status frequency: {:?}", status_frequency);
+    tracing::info!("metrics file: {:?}", metrics_file);
+    tracing::info!("stack size: {:?}", stack_size);
 
     (
         ids,

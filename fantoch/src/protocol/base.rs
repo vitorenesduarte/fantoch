@@ -1,6 +1,5 @@
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId, ShardId};
-use crate::log;
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
 use crate::{HashMap, HashSet};
 use std::iter::FromIterator;
@@ -117,7 +116,7 @@ impl BaseProcess {
             None
         };
 
-        log!(
+        tracing::trace!(
             "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?} | closest_shard_process {:?}",
             self.process_id,
             self.all_but_me,
