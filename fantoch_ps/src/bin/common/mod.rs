@@ -53,7 +53,7 @@ pub fn init_tracing_subscriber(
 
     tracing_subscriber::fmt()
         .event_format(format)
-        .with_writer(non_blocking_appender)
+        // .with_writer(non_blocking_appender)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 }
