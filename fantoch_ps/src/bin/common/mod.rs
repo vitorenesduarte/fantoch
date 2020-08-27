@@ -32,7 +32,10 @@ pub fn tokio_runtime(
         .expect("tokio runtime build should work")
 }
 
-pub fn init_tracing_subscriber(log_file: Option<impl AsRef<Path>>) {
+pub fn init_tracing_subscriber(
+    log_file: Option<impl AsRef<Path> + std::fmt::Debug>,
+) {
+    println!("log_file: {:?}", log_file);
     let format = tracing_subscriber::fmt::format()
         .without_time()
         .with_target(false)
