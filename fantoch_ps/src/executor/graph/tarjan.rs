@@ -132,7 +132,7 @@ impl TarjanSCCFinder {
             let dep_dot = vertex.deps[i].dot;
 
             if ignore(dep_dot) {
-                tracing::debug!(
+                tracing::trace!(
                     "p{}: Finder::strong_connect ignoring dependency {:?}",
                     self.process_id,
                     dep_dot
@@ -176,7 +176,7 @@ impl TarjanSCCFinder {
 
                     // if not visited, visit
                     if dep_vertex.id == 0 {
-                        tracing::debug!(
+                        tracing::trace!(
                             "p{}: Finder::strong_connect non-visited {:?}",
                             self.process_id,
                             dep_dot
@@ -214,7 +214,7 @@ impl TarjanSCCFinder {
                     } else {
                         // if visited and on the stack
                         if dep_vertex.on_stack {
-                            tracing::debug!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
+                            tracing::trace!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
                             // min low with dep id
                             vertex.low = cmp::min(vertex.low, dep_vertex.id);
                         }
@@ -295,7 +295,7 @@ impl TarjanSCCFinder {
                     added.insert(member_dot);
                 }
 
-                tracing::debug!(
+                tracing::trace!(
                     "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
                     executed_clock

@@ -117,7 +117,7 @@ impl GraphExecutor {
     fn fetch_commands_to_execute(&mut self, time: &dyn SysTime) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
-            tracing::debug!(
+            tracing::trace!(
                 "p{}: @{} GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -130,7 +130,7 @@ impl GraphExecutor {
 
     fn fetch_to_executors(&mut self, time: &dyn SysTime) {
         if let Some(added) = self.graph.to_executors() {
-            tracing::debug!(
+            tracing::trace!(
                 "p{}: @{} GraphExecutor::to_executors {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -144,7 +144,7 @@ impl GraphExecutor {
 
     fn fetch_requests(&mut self, time: &dyn SysTime) {
         for (to, dots) in self.graph.requests() {
-            tracing::debug!(
+            tracing::trace!(
                 "p{}: @{} GraphExecutor::fetch_requests {:?} {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -159,7 +159,7 @@ impl GraphExecutor {
 
     fn fetch_request_replies(&mut self, time: &dyn SysTime) {
         for (to, infos) in self.graph.request_replies() {
-            tracing::debug!(
+            tracing::trace!(
                 "p{}: @{} Graph::fetch_request_replies {:?} {:?} | time = {}",
                 self.process_id,
                 self.executor_index,

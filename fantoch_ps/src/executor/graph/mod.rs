@@ -180,7 +180,7 @@ impl DependencyGraph {
     }
 
     fn cleanup(&mut self, time: &dyn SysTime) {
-        tracing::debug!(
+        tracing::trace!(
             "p{}: @{} Graph::cleanup | time = {}",
             self.process_id,
             self.executor_index,
@@ -207,8 +207,8 @@ impl DependencyGraph {
     }
 
     fn monitor_pending(&self, time: &dyn SysTime) {
-        tracing::debug!(
-            "p{}: @{} Graph::cleanup | time = {}",
+        tracing::trace!(
+            "p{}: @{} Graph::monitor_pending | time = {}",
             self.process_id,
             self.executor_index,
             time.millis()
@@ -224,13 +224,13 @@ impl DependencyGraph {
         }
     }
 
-    fn handle_executed(&mut self, dots: HashSet<Dot>, _time: &dyn SysTime) {
-        tracing::debug!(
+    fn handle_executed(&mut self, dots: HashSet<Dot>, time: &dyn SysTime) {
+        tracing::trace!(
             "p{}: @{} Graph::handle_executed {:?} | time = {}",
             self.process_id,
             self.executor_index,
             dots,
-            _time.millis()
+            time.millis()
         );
         if self.executor_index > 0 {
             for dot in dots {
@@ -307,16 +307,16 @@ impl DependencyGraph {
         &mut self,
         from: ShardId,
         dots: HashSet<Dot>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
-        tracing::debug!(
+        tracing::trace!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
             self.executor_index,
             dots,
             from,
-            _time.millis()
+            time.millis()
         );
         // save in requests metric
         self.metrics.aggregate(ExecutorMetricsKind::InRequests, 1);
@@ -331,34 +331,32 @@ impl DependencyGraph {
         &mut self,
         from: ShardId,
         dots: impl Iterator<Item = Dot>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
         for dot in dots {
-            tracing::debug!(
-                "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
-                self.process_id,
-                self.executor_index,
-                dot,
-                from,
-                _time.millis()
-            );
             if let Some(vertex) = self.vertex_index.find(&dot) {
                 let vertex = vertex.read();
 
-                // only send the vertex if the shard that requested this vertex
-                // does not replicate it
+                // panic if the shard that requested this vertex replicates it
                 if vertex.cmd.replicated_by(&from) {
-                    tracing::debug!(
+                    panic!(
                         "p{}: @{} Graph::process_requests {:?} is replicated by {:?} (WARN) | time = {}",
                         self.process_id,
                         self.executor_index,
                         dot,
                         from,
-                        _time.millis()
+                        time.millis()
                     )
                 } else {
-                    // if it doesn't replicate the command, send command info
+                    tracing::debug!(
+                        "p{}: @{} Graph::process_requests {:?} sending info to {:?} | time = {}",
+                        self.process_id,
+                        self.executor_index,
+                        dot,
+                        from,
+                        time.millis()
+                    );
                     self.out_request_replies.entry(from).or_default().push(
                         RequestReply::Info {
                             dot,
@@ -376,7 +374,7 @@ impl DependencyGraph {
                         self.process_id,
                         self.executor_index,
                         dot,
-                        _time.millis()
+                        time.millis()
                     );
                     // if it's executed, notify the shard that it has already
                     // been executed
@@ -388,12 +386,11 @@ impl DependencyGraph {
                         .push(RequestReply::Executed { dot });
                 } else {
                     tracing::debug!(
-                        "p{}: @{} Graph::process_requests from {:?} for a dot {:?} we don't have | time = {}",
+                        "p{}: @{} Graph::process_requests {:?} buffered | time = {}",
                         self.process_id,
                         self.executor_index,
-                        from,
                         dot,
-                        _time.millis()
+                        time.millis()
                     );
                     // buffer request again
                     self.buffered_in_requests
@@ -452,7 +449,7 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) -> FinderInfo {
         assert_eq!(self.executor_index, 0);
-        tracing::debug!(
+        tracing::trace!(
             "p{}: @{} Graph::find_scc {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -504,7 +501,7 @@ impl DependencyGraph {
             .collect(ExecutorMetricsKind::ChainSize, scc.len() as u64);
 
         scc.into_iter().for_each(|dot| {
-            tracing::debug!(
+            tracing::trace!(
                 "p{}: @{} Graph::save_scc removing {:?} from indexes | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -537,7 +534,7 @@ impl DependencyGraph {
         &mut self,
         missing_deps: HashSet<Dependency>,
         dot: Dot,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         let mut requests = 0;
         for dep in missing_deps {
@@ -550,7 +547,7 @@ impl DependencyGraph {
                     self.executor_index,
                     dep_dot,
                     target_shard,
-                    _time.millis()
+                    time.millis()
                 );
                 requests += 1;
                 self.out_requests
