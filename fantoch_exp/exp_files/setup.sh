@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 
-DEBUG=false
-# set the debug flag accordingly
-if [[ ${DEBUG} == true ]]; then
-    DEBUG_FLAG="-C debug-assertions"
-else
-    DEBUG_FLAG=""
-fi
-
 # flag indicating whether we should just remove previous installations
 RUST_TOOLCHAIN="stable"
 # RUST_TOOLCHAIN="nightly-2020-06-10"
@@ -171,9 +163,9 @@ build_fantoch() {
     # - build if features enabled if any features were defined
     cd "${FANTOCH_PACKAGE}"
     if [ "${features}" == "" ]; then
-        RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins
+        RUSTFLAGS="-C target-cpu=native" cargo build --release --bins
     else
-        RUSTFLAGS="-C target-cpu=native ${DEBUG_FLAG}" cargo build --release --bins --features ${features}
+        RUSTFLAGS="-C target-cpu=native" cargo build --release --bins --features ${features}
     fi
 }
 
