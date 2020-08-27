@@ -110,6 +110,11 @@ where
         ping_interval,
         metrics_file,
     );
+    // init tracing subscriber
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
     super::tokio_runtime(stack_size, cpus).block_on(process)
 }
 
