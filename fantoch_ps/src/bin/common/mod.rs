@@ -2,6 +2,7 @@
 #[allow(dead_code)]
 pub mod protocol;
 
+use std::fs::File;
 use std::path::Path;
 use std::time::Duration;
 
@@ -32,6 +33,30 @@ pub fn tokio_runtime(
         .expect("tokio runtime build should work")
 }
 
+struct TestWriter {
+    file: File,
+}
+
+impl TestWriter {
+    fn new(log_file: impl AsRef<Path>) -> Self {
+        let file =
+            File::create(log_file).expect("creating log file should work");
+        Self { file }
+    }
+}
+
+impl std::io::Write for TestWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let buf_len = buf.len();
+        self.file.write_all(buf)?;
+        Ok(buf_len)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[must_use]
 pub fn init_tracing_subscriber(
     log_file: Option<impl AsRef<Path> + std::fmt::Debug>,
@@ -46,9 +71,14 @@ pub fn init_tracing_subscriber(
         .with_ansi(false);
 
     let (non_blocking_appender, guard) = match log_file {
+        /*
         Some(log_file) => tracing_appender::non_blocking(
             tracing_appender::rolling::never(".", log_file),
         ),
+        */
+        Some(log_file) => {
+            tracing_appender::non_blocking(TestWriter::new(log_file))
+        }
         None => tracing_appender::non_blocking(std::io::stdout()),
     };
 

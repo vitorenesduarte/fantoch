@@ -102,7 +102,7 @@ impl VertexIndex {
         // show pending commands: pending longest first
         for (_pending_for_ms, pending) in pending.into_iter().rev() {
             for fmt in pending {
-                println!("{}", fmt);
+                tracing::info!("{}", fmt);
             }
         }
 
