@@ -64,7 +64,7 @@ impl TarjanSCCFinder {
         // visited dots
         let mut visited = HashSet::new();
         while let Some(dot) = self.stack.pop() {
-            tracing::debug!(
+            tracing::trace!(
                 "p{}: Finder::finalize removing {:?} from stack",
                 _process_id,
                 dot
