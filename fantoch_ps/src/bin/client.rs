@@ -28,8 +28,6 @@ type ClientArgs = (
 );
 
 fn main() -> Result<(), Report> {
-    common::init_tracing_subscriber();
-
     let (
         ids,
         addresses,
@@ -167,7 +165,16 @@ fn parse_args() -> ClientArgs {
                 .help("number of cpus to be used by tokio; by default all available cpus are used")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("log_file")
+                .long("log_file")
+                .value_name("LOG_FILE")
+                .help("file to which logs will be written to; if not set, logs will be redirect to the stdout")
+                .takes_value(true),
+        )
         .get_matches();
+
+    common::init_tracing_subscriber(matches.value_of("log_file"));
 
     // parse arguments
     let ids = parse_id_range(matches.value_of("ids"));

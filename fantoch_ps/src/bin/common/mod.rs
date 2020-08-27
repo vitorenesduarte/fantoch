@@ -2,28 +2,13 @@
 #[allow(dead_code)]
 pub mod protocol;
 
+use std::path::Path;
 use std::time::Duration;
 
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
 const DEFAULT_STACK_SIZE: usize = 2 * 1024 * 1024; // 2MBs
-
-pub fn init_tracing_subscriber() {
-    let format = tracing_subscriber::fmt::format()
-        .without_time()
-        .with_target(false)
-        .with_level(false)
-        .with_thread_ids(false)
-        .with_thread_names(false)
-        .with_ansi(true);
-
-    // init tracing subscriber
-    tracing_subscriber::fmt()
-        .event_format(format)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-}
 
 #[allow(dead_code)]
 pub fn tokio_runtime(
@@ -45,6 +30,29 @@ pub fn tokio_runtime(
         .thread_name("runner")
         .build()
         .expect("tokio runtime build should work")
+}
+
+pub fn init_tracing_subscriber(log_file: Option<impl AsRef<Path>>) {
+    let format = tracing_subscriber::fmt::format()
+        .without_time()
+        .with_target(false)
+        .with_level(false)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_ansi(true);
+
+    let (non_blocking_appender, _guard) = match log_file {
+        Some(log_file) => tracing_appender::non_blocking(
+            tracing_appender::rolling::never(".", log_file),
+        ),
+        None => tracing_appender::non_blocking(std::io::stdout()),
+    };
+
+    tracing_subscriber::fmt()
+        .event_format(format)
+        .with_writer(non_blocking_appender)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 }
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {

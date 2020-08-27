@@ -18,6 +18,7 @@ use tokio::time::Duration;
 type Ips = HashMap<ProcessId, String>;
 
 const LOG_FILE_EXT: &str = "log";
+const ERR_FILE_EXT: &str = "err";
 const DSTAT_FILE_EXT: &str = "dstat.csv";
 const METRICS_FILE_EXT: &str = "metrics";
 pub(crate) const FLAMEGRAPH_FILE_EXT: &str = "flamegraph.svg";
@@ -352,6 +353,7 @@ async fn start_processes(
 
         // compute files to be generated during this run
         let log_file = config::run_file(process_type, LOG_FILE_EXT);
+        let err_file = config::run_file(process_type, ERR_FILE_EXT);
         let dstat_file = config::run_file(process_type, DSTAT_FILE_EXT);
         let metrics_file = config::run_file(process_type, METRICS_FILE_EXT);
 
@@ -369,6 +371,7 @@ async fn start_processes(
             ips,
             metrics_file,
             cpus,
+            log_file,
         );
         if let Some(interval) = tracer_show_interval {
             protocol_config.set_tracer_show_interval(interval);
@@ -380,7 +383,7 @@ async fn start_processes(
             protocol.binary(),
             args,
             run_mode,
-            log_file,
+            err_file,
         );
         let process = vm
             .prepare_exec(command)
@@ -455,6 +458,7 @@ async fn run_clients(
 
         // compute files to be generated during this run
         let log_file = config::run_file(process_type, LOG_FILE_EXT);
+        let err_file = config::run_file(process_type, ERR_FILE_EXT);
         let dstat_file = config::run_file(process_type, DSTAT_FILE_EXT);
         let metrics_file = config::run_file(process_type, METRICS_FILE_EXT);
 
@@ -470,6 +474,7 @@ async fn run_clients(
             workload,
             metrics_file,
             cpus,
+            log_file,
         );
         let args = client_config.to_args();
 
@@ -479,7 +484,7 @@ async fn run_clients(
             args,
             // always run clients on release mode
             RunMode::Release,
-            log_file,
+            err_file,
         );
         let client = vm
             .prepare_exec(command)

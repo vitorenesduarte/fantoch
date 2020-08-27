@@ -63,8 +63,6 @@ pub fn run<P>() -> Result<(), Report>
 where
     P: Protocol + Send + 'static,
 {
-    super::init_tracing_subscriber();
-
     let (
         process_id,
         shard_id,
@@ -362,7 +360,16 @@ fn parse_args() -> ProtocolArgs {
                 .help("number of cpus to be used by tokio; by default all available cpus are used")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("log_file")
+                .long("log_file")
+                .value_name("LOG_FILE")
+                .help("file to which logs will be written to; if not set, logs will be redirect to the stdout")
+                .takes_value(true),
+        )
         .get_matches();
+
+    super::init_tracing_subscriber(matches.value_of("log_file"));
 
     // parse arguments
     let process_id = parse_process_id(matches.value_of("id"));
