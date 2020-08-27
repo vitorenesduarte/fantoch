@@ -110,8 +110,20 @@ where
         ping_interval,
         metrics_file,
     );
+
+    let format = tracing_subscriber::fmt::format()
+        // don't include timestamps
+        .without_time()
+        // don't include event targets.
+        .with_target(false)
+        // don't include event levels.
+        .with_level(false)
+        // use a more compact, abbreviated format.
+        .compact();
+
     // init tracing subscriber
     tracing_subscriber::fmt()
+        .event_format(format)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
