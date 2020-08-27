@@ -63,6 +63,7 @@ pub fn run<P>() -> Result<(), Report>
 where
     P: Protocol + Send + 'static,
 {
+    let (args, _guard) = parse_args();
     let (
         process_id,
         shard_id,
@@ -86,7 +87,7 @@ where
         metrics_file,
         stack_size,
         cpus,
-    ) = parse_args();
+    ) = args;
 
     let process = fantoch::run::process::<P, String>(
         process_id,
@@ -114,7 +115,7 @@ where
     super::tokio_runtime(stack_size, cpus).block_on(process)
 }
 
-fn parse_args() -> ProtocolArgs {
+fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
     let matches = App::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -369,7 +370,7 @@ fn parse_args() -> ProtocolArgs {
         )
         .get_matches();
 
-    super::init_tracing_subscriber(matches.value_of("log_file"));
+    let guard = super::init_tracing_subscriber(matches.value_of("log_file"));
 
     // parse arguments
     let process_id = parse_process_id(matches.value_of("id"));
@@ -455,7 +456,7 @@ fn parse_args() -> ProtocolArgs {
     tracing::info!("metrics file: {:?}", metrics_file);
     tracing::info!("stack size: {:?}", stack_size);
 
-    (
+    let args = (
         process_id,
         shard_id,
         sorted_processes,
@@ -478,7 +479,8 @@ fn parse_args() -> ProtocolArgs {
         metrics_file,
         stack_size,
         cpus,
-    )
+    );
+    (args, guard)
 }
 
 fn parse_process_id(id: Option<&str>) -> ProcessId {

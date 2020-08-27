@@ -32,9 +32,10 @@ pub fn tokio_runtime(
         .expect("tokio runtime build should work")
 }
 
+#[must_use]
 pub fn init_tracing_subscriber(
     log_file: Option<impl AsRef<Path> + std::fmt::Debug>,
-) {
+) -> tracing_appender::non_blocking::WorkerGuard {
     println!("log_file: {:?}", log_file);
     let format = tracing_subscriber::fmt::format()
         .without_time()
@@ -44,7 +45,7 @@ pub fn init_tracing_subscriber(
         .with_thread_names(false)
         .with_ansi(false);
 
-    let (non_blocking_appender, _guard) = match log_file {
+    let (non_blocking_appender, guard) = match log_file {
         Some(log_file) => tracing_appender::non_blocking(
             tracing_appender::rolling::never(".", log_file),
         ),
@@ -53,9 +54,11 @@ pub fn init_tracing_subscriber(
 
     tracing_subscriber::fmt()
         .event_format(format)
-        // .with_writer(non_blocking_appender)
+        .with_writer(non_blocking_appender)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+
+    guard
 }
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {

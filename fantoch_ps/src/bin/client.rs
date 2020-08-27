@@ -28,6 +28,7 @@ type ClientArgs = (
 );
 
 fn main() -> Result<(), Report> {
+    let (args, _guard) = parse_args();
     let (
         ids,
         addresses,
@@ -39,7 +40,7 @@ fn main() -> Result<(), Report> {
         metrics_file,
         stack_size,
         cpus,
-    ) = parse_args();
+    ) = args;
 
     common::tokio_runtime(stack_size, cpus).block_on(fantoch::run::client(
         ids,
@@ -53,7 +54,7 @@ fn main() -> Result<(), Report> {
     ))
 }
 
-fn parse_args() -> ClientArgs {
+fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -174,7 +175,7 @@ fn parse_args() -> ClientArgs {
         )
         .get_matches();
 
-    common::init_tracing_subscriber(matches.value_of("log_file"));
+    let guard = common::init_tracing_subscriber(matches.value_of("log_file"));
 
     // parse arguments
     let ids = parse_id_range(matches.value_of("ids"));
@@ -209,7 +210,7 @@ fn parse_args() -> ClientArgs {
     tracing::info!("metrics file: {:?}", metrics_file);
     tracing::info!("stack size: {:?}", stack_size);
 
-    (
+    let args = (
         ids,
         addresses,
         interval,
@@ -220,7 +221,8 @@ fn parse_args() -> ClientArgs {
         metrics_file,
         stack_size,
         cpus,
-    )
+    );
+    (args, guard)
 }
 
 fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {
