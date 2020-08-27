@@ -1,7 +1,6 @@
 use super::VertexIndex;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::HashSet;
@@ -69,7 +68,7 @@ impl LevelExecutedClock {
         if let Some((epoch, _)) = self.to_level.get(0) {
             // compute age of this epoch
             let epoch_age = now - epoch;
-            log!(
+            tracing::debug!(
                 "p{}: LevelExecutedClock::maybe_level now {} | epoch {} | age {}",
                 self.process_id,
                 now,
@@ -84,7 +83,7 @@ impl LevelExecutedClock {
                     .pop_front()
                     .expect("there should be a front to level");
 
-                log!(
+                tracing::debug!(
                     "p{}: LevelExecutedClock::maybe_update_epoch before = {:?}",
                     self.process_id,
                     executed_clock
@@ -124,7 +123,7 @@ impl LevelExecutedClock {
 
                     // level this peer's entry in the executed clock
                     executed_clock.add_range(peer_id, level_from, level_up_to);
-                    log!(
+                    tracing::debug!(
                         "p{}: LevelExecutedClock::maybe_update_epoch peer {} leveled up to {}",
                         self.process_id,
                         peer_id,
@@ -132,7 +131,7 @@ impl LevelExecutedClock {
                     );
                 });
 
-                log!(
+                tracing::debug!(
                     "p{}: LevelExecutedClock::maybe_update_epoch after {} = {:?}",
                     self.process_id,
                     executed,
@@ -168,7 +167,7 @@ impl LevelExecutedClock {
                         })
                         .min()
                         .expect("min executed should exist");
-                    log!(
+                    tracing::debug!(
                         "p{}: LevelExecutedClock::maybe_update_epoch next epoch = {} | executed = {} | time = {}",
                         self.process_id,
                         now,
@@ -181,7 +180,7 @@ impl LevelExecutedClock {
                 }
             }
             None => {
-                log!(
+                tracing::debug!(
                     "p{}: LevelExecutedClock::maybe_update_epoch first epoch: {}",
                     self.process_id,
                     now

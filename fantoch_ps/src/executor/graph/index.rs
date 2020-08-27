@@ -61,7 +61,7 @@ impl VertexIndex {
         time: &dyn SysTime,
     ) {
         // first show executed clock
-        println!(
+        tracing::info!(
             "p{}: executed frontier before showing pending {:?}",
             self.process_id,
             executed_clock.frontier()

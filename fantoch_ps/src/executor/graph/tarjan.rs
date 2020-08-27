@@ -3,7 +3,6 @@ use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
@@ -65,7 +64,7 @@ impl TarjanSCCFinder {
         // visited dots
         let mut visited = HashSet::new();
         while let Some(dot) = self.stack.pop() {
-            log!(
+            tracing::debug!(
                 "p{}: Finder::finalize removing {:?} from stack",
                 _process_id,
                 dot
@@ -113,7 +112,7 @@ impl TarjanSCCFinder {
         vertex.on_stack = true;
         self.stack.push(dot);
 
-        log!(
+        tracing::debug!(
             "p{}: Finder::strong_connect {:?} with id {}",
             self.process_id,
             dot,
@@ -133,7 +132,7 @@ impl TarjanSCCFinder {
             let dep_dot = vertex.deps[i].dot;
 
             if ignore(dep_dot) {
-                log!(
+                tracing::debug!(
                     "p{}: Finder::strong_connect ignoring dependency {:?}",
                     self.process_id,
                     dep_dot
@@ -163,7 +162,7 @@ impl TarjanSCCFinder {
                             )
                             .collect()
                     };
-                    log!(
+                    tracing::debug!(
                         "p{}: Finder::strong_connect missing {:?} | {:?}",
                         self.process_id,
                         dep_dot,
@@ -177,7 +176,7 @@ impl TarjanSCCFinder {
 
                     // if not visited, visit
                     if dep_vertex.id == 0 {
-                        log!(
+                        tracing::debug!(
                             "p{}: Finder::strong_connect non-visited {:?}",
                             self.process_id,
                             dep_dot
@@ -215,7 +214,7 @@ impl TarjanSCCFinder {
                     } else {
                         // if visited and on the stack
                         if dep_vertex.on_stack {
-                            log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
+                            tracing::debug!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
                             // min low with dep id
                             vertex.low = cmp::min(vertex.low, dep_vertex.id);
                         }
@@ -244,7 +243,7 @@ impl TarjanSCCFinder {
                     .pop()
                     .expect("there should be an SCC member on the stack");
 
-                log!(
+                tracing::debug!(
                     "p{}: Finder::strong_connect new SCC member {:?}",
                     self.process_id,
                     member_dot
@@ -296,7 +295,7 @@ impl TarjanSCCFinder {
                     added.insert(member_dot);
                 }
 
-                log!(
+                tracing::debug!(
                     "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
                     executed_clock

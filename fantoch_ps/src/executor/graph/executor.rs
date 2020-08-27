@@ -5,7 +5,6 @@ use fantoch::config::Config;
 use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
-use fantoch::log;
 use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
@@ -115,58 +114,58 @@ impl GraphExecutor {
         }
     }
 
-    fn fetch_commands_to_execute(&mut self, _time: &dyn SysTime) {
+    fn fetch_commands_to_execute(&mut self, time: &dyn SysTime) {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
-            log!(
+            tracing::debug!(
                 "p{}: @{} GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
                 cmd.rifl(),
-                _time.millis()
+                time.millis()
             );
             self.execute(cmd);
         }
     }
 
-    fn fetch_to_executors(&mut self, _time: &dyn SysTime) {
+    fn fetch_to_executors(&mut self, time: &dyn SysTime) {
         if let Some(added) = self.graph.to_executors() {
-            log!(
+            tracing::debug!(
                 "p{}: @{} GraphExecutor::to_executors {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
                 added,
-                _time.millis()
+                time.millis()
             );
             let executed = GraphExecutionInfo::executed(added);
             self.to_executors.push((self.shard_id, executed));
         }
     }
 
-    fn fetch_requests(&mut self, _time: &dyn SysTime) {
+    fn fetch_requests(&mut self, time: &dyn SysTime) {
         for (to, dots) in self.graph.requests() {
-            log!(
+            tracing::debug!(
                 "p{}: @{} GraphExecutor::fetch_requests {:?} {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
                 to,
                 dots,
-                _time.millis()
+                time.millis()
             );
             let request = GraphExecutionInfo::request(self.shard_id, dots);
             self.to_executors.push((to, request));
         }
     }
 
-    fn fetch_request_replies(&mut self, _time: &dyn SysTime) {
+    fn fetch_request_replies(&mut self, time: &dyn SysTime) {
         for (to, infos) in self.graph.request_replies() {
-            log!(
+            tracing::debug!(
                 "p{}: @{} Graph::fetch_request_replies {:?} {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
                 to,
                 infos,
-                _time.millis()
+                time.millis()
             );
             let reply = GraphExecutionInfo::request_reply(infos);
             self.to_executors.push((to, reply));

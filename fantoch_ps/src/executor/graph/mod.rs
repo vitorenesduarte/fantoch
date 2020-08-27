@@ -22,7 +22,6 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
@@ -181,7 +180,7 @@ impl DependencyGraph {
     }
 
     fn cleanup(&mut self, time: &dyn SysTime) {
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::cleanup | time = {}",
             self.process_id,
             self.executor_index,
@@ -208,7 +207,7 @@ impl DependencyGraph {
     }
 
     fn monitor_pending(&self, time: &dyn SysTime) {
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::cleanup | time = {}",
             self.process_id,
             self.executor_index,
@@ -226,7 +225,7 @@ impl DependencyGraph {
     }
 
     fn handle_executed(&mut self, dots: HashSet<Dot>, _time: &dyn SysTime) {
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::handle_executed {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -249,7 +248,7 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::handle_add {:?} {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -292,7 +291,7 @@ impl DependencyGraph {
         // check that all newly ready commands have been incorporated
         assert_eq!(self.to_execute.len(), initial_ready + total_found);
 
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::log executed {:?} | pending {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -311,7 +310,7 @@ impl DependencyGraph {
         _time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -336,7 +335,7 @@ impl DependencyGraph {
     ) {
         assert!(self.executor_index > 0);
         for dot in dots {
-            log!(
+            tracing::debug!(
                 "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -350,7 +349,7 @@ impl DependencyGraph {
                 // only send the vertex if the shard that requested this vertex
                 // does not replicate it
                 if vertex.cmd.replicated_by(&from) {
-                    log!(
+                    tracing::debug!(
                         "p{}: @{} Graph::process_requests {:?} is replicated by {:?} (WARN) | time = {}",
                         self.process_id,
                         self.executor_index,
@@ -372,7 +371,7 @@ impl DependencyGraph {
                 // if we don't have it, then check if it's executed (in our
                 // snapshot)
                 if self.executed_clock.contains(&dot.source(), dot.sequence()) {
-                    log!(
+                    tracing::debug!(
                         "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
                         self.process_id,
                         self.executor_index,
@@ -388,7 +387,7 @@ impl DependencyGraph {
                         .or_default()
                         .push(RequestReply::Executed { dot });
                 } else {
-                    log!(
+                    tracing::debug!(
                         "p{}: @{} Graph::process_requests from {:?} for a dot {:?} we don't have | time = {}",
                         self.process_id,
                         self.executor_index,
@@ -419,7 +418,7 @@ impl DependencyGraph {
         );
 
         for info in infos {
-            log!(
+            tracing::debug!(
                 "p{}: @{} Graph::handle_request_reply {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -453,7 +452,7 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) -> FinderInfo {
         assert_eq!(self.executor_index, 0);
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::find_scc {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -505,7 +504,7 @@ impl DependencyGraph {
             .collect(ExecutorMetricsKind::ChainSize, scc.len() as u64);
 
         scc.into_iter().for_each(|dot| {
-            log!(
+            tracing::debug!(
                 "p{}: @{} Graph::save_scc removing {:?} from indexes | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -545,7 +544,7 @@ impl DependencyGraph {
             if let Some((dep_dot, target_shard)) =
                 self.pending_index.index(dep, dot)
             {
-                log!(
+                tracing::debug!(
                     "p{}: @{} Graph::index_pending will ask {:?} to {:?} | time = {}",
                     self.process_id,
                     self.executor_index,
@@ -575,7 +574,7 @@ impl DependencyGraph {
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
-                log!(
+                tracing::debug!(
                     "p{}: @{} Graph::try_pending {:?} depended on {:?} | time = {}",
                     self.process_id,
                     self.executor_index,
@@ -585,7 +584,7 @@ impl DependencyGraph {
                 );
                 self.try_pending(pending, &mut dots, total_found, time);
             } else {
-                log!(
+                tracing::debug!(
                     "p{}: @{} Graph::try_pending nothing depended on {:?} | time = {}",
                     self.process_id,
                     self.executor_index,
