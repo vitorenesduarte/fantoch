@@ -70,16 +70,13 @@ pub fn init_tracing_subscriber(
         .with_thread_names(false)
         .with_ansi(false);
 
+    let builder = tracing_appender::non_blocking::NonBlockingBuilder::default()
+        .lossy(false);
     let (non_blocking_appender, guard) = match log_file {
-        /*
-        Some(log_file) => tracing_appender::non_blocking(
-            tracing_appender::rolling::never(".", log_file),
-        ),
-        */
         Some(log_file) => {
-            tracing_appender::non_blocking(TestWriter::new(log_file))
+            builder.finish(tracing_appender::rolling::never(".", log_file))
         }
-        None => tracing_appender::non_blocking(std::io::stdout()),
+        None => builder.finish(std::io::stdout()),
     };
 
     tracing_subscriber::fmt()
