@@ -538,8 +538,12 @@ pub fn fantoch_bin_script(
     run_mode: RunMode,
     err_file: impl ToString,
 ) -> String {
-    let env_vars =
-        format!("RUST_LOG=fantoch={},fantoch_ps={}", LOG_LEVEL, LOG_LEVEL);
+    // without the first info, some of the logs don't show up and it's not clear
+    // why that is
+    let env_vars = format!(
+        "RUST_LOG=info,fantoch={},fantoch_ps={}",
+        LOG_LEVEL, LOG_LEVEL
+    );
     let run_command = run_mode.run_command(process_type, binary);
     let args = args.join(" ");
     format!(
