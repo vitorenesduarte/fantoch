@@ -36,7 +36,6 @@ impl VertexIndex {
         self.index.insert(dot, cell).map(|cell| cell.into_inner())
     }
 
-    #[cfg(debug_assertions)]
     pub fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
         self.index.iter().map(|entry| *entry.key())
     }
