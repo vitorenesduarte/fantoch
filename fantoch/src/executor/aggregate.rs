@@ -78,7 +78,7 @@ impl AggregatePending {
         // add partial result and check if it's ready
         let is_ready = cmd_result.add_partial(key, op_result);
         if is_ready {
-            tracing::warn!(
+            tracing::trace!(
                 "p{}: AggregatePending::add_partial {:?} is ready",
                 self.process_id,
                 rifl
