@@ -921,22 +921,29 @@ async fn pull_metrics_files(
 
     // compute files to be pulled
     let log_file = config::run_file(process_type, LOG_FILE_EXT);
+    let err_file = config::run_file(process_type, ERR_FILE_EXT);
     let dstat_file = config::run_file(process_type, DSTAT_FILE_EXT);
     let metrics_file = config::run_file(process_type, METRICS_FILE_EXT);
 
-    // pull log file and remove it
+    // pull log file
     let local_path = format!("{}/{}.log", exp_dir, prefix);
     vm.copy_from(&log_file, local_path)
         .await
         .wrap_err("copy log")?;
 
-    // pull dstat and remove it
+    // pull err file
+    let local_path = format!("{}/{}.err", exp_dir, prefix);
+    vm.copy_from(&err_file, local_path)
+        .await
+        .wrap_err("copy err")?;
+
+    // pull dstat
     let local_path = format!("{}/{}_dstat.csv", exp_dir, prefix);
     vm.copy_from(&dstat_file, local_path)
         .await
         .wrap_err("copy dstat")?;
 
-    // pull metrics file and remove it
+    // pull metrics file
     let local_path = format!("{}/{}_metrics.bincode.gz", exp_dir, prefix);
     vm.copy_from(&metrics_file, local_path)
         .await
