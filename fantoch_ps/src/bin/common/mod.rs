@@ -42,7 +42,7 @@ pub fn init_tracing_subscriber(
         .with_level(false)
         .with_thread_ids(false)
         .with_thread_names(false)
-        .with_ansi(true);
+        .with_ansi(false);
 
     let (non_blocking_appender, _guard) = match log_file {
         Some(log_file) => tracing_appender::non_blocking(
