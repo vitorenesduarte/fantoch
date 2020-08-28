@@ -560,9 +560,10 @@ impl DependencyGraph {
 
             // also index `visited`
             for visited_dot in visited {
-                self.pending_index
-                    .index(&dep, *visited_dot)
-                    .expect("can't request the same dot more than one");
+                assert!(
+                    self.pending_index.index(&dep, *visited_dot).is_none(),
+                    "can't request the same dot more than once"
+                );
             }
         }
         // save out requests metric

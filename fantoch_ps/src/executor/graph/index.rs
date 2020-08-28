@@ -180,34 +180,35 @@ impl PendingIndex {
     #[must_use]
     pub fn index(
         &mut self,
-        dep: &Dependency,
+        parent: &Dependency,
         dot: Dot,
     ) -> Option<(Dot, ShardId)> {
-        match self.index.entry(dep.dot) {
+        match self.index.entry(parent.dot) {
             Entry::Vacant(vacant) => {
-                // save `dot`
-                let mut dots = HashSet::new();
-                dots.insert(dot);
-                vacant.insert(dots);
+                // save `dot` as a child
+                let mut children = HashSet::new();
+                children.insert(dot);
+                // create `parent` entry
+                vacant.insert(children);
 
-                // this is the first time we detect `dep.dot` as a missing
+                // this is the first time we detect `parent.dot` as a missing
                 // dependency; in this case, we may have to ask another
                 // shard for its info if we don't replicate it; we can know if
-                // we replicate it by inspecting `dep.shards`
-                let is_mine = dep
+                // we replicate it by inspecting `parent.shards`
+                let is_mine = parent
                     .shards
                     .as_ref()
-                    .expect("dep shards should be set if it's not a noop")
+                    .expect("shards should be set if it's not a noop")
                     .contains(&self.shard_id);
                 if !is_mine {
-                    let target = dep.dot.target_shard(self.config.n());
-                    return Some((dep.dot, target));
+                    let target = parent.dot.target_shard(self.config.n());
+                    return Some((parent.dot, target));
                 }
             }
-            Entry::Occupied(mut dots) => {
-                // in this case, `dep.dot` has already been a missing dependency
+            Entry::Occupied(mut children) => {
+                // in this case, `parent` has already been a missing dependency
                 // of another command, so simply save `dot` as a child
-                dots.get_mut().insert(dot);
+                children.get_mut().insert(dot);
             }
         }
         None
