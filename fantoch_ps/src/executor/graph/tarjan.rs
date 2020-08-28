@@ -146,21 +146,13 @@ impl TarjanSCCFinder {
                     let missing_deps = if self.config.shards() == 1 {
                         std::iter::once(dep).collect()
                     } else {
-                        // if partial replication, add remaining deps as missing
-                        // dependencies; this makes sure that we request all
-                        // needed dependencies in a single request
-                        std::iter::once(dep)
-                            .chain(
-                                (i..vertex.deps.len())
-                                    .map(|i| &vertex.deps[i])
-                                    .filter(|extra_dep| {
-                                        // only request non-executed
-                                        // dependencies
-                                        !ignore(extra_dep.dot)
-                                    })
-                                    .cloned(),
-                            )
-                            .collect()
+                        // if partial replication, compute all missing dependencies transitively; this makes sure that we request all needed dependencies in a single request
+                        let mut visited = HashSet::new();
+                        vertex_index.missing_dependencies(
+                            &vertex_ref.read(),
+                            executed_clock,
+                            &mut visited,
+                        )
                     };
                     tracing::debug!(
                         "p{}: Finder::strong_connect missing {:?} | {:?}",
