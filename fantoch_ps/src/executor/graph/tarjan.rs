@@ -109,6 +109,7 @@ impl TarjanSCCFinder {
 
         // get vertex
         let mut vertex = vertex_ref.write();
+        let mut has_missing_deps = false;
 
         // set id and low for vertex
         vertex.id = self.id;
@@ -164,6 +165,7 @@ impl TarjanSCCFinder {
                         // that we will request all missing dependencies in a
                         // single request
                         self.missing_deps.insert(dep);
+                        has_missing_deps = true;
                     };
                 }
                 Some(dep_vertex_ref) => {
@@ -225,7 +227,7 @@ impl TarjanSCCFinder {
         // if after visiting all neighbors, an SCC was found if vertex.id ==
         // vertex.low
         // - good news: the SCC members are on the stack
-        if vertex.id == vertex.low {
+        if !has_missing_deps && vertex.id == vertex.low {
             let mut scc = SCC::new();
 
             // drop guards

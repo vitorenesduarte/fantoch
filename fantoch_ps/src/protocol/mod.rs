@@ -39,10 +39,8 @@ mod tests {
     const SHARD_COUNT: usize = 1;
     const SHARDS_PER_COMMAND: usize = 1;
     const COMMANDS_PER_CLIENT: usize = 100;
-    // const COMMANDS_PER_CLIENT: usize = 500;
     const CONFLICT_RATE: usize = 50;
     const CLIENTS_PER_PROCESS: usize = 10;
-    // const CLIENTS_PER_PROCESS: usize = 1_000;
 
     macro_rules! config {
         ($n:expr, $f:expr) => {
@@ -708,10 +706,6 @@ mod tests {
         let key_gen = KeyGen::ConflictRate {
             conflict_rate: CONFLICT_RATE,
         };
-        // let key_gen = KeyGen::Zipf {
-        //     coefficient: 0.5,
-        //     key_count: 1_000_000,
-        // };
         let payload_size = 1;
         let workload = Workload::new(
             shards_per_command,
