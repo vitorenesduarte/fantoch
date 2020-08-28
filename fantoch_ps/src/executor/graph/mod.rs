@@ -474,7 +474,8 @@ impl DependencyGraph {
         // reset finder state and get visited dots
         let (visited, missing_deps) = self.finder.finalize(&self.vertex_index);
         assert!(
-            // we can have a count higher the the number of dependencies if there are cycles
+            // we can have a count higher the the number of dependencies if
+            // there are cycles
             missing_deps.len() <= missing_deps_count,
             "more missing deps than the ones counted"
         );
@@ -553,6 +554,12 @@ impl DependencyGraph {
         missing_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
+        // if any of the `visited` is executed, `dot` might be executable as
+        // well; for this reason, we add each visited dot as a parent of `dot`
+        for visited_dot in visited {
+            self.pending_index.index_no_request(*visited_dot, dot);
+        }
+
         let mut requests = 0;
         for dep in missing_deps {
             if let Some((dep_dot, target_shard)) =
@@ -571,14 +578,6 @@ impl DependencyGraph {
                     .entry(target_shard)
                     .or_default()
                     .insert(dep_dot);
-            }
-
-            // also index `visited`
-            for visited_dot in visited {
-                assert!(
-                    self.pending_index.index(&dep, *visited_dot).is_none(),
-                    "can't request the same dot more than once"
-                );
             }
         }
         // save out requests metric

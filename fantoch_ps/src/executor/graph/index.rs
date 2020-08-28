@@ -167,9 +167,9 @@ impl PendingIndex {
         }
     }
 
-    /// Indexes a new `dot` as a child of `dep`:
-    /// - when `dep.dot` is executed, we'll try to execute `dot` as `dep.dot`
-    ///   was a dependency and maybe now `dot` can be executed
+    /// Indexes a new `dot` as a child of `parent`:
+    /// - when `parent.dot` is executed, we'll try to execute `dot` as
+    ///   `parent.dot` was a dependency and maybe now `dot` can be executed
     #[must_use]
     pub fn index(
         &mut self,
@@ -205,6 +205,10 @@ impl PendingIndex {
             }
         }
         None
+    }
+
+    pub fn index_no_request(&mut self, parent_dot: Dot, dot: Dot) {
+        self.index.entry(parent_dot).or_default().insert(dot);
     }
 
     /// Finds all pending dots for a given dependency dot.

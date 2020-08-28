@@ -196,7 +196,8 @@ impl TarjanSCCFinder {
                             scc_count,
                             &mut dep_missing_deps_count,
                         );
-                        // update missing deps count with the number of missing deps of our dep
+                        // update missing deps count with the number of missing
+                        // deps of our dep
                         *missing_deps_count += dep_missing_deps_count;
 
                         // if missing dependency, give up
