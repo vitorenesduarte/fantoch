@@ -90,15 +90,15 @@ async fn executor_task<P>(
 
         loop {
             futures::select_biased! {
+                _ = &mut monitor_pending_delay => {
+                    executor.monitor_pending(&time);
+                    monitor_pending_delay = gen_monitor_pending_delay();
+                }
                 execution_info = from_workers.recv().fuse() => {
                     handle_execution_info(execution_info, &mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
                 }
                 from_client = from_clients.recv().fuse() => {
                     handle_from_client::<P>(from_client, &mut to_clients).await;
-                }
-                _ = &mut monitor_pending_delay => {
-                    executor.monitor_pending(&time);
-                    monitor_pending_delay = gen_monitor_pending_delay();
                 }
                 _ = &mut cleanup_delay => {
                     cleanup_tick(&mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
