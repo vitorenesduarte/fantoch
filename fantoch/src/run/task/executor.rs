@@ -136,12 +136,12 @@ async fn handle_execution_info<P>(
     tracing::trace!("[executor] from workers: {:?}", execution_info);
     if let Some(execution_info) = execution_info {
         executor.handle(execution_info, time);
-        fetch_new_command_results::<P>(executor, to_clients).await;
-        fetch_info_to_executors::<P>(
+        fetch_results(
             executor,
             shard_id,
             shard_writers,
             to_executors,
+            to_clients,
         )
         .await;
     } else {
@@ -149,6 +149,25 @@ async fn handle_execution_info<P>(
             "[executor] error while receiving execution info from worker"
         );
     }
+}
+
+async fn fetch_results<P>(
+    executor: &mut P::Executor,
+    shard_id: ShardId,
+    shard_writers: &mut HashMap<ShardId, Vec<WriterSender<P>>>,
+    to_executors: &mut ToExecutors<P>,
+    to_clients: &mut ToClients,
+) where
+    P: Protocol + 'static,
+{
+    fetch_new_command_results::<P>(executor, to_clients).await;
+    fetch_info_to_executors::<P>(
+        executor,
+        shard_id,
+        shard_writers,
+        to_executors,
+    )
+    .await;
 }
 
 async fn fetch_new_command_results<P>(
@@ -185,7 +204,7 @@ async fn fetch_info_to_executors<P>(
 {
     // forward execution info to other shards
     for (target_shard, execution_info) in executor.to_executors_iter() {
-        tracing::trace!(
+        tracing::debug!(
             "[executor] info to executors in shard {}: {:?}",
             target_shard,
             execution_info
@@ -201,7 +220,7 @@ async fn fetch_info_to_executors<P>(
             if let Some(channels) = shard_writers.get_mut(&target_shard) {
                 crate::run::task::process::send_to_one_writer::<P>(
                     "executor",
-                    msg_to_send.clone(),
+                    msg_to_send,
                     channels,
                 )
                 .await
@@ -249,14 +268,8 @@ async fn cleanup_tick<P>(
 {
     tracing::trace!("[executor] cleanup");
     executor.cleanup(time);
-    fetch_new_command_results::<P>(executor, to_clients).await;
-    fetch_info_to_executors::<P>(
-        executor,
-        shard_id,
-        shard_writers,
-        to_executors,
-    )
-    .await;
+    fetch_results(executor, shard_id, shard_writers, to_executors, to_clients)
+        .await;
 }
 
 async fn metrics_tick<P>(
