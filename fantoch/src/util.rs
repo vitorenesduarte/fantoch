@@ -19,8 +19,6 @@ pub fn init_tracing_subscriber(
     log_file: Option<impl AsRef<std::path::Path> + std::fmt::Debug>,
     tracing_directives: Option<&'static str>,
 ) -> tracing_appender::non_blocking::WorkerGuard {
-    println!("log_file: {:?}", log_file);
-
     // create log format
     let format = tracing_subscriber::fmt::format()
         .without_time()
@@ -30,6 +28,15 @@ pub fn init_tracing_subscriber(
         .with_thread_names(false)
         .with_ansi(false);
 
+    // create env filter
+    let env_filter = match tracing_directives {
+        Some(dirs) => tracing_subscriber::EnvFilter::new(dirs),
+        None => tracing_subscriber::EnvFilter::from_default_env(),
+    };
+
+    println!("log_file: {:?}", log_file);
+    println!("env_filter: {}", env_filter);
+
     // create writer
     let builder = tracing_appender::non_blocking::NonBlockingBuilder::default()
         .lossy(false);
@@ -38,12 +45,6 @@ pub fn init_tracing_subscriber(
             builder.finish(tracing_appender::rolling::never(".", log_file))
         }
         None => builder.finish(std::io::stdout()),
-    };
-
-    // create env filter
-    let env_filter = match tracing_directives {
-        Some(dirs) => tracing_subscriber::EnvFilter::new(dirs),
-        None => tracing_subscriber::EnvFilter::from_default_env(),
     };
 
     tracing_subscriber::fmt()

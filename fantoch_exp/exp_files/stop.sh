@@ -51,6 +51,9 @@ stop_fantoch() {
     # remove files
     cmd="rm -f *.metrics *.log *.err *.dstat.csv heaptrack.*.gz"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
+
+    cmd="ls -ltrah | grep G"
+    ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 }
 
 stop_all() {
