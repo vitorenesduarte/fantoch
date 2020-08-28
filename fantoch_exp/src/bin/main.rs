@@ -185,7 +185,7 @@ async fn main() -> Result<(), Report> {
         1024 * 272,
     ];
     let shards_per_command = 2;
-    let shard_count = 4;
+    let shard_count = 5;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {

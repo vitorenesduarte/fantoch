@@ -708,7 +708,7 @@ pub fn process_metrics_table(
         "in_rep",
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.14, 0.14, 0.14, 0.20, 0.20, 0.12, 0.13, 0.13];
+    let col_widths = vec![0.12, 0.12, 0.12, 0.20, 0.25, 0.13, 0.13, 0.13];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -781,9 +781,10 @@ pub fn process_metrics_table(
             .get_collected(ExecutorMetricsKind::ChainSize)
             .map(|chain_size| {
                 format!(
-                    "{} ± {}",
+                    "{} ± {} [{}]",
                     chain_size.mean().round(),
-                    chain_size.stddev().round()
+                    chain_size.stddev().round(),
+                    chain_size.max().value().round()
                 )
             });
         let out_requests = executor_metrics
