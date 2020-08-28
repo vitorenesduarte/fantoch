@@ -77,7 +77,7 @@ enum FinderInfo {
     // set of dots in found SCCs (it's possible to find SCCs even though the
     // search for another dot failed), missing dependencies and set of dots
     // visited while searching for SCCs
-    MissingDependencies(Vec<Dot>, HashSet<Dependency>, HashSet<Dot>),
+    MissingDependencies(Vec<Dot>, HashSet<Dot>, HashSet<Dependency>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -277,9 +277,9 @@ impl DependencyGraph {
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
-            FinderInfo::MissingDependencies(dots, deps, _visited) => {
+            FinderInfo::MissingDependencies(dots, visited, missing_deps) => {
                 // update the pending
-                self.index_pending(&deps, dot, time);
+                self.index_pending(dot, &visited, missing_deps, time);
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
@@ -485,7 +485,7 @@ impl DependencyGraph {
         match finder_result {
             FinderResult::Found => FinderInfo::Found(dots),
             FinderResult::MissingDependencies(deps) => {
-                FinderInfo::MissingDependencies(dots, deps, visited)
+                FinderInfo::MissingDependencies(dots, visited, deps)
             }
             FinderResult::NotPending => FinderInfo::NotPending,
             FinderResult::NotFound => panic!(
@@ -533,14 +533,15 @@ impl DependencyGraph {
 
     fn index_pending(
         &mut self,
-        missing_deps: &HashSet<Dependency>,
         dot: Dot,
+        visited: &HashSet<Dot>,
+        missing_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
         let mut requests = 0;
         for dep in missing_deps {
             if let Some((dep_dot, target_shard)) =
-                self.pending_index.index(dep, dot)
+                self.pending_index.index(&dep, dot)
             {
                 tracing::debug!(
                     "p{}: @{} Graph::index_pending will ask {:?} to {:?} | time = {}",
@@ -555,6 +556,13 @@ impl DependencyGraph {
                     .entry(target_shard)
                     .or_default()
                     .insert(dep_dot);
+            }
+
+            // also index `visited`
+            for visited_dot in visited {
+                self.pending_index
+                    .index(&dep, *visited_dot)
+                    .expect("can't request the same dot more than one");
             }
         }
         // save out requests metric
@@ -620,20 +628,18 @@ impl DependencyGraph {
                     }
                     FinderInfo::MissingDependencies(
                         new_dots,
-                        missing_deps,
                         new_visited,
+                        missing_deps,
                     ) => {
                         // update pending: not only `dot` is pending due to
                         // `missing_dep` but also also all the dots in
                         // `new_visited`
-                        self.index_pending(&missing_deps, dot, time);
-                        for visited_dot in &new_visited {
-                            self.index_pending(
-                                &missing_deps,
-                                *visited_dot,
-                                time,
-                            );
-                        }
+                        self.index_pending(
+                            dot,
+                            &new_visited,
+                            missing_deps,
+                            time,
+                        );
 
                         if !new_dots.is_empty() {
                             // if we found a new SCC, reset visited;
@@ -1320,8 +1326,8 @@ mod tests {
 
         if let FinderInfo::MissingDependencies(
             to_be_executed,
+            _visited,
             missing_deps,
-            _,
         ) = finder_info
         {
             // check the missing dot

@@ -205,7 +205,7 @@ async fn fetch_info_to_executors<P>(
     // forward execution info to other shards
     for (target_shard, execution_info) in executor.to_executors_iter() {
         tracing::debug!(
-            "[executor] info to executors in shard {}: {:?}",
+            "[executor] to executors in shard {}: {:?}",
             target_shard,
             execution_info
         );

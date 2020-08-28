@@ -10,7 +10,7 @@ use threshold::EventSet;
 
 // epoch length is 1s
 const EPOCH_MILLIS: u64 = 1000;
-// executed clock is leveled every 10 seconds
+// executed clock is leveled to the level of my shard 10 seconds ago
 const EPOCH_LEVEL_AGE: u64 = 10;
 
 #[derive(Clone)]
