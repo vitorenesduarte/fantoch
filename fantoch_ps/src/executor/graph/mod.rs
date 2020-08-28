@@ -279,7 +279,7 @@ impl DependencyGraph {
             }
             FinderInfo::MissingDependencies(dots, deps, _visited) => {
                 // update the pending
-                self.index_pending(deps, dot, time);
+                self.index_pending(&deps, dot, time);
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_found, time);
             }
@@ -533,7 +533,7 @@ impl DependencyGraph {
 
     fn index_pending(
         &mut self,
-        missing_deps: HashSet<Dependency>,
+        missing_deps: &HashSet<Dependency>,
         dot: Dot,
         time: &dyn SysTime,
     ) {
@@ -623,6 +623,18 @@ impl DependencyGraph {
                         missing_deps,
                         new_visited,
                     ) => {
+                        // update pending: not only `dot` is pending due to
+                        // `missing_dep` but also also all the dots in
+                        // `new_visited`
+                        self.index_pending(&missing_deps, dot, time);
+                        for visited_dot in &new_visited {
+                            self.index_pending(
+                                &missing_deps,
+                                *visited_dot,
+                                time,
+                            );
+                        }
+
                         if !new_dots.is_empty() {
                             // if we found a new SCC, reset visited;
                             visited.clear();
@@ -636,9 +648,6 @@ impl DependencyGraph {
                         // if new SCCs were found, now there are more
                         // child dots to check
                         dots.extend(new_dots);
-
-                        // update pending
-                        self.index_pending(missing_deps, dot, time);
                     }
                     FinderInfo::NotPending => {
                         // this happens if the pending dot is no longer

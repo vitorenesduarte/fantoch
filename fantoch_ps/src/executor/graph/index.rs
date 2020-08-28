@@ -180,7 +180,7 @@ impl PendingIndex {
     #[must_use]
     pub fn index(
         &mut self,
-        dep: Dependency,
+        dep: &Dependency,
         dot: Dot,
     ) -> Option<(Dot, ShardId)> {
         match self.index.entry(dep.dot) {
