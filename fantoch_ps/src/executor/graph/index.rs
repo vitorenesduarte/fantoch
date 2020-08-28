@@ -105,12 +105,12 @@ impl VertexIndex {
         }
     }
 
-    pub fn missing_dependencies(
+    fn missing_dependencies(
         &self,
         vertex: &RwLockReadGuard<'_, Vertex>,
         executed_clock: &AEClock<ProcessId>,
         visited: &mut HashSet<Dot>,
-    ) -> HashSet<Dependency> {
+    ) -> HashSet<Dot> {
         let mut missing_dependencies = HashSet::new();
 
         // add self to the set of visited pending commands
@@ -138,7 +138,7 @@ impl VertexIndex {
                 ));
             } else {
                 // if it's not pending, then there's a missing dependency
-                missing_dependencies.insert(dep.clone());
+                missing_dependencies.insert(dep_dot);
             }
         }
         missing_dependencies

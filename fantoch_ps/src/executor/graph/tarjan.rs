@@ -3,6 +3,7 @@ use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::singleton;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
@@ -28,6 +29,7 @@ pub struct TarjanSCCFinder {
     id: usize,
     stack: Vec<Dot>,
     sccs: Vec<SCC>,
+    missing_deps: HashSet<Dependency>,
 }
 
 impl TarjanSCCFinder {
@@ -44,6 +46,7 @@ impl TarjanSCCFinder {
             id: 0,
             stack: Vec::new(),
             sccs: Vec::new(),
+            missing_deps: HashSet::new(),
         }
     }
 
@@ -56,7 +59,10 @@ impl TarjanSCCFinder {
     /// Returns a set with all dots visited.
     /// It also resets the ids of all vertices still on the stack.
     #[must_use]
-    pub fn finalize(&mut self, vertex_index: &VertexIndex) -> HashSet<Dot> {
+    pub fn finalize(
+        &mut self,
+        vertex_index: &VertexIndex,
+    ) -> (HashSet<Dot>, HashSet<Dependency>) {
         let _process_id = self.process_id;
         // reset id
         self.id = 0;
@@ -84,8 +90,8 @@ impl TarjanSCCFinder {
             // add dot to set of visited
             visited.insert(dot);
         }
-        // return visited dots
-        visited
+        // return visited dots and missing dependencies (if any)
+        (visited, std::mem::take(&mut self.missing_deps))
     }
 
     /// Tries to find an SCC starting from root `dot`.
@@ -143,24 +149,22 @@ impl TarjanSCCFinder {
             match vertex_index.find(&dep_dot) {
                 None => {
                     let dep = vertex.deps[i].clone();
-                    let missing_deps = if self.config.shards() == 1 {
-                        std::iter::once(dep).collect()
-                    } else {
-                        // if partial replication, compute all missing dependencies transitively; this makes sure that we request all needed dependencies in a single request
-                        let mut visited = HashSet::new();
-                        vertex_index.missing_dependencies(
-                            &vertex_ref.read(),
-                            executed_clock,
-                            &mut visited,
-                        )
-                    };
                     tracing::debug!(
-                        "p{}: Finder::strong_connect missing {:?} | {:?}",
+                        "p{}: Finder::strong_connect missing {:?}",
                         self.process_id,
-                        dep_dot,
-                        missing_deps
+                        dep,
                     );
-                    return FinderResult::MissingDependencies(missing_deps);
+                    if self.config.shards() == 1 {
+                        return FinderResult::MissingDependencies(singleton!(
+                            dep
+                        ));
+                    } else {
+                        // if partial replication, simply save this `dep` as a
+                        // missing dependency but keep going; this makes sure
+                        // that we will request all missing dependencies in a
+                        // single request
+                        self.missing_deps.insert(dep);
+                    };
                 }
                 Some(dep_vertex_ref) => {
                     // get vertex

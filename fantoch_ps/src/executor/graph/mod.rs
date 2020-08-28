@@ -465,7 +465,7 @@ impl DependencyGraph {
         });
 
         // reset finder state and get visited dots
-        let visited = self.finder.finalize(&self.vertex_index);
+        let (visited, missing_deps) = self.finder.finalize(&self.vertex_index);
 
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that
@@ -475,13 +475,25 @@ impl DependencyGraph {
         // save new SCCs if any were found
         match finder_result {
             FinderResult::Found => FinderInfo::Found(dots),
-            FinderResult::MissingDependencies(deps) => {
-                FinderInfo::MissingDependencies(dots, visited, deps)
+            FinderResult::MissingDependencies(result_missing_deps) => {
+                // if `MissingDependencies` was returned, then `missing_deps` is
+                // empty (and this is full replication)
+                assert!(
+                    missing_deps.is_empty(),
+                    "MissingDependencies is only returned in full replication"
+                );
+                FinderInfo::MissingDependencies(
+                    dots,
+                    visited,
+                    result_missing_deps,
+                )
             }
             FinderResult::NotPending => FinderInfo::NotPending,
-            FinderResult::NotFound => panic!(
-                "either there's a missing dependency, or we should find an SCC"
-            ),
+            FinderResult::NotFound => {
+                // in this case, `missing_deps` must be non-empty
+                assert!(!missing_deps.is_empty(), "either there's a missing dependency, or we should find an SCC");
+                FinderInfo::MissingDependencies(dots, visited, missing_deps)
+            }
         }
     }
 
