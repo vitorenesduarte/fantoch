@@ -102,14 +102,14 @@ impl TarjanSCCFinder {
         executed_clock: &mut AEClock<ProcessId>,
         added_to_executed_clock: &mut HashSet<Dot>,
         vertex_index: &VertexIndex,
-        found: &mut usize,
+        scc_count: &mut usize,
+        missing_deps_count: &mut usize,
     ) -> FinderResult {
         // update id
         self.id += 1;
 
         // get vertex
         let mut vertex = vertex_ref.write();
-        let mut has_missing_deps = false;
 
         // set id and low for vertex
         vertex.id = self.id;
@@ -165,7 +165,7 @@ impl TarjanSCCFinder {
                         // that we will request all missing dependencies in a
                         // single request
                         self.missing_deps.insert(dep);
-                        has_missing_deps = true;
+                        *missing_deps_count += 1;
                     };
                 }
                 Some(dep_vertex_ref) => {
@@ -186,14 +186,18 @@ impl TarjanSCCFinder {
 
                         // OPTIMIZATION: passing the dep vertex ref as an
                         // argument to `strong_connect` avoids double look-up
+                        let mut dep_missing_deps_count = 0;
                         let result = self.strong_connect(
                             dep_dot,
                             &dep_vertex_ref,
                             executed_clock,
                             added_to_executed_clock,
                             vertex_index,
-                            found,
+                            scc_count,
+                            &mut dep_missing_deps_count,
                         );
+                        // update missing deps count with the number of missing deps of our dep
+                        *missing_deps_count += dep_missing_deps_count;
 
                         // if missing dependency, give up
                         if let FinderResult::MissingDependencies(_) = result {
@@ -227,7 +231,7 @@ impl TarjanSCCFinder {
         // if after visiting all neighbors, an SCC was found if vertex.id ==
         // vertex.low
         // - good news: the SCC members are on the stack
-        if !has_missing_deps && vertex.id == vertex.low {
+        if *missing_deps_count == 0 && vertex.id == vertex.low {
             let mut scc = SCC::new();
 
             // drop guards
@@ -253,7 +257,7 @@ impl TarjanSCCFinder {
                     .expect("stack member should exist");
 
                 // increment number of commands found
-                *found += 1;
+                *scc_count += 1;
 
                 // get its vertex and change its `on_stack` value
                 let mut member_vertex = member_vertex_ref.write();

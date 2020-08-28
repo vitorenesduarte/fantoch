@@ -196,8 +196,8 @@ impl DependencyGraph {
         };
 
         if self.executor_index == 0 {
-            let mut total_found = 0;
-            self.check_pending(maybe_executed, &mut total_found, time);
+            let mut total_scc_count = 0;
+            self.check_pending(maybe_executed, &mut total_scc_count, time);
         } else {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
@@ -267,19 +267,19 @@ impl DependencyGraph {
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
-        let mut total_found = 0;
+        let mut total_scc_count = 0;
 
         // try to find new SCCs
-        match self.find_scc(dot, &mut total_found, time) {
+        match self.find_scc(dot, &mut total_scc_count, time) {
             FinderInfo::Found(dots) => {
                 // try to execute other commands if new SCCs were found
-                self.check_pending(dots, &mut total_found, time);
+                self.check_pending(dots, &mut total_scc_count, time);
             }
             FinderInfo::MissingDependencies(dots, visited, missing_deps) => {
                 // update the pending
                 self.index_pending(dot, &visited, missing_deps, time);
                 // try to execute other commands if new SCCs were found
-                self.check_pending(dots, &mut total_found, time);
+                self.check_pending(dots, &mut total_scc_count, time);
             }
             FinderInfo::NotPending => {
                 panic!("just added dot must be pending");
@@ -287,7 +287,7 @@ impl DependencyGraph {
         }
 
         // check that all newly ready commands have been incorporated
-        assert_eq!(self.to_execute.len(), initial_ready + total_found);
+        assert_eq!(self.to_execute.len(), initial_ready + total_scc_count);
 
         tracing::trace!(
             "p{}: @{} Graph::log executed {:?} | pending {:?} | time = {}",
@@ -431,8 +431,8 @@ impl DependencyGraph {
                     self.added_to_executed_clock.insert(dot);
                     // check pending
                     let dots = vec![dot];
-                    let mut total_found = 0;
-                    self.check_pending(dots, &mut total_found, time);
+                    let mut total_scc_count = 0;
+                    self.check_pending(dots, &mut total_scc_count, time);
                 }
             }
         }
@@ -442,7 +442,7 @@ impl DependencyGraph {
     fn find_scc(
         &mut self,
         dot: Dot,
-        total_found: &mut usize,
+        total_scc_count: &mut usize,
         time: &dyn SysTime,
     ) -> FinderInfo {
         assert_eq!(self.executor_index, 0);
@@ -454,23 +454,26 @@ impl DependencyGraph {
             time.millis()
         );
         // execute tarjan's algorithm
-        let mut found = 0;
-        let finder_result = self.strong_connect(dot, &mut found);
+        let mut scc_count = 0;
+        let mut missing_deps_count = 0;
+        let finder_result =
+            self.strong_connect(dot, &mut scc_count, &mut missing_deps_count);
 
-        // update total found
-        *total_found += found;
+        // update total scc's found
+        *total_scc_count += scc_count;
 
         // get sccs
         let sccs = self.finder.sccs();
 
         // save new SCCs
-        let mut dots = Vec::with_capacity(found);
+        let mut dots = Vec::with_capacity(scc_count);
         sccs.into_iter().for_each(|scc| {
             self.save_scc(scc, &mut dots, time);
         });
 
         // reset finder state and get visited dots
         let (visited, missing_deps) = self.finder.finalize(&self.vertex_index);
+        assert_eq!(missing_deps.len(), missing_deps_count);
 
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that
@@ -582,7 +585,7 @@ impl DependencyGraph {
     fn check_pending(
         &mut self,
         mut dots: Vec<Dot>,
-        total_found: &mut usize,
+        total_scc_count: &mut usize,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
@@ -597,7 +600,7 @@ impl DependencyGraph {
                     dot,
                     time.millis()
                 );
-                self.try_pending(pending, &mut dots, total_found, time);
+                self.try_pending(pending, &mut dots, total_scc_count, time);
             } else {
                 tracing::debug!(
                     "p{}: @{} Graph::try_pending nothing depended on {:?} | time = {}",
@@ -616,7 +619,7 @@ impl DependencyGraph {
         &mut self,
         pending: HashSet<Dot>,
         dots: &mut Vec<Dot>,
-        total_found: &mut usize,
+        total_scc_count: &mut usize,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
@@ -626,7 +629,7 @@ impl DependencyGraph {
         for dot in pending {
             // only try to find new SCCs from non-visited commands
             if !visited.contains(&dot) {
-                match self.find_scc(dot, total_found, time) {
+                match self.find_scc(dot, total_scc_count, time) {
                     FinderInfo::Found(new_dots) => {
                         // reset visited
                         visited.clear();
@@ -673,7 +676,12 @@ impl DependencyGraph {
         }
     }
 
-    fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
+    fn strong_connect(
+        &mut self,
+        dot: Dot,
+        scc_count: &mut usize,
+        missing_deps_count: &mut usize,
+    ) -> FinderResult {
         assert_eq!(self.executor_index, 0);
         // get the vertex
         match self.vertex_index.find(&dot) {
@@ -683,7 +691,8 @@ impl DependencyGraph {
                 &mut self.executed_clock,
                 &mut self.added_to_executed_clock,
                 &self.vertex_index,
-                found,
+                scc_count,
+                missing_deps_count,
             ),
             None => {
                 // in this case this `dot` is no longer pending
