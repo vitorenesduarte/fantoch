@@ -30,6 +30,7 @@ use std::fmt;
 use std::time::Duration;
 use threshold::AEClock;
 
+const LEVEL_EXECUTED_CLOCK_ENABLED: bool = false;
 const MONITOR_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -179,20 +180,20 @@ impl DependencyGraph {
             self.executor_index,
             time.millis()
         );
-        /*
         // try to level the executed clock
-        let maybe_executed = self.level_executed_clock.maybe_level(
-            &mut self.executed_clock,
-            &self.vertex_index,
-            time,
-        );
-        */
+        let maybe_executed = if LEVEL_EXECUTED_CLOCK_ENABLED {
+            self.level_executed_clock.maybe_level(
+                &mut self.executed_clock,
+                &self.vertex_index,
+                time,
+            )
+        } else {
+            Vec::new()
+        };
 
         if self.executor_index == 0 {
-            /*
             let mut total_found = 0;
             self.check_pending(maybe_executed, &mut total_found, time);
-            */
         } else {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
