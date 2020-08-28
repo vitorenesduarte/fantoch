@@ -130,7 +130,7 @@ impl GraphExecutor {
 
     fn fetch_to_executors(&mut self, time: &dyn SysTime) {
         if let Some(added) = self.graph.to_executors() {
-            tracing::trace!(
+            tracing::debug!(
                 "p{}: @{} GraphExecutor::to_executors {:?} | time = {}",
                 self.process_id,
                 self.executor_index,

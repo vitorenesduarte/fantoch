@@ -63,7 +63,7 @@ pub struct DependencyGraph {
     //   `added_to_executed_clock`
     to_execute: Vec<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
-    added_to_executed_clock: Option<HashSet<Dot>>,
+    added_to_executed_clock: HashSet<Dot>,
     // auxiliary workers (handles requests):
     // - may have `buffered_in_requests` when doesn't have the command yet
     // - produces `out_request_replies` when it has the command
@@ -110,11 +110,7 @@ impl DependencyGraph {
         // create requests and request replies
         let out_requests = Default::default();
         // only track what's added to the executed clock if partial replication
-        let added_to_executed_clock = if config.shards() == 1 {
-            None
-        } else {
-            Some(HashSet::new())
-        };
+        let added_to_executed_clock = HashSet::new();
         let buffered_in_requests = Default::default();
         let out_request_replies = Default::default();
         DependencyGraph {
@@ -148,14 +144,11 @@ impl DependencyGraph {
     /// Returns which dots have been added to the executed clock.
     #[must_use]
     pub fn to_executors(&mut self) -> Option<HashSet<Dot>> {
-        if let Some(added) = self.added_to_executed_clock.as_ref() {
-            // if it has been set and has something, take what's there and put a
-            // new empty set
-            if !added.is_empty() {
-                return self.added_to_executed_clock.replace(HashSet::new());
-            }
+        if self.added_to_executed_clock.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.added_to_executed_clock))
         }
-        None
     }
 
     /// Returns a request.
@@ -225,7 +218,7 @@ impl DependencyGraph {
     }
 
     fn handle_executed(&mut self, dots: HashSet<Dot>, time: &dyn SysTime) {
-        tracing::trace!(
+        tracing::debug!(
             "p{}: @{} Graph::handle_executed {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -387,10 +380,11 @@ impl DependencyGraph {
                         .push(RequestReply::Executed { dot });
                 } else {
                     tracing::debug!(
-                        "p{}: @{} Graph::process_requests {:?} buffered | time = {}",
+                        "p{}: @{} Graph::process_requests {:?} buffered from {:?} | time = {}",
                         self.process_id,
                         self.executor_index,
                         dot,
+                        from,
                         time.millis()
                     );
                     // buffer request again
@@ -432,7 +426,7 @@ impl DependencyGraph {
                 RequestReply::Executed { dot } => {
                     // update executed clock
                     self.executed_clock.add(&dot.source(), dot.sequence());
-                    self.added_to_executed_clock.as_mut().expect("added_to_executed_clock should be set in partial replication").insert(dot);
+                    self.added_to_executed_clock.insert(dot);
                     // check pending
                     let dots = vec![dot];
                     let mut total_found = 0;

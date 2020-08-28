@@ -94,7 +94,7 @@ impl TarjanSCCFinder {
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
         executed_clock: &mut AEClock<ProcessId>,
-        added_to_executed_clock: &mut Option<HashSet<Dot>>,
+        added_to_executed_clock: &mut HashSet<Dot>,
         vertex_index: &VertexIndex,
         found: &mut usize,
     ) -> FinderResult {
@@ -291,8 +291,8 @@ impl TarjanSCCFinder {
                 // member_dot     );
                 // }
                 executed_clock.add(&member_dot.source(), member_dot.sequence());
-                if let Some(added) = added_to_executed_clock.as_mut() {
-                    added.insert(member_dot);
+                if self.config.shards() > 1 {
+                    added_to_executed_clock.insert(member_dot);
                 }
 
                 tracing::trace!(
