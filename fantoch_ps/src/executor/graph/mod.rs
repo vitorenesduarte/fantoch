@@ -334,7 +334,6 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
-        let replies = self.out_request_replies.entry(from).or_default();
         for dot in dots {
             if let Some(vertex) = self.vertex_index.find(&dot) {
                 let vertex = vertex.read();
@@ -358,11 +357,13 @@ impl DependencyGraph {
                         from,
                         time.millis()
                     );
-                    replies.push(RequestReply::Info {
-                        dot,
-                        cmd: vertex.cmd.clone(),
-                        deps: vertex.deps.clone(),
-                    })
+                    self.out_request_replies.entry(from).or_default().push(
+                        RequestReply::Info {
+                            dot,
+                            cmd: vertex.cmd.clone(),
+                            deps: vertex.deps.clone(),
+                        },
+                    )
                 }
             } else {
                 // if we don't have it, then check if it's executed (in our
@@ -380,7 +381,10 @@ impl DependencyGraph {
                     // been executed
                     // - TODO: the Janus paper says that in this case, we should
                     //   send the full SCC; this will require a GC mechanism
-                    replies.push(RequestReply::Executed { dot });
+                    self.out_request_replies
+                        .entry(from)
+                        .or_default()
+                        .push(RequestReply::Executed { dot });
                 } else {
                     tracing::debug!(
                         "p{}: @{} Graph::process_requests {:?} buffered | time = {}",

@@ -130,7 +130,6 @@ where
     // create semaphore for callers that don't care about the connected
     // notification
     let semaphore = Arc::new(Semaphore::new(0));
-    let tracing_directives = None;
     process_with_notify_and_inspect::<P, A, ()>(
         process_id,
         shard_id,
@@ -152,7 +151,6 @@ where
         tracer_show_interval,
         ping_interval,
         metrics_file,
-        tracing_directives,
         semaphore,
         None,
     )
@@ -181,7 +179,6 @@ async fn process_with_notify_and_inspect<P, A, R>(
     tracer_show_interval: Option<Duration>,
     ping_interval: Option<Duration>,
     metrics_file: Option<String>,
-    tracing_directives: Option<&'static str>,
     connected: Arc<Semaphore>,
     inspect_chan: Option<InspectReceiver<P, R>>,
 ) -> Result<(), Report>
@@ -209,17 +206,6 @@ where
     if !P::leaderless() && config.leader().is_none() {
         panic!("running leader-based protocol without a leader");
     }
-
-    // init tracing if directives were set; this is only used in testing
-    let _guard = if tracing_directives.is_some() {
-        let log_file = Some(format!("server_{}.log", process_id));
-        Some(crate::util::init_tracing_subscriber(
-            log_file,
-            tracing_directives,
-        ))
-    } else {
-        None
-    };
 
     // (maybe) start tracer
     task::spawn(task::tracer::tracer_task(tracer_show_interval));
@@ -1048,6 +1034,22 @@ pub mod tests {
         P: Protocol + Send + 'static,
         R: Clone + Debug + Send + 'static,
     {
+        // init tracing if directives were set
+        let _guard = if tracing_directives.is_some() {
+            // create unique test timestamp
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("we're way past epoch")
+                .as_nanos();
+            let log_file = Some(format!("test_{}.log", timestamp));
+            Some(crate::util::init_tracing_subscriber(
+                log_file,
+                tracing_directives,
+            ))
+        } else {
+            None
+        };
+
         // create semaphore so that processes can notify once they're connected
         let semaphore = Arc::new(Semaphore::new(0));
 
@@ -1213,7 +1215,6 @@ pub mod tests {
                     tracer_show_interval,
                     ping_interval,
                     Some(metrics_file),
-                    tracing_directives,
                     semaphore.clone(),
                     Some(inspect),
                 ),
