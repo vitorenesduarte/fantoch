@@ -370,7 +370,11 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
         )
         .get_matches();
 
-    let guard = super::init_tracing_subscriber(matches.value_of("log_file"));
+    let tracing_directives = None;
+    let guard = fantoch::util::init_tracing_subscriber(
+        matches.value_of("log_file"),
+        tracing_directives,
+    );
 
     // parse arguments
     let process_id = parse_process_id(matches.value_of("id"));

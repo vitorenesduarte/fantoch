@@ -175,7 +175,11 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
         )
         .get_matches();
 
-    let guard = common::init_tracing_subscriber(matches.value_of("log_file"));
+    let tracing_directives = None;
+    let guard = fantoch::util::init_tracing_subscriber(
+        matches.value_of("log_file"),
+        tracing_directives,
+    );
 
     // parse arguments
     let ids = parse_id_range(matches.value_of("ids"));

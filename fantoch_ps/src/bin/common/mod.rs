@@ -2,7 +2,6 @@
 #[allow(dead_code)]
 pub mod protocol;
 
-use std::path::Path;
 use std::time::Duration;
 
 const DEFAULT_TCP_NODELAY: bool = true;
@@ -30,38 +29,6 @@ pub fn tokio_runtime(
         .thread_name("runner")
         .build()
         .expect("tokio runtime build should work")
-}
-
-#[must_use]
-pub fn init_tracing_subscriber(
-    log_file: Option<impl AsRef<Path> + std::fmt::Debug>,
-) -> tracing_appender::non_blocking::WorkerGuard {
-    println!("log_file: {:?}", log_file);
-    let format = tracing_subscriber::fmt::format()
-        .without_time()
-        .with_target(false)
-        .with_level(false)
-        .with_thread_ids(false)
-        .with_thread_names(false)
-        .with_ansi(false);
-
-    let builder = tracing_appender::non_blocking::NonBlockingBuilder::default()
-        // .buffered_lines_limit(0)
-        .lossy(false);
-    let (non_blocking_appender, guard) = match log_file {
-        Some(log_file) => {
-            builder.finish(tracing_appender::rolling::never(".", log_file))
-        }
-        None => builder.finish(std::io::stdout()),
-    };
-
-    tracing_subscriber::fmt()
-        .event_format(format)
-        .with_writer(non_blocking_appender)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
-    guard
 }
 
 pub fn parse_tcp_nodelay(tcp_nodelay: Option<&str>) -> bool {
