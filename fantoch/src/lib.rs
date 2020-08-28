@@ -1,4 +1,5 @@
 #![deny(rust_2018_idioms)]
+#![recursion_limit = "256"]
 
 // This module contains the definition of `Region` and `Planet`.
 pub mod planet;
