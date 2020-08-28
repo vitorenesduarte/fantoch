@@ -200,7 +200,7 @@ impl DependencyGraph {
     }
 
     fn monitor_pending(&self, time: &dyn SysTime) {
-        tracing::trace!(
+        tracing::debug!(
             "p{}: @{} Graph::monitor_pending | time = {}",
             self.process_id,
             self.executor_index,
