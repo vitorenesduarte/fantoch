@@ -313,11 +313,8 @@ impl DependencyGraph {
         );
         // save in requests metric
         self.metrics.aggregate(ExecutorMetricsKind::InRequests, 1);
-        // simply buffer the request
-        self.buffered_in_requests
-            .entry(from)
-            .or_default()
-            .extend(dots);
+        // try to process requests
+        self.process_requests(from, dots.into_iter(), time)
     }
 
     fn process_requests(
