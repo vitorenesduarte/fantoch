@@ -6,7 +6,6 @@ use crate::run::prelude::*;
 use crate::run::task;
 use crate::time::RunTime;
 use crate::HashMap;
-use futures::future::FutureExt;
 use std::sync::Arc;
 use tokio::time;
 
@@ -71,12 +70,12 @@ async fn executor_task<P>(
 
     // create executors info interval
     let gen_cleanup_delay =
-        || time::delay_for(config.executor_cleanup_interval()).fuse();
+        || time::delay_for(config.executor_cleanup_interval());
     let mut cleanup_delay = gen_cleanup_delay();
 
     // create metrics interval
     let gen_metrics_delay =
-        || time::delay_for(super::metrics_logger::METRICS_INTERVAL).fuse();
+        || time::delay_for(super::metrics_logger::METRICS_INTERVAL);
     let mut metrics_delay = gen_metrics_delay();
 
     // check if executors monitor pending interval is set
@@ -85,19 +84,19 @@ async fn executor_task<P>(
     {
         // create executors monitor pending interval
         let gen_monitor_pending_delay =
-            || time::delay_for(monitor_pending_interval).fuse();
+            || time::delay_for(monitor_pending_interval);
         let mut monitor_pending_delay = gen_monitor_pending_delay();
 
         loop {
-            futures::select_biased! {
+            tokio::select! {
                 _ = &mut monitor_pending_delay => {
                     executor.monitor_pending(&time);
                     monitor_pending_delay = gen_monitor_pending_delay();
                 }
-                execution_info = from_workers.recv().fuse() => {
+                execution_info = from_workers.recv() => {
                     handle_execution_info(execution_info, &mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
                 }
-                from_client = from_clients.recv().fuse() => {
+                from_client = from_clients.recv() => {
                     handle_from_client::<P>(from_client, &mut to_clients).await;
                 }
                 _ = &mut cleanup_delay => {
@@ -112,11 +111,11 @@ async fn executor_task<P>(
         }
     } else {
         loop {
-            futures::select_biased! {
-                execution_info = from_workers.recv().fuse() => {
+            tokio::select! {
+                execution_info = from_workers.recv() => {
                     handle_execution_info(execution_info, &mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
                 }
-                from_client = from_clients.recv().fuse() => {
+                from_client = from_clients.recv() => {
                     handle_from_client::<P>(from_client, &mut to_clients).await;
                 }
                 _ = &mut cleanup_delay => {
