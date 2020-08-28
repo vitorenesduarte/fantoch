@@ -59,13 +59,6 @@ impl VertexIndex {
         monitor_pending_threshold: Duration,
         time: &dyn SysTime,
     ) {
-        // first show executed clock
-        tracing::info!(
-            "p{}: executed frontier before showing pending {:?}",
-            self.process_id,
-            executed_clock.frontier()
-        );
-
         // collect pending commands
         let now_ms = time.millis();
         let threshold_ms = monitor_pending_threshold.as_millis() as u64;
