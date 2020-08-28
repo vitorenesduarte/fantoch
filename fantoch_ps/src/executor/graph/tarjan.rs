@@ -3,7 +3,6 @@ use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::singleton;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
@@ -16,7 +15,7 @@ pub type SCC = BTreeSet<Dot>;
 #[derive(PartialEq)]
 pub enum FinderResult {
     Found,
-    MissingDependencies(HashSet<Dependency>),
+    MissingDependencies(Vec<Dependency>),
     NotPending,
     NotFound,
 }
@@ -29,7 +28,7 @@ pub struct TarjanSCCFinder {
     id: usize,
     stack: Vec<Dot>,
     sccs: Vec<SCC>,
-    missing_deps: HashSet<Dependency>,
+    missing_deps: Vec<Dependency>,
 }
 
 impl TarjanSCCFinder {
@@ -46,7 +45,7 @@ impl TarjanSCCFinder {
             id: 0,
             stack: Vec::new(),
             sccs: Vec::new(),
-            missing_deps: HashSet::new(),
+            missing_deps: Vec::new(),
         }
     }
 
@@ -62,7 +61,7 @@ impl TarjanSCCFinder {
     pub fn finalize(
         &mut self,
         vertex_index: &VertexIndex,
-    ) -> (HashSet<Dot>, HashSet<Dependency>) {
+    ) -> (HashSet<Dot>, Vec<Dependency>) {
         let _process_id = self.process_id;
         // reset id
         self.id = 0;
@@ -156,15 +155,13 @@ impl TarjanSCCFinder {
                         dep,
                     );
                     if self.config.shards() == 1 {
-                        return FinderResult::MissingDependencies(singleton!(
-                            dep
-                        ));
+                        return FinderResult::MissingDependencies(vec![dep]);
                     } else {
                         // if partial replication, simply save this `dep` as a
                         // missing dependency but keep going; this makes sure
                         // that we will request all missing dependencies in a
                         // single request
-                        self.missing_deps.insert(dep);
+                        self.missing_deps.push(dep);
                         *missing_deps_count += 1;
                     };
                 }

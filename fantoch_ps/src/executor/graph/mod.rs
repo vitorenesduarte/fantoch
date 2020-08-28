@@ -82,7 +82,7 @@ enum FinderInfo {
     // set of dots in found SCCs (it's possible to find SCCs even though the
     // search for another dot failed), missing dependencies and set of dots
     // visited while searching for SCCs
-    MissingDependencies(Vec<Dot>, HashSet<Dot>, HashSet<Dependency>),
+    MissingDependencies(Vec<Dot>, HashSet<Dot>, Vec<Dependency>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -473,7 +473,11 @@ impl DependencyGraph {
 
         // reset finder state and get visited dots
         let (visited, missing_deps) = self.finder.finalize(&self.vertex_index);
-        assert_eq!(missing_deps.len(), missing_deps_count);
+        assert_eq!(
+            missing_deps.len(),
+            missing_deps_count,
+            "incorrect missing deps count"
+        );
 
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that
@@ -546,7 +550,7 @@ impl DependencyGraph {
         &mut self,
         dot: Dot,
         visited: &HashSet<Dot>,
-        missing_deps: HashSet<Dependency>,
+        missing_deps: Vec<Dependency>,
         time: &dyn SysTime,
     ) {
         let mut requests = 0;
