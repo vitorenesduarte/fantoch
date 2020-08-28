@@ -10,7 +10,7 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 
-const LOG_LEVEL: &str = "debug";
+const LOG_LEVEL: &str = "info";
 const SETUP_SCRIPT: &str = "exp_files/setup.sh";
 
 pub enum Machine<'a> {

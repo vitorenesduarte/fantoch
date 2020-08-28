@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_zipf0.5_debug";
+const RESULTS_DIR: &str = "../results_zipf0.5";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -33,9 +33,8 @@ const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
-const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
-const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> =
-    Some(Duration::from_secs(2));
+const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(10);
+const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> = None;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
@@ -164,10 +163,10 @@ async fn main() -> Result<(), Report> {
         // 1024 / 2,
         // 1024,
         // 1024 * 2,
-        // 1024 * 4,  // 1
-        // 1024 * 8,  // 1
-        // 1024 * 12, // 1
-        // 1024 * 16,
+        1024 * 4,  // 1
+        1024 * 8,  // 1
+        1024 * 12, // 1
+        1024 * 16,
         1024 * 20,
         1024 * 24, // 1
         1024 * 32,
