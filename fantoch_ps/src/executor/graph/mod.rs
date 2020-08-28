@@ -30,6 +30,10 @@ use std::fmt;
 use std::time::Duration;
 use threshold::AEClock;
 
+// this is approach is flawed is some ways; besides the fact that we're consider
+// commands executed without them being, we would need to make sure e.g. that we
+// never advance past the highest extra event for each entry, and we're not
+// doing that ATM
 const LEVEL_EXECUTED_CLOCK_ENABLED: bool = false;
 const MONITOR_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
 

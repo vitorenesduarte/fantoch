@@ -54,7 +54,7 @@ pub async fn metrics_logger_task(
     loop {
         tokio::select! {
             metrics = from_workers.recv() => {
-                tracing::info!("[metrics_logger] from protocol worker: {:?}", metrics);
+                tracing::trace!("[metrics_logger] from protocol worker: {:?}", metrics);
                 if let Some((index, protocol_metrics)) = metrics  {
                     // update metrics for this worker
                     global_metrics.workers.insert(index, protocol_metrics);
@@ -63,7 +63,7 @@ pub async fn metrics_logger_task(
                 }
             }
             metrics = from_executors.recv() => {
-                tracing::info!("[metrics_logger] from executor: {:?}", metrics);
+                tracing::trace!("[metrics_logger] from executor: {:?}", metrics);
                 if let Some((index, executor_metrics)) = metrics  {
                     // update metrics for this executor
                     global_metrics.executors.insert(index, executor_metrics);
