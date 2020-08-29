@@ -207,10 +207,6 @@ impl PendingIndex {
         None
     }
 
-    pub fn index_no_request(&mut self, parent_dot: Dot, dot: Dot) {
-        self.index.entry(parent_dot).or_default().insert(dot);
-    }
-
     /// Finds all pending dots for a given dependency dot.
     pub fn remove(&mut self, dep_dot: &Dot) -> Option<HashSet<Dot>> {
         self.index.remove(dep_dot)

@@ -276,9 +276,9 @@ impl DependencyGraph {
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_scc_count, time);
             }
-            FinderInfo::MissingDependencies(dots, visited, missing_deps) => {
+            FinderInfo::MissingDependencies(dots, _visited, missing_deps) => {
                 // update the pending
-                self.index_pending(dot, &visited, missing_deps, time);
+                self.index_pending(dot, missing_deps, time);
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_scc_count, time);
             }
@@ -556,16 +556,9 @@ impl DependencyGraph {
     fn index_pending(
         &mut self,
         dot: Dot,
-        visited: &HashSet<Dot>,
         missing_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
-        // if any of the `visited` is executed, `dot` might be executable as
-        // well; for this reason, we add each visited dot as a parent of `dot`
-        // for visited_dot in visited {
-        //     self.pending_index.index_no_request(*visited_dot, dot);
-        // }
-
         let mut requests = 0;
         for dep in missing_deps {
             if let Some((dep_dot, target_shard)) =
@@ -653,15 +646,8 @@ impl DependencyGraph {
                         new_visited,
                         missing_deps,
                     ) => {
-                        // update pending: not only `dot` is pending due to
-                        // `missing_dep` but also also all the dots in
-                        // `new_visited`
-                        self.index_pending(
-                            dot,
-                            &new_visited,
-                            missing_deps,
-                            time,
-                        );
+                        // update pending
+                        self.index_pending(dot, missing_deps, time);
 
                         if !new_dots.is_empty() {
                             // if we found a new SCC, reset visited;

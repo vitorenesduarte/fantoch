@@ -708,7 +708,7 @@ pub fn process_metrics_table(
         "in_rep",
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.12, 0.12, 0.12, 0.20, 0.25, 0.13, 0.13, 0.13];
+    let col_widths = vec![0.12, 0.12, 0.12, 0.24, 0.24, 0.12, 0.12, 0.12];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
