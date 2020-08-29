@@ -562,9 +562,9 @@ impl DependencyGraph {
     ) {
         // if any of the `visited` is executed, `dot` might be executable as
         // well; for this reason, we add each visited dot as a parent of `dot`
-        for visited_dot in visited {
-            self.pending_index.index_no_request(*visited_dot, dot);
-        }
+        // for visited_dot in visited {
+        //     self.pending_index.index_no_request(*visited_dot, dot);
+        // }
 
         let mut requests = 0;
         for dep in missing_deps {
