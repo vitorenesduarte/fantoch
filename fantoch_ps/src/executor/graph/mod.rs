@@ -270,7 +270,8 @@ impl DependencyGraph {
         let mut total_scc_count = 0;
 
         // try to find new SCCs
-        match self.find_scc(dot, &mut total_scc_count, time) {
+        let first_find = true;
+        match self.find_scc(first_find, dot, &mut total_scc_count, time) {
             FinderInfo::Found(dots) => {
                 // try to execute other commands if new SCCs were found
                 self.check_pending(dots, &mut total_scc_count, time);
@@ -441,6 +442,7 @@ impl DependencyGraph {
     #[must_use]
     fn find_scc(
         &mut self,
+        first_find: bool,
         dot: Dot,
         total_scc_count: &mut usize,
         time: &dyn SysTime,
@@ -456,8 +458,12 @@ impl DependencyGraph {
         // execute tarjan's algorithm
         let mut scc_count = 0;
         let mut missing_deps_count = 0;
-        let finder_result =
-            self.strong_connect(dot, &mut scc_count, &mut missing_deps_count);
+        let finder_result = self.strong_connect(
+            first_find,
+            dot,
+            &mut scc_count,
+            &mut missing_deps_count,
+        );
 
         // update total scc's found
         *total_scc_count += scc_count;
@@ -628,11 +634,12 @@ impl DependencyGraph {
         assert_eq!(self.executor_index, 0);
         // try to find new SCCs for each of those commands
         let mut visited = HashSet::new();
+        let first_find = false;
 
         for dot in pending {
             // only try to find new SCCs from non-visited commands
             if !visited.contains(&dot) {
-                match self.find_scc(dot, total_scc_count, time) {
+                match self.find_scc(first_find, dot, total_scc_count, time) {
                     FinderInfo::Found(new_dots) => {
                         // reset visited
                         visited.clear();
@@ -681,6 +688,7 @@ impl DependencyGraph {
 
     fn strong_connect(
         &mut self,
+        first_find: bool,
         dot: Dot,
         scc_count: &mut usize,
         missing_deps_count: &mut usize,
@@ -689,6 +697,7 @@ impl DependencyGraph {
         // get the vertex
         match self.vertex_index.find(&dot) {
             Some(vertex) => self.finder.strong_connect(
+                first_find,
                 dot,
                 &vertex,
                 &mut self.executed_clock,
@@ -1342,8 +1351,10 @@ mod tests {
         );
 
         // create ready commands counter and try to find an SCC
+        let first_find = true;
         let mut ready_commands = 0;
-        let finder_info = queue.find_scc(root_dot, &mut ready_commands, &time);
+        let finder_info =
+            queue.find_scc(first_find, root_dot, &mut ready_commands, &time);
 
         if let FinderInfo::MissingDependencies(
             to_be_executed,

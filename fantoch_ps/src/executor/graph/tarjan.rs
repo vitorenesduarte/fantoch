@@ -97,6 +97,7 @@ impl TarjanSCCFinder {
     /// Tries to find an SCC starting from root `dot`.
     pub fn strong_connect(
         &mut self,
+        first_find: bool,
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
         executed_clock: &mut AEClock<ProcessId>,
@@ -155,15 +156,16 @@ impl TarjanSCCFinder {
                         self.process_id,
                         dep,
                     );
-                    if self.config.shards() == 1 {
+                    if self.config.shards() == 1 || !first_find {
                         return FinderResult::MissingDependencies(singleton![
                             dep
                         ]);
                     } else {
-                        // if partial replication, simply save this `dep` as a
-                        // missing dependency but keep going; this makes sure
-                        // that we will request all missing dependencies in a
-                        // single request
+                        // if partial replication *and* it's the first search
+                        // we're doing for the root dot, simply save this `dep`
+                        // as a missing dependency but keep going; this makes
+                        // sure that we will request all missing dependencies in
+                        // a single request
                         self.missing_deps.insert(dep);
                         *missing_deps_count += 1;
                     };
@@ -188,6 +190,7 @@ impl TarjanSCCFinder {
                         // argument to `strong_connect` avoids double look-up
                         let mut dep_missing_deps_count = 0;
                         let result = self.strong_connect(
+                            first_find,
                             dep_dot,
                             &dep_vertex_ref,
                             executed_clock,
