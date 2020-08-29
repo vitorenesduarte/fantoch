@@ -495,11 +495,11 @@ impl DependencyGraph {
         match finder_result {
             FinderResult::Found => FinderInfo::Found(dots),
             FinderResult::MissingDependencies(result_missing_deps) => {
-                // if `MissingDependencies` was returned, then `missing_deps` is
-                // empty (and this is full replication)
+                // if `MissingDependencies` was returned, then `missing_deps`
+                // must be empty since we give up on the first missing dep
                 assert!(
                     missing_deps.is_empty(),
-                    "MissingDependencies is only returned in full replication"
+                    "if MissingDependencies is returned, missing_deps must be empty"
                 );
                 FinderInfo::MissingDependencies(
                     dots,
@@ -510,7 +510,10 @@ impl DependencyGraph {
             FinderResult::NotPending => FinderInfo::NotPending,
             FinderResult::NotFound => {
                 // in this case, `missing_deps` must be non-empty
-                assert!(!missing_deps.is_empty(), "either there's a missing dependency, or we should find an SCC");
+                assert!(
+                    !missing_deps.is_empty(),
+                    "either there's a missing dependency, or we should find an SCC"
+                );
                 FinderInfo::MissingDependencies(dots, visited, missing_deps)
             }
         }
