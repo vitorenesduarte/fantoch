@@ -1,7 +1,6 @@
 use crate::command::Command;
 use crate::executor::{AggregatePending, ExecutorResult};
 use crate::id::{AtomicDotGen, ClientId, ProcessId, ShardId};
-use crate::log;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::HashMap;
@@ -51,7 +50,7 @@ async fn client_listener_task(
         // handle new client connections
         match rx.recv().await {
             Some(connection) => {
-                log!("[client_listener] new connection");
+                tracing::trace!("[client_listener] new connection");
                 // start client server task and give it the producer-end of the
                 // channel in order for this client to notify
                 // parent
@@ -66,7 +65,7 @@ async fn client_listener_task(
                 ));
             }
             None => {
-                println!(
+                tracing::warn!(
                     "[client_listener] error receiving message from listener"
                 );
             }
@@ -94,7 +93,7 @@ async fn client_server_task(
     )
     .await;
     if client.is_none() {
-        println!("[client_server] giving up on new client {:?} since handshake failed:", connection);
+        tracing::warn!("[client_server] giving up on new client {:?} since handshake failed:", connection);
         return;
     }
     let (client_ids, mut executor_results) = client.unwrap();
@@ -105,11 +104,11 @@ async fn client_server_task(
     loop {
         tokio::select! {
             executor_result = executor_results.recv() => {
-                log!("[client_server] new executor result: {:?}", executor_result);
+                tracing::trace!("[client_server] new executor result: {:?}", executor_result);
                 client_server_task_handle_executor_result(executor_result, &mut connection, &mut pending).await;
             }
             from_client = connection.recv() => {
-                log!("[client_server] from client: {:?}", from_client);
+                tracing::trace!("[client_server] from client: {:?}", from_client);
                 if !client_server_task_handle_from_client(from_client, &client_ids, &atomic_dot_gen, &mut client_to_workers, &mut client_to_executors, &mut pending).await {
                     return;
                 }
@@ -128,11 +127,14 @@ async fn server_receive_hi(
     // receive hi from client
     let client_ids = if let Some(ClientHi(client_ids)) = connection.recv().await
     {
-        log!("[client_server] received hi from clients {:?}", client_ids);
+        tracing::trace!(
+            "[client_server] received hi from clients {:?}",
+            client_ids
+        );
         client_ids
     } else {
-        println!(
-            "[client_server] couldn't receive client ids from connected client"
+        tracing::warn!(
+            "[client_server] couldn't receive client ids from connected client",
         );
         return None;
     };
@@ -150,7 +152,7 @@ async fn server_receive_hi(
     let register =
         ClientToExecutor::Register(client_ids.clone(), executor_results_tx);
     if let Err(e) = client_to_executors.broadcast(register).await {
-        println!(
+        tracing::warn!(
             "[client_server] error while registering clients in executors: {:?}",
             e
         );
@@ -185,13 +187,13 @@ async fn client_server_task_handle_from_client(
         .await;
         true
     } else {
-        println!("[client_server] client disconnected.");
+        tracing::info!("[client_server] client disconnected.");
         // unregister client in all executors
         if let Err(e) = client_to_executors
             .broadcast(ClientToExecutor::Unregister(client_ids.clone()))
             .await
         {
-            println!(
+            tracing::warn!(
                 "[client_server] error while unregistering client in executors: {:?}",
                 e
             );
@@ -221,10 +223,10 @@ async fn client_server_task_handle_cmd(
                 .map(|atomic_dot_gen| atomic_dot_gen.next_id());
             // forward command to worker process
             if let Err(e) = client_to_workers.forward((dot, cmd)).await {
-                println!(
-                "[client_server] error while sending new command to protocol worker: {:?}",
-                e
-            );
+                tracing::warn!(
+                    "[client_server] error while sending new command to protocol worker: {:?}",
+                    e
+                );
             }
         }
     }
@@ -249,7 +251,7 @@ async fn client_server_task_handle_executor_result(
             connection.send(&cmd_result).await;
         }
     } else {
-        println!("[client_server] error while receiving new executor result from executor");
+        tracing::warn!("[client_server] error while receiving new executor result from executor");
     }
 }
 
@@ -257,7 +259,7 @@ pub async fn client_say_hi(
     client_ids: Vec<ClientId>,
     connection: &mut Connection,
 ) -> Option<(ProcessId, ShardId)> {
-    log!("[client] will say hi with ids {:?}", client_ids);
+    tracing::trace!("[client] will say hi with ids {:?}", client_ids);
     // say hi
     let hi = ClientHi(client_ids.clone());
     connection.send(&hi).await;
@@ -268,7 +270,7 @@ pub async fn client_say_hi(
         shard_id,
     }) = connection.recv().await
     {
-        log!(
+        tracing::trace!(
             "[client] clients {:?} received hi from process {} with shard id {}",
             client_ids,
             process_id,
@@ -276,7 +278,7 @@ pub async fn client_say_hi(
         );
         Some((process_id, shard_id))
     } else {
-        println!("[client] clients {:?} couldn't receive process id from connected process", client_ids);
+        tracing::warn!("[client] clients {:?} couldn't receive process id from connected process", client_ids);
         None
     }
 }
@@ -322,22 +324,22 @@ async fn client_rw_task(
     loop {
         tokio::select! {
             to_client = connection.recv() => {
-                log!("[client_rw] to client: {:?}", to_client);
+                tracing::trace!("[client_rw] to client: {:?}", to_client);
                 if let Some(to_client) = to_client {
                     if let Err(e) = to_parent.send(to_client).await {
-                        println!("[client_rw] error while sending message from server to parent: {:?}", e);
+                        tracing::warn!("[client_rw] error while sending message from server to parent: {:?}", e);
                     }
                 } else {
-                    println!("[client_rw] error while receiving message from server to parent");
+                    tracing::warn!("[client_rw] error while receiving message from server to parent");
                     break;
                 }
             }
             to_server = from_parent.recv() => {
-                log!("[client_rw] from client: {:?}", to_server);
+                tracing::trace!("[client_rw] from client: {:?}", to_server);
                 if let Some(to_server) = to_server {
                     connection.send(&to_server).await;
                 } else {
-                    println!("[client_rw] error while receiving message from parent to server");
+                    tracing::warn!("[client_rw] error while receiving message from parent to server");
                     // in this case it means that the parent (the client) is done, and so we can exit the loop
                     break;
                 }

@@ -71,6 +71,10 @@ where
         }
     }
 
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.shared.contains_key(key)
+    }
+
     pub fn insert(&self, key: K, value: V) -> Option<V> {
         self.shared.insert(key, value)
     }

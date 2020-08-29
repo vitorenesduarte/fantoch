@@ -6,4 +6,4 @@ parse:
 	rm SIM
 
 clean:
-	rm -f .metrics_* *.execution_log
+	rm -f *.log .metrics_* *.execution_log

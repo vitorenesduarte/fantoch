@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results_zipf0.5";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -33,7 +33,7 @@ fn partial_replication() -> Result<(), Report> {
     let mut key_gens = Vec::new();
     let zipf_key_count = 1_000_000;
     key_gens.push(KeyGen::Zipf {
-        coefficient: 0.1,
+        coefficient: 0.5,
         key_count: zipf_key_count,
     });
     // key_gens.push(KeyGen::ConflictRate { conflict_rate: 0 });
@@ -51,13 +51,13 @@ fn partial_replication() -> Result<(), Report> {
         (4, 2),
         // (5, 1),
         (5, 2),
-        // (6, 1),
-        // (6, 2),
         /*
         (2, 2),
         (3, 1),
         (3, 2),
         (5, 1),
+        (6, 1),
+        (6, 2),
         */
     ];
 

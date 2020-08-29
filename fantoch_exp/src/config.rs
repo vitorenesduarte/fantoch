@@ -84,6 +84,7 @@ pub struct ProtocolConfig {
     metrics_file: String,
     stack_size: Option<usize>,
     cpus: Option<usize>,
+    log_file: String,
 }
 
 #[cfg(feature = "exp")]
@@ -97,6 +98,7 @@ impl ProtocolConfig {
         ips: Vec<(ProcessId, String, Option<usize>)>,
         metrics_file: String,
         cpus: Option<usize>,
+        log_file: String,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -121,6 +123,7 @@ impl ProtocolConfig {
             metrics_file,
             stack_size: PROCESS_STACK_SIZE,
             cpus,
+            log_file,
         }
     }
 
@@ -159,6 +162,17 @@ impl ProtocolConfig {
                 .collect::<Vec<_>>()
                 .join(",");
             args.extend(args!["--sorted", sorted]);
+        }
+        args.extend(args![
+            "--executor_cleanup_interval",
+            self.config.executor_cleanup_interval().as_millis()
+        ]);
+        if let Some(interval) = self.config.executor_monitor_pending_interval()
+        {
+            args.extend(args![
+                "--executor_monitor_pending_interval",
+                interval.as_millis()
+            ]);
         }
         if let Some(interval) = self.config.gc_interval() {
             args.extend(args!["--gc_interval", interval.as_millis()]);
@@ -221,6 +235,7 @@ impl ProtocolConfig {
         if let Some(cpus) = self.cpus {
             args.extend(args!["--cpus", cpus]);
         }
+        args.extend(args!["--log_file", self.log_file]);
         args
     }
 
@@ -276,6 +291,7 @@ pub struct ClientConfig {
     metrics_file: String,
     stack_size: Option<usize>,
     cpus: Option<usize>,
+    log_file: String,
 }
 
 #[cfg(feature = "exp")]
@@ -287,6 +303,7 @@ impl ClientConfig {
         workload: Workload,
         metrics_file: String,
         cpus: Option<usize>,
+        log_file: String,
     ) -> Self {
         Self {
             id_start,
@@ -299,6 +316,7 @@ impl ClientConfig {
             metrics_file,
             stack_size: CLIENT_STACK_SIZE,
             cpus,
+            log_file,
         }
     }
 
@@ -351,6 +369,7 @@ impl ClientConfig {
         if let Some(cpus) = self.cpus {
             args.extend(args!["--cpus", cpus]);
         }
+        args.extend(args!["--log_file", self.log_file]);
         args
     }
 

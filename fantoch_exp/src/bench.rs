@@ -18,6 +18,7 @@ use tokio::time::Duration;
 type Ips = HashMap<ProcessId, String>;
 
 const LOG_FILE_EXT: &str = "log";
+const ERR_FILE_EXT: &str = "err";
 const DSTAT_FILE_EXT: &str = "dstat.csv";
 const METRICS_FILE_EXT: &str = "metrics";
 pub(crate) const FLAMEGRAPH_FILE_EXT: &str = "flamegraph.svg";
@@ -352,6 +353,7 @@ async fn start_processes(
 
         // compute files to be generated during this run
         let log_file = config::run_file(process_type, LOG_FILE_EXT);
+        let err_file = config::run_file(process_type, ERR_FILE_EXT);
         let dstat_file = config::run_file(process_type, DSTAT_FILE_EXT);
         let metrics_file = config::run_file(process_type, METRICS_FILE_EXT);
 
@@ -369,6 +371,7 @@ async fn start_processes(
             ips,
             metrics_file,
             cpus,
+            log_file,
         );
         if let Some(interval) = tracer_show_interval {
             protocol_config.set_tracer_show_interval(interval);
@@ -380,7 +383,7 @@ async fn start_processes(
             protocol.binary(),
             args,
             run_mode,
-            log_file,
+            err_file,
         );
         let process = vm
             .prepare_exec(command)
@@ -455,6 +458,7 @@ async fn run_clients(
 
         // compute files to be generated during this run
         let log_file = config::run_file(process_type, LOG_FILE_EXT);
+        let err_file = config::run_file(process_type, ERR_FILE_EXT);
         let dstat_file = config::run_file(process_type, DSTAT_FILE_EXT);
         let metrics_file = config::run_file(process_type, METRICS_FILE_EXT);
 
@@ -470,6 +474,7 @@ async fn run_clients(
             workload,
             metrics_file,
             cpus,
+            log_file,
         );
         let args = client_config.to_args();
 
@@ -479,7 +484,7 @@ async fn run_clients(
             args,
             // always run clients on release mode
             RunMode::Release,
-            log_file,
+            err_file,
         );
         let client = vm
             .prepare_exec(command)
@@ -916,22 +921,29 @@ async fn pull_metrics_files(
 
     // compute files to be pulled
     let log_file = config::run_file(process_type, LOG_FILE_EXT);
+    let err_file = config::run_file(process_type, ERR_FILE_EXT);
     let dstat_file = config::run_file(process_type, DSTAT_FILE_EXT);
     let metrics_file = config::run_file(process_type, METRICS_FILE_EXT);
 
-    // pull log file and remove it
+    // pull log file
     let local_path = format!("{}/{}.log", exp_dir, prefix);
     vm.copy_from(&log_file, local_path)
         .await
         .wrap_err("copy log")?;
 
-    // pull dstat and remove it
+    // pull err file
+    let local_path = format!("{}/{}.err", exp_dir, prefix);
+    vm.copy_from(&err_file, local_path)
+        .await
+        .wrap_err("copy err")?;
+
+    // pull dstat
     let local_path = format!("{}/{}_dstat.csv", exp_dir, prefix);
     vm.copy_from(&dstat_file, local_path)
         .await
         .wrap_err("copy dstat")?;
 
-    // pull metrics file and remove it
+    // pull metrics file
     let local_path = format!("{}/{}_metrics.bincode.gz", exp_dir, prefix);
     vm.copy_from(&metrics_file, local_path)
         .await
@@ -1069,8 +1081,12 @@ async fn cleanup_machine(
 
     // remove files
     let command = format!(
-        "rm -f *.{} *.{} *.{} *.{} heaptrack.*.gz *perf.data*",
-        LOG_FILE_EXT, DSTAT_FILE_EXT, METRICS_FILE_EXT, FLAMEGRAPH_FILE_EXT
+        "rm -f *.{} *.{} *.{} *.{} *.{} heaptrack.*.gz *perf.data*",
+        LOG_FILE_EXT,
+        ERR_FILE_EXT,
+        DSTAT_FILE_EXT,
+        METRICS_FILE_EXT,
+        FLAMEGRAPH_FILE_EXT
     );
     vm.exec(command).await.wrap_err("rm files")?;
     Ok(())

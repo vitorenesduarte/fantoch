@@ -1,5 +1,4 @@
 use crate::executor::ExecutorMetrics;
-use crate::log;
 use crate::protocol::ProtocolMetrics;
 use crate::run::prelude::*;
 use crate::HashMap;
@@ -44,7 +43,7 @@ pub async fn metrics_logger_task(
     mut from_workers: ProtocolMetricsReceiver,
     mut from_executors: ExecutorMetricsReceiver,
 ) {
-    println!("[metrics_logger] started with log {}", metrics_file);
+    tracing::info!("[metrics_logger] started with log {}", metrics_file);
 
     // create metrics
     let mut global_metrics = ProcessMetrics::new();
@@ -55,21 +54,21 @@ pub async fn metrics_logger_task(
     loop {
         tokio::select! {
             metrics = from_workers.recv() => {
-                log!("[metrics_logger] from protocol worker: {:?}", metrics);
+                tracing::trace!("[metrics_logger] from protocol worker: {:?}", metrics);
                 if let Some((index, protocol_metrics)) = metrics  {
                     // update metrics for this worker
                     global_metrics.workers.insert(index, protocol_metrics);
                 } else {
-                    println!("[metrics_logger] error while receiving metrics from protocol worker");
+                    tracing::warn!("[metrics_logger] error while receiving metrics from protocol worker");
                 }
             }
             metrics = from_executors.recv() => {
-                log!("[metrics_logger] from executor: {:?}", metrics);
+                tracing::trace!("[metrics_logger] from executor: {:?}", metrics);
                 if let Some((index, executor_metrics)) = metrics  {
                     // update metrics for this executor
                     global_metrics.executors.insert(index, executor_metrics);
                 } else {
-                    println!("[metrics_logger] error while receiving metrics from executor");
+                    tracing::warn!("[metrics_logger] error while receiving metrics from executor");
                 }
             }
             _ = interval.tick()  => {
@@ -82,7 +81,7 @@ pub async fn metrics_logger_task(
                 }
                 // rename file
                 if let Err(e) = std::fs::rename(&tmp, &metrics_file) {
-                    println!("[metrics_logger] coudn't rename temporary metrics file: {:?}", e);
+                    tracing::warn!("[metrics_logger] coudn't rename temporary metrics file: {:?}", e);
                 }
             }
         }

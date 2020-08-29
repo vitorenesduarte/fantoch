@@ -1,7 +1,6 @@
 use crate::command::{Command, CommandResult};
 use crate::executor::ExecutorResult;
 use crate::id::{ProcessId, Rifl, ShardId};
-use crate::log;
 use crate::HashMap;
 
 /// Structure that tracks the progress of pending commands.
@@ -31,7 +30,7 @@ impl AggregatePending {
         // get command rifl and key count
         let rifl = cmd.rifl();
         let key_count = cmd.key_count(self.shard_id);
-        log!(
+        tracing::trace!(
             "p{}: AggregatePending::wait_for {:?} | count = {}",
             self.process_id,
             rifl,
@@ -46,7 +45,7 @@ impl AggregatePending {
 
     /// Increases the number of expected notifications on some `Rifl` by one.
     pub fn wait_for_rifl(&mut self, rifl: Rifl) {
-        log!(
+        tracing::trace!(
             "p{}: AggregatePending::wait_for_rifl {:?}",
             self.process_id,
             rifl
@@ -79,7 +78,7 @@ impl AggregatePending {
         // add partial result and check if it's ready
         let is_ready = cmd_result.add_partial(key, op_result);
         if is_ready {
-            log!(
+            tracing::trace!(
                 "p{}: AggregatePending::add_partial {:?} is ready",
                 self.process_id,
                 rifl
@@ -88,7 +87,7 @@ impl AggregatePending {
             // ready
             self.pending.remove(&rifl)
         } else {
-            log!(
+            tracing::warn!(
                 "p{}: AggregatePending::add_partial {:?} is not ready",
                 self.process_id,
                 rifl

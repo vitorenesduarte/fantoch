@@ -14,20 +14,46 @@ macro_rules! singleton {
     }};
 }
 
-// Debug version
-#[cfg(debug_assertions)]
-#[macro_export]
-macro_rules! log {
-    ($( $args:expr ),*) => { println!( $( $args ),* ); }
-}
+#[must_use]
+pub fn init_tracing_subscriber(
+    log_file: Option<impl AsRef<std::path::Path> + std::fmt::Debug>,
+    tracing_directives: Option<&'static str>,
+) -> tracing_appender::non_blocking::WorkerGuard {
+    // create log format
+    let format = tracing_subscriber::fmt::format()
+        .without_time()
+        .with_target(false)
+        .with_level(false)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_ansi(false);
 
-// Non-debug version
-#[cfg(not(debug_assertions))]
-#[macro_export]
-macro_rules! log {
-    ($( $args:expr ),*) => {
-        ()
+    // create env filter
+    let env_filter = match tracing_directives {
+        Some(dirs) => tracing_subscriber::EnvFilter::new(dirs),
+        None => tracing_subscriber::EnvFilter::from_default_env(),
     };
+
+    println!("log_file: {:?}", log_file);
+    println!("env_filter: {}", env_filter);
+
+    // create writer
+    let builder = tracing_appender::non_blocking::NonBlockingBuilder::default()
+        .lossy(false);
+    let (non_blocking_appender, guard) = match log_file {
+        Some(log_file) => {
+            builder.finish(tracing_appender::rolling::never(".", log_file))
+        }
+        None => builder.finish(std::io::stdout()),
+    };
+
+    tracing_subscriber::fmt()
+        .event_format(format)
+        .with_writer(non_blocking_appender)
+        .with_env_filter(env_filter)
+        .init();
+
+    guard
 }
 
 type DefaultHasher = ahash::AHasher;

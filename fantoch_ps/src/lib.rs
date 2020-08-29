@@ -10,4 +10,4 @@ pub mod protocol;
 mod shared;
 
 // This module contains some utilitary functions.
-mod util;
+pub mod util;

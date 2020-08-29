@@ -3,7 +3,6 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId, ShardId};
-use crate::log;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
@@ -96,7 +95,6 @@ where
                         .map(|(event, delay)| (process_id, event, delay)),
                 );
 
-                log!("id {} for region {:?}", process_id, region);
                 (process_id, shard_id, region)
             })
             .collect();

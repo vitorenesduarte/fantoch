@@ -42,6 +42,11 @@ pub trait Executor: Clone {
         // executors interested in a periodic cleanup should overwrite this
     }
 
+    fn monitor_pending(&mut self, _time: &dyn SysTime) {
+        // executors interested in a periodic check of pending commands should
+        // overwrite this
+    }
+
     fn handle(&mut self, infos: Self::ExecutionInfo, time: &dyn SysTime);
 
     #[must_use]

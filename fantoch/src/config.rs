@@ -14,6 +14,9 @@ pub struct Config {
     execute_at_commit: bool,
     // defines the interval between executor cleanups
     executor_cleanup_interval: Duration,
+    // defines whether the executor should monitor pending commands, and if so,
+    // the interval between each monitor
+    executor_monitor_pending_interval: Option<Duration>,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
     // starting leader process
@@ -37,7 +40,7 @@ impl Config {
     /// system.
     pub fn new(n: usize, f: usize) -> Self {
         if f > n / 2 {
-            println!("WARNING: f={} is larger than a minority with n={}", f, n);
+            tracing::warn!("f={} is larger than a minority with n={}", f, n);
         }
         // by default, `shards = 1`
         let shards = 1;
@@ -45,6 +48,8 @@ impl Config {
         let execute_at_commit = false;
         // by default, executor cleanups happen every 5ms
         let executor_cleanup_interval = Duration::from_millis(5);
+        // by default, pending commnads are not monitored
+        let executor_monitor_pending_interval = None;
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader
@@ -63,6 +68,7 @@ impl Config {
             shards,
             execute_at_commit,
             executor_cleanup_interval,
+            executor_monitor_pending_interval,
             gc_interval,
             leader,
             newt_tiny_quorums,
@@ -111,6 +117,19 @@ impl Config {
     /// Sets the executor cleanup interval.
     pub fn set_executor_cleanup_interval(&mut self, interval: Duration) {
         self.executor_cleanup_interval = interval;
+    }
+
+    /// Checks the executor monitor pending interval.
+    pub fn executor_monitor_pending_interval(&self) -> Option<Duration> {
+        self.executor_monitor_pending_interval
+    }
+
+    /// Sets the executor monitor pending interval.
+    pub fn set_executor_monitor_pending_interval(
+        &mut self,
+        interval: Duration,
+    ) {
+        self.executor_monitor_pending_interval = Some(interval);
     }
 
     /// Checks the garbage collection interval.
@@ -283,6 +302,14 @@ mod tests {
         let interval = Duration::from_secs(2);
         config.set_executor_cleanup_interval(interval);
         assert_eq!(config.executor_cleanup_interval(), interval);
+
+        // by default, there's executor monitor pending interval
+        assert_eq!(config.executor_monitor_pending_interval(), None);
+
+        // change its value and check it has changed
+        let interval = Duration::from_millis(1);
+        config.set_executor_monitor_pending_interval(interval);
+        assert_eq!(config.executor_monitor_pending_interval(), Some(interval));
 
         // by default, there's no garbage collection interval
         assert_eq!(config.gc_interval(), None);

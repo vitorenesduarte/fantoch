@@ -1,8 +1,9 @@
+use crate::log;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{Action, BaseProcess, Protocol};
+use fantoch::singleton;
 use fantoch::HashSet;
-use fantoch::{log, singleton};
 use std::fmt::Debug;
 
 pub fn submit_actions<P>(

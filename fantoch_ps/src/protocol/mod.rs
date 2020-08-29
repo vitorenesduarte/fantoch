@@ -509,9 +509,9 @@ mod tests {
     }
 
     #[test]
-    fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_three_shards_test(
+    fn run_atlas_3_1_locked_partial_replication_two_shards_per_command_four_shards_test(
     ) {
-        let shard_count = 3;
+        let shard_count = 4;
         let workers = 2;
         let executors = 2; // atlas executor can be parallel in partial replication
         let shards_per_command = 2;
@@ -719,6 +719,7 @@ mod tests {
         // run until the clients end + another 10 seconds
         let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(10));
+        let tracing_directives = None; // Some("fantoch=debug,fantoch_ps=debug");
         let metrics = tokio_test_runtime()
             .block_on(run_test_with_inspect_fun::<P, (usize, usize, usize)>(
                 config,
@@ -727,6 +728,7 @@ mod tests {
                 workers,
                 executors,
                 tracer_show_interval,
+                tracing_directives,
                 Some(metrics_inspect),
                 extra_run_time,
             ))

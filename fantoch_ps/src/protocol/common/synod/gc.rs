@@ -1,5 +1,5 @@
+use crate::log;
 use fantoch::id::ProcessId;
-use fantoch::log;
 use fantoch::HashMap;
 use threshold::{AboveExSet, EventSet};
 

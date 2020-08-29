@@ -28,6 +28,7 @@ type ClientArgs = (
 );
 
 fn main() -> Result<(), Report> {
+    let (args, _guard) = parse_args();
     let (
         ids,
         addresses,
@@ -39,7 +40,7 @@ fn main() -> Result<(), Report> {
         metrics_file,
         stack_size,
         cpus,
-    ) = parse_args();
+    ) = args;
 
     common::tokio_runtime(stack_size, cpus).block_on(fantoch::run::client(
         ids,
@@ -53,7 +54,7 @@ fn main() -> Result<(), Report> {
     ))
 }
 
-fn parse_args() -> ClientArgs {
+fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
     let matches = App::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -165,7 +166,20 @@ fn parse_args() -> ClientArgs {
                 .help("number of cpus to be used by tokio; by default all available cpus are used")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("log_file")
+                .long("log_file")
+                .value_name("LOG_FILE")
+                .help("file to which logs will be written to; if not set, logs will be redirect to the stdout")
+                .takes_value(true),
+        )
         .get_matches();
+
+    let tracing_directives = None;
+    let guard = fantoch::util::init_tracing_subscriber(
+        matches.value_of("log_file"),
+        tracing_directives,
+    );
 
     // parse arguments
     let ids = parse_id_range(matches.value_of("ids"));
@@ -190,17 +204,17 @@ fn parse_args() -> ClientArgs {
     let stack_size = common::parse_stack_size(matches.value_of("stack_size"));
     let cpus = common::parse_cpus(matches.value_of("cpus"));
 
-    println!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
-    println!("client number: {}", ids.len());
-    println!("addresses: {:?}", addresses);
-    println!("workload: {:?}", workload);
-    println!("tcp_nodelay: {:?}", tcp_nodelay);
-    println!("channel buffer size: {:?}", channel_buffer_size);
-    println!("status frequency: {:?}", status_frequency);
-    println!("metrics file: {:?}", metrics_file);
-    println!("stack size: {:?}", stack_size);
+    tracing::info!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
+    tracing::info!("client number: {}", ids.len());
+    tracing::info!("addresses: {:?}", addresses);
+    tracing::info!("workload: {:?}", workload);
+    tracing::info!("tcp_nodelay: {:?}", tcp_nodelay);
+    tracing::info!("channel buffer size: {:?}", channel_buffer_size);
+    tracing::info!("status frequency: {:?}", status_frequency);
+    tracing::info!("metrics file: {:?}", metrics_file);
+    tracing::info!("stack size: {:?}", stack_size);
 
-    (
+    let args = (
         ids,
         addresses,
         interval,
@@ -211,7 +225,8 @@ fn parse_args() -> ClientArgs {
         metrics_file,
         stack_size,
         cpus,
-    )
+    );
+    (args, guard)
 }
 
 fn parse_id_range(id_range: Option<&str>) -> Vec<ClientId> {

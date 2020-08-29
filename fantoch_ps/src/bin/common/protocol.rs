@@ -63,6 +63,7 @@ pub fn run<P>() -> Result<(), Report>
 where
     P: Protocol + Send + 'static,
 {
+    let (args, _guard) = parse_args();
     let (
         process_id,
         shard_id,
@@ -86,7 +87,7 @@ where
         metrics_file,
         stack_size,
         cpus,
-    ) = parse_args();
+    ) = args;
 
     let process = fantoch::run::process::<P, String>(
         process_id,
@@ -110,10 +111,11 @@ where
         ping_interval,
         metrics_file,
     );
+
     super::tokio_runtime(stack_size, cpus).block_on(process)
 }
 
-fn parse_args() -> ProtocolArgs {
+fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
     let matches = App::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
@@ -203,9 +205,16 @@ fn parse_args() -> ProtocolArgs {
         )
         .arg(
             Arg::with_name("executor_cleanup_interval")
-                .long("executor_cleanup_interva")
+                .long("executor_cleanup_interval")
                 .value_name("EXECUTOR_CLEANUP_INTERVAL")
                 .help("executor cleanup interval (in milliseconds); default: 5")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("executor_monitor_pending_interval")
+                .long("executor_monitor_pending_interval")
+                .value_name("EXECUTOR_MONITOR_PENDING_INTERVAL")
+                .help("executor monitor pending interval (in milliseconds); if no value if set, pending commands are not monitored")
                 .takes_value(true),
         )
         .arg(
@@ -352,7 +361,20 @@ fn parse_args() -> ProtocolArgs {
                 .help("number of cpus to be used by tokio; by default all available cpus are used")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("log_file")
+                .long("log_file")
+                .value_name("LOG_FILE")
+                .help("file to which logs will be written to; if not set, logs will be redirect to the stdout")
+                .takes_value(true),
+        )
         .get_matches();
+
+    let tracing_directives = None;
+    let guard = fantoch::util::init_tracing_subscriber(
+        matches.value_of("log_file"),
+        tracing_directives,
+    );
 
     // parse arguments
     let process_id = parse_process_id(matches.value_of("id"));
@@ -372,6 +394,9 @@ fn parse_args() -> ProtocolArgs {
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
         parse_executor_cleanup_interval(
             matches.value_of("executor_cleanup_interval"),
+        ),
+        parse_executor_monitor_pending_interval(
+            matches.value_of("executor_monitor_pending_interval"),
         ),
         parse_gc_interval(matches.value_of("gc_interval")),
         parse_leader(matches.value_of("leader")),
@@ -408,34 +433,34 @@ fn parse_args() -> ProtocolArgs {
     let stack_size = super::parse_stack_size(matches.value_of("stack_size"));
     let cpus = super::parse_cpus(matches.value_of("cpus"));
 
-    println!("process id: {}", process_id);
-    println!("sorted processes: {:?}", sorted_processes);
-    println!("ip: {:?}", ip);
-    println!("port: {}", port);
-    println!("client port: {}", client_port);
-    println!("addresses: {:?}", addresses);
-    println!("config: {:?}", config);
-    println!("tcp_nodelay: {:?}", tcp_nodelay);
-    println!("tcp buffer size: {:?}", tcp_buffer_size);
-    println!("tcp flush interval: {:?}", tcp_flush_interval);
-    println!(
+    tracing::info!("process id: {}", process_id);
+    tracing::info!("sorted processes: {:?}", sorted_processes);
+    tracing::info!("ip: {:?}", ip);
+    tracing::info!("port: {}", port);
+    tracing::info!("client port: {}", client_port);
+    tracing::info!("addresses: {:?}", addresses);
+    tracing::info!("config: {:?}", config);
+    tracing::info!("tcp_nodelay: {:?}", tcp_nodelay);
+    tracing::info!("tcp buffer size: {:?}", tcp_buffer_size);
+    tracing::info!("tcp flush interval: {:?}", tcp_flush_interval);
+    tracing::info!(
         "process channel buffer size: {:?}",
         process_channel_buffer_size
     );
-    println!(
+    tracing::info!(
         "client channel buffer size: {:?}",
         client_channel_buffer_size
     );
-    println!("workers: {:?}", workers);
-    println!("executors: {:?}", executors);
-    println!("multiplexing: {:?}", multiplexing);
-    println!("execution log: {:?}", execution_log);
-    println!("trace_show_interval: {:?}", tracer_show_interval);
-    println!("ping_interval: {:?}", ping_interval);
-    println!("metrics file: {:?}", metrics_file);
-    println!("stack size: {:?}", stack_size);
+    tracing::info!("workers: {:?}", workers);
+    tracing::info!("executors: {:?}", executors);
+    tracing::info!("multiplexing: {:?}", multiplexing);
+    tracing::info!("execution log: {:?}", execution_log);
+    tracing::info!("trace_show_interval: {:?}", tracer_show_interval);
+    tracing::info!("ping_interval: {:?}", ping_interval);
+    tracing::info!("metrics file: {:?}", metrics_file);
+    tracing::info!("stack size: {:?}", stack_size);
 
-    (
+    let args = (
         process_id,
         shard_id,
         sorted_processes,
@@ -458,7 +483,8 @@ fn parse_args() -> ProtocolArgs {
         metrics_file,
         stack_size,
         cpus,
-    )
+    );
+    (args, guard)
 }
 
 fn parse_process_id(id: Option<&str>) -> ProcessId {
@@ -546,6 +572,7 @@ pub fn build_config(
     shards: usize,
     execute_at_commit: bool,
     executor_cleanup_interval: Duration,
+    executor_monitor_pending_interval: Option<Duration>,
     gc_interval: Option<Duration>,
     leader: Option<ProcessId>,
     newt_tiny_quorums: bool,
@@ -558,8 +585,11 @@ pub fn build_config(
     config.set_shards(shards);
     config.set_execute_at_commit(execute_at_commit);
     config.set_executor_cleanup_interval(executor_cleanup_interval);
-    if let Some(gc_interval) = gc_interval {
-        config.set_gc_interval(gc_interval);
+    if let Some(interval) = executor_monitor_pending_interval {
+        config.set_executor_monitor_pending_interval(interval);
+    }
+    if let Some(interval) = gc_interval {
+        config.set_gc_interval(interval);
     }
     // set leader if we have one
     if let Some(leader) = leader {
@@ -606,17 +636,26 @@ pub fn parse_execute_at_commit(execute_at_commit: Option<&str>) -> bool {
         .unwrap_or(DEFAULT_EXECUTE_AT_COMMIT)
 }
 
-pub fn parse_executor_cleanup_interval(
-    executor_cleanup_interval: Option<&str>,
-) -> Duration {
-    executor_cleanup_interval
-        .map(|executor_cleanup_interval| {
-            let ms = executor_cleanup_interval
+pub fn parse_executor_cleanup_interval(interval: Option<&str>) -> Duration {
+    interval
+        .map(|interval| {
+            let ms = interval
                 .parse::<u64>()
                 .expect("executor_cleanup_interval should be a number");
             Duration::from_millis(ms)
         })
         .unwrap_or(DEFAULT_EXECUTOR_CLEANUP_INTERVAL)
+}
+
+pub fn parse_executor_monitor_pending_interval(
+    interval: Option<&str>,
+) -> Option<Duration> {
+    interval.map(|interval| {
+        let ms = interval
+            .parse::<u64>()
+            .expect("executor_monitor_pending_interval should be a number");
+        Duration::from_millis(ms)
+    })
 }
 
 pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<Duration> {
@@ -642,23 +681,19 @@ fn parse_newt_tiny_quorums(newt_tiny_quorums: Option<&str>) -> bool {
         .unwrap_or(DEFAULT_NEWT_TINY_QUORUMS)
 }
 
-fn parse_newt_clock_bump_interval(
-    newt_clock_bump_interval: Option<&str>,
-) -> Option<Duration> {
-    newt_clock_bump_interval.map(|newt_clock_bump_interval| {
-        let ms = newt_clock_bump_interval
+fn parse_newt_clock_bump_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let ms = interval
             .parse::<u64>()
             .expect("newt_clock_bump_interval should be a number");
         Duration::from_millis(ms)
     })
 }
 
-fn parse_newt_detached_send_interval(
-    newt_detached_send_interval: Option<&str>,
-) -> Duration {
-    newt_detached_send_interval
-        .map(|newt_detached_send_interval| {
-            let ms = newt_detached_send_interval
+fn parse_newt_detached_send_interval(interval: Option<&str>) -> Duration {
+    interval
+        .map(|interval| {
+            let ms = interval
                 .parse::<u64>()
                 .expect("newt_detached_send_interval should be a number");
             Duration::from_millis(ms)
@@ -710,20 +745,18 @@ pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
     execution_log.map(String::from)
 }
 
-fn parse_tracer_show_interval(
-    tracer_show_interval: Option<&str>,
-) -> Option<Duration> {
-    tracer_show_interval.map(|tracer_show_interval| {
-        let millis = tracer_show_interval
+fn parse_tracer_show_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let millis = interval
             .parse::<u64>()
             .expect("tracer_show_interval should be a number");
         Duration::from_millis(millis)
     })
 }
 
-fn parse_ping_interval(ping_interval: Option<&str>) -> Option<Duration> {
-    ping_interval.map(|ping_interval| {
-        let millis = ping_interval
+fn parse_ping_interval(interval: Option<&str>) -> Option<Duration> {
+    interval.map(|interval| {
+        let millis = interval
             .parse::<u64>()
             .expect("ping_interval should be a number");
         Duration::from_millis(millis)

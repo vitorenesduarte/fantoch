@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results";
+const RESULTS_DIR: &str = "../results_zipf0.5";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -33,7 +33,8 @@ const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
-const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(5);
+const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(10);
+const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> = None;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
@@ -46,7 +47,7 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "hang";
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -73,6 +74,9 @@ macro_rules! config {
         }
         config.set_skip_fast_ack($skip_fast_ack);
         config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
+        if let Some(interval) = EXECUTOR_MONITOR_PENDING_INTERVAL {
+            config.set_executor_monitor_pending_interval(interval);
+        }
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
@@ -180,12 +184,12 @@ async fn main() -> Result<(), Report> {
         1024 * 256,
         1024 * 272,
     ];
-    let shards_per_command = 1;
-    let shard_count = 1;
+    let shards_per_command = 2;
+    let shard_count = 5;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: 0.1,
+        coefficient: 0.5,
         key_count: zipf_key_count,
     };
     // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };

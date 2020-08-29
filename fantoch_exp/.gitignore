@@ -3,6 +3,7 @@ hosts
 *_log
 *.metrics
 *.log
+*.err
 *.csv
 *.gz
 4

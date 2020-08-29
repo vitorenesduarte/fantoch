@@ -1,5 +1,4 @@
 use crate::id::{Dot, ProcessId, ShardId};
-use crate::log;
 use crate::util;
 use crate::HashMap;
 use threshold::{AEClock, EventSet, VClock};
@@ -60,7 +59,7 @@ impl GCTrack {
     pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
         // compute new stable clock
         let mut new_stable = self.stable_clock();
-        log!("GCTrack::stable_clock {:?}", new_stable);
+        tracing::trace!("GCTrack::stable_clock {:?}", new_stable);
 
         // compute new stable dots; while at it, update the previous stable
         // clock and return newly stable dots

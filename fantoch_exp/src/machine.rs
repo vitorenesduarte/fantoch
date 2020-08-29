@@ -10,6 +10,7 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 
+const LOG_LEVEL: &str = "info";
 const SETUP_SCRIPT: &str = "exp_files/setup.sh";
 
 pub enum Machine<'a> {
@@ -535,14 +536,20 @@ pub fn fantoch_bin_script(
     binary: &str,
     args: Vec<String>,
     run_mode: RunMode,
-    output_file: impl ToString,
+    err_file: impl ToString,
 ) -> String {
+    // binary=info makes sure that we also capture any logs in there
+    let env_vars = format!(
+        "RUST_LOG={}=info,fantoch={},fantoch_ps={}",
+        binary, LOG_LEVEL, LOG_LEVEL
+    );
     let run_command = run_mode.run_command(process_type, binary);
     let args = args.join(" ");
     format!(
-        "{} {} > {} 2>&1",
+        "{} {} {} > {} 2>&1",
+        env_vars,
         run_command,
         args,
-        output_file.to_string()
+        err_file.to_string()
     )
 }

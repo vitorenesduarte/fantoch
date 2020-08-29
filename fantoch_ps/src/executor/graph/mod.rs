@@ -22,13 +22,20 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::log;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::time::Duration;
 use threshold::AEClock;
+
+// this is approach is flawed is some ways; besides the fact that we're consider
+// commands executed without them being, we would need to make sure e.g. that we
+// never advance past the highest extra event for each entry, and we're not
+// doing that ATM
+const LEVEL_EXECUTED_CLOCK_ENABLED: bool = false;
+const MONITOR_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestReply {
@@ -61,7 +68,7 @@ pub struct DependencyGraph {
     //   `added_to_executed_clock`
     to_execute: Vec<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
-    added_to_executed_clock: Option<HashSet<Dot>>,
+    added_to_executed_clock: HashSet<Dot>,
     // auxiliary workers (handles requests):
     // - may have `buffered_in_requests` when doesn't have the command yet
     // - produces `out_request_replies` when it has the command
@@ -75,7 +82,7 @@ enum FinderInfo {
     // set of dots in found SCCs (it's possible to find SCCs even though the
     // search for another dot failed), missing dependencies and set of dots
     // visited while searching for SCCs
-    MissingDependencies(Vec<Dot>, HashSet<Dependency>, HashSet<Dot>),
+    MissingDependencies(Vec<Dot>, HashSet<Dot>, HashSet<Dependency>),
     // in case we try to find SCCs on dots that are no longer pending
     NotPending,
 }
@@ -108,11 +115,7 @@ impl DependencyGraph {
         // create requests and request replies
         let out_requests = Default::default();
         // only track what's added to the executed clock if partial replication
-        let added_to_executed_clock = if config.shards() == 1 {
-            None
-        } else {
-            Some(HashSet::new())
-        };
+        let added_to_executed_clock = HashSet::new();
         let buffered_in_requests = Default::default();
         let out_request_replies = Default::default();
         DependencyGraph {
@@ -146,14 +149,11 @@ impl DependencyGraph {
     /// Returns which dots have been added to the executed clock.
     #[must_use]
     pub fn to_executors(&mut self) -> Option<HashSet<Dot>> {
-        if let Some(added) = self.added_to_executed_clock.as_ref() {
-            // if it has been set and has something, take what's there and put a
-            // new empty set
-            if !added.is_empty() {
-                return self.added_to_executed_clock.replace(HashSet::new());
-            }
+        if self.added_to_executed_clock.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.added_to_executed_clock))
         }
-        None
     }
 
     /// Returns a request.
@@ -178,27 +178,57 @@ impl DependencyGraph {
     }
 
     fn cleanup(&mut self, time: &dyn SysTime) {
-        log!(
+        tracing::trace!(
             "p{}: @{} Graph::cleanup | time = {}",
             self.process_id,
             self.executor_index,
             time.millis()
         );
-        self.level_executed_clock
-            .maybe_level(&mut self.executed_clock, time);
-        if self.executor_index > 0 {
+        // try to level the executed clock
+        let maybe_executed = if LEVEL_EXECUTED_CLOCK_ENABLED {
+            self.level_executed_clock.maybe_level(
+                &mut self.executed_clock,
+                &self.vertex_index,
+                time,
+            )
+        } else {
+            Vec::new()
+        };
+
+        if self.executor_index == 0 {
+            let mut total_scc_count = 0;
+            self.check_pending(maybe_executed, &mut total_scc_count, time);
+        } else {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
         }
     }
 
-    fn handle_executed(&mut self, dots: HashSet<Dot>, _time: &dyn SysTime) {
-        log!(
+    fn monitor_pending(&self, time: &dyn SysTime) {
+        tracing::debug!(
+            "p{}: @{} Graph::monitor_pending | time = {}",
+            self.process_id,
+            self.executor_index,
+            time.millis()
+        );
+
+        if self.executor_index == 0 {
+            // check requests that have been committed at least 1 second ago
+            self.vertex_index.monitor_pending(
+                &self.executed_clock,
+                MONITOR_PENDING_THRESHOLD,
+                time,
+            )
+        }
+    }
+
+    fn handle_executed(&mut self, dots: HashSet<Dot>, time: &dyn SysTime) {
+        tracing::debug!(
             "p{}: @{} Graph::handle_executed {:?} | time = {}",
             self.process_id,
             self.executor_index,
             dots,
-            _time.millis()
+            time.millis()
         );
         if self.executor_index > 0 {
             for dot in dots {
@@ -216,7 +246,7 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        log!(
+        tracing::debug!(
             "p{}: @{} Graph::handle_add {:?} {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -237,19 +267,20 @@ impl DependencyGraph {
 
         // get current command ready count and count newly ready commands
         let initial_ready = self.to_execute.len();
-        let mut total_found = 0;
+        let mut total_scc_count = 0;
 
         // try to find new SCCs
-        match self.find_scc(dot, &mut total_found, time) {
+        let first_find = true;
+        match self.find_scc(first_find, dot, &mut total_scc_count, time) {
             FinderInfo::Found(dots) => {
                 // try to execute other commands if new SCCs were found
-                self.check_pending(dots, &mut total_found, time);
+                self.check_pending(dots, &mut total_scc_count, time);
             }
-            FinderInfo::MissingDependencies(dots, deps, _visited) => {
+            FinderInfo::MissingDependencies(dots, _visited, missing_deps) => {
                 // update the pending
-                self.index_pending(deps, dot, time);
+                self.index_pending(dot, missing_deps, time);
                 // try to execute other commands if new SCCs were found
-                self.check_pending(dots, &mut total_found, time);
+                self.check_pending(dots, &mut total_scc_count, time);
             }
             FinderInfo::NotPending => {
                 panic!("just added dot must be pending");
@@ -257,9 +288,9 @@ impl DependencyGraph {
         }
 
         // check that all newly ready commands have been incorporated
-        assert_eq!(self.to_execute.len(), initial_ready + total_found);
+        assert_eq!(self.to_execute.len(), initial_ready + total_scc_count);
 
-        log!(
+        tracing::trace!(
             "p{}: @{} Graph::log executed {:?} | pending {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -275,58 +306,53 @@ impl DependencyGraph {
         &mut self,
         from: ShardId,
         dots: HashSet<Dot>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
-        log!(
+        tracing::trace!(
             "p{}: @{} Graph::handle_request {:?} from {:?} | time = {}",
             self.process_id,
             self.executor_index,
             dots,
             from,
-            _time.millis()
+            time.millis()
         );
         // save in requests metric
         self.metrics.aggregate(ExecutorMetricsKind::InRequests, 1);
-        // simply buffer the request
-        self.buffered_in_requests
-            .entry(from)
-            .or_default()
-            .extend(dots);
+        // try to process requests
+        self.process_requests(from, dots.into_iter(), time)
     }
 
     fn process_requests(
         &mut self,
         from: ShardId,
         dots: impl Iterator<Item = Dot>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         assert!(self.executor_index > 0);
         for dot in dots {
-            log!(
-                "p{}: @{} Graph::process_requests {:?} from {:?} | time = {}",
-                self.process_id,
-                self.executor_index,
-                dot,
-                from,
-                _time.millis()
-            );
             if let Some(vertex) = self.vertex_index.find(&dot) {
                 let vertex = vertex.read();
 
-                // only send the vertex if the shard that requested this vertex
-                // does not replicate it
+                // panic if the shard that requested this vertex replicates it
                 if vertex.cmd.replicated_by(&from) {
-                    log!(
+                    panic!(
                         "p{}: @{} Graph::process_requests {:?} is replicated by {:?} (WARN) | time = {}",
                         self.process_id,
                         self.executor_index,
                         dot,
                         from,
-                        _time.millis()
+                        time.millis()
                     )
                 } else {
-                    // if it doesn't replicate the command, send command info
+                    tracing::debug!(
+                        "p{}: @{} Graph::process_requests {:?} sending info to {:?} | time = {}",
+                        self.process_id,
+                        self.executor_index,
+                        dot,
+                        from,
+                        time.millis()
+                    );
                     self.out_request_replies.entry(from).or_default().push(
                         RequestReply::Info {
                             dot,
@@ -339,12 +365,13 @@ impl DependencyGraph {
                 // if we don't have it, then check if it's executed (in our
                 // snapshot)
                 if self.executed_clock.contains(&dot.source(), dot.sequence()) {
-                    log!(
-                        "p{}: @{} Graph::process_requests {:?} is already executed | time = {}",
+                    tracing::debug!(
+                        "p{}: @{} Graph::process_requests {:?} sending executed to {:?} | time = {}",
                         self.process_id,
                         self.executor_index,
                         dot,
-                        _time.millis()
+                        from,
+                        time.millis()
                     );
                     // if it's executed, notify the shard that it has already
                     // been executed
@@ -355,13 +382,13 @@ impl DependencyGraph {
                         .or_default()
                         .push(RequestReply::Executed { dot });
                 } else {
-                    log!(
-                        "p{}: @{} Graph::process_requests from {:?} for a dot {:?} we don't have | time = {}",
+                    tracing::debug!(
+                        "p{}: @{} Graph::process_requests {:?} buffered from {:?} | time = {}",
                         self.process_id,
                         self.executor_index,
-                        from,
                         dot,
-                        _time.millis()
+                        from,
+                        time.millis()
                     );
                     // buffer request again
                     self.buffered_in_requests
@@ -386,7 +413,7 @@ impl DependencyGraph {
         );
 
         for info in infos {
-            log!(
+            tracing::debug!(
                 "p{}: @{} Graph::handle_request_reply {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -402,11 +429,11 @@ impl DependencyGraph {
                 RequestReply::Executed { dot } => {
                     // update executed clock
                     self.executed_clock.add(&dot.source(), dot.sequence());
-                    self.added_to_executed_clock.as_mut().expect("added_to_executed_clock should be set in partial replication").insert(dot);
+                    self.added_to_executed_clock.insert(dot);
                     // check pending
                     let dots = vec![dot];
-                    let mut total_found = 0;
-                    self.check_pending(dots, &mut total_found, time);
+                    let mut total_scc_count = 0;
+                    self.check_pending(dots, &mut total_scc_count, time);
                 }
             }
         }
@@ -415,12 +442,13 @@ impl DependencyGraph {
     #[must_use]
     fn find_scc(
         &mut self,
+        first_find: bool,
         dot: Dot,
-        total_found: &mut usize,
+        total_scc_count: &mut usize,
         time: &dyn SysTime,
     ) -> FinderInfo {
         assert_eq!(self.executor_index, 0);
-        log!(
+        tracing::trace!(
             "p{}: @{} Graph::find_scc {:?} | time = {}",
             self.process_id,
             self.executor_index,
@@ -428,23 +456,35 @@ impl DependencyGraph {
             time.millis()
         );
         // execute tarjan's algorithm
-        let mut found = 0;
-        let finder_result = self.strong_connect(dot, &mut found);
+        let mut scc_count = 0;
+        let mut missing_deps_count = 0;
+        let finder_result = self.strong_connect(
+            first_find,
+            dot,
+            &mut scc_count,
+            &mut missing_deps_count,
+        );
 
-        // update total found
-        *total_found += found;
+        // update total scc's found
+        *total_scc_count += scc_count;
 
         // get sccs
         let sccs = self.finder.sccs();
 
         // save new SCCs
-        let mut dots = Vec::with_capacity(found);
+        let mut dots = Vec::with_capacity(scc_count);
         sccs.into_iter().for_each(|scc| {
             self.save_scc(scc, &mut dots, time);
         });
 
         // reset finder state and get visited dots
-        let visited = self.finder.finalize(&self.vertex_index);
+        let (visited, missing_deps) = self.finder.finalize(&self.vertex_index);
+        assert!(
+            // we can have a count higher the the number of dependencies if
+            // there are cycles
+            missing_deps.len() <= missing_deps_count,
+            "more missing deps than the ones counted"
+        );
 
         // NOTE: what follows must be done even if
         // `FinderResult::MissingDependency` was returned - it's possible that
@@ -454,13 +494,28 @@ impl DependencyGraph {
         // save new SCCs if any were found
         match finder_result {
             FinderResult::Found => FinderInfo::Found(dots),
-            FinderResult::MissingDependencies(deps) => {
-                FinderInfo::MissingDependencies(dots, deps, visited)
+            FinderResult::MissingDependencies(result_missing_deps) => {
+                // if `MissingDependencies` was returned, then `missing_deps`
+                // must be empty since we give up on the first missing dep
+                assert!(
+                    missing_deps.is_empty(),
+                    "if MissingDependencies is returned, missing_deps must be empty"
+                );
+                FinderInfo::MissingDependencies(
+                    dots,
+                    visited,
+                    result_missing_deps,
+                )
             }
             FinderResult::NotPending => FinderInfo::NotPending,
-            FinderResult::NotFound => panic!(
-                "either there's a missing dependency, or we should find an SCC"
-            ),
+            FinderResult::NotFound => {
+                // in this case, `missing_deps` must be non-empty
+                assert!(
+                    !missing_deps.is_empty(),
+                    "either there's a missing dependency, or we should find an SCC"
+                );
+                FinderInfo::MissingDependencies(dots, visited, missing_deps)
+            }
         }
     }
 
@@ -472,7 +527,7 @@ impl DependencyGraph {
             .collect(ExecutorMetricsKind::ChainSize, scc.len() as u64);
 
         scc.into_iter().for_each(|dot| {
-            log!(
+            tracing::trace!(
                 "p{}: @{} Graph::save_scc removing {:?} from indexes | time = {}",
                 self.process_id,
                 self.executor_index,
@@ -490,11 +545,11 @@ impl DependencyGraph {
             dots.push(dot);
 
             // get command
-            let (duration, cmd) = vertex.into_command(time);
+            let (duration_ms, cmd) = vertex.into_command(time);
 
             // save execution delay metric
             self.metrics
-                .collect(ExecutorMetricsKind::ExecutionDelay, duration);
+                .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
             // add command to commands to be executed
             self.to_execute.push(cmd);
@@ -503,22 +558,22 @@ impl DependencyGraph {
 
     fn index_pending(
         &mut self,
-        missing_deps: HashSet<Dependency>,
         dot: Dot,
-        _time: &dyn SysTime,
+        missing_deps: HashSet<Dependency>,
+        time: &dyn SysTime,
     ) {
         let mut requests = 0;
         for dep in missing_deps {
             if let Some((dep_dot, target_shard)) =
-                self.pending_index.index(dep, dot)
+                self.pending_index.index(&dep, dot)
             {
-                log!(
+                tracing::debug!(
                     "p{}: @{} Graph::index_pending will ask {:?} to {:?} | time = {}",
                     self.process_id,
                     self.executor_index,
                     dep_dot,
                     target_shard,
-                    _time.millis()
+                    time.millis()
                 );
                 requests += 1;
                 self.out_requests
@@ -535,14 +590,14 @@ impl DependencyGraph {
     fn check_pending(
         &mut self,
         mut dots: Vec<Dot>,
-        total_found: &mut usize,
+        total_scc_count: &mut usize,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
         while let Some(dot) = dots.pop() {
             // get pending commands that depend on this dot
             if let Some(pending) = self.pending_index.remove(&dot) {
-                log!(
+                tracing::debug!(
                     "p{}: @{} Graph::try_pending {:?} depended on {:?} | time = {}",
                     self.process_id,
                     self.executor_index,
@@ -550,7 +605,15 @@ impl DependencyGraph {
                     dot,
                     time.millis()
                 );
-                self.try_pending(pending, &mut dots, total_found, time);
+                self.try_pending(pending, &mut dots, total_scc_count, time);
+            } else {
+                tracing::debug!(
+                    "p{}: @{} Graph::try_pending nothing depended on {:?} | time = {}",
+                    self.process_id,
+                    self.executor_index,
+                    dot,
+                    time.millis()
+                );
             }
         }
         // once there are no more dots to try, no command in pending should be
@@ -561,17 +624,18 @@ impl DependencyGraph {
         &mut self,
         pending: HashSet<Dot>,
         dots: &mut Vec<Dot>,
-        total_found: &mut usize,
+        total_scc_count: &mut usize,
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
         // try to find new SCCs for each of those commands
         let mut visited = HashSet::new();
+        let first_find = false;
 
         for dot in pending {
             // only try to find new SCCs from non-visited commands
             if !visited.contains(&dot) {
-                match self.find_scc(dot, total_found, time) {
+                match self.find_scc(first_find, dot, total_scc_count, time) {
                     FinderInfo::Found(new_dots) => {
                         // reset visited
                         visited.clear();
@@ -582,9 +646,12 @@ impl DependencyGraph {
                     }
                     FinderInfo::MissingDependencies(
                         new_dots,
-                        missing_deps,
                         new_visited,
+                        missing_deps,
                     ) => {
+                        // update pending
+                        self.index_pending(dot, missing_deps, time);
+
                         if !new_dots.is_empty() {
                             // if we found a new SCC, reset visited;
                             visited.clear();
@@ -598,9 +665,6 @@ impl DependencyGraph {
                         // if new SCCs were found, now there are more
                         // child dots to check
                         dots.extend(new_dots);
-
-                        // update pending
-                        self.index_pending(missing_deps, dot, time);
                     }
                     FinderInfo::NotPending => {
                         // this happens if the pending dot is no longer
@@ -611,17 +675,25 @@ impl DependencyGraph {
         }
     }
 
-    fn strong_connect(&mut self, dot: Dot, found: &mut usize) -> FinderResult {
+    fn strong_connect(
+        &mut self,
+        first_find: bool,
+        dot: Dot,
+        scc_count: &mut usize,
+        missing_deps_count: &mut usize,
+    ) -> FinderResult {
         assert_eq!(self.executor_index, 0);
         // get the vertex
         match self.vertex_index.find(&dot) {
             Some(vertex) => self.finder.strong_connect(
+                first_find,
                 dot,
                 &vertex,
                 &mut self.executed_clock,
                 &mut self.added_to_executed_clock,
                 &self.vertex_index,
-                found,
+                scc_count,
+                missing_deps_count,
             ),
             None => {
                 // in this case this `dot` is no longer pending
@@ -1268,13 +1340,15 @@ mod tests {
         );
 
         // create ready commands counter and try to find an SCC
+        let first_find = true;
         let mut ready_commands = 0;
-        let finder_info = queue.find_scc(root_dot, &mut ready_commands, &time);
+        let finder_info =
+            queue.find_scc(first_find, root_dot, &mut ready_commands, &time);
 
         if let FinderInfo::MissingDependencies(
             to_be_executed,
+            _visited,
             missing_deps,
-            _,
         ) = finder_info
         {
             // check the missing dot

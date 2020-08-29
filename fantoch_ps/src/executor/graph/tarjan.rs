@@ -3,7 +3,7 @@ use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::log;
+use fantoch::singleton;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cmp;
@@ -29,6 +29,7 @@ pub struct TarjanSCCFinder {
     id: usize,
     stack: Vec<Dot>,
     sccs: Vec<SCC>,
+    missing_deps: HashSet<Dependency>,
 }
 
 impl TarjanSCCFinder {
@@ -45,6 +46,7 @@ impl TarjanSCCFinder {
             id: 0,
             stack: Vec::new(),
             sccs: Vec::new(),
+            missing_deps: HashSet::new(),
         }
     }
 
@@ -57,7 +59,10 @@ impl TarjanSCCFinder {
     /// Returns a set with all dots visited.
     /// It also resets the ids of all vertices still on the stack.
     #[must_use]
-    pub fn finalize(&mut self, vertex_index: &VertexIndex) -> HashSet<Dot> {
+    pub fn finalize(
+        &mut self,
+        vertex_index: &VertexIndex,
+    ) -> (HashSet<Dot>, HashSet<Dependency>) {
         let _process_id = self.process_id;
         // reset id
         self.id = 0;
@@ -65,7 +70,7 @@ impl TarjanSCCFinder {
         // visited dots
         let mut visited = HashSet::new();
         while let Some(dot) = self.stack.pop() {
-            log!(
+            tracing::trace!(
                 "p{}: Finder::finalize removing {:?} from stack",
                 _process_id,
                 dot
@@ -85,19 +90,21 @@ impl TarjanSCCFinder {
             // add dot to set of visited
             visited.insert(dot);
         }
-        // return visited dots
-        visited
+        // return visited dots and missing dependencies (if any)
+        (visited, std::mem::take(&mut self.missing_deps))
     }
 
     /// Tries to find an SCC starting from root `dot`.
     pub fn strong_connect(
         &mut self,
+        first_find: bool,
         dot: Dot,
         vertex_ref: &VertexRef<'_>,
         executed_clock: &mut AEClock<ProcessId>,
-        added_to_executed_clock: &mut Option<HashSet<Dot>>,
+        added_to_executed_clock: &mut HashSet<Dot>,
         vertex_index: &VertexIndex,
-        found: &mut usize,
+        scc_count: &mut usize,
+        missing_deps_count: &mut usize,
     ) -> FinderResult {
         // update id
         self.id += 1;
@@ -113,7 +120,7 @@ impl TarjanSCCFinder {
         vertex.on_stack = true;
         self.stack.push(dot);
 
-        log!(
+        tracing::debug!(
             "p{}: Finder::strong_connect {:?} with id {}",
             self.process_id,
             dot,
@@ -133,7 +140,7 @@ impl TarjanSCCFinder {
             let dep_dot = vertex.deps[i].dot;
 
             if ignore(dep_dot) {
-                log!(
+                tracing::trace!(
                     "p{}: Finder::strong_connect ignoring dependency {:?}",
                     self.process_id,
                     dep_dot
@@ -144,32 +151,24 @@ impl TarjanSCCFinder {
             match vertex_index.find(&dep_dot) {
                 None => {
                     let dep = vertex.deps[i].clone();
-                    let missing_deps = if self.config.shards() == 1 {
-                        std::iter::once(dep).collect()
-                    } else {
-                        // if partial replication, add remaining deps as missing
-                        // dependencies; this makes sure that we request all
-                        // needed dependencies in a single request
-                        std::iter::once(dep)
-                            .chain(
-                                (i..vertex.deps.len())
-                                    .map(|i| &vertex.deps[i])
-                                    .filter(|extra_dep| {
-                                        // only request non-executed
-                                        // dependencies
-                                        !ignore(extra_dep.dot)
-                                    })
-                                    .cloned(),
-                            )
-                            .collect()
-                    };
-                    log!(
-                        "p{}: Finder::strong_connect missing {:?} | {:?}",
+                    tracing::debug!(
+                        "p{}: Finder::strong_connect missing {:?}",
                         self.process_id,
-                        dep_dot,
-                        missing_deps
+                        dep,
                     );
-                    return FinderResult::MissingDependencies(missing_deps);
+                    if self.config.shards() == 1 || !first_find {
+                        return FinderResult::MissingDependencies(singleton![
+                            dep
+                        ]);
+                    } else {
+                        // if partial replication *and* it's the first search
+                        // we're doing for the root dot, simply save this `dep`
+                        // as a missing dependency but keep going; this makes
+                        // sure that we will request all missing dependencies in
+                        // a single request
+                        self.missing_deps.insert(dep);
+                        *missing_deps_count += 1;
+                    };
                 }
                 Some(dep_vertex_ref) => {
                     // get vertex
@@ -177,7 +176,7 @@ impl TarjanSCCFinder {
 
                     // if not visited, visit
                     if dep_vertex.id == 0 {
-                        log!(
+                        tracing::trace!(
                             "p{}: Finder::strong_connect non-visited {:?}",
                             self.process_id,
                             dep_dot
@@ -189,14 +188,20 @@ impl TarjanSCCFinder {
 
                         // OPTIMIZATION: passing the dep vertex ref as an
                         // argument to `strong_connect` avoids double look-up
+                        let mut dep_missing_deps_count = 0;
                         let result = self.strong_connect(
+                            first_find,
                             dep_dot,
                             &dep_vertex_ref,
                             executed_clock,
                             added_to_executed_clock,
                             vertex_index,
-                            found,
+                            scc_count,
+                            &mut dep_missing_deps_count,
                         );
+                        // update missing deps count with the number of missing
+                        // deps of our dep
+                        *missing_deps_count += dep_missing_deps_count;
 
                         // if missing dependency, give up
                         if let FinderResult::MissingDependencies(_) = result {
@@ -215,7 +220,7 @@ impl TarjanSCCFinder {
                     } else {
                         // if visited and on the stack
                         if dep_vertex.on_stack {
-                            log!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
+                            tracing::trace!("p{}: Finder::strong_connect dependency on stack {:?}", self.process_id, dep_dot);
                             // min low with dep id
                             vertex.low = cmp::min(vertex.low, dep_vertex.id);
                         }
@@ -230,7 +235,7 @@ impl TarjanSCCFinder {
         // if after visiting all neighbors, an SCC was found if vertex.id ==
         // vertex.low
         // - good news: the SCC members are on the stack
-        if vertex.id == vertex.low {
+        if *missing_deps_count == 0 && vertex.id == vertex.low {
             let mut scc = SCC::new();
 
             // drop guards
@@ -244,7 +249,7 @@ impl TarjanSCCFinder {
                     .pop()
                     .expect("there should be an SCC member on the stack");
 
-                log!(
+                tracing::debug!(
                     "p{}: Finder::strong_connect new SCC member {:?}",
                     self.process_id,
                     member_dot
@@ -256,7 +261,7 @@ impl TarjanSCCFinder {
                     .expect("stack member should exist");
 
                 // increment number of commands found
-                *found += 1;
+                *scc_count += 1;
 
                 // get its vertex and change its `on_stack` value
                 let mut member_vertex = member_vertex_ref.write();
@@ -292,11 +297,11 @@ impl TarjanSCCFinder {
                 // member_dot     );
                 // }
                 executed_clock.add(&member_dot.source(), member_dot.sequence());
-                if let Some(added) = added_to_executed_clock.as_mut() {
-                    added.insert(member_dot);
+                if self.config.shards() > 1 {
+                    added_to_executed_clock.insert(member_dot);
                 }
 
-                log!(
+                tracing::trace!(
                     "p{}: Finder::strong_connect executed clock {:?}",
                     self.process_id,
                     executed_clock
@@ -319,10 +324,10 @@ impl TarjanSCCFinder {
 
 #[derive(Debug, Clone)]
 pub struct Vertex {
-    dot: Dot,
+    pub dot: Dot,
     pub cmd: Command,
     pub deps: Vec<Dependency>,
-    start_time: u64,
+    pub start_time_ms: u64,
     // specific to tarjan's algorithm
     id: usize,
     low: usize,
@@ -336,12 +341,12 @@ impl Vertex {
         deps: Vec<Dependency>,
         time: &dyn SysTime,
     ) -> Self {
-        let start_time = time.millis();
+        let start_time_ms = time.millis();
         Self {
             dot,
             cmd,
             deps,
-            start_time,
+            start_time_ms,
             id: 0,
             low: 0,
             on_stack: false,
@@ -350,13 +355,8 @@ impl Vertex {
 
     /// Consumes the vertex, returning its command.
     pub fn into_command(self, time: &dyn SysTime) -> (u64, Command) {
-        let end_time = time.millis();
-        let duration = end_time - self.start_time;
-        (duration, self.cmd)
-    }
-
-    /// Retrieves vertex's dot.
-    pub fn dot(&self) -> Dot {
-        self.dot
+        let end_time_ms = time.millis();
+        let duration_ms = end_time_ms - self.start_time_ms;
+        (duration_ms, self.cmd)
     }
 }

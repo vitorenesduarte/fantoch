@@ -1,4 +1,3 @@
-use crate::log;
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
 use crate::run::rw::Rw;
@@ -14,7 +13,7 @@ pub async fn execution_logger_task<P>(
 ) where
     P: Protocol,
 {
-    println!("[execution_logger] started with log {}", execution_log);
+    tracing::info!("[execution_logger] started with log {}", execution_log);
 
     // create execution log file (truncating it if already exists)
     let file = File::create(execution_log)
@@ -34,12 +33,12 @@ pub async fn execution_logger_task<P>(
     loop {
         tokio::select! {
             execution_info = from_executors.recv() => {
-                log!("[executor_logger] from parent: {:?}", execution_info);
+                tracing::trace!("[executor_logger] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     // write execution info to file
                     logger.write(&execution_info).await;
                 } else {
-                    println!("[executor_logger] error while receiving execution info from parent");
+                    tracing::warn!("[executor_logger] error while receiving execution info from parent");
                 }
             }
             _ = interval.tick()  => {

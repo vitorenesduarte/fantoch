@@ -1,6 +1,6 @@
+use super::VertexIndex;
 use fantoch::config::Config;
-use fantoch::id::{ProcessId, ShardId};
-use fantoch::log;
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::HashSet;
@@ -10,8 +10,8 @@ use threshold::EventSet;
 
 // epoch length is 1s
 const EPOCH_MILLIS: u64 = 1000;
-// executed clock is leveled every 3 seconds
-const EPOCH_LEVEL_AGE: u64 = 3;
+// executed clock is leveled to the level of my shard 10 seconds ago
+const EPOCH_LEVEL_AGE: u64 = 10;
 
 #[derive(Clone)]
 pub struct LevelExecutedClock {
@@ -61,13 +61,14 @@ impl LevelExecutedClock {
     pub fn maybe_level(
         &mut self,
         executed_clock: &mut AEClock<ProcessId>,
+        vertex_index: &VertexIndex,
         time: &dyn SysTime,
-    ) {
+    ) -> Vec<Dot> {
         let now = self.maybe_update_epoch(executed_clock, time);
         if let Some((epoch, _)) = self.to_level.get(0) {
             // compute age of this epoch
             let epoch_age = now - epoch;
-            log!(
+            tracing::debug!(
                 "p{}: LevelExecutedClock::maybe_level now {} | epoch {} | age {}",
                 self.process_id,
                 now,
@@ -82,26 +83,66 @@ impl LevelExecutedClock {
                     .pop_front()
                     .expect("there should be a front to level");
 
-                log!(
+                tracing::debug!(
                     "p{}: LevelExecutedClock::maybe_update_epoch before = {:?}",
                     self.process_id,
                     executed_clock
                 );
 
+                let mut maybe_executed = Vec::new();
+
                 // level all the entries that are not from my shard to what I've
-                // executed from my shard at that epoch
+                // executed from my shard at that epoch (only if there are no
+                // pending commands on up to that)
                 self.not_shard_process_ids.iter().for_each(|peer_id| {
-                    executed_clock.add_range(peer_id, 1, executed);
+                    let level_from = executed_clock
+                        .get(peer_id)
+                        .expect("peer should be in executed clock")
+                        .frontier() + 1;
+                    // compute up to which value we can level; if there are no
+                    // pending command up to `executed`, then level up to that;
+                    // if there are, then level up to the command prior the
+                    // oldest pending one
+                    let mut level_up_to = executed;
+
+                    // check if we can level all command up to `executed`
+                    for event in level_from..=executed {
+                        let dot = Dot::new(*peer_id, event);
+                        if vertex_index.contains(&dot) {
+                            // if this command is pending, then we can only level
+                            // up to its prior command
+                            level_up_to = event - 1;
+                            break;
+                        } else {
+                            // update set of maybe executed dots (this is a maybe
+                            // since this dot may already exist as an above
+                            // exception in the executed clock)
+                            maybe_executed.push(dot);
+                        }
+                    }
+
+                    // level this peer's entry in the executed clock
+                    executed_clock.add_range(peer_id, level_from, level_up_to);
+                    tracing::debug!(
+                        "p{}: LevelExecutedClock::maybe_update_epoch peer {} leveled up to {}",
+                        self.process_id,
+                        peer_id,
+                        level_up_to
+                    );
                 });
 
-                log!(
+                tracing::debug!(
                     "p{}: LevelExecutedClock::maybe_update_epoch after {} = {:?}",
                     self.process_id,
                     executed,
                     executed_clock
                 );
+
+                return maybe_executed;
             }
         }
+
+        Vec::new()
     }
 
     fn maybe_update_epoch(
@@ -126,7 +167,7 @@ impl LevelExecutedClock {
                         })
                         .min()
                         .expect("min executed should exist");
-                    log!(
+                    tracing::debug!(
                         "p{}: LevelExecutedClock::maybe_update_epoch next epoch = {} | executed = {} | time = {}",
                         self.process_id,
                         now,
@@ -139,7 +180,7 @@ impl LevelExecutedClock {
                 }
             }
             None => {
-                log!(
+                tracing::debug!(
                     "p{}: LevelExecutedClock::maybe_update_epoch first epoch: {}",
                     self.process_id,
                     now
