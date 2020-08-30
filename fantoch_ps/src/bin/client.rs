@@ -4,6 +4,7 @@ use clap::{App, Arg};
 use color_eyre::Report;
 use fantoch::client::{KeyGen, ShardGen, Workload};
 use fantoch::id::ClientId;
+use fantoch::info;
 use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
@@ -204,15 +205,15 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
     let stack_size = common::parse_stack_size(matches.value_of("stack_size"));
     let cpus = common::parse_cpus(matches.value_of("cpus"));
 
-    tracing::info!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
-    tracing::info!("client number: {}", ids.len());
-    tracing::info!("addresses: {:?}", addresses);
-    tracing::info!("workload: {:?}", workload);
-    tracing::info!("tcp_nodelay: {:?}", tcp_nodelay);
-    tracing::info!("channel buffer size: {:?}", channel_buffer_size);
-    tracing::info!("status frequency: {:?}", status_frequency);
-    tracing::info!("metrics file: {:?}", metrics_file);
-    tracing::info!("stack size: {:?}", stack_size);
+    info!("ids: {}-{}", ids.first().unwrap(), ids.last().unwrap());
+    info!("client number: {}", ids.len());
+    info!("addresses: {:?}", addresses);
+    info!("workload: {:?}", workload);
+    info!("tcp_nodelay: {:?}", tcp_nodelay);
+    info!("channel buffer size: {:?}", channel_buffer_size);
+    info!("status frequency: {:?}", status_frequency);
+    info!("metrics file: {:?}", metrics_file);
+    info!("stack size: {:?}", stack_size);
 
     let args = (
         ids,

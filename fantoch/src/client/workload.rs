@@ -3,6 +3,7 @@ use crate::client::{KeyGen, ShardGen};
 use crate::command::Command;
 use crate::id::{RiflGen, ShardId};
 use crate::kvs::{KVOp, Value};
+use crate::trace;
 use crate::{HashMap, HashSet};
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
@@ -102,7 +103,7 @@ impl Workload {
             // generate new command
             Some(self.gen_cmd(rifl_gen, key_gen_state))
         } else {
-            tracing::trace!("c{:?}: done!", rifl_gen.source());
+            trace!("c{:?}: done!", rifl_gen.source());
             None
         }
     }

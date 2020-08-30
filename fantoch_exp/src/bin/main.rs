@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_zipf0.5";
+const RESULTS_DIR: &str = "../results";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -47,7 +47,11 @@ const PAYLOAD_SIZE: usize = 0; // 0 if no bottleneck, 4096 if paxos bottleneck
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "hang";
+const BRANCH: &str = "tracing_compile";
+
+// tracing max log level: compile-time level should be <= run-time level
+const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
+const MAX_LEVEL_RUN_TIME: tracing::Level = tracing::Level::INFO;
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -155,62 +159,64 @@ async fn main() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
         // 1024 / 4,
         // 1024 / 2,
-        // 1024,
+        1024,
         // 1024 * 2,
-        1024 * 4,  // 1
-        1024 * 8,  // 1
-        1024 * 12, // 1
+        1024 * 4,
+        1024 * 8,
+        1024 * 12,
         1024 * 16,
         1024 * 20,
-        1024 * 24, // 1
-        1024 * 32,
-        1024 * 36, // 1
-        1024 * 40, // 1
-        1024 * 48,
-        1024 * 56, // 1
-        1024 * 64,
-        1024 * 96,
-        1024 * 128,
-        1024 * 160,
-        1024 * 192,
-        1024 * 224,
-        1024 * 240,
-        1024 * 256,
-        1024 * 272,
+        1024 * 24,
+        // 1024 * 32,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
+        // 1024 * 64,
+        // 1024 * 96,
+        // 1024 * 128,
+        // 1024 * 160,
+        // 1024 * 192,
+        // 1024 * 224,
+        // 1024 * 240,
+        // 1024 * 256,
+        // 1024 * 272,
     ];
     let shards_per_command = 2;
     let shard_count = 5;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
-    let key_gen = KeyGen::Zipf {
-        coefficient: 0.5,
-        key_count: zipf_key_count,
-    };
-    // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
 
-    let skip = |_, _, _| false;
+    let mut workloads = Vec::new();
+    for coefficient in vec![0.6, 0.4, 0.2] {
+        let key_gen = KeyGen::Zipf {
+            coefficient,
+            key_count: zipf_key_count,
+        };
+
+        let workload = Workload::new(
+            shards_per_command,
+            ShardGen::Random { shard_count },
+            keys_per_shard,
+            key_gen,
+            COMMANDS_PER_CLIENT,
+            PAYLOAD_SIZE,
+        );
+        workloads.push(workload);
+    }
 
     // set shards in each config
     configs
         .iter_mut()
         .for_each(|(_protocol, config)| config.set_shards(shard_count));
 
-    let mut workloads = Vec::new();
-    let workload = Workload::new(
-        shards_per_command,
-        ShardGen::Random { shard_count },
-        keys_per_shard,
-        key_gen,
-        COMMANDS_PER_CLIENT,
-        PAYLOAD_SIZE,
-    );
-    workloads.push(workload);
+    let skip = |_, _, _| false;
 
     // create AWS planet
     let planet = Some(Planet::from("../latency_aws"));
@@ -275,7 +281,7 @@ where
         shard_count,
         BRANCH.to_string(),
         RUN_MODE,
-        FEATURES.to_vec(),
+        all_features(),
     )
     .await
     .wrap_err("local spawn")?;
@@ -323,7 +329,7 @@ where
         shard_count,
         BRANCH.to_string(),
         RUN_MODE,
-        FEATURES.to_vec(),
+        all_features(),
     )
     .await
     .wrap_err("baremetal spawn")?;
@@ -402,7 +408,7 @@ async fn do_aws_bench(
         MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS,
         BRANCH.to_string(),
         RUN_MODE,
-        FEATURES.to_vec(),
+        all_features(),
     )
     .await
     .wrap_err("aws spawn")?;
@@ -440,7 +446,8 @@ async fn run_bench(
     fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
-        FEATURES.to_vec(),
+        &MAX_LEVEL_RUN_TIME,
+        all_features(),
         testbed,
         planet,
         configs,
@@ -455,4 +462,12 @@ async fn run_bench(
         RESULTS_DIR,
     )
     .await
+}
+
+fn all_features() -> Vec<FantochFeature> {
+    let mut features = FEATURES.to_vec();
+    if let Some(feature) = FantochFeature::max_level(&MAX_LEVEL_COMPILE_TIME) {
+        features.push(feature);
+    }
+    features
 }

@@ -1,9 +1,8 @@
-use crate::log;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{Action, BaseProcess, Protocol};
-use fantoch::singleton;
 use fantoch::HashSet;
+use fantoch::{singleton, trace};
 use std::fmt::Debug;
 
 pub fn submit_actions<P>(
@@ -228,7 +227,7 @@ where
     fn add(&mut self, from: ProcessId, add: impl FnOnce(&mut I)) -> bool {
         assert!(self.participants.insert(from));
         add(&mut self.info);
-        log!(
+        trace!(
             "p{}: ShardsCommits::add {} | current info = {:?} | participants = {:?} | shard count = {}",
             self.process_id,
             from,

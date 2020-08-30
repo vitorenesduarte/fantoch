@@ -1,3 +1,4 @@
+use crate::warn;
 use color_eyre::Report;
 use std::fmt::Debug;
 use tokio::sync::mpsc::error::TrySendError;
@@ -41,10 +42,8 @@ where
             Err(TrySendError::Full(value)) => {
                 // if it's full, use `send` and `await` on it
                 match &self.name {
-                    Some(name) => {
-                        tracing::warn!("named channel {} is full", name)
-                    }
-                    None => tracing::warn!("unnamed channel is full"),
+                    Some(name) => warn!("named channel {} is full", name),
+                    None => warn!("unnamed channel is full"),
                 }
                 self.sender
                     .send(value)

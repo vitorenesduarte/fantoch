@@ -4,6 +4,48 @@ use crate::planet::{Planet, Region};
 use crate::HashMap;
 use std::hash::{Hash, Hasher};
 
+// warn and info logs are always enabled!
+// - debug is enabled if `max_level_debug` or `max_level_trace`
+// - trace is enabled if `max_level_trace`
+
+#[macro_export]
+macro_rules! warn {
+    ($( $args:expr ),*) => { tracing::warn!( $( $args ),* ); }
+}
+
+#[macro_export]
+macro_rules! info {
+    ($( $args:expr ),*) => { tracing::info!( $( $args ),* ); }
+}
+
+#[macro_export]
+#[cfg(any(feature = "max_level_debug", feature = "max_level_trace"))]
+macro_rules! debug {
+    ($( $args:expr ),*) => { tracing::debug!( $( $args ),* ); }
+}
+
+#[macro_export]
+#[cfg(not(any(feature = "max_level_debug", feature = "max_level_trace")))]
+macro_rules! debug {
+    ($( $args:expr ),*) => {
+        ()
+    };
+}
+
+#[macro_export]
+#[cfg(feature = "max_level_trace")]
+macro_rules! trace {
+    ($( $args:expr ),*) => { tracing::trace!( $( $args ),* ); }
+}
+
+#[macro_export]
+#[cfg(not(feature = "max_level_trace"))]
+macro_rules! trace {
+    ($( $args:expr ),*) => {
+        ()
+    };
+}
+
 /// create a singleton hash set
 #[macro_export]
 macro_rules! singleton {

@@ -2,6 +2,7 @@
 #[allow(dead_code)]
 pub mod protocol;
 
+use fantoch::info;
 use std::time::Duration;
 
 const DEFAULT_TCP_NODELAY: bool = true;
@@ -17,7 +18,7 @@ pub fn tokio_runtime(
     // get number of cpus
     let available = num_cpus::get();
     let cpus = cpus.unwrap_or(available);
-    tracing::info!("cpus: {} of {}", cpus, available);
+    info!("cpus: {} of {}", cpus, available);
 
     // create tokio runtime
     tokio::runtime::Builder::new()

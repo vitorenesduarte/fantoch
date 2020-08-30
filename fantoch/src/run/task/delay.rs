@@ -1,4 +1,5 @@
 use super::chan::{ChannelReceiver, ChannelSender};
+use crate::warn;
 use std::collections::VecDeque;
 use tokio::time::{self, Duration, Instant};
 
@@ -24,7 +25,7 @@ pub async fn delay_task<M>(
                     _ = time::delay_until(*next_instant) => {
                         let msg = dequeue(&mut queue);
                         if let Err(e) = to.send(msg).await {
-                            tracing::warn!("[delay_task] error forwarding message: {:?}", e);
+                            warn!("[delay_task] error forwarding message: {:?}", e);
                             break;
                         }
                     }
@@ -48,7 +49,7 @@ fn enqueue<M>(
     } else {
         if !*error_shown {
             *error_shown = true;
-            tracing::warn!("[delay_task] error receiving message from parent");
+            warn!("[delay_task] error receiving message from parent");
         }
     }
 }

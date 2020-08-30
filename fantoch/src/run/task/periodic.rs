@@ -1,5 +1,6 @@
 use crate::protocol::Protocol;
 use crate::run::prelude::*;
+use crate::{trace, warn};
 use tokio::time::{self, Duration, Instant, Interval};
 
 // TODO: check async-timer for <1ms intervals
@@ -41,11 +42,7 @@ where
     events
         .into_iter()
         .map(|(event, duration)| {
-            tracing::trace!(
-                "[periodic] event: {:?} | interval {:?}",
-                event,
-                duration
-            );
+            trace!("[periodic] event: {:?} | interval {:?}", event, duration);
 
             // create event msg
             let event_msg = FromPeriodicMessage::Event(event);
@@ -211,7 +208,7 @@ async fn periodic_task_send_msg<P, R>(
     R: Clone + 'static,
 {
     if let Err(e) = periodic_to_workers.forward(msg).await {
-        tracing::warn!("[periodic] error sending message to workers: {:?}", e);
+        warn!("[periodic] error sending message to workers: {:?}", e);
     }
 }
 
@@ -228,9 +225,7 @@ async fn periodic_task_inspect<P, R>(
         periodic_task_send_msg(periodic_to_workers, inspect_msg).await;
     } else {
         if !*error_shown {
-            tracing::warn!(
-                "[periodic] error while receiving new inspect message"
-            );
+            warn!("[periodic] error while receiving new inspect message");
             *error_shown = true;
         }
     }

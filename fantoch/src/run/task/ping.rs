@@ -2,6 +2,7 @@ use super::chan::ChannelSender;
 use crate::id::{ProcessId, ShardId};
 use crate::run::prelude::*;
 use crate::HashMap;
+use crate::{info, trace, warn};
 use fantoch_prof::metrics::Histogram;
 use std::net::IpAddr;
 use tokio::time::{self, Duration};
@@ -23,12 +24,12 @@ pub async fn ping_task(
     let ping_interval = ping_interval.unwrap();
 
     // create tokio interval
-    tracing::trace!("[ping_task] interval {:?}", ping_interval);
+    trace!("[ping_task] interval {:?}", ping_interval);
     let mut ping_interval = time::interval(ping_interval);
 
     // create another tokio interval
     let millis = Duration::from_millis(PING_SHOW_INTERVAL);
-    tracing::trace!("[ping_task] show interval {:?}", millis);
+    trace!("[ping_task] show interval {:?}", millis);
     let mut ping_show_interval = time::interval(millis);
 
     //  create ping stats
@@ -81,9 +82,7 @@ async fn ping_task_ping(
                     .to_string();
 
                 if stdout.is_empty() {
-                    tracing::warn!(
-                        "[ping_task] ping output was empty; trying again..."
-                    )
+                    warn!("[ping_task] ping output was empty; trying again...")
                 } else {
                     break stdout;
                 }
@@ -113,7 +112,7 @@ fn ping_task_show(
     >,
 ) {
     for (process_id, (_, _, _, histogram)) in ping_stats {
-        tracing::warn!("[ping_task] {}: {:?}", process_id, histogram);
+        info!("[ping_task] {}: {:?}", process_id, histogram);
     }
 }
 
@@ -131,14 +130,11 @@ async fn ping_task_sort(
             let sorted_processes =
                 sort_by_distance(process_id, shard_id, &ping_stats);
             if let Err(e) = sort_request.send(sorted_processes).await {
-                tracing::warn!(
-                    "[ping_task] error sending message to parent: {:?}",
-                    e
-                );
+                warn!("[ping_task] error sending message to parent: {:?}", e);
             }
         }
         None => {
-            tracing::warn!("[ping_task] error receiving message from parent");
+            warn!("[ping_task] error receiving message from parent");
         }
     }
 }

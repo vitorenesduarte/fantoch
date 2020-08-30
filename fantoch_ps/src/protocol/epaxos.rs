@@ -1,5 +1,4 @@
 use crate::executor::GraphExecutor;
-use crate::log;
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
@@ -12,13 +11,12 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
-use fantoch::singleton;
 use fantoch::time::SysTime;
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use threshold::VClock;
-use tracing::instrument;
 
 pub type EPaxosSequential = EPaxos<SequentialKeyDeps>;
 pub type EPaxosLocked = EPaxos<LockedKeyDeps>;
@@ -197,7 +195,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
     }
 
     /// Handles a submit operation by a client.
-    #[instrument(skip(self, dot, cmd))]
+    // #[instrument(skip(self, dot, cmd))]
     fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
@@ -221,7 +219,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         });
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
+    // #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -231,7 +229,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         remote_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -297,7 +295,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         });
     }
 
-    #[instrument(skip(self, from, dot, deps, _time))]
+    // #[instrument(skip(self, from, dot, deps, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
@@ -305,7 +303,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -366,7 +364,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         }
     }
 
-    #[instrument(skip(self, from, dot, value, _time))]
+    // #[instrument(skip(self, from, dot, value, _time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
@@ -374,7 +372,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         value: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
@@ -429,7 +427,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         }
     }
 
-    #[instrument(skip(self, from, dot, ballot, value, _time))]
+    // #[instrument(skip(self, from, dot, ballot, value, _time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
@@ -438,7 +436,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         value: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
@@ -479,7 +477,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         self.to_processes.push(Action::ToSend { target, msg });
     }
 
-    #[instrument(skip(self, from, dot, ballot, _time))]
+    // #[instrument(skip(self, from, dot, ballot, _time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
@@ -487,7 +485,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         ballot: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
@@ -520,14 +518,14 @@ impl<KD: KeyDeps> EPaxos<KD> {
         }
     }
 
-    #[instrument(skip(self, from, dot, _time))]
+    // #[instrument(skip(self, from, dot, _time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
         dot: Dot,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
@@ -537,14 +535,14 @@ impl<KD: KeyDeps> EPaxos<KD> {
         self.cmds.commit(dot);
     }
 
-    #[instrument(skip(self, from, committed, _time))]
+    // #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
@@ -562,14 +560,14 @@ impl<KD: KeyDeps> EPaxos<KD> {
         }
     }
 
-    #[instrument(skip(self, from, stable, _time))]
+    // #[instrument(skip(self, from, stable, _time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
@@ -581,9 +579,9 @@ impl<KD: KeyDeps> EPaxos<KD> {
         self.bp.stable(stable_count);
     }
 
-    #[instrument(skip(self, _time))]
+    // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
             _time.micros()

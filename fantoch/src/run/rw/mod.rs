@@ -4,6 +4,7 @@ mod connection;
 // Re-exports.
 pub use connection::Connection;
 
+use crate::warn;
 use bytes::{Bytes, BytesMut};
 use futures::sink::{Sink, SinkExt};
 use futures::stream::StreamExt;
@@ -43,7 +44,7 @@ where
                 Some(value)
             }
             Some(Err(e)) => {
-                tracing::warn!("[rw] error while reading from stream: {:?}", e);
+                warn!("[rw] error while reading from stream: {:?}", e);
                 None
             }
             None => None,
@@ -56,7 +57,7 @@ where
     {
         let bytes = serialize(value);
         if let Err(e) = self.rw.send(bytes).await {
-            tracing::warn!("[rw] error while writing to sink: {:?}", e);
+            warn!("[rw] error while writing to sink: {:?}", e);
         }
     }
 
@@ -69,11 +70,11 @@ where
             futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_ready(cx))
                 .await
         {
-            tracing::warn!("[rw] error while polling sink ready: {:?}", e);
+            warn!("[rw] error while polling sink ready: {:?}", e);
         }
 
         if let Err(e) = Pin::new(&mut self.rw).start_send(bytes) {
-            tracing::warn!("[rw] error while starting send to sink: {:?}", e);
+            warn!("[rw] error while starting send to sink: {:?}", e);
         }
     }
 
@@ -82,7 +83,7 @@ where
             futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_flush(cx))
                 .await
         {
-            tracing::warn!("[rw] error while flushing sink: {:?}", e);
+            warn!("[rw] error while flushing sink: {:?}", e);
         }
     }
 }
