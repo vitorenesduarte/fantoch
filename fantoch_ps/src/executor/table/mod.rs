@@ -14,7 +14,6 @@ use fantoch::HashMap;
 use std::collections::BTreeMap;
 use std::mem;
 use threshold::{ARClock, EventSet};
-use tracing::instrument;
 
 type SortId = (u64, Dot);
 
@@ -139,7 +138,7 @@ impl VotesTable {
         }
     }
 
-    #[instrument(skip(self, dot, clock, rifl, op, votes))]
+    // #[instrument(skip(self, dot, clock, rifl, op, votes))]
     fn add(
         &mut self,
         dot: Dot,
@@ -171,7 +170,7 @@ impl VotesTable {
         self.add_votes(votes);
     }
 
-    #[instrument(skip(self, votes))]
+    // #[instrument(skip(self, votes))]
     fn add_votes(&mut self, votes: Vec<VoteRange>) {
         log!(
             "p{}: key={} Table::add_votes votes: {:?}",
@@ -197,7 +196,7 @@ impl VotesTable {
         );
     }
 
-    #[instrument(skip(self))]
+    // #[instrument(skip(self))]
     fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
         // compute *next* stable sort id:
         // - if clock 10 is stable, then we can execute all ops with an id

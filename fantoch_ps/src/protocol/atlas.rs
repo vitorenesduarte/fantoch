@@ -20,7 +20,6 @@ use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use threshold::VClock;
-use tracing::instrument;
 
 pub type AtlasSequential = Atlas<SequentialKeyDeps>;
 pub type AtlasLocked = Atlas<LockedKeyDeps>;
@@ -208,7 +207,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
 
 impl<KD: KeyDeps> Atlas<KD> {
     /// Handles a submit operation by a client.
-    #[instrument(skip(self, dot, cmd))]
+    // #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
@@ -249,7 +248,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         });
     }
 
-    #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
+    // #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -325,7 +324,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         });
     }
 
-    #[instrument(skip(self, from, dot, deps, _time))]
+    // #[instrument(skip(self, from, dot, deps, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
@@ -393,7 +392,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         }
     }
 
-    #[instrument(skip(self, from, dot, value, _time))]
+    // #[instrument(skip(self, from, dot, value, _time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
@@ -468,7 +467,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         }
     }
 
-    #[instrument(skip(self, from, dot, ballot, value, _time))]
+    // #[instrument(skip(self, from, dot, ballot, value, _time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
@@ -518,7 +517,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         self.to_processes.push(Action::ToSend { target, msg });
     }
 
-    #[instrument(skip(self, from, dot, ballot, _time))]
+    // #[instrument(skip(self, from, dot, ballot, _time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
@@ -553,7 +552,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         }
     }
 
-    #[instrument(skip(self, from, _from_shard_id, dot, deps, _time))]
+    // #[instrument(skip(self, from, _from_shard_id, dot, deps, _time))]
     fn handle_mshard_commit(
         &mut self,
         from: ProcessId,
@@ -600,7 +599,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         )
     }
 
-    #[instrument(skip(self, dot, deps, _time))]
+    // #[instrument(skip(self, dot, deps, _time))]
     fn handle_mshard_aggregated_commit(
         &mut self,
         dot: Dot,
@@ -636,7 +635,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         )
     }
 
-    #[instrument(skip(self, from, dot, _time))]
+    // #[instrument(skip(self, from, dot, _time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
@@ -653,7 +652,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         self.cmds.commit(dot);
     }
 
-    #[instrument(skip(self, from, committed, _time))]
+    // #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -678,7 +677,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         }
     }
 
-    #[instrument(skip(self, from, stable, _time))]
+    // #[instrument(skip(self, from, stable, _time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
@@ -697,7 +696,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         self.bp.stable(stable_count);
     }
 
-    #[instrument(skip(self, _time))]
+    // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",

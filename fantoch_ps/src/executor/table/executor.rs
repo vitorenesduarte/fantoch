@@ -8,7 +8,6 @@ use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
 
 #[derive(Clone)]
 pub struct TableExecutor {
@@ -87,7 +86,7 @@ impl Executor for TableExecutor {
 }
 
 impl TableExecutor {
-    #[instrument(skip(self, key, to_execute))]
+    // #[instrument(skip(self, key, to_execute))]
     fn execute<I>(&mut self, key: Key, to_execute: I)
     where
         I: Iterator<Item = (Rifl, KVOp)>,

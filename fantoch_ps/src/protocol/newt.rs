@@ -22,7 +22,6 @@ use serde::{Deserialize, Serialize};
 use std::mem;
 use std::time::Duration;
 use threshold::VClock;
-use tracing::instrument;
 
 pub type NewtSequential = Newt<SequentialKeyClocks>;
 pub type NewtAtomic = Newt<AtomicKeyClocks>;
@@ -266,7 +265,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
 
 impl<KC: KeyClocks> Newt<KC> {
     /// Handles a submit operation by a client.
-    #[instrument(skip(self, dot, cmd))]
+    // #[instrument(skip(self, dot, cmd))]
     fn handle_submit(
         &mut self,
         dot: Option<Dot>,
@@ -335,16 +334,16 @@ impl<KC: KeyClocks> Newt<KC> {
         });
     }
 
-    #[instrument(skip(
-        self,
-        from,
-        dot,
-        cmd,
-        quorum,
-        remote_clock,
-        votes,
-        time
-    ))]
+    // #[instrument(skip(
+    //     self,
+    //     from,
+    //     dot,
+    //     cmd,
+    //     quorum,
+    //     remote_clock,
+    //     votes,
+    //     time
+    // ))]
     fn handle_mcollect(
         &mut self,
         from: ProcessId,
@@ -464,7 +463,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, clock, remote_votes, _time))]
+    // #[instrument(skip(self, from, dot, clock, remote_votes, _time))]
     fn handle_mcollectack(
         &mut self,
         from: ProcessId,
@@ -560,7 +559,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, dot, clock, _time))]
+    // #[instrument(skip(self, from, dot, clock, _time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
@@ -647,7 +646,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, clock, _time))]
+    // #[instrument(skip(self, from, clock, _time))]
     fn handle_mcommit_clock(
         &mut self,
         from: ProcessId,
@@ -666,7 +665,7 @@ impl<KC: KeyClocks> Newt<KC> {
         self.max_commit_clock = std::cmp::max(self.max_commit_clock, clock);
     }
 
-    #[instrument(skip(self, dot, clock, _time))]
+    // #[instrument(skip(self, dot, clock, _time))]
     fn handle_mbump_to(&mut self, dot: Dot, clock: u64, _time: &dyn SysTime) {
         log!(
             "p{}: MBumpTo({:?}, {}) | time={}",
@@ -696,7 +695,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, detached, _time))]
+    // #[instrument(skip(self, detached, _time))]
     fn handle_mdetached(&mut self, detached: Votes, _time: &dyn SysTime) {
         log!(
             "p{}: MDetached({:?}) | time={}",
@@ -712,7 +711,7 @@ impl<KC: KeyClocks> Newt<KC> {
         self.to_executors.extend(execution_info);
     }
 
-    #[instrument(skip(self, from, dot, ballot, clock, _time))]
+    // #[instrument(skip(self, from, dot, ballot, clock, _time))]
     fn handle_mconsensus(
         &mut self,
         from: ProcessId,
@@ -764,7 +763,7 @@ impl<KC: KeyClocks> Newt<KC> {
         self.to_processes.push(Action::ToSend { target, msg });
     }
 
-    #[instrument(skip(self, from, dot, ballot, _time))]
+    // #[instrument(skip(self, from, dot, ballot, _time))]
     fn handle_mconsensusack(
         &mut self,
         from: ProcessId,
@@ -804,7 +803,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, _from_shard_id, dot, clock, _time))]
+    // #[instrument(skip(self, from, _from_shard_id, dot, clock, _time))]
     fn handle_mshard_commit(
         &mut self,
         from: ProcessId,
@@ -851,7 +850,7 @@ impl<KC: KeyClocks> Newt<KC> {
         )
     }
 
-    #[instrument(skip(self, dot, clock, _time))]
+    // #[instrument(skip(self, dot, clock, _time))]
     fn handle_mshard_aggregated_commit(
         &mut self,
         dot: Dot,
@@ -889,7 +888,7 @@ impl<KC: KeyClocks> Newt<KC> {
         )
     }
 
-    #[instrument(skip(self, from, dot, _time))]
+    // #[instrument(skip(self, from, dot, _time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
@@ -906,7 +905,7 @@ impl<KC: KeyClocks> Newt<KC> {
         self.cmds.commit(dot);
     }
 
-    #[instrument(skip(self, from, committed, _time))]
+    // #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -931,7 +930,7 @@ impl<KC: KeyClocks> Newt<KC> {
         }
     }
 
-    #[instrument(skip(self, from, stable, _time))]
+    // #[instrument(skip(self, from, stable, _time))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
@@ -950,7 +949,7 @@ impl<KC: KeyClocks> Newt<KC> {
         self.bp.stable(stable_count);
     }
 
-    #[instrument(skip(self, _time))]
+    // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
         log!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
@@ -968,7 +967,7 @@ impl<KC: KeyClocks> Newt<KC> {
         });
     }
 
-    #[instrument(skip(self, time))]
+    // #[instrument(skip(self, time))]
     fn handle_event_clock_bump(&mut self, time: &dyn SysTime) {
         log!(
             "p{}: PeriodicEvent::ClockBump | time={}",
@@ -991,7 +990,7 @@ impl<KC: KeyClocks> Newt<KC> {
         self.key_clocks.vote_all(min_clock, &mut self.detached);
     }
 
-    #[instrument(skip(self, _time))]
+    // #[instrument(skip(self, _time))]
     fn handle_event_send_detached(&mut self, _time: &dyn SysTime) {
         log!(
             "p{}: PeriodicEvent::SendDetached | time={}",
