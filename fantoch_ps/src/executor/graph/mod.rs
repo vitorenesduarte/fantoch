@@ -968,7 +968,7 @@ mod tests {
             ('A'..='D').map(|key| key.to_string()).collect();
 
         // create dots
-        let dots: Vec<_> = util::process_ids(shard_id, n)
+        let dots: Vec<_> = fantoch::util::process_ids(shard_id, n)
             .flat_map(|process_id| {
                 (1..=events_per_process)
                     .map(move |event| Dot::new(process_id, event as u64))

@@ -1,5 +1,4 @@
 use crate::executor::SlotExecutor;
-use crate::log;
 use crate::protocol::common::synod::{GCTrack, MultiSynod, MultiSynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -8,8 +7,8 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, Protocol, ProtocolMetrics,
 };
-use fantoch::singleton;
 use fantoch::time::SysTime;
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -205,7 +204,7 @@ impl FPaxos {
         cmd: Command,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MSpawnCommander({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
@@ -247,7 +246,7 @@ impl FPaxos {
         cmd: Command,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MAccept({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
@@ -288,7 +287,7 @@ impl FPaxos {
         slot: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MAccepted({:?}, {:?}) from {} | time={}",
             self.id(),
             ballot,
@@ -320,7 +319,7 @@ impl FPaxos {
 
     // #[instrument(skip(self, slot, cmd, _time))]
     fn handle_mchosen(&mut self, slot: u64, cmd: Command, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             slot,
@@ -352,7 +351,7 @@ impl FPaxos {
         committed: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
@@ -368,7 +367,7 @@ impl FPaxos {
 
     // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
             _time.micros()

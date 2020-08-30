@@ -1,11 +1,9 @@
 use crate::executor::GraphExecutor;
-use crate::log;
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::partial::{self, ShardsCommits};
-use crate::util;
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
@@ -14,8 +12,8 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
-use fantoch::singleton;
 use fantoch::time::SysTime;
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -72,7 +70,8 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
         );
         let to_processes = Vec::new();
         let to_executors = Vec::new();
-        let shard_processes = util::process_ids(shard_id, config.n()).collect();
+        let shard_processes =
+            fantoch::util::process_ids(shard_id, config.n()).collect();
         let buffered_commits = HashMap::new();
 
         // create `Atlas`
@@ -258,7 +257,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         remote_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -332,7 +331,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -400,7 +399,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         value: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
@@ -451,10 +450,9 @@ impl<KD: KeyDeps> Atlas<KD> {
         assert!(info.synod.handle(from, msg).is_none());
 
         // check if this dot is targetted to my shard
-        // TODO: fix this once we implement recovery for partial replication
-        let my_shard = util::process_ids(self.bp.shard_id, self.bp.config.n())
-            .any(|peer_id| peer_id == dot.source());
+        let my_shard = self.shard_processes.contains(&dot.source());
 
+        // TODO: fix this once we implement recovery for partial replication
         if self.gc_running() && my_shard {
             // if running gc and this dot belongs to my shard, then notify self
             // (i.e. the worker responsible for GC) with the committed dot
@@ -476,7 +474,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         value: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
@@ -525,7 +523,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         ballot: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
@@ -561,7 +559,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MShardCommit({:?}, {:?}) from shard {} | time={}",
             self.id(),
             dot,
@@ -606,7 +604,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MShardAggregatedCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
@@ -642,7 +640,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         dot: Dot,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
@@ -659,7 +657,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         committed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
@@ -684,7 +682,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         stable: Vec<(ProcessId, u64, u64)>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
@@ -698,7 +696,7 @@ impl<KD: KeyDeps> Atlas<KD> {
 
     // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
             _time.micros()
@@ -979,19 +977,19 @@ mod tests {
         let (mut atlas_3, _) = Atlas::<KD>::new(process_id_3, shard_id, config);
 
         // discover processes in all atlas
-        let sorted = util::sort_processes_by_distance(
+        let sorted = fantoch::util::sort_processes_by_distance(
             &europe_west2,
             &planet,
             processes.clone(),
         );
         atlas_1.discover(sorted);
-        let sorted = util::sort_processes_by_distance(
+        let sorted = fantoch::util::sort_processes_by_distance(
             &europe_west3,
             &planet,
             processes.clone(),
         );
         atlas_2.discover(sorted);
-        let sorted = util::sort_processes_by_distance(
+        let sorted = fantoch::util::sort_processes_by_distance(
             &us_west1,
             &planet,
             processes.clone(),
@@ -1026,8 +1024,11 @@ mod tests {
         let mut client_1 = Client::new(client_id, workload, status_frequency);
 
         // discover processes in client 1
-        let closest =
-            util::closest_process_per_shard(&client_region, &planet, processes);
+        let closest = fantoch::util::closest_process_per_shard(
+            &client_region,
+            &planet,
+            processes,
+        );
         client_1.connect(closest);
 
         // start client

@@ -1,5 +1,4 @@
 use crate::executor::TableExecutor;
-use crate::log;
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::common::table::{
     AtomicKeyClocks, FineLockedKeyClocks, KeyClocks, LockedKeyClocks,
@@ -14,9 +13,9 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
-use fantoch::singleton;
 use fantoch::time::SysTime;
 use fantoch::util;
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::mem;
@@ -44,7 +43,7 @@ pub struct Newt<KC: KeyClocks> {
     buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
     // bump to messages that arrived before the initial `MCollect` message
     buffered_bump_tos: HashMap<Dot, u64>,
-    // With many many operations, it can happen that logical clocks are
+    // With many many operations, it can happen that traceical clocks are
     // higher that current time (e.g. if it starts at 0 in simulation), and in
     // that case, the real time feature of newt doesn't work. Solution: track
     // the highest committed clock; when periodically bumping with real time,
@@ -292,7 +291,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // - for that reason, we'll store these votes locally and not recompute
         //   them once we receive the `MCollect` from self
         let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
-        log!(
+        trace!(
             "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
             self.id(),
             dot,
@@ -354,7 +353,7 @@ impl<KC: KeyClocks> Newt<KC> {
         mut votes: Votes,
         time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollect({:?}, {:?}, {:?}, {}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -412,7 +411,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // minimum value
             let (clock, process_votes) =
                 self.key_clocks.bump_and_vote(&cmd, remote_clock);
-            log!(
+            trace!(
                 "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
                 self.bp.process_id,
                 dot,
@@ -472,7 +471,7 @@ impl<KC: KeyClocks> Newt<KC> {
         remote_votes: Votes,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollectAck({:?}, {}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -568,7 +567,7 @@ impl<KC: KeyClocks> Newt<KC> {
         mut votes: Votes,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommit({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
@@ -653,7 +652,7 @@ impl<KC: KeyClocks> Newt<KC> {
         clock: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommitClock({}) | time={}",
             self.id(),
             clock,
@@ -667,7 +666,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
     // #[instrument(skip(self, dot, clock, _time))]
     fn handle_mbump_to(&mut self, dot: Dot, clock: u64, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: MBumpTo({:?}, {}) | time={}",
             self.id(),
             dot,
@@ -697,7 +696,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
     // #[instrument(skip(self, detached, _time))]
     fn handle_mdetached(&mut self, detached: Votes, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: MDetached({:?}) | time={}",
             self.id(),
             detached,
@@ -720,7 +719,7 @@ impl<KC: KeyClocks> Newt<KC> {
         clock: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
@@ -771,7 +770,7 @@ impl<KC: KeyClocks> Newt<KC> {
         ballot: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
@@ -812,7 +811,7 @@ impl<KC: KeyClocks> Newt<KC> {
         clock: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MShardCommit({:?}, {}) from shard {} | time={}",
             self.id(),
             dot,
@@ -857,7 +856,7 @@ impl<KC: KeyClocks> Newt<KC> {
         clock: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MShardAggregatedCommit({:?}, {}) | time={}",
             self.id(),
             dot,
@@ -895,7 +894,7 @@ impl<KC: KeyClocks> Newt<KC> {
         dot: Dot,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
@@ -912,7 +911,7 @@ impl<KC: KeyClocks> Newt<KC> {
         committed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
@@ -937,7 +936,7 @@ impl<KC: KeyClocks> Newt<KC> {
         stable: Vec<(ProcessId, u64, u64)>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
@@ -951,7 +950,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
     // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
             _time.micros()
@@ -969,7 +968,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
     // #[instrument(skip(self, time))]
     fn handle_event_clock_bump(&mut self, time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::ClockBump | time={}",
             self.id(),
             time.micros()
@@ -992,7 +991,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
     // #[instrument(skip(self, _time))]
     fn handle_event_send_detached(&mut self, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::SendDetached | time={}",
             self.id(),
             _time.micros()

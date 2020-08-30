@@ -1,5 +1,4 @@
 use crate::executor::GraphExecutor;
-use crate::log;
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
@@ -12,8 +11,8 @@ use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
-use fantoch::singleton;
 use fantoch::time::SysTime;
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -230,7 +229,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         remote_deps: HashSet<Dependency>,
         time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -304,7 +303,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         deps: HashSet<Dependency>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
@@ -373,7 +372,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         value: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommit({:?}, {:?}) | time={}",
             self.id(),
             dot,
@@ -437,7 +436,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         value: ConsensusValue,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensus({:?}, {}, {:?}) | time={}",
             self.id(),
             dot,
@@ -486,7 +485,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         ballot: u64,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MConsensusAck({:?}, {}) | time={}",
             self.id(),
             dot,
@@ -526,7 +525,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         dot: Dot,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MCommitDot({:?}) | time={}",
             self.id(),
             dot,
@@ -543,7 +542,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         committed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
@@ -568,7 +567,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         stable: Vec<(ProcessId, u64, u64)>,
         _time: &dyn SysTime,
     ) {
-        log!(
+        trace!(
             "p{}: MStable({:?}) from {} | time={}",
             self.id(),
             stable,
@@ -582,7 +581,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
 
     // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
-        log!(
+        trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
             _time.micros()

@@ -5,10 +5,10 @@ mod executor;
 // Re-exports.
 pub use executor::{TableExecutionInfo, TableExecutor};
 
-use crate::log;
 use crate::protocol::common::table::VoteRange;
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, Key};
+use fantoch::trace;
 use fantoch::util;
 use fantoch::HashMap;
 use std::collections::BTreeMap;
@@ -152,7 +152,7 @@ impl VotesTable {
         //   their dot
         let sort_id = (clock, dot);
 
-        log!(
+        trace!(
             "p{}: key={} Table::add {:?} {:?} | sort id {:?}",
             self.process_id,
             self.key,
@@ -172,7 +172,7 @@ impl VotesTable {
 
     // #[instrument(skip(self, votes))]
     fn add_votes(&mut self, votes: Vec<VoteRange>) {
-        log!(
+        trace!(
             "p{}: key={} Table::add_votes votes: {:?}",
             self.process_id,
             self.key,
@@ -188,7 +188,7 @@ impl VotesTable {
             // assert that the clock size didn't change
             assert_eq!(self.votes_clock.len(), self.n);
         });
-        log!(
+        trace!(
             "p{}: key={} Table::add_votes votes_clock: {:?}",
             self.process_id,
             self.key,
@@ -205,7 +205,7 @@ impl VotesTable {
         //   also execute it without 11 being stable, because, once 11 is
         //   stable, it will be the first to be executed either way
         let stable_clock = self.stable_clock();
-        log!(
+        trace!(
             "p{}: key={} Table::stable_ops stable_clock: {:?}",
             self.process_id,
             self.key,
@@ -232,7 +232,7 @@ impl VotesTable {
             remaining
         };
 
-        log!(
+        trace!(
             "p{}: key={} Table::stable_ops stable dots: {:?}",
             self.process_id,
             self.key,
