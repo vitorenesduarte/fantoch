@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_4";
+const RESULTS_DIR: &str = "../results";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -49,7 +49,7 @@ const CPUS: Option<usize> = None;
 // fantoch run config
 const BRANCH: &str = "tracing_compile";
 
-// tracing max log level
+// tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
 const MAX_LEVEL_RUN_TIME: tracing::Level = tracing::Level::INFO;
 
@@ -158,7 +158,7 @@ async fn main() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
@@ -167,18 +167,18 @@ async fn main() -> Result<(), Report> {
         // 1024 / 2,
         1024,
         // 1024 * 2,
-        1024 * 4, // 1
-        1024 * 8, // 1
-        // 1024 * 12, // 1
+        1024 * 4,
+        1024 * 8,
+        1024 * 12,
         1024 * 16,
-        // 1024 * 20,
-        // 1024 * 24, // 1
-        1024 * 32,
-        // 1024 * 36, // 1
-        // 1024 * 40, // 1
-        1024 * 48,
-        1024 * 56, // 1
-        1024 * 64,
+        1024 * 20,
+        1024 * 24,
+        // 1024 * 32,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
+        // 1024 * 64,
         // 1024 * 96,
         // 1024 * 128,
         // 1024 * 160,
@@ -192,29 +192,31 @@ async fn main() -> Result<(), Report> {
     let shard_count = 5;
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
-    let key_gen = KeyGen::Zipf {
-        coefficient: 0.1,
-        key_count: zipf_key_count,
-    };
-    // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };
 
-    let skip = |_, _, _| false;
+    let mut workloads = Vec::new();
+    for coefficient in vec![0.6, 0.4, 0.2] {
+        let key_gen = KeyGen::Zipf {
+            coefficient,
+            key_count: zipf_key_count,
+        };
+
+        let workload = Workload::new(
+            shards_per_command,
+            ShardGen::Random { shard_count },
+            keys_per_shard,
+            key_gen,
+            COMMANDS_PER_CLIENT,
+            PAYLOAD_SIZE,
+        );
+        workloads.push(workload);
+    }
 
     // set shards in each config
     configs
         .iter_mut()
         .for_each(|(_protocol, config)| config.set_shards(shard_count));
 
-    let mut workloads = Vec::new();
-    let workload = Workload::new(
-        shards_per_command,
-        ShardGen::Random { shard_count },
-        keys_per_shard,
-        key_gen,
-        COMMANDS_PER_CLIENT,
-        PAYLOAD_SIZE,
-    );
-    workloads.push(workload);
+    let skip = |_, _, _| false;
 
     // create AWS planet
     let planet = Some(Planet::from("../latency_aws"));

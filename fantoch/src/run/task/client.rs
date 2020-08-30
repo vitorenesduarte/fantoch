@@ -131,7 +131,9 @@ async fn server_receive_hi(
         trace!("[client_server] received hi from clients {:?}", client_ids);
         client_ids
     } else {
-        warn!("[client_server] couldn't receive client ids from connected client");
+        warn!(
+            "[client_server] couldn't receive client ids from connected client"
+        );
         return None;
     };
 
