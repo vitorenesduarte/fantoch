@@ -2,6 +2,7 @@ use clap::{App, Arg};
 use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::id::{ProcessId, ShardId};
+use fantoch::info;
 use fantoch::protocol::Protocol;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -433,32 +434,32 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
     let stack_size = super::parse_stack_size(matches.value_of("stack_size"));
     let cpus = super::parse_cpus(matches.value_of("cpus"));
 
-    tracing::info!("process id: {}", process_id);
-    tracing::info!("sorted processes: {:?}", sorted_processes);
-    tracing::info!("ip: {:?}", ip);
-    tracing::info!("port: {}", port);
-    tracing::info!("client port: {}", client_port);
-    tracing::info!("addresses: {:?}", addresses);
-    tracing::info!("config: {:?}", config);
-    tracing::info!("tcp_nodelay: {:?}", tcp_nodelay);
-    tracing::info!("tcp buffer size: {:?}", tcp_buffer_size);
-    tracing::info!("tcp flush interval: {:?}", tcp_flush_interval);
-    tracing::info!(
+    info!("process id: {}", process_id);
+    info!("sorted processes: {:?}", sorted_processes);
+    info!("ip: {:?}", ip);
+    info!("port: {}", port);
+    info!("client port: {}", client_port);
+    info!("addresses: {:?}", addresses);
+    info!("config: {:?}", config);
+    info!("tcp_nodelay: {:?}", tcp_nodelay);
+    info!("tcp buffer size: {:?}", tcp_buffer_size);
+    info!("tcp flush interval: {:?}", tcp_flush_interval);
+    info!(
         "process channel buffer size: {:?}",
         process_channel_buffer_size
     );
-    tracing::info!(
+    info!(
         "client channel buffer size: {:?}",
         client_channel_buffer_size
     );
-    tracing::info!("workers: {:?}", workers);
-    tracing::info!("executors: {:?}", executors);
-    tracing::info!("multiplexing: {:?}", multiplexing);
-    tracing::info!("execution log: {:?}", execution_log);
-    tracing::info!("trace_show_interval: {:?}", tracer_show_interval);
-    tracing::info!("ping_interval: {:?}", ping_interval);
-    tracing::info!("metrics file: {:?}", metrics_file);
-    tracing::info!("stack size: {:?}", stack_size);
+    info!("workers: {:?}", workers);
+    info!("executors: {:?}", executors);
+    info!("multiplexing: {:?}", multiplexing);
+    info!("execution log: {:?}", execution_log);
+    info!("trace_show_interval: {:?}", tracer_show_interval);
+    info!("ping_interval: {:?}", ping_interval);
+    info!("metrics file: {:?}", metrics_file);
+    info!("stack size: {:?}", stack_size);
 
     let args = (
         process_id,

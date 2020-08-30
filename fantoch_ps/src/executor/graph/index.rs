@@ -5,6 +5,7 @@ use dashmap::mapref::one::Ref as DashMapRef;
 use fantoch::config::Config;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::info;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use parking_lot::{RwLock, RwLockReadGuard};
@@ -36,6 +37,7 @@ impl VertexIndex {
         self.index.insert(dot, cell).map(|cell| cell.into_inner())
     }
 
+    #[cfg(any(feature = "max_level_debug", feature = "max_level_trace"))]
     pub fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
         self.index.iter().map(|entry| *entry.key())
     }
@@ -95,7 +97,7 @@ impl VertexIndex {
         // show pending commands: pending longest first
         for (_pending_for_ms, pending) in pending.into_iter().rev() {
             for fmt in pending {
-                tracing::info!("{}", fmt);
+                info!("{}", fmt);
             }
         }
 

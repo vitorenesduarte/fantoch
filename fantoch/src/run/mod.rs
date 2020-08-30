@@ -90,6 +90,7 @@ use crate::id::{AtomicDotGen, ClientId, ProcessId, Rifl, ShardId};
 use crate::protocol::Protocol;
 use crate::time::{RunTime, SysTime};
 use crate::HashSet;
+use crate::{info, trace, warn};
 use color_eyre::Report;
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
@@ -405,7 +406,7 @@ where
         execution_log,
         worker_to_metrics_logger,
     );
-    tracing::info!("process {} started", process_id);
+    info!("process {} started", process_id);
 
     // notify parent that we're connected
     connected.add_permits(1);
@@ -413,7 +414,7 @@ where
     let mut handles = handles.into_iter().collect::<FuturesUnordered<_>>();
     while let Some(join_result) = handles.next().await {
         let join_result = join_result?;
-        tracing::info!("process ended {:?}", join_result);
+        info!("process ended {:?}", join_result);
     }
     Ok(())
 }
@@ -497,18 +498,18 @@ where
     while let Some(join_result) = handles.next().await {
         let clients = join_result?.expect("client should run correctly");
         for client in clients {
-            tracing::info!("client {} ended", client.id());
+            info!("client {} ended", client.id());
             data.merge(client.data());
-            tracing::info!("metrics from {} collected", client.id());
+            info!("metrics from {} collected", client.id());
         }
     }
 
     if let Some(file) = metrics_file {
-        tracing::info!("will write client data to {}", file);
+        info!("will write client data to {}", file);
         serialize_and_compress(&data, &file)?;
     }
 
-    tracing::info!("all clients ended");
+    info!("all clients ended");
     Ok(())
 }
 
@@ -772,7 +773,7 @@ async fn send_to_shard(
         .get_mut(&process_id)
         .expect("[client] dind't find writer for target process");
     if let Err(e) = writer.send(msg).await {
-        tracing::warn!("[client] error while sending message to client read-write task: {:?}", e);
+        warn!("[client] error while sending message to client read-write task: {:?}", e);
     }
 }
 
@@ -807,7 +808,7 @@ fn do_handle_cmd_result<'a>(
         // handle command results and check if client is finished
         if client.handle(cmd_results, time) {
             // record that this client is finished
-            tracing::info!("client {:?} exited loop", client_id);
+            info!("client {:?} exited loop", client_id);
             assert!(finished.insert(client_id));
             None
         } else {
@@ -858,7 +859,7 @@ impl ShardsPending {
 
     fn register(&mut self, cmd: &Command) {
         let rifl = cmd.rifl();
-        tracing::trace!("c{}: register {:?}", rifl.source(), rifl);
+        trace!("c{}: register {:?}", rifl.source(), rifl);
         let shard_count = cmd.shard_count();
         let results = Vec::with_capacity(shard_count);
         let res = self.pending.insert(rifl, (shard_count, results));
@@ -872,14 +873,14 @@ impl ShardsPending {
         result: CommandResult,
     ) -> Option<(ClientId, Vec<CommandResult>)> {
         let rifl = result.rifl();
-        tracing::trace!("c{}: received {:?}", rifl.source(), rifl);
+        trace!("c{}: received {:?}", rifl.source(), rifl);
         match self.pending.entry(rifl) {
             Entry::Occupied(mut entry) => {
                 let (shard_count, results) = entry.get_mut();
                 // add new result
                 results.push(result);
 
-                tracing::trace!(
+                trace!(
                     "c{}: {:?} {}/{}",
                     rifl.source(),
                     rifl,

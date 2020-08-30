@@ -8,6 +8,7 @@ use crate::run::rw::Connection;
 use crate::run::task;
 use crate::time::RunTime;
 use crate::HashMap;
+use crate::{trace, warn};
 use color_eyre::Report;
 use rand::Rng;
 use std::fmt::Debug;
@@ -128,7 +129,7 @@ where
     // say hi to all on both connections
     say_hi(process_id, shard_id, &mut connections_0).await;
     say_hi(process_id, shard_id, &mut connections_1).await;
-    tracing::trace!("said hi to all processes");
+    trace!("said hi to all processes");
 
     // receive hi from all on both connections
     let id_to_connection_0 = receive_hi(connections_0).await;
@@ -303,24 +304,19 @@ async fn reader_task<P>(
                         .forward((process_id, shard_id, msg))
                         .await;
                     if let Err(e) = forward {
-                        tracing::warn!("[reader] error notifying process task with new msg: {:?}",e);
+                        warn!("[reader] error notifying process task with new msg: {:?}",e);
                     }
                 }
                 POEMessage::Executor(execution_info) => {
-                    tracing::trace!(
-                        "[reader] to executor {:?}",
-                        execution_info
-                    );
+                    trace!("[reader] to executor {:?}", execution_info);
                     // notify executor
                     if let Err(e) = to_executors.forward(execution_info).await {
-                        tracing::warn!("[reader] error while notifying executor with new execution info: {:?}", e);
+                        warn!("[reader] error while notifying executor with new execution info: {:?}", e);
                     }
                 }
             },
             None => {
-                tracing::warn!(
-                    "[reader] error receiving message from connection"
-                );
+                warn!("[reader] error receiving message from connection");
                 break;
             }
         }
@@ -347,7 +343,7 @@ async fn writer_task<P>(
                         // connection write *doesn't* flush
                         connection.write(&*msg).await;
                     } else {
-                        tracing::warn!("[writer] error receiving message from parent");
+                        warn!("[writer] error receiving message from parent");
                         break;
                     }
                 }
@@ -363,12 +359,12 @@ async fn writer_task<P>(
                 // connection write *does* flush
                 connection.send(&*msg).await;
             } else {
-                tracing::warn!("[writer] error receiving message from parent");
+                warn!("[writer] error receiving message from parent");
                 break;
             }
         }
     }
-    tracing::warn!("[writer] exiting after failure");
+    warn!("[writer] exiting after failure");
 }
 
 /// Starts process workers.
@@ -483,7 +479,7 @@ async fn process_task<P, R>(
                     // send metrics to logger (in case there's one)
                     let protocol_metrics = process.metrics().clone();
                     if let Err(e) = to_metrics_logger.send((worker_index, protocol_metrics)).await {
-                        tracing::warn!("[server] error while sending metrics to metrics logger: {:?}", e);
+                        warn!("[server] error while sending metrics to metrics logger: {:?}", e);
                     }
                 }
             }
@@ -503,7 +499,7 @@ async fn selected_from_processes<P>(
 ) where
     P: Protocol + 'static,
 {
-    tracing::trace!("[server] reader message: {:?}", msg);
+    trace!("[server] reader message: {:?}", msg);
     if let Some((from_id, from_shard_id, msg)) = msg {
         handle_from_processes(
             worker_index,
@@ -519,7 +515,7 @@ async fn selected_from_processes<P>(
         )
         .await
     } else {
-        tracing::warn!(
+        warn!(
             "[server] error while receiving new process message from readers"
         );
     }
@@ -618,12 +614,12 @@ async fn send_to_processes_and_executors<P>(
             if let Err(e) =
                 to_execution_logger.send(execution_info.clone()).await
             {
-                tracing::warn!("[server] error while sending new execution info to execution logger: {:?}", e);
+                warn!("[server] error while sending new execution info to execution logger: {:?}", e);
             }
         }
         // notify executor
         if let Err(e) = to_executors.forward(execution_info).await {
-            tracing::warn!(
+            warn!(
                 "[server] error while sending new execution info to executor: {:?}",
                 e
             );
@@ -649,7 +645,7 @@ async fn handle_message_from_self<P>(
         process.handle(to_forward.0, to_forward.1, to_forward.2, time)
     } else {
         if let Err(e) = reader_to_workers.forward(to_forward).await {
-            tracing::warn!("[server] error notifying process task with msg from self: {:?}", e);
+            warn!("[server] error notifying process task with msg from self: {:?}", e);
         }
     }
 }
@@ -665,11 +661,9 @@ pub async fn send_to_one_writer<P>(
     let writer_index = rand::thread_rng().gen_range(0, writers.len());
 
     if let Err(e) = writers[writer_index].send(msg).await {
-        tracing::warn!(
+        warn!(
             "[{}] error while sending to writer {}: {:?}",
-            tag,
-            writer_index,
-            e
+            tag, writer_index, e
         );
     }
 }
@@ -686,7 +680,7 @@ async fn selected_from_client<P>(
 ) where
     P: Protocol + 'static,
 {
-    tracing::trace!("[server] from clients: {:?}", cmd);
+    trace!("[server] from clients: {:?}", cmd);
     if let Some((dot, cmd)) = cmd {
         handle_from_client(
             worker_index,
@@ -701,9 +695,7 @@ async fn selected_from_client<P>(
         )
         .await
     } else {
-        tracing::warn!(
-            "[server] error while receiving new command from executor"
-        );
+        warn!("[server] error while receiving new command from executor");
     }
 }
 
@@ -747,7 +739,7 @@ async fn selected_from_periodic_task<P, R>(
     P: Protocol + 'static,
     R: Debug + 'static,
 {
-    tracing::trace!("[server] from periodic task: {:?}", event);
+    trace!("[server] from periodic task: {:?}", event);
     if let Some(event) = event {
         handle_from_periodic_task(
             worker_index,
@@ -761,9 +753,7 @@ async fn selected_from_periodic_task<P, R>(
         )
         .await
     } else {
-        tracing::warn!(
-            "[server] error while receiving new event from periodic task"
-        );
+        warn!("[server] error while receiving new event from periodic task");
     }
 }
 
@@ -798,10 +788,7 @@ async fn handle_from_periodic_task<P, R>(
         FromPeriodicMessage::Inspect(f, mut tx) => {
             let outcome = f(&process);
             if let Err(e) = tx.send(outcome).await {
-                tracing::warn!(
-                    "[server] error while sending inspect result: {:?}",
-                    e
-                );
+                warn!("[server] error while sending inspect result: {:?}", e);
             }
         }
     }

@@ -11,9 +11,8 @@ jemalloc = ["jemallocator"]
 amortize = ["fantoch/amortize"]
 prof = ["fantoch/prof", "jemallocator"]
 parallel-sim = ["rayon"]
-release_max_level_info = ["fantoch/release_max_level_info", "tracing/release_max_level_info"]
-release_max_level_debug = ["fantoch/release_max_level_debug", "tracing/release_max_level_debug"]
-release_max_level_trace = ["fantoch/release_max_level_trace", "tracing/release_max_level_trace"]
+max_level_debug = ["fantoch/max_level_debug"]
+max_level_trace = ["fantoch/max_level_trace"]
 
 [dependencies]
 ahash = "0.4.4"

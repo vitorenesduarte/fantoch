@@ -24,6 +24,7 @@ pub use workload::Workload;
 use crate::command::{Command, CommandResult};
 use crate::id::{ClientId, ProcessId, RiflGen, ShardId};
 use crate::time::SysTime;
+use crate::{info, trace};
 use crate::{HashMap, HashSet};
 use key_gen::KeyGenState;
 
@@ -97,7 +98,7 @@ impl Client {
             .map(|(target_shard, cmd)| {
                 // if a new command was generated, start it in pending
                 let rifl = cmd.rifl();
-                tracing::trace!(
+                trace!(
                     "c{}: new rifl pending {:?} | time = {}",
                     self.client_id,
                     rifl,
@@ -126,7 +127,7 @@ impl Client {
 
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(rifl, time);
-        tracing::trace!(
+        trace!(
             "c{}: rifl {:?} ended after {} micros at {}",
             self.client_id,
             rifl,
@@ -137,7 +138,7 @@ impl Client {
 
         if let Some(frequency) = self.status_frequency {
             if self.workload.issued_commands() % frequency == 0 {
-                tracing::info!(
+                info!(
                     "c{:?}: {} of {}",
                     self.client_id,
                     self.workload.issued_commands(),

@@ -8,6 +8,7 @@ use crate::protocol::{
 };
 use crate::singleton;
 use crate::time::SysTime;
+use crate::trace;
 use crate::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -179,13 +180,7 @@ impl Basic {
 
     #[instrument(skip(self, from, dot, cmd))]
     fn handle_mstore(&mut self, from: ProcessId, dot: Dot, cmd: Command) {
-        tracing::trace!(
-            "p{}: MStore({:?}, {:?}) from {}",
-            self.id(),
-            dot,
-            cmd,
-            from
-        );
+        trace!("p{}: MStore({:?}, {:?}) from {}", self.id(), dot, cmd, from);
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -206,7 +201,7 @@ impl Basic {
 
     #[instrument(skip(self, from, dot))]
     fn handle_mstoreack(&mut self, from: ProcessId, dot: Dot) {
-        tracing::trace!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
+        trace!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -232,7 +227,7 @@ impl Basic {
 
     #[instrument(skip(self, _from, dot, cmd))]
     fn handle_mcommit(&mut self, _from: ProcessId, dot: Dot, cmd: Command) {
-        tracing::trace!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
+        trace!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
 
         // // get cmd info and its rifl
         let info = self.cmds.get(dot);
@@ -262,14 +257,14 @@ impl Basic {
 
     #[instrument(skip(self, from, dot))]
     fn handle_mcommit_dot(&mut self, from: ProcessId, dot: Dot) {
-        tracing::trace!("p{}: MCommitDot({:?})", self.id(), dot);
+        trace!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.cmds.commit(dot);
     }
 
     #[instrument(skip(self, from, committed))]
     fn handle_mgc(&mut self, from: ProcessId, committed: VClock<ProcessId>) {
-        tracing::trace!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {}",
             self.id(),
             committed,
@@ -292,7 +287,7 @@ impl Basic {
         from: ProcessId,
         stable: Vec<(ProcessId, u64, u64)>,
     ) {
-        tracing::trace!("p{}: MStable({:?}) from {}", self.id(), stable, from);
+        trace!("p{}: MStable({:?}) from {}", self.id(), stable, from);
         assert_eq!(from, self.bp.process_id);
         let stable_count = self.cmds.gc(stable);
         self.bp.stable(stable_count);
@@ -300,7 +295,7 @@ impl Basic {
 
     #[instrument(skip(self))]
     fn handle_event_garbage_collection(&mut self) {
-        tracing::trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
+        trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
         let committed = self.cmds.committed();

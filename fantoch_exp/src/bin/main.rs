@@ -50,7 +50,8 @@ const CPUS: Option<usize> = None;
 const BRANCH: &str = "tracing_compile";
 
 // tracing max log level
-const MAX_LOG_LEVEL: tracing::Level = tracing::Level::INFO;
+const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
+const MAX_LEVEL_RUN_TIME: tracing::Level = tracing::Level::INFO;
 
 // release run
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
@@ -443,7 +444,7 @@ async fn run_bench(
     fantoch_exp::bench::bench_experiment(
         machines,
         RUN_MODE,
-        &MAX_LOG_LEVEL,
+        &MAX_LEVEL_RUN_TIME,
         all_features(),
         testbed,
         planet,
@@ -463,6 +464,8 @@ async fn run_bench(
 
 fn all_features() -> Vec<FantochFeature> {
     let mut features = FEATURES.to_vec();
-    features.push(FantochFeature::release_max_level(&MAX_LOG_LEVEL));
+    if let Some(feature) = FantochFeature::max_level(&MAX_LEVEL_COMPILE_TIME) {
+        features.push(feature);
+    }
     features
 }
