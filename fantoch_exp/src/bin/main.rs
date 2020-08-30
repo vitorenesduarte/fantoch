@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_3";
+const RESULTS_DIR: &str = "../results_4";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -192,7 +192,7 @@ async fn main() -> Result<(), Report> {
     let keys_per_shard = 1;
     let zipf_key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: 0.5,
+        coefficient: 0.1,
         key_count: zipf_key_count,
     };
     // let key_gen = KeyGen::ConflictRate { conflict_rate: 0 };

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # flag indicating whether we should just remove previous installations
-RUST_TOOLCHAIN="stable"
+RUST_TOOLCHAIN="1.45.0"
 # RUST_TOOLCHAIN="nightly-2020-06-10"
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
