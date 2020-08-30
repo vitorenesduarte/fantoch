@@ -10,6 +10,9 @@ license = "MIT/Apache-2.0"
 default = []
 amortize = ["griddle"]
 prof = []
+release_max_level_info = ["tracing/release_max_level_info"]
+release_max_level_debug = ["tracing/release_max_level_debug"]
+release_max_level_trace = ["tracing/release_max_level_trace"]
 
 [dependencies]
 ahash = "0.4.4"

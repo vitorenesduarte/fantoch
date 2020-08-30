@@ -72,16 +72,31 @@ pub enum FantochFeature {
     Jemalloc,
     Amortize,
     Prof,
+    ReleaseMaxLevelInfo,
+    ReleaseMaxLevelDebug,
+    ReleaseMaxLevelTrace,
 }
 
 impl FantochFeature {
     pub fn name(&self) -> String {
         match self {
-            FantochFeature::Jemalloc => "jemalloc",
-            FantochFeature::Amortize => "amortize",
-            FantochFeature::Prof => "prof",
+            Self::Jemalloc => "jemalloc",
+            Self::Amortize => "amortize",
+            Self::Prof => "prof",
+            Self::ReleaseMaxLevelInfo => "release_max_level_info",
+            Self::ReleaseMaxLevelDebug => "release_max_level_debug",
+            Self::ReleaseMaxLevelTrace => "release_max_level_trace",
         }
         .to_string()
+    }
+
+    pub fn release_max_level(level: &tracing::Level) -> Self {
+        match level {
+            &tracing::Level::INFO => Self::ReleaseMaxLevelInfo,
+            &tracing::Level::DEBUG => Self::ReleaseMaxLevelDebug,
+            &tracing::Level::TRACE => Self::ReleaseMaxLevelTrace,
+            _ => panic!(format!("tracing level {:?} not supported", level)),
+        }
     }
 }
 

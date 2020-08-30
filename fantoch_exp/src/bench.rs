@@ -43,6 +43,7 @@ impl std::error::Error for TimeoutError {}
 pub async fn bench_experiment(
     machines: Machines<'_>,
     run_mode: RunMode,
+    max_log_level: &tracing::Level,
     features: Vec<FantochFeature>,
     testbed: Testbed,
     planet: Option<Planet>,
@@ -134,7 +135,8 @@ pub async fn bench_experiment(
                     let run = run_experiment(
                         &machines,
                         run_mode,
-                        features.clone(),
+                        max_log_level,
+                        &features,
                         testbed,
                         &planet,
                         protocol,
@@ -180,7 +182,8 @@ pub async fn bench_experiment(
 async fn run_experiment(
     machines: &Machines<'_>,
     run_mode: RunMode,
-    features: Vec<FantochFeature>,
+    max_log_level: &tracing::Level,
+    features: &Vec<FantochFeature>,
     testbed: Testbed,
     planet: &Option<Planet>,
     protocol: Protocol,
@@ -199,6 +202,7 @@ async fn run_experiment(
     let start = start_processes(
         machines,
         run_mode,
+        max_log_level,
         testbed,
         planet,
         protocol,
@@ -254,7 +258,7 @@ async fn run_experiment(
         machines.placement().clone(),
         planet.clone(),
         run_mode,
-        features,
+        features.clone(),
         testbed,
         protocol,
         config,
@@ -294,6 +298,7 @@ async fn run_experiment(
 async fn start_processes(
     machines: &Machines<'_>,
     run_mode: RunMode,
+    max_log_level: &tracing::Level,
     testbed: Testbed,
     planet: &Option<Planet>,
     protocol: Protocol,
@@ -383,6 +388,7 @@ async fn start_processes(
             protocol.binary(),
             args,
             run_mode,
+            max_log_level,
             err_file,
         );
         let process = vm
@@ -484,6 +490,8 @@ async fn run_clients(
             args,
             // always run clients on release mode
             RunMode::Release,
+            // always run clients on info level
+            &tracing::Level::INFO,
             err_file,
         );
         let client = vm
