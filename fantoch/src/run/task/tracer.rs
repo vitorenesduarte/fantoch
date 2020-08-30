@@ -1,8 +1,8 @@
-use crate::warn;
 use tokio::time::Duration;
 
 #[cfg(not(feature = "prof"))]
 pub async fn tracer_task(interval: Option<Duration>) {
+    use crate::warn;
     match interval {
         Some(_) => {
             panic!("[tracer_task] tracer show interval was set but the 'prof' feature is disabled");
@@ -15,6 +15,7 @@ pub async fn tracer_task(interval: Option<Duration>) {
 
 #[cfg(feature = "prof")]
 pub async fn tracer_task(interval: Option<Duration>) {
+    use crate::{info, warn};
     use fantoch_prof::ProfSubscriber;
 
     // if no interval, do not trace
@@ -25,9 +26,9 @@ pub async fn tracer_task(interval: Option<Duration>) {
 
     // set tracing subscriber
     let subscriber = ProfSubscriber::new();
-    subscriber::set_global_default(subscriber.clone()).unwrap_or_else(|e| {
-        warn!("tracing global default subscriber already set: {:?}", e)
-    });
+    tracing::subscriber::set_global_default(subscriber.clone()).unwrap_or_else(
+        |e| warn!("tracing global default subscriber already set: {:?}", e),
+    );
 
     // create tokio interval
     let interval = interval.unwrap();
