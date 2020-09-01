@@ -268,7 +268,7 @@ impl ResultsDB {
 
         for (region, _, _, region_index) in exp_config.placement.iter() {
             // only load client dstats for this region if we haven't already
-            if !client_metrics.contains_key(region) {
+            if !client_dstats.contains_key(region) {
                 // create client file prefix
                 let process_type = ProcessType::Client(*region_index);
                 let prefix =

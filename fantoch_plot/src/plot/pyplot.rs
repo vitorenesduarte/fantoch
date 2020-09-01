@@ -56,6 +56,14 @@ impl<'p> PyPlot<'p> {
         Ok((fig, ax))
     }
 
+    pub fn subplots_adjust(
+        &self,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call("subplots_adjust", (), kwargs));
+        Ok(())
+    }
+
     pub fn table(&self, kwargs: Option<&PyDict>) -> Result<Table<'_>, Report> {
         let result = pytry!(self.py(), self.plt.call("table", (), kwargs));
         let table = Table::new(result);

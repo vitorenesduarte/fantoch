@@ -5,7 +5,7 @@ use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
     ErrorBar, ExperimentData, LatencyMetric, MetricsType, PlotFmt, ResultsDB,
-    Search, Style,
+    Search, Style, ThroughputYAxis,
 };
 use std::collections::HashMap;
 
@@ -13,6 +13,9 @@ use std::collections::HashMap;
 const RESULTS_DIR: &str = "../results";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
+
+// if true, dstats per process will be generated
+const ALL_DSTATS: bool = false;
 
 fn main() -> Result<(), Report> {
     // set global style
@@ -32,13 +35,14 @@ fn partial_replication() -> Result<(), Report> {
     let keys_per_shard = 1;
     let mut key_gens = Vec::new();
     let zipf_key_count = 1_000_000;
-    for coefficient in vec![0.2, 0.4, 0.6] {
+    for coefficient in vec![0.5, 0.6] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
             key_count: zipf_key_count,
         });
     }
     let payload_size = 0;
+    // let protocols = vec![Protocol::AtlasLocked];
     let protocols = vec![Protocol::AtlasLocked, Protocol::NewtAtomic];
 
     let shard_combinations = vec![
@@ -92,18 +96,15 @@ fn partial_replication() -> Result<(), Report> {
     ];
 
     for key_gen in key_gens {
-        // generate all-combo throughput-latency plot
-        for latency_metric in vec![
-            LatencyMetric::Average,
-            LatencyMetric::Percentile(0.99),
-            LatencyMetric::Percentile(0.999),
+        // generate all-combo throughput-something plot
+        for y_axis in vec![
+            ThroughputYAxis::Latency(LatencyMetric::Average),
+            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
+            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
+            ThroughputYAxis::CPU,
         ] {
-            let path = format!(
-                "throughput_latency_n{}_{}{}.pdf",
-                n,
-                key_gen,
-                latency_metric.to_file_suffix(),
-            );
+            let path =
+                format!("throughput_{}_n{}_{}.pdf", y_axis.name(), n, key_gen,);
             // create searches
             let searches = shard_combinations
                 .clone()
@@ -163,18 +164,22 @@ fn partial_replication() -> Result<(), Report> {
                 let mut style = HashMap::new();
                 style.insert(
                     Style::Label,
-                    format!("({}, {})", shard_count, shards_per_command),
+                    format!(
+                        "{} #{}",
+                        PlotFmt::protocol_name(search.protocol),
+                        shard_count
+                    ),
                 );
                 style.insert(Style::Color, color.to_string());
                 style.insert(Style::Marker, marker.to_string());
                 style
             }));
-            fantoch_plot::throughput_latency_plot(
+            fantoch_plot::throughput_something_plot(
                 searches,
                 style_fun,
                 n,
                 clients_per_region.clone(),
-                latency_metric,
+                y_axis,
                 PLOT_DIR,
                 &path,
                 &db,
@@ -184,19 +189,20 @@ fn partial_replication() -> Result<(), Report> {
         for (shard_count, shards_per_command) in shard_combinations.clone() {
             let shard_gen = ShardGen::Random { shard_count };
 
-            // generate throughput-latency plot
-            for latency_metric in vec![
-                LatencyMetric::Average,
-                LatencyMetric::Percentile(0.99),
-                LatencyMetric::Percentile(0.999),
+            // generate throughput-something plot
+            for y_axis in vec![
+                ThroughputYAxis::Latency(LatencyMetric::Average),
+                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
+                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
+                ThroughputYAxis::CPU,
             ] {
                 let path = format!(
-                    "throughput_latency_n{}_ts{}_s{}_{}{}.pdf",
+                    "throughput_{}_n{}_ts{}_s{}_{}.pdf",
+                    y_axis.name(),
                     n,
                     shard_count,
                     shards_per_command,
                     key_gen,
-                    latency_metric.to_file_suffix(),
                 );
                 // create searches
                 let searches = protocol_combinations(n, protocols.clone())
@@ -213,12 +219,12 @@ fn partial_replication() -> Result<(), Report> {
                     })
                     .collect();
                 let style_fun = None;
-                fantoch_plot::throughput_latency_plot(
+                fantoch_plot::throughput_something_plot(
                     searches,
                     style_fun,
                     n,
                     clients_per_region.clone(),
-                    latency_metric,
+                    y_axis,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -256,13 +262,13 @@ fn partial_replication() -> Result<(), Report> {
                 // generate dstat table
                 for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
-                        "dstat_n{}_ts{}_s{}_c{}_{}_{}.pdf",
+                        "dstat_{}_n{}_ts{}_s{}_{}_c{}.pdf",
+                        metrics_type.name(),
                         n,
                         shard_count,
                         shards_per_command,
-                        clients_per_region,
                         key_gen,
-                        metrics_type.name(),
+                        clients_per_region,
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
@@ -277,13 +283,13 @@ fn partial_replication() -> Result<(), Report> {
                 for metrics_type in process_metrics_combinations(shard_count, n)
                 {
                     let path = format!(
-                        "metrics_n{}_ts{}_s{}_c{}_{}_{}.pdf",
+                        "metrics_{}_n{}_ts{}_s{}_{}_c{}.pdf",
+                        metrics_type.name(),
                         n,
                         shard_count,
                         shards_per_command,
-                        clients_per_region,
                         key_gen,
-                        metrics_type.name(),
+                        clients_per_region,
                     );
                     fantoch_plot::process_metrics_table(
                         searches.clone(),
@@ -302,13 +308,13 @@ fn partial_replication() -> Result<(), Report> {
                     ErrorBar::With(0.999),
                 ] {
                     let path = format!(
-                        "latency_n{}_ts{}_s{}_{}_c{}{}.pdf",
+                        "latency{}_n{}_ts{}_s{}_{}_c{}.pdf",
+                        error_bar.name(),
                         n,
                         shard_count,
                         shards_per_command,
                         key_gen,
                         clients_per_region,
-                        error_bar.to_file_suffix(),
                     );
                     let style_fun = None;
                     let results = fantoch_plot::latency_plot(
@@ -387,18 +393,19 @@ fn multi_key() -> Result<(), Report> {
                 key_count: zipf_key_count,
             };
 
-            // generate throughput-latency plot
-            for latency_metric in vec![
-                LatencyMetric::Average,
-                LatencyMetric::Percentile(0.99),
-                LatencyMetric::Percentile(0.999),
+            // generate throughput-something plot
+            for y_axis in vec![
+                ThroughputYAxis::Latency(LatencyMetric::Average),
+                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
+                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
+                ThroughputYAxis::CPU,
             ] {
                 let path = format!(
-                    "throughput_latency_n{}_k{}_{}{}.pdf",
+                    "throughput_{}_n{}_k{}_{}.pdf",
+                    y_axis.name(),
                     n,
                     keys_per_shard,
                     key_gen,
-                    latency_metric.to_file_suffix(),
                 );
                 // create searches
                 let searches = protocol_combinations(n, protocols.clone())
@@ -413,12 +420,12 @@ fn multi_key() -> Result<(), Report> {
                     })
                     .collect();
                 let style_fun = None;
-                fantoch_plot::throughput_latency_plot(
+                fantoch_plot::throughput_something_plot(
                     searches,
                     style_fun,
                     n,
                     clients_per_region.clone(),
-                    latency_metric,
+                    y_axis,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -450,12 +457,12 @@ fn multi_key() -> Result<(), Report> {
                 // generate dstat table
                 for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
-                        "dstat_n{}_k{}_c{}_{}_{}.pdf",
+                        "dstat_{}_n{}_k{}_{}_c{}.pdf",
+                        metrics_type.name(),
                         n,
                         keys_per_shard,
-                        clients_per_region,
                         key_gen,
-                        metrics_type.name(),
+                        clients_per_region,
                     );
                     fantoch_plot::dstat_table(
                         searches.clone(),
@@ -470,12 +477,12 @@ fn multi_key() -> Result<(), Report> {
                 for metrics_type in process_metrics_combinations(shard_count, n)
                 {
                     let path = format!(
-                        "metrics_n{}_k{}_c{}_{}_{}.pdf",
+                        "metrics_{}_n{}_k{}_{}_c{}.pdf",
+                        metrics_type.name(),
                         n,
                         keys_per_shard,
-                        clients_per_region,
                         key_gen,
-                        metrics_type.name(),
+                        clients_per_region,
                     );
                     fantoch_plot::process_metrics_table(
                         searches.clone(),
@@ -494,12 +501,12 @@ fn multi_key() -> Result<(), Report> {
                     ErrorBar::With(0.999),
                 ] {
                     let path = format!(
-                        "latency_n{}_k{}_{}_c{}{}.pdf",
+                        "latency{}_n{}_k{}_{}_c{}.pdf",
+                        error_bar.name(),
                         n,
                         keys_per_shard,
                         key_gen,
                         clients_per_region,
-                        error_bar.to_file_suffix()
                     );
                     let style_fun = None;
                     let results = fantoch_plot::latency_plot(
@@ -590,16 +597,14 @@ fn single_key() -> Result<(), Report> {
             1024 * 32,
         ];
 
-        for latency_metric in vec![
-            LatencyMetric::Average,
-            LatencyMetric::Percentile(0.99),
-            LatencyMetric::Percentile(0.999),
+        // generate throughput-something plot
+        for y_axis in vec![
+            ThroughputYAxis::Latency(LatencyMetric::Average),
+            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
+            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
+            ThroughputYAxis::CPU,
         ] {
-            let path = format!(
-                "throughput_latency_n{}{}.pdf",
-                n,
-                latency_metric.to_file_suffix()
-            );
+            let path = format!("throughput_{}_n{}.pdf", y_axis.name(), n,);
             // create searches
             let searches = protocol_combinations(n, protocols.clone())
                 .into_iter()
@@ -610,12 +615,12 @@ fn single_key() -> Result<(), Report> {
                 })
                 .collect();
             let style_fun = None;
-            fantoch_plot::throughput_latency_plot(
+            fantoch_plot::throughput_something_plot(
                 searches,
                 style_fun,
                 n,
                 clients_per_region.clone(),
-                latency_metric,
+                y_axis,
                 PLOT_DIR,
                 &path,
                 &db,
@@ -662,10 +667,10 @@ fn single_key() -> Result<(), Report> {
                 ErrorBar::With(0.999),
             ] {
                 let path = format!(
-                    "latency_n{}_c{}{}.pdf",
+                    "latency{}_n{}_c{}.pdf",
+                    error_bar.name(),
                     n,
                     clients_per_region,
-                    error_bar.to_file_suffix()
                 );
                 let style_fun = None;
                 let results = fantoch_plot::latency_plot(
@@ -762,10 +767,14 @@ fn protocol_combinations(
 fn dstat_combinations(shard_count: usize, n: usize) -> Vec<MetricsType> {
     let global_metrics =
         vec![MetricsType::ProcessGlobal, MetricsType::ClientGlobal];
-    fantoch::util::all_process_ids(shard_count, n)
-        .map(|(process_id, _)| MetricsType::Process(process_id))
-        .chain(global_metrics)
-        .collect()
+    if ALL_DSTATS {
+        fantoch::util::all_process_ids(shard_count, n)
+            .map(|(process_id, _)| MetricsType::Process(process_id))
+            .chain(global_metrics)
+            .collect()
+    } else {
+        global_metrics
+    }
 }
 
 fn process_metrics_combinations(

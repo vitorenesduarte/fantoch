@@ -37,7 +37,7 @@ pub enum ErrorBar {
 }
 
 impl ErrorBar {
-    pub fn to_file_suffix(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             Self::Without => String::new(),
             Self::With(percentile) => format!("_p{}", percentile * 100f64),
@@ -45,18 +45,40 @@ impl ErrorBar {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum LatencyMetric {
     Average,
     Percentile(f64),
 }
 
 impl LatencyMetric {
-    pub fn to_file_suffix(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             Self::Average => String::new(),
             Self::Percentile(percentile) => {
                 format!("_p{}", percentile * 100f64)
             }
+        }
+    }
+}
+
+pub enum ThroughputYAxis {
+    Latency(LatencyMetric),
+    CPU,
+}
+
+impl ThroughputYAxis {
+    pub fn name(&self) -> String {
+        match self {
+            Self::Latency(latency) => format!("latency{}", latency.name()),
+            Self::CPU => String::from("cpu"),
+        }
+    }
+
+    fn y_label(&self) -> String {
+        match self {
+            Self::Latency(_) => format!("latency (ms)"),
+            Self::CPU => String::from("CPU utilization (%)"),
         }
     }
 }
@@ -465,12 +487,12 @@ fn inner_cdf_plot(
     Ok(())
 }
 
-pub fn throughput_latency_plot(
+pub fn throughput_something_plot(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     n: usize,
     clients_per_region: Vec<usize>,
-    latency: LatencyMetric,
+    y_axis: ThroughputYAxis,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -488,12 +510,12 @@ pub fn throughput_latency_plot(
 
     for mut search in searches {
         // check `n`
-        assert_eq!(search.n, n, "throughput_latency_plot: value of n in search doesn't match the provided");
+        assert_eq!(search.n, n, "throughput_something_plot: value of n in search doesn't match the provided");
 
         // keep track of average latency that will be used to compute throughput
         let mut avg_latency = Vec::with_capacity(clients_per_region.len());
 
-        // compute y: latency values for each number of clients
+        // compute y: values for each number of clients
         let mut y = Vec::with_capacity(clients_per_region.len());
         for &clients in clients_per_region.iter() {
             // refine search
@@ -529,15 +551,25 @@ pub fn throughput_latency_plot(
             let avg = exp_data.global_client_latency.mean().value();
             avg_latency.push(avg);
 
-            // compute latency to be plotted
-            let latency = match latency {
-                LatencyMetric::Average => avg,
-                LatencyMetric::Percentile(percentile) => exp_data
-                    .global_client_latency
-                    .percentile(percentile)
-                    .value(),
+            // compute y value to be plotted
+            let y_value = match y_axis {
+                ThroughputYAxis::Latency(latency) => match latency {
+                    LatencyMetric::Average => avg,
+                    LatencyMetric::Percentile(percentile) => exp_data
+                        .global_client_latency
+                        .percentile(percentile)
+                        .value(),
+                },
+                ThroughputYAxis::CPU => {
+                    let dstats = &exp_data.global_process_dstats;
+                    let (cpu_usr, _) = dstats.cpu_usr_mad();
+                    let (cpu_sys, _) = dstats.cpu_sys_mad();
+                    let cpu = std::cmp::min(100, cpu_usr + cpu_sys);
+                    cpu as f64
+                }
             };
-            y.push(latency);
+
+            y.push(y_value);
         }
 
         // compute x: compute throughput given average latency and number of
@@ -546,8 +578,8 @@ pub fn throughput_latency_plot(
             .into_iter()
             .zip(y.iter())
             .zip(clients_per_region.iter())
-            .filter_map(|((avg_latency, &latency), &clients)| {
-                if latency == 0f64 {
+            .filter_map(|((avg_latency, &y_value), &clients)| {
+                if avg_latency == 0f64 {
                     None
                 } else {
                     // compute throughput using the average latency
@@ -558,7 +590,7 @@ pub fn throughput_latency_plot(
                     let x = throughput / 1000f64;
 
                     // round y
-                    let y = latency.round() as usize;
+                    let y = y_value.round() as usize;
                     Some((x, y))
                 }
             })
@@ -572,12 +604,23 @@ pub fn throughput_latency_plot(
         }
     }
 
-    // set log scale on y axis
-    set_log_scale(py, &ax, AxisToScale::Y)?;
+    // set log scale on y axis if y axis is latency
+    let log_scale = match y_axis {
+        ThroughputYAxis::Latency(_) => {
+            set_log_scale(py, &ax, AxisToScale::Y)?;
+            true
+        }
+        ThroughputYAxis::CPU => false,
+    };
 
     // set labels
     ax.set_xlabel("throughput (K ops/s)")?;
-    ax.set_ylabel("latency (ms) [log-scale]")?;
+    let y_label = if log_scale {
+        format!("{} [log-scale]", y_axis.y_label())
+    } else {
+        y_axis.y_label()
+    };
+    ax.set_ylabel(&y_label)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
@@ -935,6 +978,10 @@ fn end_plot(
     } else {
         output_file.to_string()
     };
+
+    // reduce right margin
+    let kwargs = pydict!(py, ("right", 0.95));
+    plt.subplots_adjust(Some(kwargs))?;
 
     // save figure
     let kwargs = pydict!(py, ("format", "pdf"));

@@ -22,7 +22,7 @@ impl PlotFmt {
             Protocol::AtlasLocked => "Atlas",
             Protocol::EPaxosLocked => "EPaxos",
             Protocol::FPaxos => "FPaxos",
-            Protocol::NewtAtomic => "Newt-A",
+            Protocol::NewtAtomic => "Newt",
             Protocol::NewtLocked => "Newt-L",
             Protocol::NewtFineLocked => "Newt-AL",
             Protocol::Basic => "Basic",
