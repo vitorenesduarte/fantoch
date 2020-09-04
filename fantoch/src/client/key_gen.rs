@@ -14,7 +14,7 @@ pub enum KeyGen {
     },
     Zipf {
         coefficient: f64,
-        key_per_shard: usize,
+        keys_per_shard: usize,
     },
 }
 
@@ -51,9 +51,9 @@ impl KeyGenState {
             KeyGen::ConflictRate { .. } => None,
             KeyGen::Zipf {
                 coefficient,
-                key_per_shard,
+                keys_per_shard,
             } => {
-                let key_count = key_per_shard * shard_count;
+                let key_count = keys_per_shard * shard_count;
                 // initialize zipf distribution
                 let zipf = ZipfDistribution::new(key_count, coefficient)
                     .expect(

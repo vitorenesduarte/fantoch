@@ -150,7 +150,7 @@ impl ProtocolConfig {
             "--faults",
             self.config.f(),
             "--shards",
-            self.config.shards(),
+            self.config.shard_count(),
             "--execute_at_commit",
             self.config.execute_at_commit(),
         ];
@@ -321,34 +321,27 @@ impl ClientConfig {
     }
 
     pub fn to_args(&self) -> Vec<String> {
-        use fantoch::client::{KeyGen, ShardGen};
-        let shard_gen = match self.workload.shard_gen() {
-            ShardGen::Random { shard_count } => {
-                format!("random,{}", shard_count)
-            }
-        };
+        use fantoch::client::KeyGen;
         let key_gen = match self.workload.key_gen() {
             KeyGen::ConflictRate { conflict_rate } => {
                 format!("conflict_rate,{}", conflict_rate)
             }
             KeyGen::Zipf {
                 coefficient,
-                key_count,
-            } => format!("zipf,{},{}", coefficient, key_count),
+                keys_per_shard,
+            } => format!("zipf,{},{}", coefficient, keys_per_shard),
         };
         let mut args = args![
             "--ids",
             format!("{}-{}", self.id_start, self.id_end),
             "--addresses",
             self.ips_to_addresses(),
-            "--shards_per_command",
-            self.workload.shards_per_command(),
-            "--shard_gen",
-            shard_gen,
-            "--keys_per_shard",
-            self.workload.keys_per_shard(),
+            "--shard_count",
+            self.workload.shard_count(),
             "--key_gen",
             key_gen,
+            "--keys_per_command",
+            self.workload.keys_per_command(),
             "--commands_per_client",
             self.workload.commands_per_client(),
             "--payload_size",

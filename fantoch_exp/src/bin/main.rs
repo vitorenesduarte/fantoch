@@ -1,6 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::client::{KeyGen, ShardGen, Workload};
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::bench::ExperimentTimeouts;
@@ -128,18 +128,15 @@ async fn main() -> Result<(), Report> {
     ];
 
     let shard_count = 1;
-    let shards_per_command = 1;
-    let keys_per_shard = 1;
-
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let keys_per_command = 1;
     let payload_size = 4096;
 
     let mut workloads = Vec::new();
     let workload = Workload::new(
-        shards_per_command,
-        ShardGen::Random { shard_count },
-        keys_per_shard,
+        shard_count,
         key_gen,
+        keys_per_command,
         COMMANDS_PER_CLIENT,
         payload_size,
     );
@@ -151,7 +148,7 @@ async fn main() -> Result<(), Report> {
     };
 
     /*
-    MULTI_KEY
+    // MULTI_KEY
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
@@ -167,10 +164,8 @@ async fn main() -> Result<(), Report> {
     let zipf_key_count = 1_000_000;
 
     let skip = |_, _, _| false;
-    */
 
-    /*
-    PARTIAL REPLICATION
+    // PARTIAL REPLICATION
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
@@ -203,24 +198,22 @@ async fn main() -> Result<(), Report> {
         1024 * 256,
         1024 * 272,
     ];
-    let shards_per_command = 2;
     let shard_count = 5;
-    let keys_per_shard = 1;
-    let zipf_key_count = 1_000_000;
-
+    let keys_per_shard = 1_000_000;
     let key_gen = KeyGen::Zipf {
         coefficient: 0.6,
-        key_count: zipf_key_count,
+        keys_per_shard,
     };
+    let keys_per_command = 2;
     let payload_size = 0;
 
     let mut workloads = Vec::new();
     let workload = Workload::new(
-        shards_per_command,
-        ShardGen::Random { shard_count },
-        keys_per_shard,
+        shard_count,
         key_gen,
+        keys_per_command,
         COMMANDS_PER_CLIENT,
+        payload_size,
     );
     workloads.push(workload);
 
@@ -230,7 +223,7 @@ async fn main() -> Result<(), Report> {
     // set shards in each config
     configs
         .iter_mut()
-        .for_each(|(_protocol, config)| config.set_shards(shard_count));
+        .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // create AWS planet
     let planet = Some(Planet::from("../latency_aws"));

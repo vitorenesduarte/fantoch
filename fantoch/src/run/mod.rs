@@ -282,7 +282,7 @@ where
     // each other shard
     assert_eq!(
         sorted_processes.len(),
-        config.n() + config.shards() - 1,
+        config.n() + config.shard_count() - 1,
         "sorted processes count should be n + shards - 1"
     );
 
@@ -957,7 +957,7 @@ pub mod tests {
         config.set_gc_interval(Duration::from_millis(100));
 
         // there's a single shard
-        config.set_shards(1);
+        config.set_shard_count(1);
 
         // create workload
         let keys_per_command = 1;
@@ -1065,7 +1065,7 @@ pub mod tests {
 
         // create processes ports and client ports
         let n = config.n();
-        let shard_count = config.shards();
+        let shard_count = config.shard_count();
         let ports: HashMap<_, _> = util::all_process_ids(shard_count, n)
             .map(|(id, _shard_id)| (id, get_available_port()))
             .collect();

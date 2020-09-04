@@ -62,7 +62,7 @@ impl BaseProcess {
     ) -> bool {
         // reset closest shard process
         self.closest_shard_process =
-            HashMap::with_capacity(self.config.shards() - 1);
+            HashMap::with_capacity(self.config.shard_count() - 1);
 
         // select processes from my shard and compute `closest_shard_process`
         let processes: Vec<_> = all_processes

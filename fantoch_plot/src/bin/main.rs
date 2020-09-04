@@ -1,6 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::client::{KeyGen, ShardGen};
+use fantoch::client::KeyGen;
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
@@ -32,13 +32,11 @@ fn main() -> Result<(), Report> {
 fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
-    let keys_per_shard = 1;
     let mut key_gens = Vec::new();
-    let zipf_key_count = 1_000_000;
     for coefficient in vec![0.5, 0.6] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
-            key_count: zipf_key_count,
+            keys_per_shard: 1_000_000,
         });
     }
     let payload_size = 0;
@@ -109,16 +107,14 @@ fn partial_replication() -> Result<(), Report> {
             let searches = shard_combinations
                 .clone()
                 .into_iter()
-                .flat_map(|(shard_count, shards_per_command)| {
-                    let shard_gen = ShardGen::Random { shard_count };
+                .flat_map(|(shard_count, keys_per_command)| {
                     protocol_combinations(n, protocols.clone()).into_iter().map(
                         move |(protocol, f)| {
                             let mut search = Search::new(n, f, protocol);
                             search
-                                .shards_per_command(shards_per_command)
-                                .shard_gen(shard_gen)
-                                .keys_per_shard(keys_per_shard)
+                                .shard_count(shard_count)
                                 .key_gen(key_gen)
+                                .keys_per_command(keys_per_command)
                                 .payload_size(payload_size);
                             search
                         },
@@ -143,20 +139,19 @@ fn partial_replication() -> Result<(), Report> {
                 styles.insert((6, 1), ("#1abc9c", "s"));
                 styles.insert((6, 2), ("#1abc9c", "+"));
 
-                // get shards config of this search
-                let shards_per_command = search.shards_per_command.unwrap();
-                let ShardGen::Random { shard_count } =
-                    search.shard_gen.unwrap();
+                // get config of this search
+                let shard_count = search.shard_count.unwrap();
+                let keys_per_command = search.keys_per_command.unwrap();
 
                 // find color and marker for this search
                 let (color, marker) = if let Some(entry) =
-                    styles.get(&(shard_count, shards_per_command))
+                    styles.get(&(shard_count, keys_per_command))
                 {
                     entry
                 } else {
                     panic!(
                         "unsupported shards config pair: {:?}",
-                        (shard_count, shards_per_command)
+                        (shard_count, keys_per_command)
                     );
                 };
 
@@ -186,9 +181,7 @@ fn partial_replication() -> Result<(), Report> {
             )?;
         }
 
-        for (shard_count, shards_per_command) in shard_combinations.clone() {
-            let shard_gen = ShardGen::Random { shard_count };
-
+        for (shard_count, keys_per_command) in shard_combinations.clone() {
             // generate throughput-something plot
             for y_axis in vec![
                 ThroughputYAxis::Latency(LatencyMetric::Average),
@@ -197,11 +190,11 @@ fn partial_replication() -> Result<(), Report> {
                 ThroughputYAxis::CPU,
             ] {
                 let path = format!(
-                    "throughput_{}_n{}_ts{}_s{}_{}.pdf",
+                    "throughput_{}_n{}_s{}_k{}_{}.pdf",
                     y_axis.name(),
                     n,
                     shard_count,
-                    shards_per_command,
+                    keys_per_command,
                     key_gen,
                 );
                 // create searches
@@ -210,10 +203,9 @@ fn partial_replication() -> Result<(), Report> {
                     .map(|(protocol, f)| {
                         let mut search = Search::new(n, f, protocol);
                         search
-                            .shards_per_command(shards_per_command)
-                            .shard_gen(shard_gen)
-                            .keys_per_shard(keys_per_shard)
+                            .shard_count(shard_count)
                             .key_gen(key_gen)
+                            .keys_per_command(keys_per_command)
                             .payload_size(payload_size);
                         search
                     })
@@ -234,10 +226,10 @@ fn partial_replication() -> Result<(), Report> {
             // generate dstat, latency and cdf plots
             for clients_per_region in clients_per_region.clone() {
                 println!(
-                    "n = {} | ts = {} | s = {} | {} | c = {}",
+                    "n = {} | s = {} | k = {} | {} | c = {}",
                     n,
                     shard_count,
-                    shards_per_command,
+                    keys_per_command,
                     key_gen,
                     clients_per_region,
                 );
@@ -250,10 +242,9 @@ fn partial_replication() -> Result<(), Report> {
                             let mut search = Search::new(n, f, protocol);
                             search
                                 .clients_per_region(clients_per_region)
-                                .shards_per_command(shards_per_command)
-                                .shard_gen(shard_gen)
-                                .keys_per_shard(keys_per_shard)
+                                .shard_count(shard_count)
                                 .key_gen(key_gen)
+                                .keys_per_command(keys_per_command)
                                 .payload_size(payload_size);
                             search
                         })
@@ -262,11 +253,11 @@ fn partial_replication() -> Result<(), Report> {
                 // generate dstat table
                 for metrics_type in dstat_combinations(shard_count, n) {
                     let path = format!(
-                        "dstat_{}_n{}_ts{}_s{}_{}_c{}.pdf",
+                        "dstat_{}_n{}_s{}_k{}_{}_c{}.pdf",
                         metrics_type.name(),
                         n,
                         shard_count,
-                        shards_per_command,
+                        keys_per_command,
                         key_gen,
                         clients_per_region,
                     );
@@ -283,11 +274,11 @@ fn partial_replication() -> Result<(), Report> {
                 for metrics_type in process_metrics_combinations(shard_count, n)
                 {
                     let path = format!(
-                        "metrics_{}_n{}_ts{}_s{}_{}_c{}.pdf",
+                        "metrics_{}_n{}_s{}_k{}_{}_c{}.pdf",
                         metrics_type.name(),
                         n,
                         shard_count,
-                        shards_per_command,
+                        keys_per_command,
                         key_gen,
                         clients_per_region,
                     );
@@ -308,11 +299,11 @@ fn partial_replication() -> Result<(), Report> {
                     ErrorBar::With(0.999),
                 ] {
                     let path = format!(
-                        "latency{}_n{}_ts{}_s{}_{}_c{}.pdf",
+                        "latency{}_n{}_s{}_k{}_{}_c{}.pdf",
                         error_bar.name(),
                         n,
                         shard_count,
-                        shards_per_command,
+                        keys_per_command,
                         key_gen,
                         clients_per_region,
                     );
@@ -344,10 +335,10 @@ fn partial_replication() -> Result<(), Report> {
 
                 // generate cdf plot
                 let path = format!(
-                    "cdf_n{}_ts{}_s{}_{}_c{}.pdf",
+                    "cdf_n{}_s{}_k{}_{}_c{}.pdf",
                     n,
                     shard_count,
-                    shards_per_command,
+                    keys_per_command,
                     key_gen,
                     clients_per_region
                 );
@@ -371,8 +362,6 @@ fn multi_key() -> Result<(), Report> {
     // fixed parameters
     let shard_count = 1;
     let n = 5;
-    let zipf_key_count = 1_000_000;
-    // let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
     let payload_size = 0;
     let protocols = vec![
         Protocol::NewtAtomic,
@@ -390,7 +379,7 @@ fn multi_key() -> Result<(), Report> {
             // create key generator
             let key_gen = KeyGen::Zipf {
                 coefficient: zipf_coefficient,
-                key_count: zipf_key_count,
+                keys_per_shard: 1_000_000,
             };
 
             // generate throughput-something plot
@@ -413,7 +402,7 @@ fn multi_key() -> Result<(), Report> {
                     .map(|(protocol, f)| {
                         let mut search = Search::new(n, f, protocol);
                         search
-                            .keys_per_shard(keys_per_shard)
+                            .keys_per_command(keys_per_shard)
                             .key_gen(key_gen)
                             .payload_size(payload_size);
                         search
@@ -448,7 +437,7 @@ fn multi_key() -> Result<(), Report> {
                             search
                                 .clients_per_region(clients_per_region)
                                 .key_gen(key_gen)
-                                .keys_per_shard(keys_per_shard)
+                                .keys_per_command(keys_per_shard)
                                 .payload_size(payload_size);
                             search
                         })

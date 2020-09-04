@@ -154,7 +154,7 @@ impl TarjanSCCFinder {
                         "p{}: Finder::strong_connect missing {:?}",
                         self.process_id, dep
                     );
-                    if self.config.shards() == 1 || !first_find {
+                    if self.config.shard_count() == 1 || !first_find {
                         return FinderResult::MissingDependencies(singleton![
                             dep
                         ]);
@@ -294,7 +294,7 @@ impl TarjanSCCFinder {
                 // member_dot     );
                 // }
                 executed_clock.add(&member_dot.source(), member_dot.sequence());
-                if self.config.shards() > 1 {
+                if self.config.shard_count() > 1 {
                     added_to_executed_clock.insert(member_dot);
                 }
 

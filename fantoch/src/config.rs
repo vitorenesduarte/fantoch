@@ -10,7 +10,7 @@ pub struct Config {
     /// number of tolerated faults
     f: usize,
     /// number of shards
-    shards: usize,
+    shard_count: usize,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
     // defines the interval between executor cleanups
@@ -43,8 +43,8 @@ impl Config {
         if f > n / 2 {
             warn!("f={} is larger than a minority with n={}", f, n);
         }
-        // by default, `shards = 1`
-        let shards = 1;
+        // by default, `shard_count = 1`
+        let shard_count = 1;
         // by default, execution is not skipped
         let execute_at_commit = false;
         // by default, executor cleanups happen every 5ms
@@ -66,7 +66,7 @@ impl Config {
         Self {
             n,
             f,
-            shards,
+            shard_count,
             execute_at_commit,
             executor_cleanup_interval,
             executor_monitor_pending_interval,
@@ -90,14 +90,14 @@ impl Config {
     }
 
     /// Retrieve the number of shards.
-    pub fn shards(&self) -> usize {
-        self.shards
+    pub fn shard_count(&self) -> usize {
+        self.shard_count
     }
 
     /// Changes the number of sahrds.
-    pub fn set_shards(&mut self, shards: usize) {
-        assert!(shards >= 1);
-        self.shards = shards;
+    pub fn set_shard_count(&mut self, shard_count: usize) {
+        assert!(shard_count >= 1);
+        self.shard_count = shard_count;
     }
 
     /// Checks whether execution is to be skipped.
@@ -280,12 +280,12 @@ mod tests {
         assert_eq!(config.f(), f);
 
         // by default, the number shards is 1.
-        assert_eq!(config.shards(), 1);
+        assert_eq!(config.shard_count(), 1);
 
         // but that can change
         let shards = 10;
-        config.set_shards(shards);
-        assert_eq!(config.shards(), shards);
+        config.set_shard_count(shards);
+        assert_eq!(config.shard_count(), shards);
 
         // by deafult, execute at commit is false
         assert!(!config.execute_at_commit());

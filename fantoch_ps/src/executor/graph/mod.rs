@@ -98,9 +98,10 @@ impl DependencyGraph {
         // this value will be overwritten
         let executor_index = 0;
         // create executed clock and its snapshot
-        let ids: Vec<_> = util::all_process_ids(config.shards(), config.n())
-            .map(|(process_id, _)| process_id)
-            .collect();
+        let ids: Vec<_> =
+            util::all_process_ids(config.shard_count(), config.n())
+                .map(|(process_id, _)| process_id)
+                .collect();
         let executed_clock = AEClock::with(ids.clone());
         // create level executed clock
         let level_executed_clock =

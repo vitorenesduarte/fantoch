@@ -2,15 +2,14 @@ mod common;
 
 use clap::{App, Arg};
 use color_eyre::Report;
-use fantoch::client::{KeyGen, ShardGen, Workload};
+use fantoch::client::{KeyGen, Workload};
 use fantoch::id::ClientId;
 use fantoch::info;
 use std::time::Duration;
 
 const RANGE_SEP: &str = "-";
-const DEFAULT_SHARDS_PER_COMMAND: usize = 1;
-const DEFAULT_SHARD_GEN: ShardGen = ShardGen::Random { shard_count: 1 };
-const DEFAULT_KEYS_PER_SHARD: usize = 1;
+const DEFAULT_KEYS_PER_COMMAND: usize = 1;
+const DEFAULT_SHARD_COUNT: usize = 1;
 const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictRate { conflict_rate: 100 };
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
@@ -84,24 +83,10 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("shards_per_command")
-                .long("shards_per_command")
-                .value_name("SHARDS_PER_COMMAND")
-                .help("number of shards accessed by commands to be issued by each client; default: 1")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("shard_gen")
-                .long("shard_gen")
-                .value_name("SHARD_GEN")
-                .help("representation of a shard generator; possible values 'random,10' where 10 is the number of shards; default: 'random,1'")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("keys_per_shard")
-                .long("keys_per_shard")
-                .value_name("KEYS_PER_SHARD")
-                .help("number of keys per shard accessed by commands to be issued by each client; default: 1")
+            Arg::with_name("shards_count")
+                .long("shard_count")
+                .value_name("SHARD_COUNT")
+                .help("number of shards accessed in the system; default: 1")
                 .takes_value(true),
         )
         .arg(
@@ -109,6 +94,13 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .long("key_gen")
                 .value_name("KEY_GEN")
                 .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys in the distribution; default: 'conflict_rate,100'")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("keys_per_command")
+                .long("keys_per_command")
+                .value_name("KEYS_PER_COMMAND")
+                .help("number of keys accessed by each command to be issued by each client; default: 1")
                 .takes_value(true),
         )
         .arg(
@@ -187,10 +179,9 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
     let addresses = parse_addresses(matches.value_of("addresses"));
     let interval = parse_interval(matches.value_of("interval"));
     let workload = parse_workload(
-        matches.value_of("shards_per_command"),
-        matches.value_of("shard_gen"),
-        matches.value_of("keys_per_shards"),
+        matches.value_of("shard_count"),
         matches.value_of("key_gen"),
+        matches.value_of("keys_per_command"),
         matches.value_of("commands_per_client"),
         matches.value_of("payload_size"),
     );
@@ -268,76 +259,44 @@ fn parse_interval(interval: Option<&str>) -> Option<Duration> {
 }
 
 fn parse_workload(
-    shards_per_command: Option<&str>,
-    shard_gen: Option<&str>,
-    keys_per_shard: Option<&str>,
+    shard_count: Option<&str>,
     key_gen: Option<&str>,
+    keys_per_command: Option<&str>,
     commands_per_client: Option<&str>,
     payload_size: Option<&str>,
 ) -> Workload {
-    let shards_per_command = parse_shards_per_command(shards_per_command);
-    let shard_gen = parse_shard_gen(shard_gen);
-    let keys_per_shard = parse_keys_per_shard(keys_per_shard);
+    let shard_count = parse_shard_count(shard_count);
     let key_gen = parse_key_gen(key_gen);
+    let keys_per_command = parse_keys_per_command(keys_per_command);
     let commands_per_client = parse_commands_per_client(commands_per_client);
     let payload_size = parse_payload_size(payload_size);
     Workload::new(
-        shards_per_command,
-        shard_gen,
-        keys_per_shard,
+        shard_count,
         key_gen,
+        keys_per_command,
         commands_per_client,
         payload_size,
     )
 }
 
-fn parse_shards_per_command(number: Option<&str>) -> usize {
+fn parse_keys_per_command(number: Option<&str>) -> usize {
     number
         .map(|number| {
             number
                 .parse::<usize>()
-                .expect("shards per command should be a number")
+                .expect("keys per command should be a number")
         })
-        .unwrap_or(DEFAULT_SHARDS_PER_COMMAND)
+        .unwrap_or(DEFAULT_KEYS_PER_COMMAND)
 }
 
-fn parse_shard_gen(shard_gen: Option<&str>) -> ShardGen {
-    shard_gen
-        .map(|key_gen| {
-            let parts: Vec<_> = key_gen.split(',').collect();
-            match parts.len() {
-                2 => (),
-                _ => panic!(
-                    "invalid specification of shard generator: {:?}",
-                    key_gen
-                ),
-            };
-            match parts[0] {
-                "random" => {
-                    if parts.len() != 2 {
-                        panic!(
-                            "random shard generator takes a single argument"
-                        );
-                    }
-                    let shard_count = parts[1]
-                        .parse::<usize>()
-                        .expect("number of shards should be a number");
-                    ShardGen::Random { shard_count }
-                }
-                sgen => panic!("invalid shard generator type: {}", sgen),
-            }
-        })
-        .unwrap_or(DEFAULT_SHARD_GEN)
-}
-
-fn parse_keys_per_shard(number: Option<&str>) -> usize {
+fn parse_shard_count(number: Option<&str>) -> usize {
     number
         .map(|number| {
             number
                 .parse::<usize>()
-                .expect("keys per shard should be a number")
+                .expect("shard count should be a number")
         })
-        .unwrap_or(DEFAULT_KEYS_PER_SHARD)
+        .unwrap_or(DEFAULT_SHARD_COUNT)
 }
 
 fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
@@ -365,11 +324,11 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                     let coefficient = parts[1]
                         .parse::<f64>()
                         .expect("zipf coefficient should be a float");
-                    let key_count = parts[2]
+                    let keys_per_shard = parts[2]
                         .parse::<usize>()
-                        .expect("number of keys in the zipf distribution should be a number");
+                        .expect("number of keys per shard in the zipf distribution should be a number");
                         KeyGen::Zipf {
-                            coefficient, key_count
+                            coefficient, keys_per_shard,
                         }
                 }
                 kgen => panic!("invalid key generator type: {}", kgen),
