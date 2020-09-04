@@ -332,7 +332,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         if info.quorum_deps.all() {
             // compute the union while checking whether all deps reported are
             // equal
-            let (final_deps, all_equal) = info.quorum_deps.union();
+            let (final_deps, all_equal) = info.quorum_deps.check_union();
 
             // create consensus value
             let value = ConsensusValue::with(final_deps);

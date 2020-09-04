@@ -353,18 +353,18 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // check if we have all necessary replies
         if info.quorum_deps.all() {
-            // compute the threshold union while checking whether it's equal to
-            // their union
-            let (fast_path_deps, equal_to_union) =
-                info.quorum_deps.threshold_union(self.bp.config.f());
+            // check if threshold union if equal to union and get the union of
+            // all dependencies reported
+            let (all_deps, equal_to_union) =
+                info.quorum_deps.check_threshold_union(self.bp.config.f());
+
+            // create consensus value
+            let value = ConsensusValue::with(all_deps);
 
             // fast path condition:
             // - each dependency was reported by at least f processes
             if equal_to_union {
                 self.bp.fast_path();
-
-                // create consensus value
-                let value = ConsensusValue::with(fast_path_deps);
 
                 // fast path: create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
@@ -378,10 +378,6 @@ impl<KD: KeyDeps> Atlas<KD> {
                 )
             } else {
                 self.bp.slow_path();
-
-                // create consensus value
-                let (slow_path_deps, _) = info.quorum_deps.union();
-                let value = ConsensusValue::with(slow_path_deps);
 
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();

@@ -192,7 +192,8 @@ impl ResultsDB {
                     }
                 }
 
-                // filter out configuration with different keys_per_command (if set)
+                // filter out configuration with different keys_per_command (if
+                // set)
                 if let Some(keys_per_command) = search.keys_per_command {
                     if exp_config.workload.keys_per_command()
                         != keys_per_command

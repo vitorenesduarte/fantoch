@@ -343,7 +343,8 @@ mod tests {
 
     #[test]
     fn two_shards() {
-        // in order for this test to pass, `check_two_shards` should generate a command that accesses two shards
+        // in order for this test to pass, `check_two_shards` should generate a
+        // command that accesses two shards
         std::iter::repeat(()).any(|_| check_two_shards());
     }
 
