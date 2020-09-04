@@ -343,19 +343,26 @@ mod tests {
 
     #[test]
     fn two_shards() {
+        // in order for this test to pass, `check_two_shards` should generate a command that accesses two shards
+        std::iter::repeat(()).any(|_| check_two_shards());
+    }
+
+    fn check_two_shards() -> bool {
         // create rilf gen
         let client_id = 1;
         let mut rifl_gen = RiflGen::new(client_id);
 
         // general config
-        let shard_count = 1;
-        let keys_per_command = 1;
+        let shard_count = 2;
+        let keys_per_command = 2;
         let commands_per_client = 1;
         let payload_size = 0;
 
         // create workload
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let key_gen = KeyGen::Zipf {
+            coefficient: 0.1,
+            keys_per_shard: 1_000_000,
+        };
         let mut key_gen_state = key_gen.initial_state(shard_count, client_id);
         let mut workload = Workload::new(
             shard_count,
@@ -374,16 +381,14 @@ mod tests {
             "target shard should be either 0 or 1"
         );
 
-        assert_eq!(
-            cmd.key_count(0),
-            keys_per_command,
-            "there should be 1 key in shard 0"
+        assert!(
+            cmd.key_count(0) + cmd.key_count(1) == keys_per_command,
+            "the number of keys accessed by the command should be 2"
         );
 
-        assert_eq!(
-            cmd.key_count(1),
-            keys_per_command,
-            "there should be 1 key in shard 1"
-        );
+        // we want an execution in which the two shards are accessed, i.e.:
+        // - 1 key in shard 0
+        // - 1 key in shard 1
+        cmd.key_count(0) == 1 && cmd.key_count(1) == 1
     }
 }
