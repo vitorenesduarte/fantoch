@@ -319,23 +319,7 @@ mod tests {
 
     // ---- newt (partial replication) tests ---- //
     #[test]
-    fn run_newt_3_1_atomic_partial_replication_one_shard_per_command_test() {
-        let shard_count = 2;
-        let workers = 2;
-        let executors = 2;
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(3, 1),
-            shard_count,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
-    fn run_newt_3_1_atomic_partial_replication_two_shards_per_command_test() {
+    fn run_newt_3_1_atomic_partial_replication_two_shards_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
