@@ -5,9 +5,6 @@ pub mod workload;
 // `KeyGeneratorState`.
 pub mod key_gen;
 
-// This module contains the definition of `ShardGen`.
-pub mod shard_gen;
-
 // This module contains the definition of `Pending`
 pub mod pending;
 
@@ -18,7 +15,6 @@ pub mod data;
 pub use data::ClientData;
 pub use key_gen::KeyGen;
 pub use pending::Pending;
-pub use shard_gen::ShardGen;
 pub use workload::Workload;
 
 use crate::command::{Command, CommandResult};
@@ -56,13 +52,17 @@ impl Client {
         workload: Workload,
         status_frequency: Option<usize>,
     ) -> Self {
+        // create key gen state
+        let key_gen_state = workload
+            .key_gen()
+            .initial_state(workload.shard_count(), client_id);
         // create client
         Self {
             client_id,
             processes: HashMap::new(),
             rifl_gen: RiflGen::new(client_id),
             workload,
-            key_gen_state: workload.key_gen().initial_state(client_id),
+            key_gen_state,
             pending: Pending::new(),
             data: ClientData::new(),
             status_frequency,
@@ -174,20 +174,18 @@ mod tests {
     use std::time::Duration;
 
     // Generates some client.
-    fn gen_client(total_commands: usize) -> Client {
+    fn gen_client(commands_per_client: usize) -> Client {
         // workload
-        let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shard_count: 1 };
-        let keys_per_shard = 1;
+        let shard_count = 1;
+        let keys_per_command = 1;
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
         let payload_size = 100;
         let workload = Workload::new(
-            shards_per_command,
-            shard_gen,
-            keys_per_shard,
+            shard_count,
             key_gen,
-            total_commands,
+            keys_per_command,
+            commands_per_client,
             payload_size,
         );
 
@@ -216,8 +214,8 @@ mod tests {
 
         // client
         let region = Region::new("europe-west2");
-        let total_commands = 0;
-        let mut client = gen_client(total_commands);
+        let commands_per_client = 0;
+        let mut client = gen_client(commands_per_client);
 
         // check discover with empty vec
         let closest = util::closest_process_per_shard(&region, &planet, vec![]);
@@ -252,8 +250,8 @@ mod tests {
 
         // client
         let region = Region::new("europe-west2");
-        let total_commands = 2;
-        let mut client = gen_client(total_commands);
+        let commands_per_client = 2;
+        let mut client = gen_client(commands_per_client);
 
         // discover
         let closest =

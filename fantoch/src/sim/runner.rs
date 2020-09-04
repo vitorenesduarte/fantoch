@@ -577,7 +577,7 @@ impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::{KeyGen, ShardGen};
+    use crate::client::KeyGen;
     use crate::protocol::{Basic, ProtocolMetricsKind};
     use fantoch_prof::metrics::F64;
 
@@ -593,18 +593,16 @@ mod tests {
         config.set_gc_interval(Duration::from_millis(100));
 
         // clients workload
-        let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shard_count: 1 };
-        let keys_per_shard = 1;
+        let shard_count = 1;
+        let keys_per_command = 1;
         let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
-        let total_commands = 1000;
+        let commands_per_client = 1000;
         let payload_size = 100;
         let workload = Workload::new(
-            shards_per_command,
-            shard_gen,
-            keys_per_shard,
+            shard_count,
             key_gen,
-            total_commands,
+            keys_per_command,
+            commands_per_client,
             payload_size,
         );
 
@@ -642,7 +640,7 @@ mod tests {
             .expect("there should stats from us-west2 region");
 
         // check the number of issued commands
-        let expected = total_commands * clients_per_process;
+        let expected = commands_per_client * clients_per_process;
         assert_eq!(us_west1_issued, expected);
         assert_eq!(us_west2_issued, expected);
 
