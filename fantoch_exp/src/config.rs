@@ -149,7 +149,7 @@ impl ProtocolConfig {
             self.config.n(),
             "--faults",
             self.config.f(),
-            "--shards",
+            "--shard_count",
             self.config.shard_count(),
             "--execute_at_commit",
             self.config.execute_at_commit(),
