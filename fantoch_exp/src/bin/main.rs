@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_throughput_latency";
+const RESULTS_DIR: &str = "../results_partial_replication";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -46,7 +46,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "consistent_hashing";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -99,6 +99,7 @@ async fn main() -> Result<(), Report> {
     ];
     let n = regions.len();
 
+    /*
     // THROUGHPUT
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
@@ -146,6 +147,7 @@ async fn main() -> Result<(), Report> {
         // skip Atlas with more than 4096 clients
         protocol == Protocol::AtlasLocked && clients > 1024 * 4
     };
+    */
 
     /*
     // MULTI_KEY
@@ -164,45 +166,46 @@ async fn main() -> Result<(), Report> {
     let zipf_key_count = 1_000_000;
 
     let skip = |_, _, _| false;
+    */
 
     // PARTIAL REPLICATION
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
-        1024 / 4,
-        1024 / 2,
+        // 1024 / 4,
+        // 1024 / 2,
         1024,
-        1024 * 2,
+        // 1024 * 2,
         1024 * 4,
         1024 * 8,
-        1024 * 12,
+        // 1024 * 12,
         1024 * 16,
-        1024 * 20,
-        1024 * 24,
+        // 1024 * 20,
+        // 1024 * 24,
         1024 * 32,
-        1024 * 36,
-        1024 * 40,
+        // 1024 * 36,
+        // 1024 * 40,
         1024 * 48,
-        1024 * 56,
+        // 1024 * 56,
         1024 * 64,
-        1024 * 96,
-        1024 * 128,
-        1024 * 160,
-        1024 * 192,
-        1024 * 224,
-        1024 * 240,
-        1024 * 256,
-        1024 * 272,
+        // 1024 * 96,
+        // 1024 * 128,
+        // 1024 * 160,
+        // 1024 * 192,
+        // 1024 * 224,
+        // 1024 * 240,
+        // 1024 * 256,
+        // 1024 * 272,
     ];
     let shard_count = 5;
-    let keys_per_shard = 1_000_000;
+    let key_count = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: 0.6,
-        keys_per_shard,
+        coefficient: 1.0,
+        key_count,
     };
     let keys_per_command = 2;
     let payload_size = 0;
@@ -218,7 +221,6 @@ async fn main() -> Result<(), Report> {
     workloads.push(workload);
 
     let skip = |_, _, _| false;
-    */
 
     // set shards in each config
     configs

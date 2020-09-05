@@ -120,15 +120,10 @@ impl Workload {
         // generate all the key-value pairs
         let mut ops: HashMap<_, HashMap<_, _>> = HashMap::new();
 
-        // generate unique keys
-        let keys = Self::gen_unique(self.keys_per_command, || {
-            key_gen_state.gen_cmd_key()
-        });
-
-        //
         let mut target_shard = None;
-        for key in keys {
-            // generate value
+        for _ in 0..self.keys_per_command {
+            // generate key and value
+            let key = key_gen_state.gen_cmd_key();
             let value = self.gen_cmd_value();
             // compute key's shard
             let shard_id = self.shard_id(&key);
@@ -194,7 +189,7 @@ mod tests {
         // create conflicting workload
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let mut key_gen_state = key_gen.initial_state(shard_count, client_id);
+        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -213,7 +208,7 @@ mod tests {
         // create non-conflicting workload
         let conflict_rate = 0;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let mut key_gen_state = key_gen.initial_state(shard_count, client_id);
+        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -242,7 +237,7 @@ mod tests {
         // create workload
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let mut key_gen_state = key_gen.initial_state(shard_count, client_id);
+        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -309,8 +304,7 @@ mod tests {
 
             // create workload
             let key_gen = KeyGen::ConflictRate { conflict_rate };
-            let mut key_gen_state =
-                key_gen.initial_state(shard_count, client_id);
+            let mut key_gen_state = key_gen.initial_state(client_id);
             let mut workload = Workload::new(
                 shard_count,
                 key_gen,
@@ -362,9 +356,9 @@ mod tests {
         // create workload
         let key_gen = KeyGen::Zipf {
             coefficient: 0.1,
-            keys_per_shard: 1_000_000,
+            key_count: 1_000_000,
         };
-        let mut key_gen_state = key_gen.initial_state(shard_count, client_id);
+        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,

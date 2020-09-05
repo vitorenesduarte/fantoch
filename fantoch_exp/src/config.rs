@@ -328,8 +328,8 @@ impl ClientConfig {
             }
             KeyGen::Zipf {
                 coefficient,
-                keys_per_shard,
-            } => format!("zipf,{},{}", coefficient, keys_per_shard),
+                key_count,
+            } => format!("zipf,{},{}", coefficient, key_count),
         };
         let mut args = args![
             "--ids",

@@ -36,7 +36,7 @@ fn partial_replication() -> Result<(), Report> {
     for coefficient in vec![0.5, 0.6] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
-            keys_per_shard: 1_000_000,
+            key_count: 1_000_000,
         });
     }
     let payload_size = 0;
@@ -379,7 +379,7 @@ fn multi_key() -> Result<(), Report> {
             // create key generator
             let key_gen = KeyGen::Zipf {
                 coefficient: zipf_coefficient,
-                keys_per_shard: 1_000_000,
+                key_count: 1_000_000,
             };
 
             // generate throughput-something plot

@@ -102,6 +102,11 @@ impl Command {
             .unwrap_or(0)
     }
 
+    /// Returns the total number of keys accessed by this command.
+    pub fn total_key_count(&self) -> usize {
+        self.shard_to_ops.values().map(|ops| ops.len()).sum()
+    }
+
     /// Returns references to the keys modified by this command on the shard
     /// provided.
     pub fn keys(&self, shard_id: ShardId) -> impl Iterator<Item = &Key> {

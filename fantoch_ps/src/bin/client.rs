@@ -324,11 +324,11 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                     let coefficient = parts[1]
                         .parse::<f64>()
                         .expect("zipf coefficient should be a float");
-                    let keys_per_shard = parts[2]
+                    let key_count = parts[2]
                         .parse::<usize>()
-                        .expect("number of keys per shard in the zipf distribution should be a number");
+                        .expect("number of keys in the zipf distribution should be a number");
                         KeyGen::Zipf {
-                            coefficient, keys_per_shard,
+                            coefficient, key_count,
                         }
                 }
                 kgen => panic!("invalid key generator type: {}", kgen),
