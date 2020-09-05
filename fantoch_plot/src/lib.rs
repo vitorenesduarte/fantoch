@@ -740,18 +740,10 @@ pub fn process_metrics_table(
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    let col_labels = vec![
-        "fast",
-        "slow",
-        "gc",
-        "delay (ms)",
-        "chains",
-        "out",
-        "in_req",
-        "in_rep",
-    ];
+    let col_labels =
+        vec!["fast", "slow", "gc", "delay (ms)", "chains", "out", "in"];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.12, 0.12, 0.12, 0.24, 0.24, 0.12, 0.12, 0.12];
+    let col_widths = vec![0.12, 0.12, 0.12, 0.24, 0.24, 0.12, 0.12];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -773,6 +765,8 @@ pub fn process_metrics_table(
             }
             1 => (),
             _ => {
+                // TODO if more than one match *and* the number of clients was
+                // not set, then have an entry for each of the entries found
                 let matches: Vec<_> = exp_data
                     .into_iter()
                     .map(|(timestamp, _)| {
@@ -836,9 +830,6 @@ pub fn process_metrics_table(
         let in_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequests)
             .map(|in_requests| fmt(in_requests));
-        let in_request_replies = executor_metrics
-            .get_aggregated(ExecutorMetricsKind::InRequestReplies)
-            .map(|in_request_replies| fmt(in_request_replies));
         // create cell
         let cell = vec![
             fast_path,
@@ -848,7 +839,6 @@ pub fn process_metrics_table(
             chain_size,
             out_requests,
             in_requests,
-            in_request_replies,
         ];
         // format cell
         let fmt_cell_data =

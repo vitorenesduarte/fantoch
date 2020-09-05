@@ -9,8 +9,13 @@ pub const CONFLICT_COLOR: &str = "CONFLICT";
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum KeyGen {
-    ConflictRate { conflict_rate: usize },
-    Zipf { coefficient: f64, keys_per_shard: usize },
+    ConflictRate {
+        conflict_rate: usize,
+    },
+    Zipf {
+        coefficient: f64,
+        keys_per_shard: usize,
+    },
 }
 
 impl KeyGen {

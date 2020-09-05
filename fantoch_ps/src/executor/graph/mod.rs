@@ -408,12 +408,6 @@ impl DependencyGraph {
         time: &dyn SysTime,
     ) {
         assert_eq!(self.executor_index, 0);
-        // save in request replies metric
-        self.metrics.aggregate(
-            ExecutorMetricsKind::InRequestReplies,
-            infos.len() as u64,
-        );
-
         for info in infos {
             debug!(
                 "p{}: @{} Graph::handle_request_reply {:?} | time = {}",
