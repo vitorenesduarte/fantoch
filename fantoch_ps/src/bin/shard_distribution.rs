@@ -4,10 +4,10 @@ use fantoch_prof::metrics::Histogram;
 
 fn main() {
     let n = 3;
-    let keys_per_command = 3;
+    let keys_per_command = 2;
     let commands_per_client = 500;
     let payload_size = 0;
-    let clients_per_region = 8*1024;
+    let clients_per_region = 1024;
     let shard_counts = vec![2, 3, 4, 5, 6];
     let coefficients = vec![
         0.001, 0.25, 0.5, 0.75, 1.0, 1.25, 1.50, 2.0, 2.5, 3.0, 3.5, 4.0,
@@ -53,8 +53,9 @@ fn main() {
                     payload_size,
                 );
                 let mut rifl_gen = RiflGen::new(client_id);
-                let mut key_gen_state =
-                    workload.key_gen().initial_state(client_id);
+                let mut key_gen_state = workload
+                    .key_gen()
+                    .initial_state(workload.shard_count(), client_id);
                 while let Some((_target_shard, cmd)) =
                     workload.next_cmd(&mut rifl_gen, &mut key_gen_state)
                 {

@@ -90,6 +90,8 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    /*
+    // THROUGHPUT
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -99,8 +101,6 @@ async fn main() -> Result<(), Report> {
     ];
     let n = regions.len();
 
-    /*
-    // THROUGHPUT
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
@@ -169,10 +169,19 @@ async fn main() -> Result<(), Report> {
     */
 
     // PARTIAL REPLICATION
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        // Region::CaCentral1,
+        // Region::SaEast1,
+    ];
+
+    let n = regions.len();
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -200,6 +209,31 @@ async fn main() -> Result<(), Report> {
         // 1024 * 240,
         // 1024 * 256,
         // 1024 * 272,
+    ];
+    let clients_per_region = vec![
+        1024,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 48,
+        1024 * 64,
+    ];
+    let clients_per_region = vec![
+        1024,
+        1024 * 2,
+        1024 * 4,
+        1024 * 8,
+        1024 * 12,
+        1024 * 16,
+        1024 * 20,
+        1024 * 24,
+        1024 * 32,
+        1024 * 36,
+        1024 * 40,
+        1024 * 48,
+        1024 * 56,
+        1024 * 64,
     ];
     let shard_count = 5;
     let key_count = 1_000_000;
