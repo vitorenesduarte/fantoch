@@ -10,12 +10,12 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results_partial_replication_more_keys";
+const RESULTS_DIR: &str = "../results_partial_replication";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
 // if true, dstats per process will be generated
-const ALL_DSTATS: bool = false;
+const ALL_DSTATS: bool = true;
 
 fn main() -> Result<(), Report> {
     // set global style
@@ -33,7 +33,7 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
-    for coefficient in vec![1.0] {
+    for coefficient in vec![0.5, 0.6, 0.7] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
             keys_per_shard: 1_000_000,

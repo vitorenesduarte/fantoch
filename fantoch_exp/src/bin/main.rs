@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_partial_replication_more_keys";
+const RESULTS_DIR: &str = "../results_partial_replication";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -212,6 +212,15 @@ async fn main() -> Result<(), Report> {
     ];
     let clients_per_region = vec![
         1024,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 48,
+        1024 * 64,
+    ];
+    let clients_per_region = vec![
+        1024,
         1024 * 2,
         1024 * 4,
         1024 * 8,
@@ -219,26 +228,17 @@ async fn main() -> Result<(), Report> {
         1024 * 16,
         1024 * 20,
         1024 * 24,
-        1024 * 32,
-        1024 * 36,
-        1024 * 40,
-        1024 * 48,
-        1024 * 56,
-        1024 * 64,
-    ];
-    let clients_per_region = vec![
-        1024,
-        1024 * 4,
-        1024 * 8,
-        1024 * 16,
-        1024 * 32,
-        1024 * 48,
-        1024 * 64,
+        // 1024 * 32,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 48,
+        // 1024 * 56,
+        // 1024 * 64,
     ];
     let shard_count = 5;
     let keys_per_shard = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: 1.0,
+        coefficient: 0.6,
         keys_per_shard,
     };
     let keys_per_command = 2;
