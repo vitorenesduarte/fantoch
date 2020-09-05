@@ -189,7 +189,6 @@ mod tests {
         // create conflicting workload
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -197,6 +196,8 @@ mod tests {
             commands_per_client,
             payload_size,
         );
+        let mut key_gen_state =
+            key_gen.initial_state(workload.shard_count(), client_id);
         let (target_shard, command) =
             workload.gen_cmd(&mut rifl_gen, &mut key_gen_state);
         assert_eq!(target_shard, 0);
@@ -208,7 +209,6 @@ mod tests {
         // create non-conflicting workload
         let conflict_rate = 0;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -216,6 +216,8 @@ mod tests {
             commands_per_client,
             payload_size,
         );
+        let mut key_gen_state =
+            key_gen.initial_state(workload.shard_count(), client_id);
         let (target_shard, command) =
             workload.gen_cmd(&mut rifl_gen, &mut key_gen_state);
         assert_eq!(target_shard, 0);
@@ -237,7 +239,6 @@ mod tests {
         // create workload
         let conflict_rate = 100;
         let key_gen = KeyGen::ConflictRate { conflict_rate };
-        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -245,6 +246,8 @@ mod tests {
             commands_per_client,
             payload_size,
         );
+        let mut key_gen_state =
+            key_gen.initial_state(workload.shard_count(), client_id);
 
         // check total and issued commands
         assert_eq!(workload.commands_per_client(), commands_per_client);
@@ -304,7 +307,6 @@ mod tests {
 
             // create workload
             let key_gen = KeyGen::ConflictRate { conflict_rate };
-            let mut key_gen_state = key_gen.initial_state(client_id);
             let mut workload = Workload::new(
                 shard_count,
                 key_gen,
@@ -312,6 +314,8 @@ mod tests {
                 commands_per_client,
                 payload_size,
             );
+            let mut key_gen_state =
+                key_gen.initial_state(workload.shard_count(), client_id);
 
             // count conflicting commands
             let mut conflict_color_count = 0;
@@ -358,7 +362,6 @@ mod tests {
             coefficient: 0.1,
             key_count: 1_000_000,
         };
-        let mut key_gen_state = key_gen.initial_state(client_id);
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -366,6 +369,8 @@ mod tests {
             commands_per_client,
             payload_size,
         );
+        let mut key_gen_state =
+            key_gen.initial_state(workload.shard_count(), client_id);
 
         let (target_shard, cmd) = workload
             .next_cmd(&mut rifl_gen, &mut key_gen_state)

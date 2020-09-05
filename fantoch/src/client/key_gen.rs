@@ -14,8 +14,12 @@ pub enum KeyGen {
 }
 
 impl KeyGen {
-    pub fn initial_state(self, client_id: ClientId) -> KeyGenState {
-        KeyGenState::new(self, client_id)
+    pub fn initial_state(
+        self,
+        shard_count: usize,
+        client_id: ClientId,
+    ) -> KeyGenState {
+        KeyGenState::new(self, shard_count, client_id)
     }
 }
 
@@ -37,13 +41,15 @@ pub struct KeyGenState {
 }
 
 impl KeyGenState {
-    fn new(key_gen: KeyGen, client_id: ClientId) -> Self {
+    fn new(key_gen: KeyGen, shard_count: usize, client_id: ClientId) -> Self {
         let zipf = match key_gen {
             KeyGen::ConflictRate { .. } => None,
             KeyGen::Zipf {
                 coefficient,
                 key_count,
             } => {
+                // compute actual key count
+                let key_count = key_count * shard_count;
                 // initialize zipf distribution
                 let zipf = ZipfDistribution::new(key_count, coefficient)
                     .expect(

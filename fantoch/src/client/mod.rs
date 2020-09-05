@@ -53,7 +53,9 @@ impl Client {
         status_frequency: Option<usize>,
     ) -> Self {
         // create key gen state
-        let key_gen_state = workload.key_gen().initial_state(client_id);
+        let key_gen_state = workload
+            .key_gen()
+            .initial_state(workload.shard_count(), client_id);
         // create client
         Self {
             client_id,
