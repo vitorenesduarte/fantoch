@@ -83,7 +83,7 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("shards_count")
+            Arg::with_name("shard_count")
                 .long("shard_count")
                 .value_name("SHARD_COUNT")
                 .help("number of shards accessed in the system; default: 1")
