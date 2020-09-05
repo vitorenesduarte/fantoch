@@ -93,7 +93,7 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
             Arg::with_name("key_gen")
                 .long("key_gen")
                 .value_name("KEY_GEN")
-                .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys in the distribution; default: 'conflict_rate,100'")
+                .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys (per shard) in the distribution; default: 'conflict_rate,100'")
                 .takes_value(true),
         )
         .arg(
@@ -324,11 +324,11 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                     let coefficient = parts[1]
                         .parse::<f64>()
                         .expect("zipf coefficient should be a float");
-                    let key_count = parts[2]
+                    let keys_per_shard = parts[2]
                         .parse::<usize>()
-                        .expect("number of keys in the zipf distribution should be a number");
+                        .expect("number of keys (per shard) in the zipf distribution should be a number");
                         KeyGen::Zipf {
-                            coefficient, key_count,
+                            coefficient, keys_per_shard
                         }
                 }
                 kgen => panic!("invalid key generator type: {}", kgen),

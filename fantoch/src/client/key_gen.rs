@@ -10,7 +10,7 @@ pub const CONFLICT_COLOR: &str = "CONFLICT";
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum KeyGen {
     ConflictRate { conflict_rate: usize },
-    Zipf { coefficient: f64, key_count: usize },
+    Zipf { coefficient: f64, keys_per_shard: usize },
 }
 
 impl KeyGen {
@@ -46,10 +46,10 @@ impl KeyGenState {
             KeyGen::ConflictRate { .. } => None,
             KeyGen::Zipf {
                 coefficient,
-                key_count,
+                keys_per_shard,
             } => {
-                // compute actual key count
-                let key_count = key_count * shard_count;
+                // compute key count
+                let key_count = keys_per_shard * shard_count;
                 // initialize zipf distribution
                 let zipf = ZipfDistribution::new(key_count, coefficient)
                     .expect(

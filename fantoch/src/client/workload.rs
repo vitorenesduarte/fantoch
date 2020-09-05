@@ -3,10 +3,9 @@ use crate::command::Command;
 use crate::id::{RiflGen, ShardId};
 use crate::kvs::{KVOp, Key, Value};
 use crate::trace;
-use crate::{HashMap, HashSet};
+use crate::HashMap;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
-use std::hash::Hash;
 use std::iter;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -148,18 +147,6 @@ impl Workload {
             .map(|_| rng.sample(Alphanumeric))
             .take(self.payload_size)
             .collect()
-    }
-
-    fn gen_unique<V, F>(count: usize, mut gen: F) -> HashSet<V>
-    where
-        F: FnMut() -> V,
-        V: Eq + Hash,
-    {
-        let mut values = HashSet::with_capacity(count);
-        while values.len() != count {
-            values.insert(gen());
-        }
-        values
     }
 
     /// Computes which shard the key belongs to.
@@ -360,7 +347,7 @@ mod tests {
         // create workload
         let key_gen = KeyGen::Zipf {
             coefficient: 0.1,
-            key_count: 1_000_000,
+            keys_per_shard: 1_000_000,
         };
         let mut workload = Workload::new(
             shard_count,

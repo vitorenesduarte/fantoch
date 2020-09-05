@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results_partial_replication";
+const RESULTS_DIR: &str = "../results_partial_replication_more_keys";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -36,7 +36,7 @@ fn partial_replication() -> Result<(), Report> {
     for coefficient in vec![1.0] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
-            key_count: 1_000_000,
+            keys_per_shard: 1_000_000,
         });
     }
     let payload_size = 0;
@@ -380,7 +380,7 @@ fn multi_key() -> Result<(), Report> {
             // create key generator
             let key_gen = KeyGen::Zipf {
                 coefficient: zipf_coefficient,
-                key_count: 1_000_000,
+                keys_per_shard: 1_000_000,
             };
 
             // generate throughput-something plot
