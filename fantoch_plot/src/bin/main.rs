@@ -10,7 +10,7 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // folder where all results are stored
-const RESULTS_DIR: &str = "../results_partial_replication";
+const RESULTS_DIR: &str = "../results_throughput_latency";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -21,9 +21,9 @@ fn main() -> Result<(), Report> {
     // set global style
     fantoch_plot::set_global_style()?;
 
-    partial_replication()?;
+    // partial_replication()?;
     // multi_key()?;
-    // single_key()?;
+    single_key()?;
     // show_distance_matrix();
     Ok(())
 }
@@ -33,7 +33,10 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
-    for coefficient in vec![0.5, 0.6, 0.7] {
+    for coefficient in vec![
+        0.1, 0.5, 0.6, 0.7, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 6.0, 8.0,
+        12.0, 16.0, 24.0, 32.0, 64.0, 128.0,
+    ] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
             keys_per_shard: 1_000_000,
@@ -75,6 +78,7 @@ fn partial_replication() -> Result<(), Report> {
         1024 * 2,
         1024 * 4,
         1024 * 8,
+        1024 * 6,
         1024 * 12,
         1024 * 16,
         1024 * 20,
@@ -103,7 +107,7 @@ fn partial_replication() -> Result<(), Report> {
             ThroughputYAxis::CPU,
         ] {
             let path =
-                format!("throughput_{}_n{}_{}.pdf", y_axis.name(), n, key_gen,);
+                format!("throughput_{}_n{}_{}.pdf", y_axis.name(), n, key_gen);
             // create searches
             let searches = shard_combinations
                 .clone()
@@ -563,7 +567,11 @@ fn multi_key() -> Result<(), Report> {
 #[allow(dead_code)]
 fn single_key() -> Result<(), Report> {
     // fixed parameters
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+    let shard_count = 1;
+    let key_gens = vec![
+        KeyGen::ConflictRate { conflict_rate: 2 },
+        KeyGen::ConflictRate { conflict_rate: 4 },
+    ];
     let payload_size = 4096;
     let protocols = vec![
         Protocol::NewtAtomic,
@@ -571,146 +579,212 @@ fn single_key() -> Result<(), Report> {
         Protocol::FPaxos,
     ];
 
+    // generate throughput-latency plot
+    let clients_per_region = vec![
+        32,
+        512,
+        1024,
+        1024 * 2,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+    ];
+
     // load results
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     for n in vec![3, 5] {
-        // generate throughput-latency plot
-        let clients_per_region = vec![
-            32,
-            512,
-            1024,
-            1024 * 2,
-            1024 * 4,
-            1024 * 8,
-            1024 * 16,
-            1024 * 32,
-        ];
-
-        // generate throughput-something plot
-        for y_axis in vec![
-            ThroughputYAxis::Latency(LatencyMetric::Average),
-            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
-            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
-            ThroughputYAxis::CPU,
-        ] {
-            let path = format!("throughput_{}_n{}.pdf", y_axis.name(), n,);
-            // create searches
-            let searches = protocol_combinations(n, protocols.clone())
-                .into_iter()
-                .map(|(protocol, f)| {
-                    let mut search = Search::new(n, f, protocol);
-                    search.key_gen(key_gen).payload_size(payload_size);
-                    search
-                })
-                .collect();
-            let style_fun = None;
-            fantoch_plot::throughput_something_plot(
-                searches,
-                style_fun,
-                n,
-                clients_per_region.clone(),
-                y_axis,
-                PLOT_DIR,
-                &path,
-                &db,
-            )?;
-        }
-
-        // generate latency plots
-        for clients_per_region in vec![
-            4,
-            8,
-            16,
-            32,
-            64,
-            128,
-            256,
-            512,
-            1024,
-            1024 * 2,
-            1024 * 4,
-            1024 * 8,
-            1024 * 16,
-            1024 * 32,
-        ] {
-            println!("n = {} | c = {}", n, clients_per_region);
-
-            // create searches
-            let searches: Vec<_> = protocol_combinations(n, protocols.clone())
-                .into_iter()
-                .map(|(protocol, f)| {
-                    let mut search = Search::new(n, f, protocol);
-                    search
-                        .clients_per_region(clients_per_region)
-                        .key_gen(key_gen)
-                        .payload_size(payload_size);
-                    search
-                })
-                .collect();
-
-            // generate latency plot
-            let mut shown = false;
-            for error_bar in vec![
-                ErrorBar::Without,
-                ErrorBar::With(0.99),
-                ErrorBar::With(0.999),
+        for key_gen in key_gens.clone() {
+            // generate all-combo throughput-something plot
+            for y_axis in vec![
+                ThroughputYAxis::Latency(LatencyMetric::Average),
+                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
+                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
+                ThroughputYAxis::CPU,
             ] {
                 let path = format!(
-                    "latency{}_n{}_c{}.pdf",
-                    error_bar.name(),
+                    "throughput_{}_n{}_{}.pdf",
+                    y_axis.name(),
                     n,
-                    clients_per_region,
+                    key_gen
                 );
+                // create searches
+                let searches = protocol_combinations(n, protocols.clone())
+                    .into_iter()
+                    .map(|(protocol, f)| {
+                        let mut search = Search::new(n, f, protocol);
+                        match protocol {
+                            Protocol::FPaxos => {
+                                // if fpaxos, don't filter by key gen as contention does not affect the results
+                            }
+                            Protocol::AtlasLocked | Protocol::NewtAtomic => {
+                                search.key_gen(key_gen);
+                            }
+                            _ => {
+                                panic!("unsupported protocol: {:?}", protocol);
+                            }
+                        }
+                        // filter by payload size in all protocols
+                        search.payload_size(payload_size);
+                        search
+                    })
+                    .collect();
                 let style_fun = None;
-                let results = fantoch_plot::latency_plot(
-                    searches.clone(),
+                fantoch_plot::throughput_something_plot(
+                    searches,
                     style_fun,
                     n,
-                    error_bar,
+                    clients_per_region.clone(),
+                    y_axis,
                     PLOT_DIR,
                     &path,
                     &db,
-                    fmt_exp_data,
                 )?;
-
-                if !shown {
-                    // only show results once
-                    for (search, histogram_fmt) in results {
-                        println!(
-                            "{:<7} f = {} | {}",
-                            PlotFmt::protocol_name(search.protocol),
-                            search.f,
-                            histogram_fmt,
-                        );
-                    }
-                    shown = true;
-                }
             }
 
-            // generate cdf plot
-            let path = format!("cdf_n{}_c{}.pdf", n, clients_per_region);
-            let style_fun = None;
-            fantoch_plot::cdf_plot(
-                searches.clone(),
-                style_fun,
-                PLOT_DIR,
-                &path,
-                &db,
-            )?;
+            // generate dstat, latency and cdf plots
+            for clients_per_region in clients_per_region.clone() {
+                println!(
+                    "n = {} | {} | c = {}",
+                    n, key_gen, clients_per_region
+                );
 
-            if n > 3 {
-                // generate cdf plot with subplots
-                let path =
-                    format!("cdf_one_per_f_n{}_c{}.pdf", n, clients_per_region);
+                // create searches
+                let searches: Vec<_> =
+                    protocol_combinations(n, protocols.clone())
+                        .into_iter()
+                        .map(|(protocol, f)| {
+                            let mut search = Search::new(n, f, protocol);
+                            match protocol {
+                                Protocol::FPaxos => {
+                                    // if fpaxos, don't filter by key gen as contention does not affect the results
+                                }
+                                Protocol::AtlasLocked
+                                | Protocol::NewtAtomic => {
+                                    search.key_gen(key_gen);
+                                }
+                                _ => {
+                                    panic!(
+                                        "unsupported protocol: {:?}",
+                                        protocol
+                                    );
+                                }
+                            }
+                            // filter by clients per region and payload size in all protocols
+                            search
+                                .clients_per_region(clients_per_region)
+                                .payload_size(payload_size);
+                            search
+                        })
+                        .collect();
+
+                // generate dstat table
+                for metrics_type in dstat_combinations(shard_count, n) {
+                    let path = format!(
+                        "dstat_{}_n{}_{}_c{}.pdf",
+                        metrics_type.name(),
+                        n,
+                        key_gen,
+                        clients_per_region,
+                    );
+                    fantoch_plot::dstat_table(
+                        searches.clone(),
+                        metrics_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate process metrics table
+                for metrics_type in process_metrics_combinations(shard_count, n)
+                {
+                    let path = format!(
+                        "metrics_{}_n{}_{}_c{}.pdf",
+                        metrics_type.name(),
+                        n,
+                        key_gen,
+                        clients_per_region,
+                    );
+                    fantoch_plot::process_metrics_table(
+                        searches.clone(),
+                        metrics_type,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
+
+                // generate latency plot
+                let mut shown = false;
+                for error_bar in vec![
+                    ErrorBar::Without,
+                    ErrorBar::With(0.99),
+                    ErrorBar::With(0.999),
+                ] {
+                    let path = format!(
+                        "latency{}_n{}_{}_c{}.pdf",
+                        error_bar.name(),
+                        n,
+                        key_gen,
+                        clients_per_region,
+                    );
+                    let style_fun = None;
+                    let results = fantoch_plot::latency_plot(
+                        searches.clone(),
+                        style_fun,
+                        n,
+                        error_bar,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                        fmt_exp_data,
+                    )?;
+
+                    if !shown {
+                        // only show results once
+                        for (search, histogram_fmt) in results {
+                            println!(
+                                "{:<7} f = {} | {}",
+                                PlotFmt::protocol_name(search.protocol),
+                                search.f,
+                                histogram_fmt,
+                            );
+                        }
+                        shown = true;
+                    }
+                }
+
+                // generate cdf plot
+                let path = format!(
+                    "cdf_n{}_{}_c{}.pdf",
+                    n, key_gen, clients_per_region
+                );
                 let style_fun = None;
-                fantoch_plot::cdf_plot_per_f(
+                fantoch_plot::cdf_plot(
                     searches.clone(),
                     style_fun,
                     PLOT_DIR,
                     &path,
                     &db,
                 )?;
+
+                if n > 3 {
+                    // generate cdf plot with subplots
+                    let path = format!(
+                        "cdf_one_per_f_n{}_{}_c{}.pdf",
+                        n, key_gen, clients_per_region
+                    );
+                    let style_fun = None;
+                    fantoch_plot::cdf_plot_per_f(
+                        searches.clone(),
+                        style_fun,
+                        PLOT_DIR,
+                        &path,
+                        &db,
+                    )?;
+                }
             }
         }
     }

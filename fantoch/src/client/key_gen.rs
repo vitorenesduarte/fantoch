@@ -34,7 +34,11 @@ impl std::fmt::Display for KeyGen {
             Self::ConflictRate { conflict_rate } => {
                 write!(f, "conflict{}", conflict_rate)
             }
-            Self::Zipf { coefficient, .. } => write!(f, "zipf{}", coefficient),
+            Self::Zipf { coefficient, .. } => write!(
+                f,
+                "{}",
+                format!("zipf{:.2}", coefficient).replace(".", "-")
+            ),
         }
     }
 }
