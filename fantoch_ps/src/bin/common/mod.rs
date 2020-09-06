@@ -8,7 +8,7 @@ use std::time::Duration;
 const DEFAULT_TCP_NODELAY: bool = true;
 const DEFAULT_TCP_BUFFER_SIZE: usize = 8 * 1024; // 8 KBs
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 10000;
-const DEFAULT_STACK_SIZE: usize = 8 * 1024 * 1024; // 8MBs
+const DEFAULT_STACK_SIZE: usize = 32 * 1024 * 1024; // 32MBs
 
 #[allow(dead_code)]
 pub fn tokio_runtime(
