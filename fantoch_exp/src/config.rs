@@ -42,9 +42,9 @@ const CLIENT_CHANNEL_BUFFER_SIZE: usize = 10_000;
 
 // tokio config
 #[cfg(feature = "exp")]
-const PROCESS_STACK_SIZE: Option<usize> = Some(16 * 1024 * 1024); // 16MB
+const PROCESS_STACK_SIZE: Option<usize> = Some(32 * 1024 * 1024); // 32MB
 #[cfg(feature = "exp")]
-const CLIENT_STACK_SIZE: Option<usize> = None; // default is 2MB
+const CLIENT_STACK_SIZE: Option<usize> = None; // default is 8MB
 
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
