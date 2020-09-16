@@ -570,7 +570,13 @@ fn single_key() -> Result<(), Report> {
     let shard_count = 1;
     let key_gens = vec![
         KeyGen::ConflictRate { conflict_rate: 2 },
-        KeyGen::ConflictRate { conflict_rate: 4 },
+        KeyGen::ConflictRate { conflict_rate: 10 },
+        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.5 },
+        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.6 },
+        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.7 },
+        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.8 },
+        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.9 },
+        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 1.0 },
     ];
     let payload_size = 4096;
     let protocols = vec![
@@ -587,8 +593,9 @@ fn single_key() -> Result<(), Report> {
         1024 * 2,
         1024 * 4,
         1024 * 8,
+        1024 * 12,
         1024 * 16,
-        1024 * 32,
+        1024 * 20,
     ];
 
     // load results
@@ -630,6 +637,7 @@ fn single_key() -> Result<(), Report> {
                         search
                     })
                     .collect();
+
                 let style_fun = None;
                 fantoch_plot::throughput_something_plot(
                     searches,
@@ -755,6 +763,22 @@ fn single_key() -> Result<(), Report> {
                         shown = true;
                     }
                 }
+
+                // create searches without fpaxos for cdf plots
+                let protocols =
+                    vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
+                let searches: Vec<_> =
+                    protocol_combinations(n, protocols.clone())
+                        .into_iter()
+                        .map(|(protocol, f)| {
+                            let mut search = Search::new(n, f, protocol);
+                            search
+                                .key_gen(key_gen)
+                                .clients_per_region(clients_per_region)
+                                .payload_size(payload_size);
+                            search
+                        })
+                        .collect();
 
                 // generate cdf plot
                 let path = format!(
