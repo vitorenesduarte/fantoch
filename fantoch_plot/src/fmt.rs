@@ -35,13 +35,13 @@ impl PlotFmt {
 
     pub fn color(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
-            (Protocol::AtlasLocked, 1) => "#1abc9c",
-            (Protocol::AtlasLocked, 2) => "#218c74",
+            (Protocol::AtlasLocked, 1) => "#27ae60",
+            (Protocol::AtlasLocked, 2) => "#16a085",
             (Protocol::EPaxosLocked, _) => "#227093",
-            (Protocol::FPaxos, 1) => "#bdc3c7",
+            (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
-            (Protocol::NewtAtomic, 1) => "#ffa726",
-            (Protocol::NewtAtomic, 2) => "#e65100",
+            (Protocol::NewtAtomic, 1) => "#f1c40f",
+            (Protocol::NewtAtomic, 2) => "#e67e22",
             (Protocol::NewtLocked, 1) => "#3498db",
             (Protocol::NewtLocked, 2) => "#2980b9",
             (Protocol::NewtFineLocked, 1) => "#111111",
@@ -50,6 +50,18 @@ impl PlotFmt {
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
+            ),
+        }.to_string()
+    }
+
+    pub fn background_color(protocol: Protocol) -> String {
+        match protocol {
+            Protocol::AtlasLocked => "#ecf0f1",
+            Protocol::FPaxos => "#95a5a6",
+            Protocol::NewtAtomic => "#353b48",
+            _ => panic!(
+                "PlotFmt::background_color: protocol = {:?} not supported!",
+                protocol
             ),
         }.to_string()
     }
@@ -80,9 +92,9 @@ impl PlotFmt {
     // Possible values: https://matplotlib.org/3.1.1/api/markers_api.html#module-matplotlib.markers
     pub fn marker(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
-            (Protocol::AtlasLocked, 1) => "s",
-            (Protocol::AtlasLocked, 2) => "D",
-            (Protocol::EPaxosLocked, _) => ".",
+            (Protocol::AtlasLocked, 1) => "o",
+            (Protocol::AtlasLocked, 2) => "s",
+            (Protocol::EPaxosLocked, _) => "D",
             (Protocol::FPaxos, 1) => "+",
             (Protocol::FPaxos, 2) => "x",
             (Protocol::NewtAtomic, 1) => "v",

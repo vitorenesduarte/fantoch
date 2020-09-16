@@ -19,10 +19,10 @@ impl HistogramCompress {
         let max = histogram.max();
         let mean = histogram.mean();
         let stddev = histogram.stddev();
-        // all percentiles from 0.01 to 1.0 (step by 0.01) + 0.999 + 0.9999 +
-        // 0.99999
+    // all percentiles from 0.01 to 1.0 (step by 0.01) + 0.951 + 0.999 (step by 0.001) + 0.9999 + 0.99999
         let percentiles = (0..100)
             .map(|percentile| percentile as f64 / 100f64)
+            .chain((950..=998).step_by(2).map(|percentile| percentile as f64 / 1000f64))
             .chain(vec![0.999, 0.9999, 0.99999])
             .map(|percentile| {
                 (percentile.to_string(), histogram.percentile(percentile))

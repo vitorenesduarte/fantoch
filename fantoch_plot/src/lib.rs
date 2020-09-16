@@ -25,10 +25,11 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
 const GOLDEN_RATIO: f64 = 1.61803f64;
 const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
-const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO);
+// no longer golden ratio
+const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO - 0.6);
 
 // margins
-const ADJUST_TOP: f64 = 0.85;
+const ADJUST_TOP: f64 = 0.83;
 const ADJUST_BOTTOM: f64 = 0.15;
 
 pub enum ErrorBar {
@@ -404,7 +405,7 @@ pub fn cdf_plot_per_f(
         }
 
         // specific pull-up for this kind of plot
-        let y_bbox_to_anchor = Some(1.41);
+        let y_bbox_to_anchor = Some(1.48);
         // legend
         add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
 
@@ -423,10 +424,10 @@ pub fn cdf_plot_per_f(
 
 fn inner_cdf_plot_style(py: Python<'_>, ax: &Axes<'_>) -> Result<(), Report> {
     // set y limits
-    let kwargs = pydict!(py, ("ymin", 0), ("ymax", 1));
+    let kwargs = pydict!(py, ("ymin", 0.95), ("ymax", 1));
     ax.set_ylim(Some(kwargs))?;
 
-    // set log scale on x axis
+    // set log scale on x and y axis
     set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
@@ -921,7 +922,7 @@ fn percentiles() -> impl Iterator<Item = f64> {
         .step_by(10)
         .chain((65..=95).step_by(5))
         .map(|percentile| percentile as f64 / 100f64)
-        .chain(vec![0.97, 0.99, 0.999])
+        .chain(vec![0.96, 0.97, 0.98, 0.984, 0.988, 0.992, 0.996, 0.999, 0.9999])
 }
 
 fn start_plot<'a>(
@@ -998,8 +999,8 @@ fn add_legend(
         return Ok(());
     }
     // default values for `y_bbox_to_anchor`
-    let one_row = 1.17;
-    let two_rows = 1.255;
+    let one_row = 1.19;
+    let two_rows = 1.3;
 
     let (legend_ncol, y_bbox_to_anchor_default) = match plotted {
         0 => (0, 0.0),
