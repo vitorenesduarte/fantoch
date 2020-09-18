@@ -71,16 +71,16 @@ impl LatencyMetric {
 #[derive(Clone, Copy)]
 pub enum HeatmapMetric {
     CPU,
-    NetSend,
     NetRecv,
+    NetSend,
 }
 
 impl HeatmapMetric {
     pub fn name(&self) -> String {
         match self {
             Self::CPU => String::from("cpu"),
-            Self::NetSend => String::from("net_send"),
-            Self::NetRecv => String::from("net_recv"),
+            Self::NetRecv => String::from("net_in"),
+            Self::NetSend => String::from("net_out"),
         }
     }
 
