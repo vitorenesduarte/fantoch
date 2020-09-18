@@ -31,8 +31,8 @@ fn main() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    // fairness_plot()?;
-    // tail_latency_plot()?;
+    fairness_plot()?;
+    tail_latency_plot()?;
     increasing_load_plot()?;
     Ok(())
 }
@@ -196,15 +196,12 @@ fn increasing_load_plot() -> Result<(), Report> {
         search.payload_size(payload_size);
     };
 
-    let style_fun = None;
-    let path = format!("heatmap_split_n{}.pdf", n);
-    fantoch_plot::throughput_latency_heatmap_plot_split(
-        style_fun,
+    let path = String::from("plot_increasing_load_heatmap.pdf");
+    fantoch_plot::heatmap_plot_split(
         n,
         protocol_combinations(n, protocols.clone()),
         clients_per_region.clone(),
         top_key_gen,
-        bottom_key_gen,
         refine_search,
         leader,
         PLOT_DIR,
@@ -212,67 +209,23 @@ fn increasing_load_plot() -> Result<(), Report> {
         &db,
     )?;
 
-    for key_gen in vec![top_key_gen, bottom_key_gen] {
-        // refine search function
-        // create searches
-        let searches: Vec<_> = protocol_combinations(n, protocols.clone())
-            .into_iter()
-            .map(|(protocol, f)| {
-                let mut search = Search::new(n, f, protocol);
-                refine_search(&mut search, key_gen);
-                search
-            })
-            .collect();
+    let style_fun = None;
+    let y_range = Some((100.0, 2_600.0));
+    let path = String::from("plot_increasing_load.pdf");
+    fantoch_plot::throughput_latency_plot_split(
+        n,
+        protocol_combinations(n, protocols.clone()),
+        clients_per_region.clone(),
+        top_key_gen,
+        bottom_key_gen,
+        refine_search,
+        style_fun,
+        y_range,
+        PLOT_DIR,
+        &path,
+        &db,
+    )?;
 
-        // generate all-combo throughput-something plot
-        for y_axis in vec![
-            ThroughputYAxis::Latency(LatencyMetric::Average),
-            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
-            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
-            ThroughputYAxis::CPU,
-        ] {
-            let path =
-                format!("throughput_{}_n{}_{}.pdf", y_axis.name(), n, key_gen);
-
-            let style_fun = None;
-            fantoch_plot::throughput_something_plot(
-                searches.clone(),
-                style_fun,
-                n,
-                clients_per_region.clone(),
-                y_axis,
-                PLOT_DIR,
-                &path,
-                &db,
-            )?;
-        }
-
-        for heatmap_metric in vec![
-            HeatmapMetric::CPU,
-            HeatmapMetric::NetSend,
-            HeatmapMetric::NetRecv,
-        ] {
-            let path = format!(
-                "heatmap_{}_n{}_{}.pdf",
-                heatmap_metric.name(),
-                n,
-                key_gen
-            );
-
-            fantoch_plot::heatmap_plot(
-                n,
-                protocol_combinations(n, protocols.clone()),
-                clients_per_region.clone(),
-                key_gen,
-                refine_search,
-                leader,
-                heatmap_metric,
-                PLOT_DIR,
-                &path,
-                &db,
-            )?;
-        }
-    }
     Ok(())
 }
 
@@ -855,6 +808,7 @@ fn single_key() -> Result<(), Report> {
         Protocol::AtlasLocked,
         Protocol::FPaxos,
     ];
+    let leader = 1;
 
     // generate throughput-latency plot
     let clients_per_region = vec![
@@ -874,25 +828,29 @@ fn single_key() -> Result<(), Report> {
 
     for n in vec![3, 5] {
         for key_gen in key_gens.clone() {
+            let refine_search = |search: &mut Search, key_gen: KeyGen| {
+                match search.protocol {
+                    Protocol::FPaxos => {
+                        // if fpaxos, don't filter by key gen as
+                        // contention does not affect the results
+                    }
+                    Protocol::AtlasLocked | Protocol::NewtAtomic => {
+                        search.key_gen(key_gen);
+                    }
+                    _ => {
+                        panic!("unsupported protocol: {:?}", search.protocol);
+                    }
+                }
+                // filter by payload size in all protocols
+                search.payload_size(payload_size);
+            };
+
             // create searches
             let searches: Vec<_> = protocol_combinations(n, protocols.clone())
                 .into_iter()
                 .map(|(protocol, f)| {
                     let mut search = Search::new(n, f, protocol);
-                    match protocol {
-                        Protocol::FPaxos => {
-                            // if fpaxos, don't filter by key gen as
-                            // contention does not affect the results
-                        }
-                        Protocol::AtlasLocked | Protocol::NewtAtomic => {
-                            search.key_gen(key_gen);
-                        }
-                        _ => {
-                            panic!("unsupported protocol: {:?}", protocol);
-                        }
-                    }
-                    // filter by payload size in all protocols
-                    search.payload_size(payload_size);
+                    refine_search(&mut search, key_gen);
                     search
                 })
                 .collect();
@@ -918,6 +876,32 @@ fn single_key() -> Result<(), Report> {
                     n,
                     clients_per_region.clone(),
                     y_axis,
+                    PLOT_DIR,
+                    &path,
+                    &db,
+                )?;
+            }
+
+            for heatmap_metric in vec![
+                HeatmapMetric::CPU,
+                HeatmapMetric::NetSend,
+                HeatmapMetric::NetRecv,
+            ] {
+                let path = format!(
+                    "heatmap_{}_n{}_{}.pdf",
+                    heatmap_metric.name(),
+                    n,
+                    key_gen
+                );
+
+                fantoch_plot::heatmap_plot(
+                    n,
+                    protocol_combinations(n, protocols.clone()),
+                    clients_per_region.clone(),
+                    key_gen,
+                    refine_search,
+                    leader,
+                    heatmap_metric,
                     PLOT_DIR,
                     &path,
                     &db,

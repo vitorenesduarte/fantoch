@@ -29,9 +29,11 @@ use std::collections::{HashMap, HashSet};
 const GOLDEN_RATIO: f64 = 1.61803f64;
 const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
 // no longer golden ratio
-const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO - 0.6);
+const FIGSIZE: (f64, f64) = (FIGWIDTH, (FIGWIDTH / GOLDEN_RATIO) - 0.6);
 
-// adjust is the opposite of margin?
+// adjust are percentages:
+// - setting top to 0.80, means we leave the top 20% free
+// - setting bottom to 0.20, means we leave the bottom 20% free
 const ADJUST_TOP: f64 = 0.83;
 const ADJUST_BOTTOM: f64 = 0.15;
 
@@ -77,12 +79,12 @@ impl HeatmapMetric {
     pub fn name(&self) -> String {
         match self {
             Self::CPU => String::from("cpu"),
-            Self::NetSend => String::from("send"),
-            Self::NetRecv => String::from("recv"),
+            Self::NetSend => String::from("net_send"),
+            Self::NetRecv => String::from("net_recv"),
         }
     }
 
-    pub fn free(&self, value: F64) -> usize {
+    pub fn utilization(&self, value: F64) -> usize {
         let (max, value) = match self {
             Self::CPU => {
                 let max = 100f64;
@@ -94,7 +96,7 @@ impl HeatmapMetric {
                 (max, value.value())
             }
         };
-        100 - (value * 100f64 / max) as usize
+        (value * 100f64 / max) as usize
     }
 }
 
@@ -351,7 +353,7 @@ pub fn latency_plot<R>(
     ax.set_xticklabels(labels, None)?;
 
     // set labels
-    ax.set_ylabel("latency (ms)")?;
+    ax.set_ylabel("latency (ms)", None)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
@@ -410,7 +412,8 @@ pub fn cdf_plot_split(
     let py = gil.python();
     let plt = PyPlot::new(py)?;
 
-    // start plot
+    // start plot:
+    // - adjust vertical space between the two plots
     let kwargs = pydict!(py, ("hspace", 0.2));
     let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
 
@@ -506,8 +509,8 @@ fn inner_cdf_plot_style(
     set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
-    ax.set_xlabel("latency (ms) [log-scale]")?;
-    ax.set_ylabel("percentiles")?;
+    ax.set_xlabel("latency (ms) [log-scale]", None)?;
+    ax.set_ylabel("percentiles", None)?;
 
     Ok(())
 }
@@ -620,13 +623,13 @@ pub fn throughput_something_plot(
     };
 
     // set labels
-    ax.set_xlabel("throughput (K ops/s)")?;
+    ax.set_xlabel("throughput (K ops/s)", None)?;
     let y_label = if log_scale {
         format!("{} [log-scale]", y_axis.y_label())
     } else {
         y_axis.y_label()
     };
-    ax.set_ylabel(&y_label)?;
+    ax.set_ylabel(&y_label, None)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
@@ -747,7 +750,6 @@ pub fn inner_throughput_something_plot(
     Ok(())
 }
 
-// based on: https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/image_annotated_heatmap.html#sphx-glr-gallery-images-contours-and-fields-image-annotated-heatmap-py
 pub fn heatmap_plot<F>(
     n: usize,
     protocols: Vec<(Protocol, usize)>,
@@ -771,8 +773,12 @@ where
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
+    let set_xlabels = true;
+    let set_ylabels = true;
+    let set_colorbar = true;
     inner_heatmap_plot(
         py,
+        &fig,
         &ax,
         n,
         protocols,
@@ -781,6 +787,9 @@ where
         refine_search,
         leader,
         heatmap_metric,
+        set_xlabels,
+        set_ylabels,
+        set_colorbar,
         db,
     )?;
 
@@ -790,15 +799,15 @@ where
     Ok(())
 }
 
-pub fn throughput_latency_heatmap_plot_split<F>(
-    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+pub fn throughput_latency_plot_split<F>(
     n: usize,
     protocols: Vec<(Protocol, usize)>,
     clients_per_region: Vec<usize>,
     top_key_gen: KeyGen,
     bottom_key_gen: KeyGen,
     refine_search: F,
-    leader: ProcessId,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    y_range: Option<(f64, f64)>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -811,15 +820,20 @@ where
     let py = gil.python();
     let plt = PyPlot::new(py)?;
 
-    // start plot
-    let (fig, _) = start_plot(py, &plt, None)?;
+    // start plot:
+    // - adjust horizontal space between the three plots
+    let kwargs = pydict!(py, ("hspace", 0.2));
+    let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
+
+    // increase height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width, height + 1.5)?;
 
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
-    for (top, key_gen) in vec![(true, top_key_gen), (false, bottom_key_gen)] {
-        let index = if top { (1, 3) } else { (4, 6) };
-        let ax = plt.subplot(3, 3, index, None)?;
+    for (subplot, key_gen) in vec![(1, top_key_gen), (2, bottom_key_gen)] {
+        let ax = plt.subplot(2, 1, subplot, None)?;
         let searches: Vec<_> = protocols
             .clone()
             .into_iter()
@@ -843,27 +857,82 @@ where
         // set log scale on y axis if y axis is latency
         set_log_scale(py, &ax, AxisToScale::Y)?;
 
+        // maybe set y limits
+        if let Some((y_min, y_max)) = y_range {
+            let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
+            ax.set_ylim(Some(kwargs))?;
+        }
+
         // set legend and labels:
         // - set legend
         // - set xlabel if bottom
         // - set ylabel in both
-        if top {
-            // legend
-            add_legend(plotted, None, py, &ax)?;
-        } else {
-            ax.set_xlabel("throughput (K ops/s)")?;
+        match subplot {
+            1 => {
+                // specific pull-up for this kind of plot
+                let y_bbox_to_anchor = Some(1.46);
+                // legend
+                add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
+            }
+            2 => {
+                ax.set_xlabel("throughput (K ops/s)", None)?;
+            }
+            _ => unreachable!("impossible subplot"),
         }
-        ax.set_ylabel("latency (ms) [log-scale]")?;
+        ax.set_ylabel("latency (ms) [log-scale]", None)?;
     }
 
-    for (subplot, key_gen, heatmap_metric) in vec![
-        (7, bottom_key_gen, HeatmapMetric::CPU),
-        (8, bottom_key_gen, HeatmapMetric::NetRecv),
-        (9, bottom_key_gen, HeatmapMetric::NetSend),
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
+pub fn heatmap_plot_split<F>(
+    n: usize,
+    protocols: Vec<(Protocol, usize)>,
+    clients_per_region: Vec<usize>,
+    key_gen: KeyGen,
+    refine_search: F,
+    leader: ProcessId,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, KeyGen) + Clone,
+{
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot:
+    // - adjust top and bottom to have almost no margin
+    // - increase left margin
+    // - adjust horizontal space between the three plots
+    let kwargs = pydict!(
+        py,
+        ("top", 0.90),
+        ("bottom", 0.30),
+        ("left", 0.18),
+        ("wspace", 0.1)
+    );
+    let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
+
+    // increase height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width, height - 0.8)?;
+
+    for (subplot, set_xlabels, set_ylabels, set_colorbar, heatmap_metric) in vec![
+        (1, true, true, false, HeatmapMetric::CPU),
+        (2, false, false, false, HeatmapMetric::NetRecv),
+        (3, false, false, true, HeatmapMetric::NetSend),
     ] {
-        let ax = plt.subplot(3, 3, subplot, None)?;
+        let ax = plt.subplot(1, 3, subplot, None)?;
         inner_heatmap_plot(
             py,
+            &fig,
             &ax,
             n,
             protocols.clone(),
@@ -872,8 +941,13 @@ where
             refine_search.clone(),
             leader,
             heatmap_metric,
+            set_xlabels,
+            set_ylabels,
+            set_colorbar,
             db,
         )?;
+
+        ax.set_title(&heatmap_metric.name())?;
     }
 
     // end plot
@@ -882,8 +956,10 @@ where
     Ok(())
 }
 
+// based on: https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/image_annotated_heatmap.html#sphx-glr-gallery-images-contours-and-fields-image-annotated-heatmap-py
 pub fn inner_heatmap_plot<F>(
     py: Python<'_>,
+    fig: &Figure<'_>,
     ax: &Axes<'_>,
     n: usize,
     protocols: Vec<(Protocol, usize)>,
@@ -892,6 +968,9 @@ pub fn inner_heatmap_plot<F>(
     refine_search: F,
     leader: ProcessId,
     heatmap_metric: HeatmapMetric,
+    set_xlabels: bool,
+    set_ylabels: bool,
+    set_colorbar: bool,
     db: &ResultsDB,
 ) -> Result<(), Report>
 where
@@ -960,11 +1039,8 @@ where
                     exp_data.cpu_usr.mean() + exp_data.cpu_sys.mean()
                 }
             };
-            // we plot free instead of utilization because matplotlib maps 0 to
-            // black and 100 to white, and we want the opposite; most likely,
-            // there's a better way
-            let free = heatmap_metric.free(value);
-            row_data.push(free);
+            let utilization = heatmap_metric.utilization(value);
+            row_data.push(utilization);
         }
 
         println!(
@@ -979,38 +1055,62 @@ where
         rows.push(row_data);
     }
 
-    // grayscale
-    let kwargs = pydict!(py, ("cmap", "gray"), ("vmin", 0), ("vmax", 255));
+    // list of colormaps: https://matplotlib.org/tutorials/colors/colormaps.html
+    let kwargs = pydict!(py, ("cmap", "afmhot_r"), ("vmin", 0), ("vmax", 100));
     // plot the heatmap
-    ax.imshow(rows, Some(kwargs))?;
+    let im = ax.imshow(rows, Some(kwargs))?;
+
+    // create colorbar
+    if set_colorbar {
+        let cbar_ax = fig.add_axes(vec![0.71, 0.22, 0.24, 0.05])?;
+        let kwargs =
+            pydict!(py, ("cax", cbar_ax.ax()), ("orientation", "horizontal"),);
+        let cbar = fig.colorbar(im.im(), Some(kwargs))?;
+        cbar.set_label("utilization (%)", None)?;
+        cbar.set_ticks(vec![0, 25, 50, 75, 100], None)?;
+        cbar.set_ticklabels(vec![0, 25, 50, 75, 100], None)?;
+    }
 
     // set xticks
     let xticks: Vec<_> = (0..clients_per_region.len()).collect();
     ax.set_xticks(xticks, None)?;
-    let kwargs = pydict!(
-        py,
-        ("rotation", 30),
-        ("ha", "right"),
-        ("rotation_mode", "anchor")
-    );
-    ax.set_xticklabels(clients_per_region.clone(), Some(kwargs))?;
+    // set ylabels
+    if set_xlabels {
+        let kwargs = pydict!(
+            py,
+            ("rotation", 50),
+            ("horizontalalignment", "right"),
+            ("rotation_mode", "anchor")
+        );
+        ax.set_xticklabels(clients_per_region.clone(), Some(kwargs))?;
+    } else {
+        // hide xlabels
+        let kwargs = pydict!(py, ("labelbottom", false));
+        ax.tick_params(Some(kwargs))?;
+    }
 
     // set yticks
     let yticks: Vec<_> = (0..protocols.len()).collect();
     ax.set_yticks(yticks, None)?;
-    let ylabels: Vec<_> = protocols
-        .clone()
-        .into_iter()
-        .map(|(protocol, f)| PlotFmt::label(protocol, f))
-        .collect();
-    ax.set_yticklabels(ylabels, None)?;
+    // set ylabels
+    if set_ylabels {
+        let ylabels: Vec<_> = protocols
+            .clone()
+            .into_iter()
+            .map(|(protocol, f)| PlotFmt::label(protocol, f))
+            .collect();
+        ax.set_yticklabels(ylabels, None)?;
+    } else {
+        // hide ylabels
+        let kwargs = pydict!(py, ("labelleft", false));
+        ax.tick_params(Some(kwargs))?;
+    }
 
-    // hide major ticks on the left
-    let kwargs = pydict!(py, ("which", "major"), ("left", false));
-    ax.tick_params(Some(kwargs))?;
+    // // hide major ticks on the left
+    // let kwargs = pydict!(py, ("which", "major"), ("left", false));
+    // ax.tick_params(Some(kwargs))?;
 
     // create white grid
-    ax.spines.set_all_visible(false)?;
     let xticks: Vec<_> = (0..clients_per_region.len() + 1)
         .map(|tick| tick as f64 - 0.5)
         .collect();
@@ -1025,9 +1125,9 @@ where
         py,
         // the following makes sure the grid is drawn on the minor ticks
         ("which", "minor"),
-        ("color", "w"),
+        ("color", "black"),
         ("linestyle", "-"),
-        ("linewidth", 2)
+        ("linewidth", 1.5)
     );
     ax.grid(Some(kwargs))?;
 
@@ -1334,6 +1434,7 @@ fn percentiles() -> impl Iterator<Item = f64> {
         ])
 }
 
+// https://matplotlib.org/3.3.1/api/_as_gen/matplotlib.pyplot.subplots_adjust.html?highlight=subplots_adjust#matplotlib.pyplot.subplots_adjust
 fn start_plot<'a>(
     py: Python<'a>,
     plt: &'a PyPlot<'a>,

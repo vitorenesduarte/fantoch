@@ -87,8 +87,8 @@ mod tests {
         let y = vec![10, 20, 30];
         let (fig, ax) = plt.subplots(None)?;
         ax.plot(x, y, Some("o-"), None)?;
-        ax.set_xlabel("regions")?;
-        ax.set_ylabel("latency (ms)")?;
+        ax.set_xlabel("regions", None)?;
+        ax.set_ylabel("latency (ms)", None)?;
 
         let kwargs = pydict!(py, ("format", "pdf"));
         plt.savefig(path, Some(kwargs))?;
