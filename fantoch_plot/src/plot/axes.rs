@@ -1,4 +1,5 @@
 use crate::plot::axis::Axis;
+use crate::plot::spines::Spines;
 use crate::pytry;
 use color_eyre::Report;
 use pyo3::prelude::*;
@@ -9,26 +10,64 @@ pub struct Axes<'a> {
     ax: &'a PyAny,
     pub xaxis: Axis<'a>,
     pub yaxis: Axis<'a>,
+    pub spines: Spines<'a>,
 }
 
 impl<'a> Axes<'a> {
     pub fn new(ax: &'a PyAny) -> Result<Self, Report> {
         let xaxis = Axis::new(pytry!(ax.py(), ax.getattr("xaxis")));
         let yaxis = Axis::new(pytry!(ax.py(), ax.getattr("yaxis")));
-        Ok(Self { ax, xaxis, yaxis })
+        let spines = pytry!(ax.py(), ax.getattr("spines"));
+        let spines = pytry!(ax.py(), spines.downcast::<PyDict>());
+        let spines = Spines::new(spines);
+        Ok(Self {
+            ax,
+            xaxis,
+            yaxis,
+            spines,
+        })
     }
 
     pub fn ax(&self) -> &PyAny {
         self.ax
     }
 
-    pub fn set_xlabel(&self, label: &str) -> Result<(), Report> {
-        pytry!(self.py(), self.ax.call_method1("set_xlabel", (label,)));
+    pub fn grid(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("grid", (), kwargs));
         Ok(())
     }
 
-    pub fn set_ylabel(&self, label: &str) -> Result<(), Report> {
-        pytry!(self.py(), self.ax.call_method1("set_ylabel", (label,)));
+    pub fn set_axis_off(&self) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method0("set_axis_off"));
+        Ok(())
+    }
+
+    pub fn set_title(&self, title: &str) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method1("set_title", (title,)));
+        Ok(())
+    }
+
+    pub fn set_xlabel(
+        &self,
+        label: &str,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        pytry!(
+            self.py(),
+            self.ax.call_method("set_xlabel", (label,), kwargs)
+        );
+        Ok(())
+    }
+
+    pub fn set_ylabel(
+        &self,
+        label: &str,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        pytry!(
+            self.py(),
+            self.ax.call_method("set_ylabel", (label,), kwargs)
+        );
         Ok(())
     }
 
@@ -92,6 +131,11 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
+    pub fn tick_params(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("tick_params", (), kwargs));
+        Ok(())
+    }
+
     pub fn set_xscale(&self, value: &str) -> Result<(), Report> {
         pytry!(self.py(), self.ax.call_method1("set_xscale", (value,)));
         Ok(())
@@ -108,6 +152,11 @@ impl<'a> Axes<'a> {
         let left = pytry!(self.py(), xlim.get_item(0).downcast::<PyFloat>());
         let right = pytry!(self.py(), xlim.get_item(1).downcast::<PyFloat>());
         Ok((left.value(), right.value()))
+    }
+
+    pub fn set_xlim(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("set_xlim", (), kwargs));
+        Ok(())
     }
 
     pub fn get_ylim(&self) -> Result<(f64, f64), Report> {
@@ -163,7 +212,36 @@ impl<'a> Axes<'a> {
         Ok(())
     }
 
+    pub fn imshow<D>(
+        &self,
+        data: Vec<D>,
+        kwargs: Option<&PyDict>,
+    ) -> Result<AxesImage<'_>, Report>
+    where
+        D: IntoPy<PyObject>,
+    {
+        let im = AxesImage::new(pytry!(
+            self.py(),
+            self.ax.call_method("imshow", (data,), kwargs)
+        ));
+        Ok(im)
+    }
+
     fn py(&self) -> Python<'_> {
         self.ax.py()
+    }
+}
+
+pub struct AxesImage<'a> {
+    im: &'a PyAny,
+}
+
+impl<'a> AxesImage<'a> {
+    pub fn new(im: &'a PyAny) -> Self {
+        Self { im }
+    }
+
+    pub fn im(&self) -> &PyAny {
+        self.im
     }
 }

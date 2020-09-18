@@ -42,9 +42,9 @@ const CLIENT_CHANNEL_BUFFER_SIZE: usize = 10_000;
 
 // tokio config
 #[cfg(feature = "exp")]
-const PROCESS_STACK_SIZE: Option<usize> = Some(16 * 1024 * 1024); // 16MB
+const PROCESS_STACK_SIZE: Option<usize> = Some(32 * 1024 * 1024); // 32MB
 #[cfg(feature = "exp")]
-const CLIENT_STACK_SIZE: Option<usize> = None; // default is 2MB
+const CLIENT_STACK_SIZE: Option<usize> = None; // default is 8MB
 
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
@@ -149,8 +149,8 @@ impl ProtocolConfig {
             self.config.n(),
             "--faults",
             self.config.f(),
-            "--shards",
-            self.config.shards(),
+            "--shard_count",
+            self.config.shard_count(),
             "--execute_at_commit",
             self.config.execute_at_commit(),
         ];
@@ -321,34 +321,27 @@ impl ClientConfig {
     }
 
     pub fn to_args(&self) -> Vec<String> {
-        use fantoch::client::{KeyGen, ShardGen};
-        let shard_gen = match self.workload.shard_gen() {
-            ShardGen::Random { shard_count } => {
-                format!("random,{}", shard_count)
-            }
-        };
+        use fantoch::client::KeyGen;
         let key_gen = match self.workload.key_gen() {
             KeyGen::ConflictRate { conflict_rate } => {
                 format!("conflict_rate,{}", conflict_rate)
             }
             KeyGen::Zipf {
                 coefficient,
-                key_count,
-            } => format!("zipf,{},{}", coefficient, key_count),
+                keys_per_shard,
+            } => format!("zipf,{},{}", coefficient, keys_per_shard),
         };
         let mut args = args![
             "--ids",
             format!("{}-{}", self.id_start, self.id_end),
             "--addresses",
             self.ips_to_addresses(),
-            "--shards_per_command",
-            self.workload.shards_per_command(),
-            "--shard_gen",
-            shard_gen,
-            "--keys_per_shard",
-            self.workload.keys_per_shard(),
+            "--shard_count",
+            self.workload.shard_count(),
             "--key_gen",
             key_gen,
+            "--keys_per_command",
+            self.workload.keys_per_command(),
             "--commands_per_client",
             self.workload.commands_per_client(),
             "--payload_size",

@@ -353,18 +353,19 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // check if we have all necessary replies
         if info.quorum_deps.all() {
-            // compute the threshold union while checking whether it's equal to
-            // their union
-            let (final_deps, equal_to_union) =
-                info.quorum_deps.threshold_union(self.bp.config.f());
+            // check if threshold union if equal to union and get the union of
+            // all dependencies reported
+            let (all_deps, equal_to_union) =
+                info.quorum_deps.check_threshold_union(self.bp.config.f());
 
             // create consensus value
-            let value = ConsensusValue::with(final_deps);
+            let value = ConsensusValue::with(all_deps);
 
             // fast path condition:
             // - each dependency was reported by at least f processes
             if equal_to_union {
                 self.bp.fast_path();
+
                 // fast path: create `MCommit`
                 let shard_count = info.cmd.as_ref().unwrap().shard_count();
                 Self::mcommit_actions(
@@ -916,7 +917,7 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{Client, KeyGen, ShardGen, Workload};
+    use fantoch::client::{Client, KeyGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
@@ -1002,18 +1003,16 @@ mod tests {
         simulation.register_process(atlas_3, executor_3);
 
         // client workload
-        let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shard_count: 1 };
-        let keys_per_shard = 1;
+        let shard_count = 1;
         let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
-        let total_commands = 10;
+        let keys_per_command = 1;
+        let commands_per_client = 10;
         let payload_size = 100;
         let workload = Workload::new(
-            shards_per_command,
-            shard_gen,
-            keys_per_shard,
+            shard_count,
             key_gen,
-            total_commands,
+            keys_per_command,
+            commands_per_client,
             payload_size,
         );
 

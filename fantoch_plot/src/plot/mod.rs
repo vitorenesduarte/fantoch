@@ -2,6 +2,7 @@ pub mod axes;
 pub mod axis;
 pub mod figure;
 pub mod pyplot;
+pub mod spines;
 pub mod table;
 
 use color_eyre::Report;
@@ -86,8 +87,8 @@ mod tests {
         let y = vec![10, 20, 30];
         let (fig, ax) = plt.subplots(None)?;
         ax.plot(x, y, Some("o-"), None)?;
-        ax.set_xlabel("regions")?;
-        ax.set_ylabel("latency (ms)")?;
+        ax.set_xlabel("regions", None)?;
+        ax.set_ylabel("latency (ms)", None)?;
 
         let kwargs = pydict!(py, ("format", "pdf"));
         plt.savefig(path, Some(kwargs))?;

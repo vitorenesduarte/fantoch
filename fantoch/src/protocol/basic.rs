@@ -383,7 +383,7 @@ impl MessageIndex for PeriodicEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::{Client, KeyGen, ShardGen, Workload};
+    use crate::client::{Client, KeyGen, Workload};
     use crate::planet::{Planet, Region};
     use crate::sim::Simulation;
     use crate::time::SimTime;
@@ -461,18 +461,16 @@ mod tests {
         simulation.register_process(basic_3, executor_3);
 
         // client workload
-        let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shard_count: 1 };
-        let keys_per_shard = 1;
+        let shard_count = 1;
+        let keys_per_command = 1;
         let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
-        let total_commands = 10;
+        let commands_per_client = 10;
         let payload_size = 100;
         let workload = Workload::new(
-            shards_per_command,
-            shard_gen,
-            keys_per_shard,
+            shard_count,
             key_gen,
-            total_commands,
+            keys_per_command,
+            commands_per_client,
             payload_size,
         );
 

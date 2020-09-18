@@ -190,9 +190,9 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("shards")
-                .long("shards")
-                .value_name("SHARDS_NUMBER")
+            Arg::with_name("shard_count")
+                .long("shard_count")
+                .value_name("SHARDS_COUNT")
                 .help("number of shards; default: 1")
                 .required(true)
                 .takes_value(true),
@@ -391,7 +391,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
     let config = build_config(
         parse_n(matches.value_of("n")),
         parse_f(matches.value_of("f")),
-        parse_shards(matches.value_of("shards")),
+        parse_shard_count(matches.value_of("shard_count")),
         parse_execute_at_commit(matches.value_of("execute_at_commit")),
         parse_executor_cleanup_interval(
             matches.value_of("executor_cleanup_interval"),
@@ -570,7 +570,7 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<(String, Option<Duration>)> {
 pub fn build_config(
     n: usize,
     f: usize,
-    shards: usize,
+    shard_count: usize,
     execute_at_commit: bool,
     executor_cleanup_interval: Duration,
     executor_monitor_pending_interval: Option<Duration>,
@@ -583,7 +583,7 @@ pub fn build_config(
 ) -> Config {
     // create config
     let mut config = Config::new(n, f);
-    config.set_shards(shards);
+    config.set_shard_count(shard_count);
     config.set_execute_at_commit(execute_at_commit);
     config.set_executor_cleanup_interval(executor_cleanup_interval);
     if let Some(interval) = executor_monitor_pending_interval {
@@ -619,7 +619,7 @@ pub fn parse_f(f: Option<&str>) -> usize {
         .expect("f should be a number")
 }
 
-pub fn parse_shards(shards: Option<&str>) -> usize {
+pub fn parse_shard_count(shards: Option<&str>) -> usize {
     shards
         .map(|shards| {
             shards.parse::<usize>().expect("shards should be a number")

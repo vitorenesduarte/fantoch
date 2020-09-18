@@ -7,7 +7,7 @@ use crate::progress::TracingProgressBar;
 use crate::{FantochFeature, Protocol, RunMode, SerializationFormat, Testbed};
 use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
-use fantoch::client::{ShardGen, Workload};
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
@@ -80,7 +80,7 @@ pub async fn bench_experiment(
                 // check that we have the correct number of server machines
                 assert_eq!(
                     machines.server_count(),
-                    config.n() * config.shards(),
+                    config.n() * config.shard_count(),
                     "not enough server machines"
                 );
 
@@ -97,30 +97,29 @@ pub async fn bench_experiment(
                     continue;
                 }
 
-                match workload.shard_gen() {
-                    ShardGen::Random { shard_count } => {
-                        if shard_count > 1 {
-                            // the conflict rate key gen is weird in partial
-                            // replication; for example, consider the case where
-                            // commands access two shards (so,
-                            // `shards_per_command = 2`) and the conflict rate
-                            // is 0; further, assume that client A issued
-                            // command first a command X on shards 0 and 1 and
-                            // then a command Y on shards 1 and 2; even though
-                            // the conflict rate is 0, since we use the client
-                            // identifier to make the command doesn't conflict
-                            // with commands from another clients, commands from
-                            // the same client conflict with itself; thus,
-                            // command Y will depend on command X; this means
-                            // that shard 2 needs to learn about command X in
-                            // order to be able to execute command Y. overall,
-                            // we have a non-conflicting workload that's
-                            // non-genuine, and that doesn't seem right. for
-                            // this reason, we simply don't allow it
-                            // panic!("invalid workload; conflict rate key gen
-                            // is inappropriate for partial replication
-                            // scenarios");
-                        }
+                if let KeyGen::ConflictRate { .. } = workload.key_gen() {
+                    if workload.shard_count() > 1 {
+                        // the conflict rate key gen is weird in partial
+                        // replication; for example, consider the case where
+                        // commands access two shards (so,
+                        // `shards_per_command = 2`) and the conflict rate
+                        // is 0; further, assume that client A issued
+                        // command first a command X on shards 0 and 1 and
+                        // then a command Y on shards 1 and 2; even though
+                        // the conflict rate is 0, since we use the client
+                        // identifier to make the command doesn't conflict
+                        // with commands from another clients, commands from
+                        // the same client conflict with itself; thus,
+                        // command Y will depend on command X; this means
+                        // that shard 2 needs to learn about command X in
+                        // order to be able to execute command Y. overall,
+                        // we have a non-conflicting workload that's
+                        // non-genuine, and that doesn't seem right. for
+                        // this reason, we simply don't allow it
+                        // panic!("invalid workload; conflict rate key gen
+                        // is inappropriate for partial replication
+                        // scenarios");
+                        panic!("conflict rate key generator is not suitable for partial replication");
                     }
                 }
 
@@ -314,7 +313,7 @@ async fn start_processes(
         .collect();
     tracing::debug!("processes ips: {:?}", ips);
 
-    let process_count = config.n() * config.shards();
+    let process_count = config.n() * config.shard_count();
     let mut processes = HashMap::with_capacity(process_count);
     let mut wait_processes = Vec::with_capacity(process_count);
 
@@ -325,7 +324,7 @@ async fn start_processes(
 
         // compute the set of sorted processes
         let sorted = machines.sorted_processes(
-            config.shards(),
+            config.shard_count(),
             config.n(),
             *process_id,
             *shard_id,

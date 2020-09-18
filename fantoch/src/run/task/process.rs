@@ -44,7 +44,7 @@ where
     P: Protocol + 'static,
 {
     // check that (n-1 + shards-1) addresses were set
-    let total = config.n() - 1 + config.shards() - 1;
+    let total = config.n() - 1 + config.shard_count() - 1;
     assert_eq!(
         addresses.len(),
         total,

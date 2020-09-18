@@ -52,7 +52,7 @@ impl Executor for GraphExecutor {
     }
 
     fn cleanup(&mut self, time: &dyn SysTime) {
-        if self.config.shards() > 1 {
+        if self.config.shard_count() > 1 {
             self.graph.cleanup(time);
             self.fetch_actions(time);
         }
@@ -108,7 +108,7 @@ impl Executor for GraphExecutor {
 impl GraphExecutor {
     fn fetch_actions(&mut self, time: &dyn SysTime) {
         self.fetch_commands_to_execute(time);
-        if self.config.shards() > 1 {
+        if self.config.shard_count() > 1 {
             self.fetch_to_executors(time);
             self.fetch_requests(time);
             self.fetch_request_replies(time);

@@ -37,7 +37,7 @@ impl LevelExecutedClock {
         let shard_process_ids =
             util::process_ids(shard_id, config.n()).collect();
         let not_shard_process_ids =
-            util::all_process_ids(config.shards(), config.n())
+            util::all_process_ids(config.shard_count(), config.n())
                 .filter_map(|(peer_id, peer_shard_id)| {
                     if peer_shard_id == shard_id {
                         None

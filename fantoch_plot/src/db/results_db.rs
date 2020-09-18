@@ -177,28 +177,9 @@ impl ResultsDB {
                     }
                 }
 
-                // filter out configurations with different shards_per_comman
-                // d(if set)
-                if let Some(shards_per_command) = search.shards_per_command {
-                    if exp_config.workload.shards_per_command()
-                        != shards_per_command
-                    {
-                        return false;
-                    }
-                }
-
-                // filter out configurations with different shard generator (if
-                // set)
-                if let Some(shard_gen) = search.shard_gen {
-                    if exp_config.workload.shard_gen() != shard_gen {
-                        return false;
-                    }
-                }
-
-                // filter out configurations with different keys_per_shard (if
-                // set)
-                if let Some(keys_per_shard) = search.keys_per_shard {
-                    if exp_config.workload.keys_per_shard() != keys_per_shard {
+                // filter out configurations with different shard_count (if set)
+                if let Some(shard_count) = search.shard_count {
+                    if exp_config.workload.shard_count() != shard_count {
                         return false;
                     }
                 }
@@ -207,6 +188,16 @@ impl ResultsDB {
                 // set)
                 if let Some(key_gen) = search.key_gen {
                     if exp_config.workload.key_gen() != key_gen {
+                        return false;
+                    }
+                }
+
+                // filter out configuration with different keys_per_command (if
+                // set)
+                if let Some(keys_per_command) = search.keys_per_command {
+                    if exp_config.workload.keys_per_command()
+                        != keys_per_command
+                    {
                         return false;
                     }
                 }

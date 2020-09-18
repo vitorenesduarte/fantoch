@@ -1,6 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::client::{KeyGen, ShardGen, Workload};
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::bench::ExperimentTimeouts;
@@ -46,7 +46,7 @@ const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "consistent_hashing";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -90,6 +90,7 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    // THROUGHPUT
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -99,25 +100,18 @@ async fn main() -> Result<(), Report> {
     ];
     let n = regions.len();
 
-    // THROUGHPUT
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
-        4,
-        8,
-        16,
         32,
-        64,
-        128,
-        256,
         512,
         1024,
         1024 * 2,
@@ -128,18 +122,15 @@ async fn main() -> Result<(), Report> {
     ];
 
     let shard_count = 1;
-    let shards_per_command = 1;
-    let keys_per_shard = 1;
-
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 4 };
+    let keys_per_command = 1;
     let payload_size = 4096;
 
     let mut workloads = Vec::new();
     let workload = Workload::new(
-        shards_per_command,
-        ShardGen::Random { shard_count },
-        keys_per_shard,
+        shard_count,
         key_gen,
+        keys_per_command,
         COMMANDS_PER_CLIENT,
         payload_size,
     );
@@ -147,11 +138,12 @@ async fn main() -> Result<(), Report> {
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
-        protocol == Protocol::AtlasLocked && clients > 1024 * 4
+        protocol == Protocol::AtlasLocked && clients > 1024 * 8
+        // false
     };
 
     /*
-    MULTI_KEY
+    // MULTI_KEY
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
@@ -170,57 +162,82 @@ async fn main() -> Result<(), Report> {
     */
 
     /*
-    PARTIAL REPLICATION
+    // PARTIAL REPLICATION
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+    ];
+
+    let n = regions.len();
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
-        1024 / 4,
-        1024 / 2,
+        // 1024 / 4,
+        // 1024 / 2,
         1024,
-        1024 * 2,
+        // 1024 * 2,
         1024 * 4,
         1024 * 8,
-        1024 * 12,
+        // 1024 * 12,
         1024 * 16,
-        1024 * 20,
-        1024 * 24,
+        // 1024 * 20,
+        // 1024 * 24,
         1024 * 32,
-        1024 * 36,
-        1024 * 40,
+        // 1024 * 36,
+        // 1024 * 40,
         1024 * 48,
-        1024 * 56,
+        // 1024 * 56,
         1024 * 64,
-        1024 * 96,
-        1024 * 128,
-        1024 * 160,
-        1024 * 192,
-        1024 * 224,
-        1024 * 240,
-        1024 * 256,
-        1024 * 272,
+        // 1024 * 96,
+        // 1024 * 128,
+        // 1024 * 160,
+        // 1024 * 192,
+        // 1024 * 224,
+        // 1024 * 240,
+        // 1024 * 256,
+        // 1024 * 272,
     ];
-    let shards_per_command = 2;
+    let clients_per_region = vec![
+        // 1024,
+        // 1024 * 2,
+        // 1024 * 4,
+        // 1024 * 6,
+        // 1024 * 8,
+        // 1024 * 12,
+        // 1024 * 16,
+        // 1024 * 20,
+        1024 * 24,
+    ];
+    let clients_per_region = vec![
+        1024,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 48,
+        1024 * 64,
+    ];
     let shard_count = 5;
-    let keys_per_shard = 1;
-    let zipf_key_count = 1_000_000;
-
+    let keys_per_shard = 1_000_000;
     let key_gen = KeyGen::Zipf {
-        coefficient: 0.6,
-        key_count: zipf_key_count,
+        coefficient: 128.0,
+        keys_per_shard,
     };
+    let keys_per_command = 2;
     let payload_size = 0;
 
     let mut workloads = Vec::new();
     let workload = Workload::new(
-        shards_per_command,
-        ShardGen::Random { shard_count },
-        keys_per_shard,
+        shard_count,
         key_gen,
+        keys_per_command,
         COMMANDS_PER_CLIENT,
+        payload_size,
     );
     workloads.push(workload);
 
@@ -230,7 +247,7 @@ async fn main() -> Result<(), Report> {
     // set shards in each config
     configs
         .iter_mut()
-        .for_each(|(_protocol, config)| config.set_shards(shard_count));
+        .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // create AWS planet
     let planet = Some(Planet::from("../latency_aws"));

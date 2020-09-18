@@ -10,25 +10,31 @@ pub use fmt::PlotFmt;
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
+use fantoch::client::KeyGen;
 use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
 use fantoch::protocol::ProtocolMetricsKind;
+use fantoch_exp::Protocol;
+use fantoch_prof::metrics::{Histogram, F64};
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
 const GOLDEN_RATIO: f64 = 1.61803f64;
 const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
-const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO);
+// no longer golden ratio
+const FIGSIZE: (f64, f64) = (FIGWIDTH, (FIGWIDTH / GOLDEN_RATIO) - 0.6);
 
-// margins
-const ADJUST_TOP: f64 = 0.85;
+// adjust are percentages:
+// - setting top to 0.80, means we leave the top 20% free
+// - setting bottom to 0.20, means we leave the bottom 20% free
+const ADJUST_TOP: f64 = 0.83;
 const ADJUST_BOTTOM: f64 = 0.15;
 
 pub enum ErrorBar {
@@ -62,6 +68,39 @@ impl LatencyMetric {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum HeatmapMetric {
+    CPU,
+    NetRecv,
+    NetSend,
+}
+
+impl HeatmapMetric {
+    pub fn name(&self) -> String {
+        match self {
+            Self::CPU => String::from("cpu"),
+            Self::NetRecv => String::from("net_in"),
+            Self::NetSend => String::from("net_out"),
+        }
+    }
+
+    pub fn utilization(&self, value: F64) -> usize {
+        let (max, value) = match self {
+            Self::CPU => {
+                let max = 100f64;
+                (max, value.value())
+            }
+            Self::NetSend | Self::NetRecv => {
+                // 10GBit to B
+                let max = 10_000_000_000f64 / 8f64;
+                (max, value.value())
+            }
+        };
+        (value * 100f64 / max) as usize
+    }
+}
+
+#[derive(Clone, Copy)]
 pub enum ThroughputYAxis {
     Latency(LatencyMetric),
     CPU,
@@ -120,7 +159,7 @@ pub fn set_global_style() -> Result<(), Report> {
     let py = gil.python();
 
     let lib = Matplotlib::new(py)?;
-    // need to load `PyPlot` for the following to work (which is just weird)
+    // need to load `PyPlot` for the following to work
     let _ = PyPlot::new(py)?;
 
     // adjust fig size
@@ -128,7 +167,7 @@ pub fn set_global_style() -> Result<(), Report> {
     lib.rc("figure", Some(kwargs))?;
 
     // adjust font size
-    let kwargs = pydict!(py, ("size", 9));
+    let kwargs = pydict!(py, ("size", 8.5));
     lib.rc("font", Some(kwargs))?;
     let kwargs = pydict!(py, ("fontsize", 10));
     lib.rc("legend", Some(kwargs))?;
@@ -162,7 +201,8 @@ pub fn latency_plot<R>(
     );
 
     // compute x:
-    let x: Vec<_> = (0..n).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
+    // - the +1 is for the 'average' group
+    let x: Vec<_> = (0..n + 1).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
 
     // we need to shift all to the left by half of the number of combinations
     let shift_left = searches.len() as f64 / 2f64;
@@ -223,38 +263,62 @@ pub fn latency_plot<R>(
         let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
         // compute y: avg latencies sorted by region name
-        let mut err = Vec::new();
-        let mut latencies: Vec<_> = exp_data
+        let mut from_err = Vec::new();
+        let mut to_err = Vec::new();
+        let mut per_region_latency: Vec<_> = exp_data
             .client_latency
             .iter()
             .map(|(region, histogram)| {
                 // compute average latency
-                let avg = histogram.mean().value().round() as usize;
+                let avg = histogram.mean().value().round() as u64;
 
                 // maybe create error bar
-                if let ErrorBar::With(percentile) = error_bar {
-                    let p99_9 = histogram.percentile(percentile).value().round()
-                        as usize;
-                    let error_bar = (0, p99_9 - avg);
-                    err.push(error_bar);
-                }
+                let error_bar = if let ErrorBar::With(percentile) = error_bar {
+                    let percentile =
+                        histogram.percentile(percentile).value().round();
+                    percentile as u64 - avg
+                } else {
+                    0
+                };
+                // this represents the top of the bar
+                from_err.push(0);
+                // this represents the height of the error bar starting at the
+                // top of the bar
+                to_err.push(error_bar);
 
                 (region.clone(), avg)
             })
             .collect();
-        latencies.sort();
-        let (regions, y): (HashSet<_>, Vec<_>) = latencies.into_iter().unzip();
-        let (from_err, to_err): (Vec<_>, Vec<_>) = err.into_iter().unzip();
+
+        // sort by region and get region latencies
+        per_region_latency.sort();
+        let (regions, mut y): (HashSet<_>, Vec<_>) =
+            per_region_latency.into_iter().unzip();
+
+        // compute the stddev between region latencies
+        let stddev = Histogram::from(y.clone()).stddev().value().round() as u64;
+        // add stddev as an error bar
+        from_err.push(0);
+        to_err.push(stddev);
+
+        // add global client latency to the 'average' group
+        y.push(exp_data.global_client_latency.mean().value().round() as u64);
+        println!(
+            "{:<7} f = {} | {:?} | stddev = {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f,
+            y,
+            stddev,
+        );
 
         // compute x: shift all values by `shift`
         let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
 
-        // plot it:
-        // - maybe set error bars
+        // plot it error bars:
+        // - even if the error bar is not set, we have the stddev error bar from
+        //   the 'average' group
         let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
-        if let ErrorBar::With(_) = error_bar {
-            pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
-        }
+        pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
 
         ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
@@ -263,9 +327,7 @@ pub fn latency_plot<R>(
         results.push((search, f(exp_data)));
 
         // update set of all regions
-        for region in regions {
-            all_regions.insert(region);
-        }
+        all_regions.extend(regions);
     }
 
     // set xticks
@@ -285,18 +347,19 @@ pub fn latency_plot<R>(
     let mut regions: Vec<_> = all_regions.into_iter().collect();
     regions.sort();
     // map regions to their pretty name
-    let labels: Vec<_> =
+    let mut labels: Vec<_> =
         regions.into_iter().map(PlotFmt::region_name).collect();
+    labels.push("average");
     ax.set_xticklabels(labels, None)?;
 
     // set labels
-    ax.set_ylabel("latency (ms)")?;
+    ax.set_ylabel("latency (ms)", None)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
     Ok(results)
 }
 
@@ -320,93 +383,95 @@ pub fn cdf_plot(
     let mut plotted = 0;
 
     for search in searches {
-        inner_cdf_plot(py, &ax, search, &style_fun, &mut plotted, db)?;
+        inner_cdf_plot(py, &ax, search, &style_fun, db, &mut plotted)?;
     }
 
     // set cdf plot style
-    inner_cdf_plot_style(py, &ax)?;
+    inner_cdf_plot_style(py, &ax, None)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
 
     // end plot
-    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
 
-pub fn cdf_plot_per_f(
-    searches: Vec<Search>,
+pub fn cdf_plot_split(
+    top_searches: Vec<Search>,
+    bottom_searches: Vec<Search>,
+    x_range: Option<(f64, f64)>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    let fs: BTreeSet<_> = searches.iter().map(|search| search.f).collect();
-    let fs: Vec<_> = fs.into_iter().collect();
-    match fs.as_slice() {
-        [1, 2] => (),
-        _ => panic!(
-            "cdf_plots: unsupported f values: {:?}; use cdf_plot instead",
-            fs
-        ),
-    };
-
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
     let plt = PyPlot::new(py)?;
 
-    // start plot
-    let height_between_subplots = Some(0.5);
-    let (fig, _) = start_plot(py, &plt, height_between_subplots)?;
+    // start plot:
+    // - adjust vertical space between the two plots
+    let kwargs = pydict!(py, ("hspace", 0.2));
+    let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
 
     let mut previous_axis: Option<Axes<'_>> = None;
-
     let mut plotted = 0;
 
-    for f in vec![2, 1] {
-        let mut hide_xticklabels = false;
-
+    for subplot in vec![2, 1] {
         // create subplot (shared axis with the previous subplot (if any))
         let kwargs = match previous_axis {
             None => None,
             Some(previous_axis) => {
-                // share the axis with f = 2so that the plots have the same
-                // scale; also, hide the labels for f = 1
-                hide_xticklabels = true;
+                // use the bottom axis for both so that the plots have the same
+                // scale
                 Some(pydict!(py, ("sharex", previous_axis.ax())))
             }
         };
-        let ax = plt.subplot(2, 1, f, kwargs)?;
+        let ax = plt.subplot(2, 1, subplot, kwargs)?;
 
         // keep track of the number of plotted instances
         let mut subfigure_plotted = 0;
 
-        // plot all searches that match this `f`
-        for search in searches.iter().filter(|search| search.f == f) {
+        // compute which searches to use
+        let searches = match subplot {
+            1 => &top_searches,
+            2 => &bottom_searches,
+            _ => unreachable!("impossible subplot"),
+        };
+        for search in searches {
             inner_cdf_plot(
                 py,
                 &ax,
                 *search,
                 &style_fun,
-                &mut subfigure_plotted,
                 db,
+                &mut subfigure_plotted,
             )?;
         }
 
         // set cdf plot style
-        inner_cdf_plot_style(py, &ax)?;
+        inner_cdf_plot_style(py, &ax, x_range)?;
 
-        // additional style: maybe hide x-axis labels
-        if hide_xticklabels {
-            ax.xaxis.set_visible(false)?;
-        }
-
-        // specific pull-up for this kind of plot
-        let y_bbox_to_anchor = Some(1.41);
-        // legend
-        add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
+        // additional style for subplot 1:
+        // - hide x-axis
+        // - legend
+        match subplot {
+            1 => {
+                // hide x-axis
+                ax.xaxis.set_visible(false)?;
+                // specific pull-up for this kind of plot
+                let y_bbox_to_anchor = Some(1.66);
+                // legend
+                add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
+            }
+            2 => {
+                // nothing to do
+            }
+            _ => unreachable!("impossible subplot"),
+        };
 
         // save axis
         previous_axis = Some(ax);
@@ -416,22 +481,36 @@ pub fn cdf_plot_per_f(
     }
 
     // end plot
-    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
 
     Ok(())
 }
 
-fn inner_cdf_plot_style(py: Python<'_>, ax: &Axes<'_>) -> Result<(), Report> {
+fn inner_cdf_plot_style(
+    py: Python<'_>,
+    ax: &Axes<'_>,
+    x_range: Option<(f64, f64)>,
+) -> Result<(), Report> {
+    // maybe set x limits
+    if let Some((x_min, x_max)) = x_range {
+        let kwargs = pydict!(py, ("xmin", x_min), ("xmax", x_max));
+        ax.set_xlim(Some(kwargs))?;
+    }
+
     // set y limits
-    let kwargs = pydict!(py, ("ymin", 0), ("ymax", 1));
+    let kwargs = pydict!(py, ("ymin", 95.0), ("ymax", 99.99));
     ax.set_ylim(Some(kwargs))?;
 
-    // set log scale on x axis
+    let yticks = vec![95.0, 97.0, 99.0, 99.99];
+    ax.set_yticks(yticks.clone(), None)?;
+    ax.set_yticklabels(yticks.clone(), None)?;
+
+    // set log scale on x and y axis
     set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
-    ax.set_xlabel("latency (ms) [log-scale]")?;
-    ax.set_ylabel("CDF")?;
+    ax.set_xlabel("latency (ms) [log-scale]", None)?;
+    ax.set_ylabel("percentiles", None)?;
 
     Ok(())
 }
@@ -441,8 +520,8 @@ fn inner_cdf_plot(
     ax: &Axes<'_>,
     search: Search,
     style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
-    plotted: &mut usize,
     db: &ResultsDB,
+    plotted: &mut usize,
 ) -> Result<(), Report> {
     let mut exp_data = db.find(search)?;
     match exp_data.len() {
@@ -477,7 +556,21 @@ fn inner_cdf_plot(
         .collect();
 
     // compute y: percentiles!
-    let y: Vec<_> = percentiles().collect();
+    let y: Vec<_> =
+        percentiles().map(|percentile| percentile * 100.0).collect();
+
+    println!(
+        "{:<7} f = {} | c = {} | {:?}",
+        PlotFmt::protocol_name(search.protocol),
+        search.f,
+        search
+            .clients_per_region
+            .expect("clients per region should be set"),
+        x.iter()
+            .zip(y.iter())
+            .filter(|(_, percentile)| **percentile >= 95.0)
+            .collect::<Vec<_>>()
+    );
 
     // plot it!
     let kwargs = line_style(py, search, style_fun)?;
@@ -508,6 +601,56 @@ pub fn throughput_something_plot(
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
+    inner_throughput_something_plot(
+        py,
+        &ax,
+        searches,
+        &style_fun,
+        n,
+        clients_per_region,
+        y_axis,
+        db,
+        &mut plotted,
+    )?;
+
+    // set log scale on y axis if y axis is latency
+    let log_scale = match y_axis {
+        ThroughputYAxis::Latency(_) => {
+            set_log_scale(py, &ax, AxisToScale::Y)?;
+            true
+        }
+        ThroughputYAxis::CPU => false,
+    };
+
+    // set labels
+    ax.set_xlabel("throughput (K ops/s)", None)?;
+    let y_label = if log_scale {
+        format!("{} [log-scale]", y_axis.y_label())
+    } else {
+        y_axis.y_label()
+    };
+    ax.set_ylabel(&y_label, None)?;
+
+    // legend
+    add_legend(plotted, None, py, &ax)?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
+pub fn inner_throughput_something_plot(
+    py: Python<'_>,
+    ax: &Axes<'_>,
+    searches: Vec<Search>,
+    style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    n: usize,
+    clients_per_region: Vec<usize>,
+    y_axis: ThroughputYAxis,
+    db: &ResultsDB,
+    plotted: &mut usize,
+) -> Result<(), Report> {
     for mut search in searches {
         // check `n`
         assert_eq!(search.n, n, "throughput_something_plot: value of n in search doesn't match the provided");
@@ -600,33 +743,398 @@ pub fn throughput_something_plot(
         if !x.is_empty() {
             let kwargs = line_style(py, search, &style_fun)?;
             ax.plot(x, y, None, Some(kwargs))?;
-            plotted += 1;
+            *plotted += 1;
         }
     }
 
-    // set log scale on y axis if y axis is latency
-    let log_scale = match y_axis {
-        ThroughputYAxis::Latency(_) => {
-            set_log_scale(py, &ax, AxisToScale::Y)?;
-            true
-        }
-        ThroughputYAxis::CPU => false,
-    };
+    Ok(())
+}
 
-    // set labels
-    ax.set_xlabel("throughput (K ops/s)")?;
-    let y_label = if log_scale {
-        format!("{} [log-scale]", y_axis.y_label())
-    } else {
-        y_axis.y_label()
-    };
-    ax.set_ylabel(&y_label)?;
+pub fn heatmap_plot<F>(
+    n: usize,
+    protocols: Vec<(Protocol, usize)>,
+    clients_per_region: Vec<usize>,
+    key_gen: KeyGen,
+    refine_search: F,
+    leader: ProcessId,
+    heatmap_metric: HeatmapMetric,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, KeyGen),
+{
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
 
-    // legend
-    add_legend(plotted, None, py, &ax)?;
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    let set_xlabels = true;
+    let set_ylabels = true;
+    let set_colorbar = true;
+    inner_heatmap_plot(
+        py,
+        &fig,
+        &ax,
+        n,
+        protocols,
+        clients_per_region,
+        key_gen,
+        refine_search,
+        leader,
+        heatmap_metric,
+        set_xlabels,
+        set_ylabels,
+        set_colorbar,
+        db,
+    )?;
 
     // end plot
-    end_plot(plotted, output_dir, output_file, py, &plt, Some(fig))?;
+    end_plot(true, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
+pub fn throughput_latency_plot_split<F>(
+    n: usize,
+    protocols: Vec<(Protocol, usize)>,
+    clients_per_region: Vec<usize>,
+    top_key_gen: KeyGen,
+    bottom_key_gen: KeyGen,
+    refine_search: F,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    y_range: Option<(f64, f64)>,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, KeyGen) + Clone,
+{
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot:
+    // - adjust horizontal space between the three plots
+    let kwargs = pydict!(py, ("hspace", 0.2));
+    let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
+
+    // increase height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width, height + 1.5)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    for (subplot, key_gen) in vec![(1, top_key_gen), (2, bottom_key_gen)] {
+        let ax = plt.subplot(2, 1, subplot, None)?;
+        let searches: Vec<_> = protocols
+            .clone()
+            .into_iter()
+            .map(|(protocol, f)| {
+                let mut search = Search::new(n, f, protocol);
+                refine_search(&mut search, key_gen);
+                search
+            })
+            .collect();
+        inner_throughput_something_plot(
+            py,
+            &ax,
+            searches,
+            &style_fun,
+            n,
+            clients_per_region.clone(),
+            ThroughputYAxis::Latency(LatencyMetric::Average),
+            db,
+            &mut plotted,
+        )?;
+        // set log scale on y axis if y axis is latency
+        set_log_scale(py, &ax, AxisToScale::Y)?;
+
+        // maybe set y limits
+        if let Some((y_min, y_max)) = y_range {
+            let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
+            ax.set_ylim(Some(kwargs))?;
+        }
+
+        // set legend and labels:
+        // - set legend
+        // - set xlabel if bottom
+        // - set ylabel in both
+        match subplot {
+            1 => {
+                // specific pull-up for this kind of plot
+                let y_bbox_to_anchor = Some(1.46);
+                // legend
+                add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
+            }
+            2 => {
+                ax.set_xlabel("throughput (K ops/s)", None)?;
+            }
+            _ => unreachable!("impossible subplot"),
+        }
+        ax.set_ylabel("latency (ms) [log-scale]", None)?;
+    }
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
+pub fn heatmap_plot_split<F>(
+    n: usize,
+    protocols: Vec<(Protocol, usize)>,
+    clients_per_region: Vec<usize>,
+    key_gen: KeyGen,
+    refine_search: F,
+    leader: ProcessId,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, KeyGen) + Clone,
+{
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot:
+    // - adjust top and bottom to have almost no margin
+    // - increase left margin
+    // - adjust horizontal space between the three plots
+    let kwargs = pydict!(
+        py,
+        ("top", 0.90),
+        ("bottom", 0.30),
+        ("left", 0.18),
+        ("wspace", 0.1)
+    );
+    let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
+
+    // increase height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width, height - 0.8)?;
+
+    for (subplot, set_xlabels, set_ylabels, set_colorbar, heatmap_metric) in vec![
+        (1, true, true, false, HeatmapMetric::CPU),
+        (2, false, false, false, HeatmapMetric::NetRecv),
+        (3, false, false, true, HeatmapMetric::NetSend),
+    ] {
+        let ax = plt.subplot(1, 3, subplot, None)?;
+        inner_heatmap_plot(
+            py,
+            &fig,
+            &ax,
+            n,
+            protocols.clone(),
+            clients_per_region.clone(),
+            key_gen,
+            refine_search.clone(),
+            leader,
+            heatmap_metric,
+            set_xlabels,
+            set_ylabels,
+            set_colorbar,
+            db,
+        )?;
+
+        ax.set_title(&heatmap_metric.name())?;
+    }
+
+    // end plot
+    end_plot(true, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
+// based on: https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/image_annotated_heatmap.html#sphx-glr-gallery-images-contours-and-fields-image-annotated-heatmap-py
+pub fn inner_heatmap_plot<F>(
+    py: Python<'_>,
+    fig: &Figure<'_>,
+    ax: &Axes<'_>,
+    n: usize,
+    protocols: Vec<(Protocol, usize)>,
+    clients_per_region: Vec<usize>,
+    key_gen: KeyGen,
+    refine_search: F,
+    leader: ProcessId,
+    heatmap_metric: HeatmapMetric,
+    set_xlabels: bool,
+    set_ylabels: bool,
+    set_colorbar: bool,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, KeyGen),
+{
+    // data for all rows
+    let mut rows = Vec::with_capacity(protocols.len());
+
+    for (protocol, f) in protocols.iter() {
+        // create search
+        let mut search = Search::new(n, *f, *protocol);
+        // refine search
+        refine_search(&mut search, key_gen);
+
+        // data for this row
+        let mut row_data = Vec::with_capacity(clients_per_region.len());
+
+        for clients in clients_per_region.iter() {
+            // further refine search
+            search.clients_per_region(*clients);
+
+            // execute search
+            let mut exp_data = db.find(search)?;
+            match exp_data.len() {
+                0 => {
+                    eprintln!(
+                        "missing data for {} f = {}",
+                        PlotFmt::protocol_name(search.protocol),
+                        search.f
+                    );
+                    row_data.push(0);
+                    continue;
+                }
+                1 => (),
+                _ => {
+                    let matches: Vec<_> = exp_data
+                        .into_iter()
+                        .map(|(timestamp, _)| {
+                            timestamp.path().display().to_string()
+                        })
+                        .collect();
+                    panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
+                }
+            };
+            let (_timestamp, exp_data) = exp_data.pop().unwrap();
+
+            let exp_data = match search.protocol {
+                Protocol::FPaxos => {
+                    // if fpaxos, use data from the leader
+                    exp_data
+                        .process_dstats
+                        .get(&leader)
+                        .expect("leader data should exist")
+                }
+                _ => {
+                    // otherwise, use global data
+                    &exp_data.global_process_dstats
+                }
+            };
+
+            // get data
+            let value = match heatmap_metric {
+                HeatmapMetric::NetSend => exp_data.net_send.mean(),
+                HeatmapMetric::NetRecv => exp_data.net_recv.mean(),
+                HeatmapMetric::CPU => {
+                    exp_data.cpu_usr.mean() + exp_data.cpu_sys.mean()
+                }
+            };
+            let utilization = heatmap_metric.utilization(value);
+            row_data.push(utilization);
+        }
+
+        println!(
+            "{:<7} f = {} | {} -> {:?}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f,
+            heatmap_metric.name(),
+            row_data,
+        );
+
+        // save row
+        rows.push(row_data);
+    }
+
+    // list of colormaps: https://matplotlib.org/tutorials/colors/colormaps.html
+    let kwargs = pydict!(py, ("cmap", "afmhot_r"), ("vmin", 0), ("vmax", 100));
+    // plot the heatmap
+    let im = ax.imshow(rows, Some(kwargs))?;
+
+    // create colorbar
+    if set_colorbar {
+        let cbar_ax = fig.add_axes(vec![0.71, 0.22, 0.24, 0.05])?;
+        let kwargs =
+            pydict!(py, ("cax", cbar_ax.ax()), ("orientation", "horizontal"),);
+        let cbar = fig.colorbar(im.im(), Some(kwargs))?;
+        cbar.set_label("utilization (%)", None)?;
+        cbar.set_ticks(vec![0, 25, 50, 75, 100], None)?;
+        cbar.set_ticklabels(vec![0, 25, 50, 75, 100], None)?;
+    }
+
+    // set xticks
+    let xticks: Vec<_> = (0..clients_per_region.len()).collect();
+    ax.set_xticks(xticks, None)?;
+    // set ylabels
+    if set_xlabels {
+        let kwargs = pydict!(
+            py,
+            ("rotation", 50),
+            ("horizontalalignment", "right"),
+            ("rotation_mode", "anchor")
+        );
+        ax.set_xticklabels(clients_per_region.clone(), Some(kwargs))?;
+    } else {
+        // hide xlabels
+        let kwargs = pydict!(py, ("labelbottom", false));
+        ax.tick_params(Some(kwargs))?;
+    }
+
+    // set yticks
+    let yticks: Vec<_> = (0..protocols.len()).collect();
+    ax.set_yticks(yticks, None)?;
+    // set ylabels
+    if set_ylabels {
+        let ylabels: Vec<_> = protocols
+            .clone()
+            .into_iter()
+            .map(|(protocol, f)| PlotFmt::label(protocol, f))
+            .collect();
+        ax.set_yticklabels(ylabels, None)?;
+    } else {
+        // hide ylabels
+        let kwargs = pydict!(py, ("labelleft", false));
+        ax.tick_params(Some(kwargs))?;
+    }
+
+    // // hide major ticks on the left
+    // let kwargs = pydict!(py, ("which", "major"), ("left", false));
+    // ax.tick_params(Some(kwargs))?;
+
+    // create white grid
+    let xticks: Vec<_> = (0..clients_per_region.len() + 1)
+        .map(|tick| tick as f64 - 0.5)
+        .collect();
+    let kwargs = pydict!(py, ("minor", true));
+    ax.set_xticks(xticks, Some(kwargs))?;
+    let yticks: Vec<_> = (0..protocols.len() + 1)
+        .map(|tick| tick as f64 - 0.5)
+        .collect();
+    let kwargs = pydict!(py, ("minor", true));
+    ax.set_yticks(yticks, Some(kwargs))?;
+    let kwargs = pydict!(
+        py,
+        // the following makes sure the grid is drawn on the minor ticks
+        ("which", "minor"),
+        ("color", "black"),
+        ("linestyle", "-"),
+        ("linewidth", 1.5)
+    );
+    ax.grid(Some(kwargs))?;
+
+    // hide minor ticks
+    let kwargs =
+        pydict!(py, ("which", "minor"), ("bottom", false), ("left", false));
+    ax.tick_params(Some(kwargs))?;
 
     Ok(())
 }
@@ -740,18 +1248,10 @@ pub fn process_metrics_table(
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    let col_labels = vec![
-        "fast",
-        "slow",
-        "gc",
-        "delay (ms)",
-        "chains",
-        "out",
-        "in_req",
-        "in_rep",
-    ];
+    let col_labels =
+        vec!["fast", "slow", "gc", "delay (ms)", "chains", "out", "in"];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.12, 0.12, 0.12, 0.24, 0.24, 0.12, 0.12, 0.12];
+    let col_widths = vec![0.12, 0.12, 0.12, 0.24, 0.24, 0.12, 0.12];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -773,6 +1273,8 @@ pub fn process_metrics_table(
             }
             1 => (),
             _ => {
+                // TODO if more than one match *and* the number of clients was
+                // not set, then have an entry for each of the entries found
                 let matches: Vec<_> = exp_data
                     .into_iter()
                     .map(|(timestamp, _)| {
@@ -836,9 +1338,6 @@ pub fn process_metrics_table(
         let in_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequests)
             .map(|in_requests| fmt(in_requests));
-        let in_request_replies = executor_metrics
-            .get_aggregated(ExecutorMetricsKind::InRequestReplies)
-            .map(|in_request_replies| fmt(in_request_replies));
         // create cell
         let cell = vec![
             fast_path,
@@ -848,7 +1347,6 @@ pub fn process_metrics_table(
             chain_size,
             out_requests,
             in_requests,
-            in_request_replies,
         ];
         // format cell
         let fmt_cell_data =
@@ -920,7 +1418,7 @@ fn table(
         plt.tight_layout()?;
 
         // end plot
-        end_plot(plotted, output_dir, output_file, py, &plt, None)?;
+        end_plot(plotted > 0, output_dir, output_file, py, &plt, None)?;
     }
     Ok(())
 }
@@ -931,41 +1429,45 @@ fn percentiles() -> impl Iterator<Item = f64> {
         .step_by(10)
         .chain((65..=95).step_by(5))
         .map(|percentile| percentile as f64 / 100f64)
-        .chain(vec![0.97, 0.99, 0.999])
+        .chain(vec![
+            0.96, 0.97, 0.98, 0.984, 0.988, 0.992, 0.996, 0.999, 0.9999,
+        ])
 }
 
+// https://matplotlib.org/3.3.1/api/_as_gen/matplotlib.pyplot.subplots_adjust.html?highlight=subplots_adjust#matplotlib.pyplot.subplots_adjust
 fn start_plot<'a>(
     py: Python<'a>,
     plt: &'a PyPlot<'a>,
-    height_between_subplots: Option<f64>,
+    kwargs: Option<&PyDict>,
 ) -> Result<(Figure<'a>, Axes<'a>), Report> {
     let (fig, ax) = plt.subplots(None)?;
-
-    let top = ("top", ADJUST_TOP);
-    let bottom = ("bottom", ADJUST_BOTTOM);
-
-    // adjust fig margins
-    let kwargs = if let Some(hspace) = height_between_subplots {
-        // also set `hspace`
-        let hspace = ("hspace", hspace);
-        pydict!(py, top, bottom, hspace)
+    // create empty arguments if no arguments were provided
+    let kwargs = if let Some(kwargs) = kwargs {
+        kwargs
     } else {
-        pydict!(py, top, bottom)
+        pyo3::types::PyDict::new(py)
     };
+    // set adjust top and adjust bottom defaults if not set
+    if !pytry!(py, kwargs.contains("top")) {
+        pytry!(py, kwargs.set_item("top", ADJUST_TOP));
+    }
+    if !pytry!(py, kwargs.contains("bottom")) {
+        pytry!(py, kwargs.set_item("bottom", ADJUST_BOTTOM));
+    }
     fig.subplots_adjust(Some(kwargs))?;
 
     Ok((fig, ax))
 }
 
 fn end_plot(
-    plotted: usize,
+    something_plotted: bool,
     output_dir: Option<&str>,
     output_file: &str,
     py: Python<'_>,
     plt: &PyPlot<'_>,
     fig: Option<Figure<'_>>,
 ) -> Result<(), Report> {
-    if plotted == 0 {
+    if !something_plotted {
         // if nothing was plotted, just close the current figure
         return plt.close(None);
     };
@@ -1008,8 +1510,8 @@ fn add_legend(
         return Ok(());
     }
     // default values for `y_bbox_to_anchor`
-    let one_row = 1.17;
-    let two_rows = 1.255;
+    let one_row = 1.19;
+    let two_rows = 1.3;
 
     let (legend_ncol, y_bbox_to_anchor_default) = match plotted {
         0 => (0, 0.0),

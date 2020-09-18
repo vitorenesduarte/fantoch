@@ -42,6 +42,10 @@ impl Histogram {
             .flat_map(|(value, count)| (0..*count).map(move |_| *value))
     }
 
+    pub fn inner(&self) -> &BTreeMap<u64, usize> {
+        &self.values
+    }
+
     /// Merges two histograms.
     pub fn merge(&mut self, other: &Self) {
         histogram_merge(&mut self.values, &other.values)

@@ -9,13 +9,22 @@ pub const CONFLICT_COLOR: &str = "CONFLICT";
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum KeyGen {
-    ConflictRate { conflict_rate: usize },
-    Zipf { coefficient: f64, key_count: usize },
+    ConflictRate {
+        conflict_rate: usize,
+    },
+    Zipf {
+        coefficient: f64,
+        keys_per_shard: usize,
+    },
 }
 
 impl KeyGen {
-    pub fn initial_state(self, client_id: ClientId) -> KeyGenState {
-        KeyGenState::new(self, client_id)
+    pub fn initial_state(
+        self,
+        shard_count: usize,
+        client_id: ClientId,
+    ) -> KeyGenState {
+        KeyGenState::new(self, shard_count, client_id)
     }
 }
 
@@ -25,7 +34,11 @@ impl std::fmt::Display for KeyGen {
             Self::ConflictRate { conflict_rate } => {
                 write!(f, "conflict{}", conflict_rate)
             }
-            Self::Zipf { coefficient, .. } => write!(f, "zipf{}", coefficient),
+            Self::Zipf { coefficient, .. } => write!(
+                f,
+                "{}",
+                format!("zipf{:.2}", coefficient).replace(".", "-")
+            ),
         }
     }
 }
@@ -37,13 +50,15 @@ pub struct KeyGenState {
 }
 
 impl KeyGenState {
-    fn new(key_gen: KeyGen, client_id: ClientId) -> Self {
+    fn new(key_gen: KeyGen, shard_count: usize, client_id: ClientId) -> Self {
         let zipf = match key_gen {
             KeyGen::ConflictRate { .. } => None,
             KeyGen::Zipf {
                 coefficient,
-                key_count,
+                keys_per_shard,
             } => {
+                // compute key count
+                let key_count = keys_per_shard * shard_count;
                 // initialize zipf distribution
                 let zipf = ZipfDistribution::new(key_count, coefficient)
                     .expect(

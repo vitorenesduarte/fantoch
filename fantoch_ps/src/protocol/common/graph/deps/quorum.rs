@@ -42,34 +42,58 @@ impl QuorumDeps {
         self.participants.len() == self.q
     }
 
-    /// Computes the threshold union.
-    pub fn threshold_union(
+    /// Checks if threshold union == union and returns the union.
+    pub fn check_threshold_union(
         &self,
         threshold: usize,
     ) -> (HashSet<Dependency>, bool) {
+        assert!(self.all());
+        let mut equal_to_union = true;
+
         let deps: HashSet<_> = self
             .threshold_deps
             .iter()
-            .filter_map(|(dep, count)| {
-                if *count >= threshold {
-                    Some(dep.clone())
-                } else {
-                    None
-                }
+            .map(|(dep, count)| {
+                // it's equal to union if all deps were reported at least
+                // `threshold` times
+                equal_to_union = equal_to_union && *count >= threshold;
+                dep.clone()
             })
             .collect();
-        // it's equal to union if we have all deps ever reported
-        let equal_to_union = deps.len() == self.threshold_deps.len();
         (deps, equal_to_union)
     }
 
-    /// Computes the union.
-    pub fn union(&self) -> (HashSet<Dependency>, bool) {
+    /// Checks if all deps the union.
+    pub fn check_union(&self) -> (HashSet<Dependency>, bool) {
+        assert!(self.all());
+
         let (deps, counts): (HashSet<Dependency>, HashSet<usize>) =
             self.threshold_deps.clone().into_iter().unzip();
-        // we have equal deps reported if there's a single count (or no count,
+        // we have equal deps reported if there's a single count, i.e.
         // i.e. when no dependencies are reported)
-        let equal_deps_reported = counts.len() <= 1;
+        let equal_deps_reported = match counts.len() {
+            0 => {
+                // this means that no dependencies were reported, and thus it
+                // trivially holds that dependencies reported were all equal
+                true
+            }
+            1 => {
+                // we have equal deps if:
+                // - dependencies are reported the same number of times
+                // - their report count is equal to the number of fast quorum
+                //   processes
+                counts
+                    .into_iter()
+                    .next()
+                    .expect("there must be a dep count")
+                    == self.q
+            }
+            _ => {
+                // if there's a different count at least two dependencies, then
+                // at least one of the set of dependencies reported didn't match
+                false
+            }
+        };
         (deps, equal_deps_reported)
     }
 }
@@ -119,18 +143,21 @@ mod tests {
 
         // check threshold union
         assert_eq!(
-            quorum_deps.threshold_union(1),
+            quorum_deps.check_threshold_union(1),
             (deps_1_and_2.clone(), true)
         );
         assert_eq!(
-            quorum_deps.threshold_union(2),
+            quorum_deps.check_threshold_union(2),
             (deps_1_and_2.clone(), true)
         );
         assert_eq!(
-            quorum_deps.threshold_union(3),
+            quorum_deps.check_threshold_union(3),
             (deps_1_and_2.clone(), true)
         );
-        assert_eq!(quorum_deps.threshold_union(4), (HashSet::new(), false));
+        assert_eq!(
+            quorum_deps.check_threshold_union(4),
+            (deps_1_and_2.clone(), false)
+        );
 
         // -------------
         // quorum deps
@@ -149,18 +176,21 @@ mod tests {
 
         // check threshold union
         assert_eq!(
-            quorum_deps.threshold_union(1),
+            quorum_deps.check_threshold_union(1),
             (deps_1_2_and_3.clone(), true)
         );
         assert_eq!(
-            quorum_deps.threshold_union(2),
-            (deps_1_and_2.clone(), false)
+            quorum_deps.check_threshold_union(2),
+            (deps_1_2_and_3.clone(), false)
         );
         assert_eq!(
-            quorum_deps.threshold_union(3),
-            (deps_1_and_2.clone(), false)
+            quorum_deps.check_threshold_union(3),
+            (deps_1_2_and_3.clone(), false)
         );
-        assert_eq!(quorum_deps.threshold_union(4), (HashSet::new(), false));
+        assert_eq!(
+            quorum_deps.check_threshold_union(4),
+            (deps_1_2_and_3.clone(), false)
+        );
 
         // -------------
         // quorum deps
@@ -175,55 +205,83 @@ mod tests {
 
         // check threshold union
         assert_eq!(
-            quorum_deps.threshold_union(1),
+            quorum_deps.check_threshold_union(1),
             (deps_1_2_and_3.clone(), true)
         );
         assert_eq!(
-            quorum_deps.threshold_union(2),
-            (deps_1_and_2.clone(), false)
+            quorum_deps.check_threshold_union(2),
+            (deps_1_2_and_3.clone(), false)
         );
-        assert_eq!(quorum_deps.threshold_union(3), (deps_1.clone(), false));
-        assert_eq!(quorum_deps.threshold_union(4), (HashSet::new(), false));
+        assert_eq!(
+            quorum_deps.check_threshold_union(3),
+            (deps_1_2_and_3.clone(), false)
+        );
+        assert_eq!(
+            quorum_deps.check_threshold_union(4),
+            (deps_1_2_and_3.clone(), false)
+        );
     }
 
     #[test]
     fn union() {
-        let q = 4;
-
         // add deps
         let deps_1 = HashSet::from_iter(vec![new_dep(1, 1)]);
         let deps_1_and_2 =
             HashSet::from_iter(vec![new_dep(1, 1), new_dep(1, 2)]);
-        let deps_1_2_and_3 = HashSet::from_iter(vec![
-            new_dep(1, 1),
-            new_dep(1, 2),
-            new_dep(1, 3),
-        ]);
 
         // -------------
         // quorum deps
-        let mut quorum_deps = QuorumDeps::new(q);
-        assert_eq!(quorum_deps.union(), (HashSet::new(), true));
-        quorum_deps.add(1, deps_1_and_2.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), true));
-        quorum_deps.add(2, deps_1_and_2.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), true));
-        quorum_deps.add(3, deps_1_and_2.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), true));
-        quorum_deps.add(4, deps_1.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), false));
+        let mut quorum_deps = QuorumDeps::new(2);
+        quorum_deps.add(1, HashSet::new());
+        quorum_deps.add(2, HashSet::new());
+        assert_eq!(quorum_deps.check_union(), (HashSet::new(), true));
 
         // -------------
         // quorum deps
-        let mut quorum_deps = QuorumDeps::new(q);
-        assert_eq!(quorum_deps.union(), (HashSet::new(), true));
+        let mut quorum_deps = QuorumDeps::new(3);
+        quorum_deps.add(1, HashSet::new());
+        quorum_deps.add(2, HashSet::new());
+        quorum_deps.add(3, deps_1.clone());
+        assert_eq!(quorum_deps.check_union(), (deps_1.clone(), false));
+
+        // -------------
+        // quorum deps
+        let mut quorum_deps = QuorumDeps::new(3);
+        quorum_deps.add(1, deps_1.clone());
+        quorum_deps.add(2, deps_1.clone());
+        quorum_deps.add(3, deps_1.clone());
+        assert_eq!(quorum_deps.check_union(), (deps_1.clone(), true));
+
+        // -------------
+        // quorum deps
+        let mut quorum_deps = QuorumDeps::new(2);
         quorum_deps.add(1, deps_1_and_2.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), true));
         quorum_deps.add(2, deps_1_and_2.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), true));
+        assert_eq!(quorum_deps.check_union(), (deps_1_and_2.clone(), true));
+
+        // -------------
+        // quorum deps
+        let mut quorum_deps = QuorumDeps::new(2);
+        quorum_deps.add(1, deps_1_and_2.clone());
+        quorum_deps.add(2, HashSet::new());
+        assert_eq!(quorum_deps.check_union(), (deps_1_and_2, false));
+    }
+
+    #[test]
+    fn union_regression_test() {
+        let q = 3;
+
+        // add deps
+        let deps_1 = HashSet::from_iter(vec![new_dep(1, 1)]);
+        let deps_2 = HashSet::from_iter(vec![new_dep(1, 2)]);
+        let deps_1_and_2 =
+            HashSet::from_iter(vec![new_dep(1, 1), new_dep(1, 2)]);
+
+        let mut quorum_deps = QuorumDeps::new(q);
+        quorum_deps.add(1, deps_1);
+        quorum_deps.add(2, deps_2);
         quorum_deps.add(3, deps_1_and_2.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_and_2.clone(), true));
-        quorum_deps.add(4, deps_1_2_and_3.clone());
-        assert_eq!(quorum_deps.union(), (deps_1_2_and_3.clone(), false));
+
+        assert_eq!(quorum_deps.check_union(), (deps_1_and_2, false));
     }
 }

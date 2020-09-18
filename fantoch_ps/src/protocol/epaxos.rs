@@ -332,7 +332,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         if info.quorum_deps.all() {
             // compute the union while checking whether all deps reported are
             // equal
-            let (final_deps, all_equal) = info.quorum_deps.union();
+            let (final_deps, all_equal) = info.quorum_deps.check_union();
 
             // create consensus value
             let value = ConsensusValue::with(final_deps);
@@ -753,7 +753,7 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::client::{Client, KeyGen, ShardGen, Workload};
+    use fantoch::client::{Client, KeyGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
@@ -843,18 +843,16 @@ mod tests {
         simulation.register_process(epaxos_3, executor_3);
 
         // client workload
-        let shards_per_command = 1;
-        let shard_gen = ShardGen::Random { shard_count: 1 };
-        let keys_per_shard = 1;
+        let shard_count = 1;
         let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
-        let total_commands = 10;
+        let keys_per_command = 1;
+        let commands_per_client = 10;
         let payload_size = 100;
         let workload = Workload::new(
-            shards_per_command,
-            shard_gen,
-            keys_per_shard,
+            shard_count,
             key_gen,
-            total_commands,
+            keys_per_command,
+            commands_per_client,
             payload_size,
         );
 
