@@ -17,13 +17,16 @@ impl<'p> PyPlot<'p> {
         Ok(Self { plt })
     }
 
-    pub fn subplot(
+    pub fn subplot<I>(
         &self,
         nrows: usize,
         ncols: usize,
-        index: usize,
+        index: I,
         kwargs: Option<&PyDict>,
-    ) -> Result<Axes<'_>, Report> {
+    ) -> Result<Axes<'_>, Report>
+    where
+        I: IntoPy<PyObject>,
+    {
         let result = pytry!(
             self.py(),
             self.plt.call("subplot", (nrows, ncols, index), kwargs)

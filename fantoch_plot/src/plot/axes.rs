@@ -1,4 +1,5 @@
 use crate::plot::axis::Axis;
+use crate::plot::spines::Spines;
 use crate::pytry;
 use color_eyre::Report;
 use pyo3::prelude::*;
@@ -9,17 +10,31 @@ pub struct Axes<'a> {
     ax: &'a PyAny,
     pub xaxis: Axis<'a>,
     pub yaxis: Axis<'a>,
+    pub spines: Spines<'a>,
 }
 
 impl<'a> Axes<'a> {
     pub fn new(ax: &'a PyAny) -> Result<Self, Report> {
         let xaxis = Axis::new(pytry!(ax.py(), ax.getattr("xaxis")));
         let yaxis = Axis::new(pytry!(ax.py(), ax.getattr("yaxis")));
-        Ok(Self { ax, xaxis, yaxis })
+        let spines = pytry!(ax.py(), ax.getattr("spines"));
+        let spines = pytry!(ax.py(), spines.downcast::<PyDict>());
+        let spines = Spines::new(spines);
+        Ok(Self {
+            ax,
+            xaxis,
+            yaxis,
+            spines,
+        })
     }
 
     pub fn ax(&self) -> &PyAny {
         self.ax
+    }
+
+    pub fn grid(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("grid", (), kwargs));
+        Ok(())
     }
 
     pub fn set_xlabel(&self, label: &str) -> Result<(), Report> {
@@ -89,6 +104,11 @@ impl<'a> Axes<'a> {
             self.py(),
             self.ax.call_method("set_yticklabels", (labels,), kwargs)
         );
+        Ok(())
+    }
+
+    pub fn tick_params(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("tick_params", (), kwargs));
         Ok(())
     }
 
@@ -165,6 +185,18 @@ impl<'a> Axes<'a> {
         H: IntoPy<PyObject>,
     {
         pytry!(self.py(), self.ax.call_method("bar", (x, height), kwargs));
+        Ok(())
+    }
+
+    pub fn imshow<D>(
+        &self,
+        data: Vec<D>,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report>
+    where
+        D: IntoPy<PyObject>,
+    {
+        pytry!(self.py(), self.ax.call_method("imshow", (data,), kwargs));
         Ok(())
     }
 
