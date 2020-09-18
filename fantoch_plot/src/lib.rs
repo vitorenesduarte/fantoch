@@ -13,13 +13,14 @@ use color_eyre::Report;
 use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
 use fantoch::protocol::ProtocolMetricsKind;
+use fantoch_prof::metrics::Histogram;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -28,7 +29,7 @@ const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
 // no longer golden ratio
 const FIGSIZE: (f64, f64) = (FIGWIDTH, FIGWIDTH / GOLDEN_RATIO - 0.6);
 
-// margins
+// adjust is the opposite of margin?
 const ADJUST_TOP: f64 = 0.83;
 const ADJUST_BOTTOM: f64 = 0.15;
 
@@ -121,7 +122,7 @@ pub fn set_global_style() -> Result<(), Report> {
     let py = gil.python();
 
     let lib = Matplotlib::new(py)?;
-    // need to load `PyPlot` for the following to work (which is just weird)
+    // need to load `PyPlot` for the following to work
     let _ = PyPlot::new(py)?;
 
     // adjust fig size
@@ -129,7 +130,7 @@ pub fn set_global_style() -> Result<(), Report> {
     lib.rc("figure", Some(kwargs))?;
 
     // adjust font size
-    let kwargs = pydict!(py, ("size", 9));
+    let kwargs = pydict!(py, ("size", 8.5));
     lib.rc("font", Some(kwargs))?;
     let kwargs = pydict!(py, ("fontsize", 10));
     lib.rc("legend", Some(kwargs))?;
@@ -163,7 +164,8 @@ pub fn latency_plot<R>(
     );
 
     // compute x:
-    let x: Vec<_> = (0..n).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
+    // - the +1 is for the 'average' group
+    let x: Vec<_> = (0..n + 1).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
 
     // we need to shift all to the left by half of the number of combinations
     let shift_left = searches.len() as f64 / 2f64;
@@ -224,38 +226,62 @@ pub fn latency_plot<R>(
         let (_timestamp, exp_data) = exp_data.pop().unwrap();
 
         // compute y: avg latencies sorted by region name
-        let mut err = Vec::new();
-        let mut latencies: Vec<_> = exp_data
+        let mut from_err = Vec::new();
+        let mut to_err = Vec::new();
+        let mut per_region_latency: Vec<_> = exp_data
             .client_latency
             .iter()
             .map(|(region, histogram)| {
                 // compute average latency
-                let avg = histogram.mean().value().round() as usize;
+                let avg = histogram.mean().value().round() as u64;
 
                 // maybe create error bar
-                if let ErrorBar::With(percentile) = error_bar {
-                    let p99_9 = histogram.percentile(percentile).value().round()
-                        as usize;
-                    let error_bar = (0, p99_9 - avg);
-                    err.push(error_bar);
-                }
+                let error_bar = if let ErrorBar::With(percentile) = error_bar {
+                    let percentile =
+                        histogram.percentile(percentile).value().round();
+                    percentile as u64 - avg
+                } else {
+                    0
+                };
+                // this represents the top of the bar
+                from_err.push(0);
+                // this represents the height of the error bar starting at the
+                // top of the bar
+                to_err.push(error_bar);
 
                 (region.clone(), avg)
             })
             .collect();
-        latencies.sort();
-        let (regions, y): (HashSet<_>, Vec<_>) = latencies.into_iter().unzip();
-        let (from_err, to_err): (Vec<_>, Vec<_>) = err.into_iter().unzip();
+
+        // sort by region and get region latencies
+        per_region_latency.sort();
+        let (regions, mut y): (HashSet<_>, Vec<_>) =
+            per_region_latency.into_iter().unzip();
+
+        // compute the stddev between region latencies
+        let stddev = Histogram::from(y.clone()).stddev().value().round() as u64;
+        // add stddev as an error bar
+        from_err.push(0);
+        to_err.push(stddev);
+
+        // add global client latency to the 'average' group
+        y.push(exp_data.global_client_latency.mean().value().round() as u64);
+        println!(
+            "{:<7} f = {} | {:?} | stddev = {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f,
+            y,
+            stddev,
+        );
 
         // compute x: shift all values by `shift`
         let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
 
-        // plot it:
-        // - maybe set error bars
+        // plot it error bars:
+        // - even if the error bar is not set, we have the stddev error bar from
+        //   the 'average' group
         let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
-        if let ErrorBar::With(_) = error_bar {
-            pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
-        }
+        pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
 
         ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
@@ -264,9 +290,7 @@ pub fn latency_plot<R>(
         results.push((search, f(exp_data)));
 
         // update set of all regions
-        for region in regions {
-            all_regions.insert(region);
-        }
+        all_regions.extend(regions);
     }
 
     // set xticks
@@ -286,8 +310,9 @@ pub fn latency_plot<R>(
     let mut regions: Vec<_> = all_regions.into_iter().collect();
     regions.sort();
     // map regions to their pretty name
-    let labels: Vec<_> =
+    let mut labels: Vec<_> =
         regions.into_iter().map(PlotFmt::region_name).collect();
+    labels.push("average");
     ax.set_xticklabels(labels, None)?;
 
     // set labels
@@ -325,7 +350,7 @@ pub fn cdf_plot(
     }
 
     // set cdf plot style
-    inner_cdf_plot_style(py, &ax)?;
+    inner_cdf_plot_style(py, &ax, None)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
@@ -336,56 +361,50 @@ pub fn cdf_plot(
     Ok(())
 }
 
-pub fn cdf_plot_per_f(
-    searches: Vec<Search>,
+pub fn cdf_plot_split(
+    top_searches: Vec<Search>,
+    bottom_searches: Vec<Search>,
+    x_range: Option<(f64, f64)>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    let fs: BTreeSet<_> = searches.iter().map(|search| search.f).collect();
-    let fs: Vec<_> = fs.into_iter().collect();
-    match fs.as_slice() {
-        [1, 2] => (),
-        _ => panic!(
-            "cdf_plots: unsupported f values: {:?}; use cdf_plot instead",
-            fs
-        ),
-    };
-
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
     let plt = PyPlot::new(py)?;
 
     // start plot
-    let height_between_subplots = Some(0.5);
+    let height_between_subplots = Some(0.2);
     let (fig, _) = start_plot(py, &plt, height_between_subplots)?;
 
     let mut previous_axis: Option<Axes<'_>> = None;
 
     let mut plotted = 0;
 
-    for f in vec![2, 1] {
-        let mut hide_xticklabels = false;
-
+    for subplot in vec![2, 1] {
         // create subplot (shared axis with the previous subplot (if any))
         let kwargs = match previous_axis {
             None => None,
             Some(previous_axis) => {
-                // share the axis with f = 2so that the plots have the same
-                // scale; also, hide the labels for f = 1
-                hide_xticklabels = true;
+                // use the bottom axis for both so that the plots have the same
+                // scale
                 Some(pydict!(py, ("sharex", previous_axis.ax())))
             }
         };
-        let ax = plt.subplot(2, 1, f, kwargs)?;
+        let ax = plt.subplot(2, 1, subplot, kwargs)?;
 
         // keep track of the number of plotted instances
         let mut subfigure_plotted = 0;
 
-        // plot all searches that match this `f`
-        for search in searches.iter().filter(|search| search.f == f) {
+        // compute which searches to use
+        let searches = match subplot {
+            1 => &top_searches,
+            2 => &bottom_searches,
+            _ => unreachable!("impossible subplot"),
+        };
+        for search in searches {
             inner_cdf_plot(
                 py,
                 &ax,
@@ -397,17 +416,25 @@ pub fn cdf_plot_per_f(
         }
 
         // set cdf plot style
-        inner_cdf_plot_style(py, &ax)?;
+        inner_cdf_plot_style(py, &ax, x_range)?;
 
-        // additional style: maybe hide x-axis labels
-        if hide_xticklabels {
-            ax.xaxis.set_visible(false)?;
-        }
-
-        // specific pull-up for this kind of plot
-        let y_bbox_to_anchor = Some(1.48);
-        // legend
-        add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
+        // additional style for subplot 1:
+        // - hide x-axis
+        // - legend
+        match subplot {
+            1 => {
+                // hide x-axis
+                ax.xaxis.set_visible(false)?;
+                // specific pull-up for this kind of plot
+                let y_bbox_to_anchor = Some(1.66);
+                // legend
+                add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
+            }
+            2 => {
+                // nothing to do
+            }
+            _ => unreachable!("impossible subplot"),
+        };
 
         // save axis
         previous_axis = Some(ax);
@@ -422,17 +449,31 @@ pub fn cdf_plot_per_f(
     Ok(())
 }
 
-fn inner_cdf_plot_style(py: Python<'_>, ax: &Axes<'_>) -> Result<(), Report> {
+fn inner_cdf_plot_style(
+    py: Python<'_>,
+    ax: &Axes<'_>,
+    x_range: Option<(f64, f64)>,
+) -> Result<(), Report> {
+    // maybe set x limits
+    if let Some((x_min, x_max)) = x_range {
+        let kwargs = pydict!(py, ("xmin", x_min), ("xmax", x_max));
+        ax.set_xlim(Some(kwargs))?;
+    }
+
     // set y limits
-    let kwargs = pydict!(py, ("ymin", 0.95), ("ymax", 1));
+    let kwargs = pydict!(py, ("ymin", 95.0), ("ymax", 99.99));
     ax.set_ylim(Some(kwargs))?;
+
+    let yticks = vec![95.0, 97.0, 99.0, 99.99];
+    ax.set_yticks(yticks.clone(), None)?;
+    ax.set_yticklabels(yticks.clone(), None)?;
 
     // set log scale on x and y axis
     set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
     ax.set_xlabel("latency (ms) [log-scale]")?;
-    ax.set_ylabel("CDF")?;
+    ax.set_ylabel("percentiles")?;
 
     Ok(())
 }
@@ -478,7 +519,21 @@ fn inner_cdf_plot(
         .collect();
 
     // compute y: percentiles!
-    let y: Vec<_> = percentiles().collect();
+    let y: Vec<_> =
+        percentiles().map(|percentile| percentile * 100.0).collect();
+
+    println!(
+        "{:<7} f = {} | c = {} | {:?}",
+        PlotFmt::protocol_name(search.protocol),
+        search.f,
+        search
+            .clients_per_region
+            .expect("clients per region should be set"),
+        x.iter()
+            .zip(y.iter())
+            .filter(|(_, percentile)| **percentile >= 95.0)
+            .collect::<Vec<_>>()
+    );
 
     // plot it!
     let kwargs = line_style(py, search, style_fun)?;
@@ -922,7 +977,9 @@ fn percentiles() -> impl Iterator<Item = f64> {
         .step_by(10)
         .chain((65..=95).step_by(5))
         .map(|percentile| percentile as f64 / 100f64)
-        .chain(vec![0.96, 0.97, 0.98, 0.984, 0.988, 0.992, 0.996, 0.999, 0.9999])
+        .chain(vec![
+            0.96, 0.97, 0.98, 0.984, 0.988, 0.992, 0.996, 0.999, 0.9999,
+        ])
 }
 
 fn start_plot<'a>(
@@ -931,11 +988,11 @@ fn start_plot<'a>(
     height_between_subplots: Option<f64>,
 ) -> Result<(Figure<'a>, Axes<'a>), Report> {
     let (fig, ax) = plt.subplots(None)?;
-
+    // adjust margnis:
+    // - always adjust top and bottom
+    // - maybe adjust spacing between subplots
     let top = ("top", ADJUST_TOP);
     let bottom = ("bottom", ADJUST_BOTTOM);
-
-    // adjust fig margins
     let kwargs = if let Some(hspace) = height_between_subplots {
         // also set `hspace`
         let hspace = ("hspace", hspace);

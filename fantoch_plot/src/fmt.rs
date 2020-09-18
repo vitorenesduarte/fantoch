@@ -9,7 +9,7 @@ impl PlotFmt {
             "ap-southeast-1" => "Singapore",
             "ca-central-1" => "Canada",
             "eu-west-1" => "Ireland",
-            "sa-east-1" => "São Paulo",
+            "sa-east-1" => "S. Paulo", // São Paulo
             "us-west-1" => "N. California", // Northern California
             name => {
                 panic!("PlotFmt::region_name: name {} not supported!", name);
@@ -63,7 +63,8 @@ impl PlotFmt {
                 "PlotFmt::background_color: protocol = {:?} not supported!",
                 protocol
             ),
-        }.to_string()
+        }
+        .to_string()
     }
 
     // Possible values: {'/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*'}

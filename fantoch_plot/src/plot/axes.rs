@@ -110,6 +110,11 @@ impl<'a> Axes<'a> {
         Ok((left.value(), right.value()))
     }
 
+    pub fn set_xlim(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
+        pytry!(self.py(), self.ax.call_method("set_xlim", (), kwargs));
+        Ok(())
+    }
+
     pub fn get_ylim(&self) -> Result<(f64, f64), Report> {
         let xlim = pytry!(self.py(), self.ax.call_method0("get_ylim"));
         let xlim = pytry!(self.py(), xlim.downcast::<PyTuple>());

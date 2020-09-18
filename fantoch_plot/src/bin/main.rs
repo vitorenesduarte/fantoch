@@ -21,10 +21,131 @@ fn main() -> Result<(), Report> {
     // set global style
     fantoch_plot::set_global_style()?;
 
+    eurosys()?;
     // partial_replication()?;
     // multi_key()?;
-    single_key()?;
+    // single_key()?;
     // show_distance_matrix();
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn eurosys() -> Result<(), Report> {
+    fairness_plot()?;
+    tail_latency_plot()?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn fairness_plot() -> Result<(), Report> {
+    // fixed parameters
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let payload_size = 4096; // it should be 100
+    let protocols = vec![
+        Protocol::FPaxos,
+        Protocol::AtlasLocked,
+        Protocol::NewtAtomic,
+    ];
+    let n = 5;
+    let clients_per_region = 512;
+    let error_bar = ErrorBar::Without;
+
+    // load results
+    let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+
+    // create searches
+    let searches: Vec<_> = protocol_combinations(n, protocols.clone())
+        .into_iter()
+        .map(|(protocol, f)| {
+            let mut search = Search::new(n, f, protocol);
+            match protocol {
+                Protocol::FPaxos => {
+                    // if fpaxos, don't filter by key gen as contention does not
+                    // affect the results
+                }
+                Protocol::AtlasLocked | Protocol::NewtAtomic => {
+                    search.key_gen(key_gen);
+                }
+                _ => {
+                    panic!("unsupported protocol: {:?}", protocol);
+                }
+            }
+            // filter by clients per region and payload size in all protocols
+            search
+                .clients_per_region(clients_per_region)
+                .payload_size(payload_size);
+            search
+        })
+        .collect();
+
+    // generate latency plot
+    let path = String::from("plot_fairness.pdf");
+    let style_fun = None;
+    let results = fantoch_plot::latency_plot(
+        searches.clone(),
+        style_fun,
+        n,
+        error_bar,
+        PLOT_DIR,
+        &path,
+        &db,
+        fmt_exp_data,
+    )?;
+    for (search, histogram_fmt) in results {
+        println!(
+            "{:<7} f = {} | {}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f,
+            histogram_fmt,
+        );
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn tail_latency_plot() -> Result<(), Report> {
+    // fixed parameters
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let payload_size = 4096; // it should be 100
+    let protocols = vec![Protocol::AtlasLocked, Protocol::NewtAtomic];
+    let n = 5;
+    let clients_per_region_top = 512;
+    let clients_per_region_bottom = 2048;
+
+    // load results
+    let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+
+    // create searches
+    let create_searches = |clients_per_region| {
+        protocol_combinations(n, protocols.clone())
+            .into_iter()
+            .map(|(protocol, f)| {
+                let mut search = Search::new(n, f, protocol);
+                search
+                    .key_gen(key_gen)
+                    .payload_size(payload_size)
+                    .clients_per_region(clients_per_region);
+                search
+            })
+            .collect()
+    };
+    let top_searches = create_searches(clients_per_region_top);
+    let bottom_searches = create_searches(clients_per_region_bottom);
+    let x_range = Some((100.0, 20_000.0));
+
+    // generate cdf plot
+    let path = String::from("plot_tail_latency.pdf");
+    let style_fun = None;
+    fantoch_plot::cdf_plot_split(
+        top_searches,
+        bottom_searches,
+        x_range,
+        style_fun,
+        PLOT_DIR,
+        &path,
+        &db,
+    )?;
+
     Ok(())
 }
 
@@ -545,12 +666,17 @@ fn multi_key() -> Result<(), Report> {
                 if n > 3 {
                     // generate cdf plot with subplots
                     let path = format!(
-                        "cdf_one_per_f_n{}_k{}_{}_c{}.pdf",
+                        "cdf_split_n{}_k{}_{}_c{}.pdf",
                         n, keys_per_shard, key_gen, clients_per_region,
                     );
+                    let (top_searches, bottom_searches): (Vec<_>, Vec<_>) =
+                        searches.into_iter().partition(|search| search.f == 1);
+                    let x_range = None;
                     let style_fun = None;
-                    fantoch_plot::cdf_plot_per_f(
-                        searches.clone(),
+                    fantoch_plot::cdf_plot_split(
+                        top_searches,
+                        bottom_searches,
+                        x_range,
                         style_fun,
                         PLOT_DIR,
                         &path,
@@ -571,12 +697,30 @@ fn single_key() -> Result<(), Report> {
     let key_gens = vec![
         KeyGen::ConflictRate { conflict_rate: 2 },
         KeyGen::ConflictRate { conflict_rate: 10 },
-        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.5 },
-        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.6 },
-        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.7 },
-        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.8 },
-        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 0.9 },
-        KeyGen::Zipf { keys_per_shard: 1_000_000, coefficient: 1.0 },
+        KeyGen::Zipf {
+            keys_per_shard: 1_000_000,
+            coefficient: 0.5,
+        },
+        KeyGen::Zipf {
+            keys_per_shard: 1_000_000,
+            coefficient: 0.6,
+        },
+        KeyGen::Zipf {
+            keys_per_shard: 1_000_000,
+            coefficient: 0.7,
+        },
+        KeyGen::Zipf {
+            keys_per_shard: 1_000_000,
+            coefficient: 0.8,
+        },
+        KeyGen::Zipf {
+            keys_per_shard: 1_000_000,
+            coefficient: 0.9,
+        },
+        KeyGen::Zipf {
+            keys_per_shard: 1_000_000,
+            coefficient: 1.0,
+        },
     ];
     let payload_size = 4096;
     let protocols = vec![
@@ -623,7 +767,8 @@ fn single_key() -> Result<(), Report> {
                         let mut search = Search::new(n, f, protocol);
                         match protocol {
                             Protocol::FPaxos => {
-                                // if fpaxos, don't filter by key gen as contention does not affect the results
+                                // if fpaxos, don't filter by key gen as
+                                // contention does not affect the results
                             }
                             Protocol::AtlasLocked | Protocol::NewtAtomic => {
                                 search.key_gen(key_gen);
@@ -666,7 +811,8 @@ fn single_key() -> Result<(), Report> {
                             let mut search = Search::new(n, f, protocol);
                             match protocol {
                                 Protocol::FPaxos => {
-                                    // if fpaxos, don't filter by key gen as contention does not affect the results
+                                    // if fpaxos, don't filter by key gen as
+                                    // contention does not affect the results
                                 }
                                 Protocol::AtlasLocked
                                 | Protocol::NewtAtomic => {
@@ -679,7 +825,8 @@ fn single_key() -> Result<(), Report> {
                                     );
                                 }
                             }
-                            // filter by clients per region and payload size in all protocols
+                            // filter by clients per region and payload size in
+                            // all protocols
                             search
                                 .clients_per_region(clients_per_region)
                                 .payload_size(payload_size);
@@ -800,9 +947,14 @@ fn single_key() -> Result<(), Report> {
                         "cdf_one_per_f_n{}_{}_c{}.pdf",
                         n, key_gen, clients_per_region
                     );
+                    let (top_searches, bottom_searches): (Vec<_>, Vec<_>) =
+                        searches.into_iter().partition(|search| search.f == 1);
+                    let x_range = None;
                     let style_fun = None;
-                    fantoch_plot::cdf_plot_per_f(
-                        searches.clone(),
+                    fantoch_plot::cdf_plot_split(
+                        top_searches,
+                        bottom_searches,
+                        x_range,
                         style_fun,
                         PLOT_DIR,
                         &path,
@@ -832,9 +984,8 @@ fn show_distance_matrix() {
 
 fn protocol_combinations(
     n: usize,
-    mut protocols: Vec<Protocol>,
+    protocols: Vec<Protocol>,
 ) -> Vec<(Protocol, usize)> {
-    protocols.sort_by_key(|&protocol| PlotFmt::protocol_name(protocol));
     let max_f = match n {
         3 => 1,
         5 => 2,
