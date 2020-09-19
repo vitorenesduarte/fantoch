@@ -9,8 +9,6 @@ use fantoch_plot::{
 };
 use std::collections::HashMap;
 
-// folder where all results are stored
-const RESULTS_DIR: &str = "../results_throughput_latency";
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -34,11 +32,13 @@ fn eurosys() -> Result<(), Report> {
     fairness_plot()?;
     tail_latency_plot()?;
     increasing_load_plot()?;
+    scalability_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_single_key";
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let payload_size = 4096; // it should be 100
@@ -105,6 +105,7 @@ fn fairness_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_single_key";
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let payload_size = 4096; // it should be 100
@@ -152,6 +153,7 @@ fn tail_latency_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_single_key";
     // fixed parameters
     let top_key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let bottom_key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
@@ -230,7 +232,13 @@ fn increasing_load_plot() -> Result<(), Report> {
 }
 
 #[allow(dead_code)]
+fn scalability_plot() -> Result<(), Report> {
+    Ok(())
+}
+
+#[allow(dead_code)]
 fn partial_replication() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_partial_replication";
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
@@ -565,23 +573,32 @@ fn partial_replication() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn multi_key() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_multi_key";
     // fixed parameters
     let shard_count = 1;
-    let n = 5;
+    let n = 3;
     let payload_size = 0;
     let protocols = vec![
         Protocol::NewtAtomic,
-        Protocol::NewtLocked,
+        // Protocol::NewtLocked,
         // Protocol::NewtFineLocked,
     ];
 
     // load results
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
-    let clients_per_region = vec![256, 1024, 1024 * 4, 1024 * 8, 1024 * 16];
+    let clients_per_region = vec![
+        256,
+        1024,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 32,
+        1024 * 64,
+    ];
 
-    for keys_per_shard in vec![8, 64] {
-        for zipf_coefficient in vec![1.0] {
+    for keys_per_shard in vec![1] {
+        for zipf_coefficient in vec![0.5, 0.75, 1.0, 1.25] {
             // create key generator
             let key_gen = KeyGen::Zipf {
                 coefficient: zipf_coefficient,
@@ -772,6 +789,7 @@ fn multi_key() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_single_key";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
