@@ -13,7 +13,7 @@ use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
 // folder where all results will be stored
-const RESULTS_DIR: &str = "../results_throughput_latency";
+const RESULTS_DIR: &str = "../results_multi_key";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -40,13 +40,13 @@ const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
-const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
+const COMMANDS_PER_CLIENT: usize = 500_000; // 500 if WAN, 500_000 if LAN
 
 // processes and client config
 const CPUS: Option<usize> = None;
 
 // fantoch run config
-const BRANCH: &str = "consistent_hashing";
+const BRANCH: &str = "scalability";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -95,51 +95,60 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
-        Region::CaCentral1,
-        Region::SaEast1,
+        // Region::CaCentral1,
+        // Region::SaEast1,
     ];
     let n = regions.len();
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        /*
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        */
     ];
 
     let clients_per_region = vec![
-        32,
-        512,
-        1024,
-        1024 * 2,
+        // 32,
+        // 512,
+        // 1024,
+        // 1024 * 2,
         1024 * 4,
         1024 * 8,
+        // 1024 * 12,
         1024 * 16,
         1024 * 32,
     ];
 
     let shard_count = 1;
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 4 };
     let keys_per_command = 1;
-    let payload_size = 4096;
+    let payload_size = 100;
+
+    let coefficients = vec![0.5, 0.75, 1.0, 1.25];
+    let key_gens = coefficients.into_iter().map(|coefficient| KeyGen::Zipf {
+        keys_per_shard: 1_000_000,
+        coefficient,
+    });
 
     let mut workloads = Vec::new();
-    let workload = Workload::new(
-        shard_count,
-        key_gen,
-        keys_per_command,
-        COMMANDS_PER_CLIENT,
-        payload_size,
-    );
-    workloads.push(workload);
+    for key_gen in key_gens {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
-        protocol == Protocol::AtlasLocked && clients > 1024 * 8
-        // false
+        protocol == Protocol::AtlasLocked && clients > 1024 * 20
     };
 
     /*
@@ -250,8 +259,8 @@ async fn main() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
-    // let planet = None; // if delay is not to be injected
+    // let planet = Some(Planet::from("../latency_aws"));
+    let planet = None; // if delay is not to be injected
 
     // init logging
     let progress = TracingProgressBar::init(

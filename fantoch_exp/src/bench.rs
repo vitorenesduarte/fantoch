@@ -334,8 +334,8 @@ async fn start_processes(
         // get ips to connect to (based on sorted)
         let ips = sorted
             .iter()
-            .filter(|peer_id| *peer_id != process_id)
-            .map(|peer_id| {
+            .filter(|(peer_id, _)| peer_id != process_id)
+            .map(|(peer_id, _)| {
                 // get process ip
                 let ip = ips
                     .get(peer_id)

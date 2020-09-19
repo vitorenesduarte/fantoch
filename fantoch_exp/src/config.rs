@@ -67,7 +67,7 @@ const CLIENT_TCP_NODELAY: bool = true;
 pub struct ProtocolConfig {
     process_id: ProcessId,
     shard_id: ShardId,
-    sorted: Option<Vec<ProcessId>>,
+    sorted: Option<Vec<(ProcessId, ShardId)>>,
     ips: Vec<(ProcessId, String, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
@@ -94,7 +94,7 @@ impl ProtocolConfig {
         process_id: ProcessId,
         shard_id: ShardId,
         mut config: Config,
-        sorted: Option<Vec<ProcessId>>,
+        sorted: Option<Vec<(ProcessId, ShardId)>>,
         ips: Vec<(ProcessId, String, Option<usize>)>,
         metrics_file: String,
         cpus: Option<usize>,
@@ -158,7 +158,9 @@ impl ProtocolConfig {
             // make sorted ids comma-separted
             let sorted = sorted
                 .iter()
-                .map(|process_id| process_id.to_string())
+                .map(|(process_id, shard_id)| {
+                    format!("{}-{}", process_id, shard_id)
+                })
                 .collect::<Vec<_>>()
                 .join(",");
             args.extend(args!["--sorted", sorted]);

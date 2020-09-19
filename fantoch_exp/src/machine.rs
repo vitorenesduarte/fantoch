@@ -357,10 +357,10 @@ impl<'a> Machines<'a> {
         process_id: ProcessId,
         shard_id: ShardId,
         region_index: usize,
-    ) -> Vec<ProcessId> {
+    ) -> Vec<(ProcessId, ShardId)> {
         let mut sorted_processes = Vec::new();
         // make sure we're the first process
-        sorted_processes.push(process_id);
+        sorted_processes.push((process_id, shard_id));
 
         // for each region, add:
         // - all (but self), if same region
@@ -375,9 +375,9 @@ impl<'a> Machines<'a> {
             let region_ids: Vec<_> = if index == region_index {
                 // select all (but self)
                 index_processes
-                    .filter_map(|(_, (peer_id, _))| {
+                    .filter_map(|((_, peer_shard_id), (peer_id, _))| {
                         if *peer_id != process_id {
-                            Some(*peer_id)
+                            Some((*peer_id, *peer_shard_id))
                         } else {
                             None
                         }
@@ -388,7 +388,7 @@ impl<'a> Machines<'a> {
                 index_processes
                     .filter_map(|((_, peer_shard_id), (peer_id, _))| {
                         if *peer_shard_id == shard_id {
-                            Some(*peer_id)
+                            Some((*peer_id, *peer_shard_id))
                         } else {
                             None
                         }
