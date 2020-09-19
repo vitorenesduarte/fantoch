@@ -5,7 +5,7 @@ mod fmt;
 mod plot;
 
 // Re-exports.
-pub use db::{ExperimentData, ResultsDB, Search};
+pub use db::{ExperimentData, LatencyPrecision, ResultsDB, Search};
 pub use fmt::PlotFmt;
 
 use color_eyre::eyre::WrapErr;
@@ -15,7 +15,7 @@ use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
 use fantoch::protocol::ProtocolMetricsKind;
 use fantoch_exp::Protocol;
-use fantoch_prof::metrics::{Histogram, F64};
+use fantoch_prof::metrics::Histogram;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
@@ -84,16 +84,12 @@ impl HeatmapMetric {
         }
     }
 
-    pub fn utilization(&self, value: F64) -> usize {
-        let (max, value) = match self {
-            Self::CPU => {
-                let max = 100f64;
-                (max, value.value())
-            }
+    pub fn utilization(&self, value: f64) -> usize {
+        let max = match self {
+            Self::CPU => 100f64,
             Self::NetSend | Self::NetRecv => {
                 // 10GBit to B
-                let max = 10_000_000_000f64 / 8f64;
-                (max, value.value())
+                10_000_000_000f64 / 8f64
             }
         };
         (value * 100f64 / max) as usize
@@ -114,9 +110,11 @@ impl ThroughputYAxis {
         }
     }
 
-    fn y_label(&self) -> String {
+    fn y_label(&self, latency_precision: LatencyPrecision) -> String {
         match self {
-            Self::Latency(_) => format!("latency (ms)"),
+            Self::Latency(_) => {
+                format!("latency ({})", latency_precision.name())
+            }
             Self::CPU => String::from("CPU utilization (%)"),
         }
     }
@@ -182,6 +180,7 @@ pub fn set_global_style() -> Result<(), Report> {
 pub fn latency_plot<R>(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     n: usize,
     error_bar: ErrorBar,
     output_dir: Option<&str>,
@@ -253,14 +252,14 @@ pub fn latency_plot<R>(
             _ => {
                 let matches: Vec<_> = exp_data
                     .into_iter()
-                    .map(|(timestamp, _)| {
+                    .map(|(timestamp, _, _)| {
                         timestamp.path().display().to_string()
                     })
                     .collect();
                 panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
             }
         };
-        let (_timestamp, exp_data) = exp_data.pop().unwrap();
+        let (_, _, exp_data) = exp_data.pop().unwrap();
 
         // compute y: avg latencies sorted by region name
         let mut from_err = Vec::new();
@@ -270,12 +269,13 @@ pub fn latency_plot<R>(
             .iter()
             .map(|(region, histogram)| {
                 // compute average latency
-                let avg = histogram.mean().value().round() as u64;
+                let avg = histogram.mean(latency_precision).round() as u64;
 
                 // maybe create error bar
                 let error_bar = if let ErrorBar::With(percentile) = error_bar {
-                    let percentile =
-                        histogram.percentile(percentile).value().round();
+                    let percentile = histogram
+                        .percentile(percentile, latency_precision)
+                        .round();
                     percentile as u64 - avg
                 } else {
                     0
@@ -302,7 +302,12 @@ pub fn latency_plot<R>(
         to_err.push(stddev);
 
         // add global client latency to the 'average' group
-        y.push(exp_data.global_client_latency.mean().value().round() as u64);
+        y.push(
+            exp_data
+                .global_client_latency
+                .mean(latency_precision)
+                .round() as u64,
+        );
         println!(
             "{:<7} f = {} | {:?} | stddev = {}",
             PlotFmt::protocol_name(search.protocol),
@@ -353,7 +358,8 @@ pub fn latency_plot<R>(
     ax.set_xticklabels(labels, None)?;
 
     // set labels
-    ax.set_ylabel("latency (ms)", None)?;
+    let ylabel = format!("latency ({})", latency_precision.name());
+    ax.set_ylabel(&ylabel, None)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
@@ -367,6 +373,7 @@ pub fn latency_plot<R>(
 pub fn cdf_plot(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -383,11 +390,19 @@ pub fn cdf_plot(
     let mut plotted = 0;
 
     for search in searches {
-        inner_cdf_plot(py, &ax, search, &style_fun, db, &mut plotted)?;
+        inner_cdf_plot(
+            py,
+            &ax,
+            search,
+            &style_fun,
+            latency_precision,
+            db,
+            &mut plotted,
+        )?;
     }
 
     // set cdf plot style
-    inner_cdf_plot_style(py, &ax, None)?;
+    inner_cdf_plot_style(py, &ax, None, latency_precision)?;
 
     // legend
     add_legend(plotted, None, py, &ax)?;
@@ -403,6 +418,7 @@ pub fn cdf_plot_split(
     bottom_searches: Vec<Search>,
     x_range: Option<(f64, f64)>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -447,13 +463,14 @@ pub fn cdf_plot_split(
                 &ax,
                 *search,
                 &style_fun,
+                latency_precision,
                 db,
                 &mut subfigure_plotted,
             )?;
         }
 
         // set cdf plot style
-        inner_cdf_plot_style(py, &ax, x_range)?;
+        inner_cdf_plot_style(py, &ax, x_range, latency_precision)?;
 
         // additional style for subplot 1:
         // - hide x-axis
@@ -490,6 +507,7 @@ fn inner_cdf_plot_style(
     py: Python<'_>,
     ax: &Axes<'_>,
     x_range: Option<(f64, f64)>,
+    latency_precision: LatencyPrecision,
 ) -> Result<(), Report> {
     // maybe set x limits
     if let Some((x_min, x_max)) = x_range {
@@ -509,7 +527,8 @@ fn inner_cdf_plot_style(
     set_log_scale(py, ax, AxisToScale::X)?;
 
     // set labels
-    ax.set_xlabel("latency (ms) [log-scale]", None)?;
+    let xlabel = format!("latency ({}) [log-scale]", latency_precision.name());
+    ax.set_xlabel(&xlabel, None)?;
     ax.set_ylabel("percentiles", None)?;
 
     Ok(())
@@ -520,6 +539,7 @@ fn inner_cdf_plot(
     ax: &Axes<'_>,
     search: Search,
     style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     db: &ResultsDB,
     plotted: &mut usize,
 ) -> Result<(), Report> {
@@ -537,20 +557,19 @@ fn inner_cdf_plot(
         _ => {
             let matches: Vec<_> = exp_data
                 .into_iter()
-                .map(|(timestamp, _)| timestamp.path().display().to_string())
+                .map(|(timestamp, _, _)| timestamp.path().display().to_string())
                 .collect();
             panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
         }
     };
-    let (_timestamp, exp_data) = exp_data.pop().unwrap();
+    let (_, _, exp_data) = exp_data.pop().unwrap();
 
     // compute x: all values in the global histogram
     let x: Vec<_> = percentiles()
         .map(|percentile| {
             exp_data
                 .global_client_latency
-                .percentile(percentile)
-                .value()
+                .percentile(percentile, latency_precision)
                 .round() as u64
         })
         .collect();
@@ -583,6 +602,7 @@ fn inner_cdf_plot(
 pub fn throughput_something_plot(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     n: usize,
     clients_per_region: Vec<usize>,
     y_axis: ThroughputYAxis,
@@ -606,6 +626,7 @@ pub fn throughput_something_plot(
         &ax,
         searches,
         &style_fun,
+        latency_precision,
         n,
         clients_per_region,
         y_axis,
@@ -624,11 +645,10 @@ pub fn throughput_something_plot(
 
     // set labels
     ax.set_xlabel("throughput (K ops/s)", None)?;
-    let y_label = if log_scale {
-        format!("{} [log-scale]", y_axis.y_label())
-    } else {
-        y_axis.y_label()
-    };
+    let mut y_label = y_axis.y_label(latency_precision);
+    if log_scale {
+        y_label = format!("{} [log-scale]", y_label);
+    }
     ax.set_ylabel(&y_label, None)?;
 
     // legend
@@ -645,6 +665,7 @@ pub fn inner_throughput_something_plot(
     ax: &Axes<'_>,
     searches: Vec<Search>,
     style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     n: usize,
     clients_per_region: Vec<usize>,
     y_axis: ThroughputYAxis,
@@ -653,7 +674,7 @@ pub fn inner_throughput_something_plot(
 ) -> Result<(), Report> {
     for mut search in searches {
         // check `n`
-        assert_eq!(search.n, n, "throughput_something_plot: value of n in search doesn't match the provided");
+        assert_eq!(search.n, n, "inner_throughput_something_plot: value of n in search doesn't match the provided");
 
         // keep track of average latency that will be used to compute throughput
         let mut avg_latency = Vec::with_capacity(clients_per_region.len());
@@ -681,17 +702,20 @@ pub fn inner_throughput_something_plot(
                 _ => {
                     let matches: Vec<_> = exp_data
                         .into_iter()
-                        .map(|(timestamp, _)| {
+                        .map(|(timestamp, _, _)| {
                             timestamp.path().display().to_string()
                         })
                         .collect();
                     panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
                 }
             };
-            let (_timestamp, exp_data) = exp_data.pop().unwrap();
+            let (_, _, exp_data) = exp_data.pop().unwrap();
 
             // get average latency
-            let avg = exp_data.global_client_latency.mean().value();
+            let avg = exp_data
+                .global_client_latency
+                .mean(latency_precision)
+                .round();
             avg_latency.push(avg);
 
             // compute y value to be plotted
@@ -700,8 +724,8 @@ pub fn inner_throughput_something_plot(
                     LatencyMetric::Average => avg,
                     LatencyMetric::Percentile(percentile) => exp_data
                         .global_client_latency
-                        .percentile(percentile)
-                        .value(),
+                        .percentile(percentile, latency_precision)
+                        .round(),
                 },
                 ThroughputYAxis::CPU => {
                     let dstats = &exp_data.global_process_dstats;
@@ -725,10 +749,12 @@ pub fn inner_throughput_something_plot(
                 if avg_latency == 0f64 {
                     None
                 } else {
-                    // compute throughput using the average latency
-                    let per_second = 1000f64 / avg_latency;
-                    let per_site = clients as f64 * per_second;
-                    let throughput = n as f64 * per_site;
+                    let throughput = compute_throughput(
+                        n,
+                        clients,
+                        avg_latency,
+                        latency_precision,
+                    );
                     // compute K ops
                     let x = throughput / 1000f64;
 
@@ -748,6 +774,23 @@ pub fn inner_throughput_something_plot(
     }
 
     Ok(())
+}
+
+fn compute_throughput(
+    n: usize,
+    clients: usize,
+    avg_latency: f64,
+    latency_precision: LatencyPrecision,
+) -> f64 {
+    // compute throughput using the average latency:
+    // - since the average latency has two possible precisions,
+    //   compute throughput accordingly
+    let per_second = match latency_precision {
+        LatencyPrecision::Micros => 1_000_000f64 / avg_latency,
+        LatencyPrecision::Millis => 1_000f64 / avg_latency,
+    };
+    let per_site = clients as f64 * per_second;
+    n as f64 * per_site
 }
 
 pub fn heatmap_plot<F>(
@@ -799,6 +842,86 @@ where
     Ok(())
 }
 
+pub fn scalability_plot(
+    searches: Vec<Search>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    n: usize,
+    cpus: Vec<usize>,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report> {
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+    // the precision does not matter, but we still need one
+    let latency_precision = LatencyPrecision::Micros;
+
+    for mut search in searches {
+        let mut ys = Vec::with_capacity(cpus.len());
+        for cpus in cpus.iter() {
+            // check `n`
+            assert_eq!(search.n, n, "throughput_something_plot: value of n in search doesn't match the provided");
+
+            // refine search
+            search.cpus(*cpus);
+
+            // execute search
+            let exp_data = db.find(search)?;
+            let max_throughput = exp_data
+                .into_iter()
+                .map(|(_, exp_config, exp_data)| {
+                    // compute throughput for each result matching this search (we
+                    // can have several, with different number of clients)
+                    // - first get average latency
+                    // - and the compute throughput
+                    let avg_latency = exp_data
+                        .global_client_latency
+                        .mean(latency_precision)
+                        .round();
+                    let throughput = compute_throughput(
+                        n,
+                        exp_config.clients_per_region,
+                        avg_latency,
+                        latency_precision,
+                    );
+                    // compute K ops
+                    (throughput / 1000f64) as u64
+                })
+                .max();
+
+            if let Some(max_throughput) = max_throughput {
+                ys.push(max_throughput)
+            }
+        }
+
+        println!(
+            "{}: {:?}",
+            search.key_gen.expect("key gen should be set"),
+            ys
+        );
+    }
+
+    // set labels
+    ax.set_xlabel("cpus", None)?;
+    ax.set_ylabel("throughput (K ops/s)", None)?;
+
+    // legend
+    add_legend(plotted, None, py, &ax)?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
 pub fn throughput_latency_plot_split<F>(
     n: usize,
     protocols: Vec<(Protocol, usize)>,
@@ -807,6 +930,7 @@ pub fn throughput_latency_plot_split<F>(
     bottom_key_gen: KeyGen,
     refine_search: F,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
     y_range: Option<(f64, f64)>,
     output_dir: Option<&str>,
     output_file: &str,
@@ -848,6 +972,7 @@ where
             &ax,
             searches,
             &style_fun,
+            latency_precision,
             n,
             clients_per_region.clone(),
             ThroughputYAxis::Latency(LatencyMetric::Average),
@@ -879,7 +1004,9 @@ where
             }
             _ => unreachable!("impossible subplot"),
         }
-        ax.set_ylabel("latency (ms) [log-scale]", None)?;
+        let ylabel =
+            format!("latency ({}) [log-scale]", latency_precision.name());
+        ax.set_ylabel(&ylabel, None)?;
     }
 
     // end plot
@@ -1008,14 +1135,14 @@ where
                 _ => {
                     let matches: Vec<_> = exp_data
                         .into_iter()
-                        .map(|(timestamp, _)| {
+                        .map(|(timestamp, _, _)| {
                             timestamp.path().display().to_string()
                         })
                         .collect();
                     panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
                 }
             };
-            let (_timestamp, exp_data) = exp_data.pop().unwrap();
+            let (_, _, exp_data) = exp_data.pop().unwrap();
 
             let exp_data = match search.protocol {
                 Protocol::FPaxos => {
@@ -1179,14 +1306,14 @@ pub fn dstat_table(
             _ => {
                 let matches: Vec<_> = exp_data
                     .into_iter()
-                    .map(|(timestamp, _)| {
+                    .map(|(timestamp, _, _)| {
                         timestamp.path().display().to_string()
                     })
                     .collect();
                 panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
             }
         };
-        let (_timestamp, exp_data) = exp_data.pop().unwrap();
+        let (_, _, exp_data) = exp_data.pop().unwrap();
 
         // select the correct dstats depending on the `MetricsType` chosen
         let dstats = match metrics_type {
@@ -1277,14 +1404,14 @@ pub fn process_metrics_table(
                 // not set, then have an entry for each of the entries found
                 let matches: Vec<_> = exp_data
                     .into_iter()
-                    .map(|(timestamp, _)| {
+                    .map(|(timestamp, _, _)| {
                         timestamp.path().display().to_string()
                     })
                     .collect();
                 panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
             }
         };
-        let (_timestamp, exp_data) = exp_data.pop().unwrap();
+        let (_, _, exp_data) = exp_data.pop().unwrap();
 
         // select the correct metrics depending on the `MetricsType` chosen
         let (protocol_metrics, executor_metrics) = match metrics_type {

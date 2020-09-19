@@ -11,7 +11,7 @@ use std::fmt;
 
 pub type RegionIndex = usize;
 pub type Placement = HashMap<(Region, ShardId), (ProcessId, RegionIndex)>;
-type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
+pub type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
 
 // FIXED
 #[cfg(feature = "exp")]
@@ -83,7 +83,7 @@ pub struct ProtocolConfig {
     ping_interval: Option<usize>,
     metrics_file: String,
     stack_size: Option<usize>,
-    cpus: Option<usize>,
+    cpus: usize,
     log_file: String,
 }
 
@@ -97,7 +97,7 @@ impl ProtocolConfig {
         sorted: Option<Vec<(ProcessId, ShardId)>>,
         ips: Vec<(ProcessId, String, Option<usize>)>,
         metrics_file: String,
-        cpus: Option<usize>,
+        cpus: usize,
         log_file: String,
     ) -> Self {
         let (workers, executors) =
@@ -234,10 +234,7 @@ impl ProtocolConfig {
         if let Some(stack_size) = self.stack_size {
             args.extend(args!["--stack_size", stack_size]);
         }
-        if let Some(cpus) = self.cpus {
-            args.extend(args!["--cpus", cpus]);
-        }
-        args.extend(args!["--log_file", self.log_file]);
+        args.extend(args!["--cpus", self.cpus, "--log_file", self.log_file]);
         args
     }
 
@@ -304,7 +301,6 @@ impl ClientConfig {
         ips: Vec<(ProcessId, String)>,
         workload: Workload,
         metrics_file: String,
-        cpus: Option<usize>,
         log_file: String,
     ) -> Self {
         Self {
@@ -317,7 +313,7 @@ impl ClientConfig {
             status_frequency: STATUS_FREQUENCY,
             metrics_file,
             stack_size: CLIENT_STACK_SIZE,
-            cpus,
+            cpus: None,
             log_file,
         }
     }
@@ -394,6 +390,7 @@ pub struct ExperimentConfig {
     pub tcp_buffer_size: usize,
     pub tcp_flush_interval: Option<usize>,
     pub process_channel_buffer_size: usize,
+    pub cpus: usize,
     pub workers: usize,
     pub executors: usize,
     pub multiplexing: usize,
@@ -412,6 +409,7 @@ impl ExperimentConfig {
         mut config: Config,
         clients_per_region: usize,
         workload: Workload,
+        cpus: usize,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -435,6 +433,7 @@ impl ExperimentConfig {
             tcp_buffer_size: PROCESS_TCP_BUFFER_SIZE,
             tcp_flush_interval: PROCESS_TCP_FLUSH_INTERVAL,
             process_channel_buffer_size: PROCESS_CHANNEL_BUFFER_SIZE,
+            cpus,
             workers,
             executors,
             multiplexing: MULTIPLEXING,

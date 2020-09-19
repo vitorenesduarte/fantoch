@@ -4,8 +4,8 @@ use fantoch::client::KeyGen;
 use fantoch::planet::{Planet, Region};
 use fantoch_exp::Protocol;
 use fantoch_plot::{
-    ErrorBar, ExperimentData, HeatmapMetric, LatencyMetric, MetricsType,
-    PlotFmt, ResultsDB, Search, Style, ThroughputYAxis,
+    ErrorBar, ExperimentData, HeatmapMetric, LatencyMetric, LatencyPrecision,
+    MetricsType, PlotFmt, ResultsDB, Search, Style, ThroughputYAxis,
 };
 use std::collections::HashMap;
 
@@ -19,19 +19,19 @@ fn main() -> Result<(), Report> {
     // set global style
     fantoch_plot::set_global_style()?;
 
-    eurosys()?;
     // partial_replication()?;
-    // multi_key()?;
+    multi_key()?;
     // single_key()?;
     // show_distance_matrix();
+    eurosys()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    fairness_plot()?;
-    tail_latency_plot()?;
-    increasing_load_plot()?;
+    // fairness_plot()?;
+    // tail_latency_plot()?;
+    // increasing_load_plot()?;
     scalability_plot()?;
     Ok(())
 }
@@ -82,9 +82,11 @@ fn fairness_plot() -> Result<(), Report> {
     // generate latency plot
     let path = String::from("plot_fairness.pdf");
     let style_fun = None;
+    let latency_precision = LatencyPrecision::Millis;
     let results = fantoch_plot::latency_plot(
         searches.clone(),
         style_fun,
+        latency_precision,
         n,
         error_bar,
         PLOT_DIR,
@@ -138,11 +140,13 @@ fn tail_latency_plot() -> Result<(), Report> {
     // generate cdf plot
     let path = String::from("plot_tail_latency.pdf");
     let style_fun = None;
+    let latency_precision = LatencyPrecision::Millis;
     fantoch_plot::cdf_plot_split(
         top_searches,
         bottom_searches,
         x_range,
         style_fun,
+        latency_precision,
         PLOT_DIR,
         &path,
         &db,
@@ -212,6 +216,7 @@ fn increasing_load_plot() -> Result<(), Report> {
     )?;
 
     let style_fun = None;
+    let latency_precision = LatencyPrecision::Millis;
     let y_range = Some((100.0, 2_600.0));
     let path = String::from("plot_increasing_load.pdf");
     fantoch_plot::throughput_latency_plot_split(
@@ -222,6 +227,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         bottom_key_gen,
         refine_search,
         style_fun,
+        latency_precision,
         y_range,
         PLOT_DIR,
         &path,
@@ -233,6 +239,48 @@ fn increasing_load_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn scalability_plot() -> Result<(), Report> {
+    const RESULTS_DIR: &str = "../results_multi_key";
+    // fixed parameters
+    let shard_count = 1;
+    let n = 3;
+    let f = 1;
+    let payload_size = 100;
+    let keys_per_command = 1;
+    let protocol = Protocol::NewtAtomic;
+
+    let coefficients = vec![
+        0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0,
+        7.0, 8.0, 9.0, 10.0,
+    ];
+    let cpus = vec![6, 12];
+
+    // load results
+    let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
+
+    // create searches
+    let searches: Vec<_> = coefficients
+        .into_iter()
+        .map(|coefficient| {
+            // create key gen
+            let key_gen = KeyGen::Zipf {
+                keys_per_shard: 1_000_000,
+                coefficient,
+            };
+            let mut search = Search::new(n, f, protocol);
+            search
+                .shard_count(shard_count)
+                .key_gen(key_gen)
+                .keys_per_command(keys_per_command)
+                .payload_size(payload_size);
+            search
+        })
+        .collect();
+    let style_fun = None;
+    let path = String::from("plot_scalability.pdf");
+    fantoch_plot::scalability_plot(
+        searches, style_fun, n, cpus, PLOT_DIR, &path, &db,
+    )?;
+
     Ok(())
 }
 
@@ -255,6 +303,7 @@ fn partial_replication() -> Result<(), Report> {
     // let protocols = vec![Protocol::AtlasLocked];
     let protocols = vec![Protocol::AtlasLocked, Protocol::NewtAtomic];
     // let protocols = vec![Protocol::NewtAtomic];
+    let latency_precision = LatencyPrecision::Millis;
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
@@ -386,6 +435,7 @@ fn partial_replication() -> Result<(), Report> {
             fantoch_plot::throughput_something_plot(
                 searches,
                 style_fun,
+                latency_precision,
                 n,
                 clients_per_region.clone(),
                 y_axis,
@@ -428,6 +478,7 @@ fn partial_replication() -> Result<(), Report> {
                 fantoch_plot::throughput_something_plot(
                     searches,
                     style_fun,
+                    latency_precision,
                     n,
                     clients_per_region.clone(),
                     y_axis,
@@ -525,6 +576,7 @@ fn partial_replication() -> Result<(), Report> {
                     let results = fantoch_plot::latency_plot(
                         searches.clone(),
                         style_fun,
+                        latency_precision,
                         n,
                         error_bar,
                         PLOT_DIR,
@@ -560,6 +612,7 @@ fn partial_replication() -> Result<(), Report> {
                 fantoch_plot::cdf_plot(
                     searches.clone(),
                     style_fun,
+                    latency_precision,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -577,28 +630,32 @@ fn multi_key() -> Result<(), Report> {
     // fixed parameters
     let shard_count = 1;
     let n = 3;
-    let payload_size = 0;
-    let protocols = vec![
-        Protocol::NewtAtomic,
-        // Protocol::NewtLocked,
-        // Protocol::NewtFineLocked,
-    ];
+    let payload_size = 100;
+    let protocols = vec![Protocol::NewtAtomic];
+    let latency_precision = LatencyPrecision::Micros;
 
     // load results
     let db = ResultsDB::load(RESULTS_DIR).wrap_err("load results")?;
 
     let clients_per_region = vec![
+        64,
+        128,
         256,
+        512,
         1024,
-        1024 * 4,
-        1024 * 8,
-        1024 * 16,
-        1024 * 32,
-        1024 * 64,
+        1536,
+        2048,
+        2560,
+        3072,
+        3584,
+        4096,
     ];
 
     for keys_per_shard in vec![1] {
-        for zipf_coefficient in vec![0.5, 0.75, 1.0, 1.25] {
+        for zipf_coefficient in vec![
+            0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0,
+            7.0, 8.0, 9.0, 10.0,
+        ] {
             // create key generator
             let key_gen = KeyGen::Zipf {
                 coefficient: zipf_coefficient,
@@ -635,6 +692,7 @@ fn multi_key() -> Result<(), Report> {
                 fantoch_plot::throughput_something_plot(
                     searches,
                     style_fun,
+                    latency_precision,
                     n,
                     clients_per_region.clone(),
                     y_axis,
@@ -724,6 +782,7 @@ fn multi_key() -> Result<(), Report> {
                     let results = fantoch_plot::latency_plot(
                         searches.clone(),
                         style_fun,
+                        latency_precision,
                         n,
                         error_bar,
                         PLOT_DIR,
@@ -755,6 +814,7 @@ fn multi_key() -> Result<(), Report> {
                 fantoch_plot::cdf_plot(
                     searches.clone(),
                     style_fun,
+                    latency_precision,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -775,6 +835,7 @@ fn multi_key() -> Result<(), Report> {
                         bottom_searches,
                         x_range,
                         style_fun,
+                        latency_precision,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -827,6 +888,7 @@ fn single_key() -> Result<(), Report> {
         Protocol::FPaxos,
     ];
     let leader = 1;
+    let latency_precision = LatencyPrecision::Millis;
 
     // generate throughput-latency plot
     let clients_per_region = vec![
@@ -891,6 +953,7 @@ fn single_key() -> Result<(), Report> {
                 fantoch_plot::throughput_something_plot(
                     searches.clone(),
                     style_fun,
+                    latency_precision,
                     n,
                     clients_per_region.clone(),
                     y_axis,
@@ -1019,6 +1082,7 @@ fn single_key() -> Result<(), Report> {
                     let results = fantoch_plot::latency_plot(
                         searches.clone(),
                         style_fun,
+                        latency_precision,
                         n,
                         error_bar,
                         PLOT_DIR,
@@ -1066,6 +1130,7 @@ fn single_key() -> Result<(), Report> {
                 fantoch_plot::cdf_plot(
                     searches.clone(),
                     style_fun,
+                    latency_precision,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -1086,6 +1151,7 @@ fn single_key() -> Result<(), Report> {
                         bottom_searches,
                         x_range,
                         style_fun,
+                        latency_precision,
                         PLOT_DIR,
                         &path,
                         &db,

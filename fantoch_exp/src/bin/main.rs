@@ -40,10 +40,7 @@ const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
-const COMMANDS_PER_CLIENT: usize = 500_000; // 500 if WAN, 500_000 if LAN
-
-// processes and client config
-const CPUS: Option<usize> = None;
+const COMMANDS_PER_CLIENT: usize = 5_000; // 500 if WAN, 5_000 if LAN
 
 // fantoch run config
 const BRANCH: &str = "scalability";
@@ -95,15 +92,15 @@ async fn main() -> Result<(), Report> {
         Region::EuWest1,
         Region::UsWest1,
         Region::ApSoutheast1,
-        // Region::CaCentral1,
-        // Region::SaEast1,
+        /* Region::CaCentral1,
+         * Region::SaEast1, */
     ];
     let n = regions.len();
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        /* (Protocol::NewtAtomic, config!(n, 2, false, None, false)), */
         /*
         (Protocol::FPaxos, config!(n, 1, false, None, false)),
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
@@ -114,21 +111,33 @@ async fn main() -> Result<(), Report> {
 
     let clients_per_region = vec![
         // 32,
+        // 64,
+        // 128,
+        // 256
         // 512,
         // 1024,
-        // 1024 * 2,
-        1024 * 4,
-        1024 * 8,
+        // 1536,
+        // 2048,
+        // 2560,
+        // 3072,
+        // 3584,
+        4096,
+        // 1024 * 4,
+        // 1024 * 8,
         // 1024 * 12,
-        1024 * 16,
-        1024 * 32,
+        // 1024 * 16,
+        // 1024 * 32,
     ];
 
     let shard_count = 1;
     let keys_per_command = 1;
     let payload_size = 100;
+    let cpus = 12;
 
-    let coefficients = vec![0.5, 0.75, 1.0, 1.25];
+    let coefficients = vec![
+        0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0,
+        7.0, 8.0, 9.0, 10.0,
+    ];
     let key_gens = coefficients.into_iter().map(|coefficient| KeyGen::Zipf {
         keys_per_shard: 1_000_000,
         coefficient,
@@ -274,6 +283,7 @@ async fn main() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
     )
@@ -310,6 +320,7 @@ async fn local_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
 ) -> Result<(), Report>
@@ -334,6 +345,7 @@ where
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
     )
@@ -351,6 +363,7 @@ async fn baremetal_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
 ) -> Result<(), Report>
@@ -382,6 +395,7 @@ where
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
     )
@@ -398,6 +412,7 @@ async fn aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
 ) -> Result<(), Report> {
@@ -409,6 +424,7 @@ async fn aws_bench(
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
     )
@@ -434,6 +450,7 @@ async fn do_aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
 ) -> Result<(), Report> {
@@ -464,6 +481,7 @@ async fn do_aws_bench(
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
     )
@@ -480,6 +498,7 @@ async fn run_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
 ) -> Result<(), Report> {
@@ -494,7 +513,7 @@ async fn run_bench(
         TRACER_SHOW_INTERVAL,
         clients_per_region,
         workloads,
-        CPUS,
+        cpus,
         skip,
         EXPERIMENT_TIMEOUTS,
         PROTOCOLS_TO_CLEANUP.to_vec(),
