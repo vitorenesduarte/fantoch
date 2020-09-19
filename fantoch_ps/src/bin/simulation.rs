@@ -21,6 +21,8 @@ macro_rules! config {
         if let Some(interval) = $clock_bump_interval {
             config.set_newt_clock_bump_interval(interval);
         }
+        // make sure detached votes are sent
+        config.set_newt_detached_send_interval(Duration::from_millis(5));
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(1000));
         config.set_skip_fast_ack($skip_fast_ack);
@@ -42,7 +44,7 @@ fn main() {
         .unwrap();
 
     let aws = true;
-    newt_real_time(aws);
+    newt(aws);
 }
 
 fn aws_distance_matrix() {
@@ -76,7 +78,7 @@ fn newt_real_time_gcp() -> (Planet, Vec<Region>) {
     (planet, regions)
 }
 
-fn newt_real_time(aws: bool) {
+fn newt(aws: bool) {
     let (planet, regions) = if aws {
         newt_real_time_aws()
     } else {
@@ -84,9 +86,8 @@ fn newt_real_time(aws: bool) {
     };
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
-    let ns = vec![3, 5];
-    let clients_per_region =
-        vec![4, 8, 16, 32, 64, 128, 256, 512, 1024, 1024 * 2, 1024 * 4];
+    let ns = vec![5];
+    let clients_per_region = vec![512, 1024 * 2];
 
     ns.into_par_iter().for_each(|n| {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
@@ -96,8 +97,8 @@ fn newt_real_time(aws: bool) {
                 // (protocol, (n, f, tiny quorums, clock bump interval, skip
                 // fast ack))
                 ("Atlas", config!(n, 1, false, None, false)),
-                ("EPaxos", config!(n, 1, false, None, false)),
-                ("FPaxos", config!(n, 1, false, None, false)),
+                // ("EPaxos", config!(n, 1, false, None, false)),
+                // ("FPaxos", config!(n, 1, false, None, false)),
                 ("Newt", config!(n, 1, false, None, false)),
             ]
         } else if n == 5 {
@@ -106,9 +107,9 @@ fn newt_real_time(aws: bool) {
                 // fast ack))
                 ("Atlas", config!(n, 1, false, None, false)),
                 ("Atlas", config!(n, 2, false, None, false)),
-                ("EPaxos", config!(n, 0, false, None, false)),
-                ("FPaxos", config!(n, 1, false, None, false)),
-                ("FPaxos", config!(n, 2, false, None, false)),
+                // ("EPaxos", config!(n, 0, false, None, false)),
+                // ("FPaxos", config!(n, 1, false, None, false)),
+                // ("FPaxos", config!(n, 2, false, None, false)),
                 ("Newt", config!(n, 1, false, None, false)),
                 ("Newt", config!(n, 2, false, None, false)),
             ]
@@ -116,8 +117,8 @@ fn newt_real_time(aws: bool) {
             panic!("unsupported number of processes {}", n);
         };
 
-        clients_per_region.par_iter().for_each(|&clients| {
-            configs.par_iter().for_each(|&(protocol, mut config)| {
+        clients_per_region.iter().for_each(|&clients| {
+            configs.iter().for_each(|&(protocol, mut config)| {
                 // TODO check if the protocol is leader-based, and if yes, run
                 // for all possible leader configurations
 
@@ -128,7 +129,7 @@ fn newt_real_time(aws: bool) {
 
                 // clients workload
                 let shard_count = 1;
-                let key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+                let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
                 let keys_per_command = 1;
                 let commands_per_client = 500;
                 let payload_size = 0;
