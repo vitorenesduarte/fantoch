@@ -119,10 +119,14 @@ impl Workload {
         // generate all the key-value pairs
         let mut ops: HashMap<_, HashMap<_, _>> = HashMap::new();
 
+        // generate unique keys:
+        // - since we store them in Vec, this ensures that the target shard will
+        // be the shard of the first key generated
+        let keys = self.gen_unique_keys(key_gen_state);
         let mut target_shard = None;
-        for _ in 0..self.keys_per_command {
-            // generate key and value
-            let key = key_gen_state.gen_cmd_key();
+
+        for key in keys {
+            // generate value
             let value = self.gen_cmd_value();
             // compute key's shard
             let shard_id = self.shard_id(&key);
@@ -130,7 +134,7 @@ impl Workload {
                 .or_default()
                 .insert(key, KVOp::Put(value));
 
-            // target shard will be the shard of the first key generated
+            // target shard is the shard of the first key generated
             target_shard = target_shard.or(Some(shard_id));
         }
         let target_shard =
@@ -138,6 +142,17 @@ impl Workload {
 
         // create commadn
         (target_shard, Command::new(rifl, ops))
+    }
+
+    fn gen_unique_keys(&self, key_gen_state: &mut KeyGenState) -> Vec<Key> {
+        let mut keys = Vec::with_capacity(self.keys_per_command);
+        while keys.len() != self.keys_per_command {
+            let key = key_gen_state.gen_cmd_key();
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        keys
     }
 
     /// Generate a command payload with the payload size provided.
