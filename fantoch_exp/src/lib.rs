@@ -14,7 +14,7 @@ pub mod util;
 pub mod config;
 
 // Re-exports.
-pub use config::{ExperimentConfig, ProcessType};
+pub use config::{ExperimentConfig, PlacementFlat, ProcessType};
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
@@ -137,6 +137,7 @@ impl Protocol {
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Testbed {
+    // MultiRegionAws,
     Aws,
     Baremetal,
     Local,
