@@ -19,6 +19,7 @@ pub struct Search {
     pub protocol: Protocol,
     pub shard_count: Option<usize>,
     pub cpus: Option<usize>,
+    pub workers: Option<usize>,
     pub clients_per_region: Option<usize>,
     pub key_gen: Option<KeyGen>,
     pub keys_per_command: Option<usize>,
@@ -33,6 +34,7 @@ impl Search {
             protocol,
             shard_count: None,
             cpus: None,
+            workers: None,
             clients_per_region: None,
             key_gen: None,
             keys_per_command: None,
@@ -47,6 +49,11 @@ impl Search {
 
     pub fn cpus(&mut self, cpus: usize) -> &mut Self {
         self.cpus = Some(cpus);
+        self
+    }
+
+    pub fn workers(&mut self, workers: usize) -> &mut Self {
+        self.workers = Some(workers);
         self
     }
 

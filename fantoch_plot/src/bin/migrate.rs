@@ -96,7 +96,8 @@ fn main() -> Result<(), Report> {
                     let missing_file =
                         String::from("No such file or directory (os error 2)");
                     if e.root_cause().to_string() == missing_file {
-                        // if some file was not found, it may be because the folder is empty; in this case, ignore the
+                        // if some file was not found, it may be because the
+                        // folder is empty; in this case, ignore the
                         // error
                         println!("entry ignored...");
                     } else {

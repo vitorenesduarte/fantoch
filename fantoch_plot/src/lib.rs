@@ -783,8 +783,8 @@ fn compute_throughput(
     latency_precision: LatencyPrecision,
 ) -> f64 {
     // compute throughput using the average latency:
-    // - since the average latency has two possible precisions,
-    //   compute throughput accordingly
+    // - since the average latency has two possible precisions, compute
+    //   throughput accordingly
     let per_second = match latency_precision {
         LatencyPrecision::Micros => 1_000_000f64 / avg_latency,
         LatencyPrecision::Millis => 1_000f64 / avg_latency,
@@ -818,7 +818,7 @@ where
 
     let set_xlabels = true;
     let set_ylabels = true;
-    let set_colorbar = true;
+    let set_colorbar = false;
     inner_heatmap_plot(
         py,
         &fig,
@@ -878,8 +878,8 @@ pub fn scalability_plot(
             let max_throughput = exp_data
                 .into_iter()
                 .map(|(_, exp_config, exp_data)| {
-                    // compute throughput for each result matching this search (we
-                    // can have several, with different number of clients)
+                    // compute throughput for each result matching this search
+                    // (we can have several, with different number of clients)
                     // - first get average latency
                     // - and the compute throughput
                     let avg_latency = exp_data

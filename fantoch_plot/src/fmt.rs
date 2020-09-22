@@ -37,7 +37,8 @@ impl PlotFmt {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "#27ae60",
             (Protocol::AtlasLocked, 2) => "#16a085",
-            (Protocol::EPaxosLocked, _) => "#227093",
+            // (Protocol::EPaxosLocked, _) => "#227093",
+            (Protocol::EPaxosLocked, _) => "#222222",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
@@ -70,17 +71,17 @@ impl PlotFmt {
     // Possible values: {'/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*'}
     pub fn hatch(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
-            (Protocol::AtlasLocked, 1) => "/", // 1
-            (Protocol::AtlasLocked, 2) => "\\",
-            (Protocol::EPaxosLocked, _) => "///", // 3
-            (Protocol::FPaxos, 1) => "//", // 2
-            (Protocol::FPaxos, 2) => "\\\\",
-            (Protocol::NewtAtomic, 1) => "////", // 4
-            (Protocol::NewtAtomic, 2) => "\\\\\\\\",
-            (Protocol::NewtLocked, 1) => "/////", // 5
-            (Protocol::NewtLocked, 2) => "\\\\\\\\\\",
-            (Protocol::NewtFineLocked, 1) => "//////", // 6
+            (Protocol::FPaxos, 1) => "/", // 1
+            (Protocol::FPaxos, 2) => "\\",
+            (Protocol::EPaxosLocked, _) => "//", // 3
+            (Protocol::AtlasLocked, 1) => "///", // 2
+            (Protocol::AtlasLocked, 2) => "\\\\\\",
+            (Protocol::NewtLocked, 1) => "////", // 4
+            (Protocol::NewtLocked, 2) => "\\\\\\\\",
+            (Protocol::NewtFineLocked, 1) => "//////", // 5
             (Protocol::NewtFineLocked, 2) => "\\\\\\\\\\\\",
+            (Protocol::NewtAtomic, 1) => "//////", //  6
+            (Protocol::NewtAtomic, 2) => "\\\\\\\\\\\\",
             (Protocol::Basic, 1) => "///////", // 7
             (Protocol::Basic, 2) => "\\\\\\\\\\\\\\",
             _ => panic!(

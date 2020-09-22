@@ -188,6 +188,13 @@ impl ResultsDB {
                     }
                 }
 
+                // filter out configurations with different workers (if set)
+                if let Some(workers) = search.workers {
+                    if exp_config.workers != workers {
+                        return false;
+                    }
+                }
+
                 // filter out configurations with different clients_per_region
                 // (if set)
                 if let Some(clients_per_region) = search.clients_per_region {
