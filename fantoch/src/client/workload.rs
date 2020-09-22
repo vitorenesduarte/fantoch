@@ -140,7 +140,7 @@ impl Workload {
         let target_shard =
             target_shard.expect("there should be a target shard");
 
-        // create commadn
+        // create command
         (target_shard, Command::new(rifl, ops))
     }
 

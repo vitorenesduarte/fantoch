@@ -756,13 +756,17 @@ mod tests {
         let dot_1 = Dot::new(2, 1);
 
         // cmd 0
-        let cmd_0 =
-            Command::put(Rifl::new(1, 1), String::from("A"), String::new());
+        let cmd_0 = Command::from(
+            Rifl::new(1, 1),
+            vec![(String::from("A"), KVOp::Put(String::new()))],
+        );
         let deps_0 = vec![dep(dot_1, shard_id)];
 
         // cmd 1
-        let cmd_1 =
-            Command::put(Rifl::new(2, 1), String::from("A"), String::new());
+        let cmd_1 = Command::from(
+            Rifl::new(2, 1),
+            vec![(String::from("A"), KVOp::Put(String::new()))],
+        );
         let deps_1 = vec![dep(dot_0, shard_id)];
 
         // add cmd 0
@@ -1166,7 +1170,10 @@ mod tests {
     fn check_sccs_found_with_missing_dep() -> bool {
         let conflicting_command = || {
             let rifl = Rifl::new(1, 1);
-            Command::put(rifl, String::from("CONF"), String::new())
+            Command::from(
+                rifl,
+                vec![(String::from("CONF"), KVOp::Put(String::new()))],
+            )
         };
 
         // create queue

@@ -119,16 +119,24 @@ mod tests {
 
         // command put a
         let put_a_rifl = Rifl::new(1, 1);
-        let put_a = Command::put(put_a_rifl, key_a.clone(), foo.clone());
+        let put_a = Command::from(
+            put_a_rifl,
+            vec![(key_a.clone(), KVOp::Put(foo.clone()))],
+        );
 
         // command put b
         let put_b_rifl = Rifl::new(2, 1);
-        let put_b = Command::put(put_b_rifl, key_b.clone(), bar.clone());
+        let put_b = Command::from(
+            put_b_rifl,
+            vec![(key_b.clone(), KVOp::Put(bar.clone()))],
+        );
 
         // command get a and b
         let get_ab_rifl = Rifl::new(3, 1);
-        let get_ab =
-            Command::multi_get(get_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let get_ab = Command::from(
+            get_ab_rifl,
+            vec![(key_a.clone(), KVOp::Get), (key_b.clone(), KVOp::Get)],
+        );
 
         // wait for `get_ab` and `put_b`
         assert!(pending.wait_for(&get_ab));

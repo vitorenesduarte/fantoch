@@ -168,6 +168,7 @@ mod tests {
     use crate::protocol::common::table::{KeyClocks, SequentialKeyClocks};
     use fantoch::command::Command;
     use fantoch::id::Rifl;
+    use fantoch::kvs::KVOp;
 
     #[test]
     fn vote_range_compress() {
@@ -205,14 +206,16 @@ mod tests {
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
-        let mut votes_a = Votes::with_capacity(cmd_a.key_count(shard_id));
+        let cmd_a = Command::from(cmd_a_rifl, vec![(key_a.clone(), KVOp::Get)]);
+        let mut votes_a = Votes::new();
 
         // command b
         let cmd_ab_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_ab =
-            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
-        let mut votes_ab = Votes::with_capacity(cmd_ab.key_count(shard_id));
+        let cmd_ab = Command::from(
+            cmd_ab_rifl,
+            vec![(key_a.clone(), KVOp::Get), (key_b.clone(), KVOp::Get)],
+        );
+        let mut votes_ab = Votes::new();
 
         // orders on each process:
         // - p0: Submit(a),  MCommit(a),  MCollect(ab)

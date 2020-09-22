@@ -72,6 +72,7 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::{DotGen, ProcessId, Rifl};
+    use fantoch::kvs::KVOp;
     use fantoch::{HashMap, HashSet};
     use std::iter::FromIterator;
     use std::thread;
@@ -84,6 +85,13 @@ mod tests {
     #[test]
     fn locked_key_deps() {
         key_deps_flow::<LockedKeyDeps>();
+    }
+
+    fn multi_put(rifl: Rifl, keys: Vec<String>, value: String) -> Command {
+        Command::from(
+            rifl,
+            keys.into_iter().map(|key| (key.clone(), KVOp::Put(key))),
+        )
     }
 
     fn key_deps_flow<KD: KeyDeps>() {
@@ -103,25 +111,23 @@ mod tests {
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = Command::put(cmd_a_rifl, key_a.clone(), value.clone());
+        let cmd_a = multi_put(cmd_a_rifl, vec![key_a.clone()], value.clone());
 
         // command b
         let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_b = Command::put(cmd_b_rifl, key_b.clone(), value.clone());
+        let cmd_b = multi_put(cmd_b_rifl, vec![key_b.clone()], value.clone());
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
-        let cmd_ab = Command::multi_put(
+        let cmd_ab = multi_put(
             cmd_ab_rifl,
-            vec![
-                (key_a.clone(), value.clone()),
-                (key_b.clone(), value.clone()),
-            ],
+            vec![key_a.clone(), key_b.clone()],
+            value.clone(),
         );
 
         // command c
         let cmd_c_rifl = Rifl::new(103, 1); // client 103, 1st op
-        let cmd_c = Command::put(cmd_c_rifl, key_c.clone(), value.clone());
+        let cmd_c = multi_put(cmd_c_rifl, vec![key_c.clone()], value.clone());
 
         // empty conf for A
         let conf = key_deps.cmd_deps(&cmd_a);

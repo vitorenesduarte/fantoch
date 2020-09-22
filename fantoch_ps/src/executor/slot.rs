@@ -118,6 +118,7 @@ impl MessageIndex for SlotExecutionInfo {
 mod tests {
     use super::*;
     use fantoch::id::Rifl;
+    use fantoch::kvs::KVOp;
     use permutator::Permutation;
     use std::collections::BTreeMap;
 
@@ -132,11 +133,20 @@ mod tests {
 
         // create commands
         let key = String::from("a");
-        let cmd_1 = Command::put(rifl_1, key.clone(), String::from("1"));
-        let cmd_2 = Command::get(rifl_2, key.clone());
-        let cmd_3 = Command::put(rifl_3, key.clone(), String::from("2"));
-        let cmd_4 = Command::get(rifl_4, key.clone());
-        let cmd_5 = Command::put(rifl_5, key.clone(), String::from("3"));
+        let cmd_1 = Command::from(
+            rifl_1,
+            vec![(key.clone(), KVOp::Put(String::from("1")))],
+        );
+        let cmd_2 = Command::from(rifl_2, vec![(key.clone(), KVOp::Get)]);
+        let cmd_3 = Command::from(
+            rifl_3,
+            vec![(key.clone(), KVOp::Put(String::from("2")))],
+        );
+        let cmd_4 = Command::from(rifl_4, vec![(key.clone(), KVOp::Get)]);
+        let cmd_5 = Command::from(
+            rifl_5,
+            vec![(key.clone(), KVOp::Put(String::from("3")))],
+        );
 
         // create execution info
         let ei_1 = SlotExecutionInfo::new(1, cmd_1);

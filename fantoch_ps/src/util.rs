@@ -6,6 +6,7 @@ mod tests {
     use fantoch::command::Command;
     use fantoch::id::ProcessId;
     use fantoch::id::Rifl;
+    use fantoch::kvs::KVOp;
     use rand::Rng;
     use threshold::{Clock, EventSet, MaxSet, VClock};
 
@@ -40,12 +41,12 @@ mod tests {
                 // select random key
                 let key = format!("{}", rng.gen_range(0, keys_number));
                 let value = String::from("");
-                (key, value)
+                (key, KVOp::Put(value))
             })
             .collect();
         // create fake rifl
         let rifl = Rifl::new(0, 0);
         // create multi put command
-        Some(Command::multi_put(rifl, cmd_data))
+        Some(Command::from(rifl, cmd_data))
     }
 }

@@ -44,7 +44,7 @@ mod tests {
     use super::*;
     use crate::util;
     use fantoch::id::Rifl;
-    use fantoch::kvs::Key;
+    use fantoch::kvs::{KVOp, Key};
     use std::collections::BTreeSet;
     use std::iter::FromIterator;
     use std::thread;
@@ -105,6 +105,13 @@ mod tests {
         }
     }
 
+    fn multi_get(rifl: Rifl, keys: Vec<String>) -> Command {
+        Command::from(
+            rifl,
+            keys.into_iter().map(|key| (key.clone(), KVOp::Get)),
+        )
+    }
+
     fn keys_clocks_flow<KC: KeyClocks>(all_clocks_match: bool) {
         // create key clocks
         let process_id = 1;
@@ -117,16 +124,15 @@ mod tests {
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = Command::get(cmd_a_rifl, key_a.clone());
+        let cmd_a = multi_get(cmd_a_rifl, vec![key_a.clone()]);
 
         // command b
         let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_b = Command::get(cmd_b_rifl, key_b.clone());
+        let cmd_b = multi_get(cmd_b_rifl, vec![key_b.clone()]);
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
-        let cmd_ab =
-            Command::multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
+        let cmd_ab = multi_get(cmd_ab_rifl, vec![key_a.clone(), key_b.clone()]);
 
         // -------------------------
         // first clock and votes for command a
@@ -199,7 +205,7 @@ mod tests {
         // command
         let key = String::from("A");
         let cmd_rifl = Rifl::new(100, 1);
-        let cmd = Command::get(cmd_rifl, key.clone());
+        let cmd = multi_get(cmd_rifl, vec![key.clone()]);
 
         // get process votes up to 5
         let mut process_votes = Votes::new();
