@@ -31,8 +31,6 @@ macro_rules! config {
 }
 
 fn main() {
-    aws_distance_matrix();
-
     // build rayon thread pool:
     // - give me two cpus to work
     let spare = 2;
@@ -48,13 +46,6 @@ fn main() {
     fairest_leader();
 }
 
-fn aws_distance_matrix() {
-    let planet = Planet::from("../latency_aws/");
-    let mut regions = planet.regions();
-    regions.sort();
-    println!("{}", planet.distance_matrix(regions).unwrap());
-}
-
 fn aws_planet() -> (Planet, Vec<Region>) {
     let planet = Planet::from("../latency_aws");
     let regions = vec![
@@ -64,6 +55,77 @@ fn aws_planet() -> (Planet, Vec<Region>) {
         Region::new("ca-central-1"),
         Region::new("sa-east-1"),
     ];
+    (planet, regions)
+}
+
+#[allow(dead_code)]
+fn aws_runs_planet() -> (Planet, Vec<Region>) {
+    let eu = Region::new("EU");
+    let us = Region::new("US");
+    let ap = Region::new("AP");
+    let ca = Region::new("CA");
+    let sa = Region::new("SA");
+    let regions =
+        vec![eu.clone(), us.clone(), ap.clone(), ca.clone(), sa.clone()];
+    let latencies = vec![
+        (
+            eu.clone(),
+            vec![
+                (eu.clone(), 0),
+                (us.clone(), 136),
+                (ap.clone(), 180),
+                (ca.clone(), 73),
+                (sa.clone(), 177),
+            ],
+        ),
+        (
+            us.clone(),
+            vec![
+                (eu.clone(), 136),
+                (us.clone(), 0),
+                (ap.clone(), 174),
+                (ca.clone(), 79),
+                (sa.clone(), 174),
+            ],
+        ),
+        (
+            ap.clone(),
+            vec![
+                (eu.clone(), 180),
+                (us.clone(), 174),
+                (ap.clone(), 0),
+                (ca.clone(), 206),
+                (sa.clone(), 317),
+            ],
+        ),
+        (
+            ca.clone(),
+            vec![
+                (eu.clone(), 73),
+                (us.clone(), 79),
+                (ap.clone(), 206),
+                (ca.clone(), 0),
+                (sa.clone(), 122),
+            ],
+        ),
+        (
+            sa.clone(),
+            vec![
+                (eu.clone(), 177),
+                (us.clone(), 174),
+                (ap.clone(), 317),
+                (ca.clone(), 122),
+                (sa.clone(), 0),
+            ],
+        ),
+    ];
+    let latencies = latencies
+        .into_iter()
+        .map(|(region, region_latencies)| {
+            (region, region_latencies.into_iter().collect())
+        })
+        .collect();
+    let planet = Planet::from_latencies(latencies);
     (planet, regions)
 }
 
@@ -193,72 +255,8 @@ fn newt(aws: bool) {
 
 #[allow(dead_code)]
 fn fairest_leader() {
-    let eu = Region::new("EU");
-    let us = Region::new("US");
-    let ap = Region::new("AP");
-    let ca = Region::new("CA");
-    let sa = Region::new("SA");
-    let regions =
-        vec![eu.clone(), us.clone(), ap.clone(), ca.clone(), sa.clone()];
-    let latencies = vec![
-        (
-            eu.clone(),
-            vec![
-                (eu.clone(), 0),
-                (us.clone(), 136),
-                (ap.clone(), 180),
-                (ca.clone(), 73),
-                (sa.clone(), 177),
-            ],
-        ),
-        (
-            us.clone(),
-            vec![
-                (eu.clone(), 136),
-                (us.clone(), 0),
-                (ap.clone(), 174),
-                (ca.clone(), 79),
-                (sa.clone(), 174),
-            ],
-        ),
-        (
-            ap.clone(),
-            vec![
-                (eu.clone(), 180),
-                (us.clone(), 174),
-                (ap.clone(), 0),
-                (ca.clone(), 206),
-                (sa.clone(), 317),
-            ],
-        ),
-        (
-            ca.clone(),
-            vec![
-                (eu.clone(), 73),
-                (us.clone(), 79),
-                (ap.clone(), 206),
-                (ca.clone(), 0),
-                (sa.clone(), 122),
-            ],
-        ),
-        (
-            sa.clone(),
-            vec![
-                (eu.clone(), 177),
-                (us.clone(), 174),
-                (ap.clone(), 317),
-                (ca.clone(), 122),
-                (sa.clone(), 0),
-            ],
-        ),
-    ];
-    let latencies = latencies
-        .into_iter()
-        .map(|(region, region_latencies)| {
-            (region, region_latencies.into_iter().collect())
-        })
-        .collect();
-    let planet = Planet::from_latencies(latencies);
+    let (planet, regions) = aws_runs_planet();
+    // let (planet, regions) = aws_planet();
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
     let configs = vec![config!(5, 1, false, None, false)];
@@ -312,11 +310,12 @@ fn fairest_leader() {
                 },
             );
             println!(
-                "LEADER: {} in region {:?} | std = {}",
+                "LEADER: {} in region {:?} | avg = {:<3} | std = {:<3}",
                 leader,
                 regions
                     .get(leader - 1)
                     .expect("leader should exist in regions"),
+                histogram.mean().value().round() as u64,
                 histogram.stddev().value().round() as u64
             );
         }
