@@ -259,6 +259,7 @@ fn fairest_leader() {
         })
         .collect();
     let planet = Planet::from_latencies(latencies);
+    println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
     let configs = vec![config!(5, 1, false, None, false)];
 
