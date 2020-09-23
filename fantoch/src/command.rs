@@ -12,7 +12,7 @@ const DEFAULT_SHARD_ID: ShardId = 0;
 pub struct Command {
     rifl: Rifl,
     shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
-    pure: bool,
+    read_only: bool,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean
     _empty_keys: HashMap<Key, KVOp>,
@@ -24,13 +24,27 @@ impl Command {
         rifl: Rifl,
         shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
     ) -> Self {
-        let pure = shard_to_ops
+        // a command is read-only if all ops are `Get`s
+        let read_only = shard_to_ops
             .values()
             .all(|shard_ops| shard_ops.iter().all(|(_, op)| op == &KVOp::Get));
+
+        // check that if it's not read-only, then no op is a `Get`
+        // - we can probably support this easily, but just for sanity let's
+        // assume that either all ops are `Get`s or none are
+        if !read_only {
+            let no_gets = shard_to_ops.values().all(|shard_ops| {
+                shard_ops.iter().all(|(_, op)| op != &KVOp::Get)
+            });
+            assert!(
+                no_gets,
+                "non-read-only commands cannot contain Get operations"
+            );
+        }
         Self {
             rifl,
             shard_to_ops,
-            pure,
+            read_only,
             _empty_keys: HashMap::new(),
         }
     }
@@ -45,6 +59,11 @@ impl Command {
         let shard_to_ops =
             HashMap::from_iter(std::iter::once((DEFAULT_SHARD_ID, inner)));
         Self::new(rifl, shard_to_ops)
+    }
+
+    /// Checks if the command is read-only.
+    pub fn read_only(&self) -> bool {
+        self.read_only
     }
 
     /// Checks if the command is replicated by `shard_id`.
