@@ -43,8 +43,9 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let aws = true;
-    newt(aws);
+    // let aws = true;
+    // newt(aws);
+    fairest_leader();
 }
 
 fn aws_distance_matrix() {
@@ -54,7 +55,7 @@ fn aws_distance_matrix() {
     println!("{}", planet.distance_matrix(regions).unwrap());
 }
 
-fn newt_real_time_aws() -> (Planet, Vec<Region>) {
+fn aws_planet() -> (Planet, Vec<Region>) {
     let planet = Planet::from("../latency_aws");
     let regions = vec![
         Region::new("eu-west-1"),
@@ -66,7 +67,7 @@ fn newt_real_time_aws() -> (Planet, Vec<Region>) {
     (planet, regions)
 }
 
-fn newt_real_time_gcp() -> (Planet, Vec<Region>) {
+fn gcp_planet() -> (Planet, Vec<Region>) {
     let planet = Planet::new();
     let regions = vec![
         Region::new("asia-south1"),
@@ -78,12 +79,9 @@ fn newt_real_time_gcp() -> (Planet, Vec<Region>) {
     (planet, regions)
 }
 
+#[allow(dead_code)]
 fn newt(aws: bool) {
-    let (planet, regions) = if aws {
-        newt_real_time_aws()
-    } else {
-        newt_real_time_gcp()
-    };
+    let (planet, regions) = if aws { aws_planet() } else { gcp_planet() };
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
     let ns = vec![5];
@@ -191,6 +189,137 @@ fn newt(aws: bool) {
             })
         })
     });
+}
+
+#[allow(dead_code)]
+fn fairest_leader() {
+    let eu = Region::new("EU");
+    let us = Region::new("US");
+    let ap = Region::new("AP");
+    let ca = Region::new("CA");
+    let sa = Region::new("SA");
+    let regions =
+        vec![eu.clone(), us.clone(), ap.clone(), ca.clone(), sa.clone()];
+    let latencies = vec![
+        (
+            eu.clone(),
+            vec![
+                (eu.clone(), 0),
+                (us.clone(), 136),
+                (ap.clone(), 180),
+                (ca.clone(), 73),
+                (sa.clone(), 177),
+            ],
+        ),
+        (
+            us.clone(),
+            vec![
+                (eu.clone(), 136),
+                (us.clone(), 0),
+                (ap.clone(), 174),
+                (ca.clone(), 79),
+                (sa.clone(), 174),
+            ],
+        ),
+        (
+            ap.clone(),
+            vec![
+                (eu.clone(), 180),
+                (us.clone(), 174),
+                (ap.clone(), 0),
+                (ca.clone(), 206),
+                (sa.clone(), 317),
+            ],
+        ),
+        (
+            ca.clone(),
+            vec![
+                (eu.clone(), 73),
+                (us.clone(), 79),
+                (ap.clone(), 206),
+                (ca.clone(), 0),
+                (sa.clone(), 122),
+            ],
+        ),
+        (
+            sa.clone(),
+            vec![
+                (eu.clone(), 177),
+                (us.clone(), 174),
+                (ap.clone(), 317),
+                (ca.clone(), 122),
+                (sa.clone(), 0),
+            ],
+        ),
+    ];
+    let latencies = latencies
+        .into_iter()
+        .map(|(region, region_latencies)| {
+            (region, region_latencies.into_iter().collect())
+        })
+        .collect();
+    let planet = Planet::from_latencies(latencies);
+
+    let configs = vec![config!(5, 1, false, None, false)];
+
+    let clients_per_region = 1;
+    // clients workload
+    let shard_count = 1;
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let keys_per_command = 1;
+    let commands_per_client = 500;
+    let payload_size = 0;
+    let workload = Workload::new(
+        shard_count,
+        key_gen,
+        keys_per_command,
+        commands_per_client,
+        payload_size,
+    );
+
+    for mut config in configs {
+        for leader in 1..=config.n() {
+            println!("-----------------------------");
+            config.set_leader(leader as ProcessId);
+
+            // process regions, client regions and planet
+            let process_regions = regions.clone();
+            let client_regions = regions.clone();
+            let planet = planet.clone();
+
+            let (_process_metrics, client_latencies) = run::<FPaxos>(
+                config,
+                workload,
+                clients_per_region,
+                process_regions,
+                client_regions,
+                planet,
+            );
+            // compute clients stats
+            let histogram = client_latencies.into_iter().fold(
+                Histogram::new(),
+                |mut histogram_acc, (region, (_issued_commands, histogram))| {
+                    println!(
+                        "region = {:<14} | {:?}",
+                        region.name(),
+                        histogram
+                    );
+                    // add average latency to histogram
+                    histogram_acc
+                        .increment(histogram.mean().value().round() as u64);
+                    histogram_acc
+                },
+            );
+            println!(
+                "LEADER: {} in region {:?} | std = {}",
+                leader,
+                regions
+                    .get(leader - 1)
+                    .expect("leader should exist in regions"),
+                histogram.stddev().value().round() as u64
+            );
+        }
+    }
 }
 
 #[allow(dead_code)]
