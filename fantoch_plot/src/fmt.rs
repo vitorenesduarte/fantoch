@@ -30,7 +30,10 @@ impl PlotFmt {
     }
 
     pub fn label(protocol: Protocol, f: usize) -> String {
-        format!("{} f = {}", Self::protocol_name(protocol), f)
+        match protocol {
+            Protocol::EPaxosLocked => Self::protocol_name(protocol).to_string(),
+            _ => format!("{} f = {}", Self::protocol_name(protocol), f),
+        }
     }
 
     pub fn color(protocol: Protocol, f: usize) -> String {
@@ -38,7 +41,7 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 1) => "#27ae60",
             (Protocol::AtlasLocked, 2) => "#16a085",
             // (Protocol::EPaxosLocked, _) => "#227093",
-            (Protocol::EPaxosLocked, _) => "#222222",
+            (Protocol::EPaxosLocked, _) => "#444444",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
@@ -47,7 +50,7 @@ impl PlotFmt {
             (Protocol::NewtLocked, 2) => "#2980b9",
             (Protocol::NewtFineLocked, 1) => "#111111",
             (Protocol::NewtFineLocked, 2) => "#333333",
-            (Protocol::Basic, _) => "",
+            (Protocol::Basic, _) => "#444444",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -103,10 +106,10 @@ impl PlotFmt {
             (Protocol::NewtAtomic, 2) => "^",
             (Protocol::NewtLocked, 1) => ">",
             (Protocol::NewtLocked, 2) => "<",
-            (Protocol::NewtFineLocked, 1) => "p",
-            (Protocol::NewtFineLocked, 2) => "P",
-            (Protocol::Basic, 1) => "|",
-            (Protocol::Basic, 2) => "_",
+            (Protocol::NewtFineLocked, 1) => "_",
+            (Protocol::NewtFineLocked, 2) => "|",
+            (Protocol::Basic, 1) => "p",
+            (Protocol::Basic, 2) => "P",
             _ => panic!(
                 "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -123,7 +126,7 @@ impl PlotFmt {
             (Protocol::NewtAtomic, _) => "-",
             (Protocol::NewtLocked, _) => "-",
             (Protocol::NewtFineLocked, _) => "-",
-            (Protocol::Basic, _) => "",
+            (Protocol::Basic, _) => ":",
         }
         .to_string()
     }

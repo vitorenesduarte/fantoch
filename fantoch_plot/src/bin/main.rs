@@ -116,8 +116,8 @@ fn tail_latency_plot() -> Result<(), Report> {
     let payload_size = 100;
     let protocols = vec![
         (Protocol::NewtAtomic, 1),
-        (Protocol::AtlasLocked, 1),
         (Protocol::NewtAtomic, 2),
+        (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
         (Protocol::EPaxosLocked, 2),
     ];
@@ -172,16 +172,6 @@ fn increasing_load_plot() -> Result<(), Report> {
     let top_key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let bottom_key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
     let payload_size = 4096;
-    let protocols = vec![
-        (Protocol::NewtAtomic, 1),
-        (Protocol::AtlasLocked, 1),
-        (Protocol::FPaxos, 1),
-        (Protocol::NewtAtomic, 2),
-        (Protocol::AtlasLocked, 2),
-        (Protocol::FPaxos, 2),
-        (Protocol::EPaxosLocked, 2),
-        (Protocol::Basic, 1),
-    ];
     let n = 5;
     let leader = 1;
 
@@ -219,6 +209,16 @@ fn increasing_load_plot() -> Result<(), Report> {
         // filter by payload size in all protocols
         search.payload_size(payload_size);
     };
+
+    let protocols = vec![
+        (Protocol::NewtAtomic, 1),
+        (Protocol::NewtAtomic, 2),
+        (Protocol::FPaxos, 1),
+        (Protocol::FPaxos, 2),
+        (Protocol::AtlasLocked, 1),
+        (Protocol::AtlasLocked, 2),
+        (Protocol::EPaxosLocked, 2),
+    ];
 
     let path = String::from("plot_increasing_load_heatmap.pdf");
     fantoch_plot::heatmap_plot_split(
