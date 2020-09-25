@@ -149,8 +149,9 @@ impl Workload {
         // be the shard of the first key generated
         let keys = self.gen_unique_keys(key_gen_state);
         // check if the command should be read-only
-        let read_only =
-            super::key_gen::true_if_random_is_less_than(self.read_only_percentage);
+        let read_only = super::key_gen::true_if_random_is_less_than(
+            self.read_only_percentage,
+        );
         let mut target_shard = None;
 
         for key in keys {

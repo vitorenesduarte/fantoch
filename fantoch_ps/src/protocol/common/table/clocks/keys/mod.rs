@@ -27,13 +27,13 @@ pub trait KeyClocks: Debug + Clone {
     /// Bump clocks to at least `min_clock` and return the new clock (that might
     /// be `min_clock` in case it was higher than any of the local clocks). Also
     /// returns the consumed votes.
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes);
+    fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes);
 
     /// Votes up to `clock` for the keys accessed by `cmd`.
-    fn vote(&mut self, cmd: &Command, clock: u64, votes: &mut Votes);
+    fn detached(&mut self, cmd: &Command, clock: u64, votes: &mut Votes);
 
     /// Votes up to `clock` on all keys.
-    fn vote_all(&mut self, clock: u64, votes: &mut Votes);
+    fn detached_all(&mut self, clock: u64, votes: &mut Votes);
 
     fn parallel() -> bool;
 }
@@ -129,21 +129,21 @@ mod tests {
 
         // -------------------------
         // first clock and votes for command a
-        let (clock, process_votes) = clocks.bump_and_vote(&cmd_a, 0);
+        let (clock, process_votes) = clocks.proposal(&cmd_a, 0);
         assert_eq!(clock, 1);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![1]);
 
         // -------------------------
         // second clock and votes for command a
-        let (clock, process_votes) = clocks.bump_and_vote(&cmd_a, 0);
+        let (clock, process_votes) = clocks.proposal(&cmd_a, 0);
         assert_eq!(clock, 2);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![2]);
 
         // -------------------------
         // first clock and votes for command ab
-        let (clock, process_votes) = clocks.bump_and_vote(&cmd_ab, 0);
+        let (clock, process_votes) = clocks.proposal(&cmd_ab, 0);
         assert_eq!(clock, 3);
         assert_eq!(process_votes.len(), 2); // two keys
         assert_eq!(get_key_votes(&key_a, &process_votes), vec![3]);
@@ -166,7 +166,7 @@ mod tests {
 
         // -------------------------
         // first clock and votes for command b
-        let (clock, process_votes) = clocks.bump_and_vote(&cmd_b, 0);
+        let (clock, process_votes) = clocks.proposal(&cmd_b, 0);
         if all_clocks_match {
             assert_eq!(clock, 4);
         } else {
@@ -202,34 +202,34 @@ mod tests {
 
         // get process votes up to 5
         let mut process_votes = Votes::new();
-        clocks.vote(&cmd, 5, &mut process_votes);
+        clocks.detached(&cmd, 5, &mut process_votes);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![1, 2, 3, 4, 5]);
 
         // get process votes up to 5 again: should get no votes
         let mut process_votes = Votes::new();
-        clocks.vote(&cmd, 5, &mut process_votes);
+        clocks.detached(&cmd, 5, &mut process_votes);
         assert!(process_votes.is_empty());
 
         // get process votes up to 6
         let mut process_votes = Votes::new();
-        clocks.vote(&cmd, 6, &mut process_votes);
+        clocks.detached(&cmd, 6, &mut process_votes);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![6]);
 
         // get process votes up to 2: should get no votes
         let mut process_votes = Votes::new();
-        clocks.vote(&cmd, 2, &mut process_votes);
+        clocks.detached(&cmd, 2, &mut process_votes);
         assert!(process_votes.is_empty());
 
         // get process votes up to 3: should get no votes
         let mut process_votes = Votes::new();
-        clocks.vote(&cmd, 3, &mut process_votes);
+        clocks.detached(&cmd, 3, &mut process_votes);
         assert!(process_votes.is_empty());
 
         // get process votes up to 10
         let mut process_votes = Votes::new();
-        clocks.vote(&cmd, 10, &mut process_votes);
+        clocks.detached(&cmd, 10, &mut process_votes);
         assert_eq!(process_votes.len(), 1); // single key
         assert_eq!(get_key_votes(&key, &process_votes), vec![7, 8, 9, 10]);
     }
@@ -327,7 +327,7 @@ mod tests {
                 "command shouldn't be a noop since the noop probability is 0",
             );
             // get votes
-            let (new_highest, votes) = clocks.bump_and_vote(&cmd, highest);
+            let (new_highest, votes) = clocks.proposal(&cmd, highest);
             // update highest
             highest = new_highest;
             // save votes

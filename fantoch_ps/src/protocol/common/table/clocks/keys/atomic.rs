@@ -39,7 +39,7 @@ impl KeyClocks for AtomicKeyClocks {
         });
     }
 
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+    fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // first round of votes:
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
@@ -81,7 +81,7 @@ impl KeyClocks for AtomicKeyClocks {
         (up_to, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
+    fn detached(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         for key in cmd.keys(self.shard_id) {
             let clock = self.clocks.get_or(key, || AtomicU64::default());
             if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
@@ -90,7 +90,7 @@ impl KeyClocks for AtomicKeyClocks {
         }
     }
 
-    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
+    fn detached_all(&mut self, up_to: u64, votes: &mut Votes) {
         self.clocks.iter().for_each(|entry| {
             let key = entry.key();
             let clock = entry.value();

@@ -224,27 +224,25 @@ mod tests {
         // ------------------------
         // submit command a by p0 AND
         // (local) MCollect handle by p0 (command a)
-        let (clock_a_p0, process_votes_a_p0) =
-            clocks_p0.bump_and_vote(&cmd_a, 0);
+        let (clock_a_p0, process_votes_a_p0) = clocks_p0.proposal(&cmd_a, 0);
         assert_eq!(clock_a_p0, 1);
 
         // -------------------------
         // submit command ab by p1 AND
         // (local) MCollect handle by p1 (command ab)
-        let (clock_ab_p1, process_votes_ab_p1) =
-            clocks_p1.bump_and_vote(&cmd_ab, 0);
+        let (clock_ab_p1, process_votes_ab_p1) = clocks_p1.proposal(&cmd_ab, 0);
         assert_eq!(clock_ab_p1, 1);
 
         // -------------------------
         // (remote) MCollect handle by p1 (command a)
         let (clock_a_p1, process_votes_a_p1) =
-            clocks_p1.bump_and_vote(&cmd_a, clock_a_p0);
+            clocks_p1.proposal(&cmd_a, clock_a_p0);
         assert_eq!(clock_a_p1, 2);
 
         // -------------------------
         // (remote) MCollect handle by p0 (command ab)
         let (clock_ab_p0, process_votes_ab_p0) =
-            clocks_p0.bump_and_vote(&cmd_ab, clock_ab_p1);
+            clocks_p0.proposal(&cmd_ab, clock_ab_p1);
         assert_eq!(clock_ab_p0, 2);
 
         // -------------------------

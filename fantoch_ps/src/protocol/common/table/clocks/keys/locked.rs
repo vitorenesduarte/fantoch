@@ -41,7 +41,7 @@ impl KeyClocks for LockedKeyClocks {
         common::init_clocks(self.shard_id, &self.clocks, cmd)
     }
 
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+    fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // make sure locks will be acquired in some pre-determined order to
         // avoid deadlocks
         let keys = BTreeSet::from_iter(cmd.keys(self.shard_id));
@@ -99,12 +99,19 @@ impl KeyClocks for LockedKeyClocks {
         }
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
-        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to, votes)
+    fn detached(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
+        common::detached(
+            self.id,
+            self.shard_id,
+            &self.clocks,
+            cmd,
+            up_to,
+            votes,
+        )
     }
 
-    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
-        common::vote_all(self.id, &self.clocks, up_to, votes)
+    fn detached_all(&mut self, up_to: u64, votes: &mut Votes) {
+        common::detached_all(self.id, &self.clocks, up_to, votes)
     }
 
     fn parallel() -> bool {
@@ -134,7 +141,7 @@ mod common {
         })
     }
 
-    pub(super) fn vote(
+    pub(super) fn detached(
         id: ProcessId,
         shard_id: ShardId,
         clocks: &Clocks,
@@ -151,7 +158,7 @@ mod common {
         }
     }
 
-    pub(super) fn vote_all(
+    pub(super) fn detached_all(
         id: ProcessId,
         clocks: &Clocks,
         up_to: u64,
@@ -202,7 +209,7 @@ mod tests {
 
         // read-only commmands do not bump clocks
         let ro_cmd = Command::from(rifl, vec![(String::from("K"), KVOp::Get)]);
-        let (clock, votes) = clocks.bump_and_vote(&ro_cmd, 0);
+        let (clock, votes) = clocks.proposal(&ro_cmd, 0);
         assert_eq!(clock, 0);
         assert!(votes.is_empty());
 
@@ -211,13 +218,13 @@ mod tests {
             rifl,
             vec![(String::from("K"), KVOp::Put(String::new()))],
         );
-        let (clock, votes) = clocks.bump_and_vote(&cmd, 0);
+        let (clock, votes) = clocks.proposal(&cmd, 0);
         assert_eq!(clock, 1);
         assert!(!votes.is_empty());
 
         // read-only commmands do not bump clocks
         let ro_cmd = Command::from(rifl, vec![(String::from("K"), KVOp::Get)]);
-        let (clock, votes) = clocks.bump_and_vote(&ro_cmd, 0);
+        let (clock, votes) = clocks.proposal(&ro_cmd, 0);
         assert_eq!(clock, 1);
         assert!(votes.is_empty());
     }

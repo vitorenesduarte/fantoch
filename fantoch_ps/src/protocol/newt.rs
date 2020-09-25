@@ -290,7 +290,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // - this may also consume votes since we're bumping the clocks here
         // - for that reason, we'll store these votes locally and not recompute
         //   them once we receive the `MCollect` from self
-        let (clock, process_votes) = self.key_clocks.bump_and_vote(&cmd, 0);
+        let (clock, process_votes) = self.key_clocks.proposal(&cmd, 0);
         trace!(
             "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
             self.id(),
@@ -410,7 +410,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // if not from self, compute clock considering `remote_clock` as the
             // minimum value
             let (clock, process_votes) =
-                self.key_clocks.bump_and_vote(&cmd, remote_clock);
+                self.key_clocks.proposal(&cmd, remote_clock);
             trace!(
                 "p{}: bump_and_vote: {:?} | clock: {} | votes: {:?}",
                 self.bp.process_id,
@@ -429,7 +429,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // if there are any buffered `MBump`'s, generate detached votes
         if let Some(bump_to) = self.buffered_mbumps.remove(&dot) {
-            self.key_clocks.vote(&cmd, bump_to, &mut self.detached);
+            self.key_clocks.detached(&cmd, bump_to, &mut self.detached);
         }
 
         // get shard count
@@ -516,7 +516,7 @@ impl<KC: KeyClocks> Newt<KC> {
         //   real-time clocks
         let cmd = info.cmd.as_ref().unwrap();
         if !message_from_self {
-            self.key_clocks.vote(cmd, max_clock, &mut self.detached);
+            self.key_clocks.detached(cmd, max_clock, &mut self.detached);
         }
 
         // check if we have all necessary replies
@@ -637,7 +637,7 @@ impl<KC: KeyClocks> Newt<KC> {
         } else {
             // try to generate detached votes
             let cmd = info.cmd.as_ref().unwrap();
-            self.key_clocks.vote(cmd, clock, &mut self.detached);
+            self.key_clocks.detached(cmd, clock, &mut self.detached);
         }
 
         // check if this dot is targetted to my shard
@@ -692,7 +692,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // maybe bump up to `clock`
         if let Some(cmd) = info.cmd.as_ref() {
             // we have the payload, thus we can bump to `clock`
-            self.key_clocks.vote(cmd, clock, &mut self.detached);
+            self.key_clocks.detached(cmd, clock, &mut self.detached);
         } else {
             // in this case we don't have the payload (which means we have
             // received the `MBump` from some shard before `MCollect` from my
@@ -998,7 +998,7 @@ impl<KC: KeyClocks> Newt<KC> {
         // Iterate all clocks and bump them.
         // - TODO: only bump the clocks of active keys (i.e. keys with an
         //   `MCollect` without the  corresponding `MCommit`)
-        self.key_clocks.vote_all(min_clock, &mut self.detached);
+        self.key_clocks.detached_all(min_clock, &mut self.detached);
     }
 
     // #[instrument(skip(self, _time))]
