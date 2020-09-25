@@ -24,7 +24,6 @@ impl PlotFmt {
             Protocol::FPaxos => "FPaxos",
             Protocol::NewtAtomic => "Newt",
             Protocol::NewtLocked => "Newt-L",
-            Protocol::NewtFineLocked => "Newt-AL",
             Protocol::Basic => "Basic",
         }
     }
@@ -46,10 +45,8 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
             (Protocol::NewtAtomic, 2) => "#e67e22",
-            (Protocol::NewtLocked, 1) => "#3498db",
-            (Protocol::NewtLocked, 2) => "#2980b9",
-            (Protocol::NewtFineLocked, 1) => "#111111",
-            (Protocol::NewtFineLocked, 2) => "#333333",
+            (Protocol::NewtLocked, 1) => "#3498db", // "#111111"
+            (Protocol::NewtLocked, 2) => "#2980b9", // "#333333"
             (Protocol::Basic, _) => "#444444",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
@@ -81,8 +78,6 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 2) => "\\\\\\",
             (Protocol::NewtLocked, 1) => "////", // 4
             (Protocol::NewtLocked, 2) => "\\\\\\\\",
-            (Protocol::NewtFineLocked, 1) => "//////", // 5
-            (Protocol::NewtFineLocked, 2) => "\\\\\\\\\\\\",
             (Protocol::NewtAtomic, 1) => "//////", //  6
             (Protocol::NewtAtomic, 2) => "\\\\\\\\\\\\",
             (Protocol::Basic, 1) => "///////", // 7
@@ -106,8 +101,6 @@ impl PlotFmt {
             (Protocol::NewtAtomic, 2) => "^",
             (Protocol::NewtLocked, 1) => ">",
             (Protocol::NewtLocked, 2) => "<",
-            (Protocol::NewtFineLocked, 1) => "_",
-            (Protocol::NewtFineLocked, 2) => "|",
             (Protocol::Basic, 1) => "p",
             (Protocol::Basic, 2) => "P",
             _ => panic!(
@@ -125,7 +118,6 @@ impl PlotFmt {
             (Protocol::FPaxos, _) => "-.",
             (Protocol::NewtAtomic, _) => "-",
             (Protocol::NewtLocked, _) => "-",
-            (Protocol::NewtFineLocked, _) => "-",
             (Protocol::Basic, _) => ":",
         }
         .to_string()

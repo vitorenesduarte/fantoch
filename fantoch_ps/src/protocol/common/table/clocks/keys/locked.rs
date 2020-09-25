@@ -22,14 +22,6 @@ pub struct LockedKeyClocks {
     clocks: Clocks,
 }
 
-/// `bump_and_vote` grabs one lock at a time
-#[derive(Debug, Clone)]
-pub struct FineLockedKeyClocks {
-    id: ProcessId,
-    shard_id: ShardId,
-    clocks: Clocks,
-}
-
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
     fn new(id: ProcessId, shard_id: ShardId) -> Self {
@@ -54,7 +46,8 @@ impl KeyClocks for LockedKeyClocks {
         self.clocks
             .get_or_all(&keys, &mut locks, || Mutex::default());
 
-        // keep track of which clock we should bump to
+        // keep track of which clock we should bump to (in case the command is
+        // not read-only)
         let mut up_to = min_clock;
 
         // acquire the lock on all keys
@@ -81,64 +74,6 @@ impl KeyClocks for LockedKeyClocks {
             drop(guard);
         }
         (up_to, votes)
-    }
-
-    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
-        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to, votes)
-    }
-
-    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
-        common::vote_all(self.id, &self.clocks, up_to, votes)
-    }
-
-    fn parallel() -> bool {
-        true
-    }
-}
-
-impl KeyClocks for FineLockedKeyClocks {
-    /// Create a new `FineLockedKeyClocks` instance.
-    fn new(id: ProcessId, shard_id: ShardId) -> Self {
-        Self {
-            id,
-            shard_id,
-            clocks: common::new(),
-        }
-    }
-
-    fn init_clocks(&mut self, cmd: &Command) {
-        common::init_clocks(self.shard_id, &self.clocks, cmd)
-    }
-
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
-        // single round of votes:
-        // - vote on each key and compute the highest clock seen
-        // - this means that if we have more than one key, then we don't
-        //   necessarily end up with all key clocks equal
-        let key_count = cmd.key_count(self.shard_id);
-        let mut votes = Votes::with_capacity(key_count);
-        let highest = cmd
-            .keys(self.shard_id)
-            .map(|key| {
-                let key_lock = self.clocks.get_or(key, || Mutex::default());
-                let mut guard = key_lock.lock();
-                let previous_value = *guard;
-                let current_value = cmp::max(min_clock, previous_value + 1);
-                *guard = current_value;
-                // drop the lock
-                drop(guard);
-
-                // create vote range
-                let vr =
-                    VoteRange::new(self.id, previous_value + 1, current_value);
-                votes.set(key.clone(), vec![vr]);
-
-                // return "current" clock value
-                current_value
-            })
-            .max()
-            .expect("there should be a maximum sequence");
-        (highest, votes)
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {

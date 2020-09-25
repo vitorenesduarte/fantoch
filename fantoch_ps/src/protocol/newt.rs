@@ -1,8 +1,8 @@
 use crate::executor::TableExecutor;
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::common::table::{
-    AtomicKeyClocks, FineLockedKeyClocks, KeyClocks, LockedKeyClocks,
-    QuorumClocks, SequentialKeyClocks, Votes,
+    AtomicKeyClocks, KeyClocks, LockedKeyClocks, QuorumClocks,
+    SequentialKeyClocks, Votes,
 };
 use crate::protocol::partial::{self, ShardsCommits};
 use fantoch::command::Command;
@@ -25,7 +25,6 @@ use threshold::VClock;
 pub type NewtSequential = Newt<SequentialKeyClocks>;
 pub type NewtAtomic = Newt<AtomicKeyClocks>;
 pub type NewtLocked = Newt<LockedKeyClocks>;
-pub type NewtFineLocked = Newt<FineLockedKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 

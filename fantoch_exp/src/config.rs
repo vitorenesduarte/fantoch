@@ -272,7 +272,6 @@ fn workers_executors_and_leader(
         }
         Protocol::NewtAtomic => EXECUTORS,
         Protocol::NewtLocked => EXECUTORS,
-        Protocol::NewtFineLocked => EXECUTORS,
         Protocol::Basic => EXECUTORS,
     };
     (WORKERS + EXECUTORS - executors, executors)

@@ -9,7 +9,6 @@ mod locked;
 
 // Re-exports.
 pub use atomic::AtomicKeyClocks;
-pub use locked::FineLockedKeyClocks;
 pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
@@ -65,12 +64,6 @@ mod tests {
     fn locked_key_clocks() {
         keys_clocks_flow::<LockedKeyClocks>(true);
         keys_clocks_no_double_votes::<LockedKeyClocks>();
-    }
-
-    #[test]
-    fn fine_locked_key_clocks() {
-        keys_clocks_flow::<FineLockedKeyClocks>(false);
-        keys_clocks_no_double_votes::<FineLockedKeyClocks>();
     }
 
     #[test]
