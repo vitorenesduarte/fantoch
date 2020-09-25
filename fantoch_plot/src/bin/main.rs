@@ -32,13 +32,13 @@ fn eurosys() -> Result<(), Report> {
     fairness_plot()?;
     tail_latency_plot()?;
     increasing_load_plot()?;
-    scalability_plot()?;
+    // scalability_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
-    let results_dir = "../results_fairness";
+    let results_dir = "../results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let payload_size = 100;
@@ -110,7 +110,7 @@ fn fairness_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
-    let results_dir = "../results_fairness";
+    let results_dir = "../results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
     let payload_size = 100;
