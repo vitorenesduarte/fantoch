@@ -9,6 +9,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::kvs::KVOp;
 use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
     ProtocolMetrics,
@@ -599,9 +600,20 @@ impl<KC: KeyClocks> Newt<KC> {
         let execution_info =
             cmd.into_iter(self.bp.shard_id).map(|(key, op)| {
                 // find votes on this key
-                let key_votes = votes
-                    .remove(&key)
-                    .expect("there should be votes on all command keys");
+                let key_votes = votes.remove(&key);
+                let key_votes = match op {
+                    KVOp::Get => {
+                        assert!(
+                            key_votes.is_none(),
+                            "Get's should have no votes"
+                        );
+                        Vec::new()
+                    }
+                    KVOp::Put(_) => key_votes.expect("Put's should have votes"),
+                    _ => {
+                        panic!("unsupported operation: {:?}", op);
+                    }
+                };
                 ExecutionInfo::votes(dot, clock, rifl, key, op, key_votes)
             });
         self.to_executors.extend(execution_info);
