@@ -32,7 +32,7 @@ fn eurosys() -> Result<(), Report> {
     fairness_plot()?;
     tail_latency_plot()?;
     increasing_load_plot()?;
-    // scalability_plot()?;
+    scalability_plot()?;
     Ok(())
 }
 
@@ -257,7 +257,7 @@ fn increasing_load_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn scalability_plot() -> Result<(), Report> {
-    let results_dir = "../results_multi_key";
+    let results_dir = "../results_scalability";
     // fixed parameters
     let shard_count = 1;
     let n = 3;
@@ -874,7 +874,7 @@ fn multi_key() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key() -> Result<(), Report> {
-    let results_dir = "../results_tail_latency_3";
+    let results_dir = "../results_tail_latency";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![

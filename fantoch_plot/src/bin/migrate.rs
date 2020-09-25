@@ -1,6 +1,6 @@
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
-use fantoch::client::Workload;
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::planet::Planet;
 use fantoch_exp::{
@@ -9,6 +9,22 @@ use fantoch_exp::{
 };
 use fantoch_plot::ResultsDB;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PreviousWorkload {
+    /// number of shards
+    shard_count: u64,
+    // key generator
+    key_gen: KeyGen,
+    /// number of keys accessed by the command
+    keys_per_command: usize,
+    /// number of commands to be submitted in this workload
+    commands_per_client: usize,
+    /// size of payload in command (in bytes)
+    payload_size: usize,
+    /// number of commands already issued in this workload
+    command_count: usize,
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct PreviousExperimentConfig {
@@ -20,11 +36,12 @@ pub struct PreviousExperimentConfig {
     pub protocol: Protocol,
     pub config: Config,
     pub clients_per_region: usize,
-    pub workload: Workload,
+    pub workload: PreviousWorkload,
     pub process_tcp_nodelay: bool,
     pub tcp_buffer_size: usize,
     pub tcp_flush_interval: Option<usize>,
     pub process_channel_buffer_size: usize,
+    pub cpus: usize,
     pub workers: usize,
     pub executors: usize,
     pub multiplexing: usize,
@@ -34,9 +51,9 @@ pub struct PreviousExperimentConfig {
 
 fn main() -> Result<(), Report> {
     for results_dir in vec![
-        "../results_multi_key",
-        "../results_single_key",
-        "../results_partial_replication",
+        "../results_fairness",
+        "../results_increasing_load",
+        "../results_scalability",
     ] {
         // load results
         let timestamps =
@@ -60,6 +77,14 @@ fn main() -> Result<(), Report> {
 
             match previous {
                 Ok(previous) => {
+                    let mut workload = Workload::new(
+                        previous.workload.shard_count as usize,
+                        previous.workload.key_gen,
+                        previous.workload.keys_per_command,
+                        previous.workload.commands_per_client,
+                        previous.workload.payload_size,
+                    );
+                    workload.set_read_only_percentage(0);
                     let exp_config = ExperimentConfig {
                         placement: previous.placement,
                         planet: previous.planet,
@@ -74,14 +99,14 @@ fn main() -> Result<(), Report> {
                         tcp_flush_interval: previous.tcp_flush_interval,
                         process_channel_buffer_size: previous
                             .process_channel_buffer_size,
+                        cpus: previous.cpus,
                         workers: previous.workers,
                         executors: previous.executors,
                         multiplexing: previous.multiplexing,
-                        workload: previous.workload,
+                        workload,
                         client_tcp_nodelay: previous.client_tcp_nodelay,
                         client_channel_buffer_size: previous
                             .client_channel_buffer_size,
-                        cpus: 12,
                     };
 
                     // save experiment config
