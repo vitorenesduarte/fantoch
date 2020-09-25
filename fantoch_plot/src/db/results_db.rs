@@ -221,6 +221,17 @@ impl ResultsDB {
                     }
                 }
 
+                // filter out configurations with different read_only_percentage
+                // (if set)
+                if let Some(read_only_percentage) = search.read_only_percentage
+                {
+                    if exp_config.workload.read_only_percentage()
+                        != read_only_percentage
+                    {
+                        return false;
+                    }
+                }
+
                 // filter out configurations with different payload_size (if
                 // set)
                 if let Some(payload_size) = search.payload_size {

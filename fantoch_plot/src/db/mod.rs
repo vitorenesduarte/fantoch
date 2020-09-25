@@ -23,6 +23,7 @@ pub struct Search {
     pub clients_per_region: Option<usize>,
     pub key_gen: Option<KeyGen>,
     pub keys_per_command: Option<usize>,
+    pub read_only_percentage: Option<usize>,
     pub payload_size: Option<usize>,
 }
 
@@ -38,6 +39,7 @@ impl Search {
             clients_per_region: None,
             key_gen: None,
             keys_per_command: None,
+            read_only_percentage: None,
             payload_size: None,
         }
     }
@@ -72,6 +74,14 @@ impl Search {
 
     pub fn keys_per_command(&mut self, keys_per_command: usize) -> &mut Self {
         self.keys_per_command = Some(keys_per_command);
+        self
+    }
+
+    pub fn read_only_percentage(
+        &mut self,
+        read_only_percentage: usize,
+    ) -> &mut Self {
+        self.read_only_percentage = Some(read_only_percentage);
         self
     }
 
