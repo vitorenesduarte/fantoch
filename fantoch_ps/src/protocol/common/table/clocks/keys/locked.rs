@@ -2,17 +2,22 @@ use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
 use crate::shared::Shared;
 use fantoch::command::Command;
-use fantoch::id::{ProcessId, ShardId};
+use fantoch::id::{ProcessId, Rifl, ShardId};
 use fantoch::kvs::Key;
+use fantoch::HashSet;
 use parking_lot::Mutex;
 use std::cmp;
 use std::collections::BTreeSet;
 use std::iter::FromIterator;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Default)]
+struct ClockAndPendingReads {
+    clock: u64,
+    pending_reads: HashSet<Rifl>,
+}
 // all clock's are protected by a mutex
-type Clock = Mutex<u64>;
-type Clocks = Arc<Shared<Key, Clock>>;
+type Clocks = Arc<Shared<Key, Mutex<ClockAndPendingReads>>>;
 
 /// `bump_and_vote` grabs all locks before any change
 #[derive(Debug, Clone)]
@@ -60,7 +65,7 @@ impl KeyClocks for LockedKeyClocks {
         let mut guards = Vec::with_capacity(key_count);
         for (_key, key_lock) in &locks {
             let guard = key_lock.lock();
-            up_to = cmp::max(up_to, *guard + 1);
+            up_to = cmp::max(up_to, guard.clock + 1);
             guards.push(guard);
         }
 
@@ -69,7 +74,13 @@ impl KeyClocks for LockedKeyClocks {
         for entry in locks.iter().zip(guards.into_iter()) {
             let (key, _key_lock) = entry.0;
             let mut guard = entry.1;
-            common::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
+            common::maybe_bump(
+                self.id,
+                key,
+                &mut guard.clock,
+                up_to,
+                &mut votes,
+            );
             // release the lock
             drop(guard);
         }
@@ -122,7 +133,7 @@ mod common {
         for key in cmd.keys(shard_id) {
             let key_lock = clocks.get_or(key, || Mutex::default());
             let mut guard = key_lock.lock();
-            maybe_bump(id, key, &mut guard, up_to, votes);
+            maybe_bump(id, key, &mut guard.clock, up_to, votes);
             // release the lock
             drop(guard);
         }
@@ -138,7 +149,7 @@ mod common {
             let key = entry.key();
             let key_lock = entry.value();
             let mut guard = key_lock.lock();
-            maybe_bump(id, key, &mut guard, up_to, votes);
+            maybe_bump(id, key, &mut guard.clock, up_to, votes);
             // release the lock
             drop(guard);
         });
