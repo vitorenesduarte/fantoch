@@ -12,6 +12,7 @@ const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_SHARD_COUNT: usize = 1;
 const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictRate { conflict_rate: 100 };
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
+const DEFAULT_READ_ONLY_PERCENTAGE: usize = 0;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
 
 type ClientArgs = (
@@ -111,6 +112,13 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("read_only_percentage")
+                .long("read_only_percentage")
+                .value_name("READ_ONLY_PERCENTAGE")
+                .help("percentage of read-only commands; default: 0")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("payload_size")
                 .long("payload_size")
                 .value_name("PAYLOAD_SIZE")
@@ -183,6 +191,7 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
         matches.value_of("key_gen"),
         matches.value_of("keys_per_command"),
         matches.value_of("commands_per_client"),
+        matches.value_of("read_only_percentage"),
         matches.value_of("payload_size"),
     );
     let tcp_nodelay =
@@ -263,20 +272,24 @@ fn parse_workload(
     key_gen: Option<&str>,
     keys_per_command: Option<&str>,
     commands_per_client: Option<&str>,
+    read_only_percentage: Option<&str>,
     payload_size: Option<&str>,
 ) -> Workload {
     let shard_count = parse_shard_count(shard_count);
     let key_gen = parse_key_gen(key_gen);
     let keys_per_command = parse_keys_per_command(keys_per_command);
     let commands_per_client = parse_commands_per_client(commands_per_client);
+    let read_only_percentage = parse_read_only_percentage(read_only_percentage);
     let payload_size = parse_payload_size(payload_size);
-    Workload::new(
+    let mut workload = Workload::new(
         shard_count,
         key_gen,
         keys_per_command,
         commands_per_client,
         payload_size,
-    )
+    );
+    workload.set_read_only_percentage(read_only_percentage);
+    workload
 }
 
 fn parse_keys_per_command(number: Option<&str>) -> usize {
@@ -345,6 +358,16 @@ fn parse_commands_per_client(number: Option<&str>) -> usize {
                 .expect("commands per client should be a number")
         })
         .unwrap_or(DEFAULT_COMMANDS_PER_CLIENT)
+}
+
+fn parse_read_only_percentage(number: Option<&str>) -> usize {
+    number
+        .map(|number| {
+            number
+                .parse::<usize>()
+                .expect("read only percentage should be a number")
+        })
+        .unwrap_or(DEFAULT_READ_ONLY_PERCENTAGE)
 }
 
 fn parse_payload_size(number: Option<&str>) -> usize {

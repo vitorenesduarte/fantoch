@@ -107,7 +107,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         (Protocol::NewtLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
     ];

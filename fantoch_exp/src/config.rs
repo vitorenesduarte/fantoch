@@ -343,6 +343,8 @@ impl ClientConfig {
             self.workload.commands_per_client(),
             "--payload_size",
             self.workload.payload_size(),
+            "--read_only_percentage",
+            self.workload.read_only_percentage(),
             "--tcp_nodelay",
             self.tcp_nodelay,
             "--channel_buffer_size",

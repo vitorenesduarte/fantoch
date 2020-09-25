@@ -184,3 +184,41 @@ mod common {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fantoch::kvs::KVOp;
+
+    #[test]
+    fn bump_test() {
+        let process_id = 1;
+        let shard_id = 0;
+        let mut clocks = LockedKeyClocks::new(process_id, shard_id);
+
+        // create rifl
+        let client_id = 1;
+        let rifl = Rifl::new(client_id, 1);
+
+        // read-only commmands do not bump clocks
+        let ro_cmd = Command::from(rifl, vec![(String::from("K"), KVOp::Get)]);
+        let (clock, votes) = clocks.bump_and_vote(&ro_cmd, 0);
+        assert_eq!(clock, 0);
+        assert!(votes.is_empty());
+
+        // update command bump the clock
+        let cmd = Command::from(
+            rifl,
+            vec![(String::from("K"), KVOp::Put(String::new()))],
+        );
+        let (clock, votes) = clocks.bump_and_vote(&cmd, 0);
+        assert_eq!(clock, 1);
+        assert!(!votes.is_empty());
+
+        // read-only commmands do not bump clocks
+        let ro_cmd = Command::from(rifl, vec![(String::from("K"), KVOp::Get)]);
+        let (clock, votes) = clocks.bump_and_vote(&ro_cmd, 0);
+        assert_eq!(clock, 1);
+        assert!(votes.is_empty());
+    }
+}
