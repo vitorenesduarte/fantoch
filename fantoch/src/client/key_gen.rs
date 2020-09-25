@@ -87,13 +87,8 @@ impl KeyGenState {
     fn gen_conflict_rate(&self, conflict_rate: usize) -> Key {
         debug_assert!(conflict_rate <= 100);
 
-        // check if we should generate a conflict:
-        let should_conflict = match conflict_rate {
-            0 => false,
-            100 => true,
-            c => rand::thread_rng().gen_range(0, 100) < c,
-        };
-
+        // check if we should generate a conflict
+        let should_conflict = bool_from_percentage(conflict_rate);
         if should_conflict {
             // single color accessed by all conflicting operations
             CONFLICT_COLOR.to_owned()
@@ -110,5 +105,13 @@ impl KeyGenState {
             .expect("ZipfDistribution should already be initialized");
         let mut rng = rand::thread_rng();
         zipf.sample(&mut rng).to_string()
+    }
+}
+
+pub fn bool_from_percentage(percentage: usize) -> bool {
+    match percentage {
+        0 => false,
+        100 => true,
+        _ => rand::thread_rng().gen_range(0, 100) < percentage,
     }
 }
