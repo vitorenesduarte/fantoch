@@ -325,9 +325,6 @@ fn partial_replication() -> Result<(), Report> {
     let shard_combinations = vec![
         // shard_count, shards_per_command
         (2, 2),
-        // (3, 2),
-        // (4, 2),
-        // (5, 2),
     ];
 
     // load results
@@ -335,6 +332,22 @@ fn partial_replication() -> Result<(), Report> {
 
     let clients_per_region =
         vec![1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 24, 1024 * 32];
+
+    let refine_search = |search: &mut Search, read_only_percentage: usize| {
+        match search.protocol {
+            Protocol::NewtAtomic => {
+                // if newt atomic, don't filter by read-only percentage as reads
+                // are not treated in any special way there, and thus, it does
+                // not affect the results
+            }
+            Protocol::AtlasLocked | Protocol::NewtLocked => {
+                search.read_only_percentage(read_only_percentage);
+            }
+            _ => {
+                panic!("unsupported protocol: {:?}", search.protocol);
+            }
+        }
+    };
 
     for read_only_percentage in vec![100, 95, 50] {
         for key_gen in key_gens.clone() {
@@ -365,8 +378,11 @@ fn partial_replication() -> Result<(), Report> {
                                     .shard_count(shard_count)
                                     .key_gen(key_gen)
                                     .keys_per_command(keys_per_command)
-                                    .read_only_percentage(read_only_percentage)
                                     .payload_size(payload_size);
+                                refine_search(
+                                    &mut search,
+                                    read_only_percentage,
+                                );
                                 search
                             })
                     })
@@ -458,8 +474,8 @@ fn partial_replication() -> Result<(), Report> {
                                 .shard_count(shard_count)
                                 .key_gen(key_gen)
                                 .keys_per_command(keys_per_command)
-                                .read_only_percentage(read_only_percentage)
                                 .payload_size(payload_size);
+                            refine_search(&mut search, read_only_percentage);
                             search
                         })
                         .collect();
@@ -499,8 +515,11 @@ fn partial_replication() -> Result<(), Report> {
                                     .shard_count(shard_count)
                                     .key_gen(key_gen)
                                     .keys_per_command(keys_per_command)
-                                    .read_only_percentage(read_only_percentage)
                                     .payload_size(payload_size);
+                                refine_search(
+                                    &mut search,
+                                    read_only_percentage,
+                                );
                                 search
                             })
                             .collect();

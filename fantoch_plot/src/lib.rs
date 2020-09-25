@@ -204,14 +204,26 @@ pub fn latency_plot<R>(
     let x: Vec<_> = (0..n + 1).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
 
     // we need to shift all to the left by half of the number of combinations
-    let shift_left = searches.len() as f64 / 2f64;
+    let search_count = searches.len();
+    let shift_left = search_count as f64 / 2f64;
     // we also need to shift half bar to the right
     let shift_right = 0.5;
     let searches = searches.into_iter().enumerate().map(|(index, search)| {
         // compute index according to shifts
-        let index = index as f64 - shift_left + shift_right;
+        let mut base = index as f64 - shift_left + shift_right;
+
+        // HACK to separate move `f = 1` (i.e. the first 3 searches) a bit to
+        // the left and `f = 2` (i.e. the second 3 searches) a bit to the right
+        if search_count == 6 {
+            if search.f == 1 && index < 3 {
+                base -= 0.25;
+            }
+            if search.f == 2 && index >= 3 {
+                base += 0.25;
+            }
+        }
         // compute combination's shift
-        let shift = index * BAR_WIDTH;
+        let shift = base * BAR_WIDTH;
         (shift, search)
     });
 
@@ -1821,6 +1833,7 @@ fn line_style<'a>(
         ("label", label),
         ("color", color),
         ("marker", marker),
+        ("markersize", 4.2),
         ("linestyle", linestyle),
         ("linewidth", linewidth),
     );
