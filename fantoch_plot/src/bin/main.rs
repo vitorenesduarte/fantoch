@@ -308,7 +308,8 @@ fn partial_replication() -> Result<(), Report> {
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
-    for coefficient in vec![1.0] {
+    // for coefficient in vec![0.5, 1.0] {
+    for coefficient in vec![0.7] {
         key_gens.push(KeyGen::Zipf {
             coefficient,
             keys_per_shard: 1_000_000,
@@ -333,6 +334,7 @@ fn partial_replication() -> Result<(), Report> {
     let clients_per_region =
         vec![1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 24, 1024 * 32];
 
+    let y_range = Some((150.0, 400.0));
     let refine_search = |search: &mut Search, read_only_percentage: usize| {
         match search.protocol {
             Protocol::NewtAtomic => {
@@ -442,6 +444,7 @@ fn partial_replication() -> Result<(), Report> {
                     n,
                     clients_per_region.clone(),
                     y_axis,
+                    y_range,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -487,6 +490,7 @@ fn partial_replication() -> Result<(), Report> {
                         n,
                         clients_per_region.clone(),
                         y_axis,
+                        y_range,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -698,6 +702,7 @@ fn multi_key() -> Result<(), Report> {
                         })
                         .collect();
                     let style_fun = None;
+                    let y_range = None;
                     fantoch_plot::throughput_something_plot(
                         searches,
                         style_fun,
@@ -705,6 +710,7 @@ fn multi_key() -> Result<(), Report> {
                         n,
                         clients_per_region.clone(),
                         y_axis,
+                        y_range,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -971,6 +977,7 @@ fn single_key() -> Result<(), Report> {
                 );
 
                 let style_fun = None;
+                let y_range = None;
                 fantoch_plot::throughput_something_plot(
                     searches.clone(),
                     style_fun,
@@ -978,6 +985,7 @@ fn single_key() -> Result<(), Report> {
                     n,
                     clients_per_region.clone(),
                     y_axis,
+                    y_range,
                     PLOT_DIR,
                     &path,
                     &db,

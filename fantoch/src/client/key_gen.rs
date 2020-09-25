@@ -88,7 +88,7 @@ impl KeyGenState {
         debug_assert!(conflict_rate <= 100);
 
         // check if we should generate a conflict
-        let should_conflict = bool_from_percentage(conflict_rate);
+        let should_conflict = true_if_random_is_less_than(conflict_rate);
         if should_conflict {
             // single color accessed by all conflicting operations
             CONFLICT_COLOR.to_owned()
@@ -108,7 +108,7 @@ impl KeyGenState {
     }
 }
 
-pub fn bool_from_percentage(percentage: usize) -> bool {
+pub fn true_if_random_is_less_than(percentage: usize) -> bool {
     match percentage {
         0 => false,
         100 => true,

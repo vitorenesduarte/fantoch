@@ -40,9 +40,9 @@ pub struct Newt<KC: KeyClocks> {
     detached: Votes,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_commits: HashMap<Dot, (ProcessId, u64, Votes)>,
-    // bump to messages that arrived before the initial `MCollect` message
-    buffered_bump_tos: HashMap<Dot, u64>,
+    buffered_mcommits: HashMap<Dot, (ProcessId, u64, Votes)>,
+    // `MBump` messages that arrived before the initial `MCollect` message
+    buffered_mbumps: HashMap<Dot, u64>,
     // With many many operations, it can happen that traceical clocks are
     // higher that current time (e.g. if it starts at 0 in simulation), and in
     // that case, the real time feature of newt doesn't work. Solution: track
@@ -86,8 +86,8 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let detached = Votes::new();
-        let buffered_commits = HashMap::new();
-        let buffered_bump_tos = HashMap::new();
+        let buffered_mcommits = HashMap::new();
+        let buffered_mbumps = HashMap::new();
         let max_commit_clock = 0;
         // enable skip fast ack if configured like that and the fast quorum size
         // is 2
@@ -101,8 +101,8 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             to_processes,
             to_executors,
             detached,
-            buffered_commits,
-            buffered_bump_tos,
+            buffered_mcommits,
+            buffered_mbumps,
             max_commit_clock,
             skip_fast_ack,
         };
@@ -204,8 +204,8 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             Message::MForwardSubmit { dot, cmd } => {
                 self.handle_submit(Some(dot), cmd, false)
             }
-            Message::MBumpTo { dot, clock } => {
-                self.handle_mbump_to(dot, clock, time)
+            Message::MBump { dot, clock } => {
+                self.handle_mbump(dot, clock, time)
             }
             Message::MShardCommit { dot, clock } => {
                 self.handle_mshard_commit(from, from_shard_id, dot, clock, time)
@@ -394,7 +394,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // check if there's a buffered commit notification; if yes, handle
             // the commit again (since now we have the payload)
             if let Some((from, clock, votes)) =
-                self.buffered_commits.remove(&dot)
+                self.buffered_mcommits.remove(&dot)
             {
                 self.handle_mcommit(from, dot, clock, votes, time);
             }
@@ -419,6 +419,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 process_votes
             );
             // check that there's one vote per key
+            // TODO this is not the case if the command is a `Get`
             debug_assert_eq!(
                 process_votes.len(),
                 cmd.key_count(self.bp.shard_id)
@@ -426,8 +427,8 @@ impl<KC: KeyClocks> Newt<KC> {
             (clock, process_votes)
         };
 
-        // if there are any buffered `MBumpTo`'s, generate detached votes
-        if let Some(bump_to) = self.buffered_bump_tos.remove(&dot) {
+        // if there are any buffered `MBump`'s, generate detached votes
+        if let Some(bump_to) = self.buffered_mbumps.remove(&dot) {
             self.key_clocks.vote(&cmd, bump_to, &mut self.detached);
         }
 
@@ -585,7 +586,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // - save this notification just in case we've received the
             //   `MCollect` and `MCommit` in opposite orders (due to
             //   multiplexing)
-            self.buffered_commits.insert(dot, (from, clock, votes));
+            self.buffered_mcommits.insert(dot, (from, clock, votes));
             return;
         }
 
@@ -676,9 +677,9 @@ impl<KC: KeyClocks> Newt<KC> {
     }
 
     // #[instrument(skip(self, dot, clock, _time))]
-    fn handle_mbump_to(&mut self, dot: Dot, clock: u64, _time: &dyn SysTime) {
+    fn handle_mbump(&mut self, dot: Dot, clock: u64, _time: &dyn SysTime) {
         trace!(
-            "p{}: MBumpTo({:?}, {}) | time={}",
+            "p{}: MBump({:?}, {}) | time={}",
             self.id(),
             dot,
             clock,
@@ -694,12 +695,12 @@ impl<KC: KeyClocks> Newt<KC> {
             self.key_clocks.vote(cmd, clock, &mut self.detached);
         } else {
             // in this case we don't have the payload (which means we have
-            // received the `MBumpTo` from some shard before `MCollect` from my
+            // received the `MBump` from some shard before `MCollect` from my
             // shard); thus, buffer this request and handle it when we do
             // receive the `MCollect` (see `handle_mcollect`)
-            let current = self.buffered_bump_tos.entry(dot).or_default();
+            let current = self.buffered_mbumps.entry(dot).or_default();
             // if the command acesses more than two shards, we could receive
-            // several `MBumpTo`'s before the `MCollect`; in this case, save the
+            // several `MBump`'s before the `MCollect`; in this case, save the
             // highest one
             *current = std::cmp::max(*current, clock);
         }
@@ -1050,12 +1051,10 @@ impl<KC: KeyClocks> Newt<KC> {
             for shard_id in
                 cmd.shards().filter(|shard_id| **shard_id != my_shard_id)
             {
-                let mbump_to = Message::MBumpTo { dot, clock };
+                let mbump = Message::MBump { dot, clock };
                 let target = singleton![self.bp.closest_process(shard_id)];
-                self.to_processes.push(Action::ToSend {
-                    target,
-                    msg: mbump_to,
-                })
+                self.to_processes
+                    .push(Action::ToSend { target, msg: mbump })
             }
         }
     }
@@ -1208,7 +1207,7 @@ pub enum Message {
         dot: Dot,
         cmd: Command,
     },
-    MBumpTo {
+    MBump {
         dot: Dot,
         clock: u64,
     },
@@ -1256,7 +1255,7 @@ impl MessageIndex for Message {
             Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
             // Partial replication messages
             Self::MForwardSubmit { dot, .. } => worker_dot_index_shift(&dot),
-            Self::MBumpTo { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MBump { dot, .. } => worker_dot_index_shift(&dot),
             Self::MShardCommit { dot, .. } => worker_dot_index_shift(&dot),
             Self::MShardAggregatedCommit { dot, .. } => {
                 worker_dot_index_shift(&dot)

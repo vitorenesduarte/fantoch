@@ -150,7 +150,7 @@ impl Workload {
         let keys = self.gen_unique_keys(key_gen_state);
         // check if the command should be read-only
         let read_only =
-            super::key_gen::bool_from_percentage(self.read_only_percentage);
+            super::key_gen::true_if_random_is_less_than(self.read_only_percentage);
         let mut target_shard = None;
 
         for key in keys {

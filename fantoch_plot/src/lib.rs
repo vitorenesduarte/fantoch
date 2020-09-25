@@ -618,6 +618,7 @@ pub fn throughput_something_plot(
     n: usize,
     clients_per_region: Vec<usize>,
     y_axis: ThroughputYAxis,
+    y_range: Option<(f64, f64)>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -642,6 +643,7 @@ pub fn throughput_something_plot(
         n,
         clients_per_region,
         y_axis,
+        y_range,
         db,
         &mut plotted,
     )?;
@@ -681,6 +683,7 @@ pub fn inner_throughput_something_plot(
     n: usize,
     clients_per_region: Vec<usize>,
     y_axis: ThroughputYAxis,
+    y_range: Option<(f64, f64)>,
     db: &ResultsDB,
     plotted: &mut usize,
 ) -> Result<(), Report> {
@@ -783,6 +786,12 @@ pub fn inner_throughput_something_plot(
             ax.plot(x, y, None, Some(kwargs))?;
             *plotted += 1;
         }
+    }
+
+    // maybe set y limits
+    if let Some((y_min, y_max)) = y_range {
+        let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
+        ax.set_ylim(Some(kwargs))?;
     }
 
     Ok(())
@@ -988,17 +997,12 @@ where
             n,
             clients_per_region.clone(),
             ThroughputYAxis::Latency(LatencyMetric::Average),
+            y_range,
             db,
             &mut plotted,
         )?;
-        // set log scale on y axis if y axis is latency
+        // set log scale on y axis
         set_log_scale(py, &ax, AxisToScale::Y)?;
-
-        // maybe set y limits
-        if let Some((y_min, y_max)) = y_range {
-            let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
-            ax.set_ylim(Some(kwargs))?;
-        }
 
         // set legend and labels:
         // - set legend
