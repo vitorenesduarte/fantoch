@@ -1,8 +1,8 @@
 use crate::command::{Command, CommandResult};
 use crate::executor::ExecutorResult;
 use crate::id::{ProcessId, Rifl, ShardId};
+use crate::trace;
 use crate::HashMap;
-use crate::{trace, warn};
 
 /// Structure that tracks the progress of pending commands.
 #[derive(Clone)]
@@ -88,9 +88,10 @@ impl AggregatePending {
             // ready
             self.pending.remove(&rifl)
         } else {
-            warn!(
+            trace!(
                 "p{}: AggregatePending::add_partial {:?} is not ready",
-                self.process_id, rifl
+                self.process_id,
+                rifl
             );
             None
         }
