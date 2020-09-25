@@ -47,44 +47,56 @@ impl KeyClocks for LockedKeyClocks {
         let keys = BTreeSet::from_iter(cmd.keys(self.shard_id));
         let key_count = keys.len();
         // find all the locks
+        // - NOTE that the following loop and the one below cannot be merged due
+        //   to lifetimes: `let guard = key_lock.lock()` borrows `key_lock` and
+        //   the borrow checker doesn't not understand that it's fine to move
+        //   both the `guard` and `key_lock` into e.g. a `Vec`. For that reason,
+        //   we have two loops. One that fetches the locks (the following one)
+        //   and another one (the one below it ) that actually acquires the
+        //   locks.
         let mut locks = Vec::with_capacity(key_count);
         self.clocks
             .get_or_all(&keys, &mut locks, || Mutex::default());
 
-        // keep track of which clock we should bump to (in case the command is
-        // not read-only)
-        let mut up_to = min_clock;
+        if cmd.read_only() {
+            // if the command is read-only, the simply read the current clock
+            // value
+            // TODO: add the read as pending
+            let mut clock = min_clock;
+            for (_key, key_lock) in &locks {
+                let guard = key_lock.lock();
+                clock = cmp::max(clock, guard.clock);
+            }
+            (clock, Votes::new())
+        } else {
+            // keep track of which clock we should bump to
+            let mut up_to = min_clock;
 
-        // acquire the lock on all keys
-        // - NOTE that this loop and the above cannot be merged due to
-        //   lifetimes: `let guard = key_lock.lock()` borrows `key_lock` and the
-        //   borrow checker doesn't not understand that it's fine to move both
-        //   the `guard` and `key_lock` into e.g. a `Vec`. For that reason, we
-        //   have two loops. One that fetches the locks and another one (the one
-        //   that follows) that actually acquires the locks.
-        let mut guards = Vec::with_capacity(key_count);
-        for (_key, key_lock) in &locks {
-            let guard = key_lock.lock();
-            up_to = cmp::max(up_to, guard.clock + 1);
-            guards.push(guard);
-        }
+            // acquire the lock on all keys
+            let mut guards = Vec::with_capacity(key_count);
+            for (_key, key_lock) in &locks {
+                let guard = key_lock.lock();
+                up_to = cmp::max(up_to, guard.clock + 1);
+                guards.push(guard);
+            }
 
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
-        for entry in locks.iter().zip(guards.into_iter()) {
-            let (key, _key_lock) = entry.0;
-            let mut guard = entry.1;
-            common::maybe_bump(
-                self.id,
-                key,
-                &mut guard.clock,
-                up_to,
-                &mut votes,
-            );
-            // release the lock
-            drop(guard);
+            // create votes
+            let mut votes = Votes::with_capacity(key_count);
+            for entry in locks.iter().zip(guards.into_iter()) {
+                let (key, _key_lock) = entry.0;
+                let mut guard = entry.1;
+                common::maybe_bump(
+                    self.id,
+                    key,
+                    &mut guard.clock,
+                    up_to,
+                    &mut votes,
+                );
+                // release the lock
+                drop(guard);
+            }
+            (up_to, votes)
         }
-        (up_to, votes)
     }
 
     fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
