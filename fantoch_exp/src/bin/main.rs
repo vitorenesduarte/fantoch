@@ -108,21 +108,35 @@ async fn partial_replication_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtLocked, config!(n, 1, false, None, false)),
+        // (Protocol::NewtLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
     ];
 
-    let clients_per_region =
-        vec![1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 24, 1024 * 32];
+    let clients_per_region = vec![
+        // 256,
+        1024,
+        // 1024 * 2, // for Atlas s=2,4 zipf=0.7 r=50%
+        1024 * 4,
+        1024 * 8,
+        // 1024 * 9, // for Atlas s=2 zipf=0.7 r=95%
+        1024 * 16,
+        // 1024 * 20, // for Atlas s=4 zipf=0.7 r=95%
+        1024 * 24,
+        1024 * 32,
+        // 1024 * 48,
+        // 1024 * 64,
+    ];
 
-    let shard_count = 2;
+    let shard_count = 1;
     let keys_per_command = 2;
     let payload_size = 100;
     let cpus = 12;
 
     let mut workloads = Vec::new();
-    for coefficient in vec![1.0] {
-        for read_only_percentage in vec![100, 95, 50] {
+    // for coefficient in vec![0.5, 0.7] {
+    for coefficient in vec![0.5, 0.7] {
+        // for read_only_percentage in vec![0] {
+            for read_only_percentage in vec![100, 95, 50] {
             let key_gen = KeyGen::Zipf {
                 keys_per_shard: 1_000_000,
                 coefficient,
@@ -139,10 +153,8 @@ async fn partial_replication_plot() -> Result<(), Report> {
         }
     }
 
-    let skip = |protocol, _, clients| {
-        // skip Atlas with more than 32K clients
-        protocol == Protocol::AtlasLocked && clients > 1024 * 32
-    };
+    // don't skip
+    let skip = |_, _, _| false;
 
     // set shards in each config
     configs

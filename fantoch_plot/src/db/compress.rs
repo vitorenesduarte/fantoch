@@ -66,7 +66,7 @@ impl MicrosHistogramCompress {
 // same as `Histogram`'s
 impl fmt::Debug for MicrosHistogramCompress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let latency_precision = LatencyPrecision::Micros;
+        let latency_precision = LatencyPrecision::Millis;
         write!(
             f,
             "min={:<6} max={:<6} avg={:<6} p5={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",

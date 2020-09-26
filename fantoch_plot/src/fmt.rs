@@ -45,9 +45,9 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
             (Protocol::NewtAtomic, 2) => "#e67e22",
-            (Protocol::NewtLocked, 1) => "#3498db", // "#111111"
-            (Protocol::NewtLocked, 2) => "#2980b9", // "#333333"
-            (Protocol::Basic, _) => "#444444",
+            (Protocol::NewtLocked, 1) => "#2980b9", // "#111111"
+            (Protocol::NewtLocked, 2) => "#c23616", // "#333333"
+            (Protocol::Basic, _) => "#576574",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -99,8 +99,8 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "x",
             (Protocol::NewtAtomic, 1) => "v",
             (Protocol::NewtAtomic, 2) => "^",
-            (Protocol::NewtLocked, 1) => ">",
-            (Protocol::NewtLocked, 2) => "<",
+            (Protocol::NewtLocked, 1) => "o",
+            (Protocol::NewtLocked, 2) => "s",
             (Protocol::Basic, 1) => "p",
             (Protocol::Basic, 2) => "P",
             _ => panic!(

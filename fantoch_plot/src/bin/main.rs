@@ -13,17 +13,16 @@ use std::collections::HashMap;
 const PLOT_DIR: Option<&str> = Some("plots");
 
 // if true, dstats per process will be generated
-const ALL_DSTATS: bool = true;
+const ALL_DSTATS: bool = false;
 
 fn main() -> Result<(), Report> {
     // set global style
     fantoch_plot::set_global_style()?;
 
-    partial_replication()?;
+    // partial_replication_all()?;
     // multi_key()?;
     // single_key()?;
-    // show_distance_matrix();
-    // eurosys()?;
+    eurosys()?;
     Ok(())
 }
 
@@ -33,11 +32,13 @@ fn eurosys() -> Result<(), Report> {
     tail_latency_plot()?;
     increasing_load_plot()?;
     // scalability_plot()?;
+    partial_replication_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
+    println!(">>>>>>>> FAIRNESS <<<<<<<<");
     let results_dir = "../results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
@@ -110,6 +111,7 @@ fn fairness_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
+    println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
     let results_dir = "../results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
@@ -167,6 +169,7 @@ fn tail_latency_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
+    println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
     let results_dir = "../results_increasing_load";
     // fixed parameters
     let top_key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
@@ -190,7 +193,7 @@ fn increasing_load_plot() -> Result<(), Report> {
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    let refine_search = |search: &mut Search, key_gen: KeyGen| {
+    let search_refine = |search: &mut Search, key_gen: KeyGen| {
         match search.protocol {
             Protocol::FPaxos => {
                 // if fpaxos, don't filter by key gen as
@@ -226,27 +229,39 @@ fn increasing_load_plot() -> Result<(), Report> {
         protocols.clone(),
         clients_per_region.clone(),
         top_key_gen,
-        refine_search,
+        search_refine,
         leader,
         PLOT_DIR,
         &path,
         &db,
     )?;
 
+    let search_gen = |(protocol, f)| Search::new(n, f, protocol);
     let style_fun = None;
     let latency_precision = LatencyPrecision::Millis;
+    let x_range = None;
     let y_range = Some((100.0, 2_600.0));
+    let y_log_scale = true;
+    let show_legend = true;
+    let left_margin = None;
+    let width_reduction = None;
     let path = String::from("plot_increasing_load.pdf");
     fantoch_plot::throughput_latency_plot_split(
         n,
         protocols.clone(),
+        search_gen,
         clients_per_region.clone(),
         top_key_gen,
         bottom_key_gen,
-        refine_search,
+        search_refine,
         style_fun,
         latency_precision,
+        x_range,
         y_range,
+        y_log_scale,
+        show_legend,
+        left_margin,
+        width_reduction,
         PLOT_DIR,
         &path,
         &db,
@@ -303,17 +318,158 @@ fn scalability_plot() -> Result<(), Report> {
 }
 
 #[allow(dead_code)]
-fn partial_replication() -> Result<(), Report> {
+fn partial_replication_plot() -> Result<(), Report> {
+    println!(">>>>>>>> PARTIAL REPLICATION <<<<<<<<");
+    let results_dir = "../results_partial_replication";
+    // fixed parameters
+    let top_coefficient = 0.5;
+    let bottom_coefficient = 0.7;
+    let payload_size = 100;
+    let n = 3;
+    let f = 1;
+
+    // generate throughput-latency plot
+    let clients_per_region = vec![
+        256,
+        1024,
+        1024 * 2,
+        1024 * 3,
+        1024 * 4,
+        1024 * 5,
+        1024 * 6,
+        1024 * 8,
+        1024 * 9,
+        1024 * 10,
+        1024 * 12,
+        1024 * 16,
+        1024 * 20,
+        1024 * 22,
+        1024 * 24,
+        1024 * 32,
+        1024 * 48,
+        1024 * 64,
+    ];
+
+    // load results
+    let db = ResultsDB::load(results_dir).wrap_err("load results")?;
+
+    for (shard_count, x_range) in vec![
+        (1, Some((0.0, 400.0))),
+        (2, Some((0.0, 400.0))),
+        (4, Some((0.0, 700.0))),
+    ] {
+        let search_refine = |search: &mut Search, coefficient: f64| {
+            let key_gen = KeyGen::Zipf {
+                coefficient,
+                keys_per_shard: 1_000_000,
+            };
+            search
+                .key_gen(key_gen)
+                .shard_count(shard_count)
+                .payload_size(payload_size);
+        };
+
+        let protocols = vec![
+            (Protocol::NewtAtomic, 0),
+            (Protocol::AtlasLocked, 100),
+            (Protocol::AtlasLocked, 95),
+            (Protocol::AtlasLocked, 50),
+        ];
+
+        let search_gen = |(protocol, read_only_percentage)| {
+            let mut search = Search::new(n, f, protocol);
+            search.read_only_percentage(read_only_percentage);
+            search
+        };
+        let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
+            Some(Box::new(|search| {
+                let mut style = HashMap::new();
+                match search.protocol {
+                    Protocol::NewtAtomic => {
+                        style.insert(
+                            Style::Label,
+                            format!(
+                                "{}",
+                                PlotFmt::protocol_name(search.protocol)
+                            ),
+                        );
+                    }
+                    Protocol::AtlasLocked => {
+                        let ro = search.read_only_percentage.expect(
+                            "read-only percentage should be set in search",
+                        );
+                        style.insert(
+                            Style::Label,
+                            format!("Janus* r = {}%", ro),
+                        );
+
+                        let (protocol, f) = match ro {
+                            100 => (Protocol::Basic, 2),
+                            95 => (Protocol::NewtLocked, 1),
+                            50 => (Protocol::NewtLocked, 2),
+                            _ => panic!(
+                                "unsupported read-only percentage: {:?}",
+                                ro
+                            ),
+                        };
+                        style.insert(Style::Color, PlotFmt::color(protocol, f));
+                        style.insert(
+                            Style::Marker,
+                            PlotFmt::marker(protocol, f),
+                        );
+                    }
+                    _ => panic!("unsupported protocol: {:?}", search.protocol),
+                }
+                style
+            }));
+        let latency_precision = LatencyPrecision::Millis;
+        let y_range = Some((140.0, 310.0));
+        let y_log_scale = false;
+        let show_legend = true;
+        let left_margin = Some(0.15);
+        let width_reduction = Some(1.75);
+        let path = format!("plot_partial_replication_{}.pdf", shard_count);
+        fantoch_plot::throughput_latency_plot_split(
+            n,
+            protocols.clone(),
+            search_gen,
+            clients_per_region.clone(),
+            top_coefficient,
+            bottom_coefficient,
+            search_refine,
+            style_fun,
+            latency_precision,
+            x_range,
+            y_range,
+            y_log_scale,
+            show_legend,
+            left_margin,
+            width_reduction,
+            PLOT_DIR,
+            &path,
+            &db,
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn partial_replication_all() -> Result<(), Report> {
     let results_dir = "../results_partial_replication";
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
     // for coefficient in vec![0.5, 1.0] {
-    for coefficient in vec![0.7] {
-        key_gens.push(KeyGen::Zipf {
+    for (coefficient, x_range, y_range) in vec![
+        (0.5, Some((0.0, 700.0)), Some((150.0, 400.0))),
+        // (0.6, Some((0.0, 500.0)), Some((150.0, 300.0))),
+        (0.7, Some((0.0, 700.0)), Some((150.0, 400.0))),
+    ] {
+        let key_gen = KeyGen::Zipf {
             coefficient,
             keys_per_shard: 1_000_000,
-        });
+        };
+        key_gens.push((key_gen, x_range, y_range));
     }
     let payload_size = 100;
     let protocols = vec![
@@ -325,17 +481,35 @@ fn partial_replication() -> Result<(), Report> {
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
-        (2, 2),
+        // (1, 2),
+        // (2, 2),
+        (4, 2),
     ];
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    let clients_per_region =
-        vec![1024, 1024 * 4, 1024 * 8, 1024 * 16, 1024 * 24, 1024 * 32];
+    let clients_per_region = vec![
+        1024,
+        1024 * 2,
+        1024 * 3,
+        1024 * 4,
+        1024 * 5,
+        1024 * 6,
+        1024 * 8,
+        1024 * 9,
+        1024 * 10,
+        1024 * 12,
+        1024 * 16,
+        1024 * 20,
+        1024 * 22,
+        1024 * 24,
+        1024 * 32,
+        1024 * 48,
+        1024 * 64,
+    ];
 
-    let y_range = Some((150.0, 400.0));
-    let refine_search = |search: &mut Search, read_only_percentage: usize| {
+    let search_refine = |search: &mut Search, read_only_percentage: usize| {
         match search.protocol {
             Protocol::NewtAtomic => {
                 // if newt atomic, don't filter by read-only percentage as reads
@@ -352,7 +526,7 @@ fn partial_replication() -> Result<(), Report> {
     };
 
     for read_only_percentage in vec![100, 95, 50] {
-        for key_gen in key_gens.clone() {
+        for (key_gen, x_range, y_range) in key_gens.clone() {
             // generate all-combo throughput-something plot
             for y_axis in vec![
                 ThroughputYAxis::Latency(LatencyMetric::Average),
@@ -381,7 +555,7 @@ fn partial_replication() -> Result<(), Report> {
                                     .key_gen(key_gen)
                                     .keys_per_command(keys_per_command)
                                     .payload_size(payload_size);
-                                refine_search(
+                                search_refine(
                                     &mut search,
                                     read_only_percentage,
                                 );
@@ -395,7 +569,7 @@ fn partial_replication() -> Result<(), Report> {
                 > = Some(Box::new(|search| {
                     // create styles
                     let mut styles = HashMap::new();
-                    styles.insert((1, 1), ("#111111", "s"));
+                    styles.insert((1, 2), ("#111111", "s"));
                     styles.insert((2, 1), ("#218c74", "s"));
                     styles.insert((2, 2), ("#218c74", "+"));
                     styles.insert((3, 1), ("#bdc3c7", "s"));
@@ -443,8 +617,9 @@ fn partial_replication() -> Result<(), Report> {
                     latency_precision,
                     n,
                     clients_per_region.clone(),
-                    y_axis,
+                    x_range,
                     y_range,
+                    y_axis,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -478,7 +653,7 @@ fn partial_replication() -> Result<(), Report> {
                                 .key_gen(key_gen)
                                 .keys_per_command(keys_per_command)
                                 .payload_size(payload_size);
-                            refine_search(&mut search, read_only_percentage);
+                            search_refine(&mut search, read_only_percentage);
                             search
                         })
                         .collect();
@@ -489,8 +664,9 @@ fn partial_replication() -> Result<(), Report> {
                         latency_precision,
                         n,
                         clients_per_region.clone(),
-                        y_axis,
+                        x_range,
                         y_range,
+                        y_axis,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -520,7 +696,7 @@ fn partial_replication() -> Result<(), Report> {
                                     .key_gen(key_gen)
                                     .keys_per_command(keys_per_command)
                                     .payload_size(payload_size);
-                                refine_search(
+                                search_refine(
                                     &mut search,
                                     read_only_percentage,
                                 );
@@ -644,7 +820,7 @@ fn partial_replication() -> Result<(), Report> {
 }
 
 #[allow(dead_code)]
-fn multi_key() -> Result<(), Report> {
+fn multi_key_all() -> Result<(), Report> {
     let results_dir = "../results_multi_key";
     // fixed parameters
     let shard_count = 1;
@@ -702,6 +878,7 @@ fn multi_key() -> Result<(), Report> {
                         })
                         .collect();
                     let style_fun = None;
+                    let x_range = None;
                     let y_range = None;
                     fantoch_plot::throughput_something_plot(
                         searches,
@@ -709,8 +886,9 @@ fn multi_key() -> Result<(), Report> {
                         latency_precision,
                         n,
                         clients_per_region.clone(),
-                        y_axis,
+                        x_range,
                         y_range,
+                        y_axis,
                         PLOT_DIR,
                         &path,
                         &db,
@@ -876,7 +1054,7 @@ fn multi_key() -> Result<(), Report> {
 }
 
 #[allow(dead_code)]
-fn single_key() -> Result<(), Report> {
+fn single_key_all() -> Result<(), Report> {
     let results_dir = "../results_tail_latency";
     // fixed parameters
     let shard_count = 1;
@@ -935,7 +1113,7 @@ fn single_key() -> Result<(), Report> {
 
     for n in vec![3, 5] {
         for key_gen in key_gens.clone() {
-            let refine_search = |search: &mut Search, key_gen: KeyGen| {
+            let search_refine = |search: &mut Search, key_gen: KeyGen| {
                 match search.protocol {
                     Protocol::FPaxos => {
                         // if fpaxos, don't filter by key gen as
@@ -957,7 +1135,7 @@ fn single_key() -> Result<(), Report> {
                 .into_iter()
                 .map(|(protocol, f)| {
                     let mut search = Search::new(n, f, protocol);
-                    refine_search(&mut search, key_gen);
+                    search_refine(&mut search, key_gen);
                     search
                 })
                 .collect();
@@ -977,6 +1155,7 @@ fn single_key() -> Result<(), Report> {
                 );
 
                 let style_fun = None;
+                let x_range = None;
                 let y_range = None;
                 fantoch_plot::throughput_something_plot(
                     searches.clone(),
@@ -984,8 +1163,9 @@ fn single_key() -> Result<(), Report> {
                     latency_precision,
                     n,
                     clients_per_region.clone(),
-                    y_axis,
+                    x_range,
                     y_range,
+                    y_axis,
                     PLOT_DIR,
                     &path,
                     &db,
@@ -1009,7 +1189,7 @@ fn single_key() -> Result<(), Report> {
                     protocol_combinations(n, protocols.clone()),
                     clients_per_region.clone(),
                     key_gen,
-                    refine_search,
+                    search_refine,
                     leader,
                     heatmap_metric,
                     PLOT_DIR,

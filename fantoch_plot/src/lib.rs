@@ -617,8 +617,9 @@ pub fn throughput_something_plot(
     latency_precision: LatencyPrecision,
     n: usize,
     clients_per_region: Vec<usize>,
-    y_axis: ThroughputYAxis,
+    x_range: Option<(f64, f64)>,
     y_range: Option<(f64, f64)>,
+    y_axis: ThroughputYAxis,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -642,8 +643,9 @@ pub fn throughput_something_plot(
         latency_precision,
         n,
         clients_per_region,
-        y_axis,
+        x_range,
         y_range,
+        y_axis,
         db,
         &mut plotted,
     )?;
@@ -682,8 +684,9 @@ pub fn inner_throughput_something_plot(
     latency_precision: LatencyPrecision,
     n: usize,
     clients_per_region: Vec<usize>,
-    y_axis: ThroughputYAxis,
+    x_range: Option<(f64, f64)>,
     y_range: Option<(f64, f64)>,
+    y_axis: ThroughputYAxis,
     db: &ResultsDB,
     plotted: &mut usize,
 ) -> Result<(), Report> {
@@ -788,6 +791,12 @@ pub fn inner_throughput_something_plot(
         }
     }
 
+    // maybe set x limits
+    if let Some((x_min, x_max)) = x_range {
+        let kwargs = pydict!(py, ("xmin", x_min), ("xmax", x_max));
+        ax.set_xlim(Some(kwargs))?;
+    }
+
     // maybe set y limits
     if let Some((y_min, y_max)) = y_range {
         let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
@@ -819,7 +828,7 @@ pub fn heatmap_plot<F>(
     protocols: Vec<(Protocol, usize)>,
     clients_per_region: Vec<usize>,
     key_gen: KeyGen,
-    refine_search: F,
+    search_refine: F,
     leader: ProcessId,
     heatmap_metric: HeatmapMetric,
     output_dir: Option<&str>,
@@ -848,7 +857,7 @@ where
         protocols,
         clients_per_region,
         key_gen,
-        refine_search,
+        search_refine,
         leader,
         heatmap_metric,
         set_xlabels,
@@ -943,22 +952,31 @@ pub fn scalability_plot(
     Ok(())
 }
 
-pub fn throughput_latency_plot_split<F>(
+pub fn throughput_latency_plot_split<GInput, G, RInput, R>(
     n: usize,
-    protocols: Vec<(Protocol, usize)>,
+    search_gen_inputs: Vec<GInput>,
+    search_gen: G,
     clients_per_region: Vec<usize>,
-    top_key_gen: KeyGen,
-    bottom_key_gen: KeyGen,
-    refine_search: F,
+    top_search_refine_input: RInput,
+    bottom_search_refine_input: RInput,
+    search_refine: R,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     latency_precision: LatencyPrecision,
+    x_range: Option<(f64, f64)>,
     y_range: Option<(f64, f64)>,
+    y_log_scale: bool,
+    show_legend: bool,
+    left_margin: Option<f64>,
+    witdh_reduction: Option<f64>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report>
 where
-    F: Fn(&mut Search, KeyGen) + Clone,
+    GInput: Clone,
+    G: Fn(GInput) -> Search,
+    RInput: Clone,
+    R: Fn(&mut Search, RInput),
 {
     // start python
     let gil = Python::acquire_gil();
@@ -968,23 +986,32 @@ where
     // start plot:
     // - adjust horizontal space between the three plots
     let kwargs = pydict!(py, ("hspace", 0.2));
+    if let Some(left_margin) = left_margin {
+        pytry!(py, kwargs.set_item("left", left_margin));
+    }
     let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
 
     // increase height
-    let (width, height) = FIGSIZE;
+    let (mut width, height) = FIGSIZE;
+    if let Some(width_reduction) = witdh_reduction {
+        width -= width_reduction;
+    }
     fig.set_size_inches(width, height + 1.5)?;
 
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
-    for (subplot, key_gen) in vec![(1, top_key_gen), (2, bottom_key_gen)] {
+    for (subplot, search_refine_input) in vec![
+        (1, top_search_refine_input),
+        (2, bottom_search_refine_input),
+    ] {
         let ax = plt.subplot(2, 1, subplot, None)?;
-        let searches: Vec<_> = protocols
+        let searches: Vec<_> = search_gen_inputs
             .clone()
             .into_iter()
-            .map(|(protocol, f)| {
-                let mut search = Search::new(n, f, protocol);
-                refine_search(&mut search, key_gen);
+            .map(|search_gen_input| {
+                let mut search = search_gen(search_gen_input);
+                search_refine(&mut search, search_refine_input.clone());
                 search
             })
             .collect();
@@ -996,13 +1023,12 @@ where
             latency_precision,
             n,
             clients_per_region.clone(),
-            ThroughputYAxis::Latency(LatencyMetric::Average),
+            x_range,
             y_range,
+            ThroughputYAxis::Latency(LatencyMetric::Average),
             db,
             &mut plotted,
         )?;
-        // set log scale on y axis
-        set_log_scale(py, &ax, AxisToScale::Y)?;
 
         // set legend and labels:
         // - set legend
@@ -1010,18 +1036,26 @@ where
         // - set ylabel in both
         match subplot {
             1 => {
-                // specific pull-up for this kind of plot
-                let y_bbox_to_anchor = Some(1.46);
-                // legend
-                add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
+                if show_legend {
+                    // specific pull-up for this kind of plot
+                    let y_bbox_to_anchor = Some(1.46);
+                    // legend
+                    add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
+                }
             }
             2 => {
                 ax.set_xlabel("throughput (K ops/s)", None)?;
             }
             _ => unreachable!("impossible subplot"),
         }
-        let ylabel =
-            format!("latency ({}) [log-scale]", latency_precision.name());
+
+        let ylabel = if y_log_scale {
+            // set log scale on y axis
+            set_log_scale(py, &ax, AxisToScale::Y)?;
+            format!("latency ({}) [log-scale]", latency_precision.name())
+        } else {
+            format!("latency ({})", latency_precision.name())
+        };
         ax.set_ylabel(&ylabel, None)?;
     }
 
@@ -1036,7 +1070,7 @@ pub fn heatmap_plot_split<F>(
     protocols: Vec<(Protocol, usize)>,
     clients_per_region: Vec<usize>,
     key_gen: KeyGen,
-    refine_search: F,
+    search_refine: F,
     leader: ProcessId,
     output_dir: Option<&str>,
     output_file: &str,
@@ -1081,7 +1115,7 @@ where
             protocols.clone(),
             clients_per_region.clone(),
             key_gen,
-            refine_search.clone(),
+            search_refine.clone(),
             leader,
             heatmap_metric,
             set_xlabels,
@@ -1108,7 +1142,7 @@ pub fn inner_heatmap_plot<F>(
     protocols: Vec<(Protocol, usize)>,
     clients_per_region: Vec<usize>,
     key_gen: KeyGen,
-    refine_search: F,
+    search_refine: F,
     leader: ProcessId,
     heatmap_metric: HeatmapMetric,
     set_xlabels: bool,
@@ -1126,7 +1160,7 @@ where
         // create search
         let mut search = Search::new(n, *f, *protocol);
         // refine search
-        refine_search(&mut search, key_gen);
+        search_refine(&mut search, key_gen);
 
         // data for this row
         let mut row_data = Vec::with_capacity(clients_per_region.len());
@@ -1676,7 +1710,9 @@ fn add_legend(
         ),
     };
 
-    // use the default value if not set
+    // legend position
+    let x_bbox_to_anchor = 0.45;
+    // use the default value for y if not set
     let y_bbox_to_anchor = y_bbox_to_anchor.unwrap_or(y_bbox_to_anchor_default);
 
     // add legend
@@ -1684,7 +1720,7 @@ fn add_legend(
         py,
         ("loc", "upper center"),
         // pull legend up
-        ("bbox_to_anchor", (0.5, y_bbox_to_anchor)),
+        ("bbox_to_anchor", (x_bbox_to_anchor, y_bbox_to_anchor)),
         // remove box around legend:
         ("edgecolor", "white"),
         ("ncol", legend_ncol),
