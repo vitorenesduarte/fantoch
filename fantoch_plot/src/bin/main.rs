@@ -220,7 +220,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::FPaxos, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
-        (Protocol::EPaxosLocked, 2),
+        // (Protocol::EPaxosLocked, 2),
     ];
 
     let path = String::from("plot_increasing_load_heatmap.pdf");
@@ -240,9 +240,9 @@ fn increasing_load_plot() -> Result<(), Report> {
     let style_fun = None;
     let latency_precision = LatencyPrecision::Millis;
     let x_range = None;
-    let y_range = Some((100.0, 2_600.0));
+    let y_range = Some((100.0, 1500.0));
     let y_log_scale = true;
-    let show_legend = true;
+    let x_bbox_to_anchor = None;
     let left_margin = None;
     let width_reduction = None;
     let path = String::from("plot_increasing_load.pdf");
@@ -259,7 +259,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         x_range,
         y_range,
         y_log_scale,
-        show_legend,
+        x_bbox_to_anchor,
         left_margin,
         width_reduction,
         PLOT_DIR,
@@ -338,7 +338,6 @@ fn partial_replication_plot() -> Result<(), Report> {
         1024 * 5,
         1024 * 6,
         1024 * 8,
-        1024 * 9,
         1024 * 10,
         1024 * 12,
         1024 * 16,
@@ -353,10 +352,11 @@ fn partial_replication_plot() -> Result<(), Report> {
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    for (shard_count, x_range) in vec![
-        (1, Some((0.0, 400.0))),
-        (2, Some((0.0, 400.0))),
-        (4, Some((0.0, 700.0))),
+    for (shard_count, keys_per_command, x_range) in vec![
+        (1, 1, Some((0.0, 500.0))),
+        (1, 2, Some((0.0, 400.0))),
+        (2, 2, Some((0.0, 400.0))),
+        (4, 2, Some((0.0, 700.0))),
     ] {
         let search_refine = |search: &mut Search, coefficient: f64| {
             let key_gen = KeyGen::Zipf {
@@ -366,6 +366,7 @@ fn partial_replication_plot() -> Result<(), Report> {
             search
                 .key_gen(key_gen)
                 .shard_count(shard_count)
+                .keys_per_command(keys_per_command)
                 .payload_size(payload_size);
         };
 
@@ -425,10 +426,13 @@ fn partial_replication_plot() -> Result<(), Report> {
         let latency_precision = LatencyPrecision::Millis;
         let y_range = Some((140.0, 310.0));
         let y_log_scale = false;
-        let show_legend = true;
+        let x_bbox_to_anchor = Some(0.45);
         let left_margin = Some(0.15);
         let width_reduction = Some(1.75);
-        let path = format!("plot_partial_replication_{}.pdf", shard_count);
+        let path = format!(
+            "plot_partial_replication_{}_k{}.pdf",
+            shard_count, keys_per_command
+        );
         fantoch_plot::throughput_latency_plot_split(
             n,
             protocols.clone(),
@@ -442,7 +446,7 @@ fn partial_replication_plot() -> Result<(), Report> {
             x_range,
             y_range,
             y_log_scale,
-            show_legend,
+            x_bbox_to_anchor,
             left_margin,
             width_reduction,
             PLOT_DIR,
@@ -481,8 +485,9 @@ fn partial_replication_all() -> Result<(), Report> {
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
-        // (1, 2),
-        // (2, 2),
+        (1, 1),
+        (1, 2),
+        (2, 2),
         (4, 2),
     ];
 
@@ -569,7 +574,8 @@ fn partial_replication_all() -> Result<(), Report> {
                 > = Some(Box::new(|search| {
                     // create styles
                     let mut styles = HashMap::new();
-                    styles.insert((1, 2), ("#111111", "s"));
+                    styles.insert((1, 1), ("#444444", "s"));
+                    styles.insert((1, 2), ("#111111", "+"));
                     styles.insert((2, 1), ("#218c74", "s"));
                     styles.insert((2, 2), ("#218c74", "+"));
                     styles.insert((3, 1), ("#bdc3c7", "s"));

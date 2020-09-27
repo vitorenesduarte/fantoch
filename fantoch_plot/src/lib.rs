@@ -374,7 +374,7 @@ pub fn latency_plot<R>(
     ax.set_ylabel(&ylabel, None)?;
 
     // legend
-    add_legend(plotted, None, py, &ax)?;
+    add_legend(plotted, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -417,7 +417,7 @@ pub fn cdf_plot(
     inner_cdf_plot_style(py, &ax, None, latency_precision)?;
 
     // legend
-    add_legend(plotted, None, py, &ax)?;
+    add_legend(plotted, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -494,7 +494,7 @@ pub fn cdf_plot_split(
                 // specific pull-up for this kind of plot
                 let y_bbox_to_anchor = Some(1.66);
                 // legend
-                add_legend(subfigure_plotted, y_bbox_to_anchor, py, &ax)?;
+                add_legend(subfigure_plotted, None, y_bbox_to_anchor, py, &ax)?;
             }
             2 => {
                 // nothing to do
@@ -668,7 +668,7 @@ pub fn throughput_something_plot(
     ax.set_ylabel(&y_label, None)?;
 
     // legend
-    add_legend(plotted, None, py, &ax)?;
+    add_legend(plotted, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -944,7 +944,7 @@ pub fn scalability_plot(
     ax.set_ylabel("throughput (K ops/s)", None)?;
 
     // legend
-    add_legend(plotted, None, py, &ax)?;
+    add_legend(plotted, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -965,7 +965,7 @@ pub fn throughput_latency_plot_split<GInput, G, RInput, R>(
     x_range: Option<(f64, f64)>,
     y_range: Option<(f64, f64)>,
     y_log_scale: bool,
-    show_legend: bool,
+    x_bbox_to_anchor: Option<f64>,
     left_margin: Option<f64>,
     witdh_reduction: Option<f64>,
     output_dir: Option<&str>,
@@ -1036,12 +1036,16 @@ where
         // - set ylabel in both
         match subplot {
             1 => {
-                if show_legend {
-                    // specific pull-up for this kind of plot
-                    let y_bbox_to_anchor = Some(1.46);
-                    // legend
-                    add_legend(plotted, y_bbox_to_anchor, py, &ax)?;
-                }
+                // specific pull-up for this kind of plot
+                let y_bbox_to_anchor = Some(1.46);
+                // legend
+                add_legend(
+                    plotted,
+                    x_bbox_to_anchor,
+                    y_bbox_to_anchor,
+                    py,
+                    &ax,
+                )?;
             }
             2 => {
                 ax.set_xlabel("throughput (K ops/s)", None)?;
@@ -1679,6 +1683,7 @@ fn end_plot(
 
 fn add_legend(
     plotted: usize,
+    x_bbox_to_anchor: Option<f64>,
     y_bbox_to_anchor: Option<f64>,
     py: Python<'_>,
     ax: &Axes<'_>,
@@ -1710,9 +1715,9 @@ fn add_legend(
         ),
     };
 
-    // legend position
-    let x_bbox_to_anchor = 0.45;
-    // use the default value for y if not set
+    // legend position: use default values if x or y not set
+    let x_bbox_to_anchor_default = 0.5;
+    let x_bbox_to_anchor = x_bbox_to_anchor.unwrap_or(x_bbox_to_anchor_default);
     let y_bbox_to_anchor = y_bbox_to_anchor.unwrap_or(y_bbox_to_anchor_default);
 
     // add legend

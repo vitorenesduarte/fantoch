@@ -100,9 +100,3 @@ impl ExperimentData {
         latency_data.map(move |duration| duration.as_micros() as u64)
     }
 }
-
-// #[derive(Clone, Copy)]
-// enum LatencyPrecision {
-//     Micros,
-//     Millis,
-// }
