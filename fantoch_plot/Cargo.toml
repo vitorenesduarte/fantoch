@@ -6,6 +6,9 @@ edition = "2018"
 authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
+# by default, run the main binary
+default-run = "main"
+
 [dependencies]
 pyo3 = "0.11.1"
 color-eyre = "0.5.1"

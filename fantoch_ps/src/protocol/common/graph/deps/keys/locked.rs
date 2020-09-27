@@ -7,13 +7,18 @@ use fantoch::HashSet;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-type Latest = RwLock<Option<Dependency>>;
+type Latest = Option<Dependency>;
+#[derive(Debug, Clone, Default)]
+struct LatestRW {
+    read: Latest,
+    write: Latest,
+}
 
 #[derive(Debug, Clone)]
 pub struct LockedKeyDeps {
     shard_id: ShardId,
-    latest_deps: Arc<Shared<Key, Latest>>,
-    noop_latest_dep: Arc<Latest>,
+    latest: Arc<Shared<Key, RwLock<LatestRW>>>,
+    latest_noop: Arc<RwLock<Latest>>,
 }
 
 impl KeyDeps for LockedKeyDeps {
@@ -21,8 +26,8 @@ impl KeyDeps for LockedKeyDeps {
     fn new(shard_id: ShardId) -> Self {
         Self {
             shard_id,
-            latest_deps: Arc::new(Shared::new()),
-            noop_latest_dep: Arc::new(RwLock::new(None)),
+            latest: Arc::new(Shared::new()),
+            latest_noop: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -70,7 +75,7 @@ impl KeyDeps for LockedKeyDeps {
 impl LockedKeyDeps {
     fn maybe_add_noop_latest(&self, deps: &mut HashSet<Dependency>) {
         // for this operation we only need a read lock
-        if let Some(dep) = self.noop_latest_dep.read().as_ref() {
+        if let Some(dep) = self.latest_noop.read().as_ref() {
             deps.insert(dep.clone());
         }
     }
@@ -81,17 +86,34 @@ impl LockedKeyDeps {
         cmd: &Command,
         mut deps: HashSet<Dependency>,
     ) -> HashSet<Dependency> {
+        // create cmd dep
+        let cmd_dep = Dependency::from_cmd(dot, cmd);
+
         // iterate through all command keys, grab a write lock, get their
         // current latest and set ourselves to be the new latest
         cmd.keys(self.shard_id).for_each(|key| {
-            // get latest command on this key
-            let entry = self.latest_deps.get_or(key, || RwLock::default());
+            // get latest read and write on this key
+            let entry = self.latest.get_or(key, || RwLock::default());
             // grab a write lock
             let mut guard = entry.write();
-            // set self to be the new latest
-            if let Some(dep) = guard.replace(Dependency::from_cmd(dot, cmd)) {
-                // if there was a previous latest, then it's a dependency
-                deps.insert(dep);
+
+            if cmd.read_only() {
+                // if a command is read-only, then it should depend on the
+                // latest write, and it should be added as the latest read
+                if let Some(wdep) = guard.write.as_ref() {
+                    deps.insert(wdep.clone());
+                }
+                guard.read = Some(cmd_dep.clone());
+            } else {
+                // if a command is not read-only, then it should depend on the
+                // latest read and latest write, and it should be added as the
+                // latest write
+                if let Some(rdep) = guard.read.as_ref() {
+                    deps.insert(rdep.clone());
+                }
+                if let Some(wdep) = guard.write.replace(cmd_dep.clone()) {
+                    deps.insert(wdep);
+                }
             }
         });
 
@@ -118,10 +140,8 @@ impl LockedKeyDeps {
         //     that, even though we will not see that newly created key, that
         //     key will see us
         // grab a write lock and set self to be the new latest
-        if let Some(dep) = self
-            .noop_latest_dep
-            .write()
-            .replace(Dependency::from_noop(dot))
+        if let Some(dep) =
+            self.latest_noop.write().replace(Dependency::from_noop(dot))
         {
             // if there was a previous latest, then it's a dependency
             deps.insert(dep);
@@ -136,10 +156,14 @@ impl LockedKeyDeps {
     fn do_noop_deps(&self, deps: &mut HashSet<Dependency>) {
         // iterate through all keys, grab a read lock, and include their latest
         // in the final `deps`
-        self.latest_deps.iter().for_each(|entry| {
-            // grab a read lock and take the dot there as a dependency
-            if let Some(dep) = entry.value().read().as_ref() {
-                deps.insert(dep.clone());
+        self.latest.iter().for_each(|entry| {
+            // grab a read lock and take the dots there as a dependency
+            let latest_rw = entry.value().read();
+            if let Some(rdep) = latest_rw.read.as_ref() {
+                deps.insert(rdep.clone());
+            }
+            if let Some(wdep) = latest_rw.write.as_ref() {
+                deps.insert(wdep.clone());
             }
         });
     }
@@ -148,12 +172,14 @@ impl LockedKeyDeps {
     fn do_cmd_deps(&self, cmd: &Command, deps: &mut HashSet<Dependency>) {
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest command on this key
-            let entry = self.latest_deps.get_or(key, || RwLock::default());
-            // grab a read lock
-            let guard = entry.read();
-            // take the dot there as a dependency
-            if let Some(dep) = guard.as_ref() {
-                deps.insert(dep.clone());
+            let entry = self.latest.get_or(key, || RwLock::default());
+            // grab a read lock and take the dots there as a dependency
+            let latest_rw = entry.value().read();
+            if let Some(rdep) = latest_rw.read.as_ref() {
+                deps.insert(rdep.clone());
+            }
+            if let Some(wdep) = latest_rw.write.as_ref() {
+                deps.insert(wdep.clone());
             }
         });
     }

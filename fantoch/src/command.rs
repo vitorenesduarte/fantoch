@@ -1,10 +1,10 @@
 use crate::executor::ExecutorResult;
 use crate::id::{Rifl, ShardId};
-use crate::kvs::{KVOp, KVOpResult, KVStore, Key, Value};
+use crate::kvs::{KVOp, KVOpResult, KVStore, Key};
 use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
-use std::iter::{self, FromIterator};
+use std::iter::FromIterator;
 
 const DEFAULT_SHARD_ID: ShardId = 0;
 
@@ -12,6 +12,7 @@ const DEFAULT_SHARD_ID: ShardId = 0;
 pub struct Command {
     rifl: Rifl,
     shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
+    read_only: bool,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean
     _empty_keys: HashMap<Key, KVOp>,
@@ -23,14 +24,32 @@ impl Command {
         rifl: Rifl,
         shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
     ) -> Self {
+        // a command is read-only if all ops are `Get`s
+        let read_only = shard_to_ops
+            .values()
+            .all(|shard_ops| shard_ops.iter().all(|(_, op)| op == &KVOp::Get));
+
+        // check that if it's not read-only, then no op is a `Get`
+        // - we can probably support this easily, but just for sanity let's
+        // assume that either all ops are `Get`s or none are
+        if !read_only {
+            let no_gets = shard_to_ops.values().all(|shard_ops| {
+                shard_ops.iter().all(|(_, op)| op != &KVOp::Get)
+            });
+            assert!(
+                no_gets,
+                "non-read-only commands cannot contain Get operations"
+            );
+        }
         Self {
             rifl,
             shard_to_ops,
+            read_only,
             _empty_keys: HashMap::new(),
         }
     }
 
-    /// Create a new `Command` from an iterator.
+    // Create a new `Command` from an iterator.
     pub fn from<I: IntoIterator<Item = (Key, KVOp)>>(
         rifl: Rifl,
         iter: I,
@@ -42,55 +61,19 @@ impl Command {
         Self::new(rifl, shard_to_ops)
     }
 
+    /// Checks if the command is read-only.
+    pub fn read_only(&self) -> bool {
+        self.read_only
+    }
+
     /// Checks if the command is replicated by `shard_id`.
     pub fn replicated_by(&self, shard_id: &ShardId) -> bool {
         self.shard_to_ops.contains_key(&shard_id)
     }
 
-    /// Creates a get command.
-    pub fn get(rifl: Rifl, key: Key) -> Self {
-        Self::from(rifl, iter::once((key, KVOp::Get)))
-    }
-
-    /// Creates a multi-get command.
-    pub fn multi_get(rifl: Rifl, keys: Vec<Key>) -> Self {
-        let commands = keys.into_iter().map(|key| (key, KVOp::Get));
-        Self::from(rifl, commands)
-    }
-
-    /// Creates a put command.
-    pub fn put(rifl: Rifl, key: Key, value: Value) -> Self {
-        Self::from(rifl, iter::once((key, KVOp::Put(value))))
-    }
-
-    /// Creates a multi-put command.
-    pub fn multi_put(rifl: Rifl, kvs: Vec<(Key, Value)>) -> Self {
-        let commands =
-            kvs.into_iter().map(|(key, value)| (key, KVOp::Put(value)));
-        Self::from(rifl, commands)
-    }
-
     /// Returns the command identifier.
     pub fn rifl(&self) -> Rifl {
         self.rifl
-    }
-
-    /// Checks if `key` is accessed by this command.
-    #[allow(clippy::ptr_arg)]
-    pub fn contains_key(&self, shard_id: ShardId, key: &Key) -> bool {
-        self.shard_to_ops
-            .get(&shard_id)
-            .map(|shard_ops| shard_ops.contains_key(key))
-            .unwrap_or(false)
-    }
-
-    /// Checks if a command conflicts with another given command.
-    pub fn conflicts(&self, other: &Command) -> bool {
-        self.shard_to_ops.iter().any(|(shard_id, shard_ops)| {
-            shard_ops
-                .iter()
-                .any(|(key, _)| other.contains_key(*shard_id, key))
-        })
     }
 
     /// Returns the number of keys accessed by this command on the shard
@@ -149,6 +132,23 @@ impl Command {
             .remove(&shard_id)
             .map(|shard_ops| shard_ops.into_iter())
             .unwrap_or_else(|| self._empty_keys.into_iter())
+    }
+
+    /// Checks if a command conflicts with another given command.
+    pub fn conflicts(&self, other: &Command) -> bool {
+        self.shard_to_ops.iter().any(|(shard_id, shard_ops)| {
+            shard_ops
+                .iter()
+                .any(|(key, _)| other.contains_key(*shard_id, key))
+        })
+    }
+
+    /// Checks if `key` is accessed by this command.
+    fn contains_key(&self, shard_id: ShardId, key: &Key) -> bool {
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.contains_key(key))
+            .unwrap_or(false)
     }
 }
 
@@ -216,16 +216,21 @@ impl CommandResult {
 mod tests {
     use super::*;
 
+    fn multi_put(rifl: Rifl, keys: Vec<String>) -> Command {
+        Command::from(
+            rifl,
+            keys.into_iter().map(|key| (key.clone(), KVOp::Put(key))),
+        )
+    }
+
     #[test]
     fn conflicts() {
         let rifl = Rifl::new(1, 1);
-        let cmd_a = Command::multi_get(rifl, vec![String::from("A")]);
-        let cmd_b = Command::multi_get(rifl, vec![String::from("B")]);
-        let cmd_c = Command::multi_get(rifl, vec![String::from("C")]);
-        let cmd_ab = Command::multi_get(
-            rifl,
-            vec![String::from("A"), String::from("B")],
-        );
+        let cmd_a = multi_put(rifl, vec![String::from("A")]);
+        let cmd_b = multi_put(rifl, vec![String::from("B")]);
+        let cmd_c = multi_put(rifl, vec![String::from("C")]);
+        let cmd_ab =
+            multi_put(rifl, vec![String::from("A"), String::from("B")]);
 
         // check command a conflicts
         assert!(cmd_a.conflicts(&cmd_a));

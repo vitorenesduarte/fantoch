@@ -14,7 +14,7 @@ pub mod util;
 pub mod config;
 
 // Re-exports.
-pub use config::{ExperimentConfig, ProcessType};
+pub use config::{ExperimentConfig, PlacementFlat, ProcessType};
 
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
@@ -117,7 +117,6 @@ pub enum Protocol {
     FPaxos,
     NewtAtomic,
     NewtLocked,
-    NewtFineLocked,
     Basic,
 }
 
@@ -129,7 +128,6 @@ impl Protocol {
             Protocol::FPaxos => "fpaxos",
             Protocol::NewtAtomic => "newt_atomic",
             Protocol::NewtLocked => "newt_locked",
-            Protocol::NewtFineLocked => "newt_fine_locked",
             Protocol::Basic => "basic",
         }
     }
@@ -137,6 +135,7 @@ impl Protocol {
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Testbed {
+    // MultiRegionAws,
     Aws,
     Baremetal,
     Local,

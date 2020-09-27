@@ -2,29 +2,26 @@ use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
 use crate::shared::Shared;
 use fantoch::command::Command;
-use fantoch::id::{ProcessId, ShardId};
+use fantoch::id::{ProcessId, Rifl, ShardId};
 use fantoch::kvs::Key;
+use fantoch::HashSet;
 use parking_lot::Mutex;
 use std::cmp;
 use std::collections::BTreeSet;
 use std::iter::FromIterator;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Default)]
+struct ClockAndPendingReads {
+    clock: u64,
+    pending_reads: HashSet<Rifl>,
+}
 // all clock's are protected by a mutex
-type Clock = Mutex<u64>;
-type Clocks = Arc<Shared<Key, Clock>>;
+type Clocks = Arc<Shared<Key, Mutex<ClockAndPendingReads>>>;
 
 /// `bump_and_vote` grabs all locks before any change
 #[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
-    id: ProcessId,
-    shard_id: ShardId,
-    clocks: Clocks,
-}
-
-/// `bump_and_vote` grabs one lock at a time
-#[derive(Debug, Clone)]
-pub struct FineLockedKeyClocks {
     id: ProcessId,
     shard_id: ShardId,
     clocks: Clocks,
@@ -44,109 +41,77 @@ impl KeyClocks for LockedKeyClocks {
         common::init_clocks(self.shard_id, &self.clocks, cmd)
     }
 
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+    fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // make sure locks will be acquired in some pre-determined order to
         // avoid deadlocks
         let keys = BTreeSet::from_iter(cmd.keys(self.shard_id));
         let key_count = keys.len();
         // find all the locks
+        // - NOTE that the following loop and the one below cannot be merged due
+        //   to lifetimes: `let guard = key_lock.lock()` borrows `key_lock` and
+        //   the borrow checker doesn't not understand that it's fine to move
+        //   both the `guard` and `key_lock` into e.g. a `Vec`. For that reason,
+        //   we have two loops. One that fetches the locks (the following one)
+        //   and another one (the one below it ) that actually acquires the
+        //   locks.
         let mut locks = Vec::with_capacity(key_count);
         self.clocks
             .get_or_all(&keys, &mut locks, || Mutex::default());
 
-        // keep track of which clock we should bump to
-        let mut up_to = min_clock;
+        if cmd.read_only() {
+            // if the command is read-only, the simply read the current clock
+            // value
+            // TODO: add the read as pending
+            let mut clock = min_clock;
+            for (_key, key_lock) in &locks {
+                let guard = key_lock.lock();
+                clock = cmp::max(clock, guard.clock);
+            }
+            (clock, Votes::new())
+        } else {
+            // keep track of which clock we should bump to
+            let mut up_to = min_clock;
 
-        // acquire the lock on all keys
-        // - NOTE that this loop and the above cannot be merged due to
-        //   lifetimes: `let guard = key_lock.lock()` borrows `key_lock` and the
-        //   borrow checker doesn't not understand that it's fine to move both
-        //   the `guard` and `key_lock` into e.g. a `Vec`. For that reason, we
-        //   have two loops. One that fetches the locks and another one (the one
-        //   that follows) that actually acquires the locks.
-        let mut guards = Vec::with_capacity(key_count);
-        for (_key, key_lock) in &locks {
-            let guard = key_lock.lock();
-            up_to = cmp::max(up_to, *guard + 1);
-            guards.push(guard);
-        }
+            // acquire the lock on all keys
+            let mut guards = Vec::with_capacity(key_count);
+            for (_key, key_lock) in &locks {
+                let guard = key_lock.lock();
+                up_to = cmp::max(up_to, guard.clock + 1);
+                guards.push(guard);
+            }
 
-        // create votes
-        let mut votes = Votes::with_capacity(key_count);
-        for entry in locks.iter().zip(guards.into_iter()) {
-            let (key, _key_lock) = entry.0;
-            let mut guard = entry.1;
-            common::maybe_bump(self.id, key, &mut guard, up_to, &mut votes);
-            // release the lock
-            drop(guard);
-        }
-        (up_to, votes)
-    }
-
-    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
-        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to, votes)
-    }
-
-    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
-        common::vote_all(self.id, &self.clocks, up_to, votes)
-    }
-
-    fn parallel() -> bool {
-        true
-    }
-}
-
-impl KeyClocks for FineLockedKeyClocks {
-    /// Create a new `FineLockedKeyClocks` instance.
-    fn new(id: ProcessId, shard_id: ShardId) -> Self {
-        Self {
-            id,
-            shard_id,
-            clocks: common::new(),
-        }
-    }
-
-    fn init_clocks(&mut self, cmd: &Command) {
-        common::init_clocks(self.shard_id, &self.clocks, cmd)
-    }
-
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
-        // single round of votes:
-        // - vote on each key and compute the highest clock seen
-        // - this means that if we have more than one key, then we don't
-        //   necessarily end up with all key clocks equal
-        let key_count = cmd.key_count(self.shard_id);
-        let mut votes = Votes::with_capacity(key_count);
-        let highest = cmd
-            .keys(self.shard_id)
-            .map(|key| {
-                let key_lock = self.clocks.get_or(key, || Mutex::default());
-                let mut guard = key_lock.lock();
-                let previous_value = *guard;
-                let current_value = cmp::max(min_clock, previous_value + 1);
-                *guard = current_value;
-                // drop the lock
+            // create votes
+            let mut votes = Votes::with_capacity(key_count);
+            for entry in locks.iter().zip(guards.into_iter()) {
+                let (key, _key_lock) = entry.0;
+                let mut guard = entry.1;
+                common::maybe_bump(
+                    self.id,
+                    key,
+                    &mut guard.clock,
+                    up_to,
+                    &mut votes,
+                );
+                // release the lock
                 drop(guard);
-
-                // create vote range
-                let vr =
-                    VoteRange::new(self.id, previous_value + 1, current_value);
-                votes.set(key.clone(), vec![vr]);
-
-                // return "current" clock value
-                current_value
-            })
-            .max()
-            .expect("there should be a maximum sequence");
-        (highest, votes)
+            }
+            (up_to, votes)
+        }
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
-        common::vote(self.id, self.shard_id, &self.clocks, cmd, up_to, votes)
+    fn detached(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
+        common::detached(
+            self.id,
+            self.shard_id,
+            &self.clocks,
+            cmd,
+            up_to,
+            votes,
+        )
     }
 
-    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
-        common::vote_all(self.id, &self.clocks, up_to, votes)
+    fn detached_all(&mut self, up_to: u64, votes: &mut Votes) {
+        common::detached_all(self.id, &self.clocks, up_to, votes)
     }
 
     fn parallel() -> bool {
@@ -176,7 +141,7 @@ mod common {
         })
     }
 
-    pub(super) fn vote(
+    pub(super) fn detached(
         id: ProcessId,
         shard_id: ShardId,
         clocks: &Clocks,
@@ -187,13 +152,13 @@ mod common {
         for key in cmd.keys(shard_id) {
             let key_lock = clocks.get_or(key, || Mutex::default());
             let mut guard = key_lock.lock();
-            maybe_bump(id, key, &mut guard, up_to, votes);
+            maybe_bump(id, key, &mut guard.clock, up_to, votes);
             // release the lock
             drop(guard);
         }
     }
 
-    pub(super) fn vote_all(
+    pub(super) fn detached_all(
         id: ProcessId,
         clocks: &Clocks,
         up_to: u64,
@@ -203,7 +168,7 @@ mod common {
             let key = entry.key();
             let key_lock = entry.value();
             let mut guard = key_lock.lock();
-            maybe_bump(id, key, &mut guard, up_to, votes);
+            maybe_bump(id, key, &mut guard.clock, up_to, votes);
             // release the lock
             drop(guard);
         });
@@ -224,5 +189,43 @@ mod common {
             *current = up_to;
             votes.add(key, vr);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fantoch::kvs::KVOp;
+
+    #[test]
+    fn bump_test() {
+        let process_id = 1;
+        let shard_id = 0;
+        let mut clocks = LockedKeyClocks::new(process_id, shard_id);
+
+        // create rifl
+        let client_id = 1;
+        let rifl = Rifl::new(client_id, 1);
+
+        // read-only commmands do not bump clocks
+        let ro_cmd = Command::from(rifl, vec![(String::from("K"), KVOp::Get)]);
+        let (clock, votes) = clocks.proposal(&ro_cmd, 0);
+        assert_eq!(clock, 0);
+        assert!(votes.is_empty());
+
+        // update command bump the clock
+        let cmd = Command::from(
+            rifl,
+            vec![(String::from("K"), KVOp::Put(String::new()))],
+        );
+        let (clock, votes) = clocks.proposal(&cmd, 0);
+        assert_eq!(clock, 1);
+        assert!(!votes.is_empty());
+
+        // read-only commmands do not bump clocks
+        let ro_cmd = Command::from(rifl, vec![(String::from("K"), KVOp::Get)]);
+        let (clock, votes) = clocks.proposal(&ro_cmd, 0);
+        assert_eq!(clock, 1);
+        assert!(votes.is_empty());
     }
 }

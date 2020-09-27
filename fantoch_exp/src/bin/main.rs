@@ -1,3 +1,5 @@
+#![type_length_limit = "5624544"]
+
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
@@ -8,12 +10,10 @@ use fantoch_exp::machine::Machines;
 use fantoch_exp::progress::TracingProgressBar;
 use fantoch_exp::{FantochFeature, Protocol, RunMode, Testbed};
 use rusoto_core::Region;
+use std::path::Path;
 use std::time::Duration;
 use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
-
-// folder where all results will be stored
-const RESULTS_DIR: &str = "../results_throughput_latency";
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
@@ -26,10 +26,10 @@ const EXPERIMENT_TIMEOUTS: ExperimentTimeouts = ExperimentTimeouts {
 };
 
 // aws experiment config
-const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
-const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
-// const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
-const CLIENT_INSTANCE_TYPE: &str = "c5.2xlarge";
+const LAUCH_MODE: LaunchMode = LaunchMode::OnDemand;
+// const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
+const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
+const CLIENT_INSTANCE_TYPE: &str = "m5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
@@ -40,13 +40,11 @@ const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 const TRACER_SHOW_INTERVAL: Option<usize> = None;
 
 // clients config
-const COMMANDS_PER_CLIENT: usize = 500; // 500 if WAN, 500_000 if LAN
-
-// processes and client config
-const CPUS: Option<usize> = None;
+const COMMANDS_PER_CLIENT_WAN: usize = 500;
+const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 
 // fantoch run config
-const BRANCH: &str = "consistent_hashing";
+const BRANCH: &str = "scalability";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -65,8 +63,11 @@ const RUN_MODE: RunMode = RunMode::Release;
 // const RUN_MODE: RunMode = RunMode::Flamegraph;
 
 // list of protocol binaries to cleanup before running the experiment
-const PROTOCOLS_TO_CLEANUP: &[Protocol] =
-    &[Protocol::AtlasLocked, Protocol::NewtAtomic];
+const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
+    Protocol::AtlasLocked,
+    Protocol::NewtAtomic,
+    Protocol::NewtLocked,
+];
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
@@ -90,6 +91,104 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    // fairness_and_tail_latency_plot().await
+    // increasing_load_plot().await
+    partial_replication_plot().await
+}
+
+#[allow(dead_code)]
+async fn partial_replication_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_partial_replication";
+
+    // THROUGHPUT
+    let regions = vec![Region::EuWest1, Region::UsWest1, Region::ApSoutheast1];
+    let n = regions.len();
+
+    let mut configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::NewtLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+    ];
+
+    let clients_per_region = vec![
+        // 256,
+        // 1024,
+        // 1024 * 2, // for Atlas s=2,4 zipf=0.7 r=50%
+        // 1024 * 4,
+        // 1024 * 8,
+        // 1024 * 10, // for Atlas s=2 zipf=0.7 r=95%
+        // 1024 * 12, // for Atlas s=2 zipf=0.7 r=95%
+        // 1024 * 16,
+        // 1024 * 20, // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95%
+        // 1024 * 24,
+        // 1024 * 32,
+        // 1024 * 48,
+        // 1024 * 64,
+    ];
+
+    let shard_count = 4;
+    let keys_per_command = 2;
+    let payload_size = 100;
+    let cpus = 12;
+
+    let mut workloads = Vec::new();
+    for coefficient in vec![0.5, 0.7] {
+        // for read_only_percentage in vec![0] {
+        for read_only_percentage in vec![100, 95, 50] {
+            let key_gen = KeyGen::Zipf {
+                keys_per_shard: 1_000_000,
+                coefficient,
+            };
+            let mut workload = Workload::new(
+                shard_count,
+                key_gen,
+                keys_per_command,
+                COMMANDS_PER_CLIENT_WAN,
+                payload_size,
+            );
+            workload.set_read_only_percentage(read_only_percentage);
+            workloads.push(workload);
+        }
+    }
+
+    // don't skip
+    let skip = |_, _, _| false;
+
+    // set shards in each config
+    configs
+        .iter_mut()
+        .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
+
+    // create AWS planet
+    let planet = Some(Planet::from("../latency_aws"));
+
+    // init logging
+    let progress = TracingProgressBar::init(
+        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+    );
+
+    baremetal_bench(
+        regions,
+        shard_count,
+        planet,
+        configs,
+        clients_per_region,
+        workloads,
+        cpus,
+        skip,
+        progress,
+        results_dir,
+    )
+    .await
+}
+
+#[allow(dead_code)]
+async fn increasing_load_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_increasing_load";
+
     // THROUGHPUT
     let regions = vec![
         Region::EuWest1,
@@ -104,10 +203,11 @@ async fn main() -> Result<(), Report> {
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -118,28 +218,213 @@ async fn main() -> Result<(), Report> {
         1024 * 4,
         1024 * 8,
         1024 * 16,
-        1024 * 32,
+        1024 * 20,
     ];
 
     let shard_count = 1;
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 4 };
     let keys_per_command = 1;
     let payload_size = 4096;
+    let cpus = 12;
+
+    let key_gens = vec![
+        KeyGen::ConflictRate { conflict_rate: 2 },
+        KeyGen::ConflictRate { conflict_rate: 10 },
+    ];
 
     let mut workloads = Vec::new();
-    let workload = Workload::new(
-        shard_count,
-        key_gen,
-        keys_per_command,
-        COMMANDS_PER_CLIENT,
-        payload_size,
-    );
-    workloads.push(workload);
+    for key_gen in key_gens {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT_WAN,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
-        protocol == Protocol::AtlasLocked && clients > 1024 * 8
-        // false
+        protocol == Protocol::AtlasLocked && clients > 1024 * 20
+    };
+
+    // set shards in each config
+    configs
+        .iter_mut()
+        .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
+
+    // create AWS planet
+    let planet = Some(Planet::from("../latency_aws"));
+
+    // init logging
+    let progress = TracingProgressBar::init(
+        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+    );
+
+    baremetal_bench(
+        regions,
+        shard_count,
+        planet,
+        configs,
+        clients_per_region,
+        workloads,
+        cpus,
+        skip,
+        progress,
+        results_dir,
+    )
+    .await
+}
+
+#[allow(dead_code)]
+async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
+    let results_dir = "../results_fairness_and_tail_latency";
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
+    ];
+    let n = regions.len();
+
+    let mut configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+    ];
+
+    let clients_per_region = vec![512, 1024];
+
+    let shard_count = 1;
+    let keys_per_command = 1;
+    let payload_size = 100;
+    let cpus = 8;
+
+    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gens = vec![key_gen];
+
+    let mut workloads = Vec::new();
+    for key_gen in key_gens {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT_WAN,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
+
+    let skip = |_, _, _| false;
+
+    // set shards in each config
+    configs
+        .iter_mut()
+        .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
+
+    // init logging
+    let progress = TracingProgressBar::init(
+        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+    );
+
+    aws_bench(
+        regions,
+        shard_count,
+        configs,
+        clients_per_region,
+        workloads,
+        cpus,
+        skip,
+        progress,
+        results_dir,
+    )
+    .await
+}
+
+#[allow(dead_code)]
+async fn whatever_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_scalability";
+
+    // THROUGHPUT
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        /* Region::CaCentral1,
+         * Region::SaEast1, */
+    ];
+    let n = regions.len();
+
+    let mut configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        /* (Protocol::NewtAtomic, config!(n, 2, false, None, false)), */
+        /*
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        */
+    ];
+
+    let clients_per_region = vec![
+        // 32,
+        // 64,
+        // 128,
+        // 256,
+        // 512, 768, 1024,
+        // 1280,
+        // 1536,
+        // 1792,
+        2048,
+        // 2560,
+        // 3072,
+        // 3584,
+        // 4096,
+        // 1024 * 4,
+        // 1024 * 8,
+        // 1024 * 12,
+        // 1024 * 16,
+        // 1024 * 32,
+    ];
+
+    let shard_count = 1;
+    let keys_per_command = 1;
+    let payload_size = 100;
+    let cpus = 2;
+
+    let coefficients = vec![
+        // 0.5, 0.75, 1.0,
+        // 1.25, 1.5, 1.75,
+        2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
+    ];
+    let key_gens = coefficients.into_iter().map(|coefficient| KeyGen::Zipf {
+        keys_per_shard: 1_000_000,
+        coefficient,
+    });
+
+    let mut workloads = Vec::new();
+    for key_gen in key_gens {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT_LAN,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
+
+    let skip = |protocol, _, clients| {
+        // skip Atlas with more than 4096 clients
+        protocol == Protocol::AtlasLocked && clients > 1024 * 20
     };
 
     /*
@@ -250,8 +535,8 @@ async fn main() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
-    // let planet = None; // if delay is not to be injected
+    // let planet = Some(Planet::from("../latency_aws"));
+    let planet = None; // if delay is not to be injected
 
     // init logging
     let progress = TracingProgressBar::init(
@@ -265,8 +550,10 @@ async fn main() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
+        results_dir,
     )
     .await
     /*
@@ -301,8 +588,10 @@ async fn local_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
+    results_dir: impl AsRef<Path>,
 ) -> Result<(), Report>
 where
 {
@@ -325,8 +614,10 @@ where
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
+        results_dir,
     )
     .await
     .wrap_err("run bench")?;
@@ -342,8 +633,10 @@ async fn baremetal_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
+    results_dir: impl AsRef<Path>,
 ) -> Result<(), Report>
 where
 {
@@ -373,8 +666,10 @@ where
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
+        results_dir,
     )
     .await
     .wrap_err("run bench")?;
@@ -389,8 +684,10 @@ async fn aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
+    results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
     let res = do_aws_bench(
@@ -400,8 +697,10 @@ async fn aws_bench(
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
+        results_dir,
     )
     .await;
 
@@ -425,8 +724,10 @@ async fn do_aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
+    results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
@@ -455,8 +756,10 @@ async fn do_aws_bench(
         configs,
         clients_per_region,
         workloads,
+        cpus,
         skip,
         progress,
+        results_dir,
     )
     .await
     .wrap_err("run bench")?;
@@ -471,8 +774,10 @@ async fn run_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
+    results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     fantoch_exp::bench::bench_experiment(
         machines,
@@ -485,12 +790,12 @@ async fn run_bench(
         TRACER_SHOW_INTERVAL,
         clients_per_region,
         workloads,
-        CPUS,
+        cpus,
         skip,
         EXPERIMENT_TIMEOUTS,
         PROTOCOLS_TO_CLEANUP.to_vec(),
         progress,
-        RESULTS_DIR,
+        results_dir,
     )
     .await
 }

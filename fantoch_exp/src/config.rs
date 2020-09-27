@@ -11,7 +11,7 @@ use std::fmt;
 
 pub type RegionIndex = usize;
 pub type Placement = HashMap<(Region, ShardId), (ProcessId, RegionIndex)>;
-type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
+pub type PlacementFlat = Vec<(Region, ShardId, ProcessId, RegionIndex)>;
 
 // FIXED
 #[cfg(feature = "exp")]
@@ -67,7 +67,7 @@ const CLIENT_TCP_NODELAY: bool = true;
 pub struct ProtocolConfig {
     process_id: ProcessId,
     shard_id: ShardId,
-    sorted: Option<Vec<ProcessId>>,
+    sorted: Option<Vec<(ProcessId, ShardId)>>,
     ips: Vec<(ProcessId, String, Option<usize>)>,
     config: Config,
     tcp_nodelay: bool,
@@ -83,7 +83,7 @@ pub struct ProtocolConfig {
     ping_interval: Option<usize>,
     metrics_file: String,
     stack_size: Option<usize>,
-    cpus: Option<usize>,
+    cpus: usize,
     log_file: String,
 }
 
@@ -94,10 +94,10 @@ impl ProtocolConfig {
         process_id: ProcessId,
         shard_id: ShardId,
         mut config: Config,
-        sorted: Option<Vec<ProcessId>>,
+        sorted: Option<Vec<(ProcessId, ShardId)>>,
         ips: Vec<(ProcessId, String, Option<usize>)>,
         metrics_file: String,
-        cpus: Option<usize>,
+        cpus: usize,
         log_file: String,
     ) -> Self {
         let (workers, executors) =
@@ -158,7 +158,9 @@ impl ProtocolConfig {
             // make sorted ids comma-separted
             let sorted = sorted
                 .iter()
-                .map(|process_id| process_id.to_string())
+                .map(|(process_id, shard_id)| {
+                    format!("{}-{}", process_id, shard_id)
+                })
                 .collect::<Vec<_>>()
                 .join(",");
             args.extend(args!["--sorted", sorted]);
@@ -232,10 +234,7 @@ impl ProtocolConfig {
         if let Some(stack_size) = self.stack_size {
             args.extend(args!["--stack_size", stack_size]);
         }
-        if let Some(cpus) = self.cpus {
-            args.extend(args!["--cpus", cpus]);
-        }
-        args.extend(args!["--log_file", self.log_file]);
+        args.extend(args!["--cpus", self.cpus, "--log_file", self.log_file]);
         args
     }
 
@@ -273,7 +272,6 @@ fn workers_executors_and_leader(
         }
         Protocol::NewtAtomic => EXECUTORS,
         Protocol::NewtLocked => EXECUTORS,
-        Protocol::NewtFineLocked => EXECUTORS,
         Protocol::Basic => EXECUTORS,
     };
     (WORKERS + EXECUTORS - executors, executors)
@@ -302,7 +300,6 @@ impl ClientConfig {
         ips: Vec<(ProcessId, String)>,
         workload: Workload,
         metrics_file: String,
-        cpus: Option<usize>,
         log_file: String,
     ) -> Self {
         Self {
@@ -315,7 +312,7 @@ impl ClientConfig {
             status_frequency: STATUS_FREQUENCY,
             metrics_file,
             stack_size: CLIENT_STACK_SIZE,
-            cpus,
+            cpus: None,
             log_file,
         }
     }
@@ -346,6 +343,8 @@ impl ClientConfig {
             self.workload.commands_per_client(),
             "--payload_size",
             self.workload.payload_size(),
+            "--read_only_percentage",
+            self.workload.read_only_percentage(),
             "--tcp_nodelay",
             self.tcp_nodelay,
             "--channel_buffer_size",
@@ -392,6 +391,7 @@ pub struct ExperimentConfig {
     pub tcp_buffer_size: usize,
     pub tcp_flush_interval: Option<usize>,
     pub process_channel_buffer_size: usize,
+    pub cpus: usize,
     pub workers: usize,
     pub executors: usize,
     pub multiplexing: usize,
@@ -410,6 +410,7 @@ impl ExperimentConfig {
         mut config: Config,
         clients_per_region: usize,
         workload: Workload,
+        cpus: usize,
     ) -> Self {
         let (workers, executors) =
             workers_executors_and_leader(protocol, &mut config);
@@ -433,6 +434,7 @@ impl ExperimentConfig {
             tcp_buffer_size: PROCESS_TCP_BUFFER_SIZE,
             tcp_flush_interval: PROCESS_TCP_FLUSH_INTERVAL,
             process_channel_buffer_size: PROCESS_CHANNEL_BUFFER_SIZE,
+            cpus,
             workers,
             executors,
             multiplexing: MULTIPLEXING,

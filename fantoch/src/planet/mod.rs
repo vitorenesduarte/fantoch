@@ -41,11 +41,15 @@ impl Planet {
             .iter()
             .map(|dat| (dat.region(), dat.latencies()))
             .collect();
+        Self::from_latencies(latencies)
+    }
 
-        // also create sorted
+    /// Creates a new `Planet` instance from the latencies provided.
+    pub fn from_latencies(
+        latencies: HashMap<Region, HashMap<Region, u64>>,
+    ) -> Self {
+        // create sorted and and planet
         let sorted = Self::sort_by_distance(latencies.clone());
-
-        // return a new planet
         Planet { latencies, sorted }
     }
 

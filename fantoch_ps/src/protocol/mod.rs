@@ -20,7 +20,7 @@ mod partial;
 pub use atlas::{AtlasLocked, AtlasSequential};
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
-pub use newt::{NewtAtomic, NewtFineLocked, NewtLocked, NewtSequential};
+pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
 
 #[cfg(test)]
 mod tests {

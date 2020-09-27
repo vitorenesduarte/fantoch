@@ -6,7 +6,7 @@ mod clocks;
 
 // Re-exports.
 pub use clocks::{
-    AtomicKeyClocks, FineLockedKeyClocks, KeyClocks, LockedKeyClocks,
-    QuorumClocks, SequentialKeyClocks,
+    AtomicKeyClocks, KeyClocks, LockedKeyClocks, QuorumClocks,
+    SequentialKeyClocks,
 };
 pub use votes::{VoteRange, Votes};

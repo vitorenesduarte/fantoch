@@ -1,11 +1,10 @@
-use crate::db::{Dstat, DstatCompress, HistogramCompress};
+use crate::db::{Dstat, DstatCompress, MicrosHistogramCompress};
 use fantoch::client::ClientData;
 use fantoch::executor::ExecutorMetrics;
 use fantoch::id::ProcessId;
-use fantoch::planet::{Planet, Region};
+use fantoch::planet::Region;
 use fantoch::protocol::ProtocolMetrics;
 use fantoch::run::task::metrics_logger::ProcessMetrics;
-use fantoch_exp::Testbed;
 use fantoch_prof::metrics::Histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -19,14 +18,12 @@ pub struct ExperimentData {
     pub process_dstats: HashMap<ProcessId, DstatCompress>,
     pub global_process_dstats: DstatCompress,
     pub global_client_dstats: DstatCompress,
-    pub client_latency: HashMap<Region, HistogramCompress>,
-    pub global_client_latency: HistogramCompress,
+    pub client_latency: HashMap<Region, MicrosHistogramCompress>,
+    pub global_client_latency: MicrosHistogramCompress,
 }
 
 impl ExperimentData {
     pub fn new(
-        planet: &Option<Planet>,
-        testbed: Testbed,
         process_metrics: HashMap<ProcessId, (Region, ProcessMetrics)>,
         process_dstats: HashMap<ProcessId, Dstat>,
         client_metrics: HashMap<Region, ClientData>,
@@ -64,48 +61,26 @@ impl ExperimentData {
         // compress global client dstat
         let global_client_dstats = DstatCompress::from(&global_client_dstats);
 
-        // we should use milliseconds if: AWS or (baremetal + injected latency)
-        let precision = match testbed {
-            Testbed::Aws => {
-                // assert that no latency was injected
-                assert!(planet.is_none());
-                LatencyPrecision::Millis
-            }
-            Testbed::Baremetal | Testbed::Local => {
-                // use ms if latency was injected, otherwise micros
-                if planet.is_some() {
-                    LatencyPrecision::Millis
-                } else {
-                    LatencyPrecision::Micros
-                }
-            }
-        };
-
         // create latency histogram per region
         let client_latency = client_metrics
             .into_iter()
             .map(|(region, client_data)| {
-                // create latency histogram (for the given precision)
-                let latency = Self::extract_latency(
-                    precision,
-                    client_data.latency_data(),
-                );
+                // create latency histogram
+                let latency = Self::extract_micros(client_data.latency_data());
                 let histogram = Histogram::from(latency);
                 // compress client histogram
-                let histogram = HistogramCompress::from(&histogram);
+                let histogram = MicrosHistogramCompress::from(&histogram);
                 (region, histogram)
             })
             .collect();
 
         // create global latency histogram
-        let latency = Self::extract_latency(
-            precision,
-            global_client_metrics.latency_data(),
-        );
+        let latency =
+            Self::extract_micros(global_client_metrics.latency_data());
         let global_client_latency = Histogram::from(latency);
         // compress global client histogram
         let global_client_latency =
-            HistogramCompress::from(&global_client_latency);
+            MicrosHistogramCompress::from(&global_client_latency);
 
         Self {
             process_metrics,
@@ -119,22 +94,9 @@ impl ExperimentData {
         }
     }
 
-    fn extract_latency(
-        precision: LatencyPrecision,
+    fn extract_micros(
         latency_data: impl Iterator<Item = Duration>,
     ) -> impl Iterator<Item = u64> {
-        latency_data.map(move |duration| {
-            let latency = match precision {
-                LatencyPrecision::Micros => duration.as_micros(),
-                LatencyPrecision::Millis => duration.as_millis(),
-            };
-            latency as u64
-        })
+        latency_data.map(move |duration| duration.as_micros() as u64)
     }
-}
-
-#[derive(Clone, Copy)]
-enum LatencyPrecision {
-    Micros,
-    Millis,
 }

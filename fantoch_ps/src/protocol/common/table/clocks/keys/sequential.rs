@@ -33,20 +33,20 @@ impl KeyClocks for SequentialKeyClocks {
         });
     }
 
-    fn bump_and_vote(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+    fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // bump to at least `min_clock`
         let clock = cmp::max(min_clock, self.clock(cmd) + 1);
 
         // compute votes up to that clock
         let key_count = cmd.key_count(self.shard_id);
         let mut votes = Votes::with_capacity(key_count);
-        self.vote(cmd, clock, &mut votes);
+        self.detached(cmd, clock, &mut votes);
 
         // return both
         (clock, votes)
     }
 
-    fn vote(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
+    fn detached(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         // vote on each key
         cmd.keys(self.shard_id).for_each(|key| {
             // get a mutable reference to current clock value
@@ -59,7 +59,7 @@ impl KeyClocks for SequentialKeyClocks {
         });
     }
 
-    fn vote_all(&mut self, up_to: u64, votes: &mut Votes) {
+    fn detached_all(&mut self, up_to: u64, votes: &mut Votes) {
         // vote on each key
         let id = self.id;
         self.clocks.iter_mut().for_each(|(key, current)| {

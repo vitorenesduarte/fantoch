@@ -60,8 +60,8 @@ where
                 }
                 None => {
                     // clear any previous references to the map (since
-                    // `self.shared.entry` can deadlock if we hold any
-                    // references to `self.shared`)
+                    // `self.shared.entry` used in `self.maybe_insert` can
+                    // deadlock if we hold any references to `self.shared`)
                     refs.clear();
                     // make sure key exits, and start again
                     self.maybe_insert(key, value);

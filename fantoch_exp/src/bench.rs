@@ -51,7 +51,7 @@ pub async fn bench_experiment(
     tracer_show_interval: Option<usize>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    cpus: Option<usize>,
+    cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     experiment_timeouts: ExperimentTimeouts,
     protocols_to_cleanup: Vec<Protocol>,
@@ -95,6 +95,12 @@ pub async fn bench_experiment(
                 if skip(protocol, config, clients) {
                     progress.inc();
                     continue;
+                }
+
+                if protocol == Protocol::NewtAtomic
+                    && workload.read_only_percentage() > 0
+                {
+                    panic!("NewtAtomic doesn't support read-only commands")
                 }
 
                 if let KeyGen::ConflictRate { .. } = workload.key_gen() {
@@ -190,7 +196,7 @@ async fn run_experiment(
     tracer_show_interval: Option<usize>,
     clients_per_region: usize,
     workload: Workload,
-    cpus: Option<usize>,
+    cpus: usize,
     experiment_timeouts: ExperimentTimeouts,
     exp_dir: &str,
 ) -> Result<(), Report> {
@@ -229,7 +235,6 @@ async fn run_experiment(
     let run_clients = run_clients(
         clients_per_region,
         workload,
-        cpus,
         machines,
         process_ips,
         &mut dstats,
@@ -263,6 +268,7 @@ async fn run_experiment(
         config,
         clients_per_region,
         workload,
+        cpus,
     );
 
     let pull_metrics_and_stop = async {
@@ -303,7 +309,7 @@ async fn start_processes(
     protocol: Protocol,
     config: Config,
     tracer_show_interval: Option<usize>,
-    cpus: Option<usize>,
+    cpus: usize,
     dstats: &mut Vec<tokio::process::Child>,
 ) -> Result<(Ips, HashMap<ProcessId, (Region, tokio::process::Child)>), Report>
 {
@@ -334,8 +340,8 @@ async fn start_processes(
         // get ips to connect to (based on sorted)
         let ips = sorted
             .iter()
-            .filter(|peer_id| *peer_id != process_id)
-            .map(|peer_id| {
+            .filter(|(peer_id, _)| peer_id != process_id)
+            .map(|(peer_id, _)| {
                 // get process ip
                 let ip = ips
                     .get(peer_id)
@@ -426,7 +432,6 @@ fn maybe_inject_delay(
 async fn run_clients(
     clients_per_region: usize,
     workload: Workload,
-    cpus: Option<usize>,
     machines: &Machines<'_>,
     process_ips: Ips,
     dstats: &mut Vec<tokio::process::Child>,
@@ -478,7 +483,6 @@ async fn run_clients(
             ips,
             workload,
             metrics_file,
-            cpus,
             log_file,
         );
         let args = client_config.to_args();

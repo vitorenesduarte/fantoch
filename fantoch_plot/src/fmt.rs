@@ -24,29 +24,30 @@ impl PlotFmt {
             Protocol::FPaxos => "FPaxos",
             Protocol::NewtAtomic => "Newt",
             Protocol::NewtLocked => "Newt-L",
-            Protocol::NewtFineLocked => "Newt-AL",
             Protocol::Basic => "Basic",
         }
     }
 
     pub fn label(protocol: Protocol, f: usize) -> String {
-        format!("{} f = {}", Self::protocol_name(protocol), f)
+        match protocol {
+            Protocol::EPaxosLocked => Self::protocol_name(protocol).to_string(),
+            _ => format!("{} f = {}", Self::protocol_name(protocol), f),
+        }
     }
 
     pub fn color(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "#27ae60",
             (Protocol::AtlasLocked, 2) => "#16a085",
-            (Protocol::EPaxosLocked, _) => "#227093",
+            // (Protocol::EPaxosLocked, _) => "#227093",
+            (Protocol::EPaxosLocked, _) => "#444444",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
             (Protocol::NewtAtomic, 2) => "#e67e22",
-            (Protocol::NewtLocked, 1) => "#3498db",
-            (Protocol::NewtLocked, 2) => "#2980b9",
-            (Protocol::NewtFineLocked, 1) => "#111111",
-            (Protocol::NewtFineLocked, 2) => "#333333",
-            (Protocol::Basic, _) => "",
+            (Protocol::NewtLocked, 1) => "#2980b9", // "#111111"
+            (Protocol::NewtLocked, 2) => "#c23616", // "#333333"
+            (Protocol::Basic, _) => "#576574",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -70,17 +71,15 @@ impl PlotFmt {
     // Possible values: {'/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*'}
     pub fn hatch(protocol: Protocol, f: usize) -> String {
         match (protocol, f) {
-            (Protocol::AtlasLocked, 1) => "/", // 1
-            (Protocol::AtlasLocked, 2) => "\\",
-            (Protocol::EPaxosLocked, _) => "///", // 3
-            (Protocol::FPaxos, 1) => "//", // 2
-            (Protocol::FPaxos, 2) => "\\\\",
-            (Protocol::NewtAtomic, 1) => "////", // 4
-            (Protocol::NewtAtomic, 2) => "\\\\\\\\",
-            (Protocol::NewtLocked, 1) => "/////", // 5
-            (Protocol::NewtLocked, 2) => "\\\\\\\\\\",
-            (Protocol::NewtFineLocked, 1) => "//////", // 6
-            (Protocol::NewtFineLocked, 2) => "\\\\\\\\\\\\",
+            (Protocol::FPaxos, 1) => "/", // 1
+            (Protocol::FPaxos, 2) => "\\",
+            (Protocol::EPaxosLocked, _) => "//", // 3
+            (Protocol::AtlasLocked, 1) => "///", // 2
+            (Protocol::AtlasLocked, 2) => "\\\\\\",
+            (Protocol::NewtLocked, 1) => "////", // 4
+            (Protocol::NewtLocked, 2) => "\\\\\\\\",
+            (Protocol::NewtAtomic, 1) => "//////", //  6
+            (Protocol::NewtAtomic, 2) => "\\\\\\\\\\\\",
             (Protocol::Basic, 1) => "///////", // 7
             (Protocol::Basic, 2) => "\\\\\\\\\\\\\\",
             _ => panic!(
@@ -100,12 +99,10 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "x",
             (Protocol::NewtAtomic, 1) => "v",
             (Protocol::NewtAtomic, 2) => "^",
-            (Protocol::NewtLocked, 1) => ">",
-            (Protocol::NewtLocked, 2) => "<",
-            (Protocol::NewtFineLocked, 1) => "p",
-            (Protocol::NewtFineLocked, 2) => "P",
-            (Protocol::Basic, 1) => "|",
-            (Protocol::Basic, 2) => "_",
+            (Protocol::NewtLocked, 1) => "o",
+            (Protocol::NewtLocked, 2) => "s",
+            (Protocol::Basic, 1) => "p",
+            (Protocol::Basic, 2) => "P",
             _ => panic!(
                 "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -121,16 +118,15 @@ impl PlotFmt {
             (Protocol::FPaxos, _) => "-.",
             (Protocol::NewtAtomic, _) => "-",
             (Protocol::NewtLocked, _) => "-",
-            (Protocol::NewtFineLocked, _) => "-",
-            (Protocol::Basic, _) => "",
+            (Protocol::Basic, _) => ":",
         }
         .to_string()
     }
 
     pub fn linewidth(f: usize) -> String {
         match f {
-            1 => 1.5,
-            2 => 2.0,
+            1 => 1.6,
+            2 => 1.6,
             _ => panic!("PlotFmt::linewidth: f = {} not supported!", f),
         }
         .to_string()

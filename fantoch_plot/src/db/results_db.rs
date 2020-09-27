@@ -21,7 +21,7 @@ pub struct ResultsDB {
 }
 
 impl ResultsDB {
-    pub fn load(results_dir: &str) -> Result<Self, Report> {
+    pub fn list_timestamps(results_dir: &str) -> Result<Vec<DirEntry>, Report> {
         // find all timestamps
         let read_dir = std::fs::read_dir(results_dir)
             .wrap_err("read results directory")?;
@@ -38,7 +38,11 @@ impl ResultsDB {
                 timestamps.push(timestamp);
             }
         }
+        Ok(timestamps)
+    }
 
+    pub fn load(results_dir: &str) -> Result<Self, Report> {
+        let timestamps = Self::list_timestamps(results_dir)?;
         // holder for results
         let mut results = Vec::with_capacity(timestamps.len());
 
@@ -149,7 +153,8 @@ impl ResultsDB {
     pub fn find(
         &self,
         search: Search,
-    ) -> Result<Vec<(&DirEntry, &ExperimentData)>, Report> {
+    ) -> Result<Vec<&(DirEntry, ExperimentConfig, ExperimentData)>, Report>
+    {
         let filtered = self
             .results
             .iter()
@@ -169,17 +174,31 @@ impl ResultsDB {
                     return false;
                 }
 
-                // filter out configurations with different clients_per_region
-                // (if set)
-                if let Some(clients_per_region) = search.clients_per_region {
-                    if exp_config.clients_per_region != clients_per_region {
+                // filter out configurations with different shard_count (if set)
+                if let Some(shard_count) = search.shard_count {
+                    if exp_config.config.shard_count() != shard_count {
                         return false;
                     }
                 }
 
-                // filter out configurations with different shard_count (if set)
-                if let Some(shard_count) = search.shard_count {
-                    if exp_config.workload.shard_count() != shard_count {
+                // filter out configurations with different cpus (if set)
+                if let Some(cpus) = search.cpus {
+                    if exp_config.cpus != cpus {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different workers (if set)
+                if let Some(workers) = search.workers {
+                    if exp_config.workers != workers {
+                        return false;
+                    }
+                }
+
+                // filter out configurations with different clients_per_region
+                // (if set)
+                if let Some(clients_per_region) = search.clients_per_region {
+                    if exp_config.clients_per_region != clients_per_region {
                         return false;
                     }
                 }
@@ -202,6 +221,17 @@ impl ResultsDB {
                     }
                 }
 
+                // filter out configurations with different read_only_percentage
+                // (if set)
+                if let Some(read_only_percentage) = search.read_only_percentage
+                {
+                    if exp_config.workload.read_only_percentage()
+                        != read_only_percentage
+                    {
+                        return false;
+                    }
+                }
+
                 // filter out configurations with different payload_size (if
                 // set)
                 if let Some(payload_size) = search.payload_size {
@@ -214,7 +244,6 @@ impl ResultsDB {
                 // return it
                 true
             })
-            .map(|(timestamp, _, exp_data)| (timestamp, exp_data))
             .collect();
         Ok(filtered)
     }
@@ -294,8 +323,6 @@ impl ResultsDB {
 
         // return experiment data
         Ok(ExperimentData::new(
-            &exp_config.planet,
-            exp_config.testbed,
             process_metrics,
             process_dstats,
             client_metrics,

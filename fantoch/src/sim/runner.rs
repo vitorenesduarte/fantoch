@@ -61,7 +61,7 @@ where
         config: Config,
         workload: Workload,
         clients_per_process: usize,
-        mut process_regions: Vec<Region>,
+        process_regions: Vec<Region>,
         client_regions: Vec<Region>,
     ) -> Self {
         // check that we have the correct number of `process_regions`
@@ -78,7 +78,6 @@ where
         // there's a single shard
         let shard_id = 0;
 
-        process_regions.sort();
         let to_discover: Vec<_> = process_regions
             .into_iter()
             .zip(util::process_ids(shard_id, config.n()))
