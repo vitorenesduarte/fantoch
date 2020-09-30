@@ -37,14 +37,18 @@ pub async fn execution_logger_task<P>(
                 trace!("[executor_logger] from parent: {:?}", execution_info);
                 if let Some(execution_info) = execution_info {
                     // write execution info to file
-                    logger.write(&execution_info).await;
+                    if let Err(e) = logger.write(&execution_info).await {
+                        warn!("[executor_logger] error when writing to the logger file: {:?}", e);
+                    }
                 } else {
                     warn!("[executor_logger] error while receiving execution info from parent");
                 }
             }
             _ = interval.tick()  => {
                 // flush
-                logger.flush().await
+                if let Err(e) = logger.flush().await {
+                    warn!("[executor_logger] error when flushing to the logger file: {:?}", e);
+                }
             }
         }
     }

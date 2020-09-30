@@ -157,7 +157,9 @@ async fn say_hi(
     };
     // send hi on each connection
     for connection in connections.iter_mut() {
-        connection.send(&hi).await;
+        if let Err(e) = connection.send(&hi).await {
+            warn!("error while sending hi to connection: {:?}", e)
+        }
     }
 }
 
@@ -331,6 +333,8 @@ async fn writer_task<P>(
 ) where
     P: Protocol + 'static,
 {
+    // track whether there's been a flush error on this connection
+    let mut flush_error = false;
     // if flush interval higher than 0, then flush periodically; otherwise,
     // flush on every write
     if let Some(tcp_flush_interval) = tcp_flush_interval {
@@ -341,7 +345,9 @@ async fn writer_task<P>(
                 msg = parent.recv() => {
                     if let Some(msg) = msg {
                         // connection write *doesn't* flush
-                        connection.write(&*msg).await;
+                        if let Err(e) = connection.write(&*msg).await {
+                            warn!("[writer] error writing message in connection: {:?}", e);
+                        }
                     } else {
                         warn!("[writer] error receiving message from parent");
                         break;
@@ -349,7 +355,13 @@ async fn writer_task<P>(
                 }
                 _ = interval.tick() => {
                     // flush socket
-                    connection.flush().await;
+                    if let Err(e) = connection.flush().await {
+                        // make sure we only log the error once
+                        if !flush_error {
+                            warn!("[writer] error flushing connection: {:?}", e);
+                            flush_error = true;
+                        }
+                    }
                 }
             }
         }
@@ -357,7 +369,12 @@ async fn writer_task<P>(
         loop {
             if let Some(msg) = parent.recv().await {
                 // connection write *does* flush
-                connection.send(&*msg).await;
+                if let Err(e) = connection.send(&*msg).await {
+                    warn!(
+                        "[writer] error sending message to connection: {:?}",
+                        e
+                    );
+                }
             } else {
                 warn!("[writer] error receiving message from parent");
                 break;

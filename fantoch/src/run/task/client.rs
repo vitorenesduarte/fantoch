@@ -161,7 +161,9 @@ async fn server_receive_hi(
         process_id,
         shard_id,
     };
-    connection.send(&hi).await;
+    if let Err(e) = connection.send(&hi).await {
+        warn!("[client_server] error while sending hi: {:?}", e);
+    }
 
     // return client id and channel where client should read executor results
     Some((client_ids, executor_results_rx))
@@ -246,7 +248,12 @@ async fn client_server_task_handle_executor_result(
 ) {
     if let Some(executor_result) = executor_result {
         if let Some(cmd_result) = pending.add_executor_result(executor_result) {
-            connection.send(&cmd_result).await;
+            if let Err(e) = connection.send(&cmd_result).await {
+                warn!(
+                    "[client_server] error while sending command results: {:?}",
+                    e
+                );
+            }
         }
     } else {
         warn!("[client_server] error while receiving new executor result from executor");
@@ -260,7 +267,9 @@ pub async fn client_say_hi(
     trace!("[client] will say hi with ids {:?}", client_ids);
     // say hi
     let hi = ClientHi(client_ids.clone());
-    connection.send(&hi).await;
+    if let Err(e) = connection.send(&hi).await {
+        warn!("[client] error while sending hi: {:?}", e);
+    }
 
     // receive hi back
     if let Some(ProcessHi {
@@ -335,7 +344,9 @@ async fn client_rw_task(
             to_server = from_parent.recv() => {
                 trace!("[client_rw] from client: {:?}", to_server);
                 if let Some(to_server) = to_server {
-                    connection.send(&to_server).await;
+                    if let Err(e) = connection.send(&to_server).await {
+                        warn!("[client_rw] error while sending message to server: {:?}", e);
+                    }
                 } else {
                     warn!("[client_rw] error while receiving message from parent to server");
                     // in this case it means that the parent (the client) is done, and so we can exit the loop

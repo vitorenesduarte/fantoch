@@ -6,6 +6,7 @@ pub use connection::Connection;
 
 use crate::warn;
 use bytes::{Bytes, BytesMut};
+use color_eyre::eyre::{Report, WrapErr};
 use futures::sink::{Sink, SinkExt};
 use futures::stream::StreamExt;
 use serde::de::DeserializeOwned;
@@ -51,40 +52,34 @@ where
         }
     }
 
-    pub async fn send<V>(&mut self, value: &V)
+    pub async fn send<V>(&mut self, value: &V) -> Result<(), Report>
     where
         V: Serialize,
     {
         let bytes = serialize(value);
-        if let Err(e) = self.rw.send(bytes).await {
-            warn!("[rw] error while writing to sink: {:?}", e);
-        }
+        self.rw
+            .send(bytes)
+            .await
+            .wrap_err("error while sending to sink")
     }
 
-    pub async fn write<V>(&mut self, value: &V)
+    pub async fn write<V>(&mut self, value: &V) -> Result<(), Report>
     where
         V: Serialize,
     {
         let bytes = serialize(value);
-        if let Err(e) =
-            futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_ready(cx))
-                .await
-        {
-            warn!("[rw] error while polling sink ready: {:?}", e);
-        }
-
-        if let Err(e) = Pin::new(&mut self.rw).start_send(bytes) {
-            warn!("[rw] error while starting send to sink: {:?}", e);
-        }
+        futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_ready(cx))
+            .await
+            .wrap_err("error while polling sink ready")?;
+        Pin::new(&mut self.rw)
+            .start_send(bytes)
+            .wrap_err("error while starting send to sink")
     }
 
-    pub async fn flush(&mut self) {
-        if let Err(e) =
-            futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_flush(cx))
-                .await
-        {
-            panic!("[rw] error while flushing sink: {:?}", e);
-        }
+    pub async fn flush(&mut self) -> Result<(), Report> {
+        futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_flush(cx))
+            .await
+            .wrap_err("error while flushing sink")
     }
 }
 
