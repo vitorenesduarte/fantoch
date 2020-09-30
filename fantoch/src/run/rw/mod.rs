@@ -83,7 +83,7 @@ where
             futures::future::poll_fn(|cx| Pin::new(&mut self.rw).poll_flush(cx))
                 .await
         {
-            warn!("[rw] error while flushing sink: {:?}", e);
+            panic!("[rw] error while flushing sink: {:?}", e);
         }
     }
 }
