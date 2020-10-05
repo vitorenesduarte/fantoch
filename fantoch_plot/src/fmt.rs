@@ -80,8 +80,7 @@ impl PlotFmt {
             (Protocol::NewtLocked, 2) => "\\\\\\\\",
             (Protocol::NewtAtomic, 1) => "//////", //  6
             (Protocol::NewtAtomic, 2) => "\\\\\\\\\\\\",
-            (Protocol::Basic, 1) => "///////", // 7
-            (Protocol::Basic, 2) => "\\\\\\\\\\\\\\",
+            (Protocol::Basic, _) => "\\\\\\\\\\\\", // 6
             _ => panic!(
                 "PlotFmt::hatch: protocol = {:?} and f = {} combination not supported!",
                 protocol, f

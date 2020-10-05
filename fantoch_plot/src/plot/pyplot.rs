@@ -78,6 +78,17 @@ impl<'p> PyPlot<'p> {
         Ok(())
     }
 
+    pub fn text(
+        &self,
+        x: f64,
+        y: f64,
+        text: &str,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        pytry!(self.py(), self.plt.call("text", (x, y, text), kwargs));
+        Ok(())
+    }
+
     pub fn savefig(
         &self,
         path: &str,

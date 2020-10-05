@@ -46,7 +46,10 @@ impl Dstat {
         // skip first 5 lines (non-header lines)
         for _ in 0..5 {
             let mut s = String::new();
-            buf.read_line(&mut s)?;
+            // ignore empty lines
+            while s.trim().is_empty() {
+                buf.read_line(&mut s)?;
+            }
         }
 
         // create csv reader:
@@ -67,7 +70,9 @@ impl Dstat {
             }
 
             // parse csv row
-            let row: DstatRow = row.deserialize(Some(&headers))?;
+            let row: DstatRow = row
+                .deserialize(Some(&headers))
+                .wrap_err_with(|| format!("deserialize dstat row {}", path))?;
 
             // only consider the record if within bounds
             if row.epoch >= start && row.epoch <= end {
@@ -131,7 +136,10 @@ where
     D: Deserializer<'de>,
 {
     let epoch = String::deserialize(de)?;
-    let epoch = epoch.parse::<f64>().expect("epoch should be a float");
+    let epoch = epoch
+        .parse::<f64>()
+        .wrap_err("parse epoch")
+        .map_err(serde::de::Error::custom)?;
     // convert epoch to milliseconds
     let epoch = epoch * 1000f64;
     let epoch = epoch.round() as u64;

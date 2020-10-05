@@ -13,7 +13,7 @@ use std::collections::HashMap;
 const PLOT_DIR: Option<&str> = Some("plots");
 
 // if true, dstats per process will be generated
-const ALL_DSTATS: bool = false;
+const ALL_DSTATS: bool = true;
 
 fn main() -> Result<(), Report> {
     // set global style
@@ -29,10 +29,10 @@ fn main() -> Result<(), Report> {
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
     fairness_plot()?;
-    tail_latency_plot()?;
-    increasing_load_plot()?;
+    // tail_latency_plot()?;
+    // increasing_load_plot()?;
     // scalability_plot()?;
-    partial_replication_plot()?;
+    // partial_replication_plot()?;
     Ok(())
 }
 
@@ -308,11 +308,7 @@ fn scalability_plot() -> Result<(), Report> {
             search
         })
         .collect();
-    let style_fun = None;
-    let path = String::from("plot_scalability.pdf");
-    fantoch_plot::scalability_plot(
-        searches, style_fun, n, cpus, PLOT_DIR, &path, &db,
-    )?;
+    fantoch_plot::intra_machine_scalability_plot(searches, n, cpus, &db)?;
 
     Ok(())
 }
@@ -345,9 +341,64 @@ fn partial_replication_plot() -> Result<(), Report> {
         1024 * 22,
         1024 * 24,
         1024 * 32,
+        1024 * 34,
+        1024 * 36,
+        1024 * 40,
+        1024 * 44,
         1024 * 48,
         1024 * 64,
+        1024 * 72,
+        1024 * 80,
+        1024 * 96,
+        1024 * 104,
+        1024 * 112,
+        1024 * 128,
+        1024 * 136,
+        1024 * 144,
     ];
+
+    let protocols = vec![
+        (Protocol::NewtAtomic, 0),
+        (Protocol::AtlasLocked, 100),
+        (Protocol::AtlasLocked, 95),
+        (Protocol::AtlasLocked, 50),
+    ];
+
+    let search_gen = |(protocol, read_only_percentage)| {
+        let mut search = Search::new(n, f, protocol);
+        search.read_only_percentage(read_only_percentage);
+        search
+    };
+
+    let style_fun = |search: &Search| {
+        let mut style = HashMap::new();
+        match search.protocol {
+            Protocol::NewtAtomic => {
+                style.insert(
+                    Style::Label,
+                    format!("{}", PlotFmt::protocol_name(search.protocol)),
+                );
+            }
+            Protocol::AtlasLocked => {
+                let ro = search
+                    .read_only_percentage
+                    .expect("read-only percentage should be set in search");
+                style.insert(Style::Label, format!("Janus* r = {}%", ro));
+
+                let (protocol, f) = match ro {
+                    100 => (Protocol::Basic, 2),
+                    95 => (Protocol::NewtLocked, 1),
+                    50 => (Protocol::NewtLocked, 2),
+                    _ => panic!("unsupported read-only percentage: {:?}", ro),
+                };
+                style.insert(Style::Color, PlotFmt::color(protocol, f));
+                style.insert(Style::Marker, PlotFmt::marker(protocol, f));
+                style.insert(Style::Hatch, PlotFmt::hatch(protocol, f));
+            }
+            _ => panic!("unsupported protocol: {:?}", search.protocol),
+        }
+        style
+    };
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
@@ -357,6 +408,8 @@ fn partial_replication_plot() -> Result<(), Report> {
         (1, 2, Some((0.0, 400.0))),
         (2, 2, Some((0.0, 400.0))),
         (4, 2, Some((0.0, 700.0))),
+        (6, 2, Some((0.0, 1000.0))),
+        (8, 2, Some((0.0, 1300.0))),
     ] {
         let search_refine = |search: &mut Search, coefficient: f64| {
             let key_gen = KeyGen::Zipf {
@@ -370,59 +423,6 @@ fn partial_replication_plot() -> Result<(), Report> {
                 .payload_size(payload_size);
         };
 
-        let protocols = vec![
-            (Protocol::NewtAtomic, 0),
-            (Protocol::AtlasLocked, 100),
-            (Protocol::AtlasLocked, 95),
-            (Protocol::AtlasLocked, 50),
-        ];
-
-        let search_gen = |(protocol, read_only_percentage)| {
-            let mut search = Search::new(n, f, protocol);
-            search.read_only_percentage(read_only_percentage);
-            search
-        };
-        let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
-            Some(Box::new(|search| {
-                let mut style = HashMap::new();
-                match search.protocol {
-                    Protocol::NewtAtomic => {
-                        style.insert(
-                            Style::Label,
-                            format!(
-                                "{}",
-                                PlotFmt::protocol_name(search.protocol)
-                            ),
-                        );
-                    }
-                    Protocol::AtlasLocked => {
-                        let ro = search.read_only_percentage.expect(
-                            "read-only percentage should be set in search",
-                        );
-                        style.insert(
-                            Style::Label,
-                            format!("Janus* r = {}%", ro),
-                        );
-
-                        let (protocol, f) = match ro {
-                            100 => (Protocol::Basic, 2),
-                            95 => (Protocol::NewtLocked, 1),
-                            50 => (Protocol::NewtLocked, 2),
-                            _ => panic!(
-                                "unsupported read-only percentage: {:?}",
-                                ro
-                            ),
-                        };
-                        style.insert(Style::Color, PlotFmt::color(protocol, f));
-                        style.insert(
-                            Style::Marker,
-                            PlotFmt::marker(protocol, f),
-                        );
-                    }
-                    _ => panic!("unsupported protocol: {:?}", search.protocol),
-                }
-                style
-            }));
         let latency_precision = LatencyPrecision::Millis;
         let y_range = Some((140.0, 310.0));
         let y_log_scale = false;
@@ -433,6 +433,8 @@ fn partial_replication_plot() -> Result<(), Report> {
             "plot_partial_replication_{}_k{}.pdf",
             shard_count, keys_per_command
         );
+        let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
+            Some(Box::new(style_fun));
         fantoch_plot::throughput_latency_plot_split(
             n,
             protocols.clone(),
@@ -454,6 +456,27 @@ fn partial_replication_plot() -> Result<(), Report> {
             &db,
         )?;
     }
+
+    // create searches
+    let searches: Vec<_> = protocols
+        .into_iter()
+        .map(|search_gen_input| search_gen(search_gen_input))
+        .collect();
+    let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
+        Some(Box::new(style_fun));
+    let settings = vec![
+        (2, 2, top_coefficient),
+        (2, 2, bottom_coefficient),
+        (4, 2, top_coefficient),
+        (4, 2, bottom_coefficient),
+        (6, 2, top_coefficient),
+        (6, 2, bottom_coefficient),
+    ];
+    let y_range = Some((0.0, 1000.0));
+    let path = format!("plot_partial_replication.pdf");
+    fantoch_plot::inter_machine_scalability_plot(
+        searches, style_fun, n, settings, y_range, PLOT_DIR, &path, &db,
+    )?;
     Ok(())
 }
 
@@ -465,9 +488,9 @@ fn partial_replication_all() -> Result<(), Report> {
     let mut key_gens = Vec::new();
     // for coefficient in vec![0.5, 1.0] {
     for (coefficient, x_range, y_range) in vec![
-        (0.5, Some((0.0, 700.0)), Some((150.0, 400.0))),
-        // (0.6, Some((0.0, 500.0)), Some((150.0, 300.0))),
-        (0.7, Some((0.0, 700.0)), Some((150.0, 400.0))),
+        // (0.5, Some((0.0, 700.0)), Some((150.0, 400.0))),
+        // (0.7, Some((0.0, 700.0)), Some((150.0, 400.0))),
+        (1.0, None, None),
     ] {
         let key_gen = KeyGen::Zipf {
             coefficient,
@@ -489,12 +512,15 @@ fn partial_replication_all() -> Result<(), Report> {
         (1, 2),
         (2, 2),
         (4, 2),
+        (6, 2),
+        (8, 2),
     ];
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
     let clients_per_region = vec![
+        256,
         1024,
         1024 * 2,
         1024 * 3,
@@ -502,7 +528,6 @@ fn partial_replication_all() -> Result<(), Report> {
         1024 * 5,
         1024 * 6,
         1024 * 8,
-        1024 * 9,
         1024 * 10,
         1024 * 12,
         1024 * 16,
@@ -510,8 +535,20 @@ fn partial_replication_all() -> Result<(), Report> {
         1024 * 22,
         1024 * 24,
         1024 * 32,
+        1024 * 34,
+        1024 * 36,
+        1024 * 40,
+        1024 * 44,
         1024 * 48,
         1024 * 64,
+        1024 * 72,
+        1024 * 80,
+        1024 * 96,
+        1024 * 104,
+        1024 * 112,
+        1024 * 128,
+        1024 * 136,
+        1024 * 144,
     ];
 
     let search_refine = |search: &mut Search, read_only_percentage: usize| {
@@ -530,7 +567,8 @@ fn partial_replication_all() -> Result<(), Report> {
         }
     };
 
-    for read_only_percentage in vec![100, 95, 50] {
+    // for read_only_percentage in vec![100, 95, 50] {
+    for read_only_percentage in vec![0] {
         for (key_gen, x_range, y_range) in key_gens.clone() {
             // generate all-combo throughput-something plot
             for y_axis in vec![
@@ -664,29 +702,40 @@ fn partial_replication_all() -> Result<(), Report> {
                         })
                         .collect();
                     let style_fun = None;
-                    fantoch_plot::throughput_something_plot(
-                        searches,
-                        style_fun,
-                        latency_precision,
+                    let max_throughputs =
+                        fantoch_plot::throughput_something_plot(
+                            searches,
+                            style_fun,
+                            latency_precision,
+                            n,
+                            clients_per_region.clone(),
+                            x_range,
+                            y_range,
+                            y_axis,
+                            PLOT_DIR,
+                            &path,
+                            &db,
+                        )?;
+                    println!(
+                        "n = {} | s = {} | k = {} | {} | read_only = {} | max. tputs: {:?}",
                         n,
-                        clients_per_region.clone(),
-                        x_range,
-                        y_range,
-                        y_axis,
-                        PLOT_DIR,
-                        &path,
-                        &db,
-                    )?;
+                        shard_count,
+                        keys_per_command,
+                        key_gen,
+                        read_only_percentage,
+                        max_throughputs
+                    );
                 }
 
                 // generate dstat, latency and cdf plots
                 for clients_per_region in clients_per_region.clone() {
                     println!(
-                        "n = {} | s = {} | k = {} | {} | c = {}",
+                        "n = {} | s = {} | k = {} | {} | read_only = {} | c = {}",
                         n,
                         shard_count,
                         keys_per_command,
                         key_gen,
+                        read_only_percentage,
                         clients_per_region,
                     );
 

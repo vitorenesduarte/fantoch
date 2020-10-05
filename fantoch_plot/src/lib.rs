@@ -15,14 +15,13 @@ use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
 use fantoch::protocol::ProtocolMetricsKind;
 use fantoch_exp::Protocol;
-use fantoch_prof::metrics::Histogram;
 use plot::axes::Axes;
 use plot::figure::Figure;
 use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -193,13 +192,12 @@ pub fn latency_plot<R>(
     // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
     const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
 
-    // let combinations = combinations(n);
     assert!(
         searches.len() <= MAX_COMBINATIONS,
         "latency_plot: expected less searches than the max number of combinations"
     );
 
-    // compute x:
+    // compute x: one per region
     // - the +1 is for the 'average' group
     let x: Vec<_> = (0..n + 1).map(|i| i as f64 * FULL_REGION_WIDTH).collect();
 
@@ -308,7 +306,8 @@ pub fn latency_plot<R>(
             per_region_latency.into_iter().unzip();
 
         // compute the stddev between region latencies
-        let stddev = Histogram::from(y.clone()).stddev().value().round() as u64;
+        // let stddev = fantoch_prof::metrics::Histogram::from(y.clone()).stddev().value().round() as u64;
+        let stddev = 0;
         // add stddev as an error bar
         from_err.push(0);
         to_err.push(stddev);
@@ -623,7 +622,7 @@ pub fn throughput_something_plot(
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
-) -> Result<(), Report> {
+) -> Result<Vec<usize>, Report> {
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
@@ -635,7 +634,7 @@ pub fn throughput_something_plot(
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
-    inner_throughput_something_plot(
+    let max_throughputs = inner_throughput_something_plot(
         py,
         &ax,
         searches,
@@ -673,7 +672,7 @@ pub fn throughput_something_plot(
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
 
-    Ok(())
+    Ok(max_throughputs)
 }
 
 pub fn inner_throughput_something_plot(
@@ -689,7 +688,8 @@ pub fn inner_throughput_something_plot(
     y_axis: ThroughputYAxis,
     db: &ResultsDB,
     plotted: &mut usize,
-) -> Result<(), Report> {
+) -> Result<Vec<usize>, Report> {
+    let mut max_throughputs = Vec::with_capacity(searches.len());
     for mut search in searches {
         // check `n`
         assert_eq!(search.n, n, "inner_throughput_something_plot: value of n in search doesn't match the provided");
@@ -759,6 +759,7 @@ pub fn inner_throughput_something_plot(
 
         // compute x: compute throughput given average latency and number of
         // clients
+        let mut max_throughput = 0;
         let (x, y): (Vec<_>, Vec<_>) = avg_latency
             .into_iter()
             .zip(y.iter())
@@ -776,12 +777,18 @@ pub fn inner_throughput_something_plot(
                     // compute K ops
                     let x = throughput / 1000f64;
 
+                    // update max throughput
+                    max_throughput = std::cmp::max(max_throughput, x as usize);
+
                     // round y
                     let y = y_value.round() as usize;
                     Some((x, y))
                 }
             })
             .unzip();
+
+        // save max throughput
+        max_throughputs.push(max_throughput);
 
         // plot it! (if there's something to be plotted)
         if !x.is_empty() {
@@ -803,7 +810,7 @@ pub fn inner_throughput_something_plot(
         ax.set_ylim(Some(kwargs))?;
     }
 
-    Ok(())
+    Ok(max_throughputs)
 }
 
 fn compute_throughput(
@@ -872,25 +879,12 @@ where
     Ok(())
 }
 
-pub fn scalability_plot(
+pub fn intra_machine_scalability_plot(
     searches: Vec<Search>,
-    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     n: usize,
     cpus: Vec<usize>,
-    output_dir: Option<&str>,
-    output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    // start python
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let plt = PyPlot::new(py)?;
-
-    // start plot
-    let (fig, ax) = start_plot(py, &plt, None)?;
-
-    // keep track of the number of plotted instances
-    let mut plotted = 0;
     // the precision does not matter, but we still need one
     let latency_precision = LatencyPrecision::Micros;
 
@@ -898,7 +892,7 @@ pub fn scalability_plot(
         let mut ys = Vec::with_capacity(cpus.len());
         for cpus in cpus.iter() {
             // check `n`
-            assert_eq!(search.n, n, "throughput_something_plot: value of n in search doesn't match the provided");
+            assert_eq!(search.n, n, "intra_machine_scalability_plot: value of n in search doesn't match the provided");
 
             // refine search
             search.cpus(*cpus);
@@ -939,16 +933,152 @@ pub fn scalability_plot(
         );
     }
 
+    Ok(())
+}
+
+pub fn inter_machine_scalability_plot(
+    searches: Vec<Search>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    n: usize,
+    settings: Vec<(usize, usize, f64)>,
+    y_range: Option<(f64, f64)>,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report> {
+    const FULL_PER_GROUP_WIDTH: f64 = 10f64;
+    const MAX_COMBINATIONS: usize = 4;
+    // 80% of `FULL_PER_GROUP_WIDTH` when `MAX_COMBINATIONS` is reached
+    const BAR_WIDTH: f64 = FULL_PER_GROUP_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
+
+    assert!(
+        searches.len() == MAX_COMBINATIONS,
+        "inter_machine_scalability_plot: expected same number of seaches as the max number of combinations"
+    );
+
+    // compute x: one per setting
+    let x: Vec<_> = (0..settings.len())
+        .map(|i| i as f64 * FULL_PER_GROUP_WIDTH)
+        .collect();
+
+    // we need to shift all to the left by half of the number of searches
+    let search_count = searches.len();
+    let shift_left = search_count as f64 / 2f64;
+    // we also need to shift half bar to the right
+    let shift_right = 0.5;
+    let searches = searches.into_iter().enumerate().map(|(index, search)| {
+        // compute index according to shifts
+        let base = index as f64 - shift_left + shift_right;
+        // compute combination's shift
+        let shift = base * BAR_WIDTH;
+        (shift, search)
+    });
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    // the precision does not matter, but we still need one
+    let latency_precision = LatencyPrecision::Micros;
+
+    for (shift, mut search) in searches.clone() {
+        let mut y = Vec::new();
+        for (shard_count, keys_per_command, coefficient) in settings.clone() {
+            // check `n`
+            assert_eq!(search.n, n, "inter_machine_scalability_plot: value of n in search doesn't match the provided");
+
+            // refine search
+            let key_gen = KeyGen::Zipf {
+                coefficient,
+                keys_per_shard: 1_000_000,
+            };
+            search
+                .shard_count(shard_count)
+                .keys_per_command(keys_per_command)
+                .key_gen(key_gen);
+
+            // execute search
+            let exp_data = db.find(search)?;
+            let max_throughput = exp_data
+                .into_iter()
+                .map(|(_, exp_config, exp_data)| {
+                    // compute throughput for each result matching this search
+                    // (we can have several, with different number of clients)
+                    // - first get average latency
+                    // - and the compute throughput
+                    let avg_latency = exp_data
+                        .global_client_latency
+                        .mean(latency_precision)
+                        .round();
+                    let throughput = compute_throughput(
+                        n,
+                        exp_config.clients_per_region,
+                        avg_latency,
+                        latency_precision,
+                    );
+                    // compute K ops
+                    (throughput / 1000f64) as u64
+                })
+                .max();
+
+            let max_throughput = max_throughput.unwrap_or_default();
+            y.push(max_throughput);
+        }
+
+        // compute x: shift all values by `shift`
+        let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
+        println!("x: {:?} | y: {:?}", x, y);
+
+        // plot it
+        let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
+        ax.bar(x, y, Some(kwargs))?;
+        plotted += 1;
+    }
+
+    // set xticks
+    ax.set_xticks(x, None)?;
+
+    let mut shards = BTreeSet::new();
+    let labels: Vec<_> = settings
+        .into_iter()
+        .map(|(shard_count, _, coefficient)| {
+            shards.insert(shard_count);
+            format!("zipf = {}", coefficient)
+        })
+        .collect();
+    let fontdict = pydict!(py, ("fontsize", 7.5));
+    let kwargs = pydict!(py, ("fontdict", fontdict));
+    ax.set_xticklabels(labels, Some(kwargs))?;
+
+    // check that the number of shards is 3
+    assert!(shards.len() == 3, "unsupported number of shards");
+    let kwargs = None;
+    plt.text(0.0, -190.0, "2 partitions", kwargs)?;
+    plt.text(20.0, -190.0, "4 partitions", kwargs)?;
+    plt.text(40.0, -190.0, "6 partitions", kwargs)?;
+
     // set labels
-    ax.set_xlabel("cpus", None)?;
-    ax.set_ylabel("throughput (K ops/s)", None)?;
+    let ylabel = String::from("max. throughput (K ops/s)");
+    ax.set_ylabel(&ylabel, None)?;
+
+    // maybe set y limits
+    if let Some((y_min, y_max)) = y_range {
+        let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
+        ax.set_ylim(Some(kwargs))?;
+    }
 
     // legend
     add_legend(plotted, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
-
     Ok(())
 }
 
@@ -1878,7 +2008,7 @@ fn line_style<'a>(
         ("label", label),
         ("color", color),
         ("marker", marker),
-        ("markersize", 4.2),
+        ("markersize", 4.8),
         ("linestyle", linestyle),
         ("linewidth", linewidth),
     );

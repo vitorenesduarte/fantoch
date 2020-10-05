@@ -136,22 +136,40 @@ async fn baremetal_setup(
 
     // hostname should return at least one ip like so "10.10.5.61 172.17.0.1"
     let parts: Vec<_> = ips.split(' ').collect();
-    let ip = parts[0];
+    let mut ip = parts[0];
+    // one of the veleta machines returns
+    // "169.254.0.2 10.10.5.204 11.1.212.203 172.17.0.1 192.168.224.1 172.28.0.1"
+    // and we want the "10.10.*.*";
+    // thus, if more than one ip is returned, give preference to that one
+    for part in parts {
+        if part.starts_with("10.10") {
+            ip = part;
+            break;
+        }
+    }
 
     // append ssh port
     // - TODO: I think this should be fixed in tsunami, not here
     let addr = format!("{}:22", ip);
     tracing::debug!("hostname -I: extracted {:?}", ip);
 
-    let setup =
-        tsunami::providers::baremetal::Setup::new(addr, Some(username))?
-            .key_path(PRIVATE_KEY)
-            .setup(crate::machine::fantoch_setup(
+    let fantoch_setup =
+        if machine.contains("veleta") && !machine.contains("veleta8") {
+            // don't setup if this is a veleta machine that is not veleta8
+            crate::machine::veleta_fantoch_setup()
+        } else {
+            crate::machine::fantoch_setup(
                 branch,
                 run_mode,
                 features,
                 Testbed::Baremetal,
-            ));
+            )
+        };
+
+    let setup =
+        tsunami::providers::baremetal::Setup::new(addr, Some(username))?
+            .key_path(PRIVATE_KEY)
+            .setup(fantoch_setup);
     Ok(setup)
 }
 

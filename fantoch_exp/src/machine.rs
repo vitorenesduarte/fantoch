@@ -495,6 +495,21 @@ pub fn fantoch_setup(
     })
 }
 
+pub fn veleta_fantoch_setup() -> Box<
+    dyn for<'r> Fn(
+            &'r tsunami::Machine<'_>,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
+        > + Send
+        + Sync
+        + 'static,
+> {
+    // TODO: actually, we need to still do some setup on veleta machines like
+    // increasing max number of open files, which was done "manually" in the
+    // first time
+    Box::new(|_| Box::pin(async { Ok(()) }))
+}
+
 pub async fn local_fantoch_setup(
     branch: String,
     run_mode: RunMode,

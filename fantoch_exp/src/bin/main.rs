@@ -44,7 +44,7 @@ const COMMANDS_PER_CLIENT_WAN: usize = 500;
 const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 
 // fantoch run config
-const BRANCH: &str = "scalability";
+const BRANCH: &str = "master";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -91,9 +91,9 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    // fairness_and_tail_latency_plot().await
+    fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
-    partial_replication_plot().await
+    // partial_replication_plot().await
 }
 
 #[allow(dead_code)]
@@ -107,9 +107,9 @@ async fn partial_replication_plot() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         // (Protocol::NewtLocked, config!(n, 1, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -121,22 +121,33 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // 1024 * 10, // for Atlas s=2 zipf=0.7 r=95%
         // 1024 * 12, // for Atlas s=2 zipf=0.7 r=95%
         // 1024 * 16,
-        // 1024 * 20, // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95%
-        // 1024 * 24,
+        // 1024 * 20, // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95% 1024 * 24,
         // 1024 * 32,
+        // 1024 * 34,
+        // 1024 * 36,
+        // 1024 * 40,
+        // 1024 * 44,
         // 1024 * 48,
         // 1024 * 64,
+        // 1024 * 72,
+        // 1024 * 80,
+        // 1024 * 96,
+        // 1024 * 104,
+        // 1024 * 112,
+        // 1024 * 128,
+        1024 * 144,
     ];
 
-    let shard_count = 4;
+    let shard_count = 6;
     let keys_per_command = 2;
     let payload_size = 100;
     let cpus = 12;
 
     let mut workloads = Vec::new();
-    for coefficient in vec![0.5, 0.7] {
-        // for read_only_percentage in vec![0] {
-        for read_only_percentage in vec![100, 95, 50] {
+    // for coefficient in vec![0.5, 0.7] {
+    for coefficient in vec![1.0] {
+        // for read_only_percentage in vec![100, 95, 50] {
+        for read_only_percentage in vec![0] {
             let key_gen = KeyGen::Zipf {
                 keys_per_shard: 1_000_000,
                 coefficient,
@@ -299,7 +310,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
     ];
 
-    let clients_per_region = vec![512, 1024];
+    let clients_per_region = vec![256];
 
     let shard_count = 1;
     let keys_per_command = 1;

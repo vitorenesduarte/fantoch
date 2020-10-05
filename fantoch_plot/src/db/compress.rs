@@ -69,9 +69,10 @@ impl fmt::Debug for MicrosHistogramCompress {
         let latency_precision = LatencyPrecision::Millis;
         write!(
             f,
-            "min={:<6} max={:<6} avg={:<6} p5={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
+            "min={:<6} max={:<6} std={:<6} avg={:<6} p5={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
             self.min(latency_precision).round(),
             self.max(latency_precision).round(),
+            self.stddev(latency_precision).round(),
             self.mean(latency_precision).round(),
             self.percentile(0.05, latency_precision).round(),
             self.percentile(0.95, latency_precision).round(),
@@ -235,9 +236,10 @@ impl fmt::Debug for HistogramCompress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "min={:<6} max={:<6} avg={:<6} p5={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
+            "min={:<6} max={:<6} std={:<6} avg={:<6} p5={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
             self.min().round(),
             self.max().round(),
+            self.stddev().round(),
             self.mean().round(),
             self.percentile(0.05).round(),
             self.percentile(0.95).round(),
