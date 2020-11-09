@@ -15,7 +15,7 @@ max_level_debug = ["fantoch/max_level_debug"]
 max_level_trace = ["fantoch/max_level_trace"]
 
 [dependencies]
-ahash = "0.4.4"
+ahash = "0.5.8"
 clap = "2.33.3"
 color-eyre = "0.5.1"
 dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "4cabdf423002be85fe5ecbf7308dbd9754d33011" }
