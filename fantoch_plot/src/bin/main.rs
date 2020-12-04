@@ -29,10 +29,10 @@ fn main() -> Result<(), Report> {
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
     fairness_plot()?;
-    // tail_latency_plot()?;
-    // increasing_load_plot()?;
+    tail_latency_plot()?;
+    increasing_load_plot()?;
     // scalability_plot()?;
-    // partial_replication_plot()?;
+    partial_replication_plot()?;
     Ok(())
 }
 
@@ -51,6 +51,7 @@ fn fairness_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 2),
     ];
+    let legend_order = vec![0, 2, 4, 1, 3, 5];
     let n = 5;
     let clients_per_region = 512;
     let error_bar = ErrorBar::Without;
@@ -88,7 +89,8 @@ fn fairness_plot() -> Result<(), Report> {
     let style_fun = None;
     let latency_precision = LatencyPrecision::Millis;
     let results = fantoch_plot::latency_plot(
-        searches.clone(),
+        searches,
+        Some(legend_order),
         style_fun,
         latency_precision,
         n,
@@ -121,11 +123,12 @@ fn tail_latency_plot() -> Result<(), Report> {
         (Protocol::NewtAtomic, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
+        // (Protocol::FPaxos, 1),
         (Protocol::EPaxosLocked, 2),
     ];
     let n = 5;
-    let clients_per_region_top = 512;
-    let clients_per_region_bottom = 1024;
+    let clients_per_region_top = 256;
+    let clients_per_region_bottom = 512;
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
@@ -147,7 +150,7 @@ fn tail_latency_plot() -> Result<(), Report> {
     };
     let top_searches = create_searches(clients_per_region_top);
     let bottom_searches = create_searches(clients_per_region_bottom);
-    let x_range = Some((100.0, 20_000.0));
+    let x_range = Some((100.0, 15_000.0));
 
     // generate cdf plot
     let path = String::from("plot_tail_latency.pdf");
@@ -216,19 +219,32 @@ fn increasing_load_plot() -> Result<(), Report> {
     let protocols = vec![
         (Protocol::NewtAtomic, 1),
         (Protocol::NewtAtomic, 2),
-        (Protocol::FPaxos, 1),
-        (Protocol::FPaxos, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
+        (Protocol::FPaxos, 1),
+        (Protocol::FPaxos, 2),
         // (Protocol::EPaxosLocked, 2),
     ];
 
-    let path = String::from("plot_increasing_load_heatmap.pdf");
+    let path = format!("plot_increasing_load_heatmap_{}.pdf", top_key_gen);
     fantoch_plot::heatmap_plot_split(
         n,
         protocols.clone(),
         clients_per_region.clone(),
         top_key_gen,
+        search_refine,
+        leader,
+        PLOT_DIR,
+        &path,
+        &db,
+    )?;
+
+    let path = format!("plot_increasing_load_heatmap_{}.pdf", bottom_key_gen);
+    fantoch_plot::heatmap_plot_split(
+        n,
+        protocols.clone(),
+        clients_per_region.clone(),
+        bottom_key_gen,
         search_refine,
         leader,
         PLOT_DIR,
@@ -383,7 +399,7 @@ fn partial_replication_plot() -> Result<(), Report> {
                 let ro = search
                     .read_only_percentage
                     .expect("read-only percentage should be set in search");
-                style.insert(Style::Label, format!("Janus* r = {}%", ro));
+                style.insert(Style::Label, format!("Janus* w = {}%", 100 - ro));
 
                 let (protocol, f) = match ro {
                     100 => (Protocol::Basic, 2),
@@ -404,12 +420,10 @@ fn partial_replication_plot() -> Result<(), Report> {
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
     for (shard_count, keys_per_command, x_range) in vec![
-        (1, 1, Some((0.0, 500.0))),
         (1, 2, Some((0.0, 400.0))),
         (2, 2, Some((0.0, 400.0))),
         (4, 2, Some((0.0, 700.0))),
         (6, 2, Some((0.0, 1000.0))),
-        (8, 2, Some((0.0, 1300.0))),
     ] {
         let search_refine = |search: &mut Search, coefficient: f64| {
             let key_gen = KeyGen::Zipf {
@@ -488,8 +502,8 @@ fn partial_replication_all() -> Result<(), Report> {
     let mut key_gens = Vec::new();
     // for coefficient in vec![0.5, 1.0] {
     for (coefficient, x_range, y_range) in vec![
-        // (0.5, Some((0.0, 700.0)), Some((150.0, 400.0))),
-        // (0.7, Some((0.0, 700.0)), Some((150.0, 400.0))),
+        (0.5, Some((0.0, 700.0)), Some((150.0, 400.0))),
+        (0.7, Some((0.0, 700.0)), Some((150.0, 400.0))),
         (1.0, None, None),
     ] {
         let key_gen = KeyGen::Zipf {
@@ -513,7 +527,7 @@ fn partial_replication_all() -> Result<(), Report> {
         (2, 2),
         (4, 2),
         (6, 2),
-        (8, 2),
+        // (8, 2),
     ];
 
     // load results
@@ -568,7 +582,7 @@ fn partial_replication_all() -> Result<(), Report> {
     };
 
     // for read_only_percentage in vec![100, 95, 50] {
-    for read_only_percentage in vec![0] {
+    for read_only_percentage in vec![0, 100, 95, 50] {
         for (key_gen, x_range, y_range) in key_gens.clone() {
             // generate all-combo throughput-something plot
             for y_axis in vec![
@@ -820,9 +834,11 @@ fn partial_replication_all() -> Result<(), Report> {
                             read_only_percentage,
                             clients_per_region,
                         );
+                        let legend_order = None;
                         let style_fun = None;
                         let results = fantoch_plot::latency_plot(
                             searches.clone(),
+                            legend_order,
                             style_fun,
                             latency_precision,
                             n,
@@ -1031,9 +1047,11 @@ fn multi_key_all() -> Result<(), Report> {
                             key_gen,
                             clients_per_region,
                         );
+                        let legend_order = None;
                         let style_fun = None;
                         let results = fantoch_plot::latency_plot(
                             searches.clone(),
+                            legend_order,
                             style_fun,
                             latency_precision,
                             n,
@@ -1342,9 +1360,11 @@ fn single_key_all() -> Result<(), Report> {
                         key_gen,
                         clients_per_region,
                     );
+                    let legend_order = None;
                     let style_fun = None;
                     let results = fantoch_plot::latency_plot(
                         searches.clone(),
+                        legend_order,
                         style_fun,
                         latency_precision,
                         n,

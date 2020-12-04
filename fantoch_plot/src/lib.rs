@@ -21,7 +21,7 @@ use plot::pyplot::PyPlot;
 use plot::Matplotlib;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
@@ -178,6 +178,7 @@ pub fn set_global_style() -> Result<(), Report> {
 
 pub fn latency_plot<R>(
     searches: Vec<Search>,
+    legend_order: Option<Vec<usize>>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     latency_precision: LatencyPrecision,
     n: usize,
@@ -242,7 +243,20 @@ pub fn latency_plot<R>(
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
-    for (shift, search) in searches {
+    // compute legend order: if not defined, then it's the order given by
+    // `searches`
+    let legend_order =
+        legend_order.unwrap_or_else(|| (0..searches.len()).collect::<Vec<_>>());
+    assert_eq!(
+        legend_order.len(),
+        searches.len(),
+        "legend order should contain the same number of searches"
+    );
+    let mut legends = BTreeMap::new();
+
+    for ((shift, search), legend_order) in
+        searches.into_iter().zip(legend_order)
+    {
         // check `n`
         assert_eq!(
             search.n, n,
@@ -336,8 +350,14 @@ pub fn latency_plot<R>(
         let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
         pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
 
-        ax.bar(x, y, Some(kwargs))?;
+        let line = ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
+
+        // save line with its legend order
+        legends.insert(
+            legend_order,
+            (line, PlotFmt::label(search.protocol, search.f)),
+        );
 
         // save new result
         results.push((search, f(exp_data)));
@@ -373,7 +393,7 @@ pub fn latency_plot<R>(
     ax.set_ylabel(&ylabel, None)?;
 
     // legend
-    add_legend(plotted, None, None, py, &ax)?;
+    add_legend(plotted, Some(legends), None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -416,7 +436,7 @@ pub fn cdf_plot(
     inner_cdf_plot_style(py, &ax, None, latency_precision)?;
 
     // legend
-    add_legend(plotted, None, None, py, &ax)?;
+    add_legend(plotted, None, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -493,7 +513,14 @@ pub fn cdf_plot_split(
                 // specific pull-up for this kind of plot
                 let y_bbox_to_anchor = Some(1.66);
                 // legend
-                add_legend(subfigure_plotted, None, y_bbox_to_anchor, py, &ax)?;
+                add_legend(
+                    subfigure_plotted,
+                    None,
+                    None,
+                    y_bbox_to_anchor,
+                    py,
+                    &ax,
+                )?;
             }
             2 => {
                 // nothing to do
@@ -622,7 +649,7 @@ pub fn throughput_something_plot(
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
-) -> Result<Vec<usize>, Report> {
+) -> Result<Vec<(Search, usize)>, Report> {
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
@@ -667,7 +694,7 @@ pub fn throughput_something_plot(
     ax.set_ylabel(&y_label, None)?;
 
     // legend
-    add_legend(plotted, None, None, py, &ax)?;
+    add_legend(plotted, None, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -688,7 +715,7 @@ pub fn inner_throughput_something_plot(
     y_axis: ThroughputYAxis,
     db: &ResultsDB,
     plotted: &mut usize,
-) -> Result<Vec<usize>, Report> {
+) -> Result<Vec<(Search, usize)>, Report> {
     let mut max_throughputs = Vec::with_capacity(searches.len());
     for mut search in searches {
         // check `n`
@@ -787,8 +814,17 @@ pub fn inner_throughput_something_plot(
             })
             .unzip();
 
+        println!(
+            "{:<7} f = {}\n  throughput: {:?} | max = {}\n  latency:    {:?}",
+            PlotFmt::protocol_name(search.protocol),
+            search.f,
+            x.iter().map(|v| v.round() as usize).collect::<Vec<_>>(),
+            max_throughput,
+            y
+        );
+
         // save max throughput
-        max_throughputs.push(max_throughput);
+        max_throughputs.push((search, max_throughput));
 
         // plot it! (if there's something to be plotted)
         if !x.is_empty() {
@@ -1060,9 +1096,9 @@ pub fn inter_machine_scalability_plot(
     // check that the number of shards is 3
     assert!(shards.len() == 3, "unsupported number of shards");
     let kwargs = None;
-    plt.text(0.0, -190.0, "2 partitions", kwargs)?;
-    plt.text(20.0, -190.0, "4 partitions", kwargs)?;
-    plt.text(40.0, -190.0, "6 partitions", kwargs)?;
+    plt.text(0.0, -190.0, "2 shards", kwargs)?;
+    plt.text(20.0, -190.0, "4 shards", kwargs)?;
+    plt.text(40.0, -190.0, "6 shards", kwargs)?;
 
     // set labels
     let ylabel = String::from("max. throughput (K ops/s)");
@@ -1075,7 +1111,7 @@ pub fn inter_machine_scalability_plot(
     }
 
     // legend
-    add_legend(plotted, None, None, py, &ax)?;
+    add_legend(plotted, None, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -1171,6 +1207,7 @@ where
                 // legend
                 add_legend(
                     plotted,
+                    None,
                     x_bbox_to_anchor,
                     y_bbox_to_anchor,
                     py,
@@ -1813,6 +1850,7 @@ fn end_plot(
 
 fn add_legend(
     plotted: usize,
+    legends: Option<BTreeMap<usize, (&PyAny, String)>>,
     x_bbox_to_anchor: Option<f64>,
     y_bbox_to_anchor: Option<f64>,
     py: Python<'_>,
@@ -1860,7 +1898,8 @@ fn add_legend(
         ("edgecolor", "white"),
         ("ncol", legend_ncol),
     );
-    ax.legend(Some(kwargs))?;
+    let legends = legends.map(|map| map.into_iter().map(|(_, l)| l).collect());
+    ax.legend(legends, Some(kwargs))?;
 
     Ok(())
 }

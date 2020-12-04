@@ -174,8 +174,24 @@ impl<'a> Axes<'a> {
 
     // any questions about legend positioning should be answered here: https://stackoverflow.com/a/43439132/4262469
     // - that's how great the answer is!
-    pub fn legend(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
-        pytry!(self.py(), self.ax.call_method("legend", (), kwargs));
+    pub fn legend(
+        &self,
+        legends: Option<Vec<(&PyAny, String)>>,
+        kwargs: Option<&PyDict>,
+    ) -> Result<(), Report> {
+        match legends {
+            None => {
+                pytry!(self.py(), self.ax.call_method("legend", (), kwargs));
+            }
+            Some(legends) => {
+                let (handles, legends): (Vec<_>, Vec<_>) =
+                    legends.into_iter().unzip();
+                pytry!(
+                    self.py(),
+                    self.ax.call_method("legend", (handles, legends), kwargs)
+                );
+            }
+        }
         Ok(())
     }
 
@@ -203,13 +219,14 @@ impl<'a> Axes<'a> {
         x: Vec<X>,
         height: Vec<H>,
         kwargs: Option<&PyDict>,
-    ) -> Result<(), Report>
+    ) -> Result<&PyAny, Report>
     where
         X: IntoPy<PyObject>,
         H: IntoPy<PyObject>,
     {
-        pytry!(self.py(), self.ax.call_method("bar", (x, height), kwargs));
-        Ok(())
+        let result =
+            pytry!(self.py(), self.ax.call_method("bar", (x, height), kwargs));
+        Ok(result)
     }
 
     pub fn imshow<D>(
