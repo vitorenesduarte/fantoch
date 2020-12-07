@@ -2,4 +2,4 @@
 mod clocks;
 
 // Re-exports.
-pub use clocks::{KeyClocks, SequentialKeyClocks};
+pub use clocks::{Clock, KeyClocks, SequentialKeyClocks};

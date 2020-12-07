@@ -4,28 +4,38 @@ mod sequential;
 // Re-exports.
 pub use sequential::SequentialKeyClocks;
 
-use super::Timestamp;
+use super::Clock;
 use fantoch::command::Command;
-use fantoch::id::{Dot, ShardId};
+use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::HashSet;
+use std::fmt::Debug;
 
-pub trait KeyClocks: Clone {
+pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance.
-    fn new(shard_id: ShardId) -> Self;
+    fn new(process_id: ProcessId, shard_id: ShardId) -> Self;
 
-    /// Computes this command's set of predecessors. From this moment on, this
-    /// command will be reported as a predecessor of commands with a higher
-    /// timestamp. It also removes the prior instance of this command associated
-    /// with its previous clock.
+    // Generate the next clock.
+    fn clock_next(&mut self) -> Clock;
+
+    // Joins with remote clock.
+    fn clock_join(&mut self, other: &Clock);
+
+    // Adds a new command with some tentative timestamp.
+    // After this, it starts being reported as a predecessor of other commands
+    // with tentative higher timestamps.
+    fn add(&mut self, dot: Dot, cmd: &Command, clock: Clock);
+
+    // Removes a previously added command with some tentative timestamp.
+    // After this, it stops being reported as a predecessor of other commands.
+    fn remove(&mut self, cmd: &Command, clock: Clock);
+
+    /// Computes all conflicting commands with a timestamp lower than `clock`.
     fn predecessors(
         &mut self,
-        dot: Dot,
         cmd: &Command,
-        clock: Timestamp,
-        previous_clock: Option<Timestamp>,
+        clock: Clock,
+        blocking: Option<&mut HashSet<Dot>>,
     ) -> HashSet<Dot>;
-
-    fn remove(&mut self, cmd: &Command, clock: Timestamp);
 
     fn parallel() -> bool;
 }

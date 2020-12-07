@@ -40,7 +40,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     type PeriodicEvent = PeriodicEvent;
     type Executor = GraphExecutor;
 
-    /// Creates a new `Atlas` process.
+    /// Creates a new `EPaxos` process.
     fn new(
         process_id: ProcessId,
         shard_id: ShardId,
@@ -668,7 +668,7 @@ impl Info for EPaxosInfo {
     }
 }
 
-// `Atlas` protocol messages
+// `EPaxos` protocol messages
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
     MCollect {
