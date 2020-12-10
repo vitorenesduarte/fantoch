@@ -84,4 +84,34 @@ mod tests {
         assert!(!(Clock::from(10, 1) < Clock::from(9, 2)));
         assert!((Clock::from(10, 1) > Clock::from(9, 2)));
     }
+
+    #[test]
+    fn join() {
+        let p1 = 1;
+        let p2 = 2;
+        let p3 = 3;
+        let p4 = 4;
+        let mut clock = Clock::new(p1);
+
+        // if we join with something with a higher timestamp, then we take their
+        // value
+        clock.join(&Clock::from(2, p2));
+        assert_eq!(clock, Clock::from(2, p2));
+
+        // if we join with something with the same timestamp, then we take the
+        // max of the identifiers
+        clock.join(&Clock::from(2, p3));
+        assert_eq!(clock, Clock::from(2, p3));
+
+        clock.join(&Clock::from(4, p3));
+        assert_eq!(clock, Clock::from(4, p3));
+        clock.join(&Clock::from(4, p2));
+        assert_eq!(clock, Clock::from(4, p3));
+
+        // if we join with something with a lower timestamp, then nothing
+        // happens
+        clock.join(&Clock::from(1, p4));
+        clock.join(&Clock::from(2, p4));
+        clock.join(&Clock::from(3, p4));
+    }
 }
