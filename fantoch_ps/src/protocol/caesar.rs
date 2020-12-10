@@ -342,11 +342,6 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        // ignore ack from self (see `CaesarInfo::new` for the reason why)
-        if from == self.bp.process_id {
-            return;
-        }
-
         // get cmd info
         let info = self.cmds.get(dot);
 
@@ -646,7 +641,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         let cmd = info.cmd.as_ref().expect("command has been set");
 
         // remove previous clock from key clocks if we added it before
-        let added_before = info.clock.is_zero();
+        let added_before = !info.clock.is_zero();
         if added_before {
             key_clocks.remove(&cmd, info.clock);
         }
@@ -800,16 +795,16 @@ mod tests {
     use fantoch::util;
 
     #[test]
-    fn sequential_epaxos_test() {
-        epaxos_flow::<SequentialKeyClocks>();
+    fn sequential_caesar_test() {
+        caesar_flow::<SequentialKeyClocks>();
     }
 
     #[test]
-    fn locked_epaxos_test() {
-        epaxos_flow::<LockedKeyClocks>();
+    fn locked_caesar_test() {
+        caesar_flow::<LockedKeyClocks>();
     }
 
-    fn epaxos_flow<KD: KeyClocks>() {
+    fn caesar_flow<KD: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -849,38 +844,38 @@ mod tests {
         let executor_2 = GraphExecutor::new(process_id_2, shard_id, config);
         let executor_3 = GraphExecutor::new(process_id_3, shard_id, config);
 
-        // epaxos
-        let (mut epaxos_1, _) =
+        // caesar
+        let (mut caesar_1, _) =
             Caesar::<KD>::new(process_id_1, shard_id, config);
-        let (mut epaxos_2, _) =
+        let (mut caesar_2, _) =
             Caesar::<KD>::new(process_id_2, shard_id, config);
-        let (mut epaxos_3, _) =
+        let (mut caesar_3, _) =
             Caesar::<KD>::new(process_id_3, shard_id, config);
 
-        // discover processes in all epaxos
+        // discover processes in all caesar
         let sorted = util::sort_processes_by_distance(
             &europe_west2,
             &planet,
             processes.clone(),
         );
-        epaxos_1.discover(sorted);
+        caesar_1.discover(sorted);
         let sorted = util::sort_processes_by_distance(
             &europe_west3,
             &planet,
             processes.clone(),
         );
-        epaxos_2.discover(sorted);
+        caesar_2.discover(sorted);
         let sorted = util::sort_processes_by_distance(
             &us_west1,
             &planet,
             processes.clone(),
         );
-        epaxos_3.discover(sorted);
+        caesar_3.discover(sorted);
 
         // register processes
-        simulation.register_process(epaxos_1, executor_1);
-        simulation.register_process(epaxos_2, executor_2);
-        simulation.register_process(epaxos_3, executor_3);
+        simulation.register_process(caesar_1, executor_1);
+        simulation.register_process(caesar_2, executor_2);
+        simulation.register_process(caesar_3, executor_3);
 
         // client workload
         let shard_count = 1;
@@ -896,7 +891,7 @@ mod tests {
             payload_size,
         );
 
-        // create client 1 that is connected to epaxos 1
+        // create client 1 that is connected to caesar 1
         let client_id = 1;
         let client_region = europe_west2.clone();
         let status_frequency = None;
@@ -913,13 +908,13 @@ mod tests {
             .expect("there should be a first operation");
         let target = client_1.shard_process(&target_shard);
 
-        // check that `target` is epaxos 1
+        // check that `target` is caesar 1
         assert_eq!(target, process_id_1);
 
         // register client
         simulation.register_client(client_1);
 
-        // register command in executor and submit it in epaxos 1
+        // register command in executor and submit it in caesar 1
         let (process, _, pending, time) = simulation.get_process(target);
         pending.wait_for(&cmd);
         process.submit(None, cmd, time);
@@ -938,12 +933,24 @@ mod tests {
         let mut mproposeacks =
             simulation.forward_to_processes((process_id_1, mpropose));
 
-        // check that there are 2 mproposeacks
-        assert_eq!(mproposeacks.len(), 2 * f);
+        // check that there are 3 mproposeacks
+        assert_eq!(mproposeacks.len(), 3);
 
-        // handle the *only* mproposeack
-        // - there's a single mproposeack single the initial coordinator does
-        //   not reply to itself
+        // handle the first mproposeack
+        let mcommits = simulation.forward_to_processes(
+            mproposeacks.pop().expect("there should be an mpropose ack"),
+        );
+        // no mcommit yet
+        assert!(mcommits.is_empty());
+
+        // handle the second mproposeack
+        let mcommits = simulation.forward_to_processes(
+            mproposeacks.pop().expect("there should be an mpropose ack"),
+        );
+        // no mcommit yet
+        assert!(mcommits.is_empty());
+
+        // handle the third mproposeack
         let mut mcommits = simulation.forward_to_processes(
             mproposeacks.pop().expect("there should be an mpropose ack"),
         );
