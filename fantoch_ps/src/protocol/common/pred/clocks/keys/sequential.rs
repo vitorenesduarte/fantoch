@@ -73,11 +73,13 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     /// Computes all conflicting commands with a timestamp lower than `clock`.
+    /// If `higher` is set, it fills it with all the conflicting commands with a
+    /// timestamp higher than `clock`.
     fn predecessors(
         &mut self,
         cmd: &Command,
         clock: Clock,
-        mut blocking: Option<&mut HashSet<Dot>>,
+        mut higher: Option<&mut HashSet<Dot>>,
     ) -> HashSet<Dot> {
         // TODO is this data structure ever GCed? otherwise the set that we
         // return here will grow unbounded as the more commands are processed in
@@ -88,18 +90,18 @@ impl KeyClocks for SequentialKeyClocks {
                 for (cmd_clock, cmd_dot) in commands {
                     match cmd_clock.cmp(&clock) {
                         Ordering::Less => {
-                            // find all `Dot's` with a timestamp smaller `clock`, and add them
-                            // as predecessors:
+                            // if it has a timestamp smaller than `clock`, add
+                            // it as a predecessor
                             // - we don't assert that doesn't exist already because the same
                             // `Dot` might be stored on different keys if we have multi-key
                             // commands
                             predecessors.insert(*cmd_dot);
                         }
                         Ordering::Greater => {
-                            // add the remaining as blocking, in case a blocking set was passed
-                            // as argument
-                            if let Some(blocking) = blocking.as_deref_mut() {
-                                blocking.insert(*cmd_dot);
+                            // if it has a timestamp smaller than `clock`, add
+                            // it to `higher` if it's defined
+                            if let Some(higher) = higher.as_deref_mut() {
+                                higher.insert(*cmd_dot);
                             }
                         }
                         Ordering::Equal => {

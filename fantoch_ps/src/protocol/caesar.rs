@@ -193,7 +193,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
     }
 }
 
-impl<KD: KeyClocks> Caesar<KD> {
+impl<KC: KeyClocks> Caesar<KC> {
     /// Caesar always tolerates a minority of faults.
     pub fn allowed_faults(n: usize) -> usize {
         n / 2
@@ -281,16 +281,13 @@ impl<KD: KeyClocks> Caesar<KD> {
             Some(&mut blocking),
         );
 
-        // save command in key clocks
-        self.key_clocks.add(dot, &cmd, remote_clock);
-
         // update command info
         info.status = Status::PROPOSE;
         info.cmd = Some(cmd);
-        info.clock = remote_clock;
         info.deps = deps;
+        Self::update_clock(&mut self.key_clocks, dot, info, remote_clock);
 
-        // it's okay if no command is blocking this command
+        // we send an ok if no command is blocking this command
         // TODO: add wait
         let ok = blocking.is_empty();
 
@@ -447,8 +444,8 @@ impl<KD: KeyClocks> Caesar<KD> {
 
         // update command info:
         info.status = Status::COMMIT;
-        info.clock = clock;
         info.deps = deps;
+        Self::update_clock(&mut self.key_clocks, dot, info, clock);
 
         if self.gc_running() {
             // notify self with the committed dot
@@ -491,8 +488,8 @@ impl<KD: KeyClocks> Caesar<KD> {
 
         // update command info:
         info.status = Status::ACCEPT;
-        info.clock = clock;
         info.deps = deps.clone();
+        Self::update_clock(&mut self.key_clocks, dot, info, clock);
 
         // compute new set of predecessors for the command
         let cmd = info.cmd.as_ref().expect("command has been set");
@@ -540,7 +537,7 @@ impl<KD: KeyClocks> Caesar<KD> {
         info.quorum_retries.add(from, deps);
 
         // check if we have all necessary replies
-        if info.quorum_clocks.all() {
+        if info.quorum_retries.all() {
             // if yes, get the aggregated results
             let aggregated_deps = info.quorum_retries.aggregated();
 
@@ -637,6 +634,28 @@ impl<KD: KeyClocks> Caesar<KD> {
 
     fn gc_running(&self) -> bool {
         self.bp.config.gc_interval().is_some()
+    }
+
+    fn update_clock(
+        key_clocks: &mut KC,
+        dot: Dot,
+        info: &mut CaesarInfo,
+        new_clock: Clock,
+    ) {
+        // first get the command
+        let cmd = info.cmd.as_ref().expect("command has been set");
+
+        // remove previous clock from key clocks if we added it before
+        let added_before = info.clock.is_zero();
+        if added_before {
+            key_clocks.remove(&cmd, info.clock);
+        }
+
+        // add new clock to key clocks
+        key_clocks.add(dot, &cmd, new_clock);
+
+        // finally update the clock
+        info.clock = new_clock;
     }
 }
 

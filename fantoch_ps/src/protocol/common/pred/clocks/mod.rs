@@ -55,6 +55,10 @@ impl Clock {
             }
         }
     }
+
+    pub fn is_zero(&self) -> bool {
+        self.seq == 0
+    }
 }
 
 #[cfg(test)]

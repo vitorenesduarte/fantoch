@@ -30,11 +30,13 @@ pub trait KeyClocks: Debug + Clone {
     fn remove(&mut self, cmd: &Command, clock: Clock);
 
     /// Computes all conflicting commands with a timestamp lower than `clock`.
+    /// If `higher` is set, it fills it with all the conflicting commands with a
+    /// timestamp higher than `clock`.
     fn predecessors(
         &mut self,
         cmd: &Command,
         clock: Clock,
-        blocking: Option<&mut HashSet<Dot>>,
+        higher: Option<&mut HashSet<Dot>>,
     ) -> HashSet<Dot>;
 
     fn parallel() -> bool;
