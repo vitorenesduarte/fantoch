@@ -67,6 +67,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
             config.n(),
             config.f(),
             fast_quorum_size,
+            write_quorum_size,
         );
         let to_processes = Vec::new();
         let to_executors = Vec::new();
@@ -797,6 +798,7 @@ impl Info for AtlasInfo {
         n: usize,
         f: usize,
         fast_quorum_size: usize,
+        _write_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
         let initial_value = ConsensusValue::bottom();

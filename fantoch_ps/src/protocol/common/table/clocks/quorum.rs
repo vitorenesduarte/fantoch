@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuorumClocks {
     // fast quorum size
-    q: usize,
+    fast_quorum_size: usize,
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
     // cache current max clock
@@ -16,10 +16,10 @@ pub struct QuorumClocks {
 
 impl QuorumClocks {
     /// Creates a `QuorumClocks` instance given the quorum size.
-    pub fn new(q: usize) -> Self {
+    pub fn new(fast_quorum_size: usize) -> Self {
         Self {
-            q,
-            participants: HashSet::with_capacity(q),
+            fast_quorum_size,
+            participants: HashSet::with_capacity(fast_quorum_size),
             max_clock: 0,
             max_clock_count: 0,
         }
@@ -28,7 +28,7 @@ impl QuorumClocks {
     /// Adds a new `clock` reported by `process_id` and returns the maximum
     /// clock seen until now.
     pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
-        assert!(self.participants.len() < self.q);
+        assert!(self.participants.len() < self.fast_quorum_size);
 
         // record new participant
         self.participants.insert(process_id);
@@ -55,7 +55,7 @@ impl QuorumClocks {
 
     /// Check if we all fast quorum processes have reported their clock.
     pub fn all(&self) -> bool {
-        self.participants.len() == self.q
+        self.participants.len() == self.fast_quorum_size
     }
 }
 

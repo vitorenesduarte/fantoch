@@ -4,6 +4,9 @@ mod graph;
 // This module contains the implementation of a votes table executor.
 mod table;
 
+// This module contains the implementation of a predecessors executor.
+// mod pred;
+
 // This module contains the implementation of an slot executor.
 mod slot;
 

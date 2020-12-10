@@ -7,7 +7,7 @@ type ThresholdDeps = HashMap<Dependency, usize>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuorumDeps {
     // fast quorum size
-    q: usize,
+    fast_quorum_size: usize,
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
     // threshold deps
@@ -16,17 +16,17 @@ pub struct QuorumDeps {
 
 impl QuorumDeps {
     /// Creates a `QuorumDeps` instance given the quorum size.
-    pub fn new(q: usize) -> Self {
+    pub fn new(fast_quorum_size: usize) -> Self {
         Self {
-            q,
-            participants: HashSet::with_capacity(q),
+            fast_quorum_size,
+            participants: HashSet::with_capacity(fast_quorum_size),
             threshold_deps: ThresholdDeps::new(),
         }
     }
 
     /// Adds new `deps` reported by `process_id`.
     pub fn add(&mut self, process_id: ProcessId, deps: HashSet<Dependency>) {
-        assert!(self.participants.len() < self.q);
+        assert!(self.participants.len() < self.fast_quorum_size);
 
         // record new participant
         self.participants.insert(process_id);
@@ -39,7 +39,7 @@ impl QuorumDeps {
 
     /// Check if we all fast quorum processes have reported their deps.
     pub fn all(&self) -> bool {
-        self.participants.len() == self.q
+        self.participants.len() == self.fast_quorum_size
     }
 
     /// Checks if threshold union == union and returns the union.
@@ -86,7 +86,7 @@ impl QuorumDeps {
                     .into_iter()
                     .next()
                     .expect("there must be a dep count")
-                    == self.q
+                    == self.fast_quorum_size
             }
             _ => {
                 // if there's a different count at least two dependencies, then

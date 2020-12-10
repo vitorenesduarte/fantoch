@@ -53,6 +53,7 @@ impl Protocol for Basic {
             config.n(),
             config.f(),
             fast_quorum_size,
+            write_quorum_size,
         );
         let to_processes = Vec::new();
         let to_executors = Vec::new();
@@ -326,6 +327,7 @@ impl Info for BasicInfo {
         _n: usize,
         _f: usize,
         fast_quorum_size: usize,
+        _write_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
         Self {

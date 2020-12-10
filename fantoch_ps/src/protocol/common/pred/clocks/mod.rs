@@ -1,12 +1,12 @@
 // This module contains the definition of `KeyClocks`.
 mod keys;
 
-// This module contains the definition of `QuorumClocks`.
+// This module contains the definition of `QuorumClocks` and `QuorumRetries`.
 mod quorum;
 
 // Re-exports.
 pub use keys::{KeyClocks, SequentialKeyClocks};
-pub use quorum::QuorumClocks;
+pub use quorum::{QuorumClocks, QuorumRetries};
 
 use fantoch::id::ProcessId;
 use serde::{Deserialize, Serialize};

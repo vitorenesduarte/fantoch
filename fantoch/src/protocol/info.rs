@@ -11,6 +11,7 @@ pub trait Info {
         n: usize,
         f: usize,
         fast_quorum_size: usize,
+        write_quorum_size: usize,
     ) -> Self;
 }
 
@@ -22,6 +23,7 @@ pub struct CommandsInfo<I> {
     n: usize,
     f: usize,
     fast_quorum_size: usize,
+    write_quorum_size: usize,
     dot_to_info: HashMap<Dot, I>,
     gc_track: GCTrack,
 }
@@ -36,6 +38,7 @@ where
         n: usize,
         f: usize,
         fast_quorum_size: usize,
+        write_quorum_size: usize,
     ) -> Self {
         Self {
             process_id,
@@ -43,6 +46,7 @@ where
             n,
             f,
             fast_quorum_size,
+            write_quorum_size,
             dot_to_info: HashMap::new(),
             gc_track: GCTrack::new(process_id, shard_id, n),
         }
@@ -58,8 +62,9 @@ where
         let n = self.n;
         let f = self.f;
         let fast_quorum_size = self.fast_quorum_size;
+        let write_quorum_size = self.write_quorum_size;
         self.dot_to_info.entry(dot).or_insert_with(|| {
-            I::new(process_id, shard_id, n, f, fast_quorum_size)
+            I::new(process_id, shard_id, n, f, fast_quorum_size, write_quorum_size)
         })
     }
 
