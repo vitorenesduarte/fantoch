@@ -285,15 +285,17 @@ impl<KD: KeyDeps> EPaxos<KD> {
         let value = ConsensusValue::with(deps.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
 
-        // create `MCollectAck` and target
-        let mcollectack = Message::MCollectAck { dot, deps };
-        let target = singleton![from];
+        // create `MCollectAck` and target (only if not message from self)
+        if !message_from_self {
+            let mcollectack = Message::MCollectAck { dot, deps };
+            let target = singleton![from];
 
-        // save new action
-        self.to_processes.push(Action::ToSend {
-            target,
-            msg: mcollectack,
-        });
+            // save new action
+            self.to_processes.push(Action::ToSend {
+                target,
+                msg: mcollectack,
+            });
+        }
     }
 
     // #[instrument(skip(self, from, dot, deps, _time))]
@@ -313,10 +315,8 @@ impl<KD: KeyDeps> EPaxos<KD> {
             _time.micros()
         );
 
-        // ignore ack from self (see `EPaxosInfo::new` for the reason why)
-        if from == self.bp.process_id {
-            return;
-        }
+        // it can't be a ack from self (see the `MCollect` handler)
+        assert_ne!(from, self.bp.process_id);
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -900,11 +900,11 @@ mod tests {
         let mut mcollectacks =
             simulation.forward_to_processes((process_id_1, mcollect));
 
-        // check that there are 2 mcollectacks
-        assert_eq!(mcollectacks.len(), 2 * f);
+        // check that there's a single mcollectack
+        assert_eq!(mcollectacks.len(), 1);
 
         // handle the *only* mcollectack
-        // - there's a single mcollectack single the initial coordinator does
+        // - there's a single mcollectack since the initial coordinator does
         //   not reply to itself
         let mut mcommits = simulation.forward_to_processes(
             mcollectacks.pop().expect("there should be an mcollect ack"),
