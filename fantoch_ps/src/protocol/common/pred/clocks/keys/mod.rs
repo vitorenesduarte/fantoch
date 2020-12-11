@@ -34,6 +34,7 @@ pub trait KeyClocks: Debug + Clone {
     /// timestamp higher than `clock`.
     fn predecessors(
         &mut self,
+        dot: Dot,
         cmd: &Command,
         clock: Clock,
         higher: Option<&mut HashSet<Dot>>,

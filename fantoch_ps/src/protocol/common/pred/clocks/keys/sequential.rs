@@ -77,6 +77,7 @@ impl KeyClocks for SequentialKeyClocks {
     /// timestamp higher than `clock`.
     fn predecessors(
         &mut self,
+        dot: Dot,
         cmd: &Command,
         clock: Clock,
         mut higher: Option<&mut HashSet<Dot>>,
@@ -107,7 +108,9 @@ impl KeyClocks for SequentialKeyClocks {
                             }
                         }
                         Ordering::Equal => {
-                            panic!("found command with the same timestamp")
+                            if *cmd_dot != dot {
+                                panic!("found command with the same timestamp")
+                            }
                         }
                     }
                 }

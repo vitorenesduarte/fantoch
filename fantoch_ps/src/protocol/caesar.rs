@@ -283,6 +283,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // compute set of predecessors
         let mut blocking = HashSet::new();
         let deps = self.key_clocks.predecessors(
+            dot,
             &cmd,
             remote_clock,
             Some(&mut blocking),
@@ -309,7 +310,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             let cmd = info.cmd.as_ref().expect("command has been set");
             let blocking = None;
             let new_deps =
-                self.key_clocks.predecessors(cmd, new_clock, blocking);
+                self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
             (new_clock, new_deps)
         };
 
@@ -503,7 +504,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         // compute new set of predecessors for the command
         let cmd = info.cmd.as_ref().expect("command has been set");
         let blocking = None;
-        let mut new_deps = self.key_clocks.predecessors(cmd, clock, blocking);
+        let mut new_deps =
+            self.key_clocks.predecessors(dot, cmd, clock, blocking);
 
         // aggregate with incoming deps
         new_deps.extend(deps);
