@@ -369,6 +369,10 @@ impl<KC: KeyClocks> Caesar<KC> {
 
             // fast path condition: all reported deps were equal
             if aggregated_ok {
+                // in this, all processes have accepted the proposal by the
+                // coordinator; check that that's the case
+                assert_eq!(aggregated_clock, info.clock);
+
                 self.bp.fast_path();
                 // fast path: create `MCommit`
                 let mcommit = Message::MCommit {

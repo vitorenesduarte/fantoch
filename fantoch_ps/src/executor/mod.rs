@@ -5,7 +5,7 @@ mod graph;
 mod table;
 
 // This module contains the implementation of a predecessors executor.
-// mod pred;
+mod pred;
 
 // This module contains the implementation of an slot executor.
 mod slot;

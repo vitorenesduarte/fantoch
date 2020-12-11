@@ -10,6 +10,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use fantoch::{debug, trace};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::iter::FromIterator;
 
 #[derive(Clone)]
@@ -177,6 +178,12 @@ impl GraphExecutor {
         // execute the command
         let results = cmd.execute(self.shard_id, &mut self.store);
         self.to_clients.extend(results);
+    }
+}
+
+impl fmt::Debug for GraphExecutor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#?}", self.graph)
     }
 }
 

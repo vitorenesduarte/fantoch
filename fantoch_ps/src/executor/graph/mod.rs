@@ -698,6 +698,7 @@ mod tests {
     use fantoch::HashMap;
     use permutator::{Combination, Permutation};
     use rand::seq::SliceRandom;
+    use rand::Rng;
     use std::cell::RefCell;
     use std::cmp::Ordering;
     use std::collections::{BTreeMap, BTreeSet};
@@ -1001,7 +1002,8 @@ mod tests {
                 } else {
                     // otherwise, make them depend on each other (maybe both
                     // ways)
-                    match rand::random::<usize>() % 3 {
+                    let mut rng = rand::thread_rng();
+                    match rng.gen_range(0, 3) {
                         0 => {
                             // left depends on right
                             left_deps.insert(*right);
@@ -1015,7 +1017,7 @@ mod tests {
                             left_deps.insert(*right);
                             right_deps.insert(*left);
                         }
-                        _ => panic!("usize % 3 must < 3"),
+                        _ => panic!("out-of-bounds random number"),
                     }
                 }
             }
