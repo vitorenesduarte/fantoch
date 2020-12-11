@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
-    Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
+    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
 };
 use crate::singleton;

@@ -1,8 +1,7 @@
-
+use super::Info;
+use crate::id::{Dot, ProcessId, ShardId};
 use crate::util;
 use crate::HashMap;
-use crate::id::{Dot, ProcessId, ShardId};
-use super::{Info, CommandsInfo};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialCommandsInfo<I> {
@@ -15,11 +14,11 @@ pub struct SequentialCommandsInfo<I> {
     dot_to_info: HashMap<Dot, I>,
 }
 
-impl<I> CommandsInfo<I> for SequentialCommandsInfo<I>
+impl<I> SequentialCommandsInfo<I>
 where
     I: Info,
 {
-    fn new(
+    pub fn new(
         process_id: ProcessId,
         shard_id: ShardId,
         n: usize,
@@ -40,7 +39,7 @@ where
 
     /// Returns the `Info` associated with `Dot`.
     /// If no `Info` is associated, an empty `Info` is returned.
-    fn get(&mut self, dot: Dot) -> &mut I {
+    pub fn get(&mut self, dot: Dot) -> &mut I {
         // borrow everything we need so that the borrow checker does not
         // complain
         let process_id = self.process_id;
@@ -63,7 +62,7 @@ where
 
     /// Performs garbage collection of stable dots.
     /// Returns how many stable does were removed.
-    fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
+    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
         util::dots(stable)
             .filter(|dot| {
                 // remove dot:
@@ -75,7 +74,7 @@ where
     }
 
     /// Removes a command has been committed.
-    fn gc_single(&mut self, dot: Dot) {
+    pub fn gc_single(&mut self, dot: Dot) {
         assert!(self.dot_to_info.remove(&dot).is_some());
     }
 }

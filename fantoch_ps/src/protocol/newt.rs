@@ -11,7 +11,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVOp;
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
+    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
