@@ -8,14 +8,10 @@ mod index;
 /// `GraphExecutionInfo`.
 mod executor;
 
-/// This module contains the definition of `LevelExecutedClock`.
-mod level;
-
 // Re-exports.
 pub use executor::{GraphExecutionInfo, GraphExecutor};
 
 use self::index::{PendingIndex, VertexIndex};
-use self::level::LevelExecutedClock;
 use self::tarjan::{FinderResult, TarjanSCCFinder, Vertex, SCC};
 use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
@@ -31,11 +27,6 @@ use std::fmt;
 use std::time::Duration;
 use threshold::AEClock;
 
-// this is approach is flawed is some ways; besides the fact that we're consider
-// commands executed without them being, we would need to make sure e.g. that we
-// never advance past the highest extra event for each entry, and we're not
-// doing that ATM
-const LEVEL_EXECUTED_CLOCK_ENABLED: bool = false;
 const MONITOR_PENDING_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,8 +47,6 @@ pub struct DependencyGraph {
     process_id: ProcessId,
     shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
-    // only used in partial replication
-    level_executed_clock: LevelExecutedClock,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
     finder: TarjanSCCFinder,
@@ -103,9 +92,6 @@ impl DependencyGraph {
                 .map(|(process_id, _)| process_id)
                 .collect();
         let executed_clock = AEClock::with(ids.clone());
-        // create level executed clock
-        let level_executed_clock =
-            LevelExecutedClock::new(process_id, shard_id, config);
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
         let pending_index = PendingIndex::new(process_id, shard_id, *config);
@@ -125,7 +111,6 @@ impl DependencyGraph {
             process_id,
             shard_id,
             executed_clock,
-            level_executed_clock,
             vertex_index,
             pending_index,
             finder,
@@ -186,21 +171,7 @@ impl DependencyGraph {
             self.executor_index,
             time.millis()
         );
-        // try to level the executed clock
-        let maybe_executed = if LEVEL_EXECUTED_CLOCK_ENABLED {
-            self.level_executed_clock.maybe_level(
-                &mut self.executed_clock,
-                &self.vertex_index,
-                time,
-            )
-        } else {
-            Vec::new()
-        };
-
-        if self.executor_index == 0 {
-            let mut total_scc_count = 0;
-            self.check_pending(maybe_executed, &mut total_scc_count, time);
-        } else {
+        if self.executor_index > 0 {
             // if not main executor, check pending remote requests
             self.check_pending_requests(time);
         }

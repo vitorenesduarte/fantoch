@@ -178,10 +178,6 @@ impl GraphExecutor {
         let results = cmd.execute(self.shard_id, &mut self.store);
         self.to_clients.extend(results);
     }
-
-    pub fn show_internal_status(&self) {
-        println!("{:?}", self.graph);
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

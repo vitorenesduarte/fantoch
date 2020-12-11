@@ -41,10 +41,6 @@ impl VertexIndex {
         self.index.iter().map(|entry| *entry.key())
     }
 
-    pub fn contains(&self, dot: &Dot) -> bool {
-        self.index.contains_key(dot)
-    }
-
     pub fn find(&self, dot: &Dot) -> Option<VertexRef<'_>> {
         self.index.get(dot)
     }
