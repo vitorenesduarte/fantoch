@@ -1,8 +1,6 @@
 use crate::id::{Dot, ProcessId, ShardId};
-use crate::protocol::gc::GCTrack;
 use crate::util;
 use crate::HashMap;
-use threshold::VClock;
 
 pub trait Info {
     fn new(
@@ -25,7 +23,6 @@ pub struct CommandsInfo<I> {
     fast_quorum_size: usize,
     write_quorum_size: usize,
     dot_to_info: HashMap<Dot, I>,
-    gc_track: GCTrack,
 }
 
 impl<I> CommandsInfo<I>
@@ -48,7 +45,6 @@ where
             fast_quorum_size,
             write_quorum_size,
             dot_to_info: HashMap::new(),
-            gc_track: GCTrack::new(process_id, shard_id, n),
         }
     }
 
@@ -68,29 +64,29 @@ where
         })
     }
 
-    /// Records that a command has been committed.
-    pub fn commit(&mut self, dot: Dot) {
-        self.gc_track.commit(dot);
-    }
+    // /// Records that a command has been committed.
+    // pub fn commit(&mut self, dot: Dot) {
+    //     self.gc_track.commit(dot);
+    // }
 
-    /// Records that set of `committed` commands by process `from`.
-    pub fn committed_by(
-        &mut self,
-        from: ProcessId,
-        committed: VClock<ProcessId>,
-    ) {
-        self.gc_track.committed_by(from, committed);
-    }
+    // /// Records that set of `committed` commands by process `from`.
+    // pub fn committed_by(
+    //     &mut self,
+    //     from: ProcessId,
+    //     committed: VClock<ProcessId>,
+    // ) {
+    //     self.gc_track.committed_by(from, committed);
+    // }
 
-    /// Returns committed clock and newly stable dots.
-    pub fn committed(&mut self) -> VClock<ProcessId> {
-        self.gc_track.committed()
-    }
+    // /// Returns committed clock and newly stable dots.
+    // pub fn committed(&mut self) -> VClock<ProcessId> {
+    //     self.gc_track.committed()
+    // }
 
-    /// Returns newly stable dots.
-    pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
-        self.gc_track.stable()
-    }
+    // /// Returns newly stable dots.
+    // pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
+    //     self.gc_track.stable()
+    // }
 
     /// Performs garbage collection of stable dots.
     /// Returns how many stable does were removed.

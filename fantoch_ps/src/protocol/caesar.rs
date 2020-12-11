@@ -7,7 +7,7 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
+    Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics,
 };
 use fantoch::time::SysTime;
@@ -29,6 +29,7 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: CommandsInfo<CaesarInfo>,
+    gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
     // commit notifications that arrived before the initial `MPropose` message
@@ -69,6 +70,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
+        let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_commits = HashMap::new();
@@ -78,6 +80,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             bp,
             key_clocks,
             cmds,
+            gc_track,
             to_processes,
             to_executors,
             buffered_commits,
@@ -565,7 +568,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
-        self.cmds.commit(dot);
+        self.gc_track.commit(dot);
     }
 
     fn handle_mgc(
@@ -581,9 +584,9 @@ impl<KC: KeyClocks> Caesar<KC> {
             from,
             _time.micros()
         );
-        self.cmds.committed_by(from, committed);
+        self.gc_track.committed_by(from, committed);
         // compute newly stable dots
-        let stable = self.cmds.stable();
+        let stable = self.gc_track.stable();
         // create `ToForward` to self
         if !stable.is_empty() {
             self.to_processes.push(Action::ToForward {
@@ -618,7 +621,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // retrieve the committed clock
-        let committed = self.cmds.committed();
+        let committed = self.gc_track.committed();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -794,11 +797,13 @@ mod tests {
     use fantoch::time::SimTime;
     use fantoch::util;
 
+    #[ignore]
     #[test]
     fn sequential_caesar_test() {
         caesar_flow::<SequentialKeyClocks>();
     }
 
+    #[ignore]
     #[test]
     fn locked_caesar_test() {
         caesar_flow::<LockedKeyClocks>();

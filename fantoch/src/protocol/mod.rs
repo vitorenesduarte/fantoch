@@ -21,6 +21,7 @@ mod gc;
 pub use base::BaseProcess;
 pub use basic::Basic;
 pub use info::{CommandsInfo, Info};
+pub use gc::GCTrack;
 
 use crate::command::Command;
 use crate::config::Config;
