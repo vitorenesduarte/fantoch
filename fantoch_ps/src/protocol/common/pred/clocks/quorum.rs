@@ -64,6 +64,10 @@ impl QuorumClocks {
         let some_not_ok_after_majority =
             !self.ok && replied >= self.write_quorum_size;
         let fast_quorum = replied == self.fast_quorum_size;
+        println!(
+            "ok {} | replied {} | some not ok {} | fast q {} ",
+            self.ok, replied, some_not_ok_after_majority, fast_quorum
+        );
         some_not_ok_after_majority || fast_quorum
     }
 
@@ -132,7 +136,7 @@ mod tests {
         let process_id = 1;
 
         // agreement
-        let mut quorum_clocks = QuorumClocks::new(fq, mq, process_id);
+        let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
         let clock_1 = Clock::from(10, 1);
         let deps_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
         let ok_1 = true;
@@ -168,7 +172,7 @@ mod tests {
         let deps_3 = HashSet::from_iter(vec![Dot::new(1, 4)]);
         let ok_3 = true;
         // order: 1, 2
-        let mut quorum_clocks = QuorumClocks::new(fq, mq, process_id);
+        let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
         quorum_clocks.add(1, clock_1, deps_1.clone(), ok_1);
         assert!(!quorum_clocks.all());
         quorum_clocks.add(2, clock_2, deps_2.clone(), ok_2);
@@ -187,7 +191,7 @@ mod tests {
         assert!(!ok);
 
         // order: 1, 3, 2
-        let mut quorum_clocks = QuorumClocks::new(fq, mq, process_id);
+        let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
         quorum_clocks.add(1, clock_1, deps_1.clone(), ok_1);
         assert!(!quorum_clocks.all());
         quorum_clocks.add(3, clock_3, deps_3.clone(), ok_3);
@@ -209,7 +213,7 @@ mod tests {
         assert!(!ok);
 
         // order: 2, 3
-        let mut quorum_clocks = QuorumClocks::new(fq, mq, process_id);
+        let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
         quorum_clocks.add(2, clock_2, deps_2.clone(), ok_2);
         assert!(!quorum_clocks.all());
         quorum_clocks.add(3, clock_3, deps_3.clone(), ok_3);
