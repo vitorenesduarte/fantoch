@@ -120,7 +120,7 @@ impl GraphExecutor {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
             trace!(
-                "p{}: @{} GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
+                "p{}: @{} GraphExecutor::comands_to_execute {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
                 cmd.rifl(),

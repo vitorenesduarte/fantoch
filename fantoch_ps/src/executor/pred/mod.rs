@@ -144,10 +144,24 @@ impl PredecessorsGraph {
                 .contains(&dep_dot.source(), dep_dot.sequence());
 
             if !committed {
+                trace!(
+                    "p{}: Predecessors::move_1 non committed dep {:?} | time = {}",
+                    self.process_id,
+                    dep_dot,
+                    time.millis()
+                );
                 non_committed_deps_count += 1;
                 self.phase_one_pending_index.index(dot, *dep_dot);
             }
         }
+
+        trace!(
+            "p{}: Predecessors::move_1 {:?} missing deps for {:?} | time = {}",
+            self.process_id,
+            non_committed_deps_count,
+            dot,
+            time.millis()
+        );
 
         if non_committed_deps_count > 0 {
             vertex.set_missing_deps(non_committed_deps_count);
@@ -183,17 +197,38 @@ impl PredecessorsGraph {
                 .executed_clock
                 .contains(&dep_dot.source(), dep_dot.sequence());
             if !executed {
+                trace!(
+                    "p{}: Predecessors::move_2 non executed dep {:?} | time = {}",
+                    self.process_id,
+                    dep_dot,
+                    time.millis()
+                );
                 let dep_ref = self
                     .vertex_index
                     .find(&dep_dot)
                     .expect("non-executed dependency must exist");
                 let dep = dep_ref.borrow();
+
                 if dep.clock < vertex.clock {
+                    trace!(
+                        "p{}: Predecessors::move_2 non executed dep with lower clock {:?} | time = {}",
+                        self.process_id,
+                        dep_dot,
+                        time.millis()
+                    );
                     non_executed_deps_count += 1;
                     self.phase_two_pending_index.index(dot, *dep_dot);
                 }
             }
         }
+
+        trace!(
+            "p{}: Predecessors::move_2 {:?} missing deps for {:?} | time = {}",
+            self.process_id,
+            non_executed_deps_count,
+            dot,
+            time.millis()
+        );
 
         if non_executed_deps_count > 0 {
             vertex.set_missing_deps(non_executed_deps_count);
@@ -230,7 +265,7 @@ impl PredecessorsGraph {
             // get vertex
             let vertex_ref = self
                 .vertex_index
-                .find(&dot)
+                .find(&pending_dot)
                 .expect("command pending at phase one must exist");
             let mut vertex = vertex_ref.borrow_mut();
             vertex.decrease_missing_deps();
@@ -248,7 +283,7 @@ impl PredecessorsGraph {
             // get vertex
             let vertex_ref = self
                 .vertex_index
-                .find(&dot)
+                .find(&pending_dot)
                 .expect("command pending at phase two must exist");
             let mut vertex = vertex_ref.borrow_mut();
             vertex.decrease_missing_deps();
@@ -268,6 +303,9 @@ impl PredecessorsGraph {
             dot,
             time.millis()
         );
+
+        // mark dot as executed
+        assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
 
         // remove from vertex index
         let vertex = self

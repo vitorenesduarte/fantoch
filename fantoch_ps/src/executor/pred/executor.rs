@@ -43,18 +43,17 @@ impl Executor for PredecessorsExecutor {
             self.execute(info.cmd);
         } else {
             // handle new command
-            self.graph.add(
-                info.dot, info.cmd, info.clock, info.deps, time,
-            );
+            self.graph
+                .add(info.dot, info.cmd, info.clock, info.deps, time);
 
             // get more commands that are ready to be executed
             while let Some(cmd) = self.graph.command_to_execute() {
                 trace!(
-                "p{}: PredecessorsExecutor::fetch_comands_to_execute {:?} | time = {}",
-                self.process_id,
-                cmd.rifl(),
-                _time.millis()
-            );
+                    "p{}: PredecessorsExecutor::comands_to_execute {:?} | time = {}",
+                    self.process_id,
+                    cmd.rifl(),
+                    time.millis()
+                );
                 self.execute(cmd);
             }
         }
