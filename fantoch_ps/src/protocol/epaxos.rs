@@ -8,9 +8,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
-    GCTrack,
+    Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
@@ -28,7 +27,7 @@ type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 pub struct EPaxos<KD: KeyDeps> {
     bp: BaseProcess,
     key_deps: KD,
-    cmds: CommandsInfo<EPaxosInfo>,
+    cmds: SequentialCommandsInfo<EPaxosInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -62,7 +61,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
         );
         let key_deps = KD::new(shard_id);
         let f = Self::allowed_faults(config.n());
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),
@@ -908,8 +907,8 @@ mod tests {
         assert_eq!(mcollectacks.len(), 1);
 
         // handle the *only* mcollectack
-        // - there's a single mcollectack since the initial coordinator does
-        //   not reply to itself
+        // - there's a single mcollectack since the initial coordinator does not
+        //   reply to itself
         let mut mcommits = simulation.forward_to_processes(
             mcollectacks.pop().expect("there should be an mcollect ack"),
         );

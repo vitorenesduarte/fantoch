@@ -20,8 +20,8 @@ mod gc;
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;
-pub use info::{CommandsInfo, Info};
 pub use gc::GCTrack;
+pub use info::{CommandsInfo, Info, SequentialCommandsInfo};
 
 use crate::command::Command;
 use crate::config::Config;

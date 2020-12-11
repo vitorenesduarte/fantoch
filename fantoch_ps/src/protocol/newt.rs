@@ -11,9 +11,8 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVOp;
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
-    GCTrack,
+    Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -34,7 +33,7 @@ type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 pub struct Newt<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
-    cmds: CommandsInfo<NewtInfo>,
+    cmds: SequentialCommandsInfo<NewtInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -78,7 +77,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             write_quorum_size,
         );
         let key_clocks = KC::new(process_id, shard_id);
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),

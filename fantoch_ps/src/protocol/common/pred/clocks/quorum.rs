@@ -69,7 +69,8 @@ impl QuorumClocks {
 
     /// Returns the current aggregated result.
     pub fn aggregated(&mut self) -> (Clock, HashSet<Dot>, bool) {
-        // resets `this.deps` so that it can be returned without having to clone it
+        // resets `this.deps` so that it can be returned without having to clone
+        // it
         let deps = std::mem::take(&mut self.deps);
         (self.clock, deps, self.ok)
     }
@@ -111,7 +112,8 @@ impl QuorumRetries {
 
     /// Returns the current aggregated result.
     pub fn aggregated(&mut self) -> HashSet<Dot> {
-        // resets `this.deps` so that it can be returned without having to clone it
+        // resets `this.deps` so that it can be returned without having to clone
+        // it
         std::mem::take(&mut self.deps)
     }
 }

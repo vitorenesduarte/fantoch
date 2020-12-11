@@ -13,9 +13,34 @@ pub trait Info {
     ) -> Self;
 }
 
+pub trait CommandsInfo<I>
+where
+    I: Info,
+{
+    fn new(
+        process_id: ProcessId,
+        shard_id: ShardId,
+        n: usize,
+        f: usize,
+        fast_quorum_size: usize,
+        write_quorum_size: usize,
+    ) -> Self;
+
+    /// Returns the `Info` associated with `Dot`.
+    /// If no `Info` is associated, an empty `Info` is returned.
+    fn get(&mut self, dot: Dot) -> &mut I;
+
+    /// Performs garbage collection of stable dots.
+    /// Returns how many stable does were removed.
+    fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize;
+
+    /// Removes a command has been committed.
+    fn gc_single(&mut self, dot: Dot);
+}
+
 // `CommandsInfo` contains `CommandInfo` for each `Dot`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CommandsInfo<I> {
+pub struct SequentialCommandsInfo<I> {
     process_id: ProcessId,
     shard_id: ShardId,
     n: usize,
@@ -25,11 +50,11 @@ pub struct CommandsInfo<I> {
     dot_to_info: HashMap<Dot, I>,
 }
 
-impl<I> CommandsInfo<I>
+impl<I> CommandsInfo<I> for SequentialCommandsInfo<I>
 where
     I: Info,
 {
-    pub fn new(
+    fn new(
         process_id: ProcessId,
         shard_id: ShardId,
         n: usize,
@@ -50,7 +75,7 @@ where
 
     /// Returns the `Info` associated with `Dot`.
     /// If no `Info` is associated, an empty `Info` is returned.
-    pub fn get(&mut self, dot: Dot) -> &mut I {
+    fn get(&mut self, dot: Dot) -> &mut I {
         // TODO borrow everything we need so that the borrow checker does not
         // complain
         let process_id = self.process_id;
@@ -60,37 +85,20 @@ where
         let fast_quorum_size = self.fast_quorum_size;
         let write_quorum_size = self.write_quorum_size;
         self.dot_to_info.entry(dot).or_insert_with(|| {
-            I::new(process_id, shard_id, n, f, fast_quorum_size, write_quorum_size)
+            I::new(
+                process_id,
+                shard_id,
+                n,
+                f,
+                fast_quorum_size,
+                write_quorum_size,
+            )
         })
     }
 
-    // /// Records that a command has been committed.
-    // pub fn commit(&mut self, dot: Dot) {
-    //     self.gc_track.commit(dot);
-    // }
-
-    // /// Records that set of `committed` commands by process `from`.
-    // pub fn committed_by(
-    //     &mut self,
-    //     from: ProcessId,
-    //     committed: VClock<ProcessId>,
-    // ) {
-    //     self.gc_track.committed_by(from, committed);
-    // }
-
-    // /// Returns committed clock and newly stable dots.
-    // pub fn committed(&mut self) -> VClock<ProcessId> {
-    //     self.gc_track.committed()
-    // }
-
-    // /// Returns newly stable dots.
-    // pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
-    //     self.gc_track.stable()
-    // }
-
     /// Performs garbage collection of stable dots.
     /// Returns how many stable does were removed.
-    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
+    fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
         util::dots(stable)
             .filter(|dot| {
                 // remove dot:
@@ -102,7 +110,7 @@ where
     }
 
     /// Removes a command has been committed.
-    pub fn gc_single(&mut self, dot: Dot) {
+    fn gc_single(&mut self, dot: Dot) {
         assert!(self.dot_to_info.remove(&dot).is_some());
     }
 }

@@ -10,7 +10,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
@@ -28,7 +28,7 @@ type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 pub struct Atlas<KD: KeyDeps> {
     bp: BaseProcess,
     key_deps: KD,
-    cmds: CommandsInfo<AtlasInfo>,
+    cmds: SequentialCommandsInfo<AtlasInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -62,7 +62,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
             write_quorum_size,
         );
         let key_deps = KD::new(shard_id);
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),

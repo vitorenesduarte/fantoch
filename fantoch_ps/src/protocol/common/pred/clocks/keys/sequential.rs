@@ -92,8 +92,10 @@ impl KeyClocks for SequentialKeyClocks {
                         Ordering::Less => {
                             // if it has a timestamp smaller than `clock`, add
                             // it as a predecessor
-                            // - we don't assert that doesn't exist already because the same
-                            // `Dot` might be stored on different keys if we have multi-key
+                            // - we don't assert that doesn't exist already
+                            //   because the same
+                            // `Dot` might be stored on different keys if we
+                            // have multi-key
                             // commands
                             predecessors.insert(*cmd_dot);
                         }

@@ -4,7 +4,7 @@ use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
     Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use crate::singleton;
 use crate::time::SysTime;
@@ -19,7 +19,7 @@ type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Basic {
     bp: BaseProcess,
-    cmds: CommandsInfo<BasicInfo>,
+    cmds: SequentialCommandsInfo<BasicInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -48,7 +48,7 @@ impl Protocol for Basic {
             fast_quorum_size,
             write_quorum_size,
         );
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),

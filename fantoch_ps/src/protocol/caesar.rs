@@ -8,7 +8,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, CommandsInfo, GCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
@@ -28,7 +28,7 @@ type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
-    cmds: CommandsInfo<CaesarInfo>,
+    cmds: SequentialCommandsInfo<CaesarInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -62,7 +62,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         );
         let key_clocks = KC::new(process_id, shard_id);
         let f = Self::allowed_faults(config.n());
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),
@@ -436,9 +436,9 @@ impl<KC: KeyClocks> Caesar<KC> {
         }
 
         // TODO: create execution info
-        // let cmd = info.cmd.clone().expect("there should be a command payload");
-        // let execution_info = ExecutionInfo::add(dot, cmd, deps.clone());
-        // self.to_executors.push(execution_info);
+        // let cmd = info.cmd.clone().expect("there should be a command
+        // payload"); let execution_info = ExecutionInfo::add(dot, cmd,
+        // deps.clone()); self.to_executors.push(execution_info);
 
         // update command info:
         info.status = Status::COMMIT;
@@ -480,7 +480,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         let info = self.cmds.get(dot);
 
         if matches!(info.status, Status::START | Status::COMMIT) {
-            // do nothing if we don't have the payload or if have already committed
+            // do nothing if we don't have the payload or if have already
+            // committed
             return;
         }
 
