@@ -29,7 +29,7 @@ pub type NewtLocked = Newt<LockedKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Newt<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,

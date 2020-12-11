@@ -24,7 +24,7 @@ pub type AtlasLocked = Atlas<LockedKeyDeps>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Atlas<KD: KeyDeps> {
     bp: BaseProcess,
     key_deps: KD,

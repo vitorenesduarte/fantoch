@@ -11,14 +11,15 @@ use crate::util;
 use crate::HashMap;
 use fantoch_prof::metrics::Histogram;
 use std::fmt;
+use std::fmt::Debug;
 use std::time::Duration;
 
 #[derive(PartialEq, Eq)]
-enum ScheduleAction<P: Protocol + Eq> {
+enum ScheduleAction<Message, PeriodicEvent> {
     SubmitToProc(ProcessId, Command),
-    SendToProc(ProcessId, ShardId, ProcessId, P::Message),
+    SendToProc(ProcessId, ShardId, ProcessId, Message),
     SendToClient(ClientId, CommandResult),
-    PeriodicEvent(ProcessId, P::PeriodicEvent, Duration),
+    PeriodicEvent(ProcessId, PeriodicEvent, Duration),
 }
 #[derive(Clone)]
 enum MessageRegion {
@@ -26,10 +27,10 @@ enum MessageRegion {
     Client(ClientId),
 }
 
-pub struct Runner<P: Protocol + Eq> {
+pub struct Runner<P: Protocol> {
     planet: Planet,
     simulation: Simulation<P>,
-    schedule: Schedule<ScheduleAction<P>>,
+    schedule: Schedule<ScheduleAction<P::Message, P::PeriodicEvent>>,
     // mapping from process identifier to its region
     process_to_region: HashMap<ProcessId, Region>,
     // mapping from client identifier to its region
@@ -50,7 +51,7 @@ enum SimulationStatus {
 
 impl<P> Runner<P>
 where
-    P: Protocol + Eq,
+    P: Protocol,
 {
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of
     /// regions:
@@ -412,7 +413,7 @@ where
         &mut self,
         from_region: MessageRegion,
         to_region: MessageRegion,
-        action: ScheduleAction<P>,
+        action: ScheduleAction<P::Message, P::PeriodicEvent>,
     ) {
         // get actual regions
         let from = self.compute_region(from_region);
@@ -545,7 +546,9 @@ where
     }
 }
 
-impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
+impl<Message: Debug, PeriodicEvent: Debug> fmt::Debug
+    for ScheduleAction<Message, PeriodicEvent>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ScheduleAction::SubmitToProc(process_id, cmd) => {

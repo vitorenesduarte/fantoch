@@ -23,7 +23,7 @@ pub type EPaxosLocked = EPaxos<LockedKeyDeps>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct EPaxos<KD: KeyDeps> {
     bp: BaseProcess,
     key_deps: KD,
