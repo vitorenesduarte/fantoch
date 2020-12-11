@@ -1,4 +1,4 @@
-use crate::executor::GraphExecutor;
+use crate::executor::PredecessorsExecutor;
 use crate::protocol::common::pred::{
     Clock, KeyClocks, QuorumClocks, QuorumRetries, SequentialKeyClocks,
 };
@@ -23,7 +23,7 @@ type LockedKeyClocks = SequentialKeyClocks;
 pub type CaesarSequential = Caesar<SequentialKeyClocks>;
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
-type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
+type ExecutionInfo = <PredecessorsExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone)]
 pub struct Caesar<KC: KeyClocks> {
@@ -41,7 +41,7 @@ pub struct Caesar<KC: KeyClocks> {
 impl<KC: KeyClocks> Protocol for Caesar<KC> {
     type Message = Message;
     type PeriodicEvent = PeriodicEvent;
-    type Executor = GraphExecutor;
+    type Executor = PredecessorsExecutor;
 
     /// Creates a new `Caesar` process.
     fn new(
@@ -431,11 +431,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         let mut info = info_ref.write();
 
         if info.status == Status::START {
-            // TODO we missed the `MPropose` message and should try to recover
-            // the payload:
-            // - save this notification just in case we've received the
-            //   `MPropose` and `MCommit` in opposite orders (due to
-            //   multiplexing)
+            // save this notification just in case we've received the `MPropose`
+            // and `MCommit` in opposite orders (due to multiplexing)
             self.buffered_commits.insert(dot, (from, clock, deps));
             return;
         }
@@ -445,10 +442,10 @@ impl<KC: KeyClocks> Caesar<KC> {
             return;
         }
 
-        // TODO: create execution info
-        // let cmd = info.cmd.clone().expect("there should be a command
-        // payload"); let execution_info = ExecutionInfo::add(dot, cmd,
-        // deps.clone()); self.to_executors.push(execution_info);
+        // create execution info
+        let cmd = info.cmd.clone().expect("there should be a command payload");
+        let execution_info = ExecutionInfo::new(dot, cmd, clock, deps.clone());
+        self.to_executors.push(execution_info);
 
         // update command info:
         info.status = Status::COMMIT;
@@ -812,13 +809,11 @@ mod tests {
     use fantoch::time::SimTime;
     use fantoch::util;
 
-    #[ignore]
     #[test]
     fn sequential_caesar_test() {
         caesar_flow::<SequentialKeyClocks>();
     }
 
-    #[ignore]
     #[test]
     fn locked_caesar_test() {
         caesar_flow::<LockedKeyClocks>();
@@ -860,9 +855,12 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(process_id_1, shard_id, config);
-        let executor_2 = GraphExecutor::new(process_id_2, shard_id, config);
-        let executor_3 = GraphExecutor::new(process_id_3, shard_id, config);
+        let executor_1 =
+            PredecessorsExecutor::new(process_id_1, shard_id, config);
+        let executor_2 =
+            PredecessorsExecutor::new(process_id_2, shard_id, config);
+        let executor_3 =
+            PredecessorsExecutor::new(process_id_3, shard_id, config);
 
         // caesar
         let (mut caesar_1, _) =

@@ -388,11 +388,8 @@ impl<KD: KeyDeps> EPaxos<KD> {
         let info = self.cmds.get(dot);
 
         if info.status == Status::START {
-            // TODO we missed the `MCollect` message and should try to recover
-            // the payload:
-            // - save this notification just in case we've received the
-            //   `MCollect` and `MCommit` in opposite orders (due to
-            //   multiplexing)
+            // save this notification just in case we've received the `MCollect`
+            // and `MCommit` in opposite orders (due to multiplexing)
             self.buffered_commits.insert(dot, (from, value));
             return;
         }

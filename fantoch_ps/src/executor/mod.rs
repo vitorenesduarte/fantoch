@@ -12,5 +12,6 @@ mod slot;
 
 // Re-exports.
 pub use graph::{GraphExecutionInfo, GraphExecutor};
+pub use pred::{PredecessorsExecutionInfo, PredecessorsExecutor};
 pub use slot::{SlotExecutionInfo, SlotExecutor};
 pub use table::{TableExecutionInfo, TableExecutor};
