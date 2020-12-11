@@ -7,12 +7,13 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics, SequentialCommandsInfo,
+    Action, BaseProcess, GCTrack, Info, LockedCommandsInfo, MessageIndex,
+    Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
+use parking_lot::RwLockWriteGuard;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use threshold::VClock;
@@ -24,11 +25,11 @@ pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
 type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
-    cmds: SequentialCommandsInfo<CaesarInfo>,
+    cmds: LockedCommandsInfo<CaesarInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
@@ -62,7 +63,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         );
         let key_clocks = KC::new(process_id, shard_id);
         let f = Self::allowed_faults(config.n());
-        let cmds = SequentialCommandsInfo::new(
+        let cmds = LockedCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),
@@ -249,7 +250,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         self.key_clocks.clock_join(&remote_clock);
 
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -271,6 +273,8 @@ impl<KC: KeyClocks> Caesar<KC> {
             if let Some((from, clock, deps)) =
                 self.buffered_commits.remove(&dot)
             {
+                drop(info);
+                drop(info_ref);
                 self.handle_mcommit(from, dot, clock, deps, time);
             }
             return;
@@ -288,7 +292,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         info.status = Status::PROPOSE;
         info.cmd = Some(cmd);
         info.deps = deps;
-        Self::update_clock(&mut self.key_clocks, dot, info, remote_clock);
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
         // we send an ok if no command is blocking this command
         // TODO: add wait
@@ -346,7 +350,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         // do nothing if we're no longer PROPOSE
         if info.status != Status::PROPOSE {
@@ -418,7 +423,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         self.key_clocks.clock_join(&clock);
 
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         if info.status == Status::START {
             // TODO we missed the `MPropose` message and should try to recover
@@ -443,8 +449,10 @@ impl<KC: KeyClocks> Caesar<KC> {
         // update command info:
         info.status = Status::COMMIT;
         info.deps = deps;
-        Self::update_clock(&mut self.key_clocks, dot, info, clock);
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
+        drop(info);
+        drop(info_ref);
         if self.gc_running() {
             // notify self with the committed dot
             self.to_processes.push(Action::ToForward {
@@ -477,7 +485,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         self.key_clocks.clock_join(&clock);
 
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         if matches!(info.status, Status::START | Status::COMMIT) {
             // do nothing if we don't have the payload or if have already
@@ -488,7 +497,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // update command info:
         info.status = Status::ACCEPT;
         info.deps = deps.clone();
-        Self::update_clock(&mut self.key_clocks, dot, info, clock);
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
         // compute new set of predecessors for the command
         let cmd = info.cmd.as_ref().expect("command has been set");
@@ -525,7 +534,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         if info.status == Status::COMMIT {
             // do nothing if have already committed
@@ -638,7 +648,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn update_clock(
         key_clocks: &mut KC,
         dot: Dot,
-        info: &mut CaesarInfo,
+        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
         new_clock: Clock,
     ) {
         // first get the command

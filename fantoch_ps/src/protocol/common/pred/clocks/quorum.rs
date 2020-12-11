@@ -64,10 +64,6 @@ impl QuorumClocks {
         let some_not_ok_after_majority =
             !self.ok && replied >= self.write_quorum_size;
         let fast_quorum = replied == self.fast_quorum_size;
-        println!(
-            "ok {} | replied {} | some not ok {} | fast q {} ",
-            self.ok, replied, some_not_ok_after_majority, fast_quorum
-        );
         some_not_ok_after_majority || fast_quorum
     }
 
