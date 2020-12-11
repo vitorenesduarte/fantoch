@@ -526,7 +526,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MRetryAck({:?}, {}) | time={}",
+            "p{}: MRetryAck({:?}, {:?}) | time={}",
             self.id(),
             dot,
             deps,
@@ -754,9 +754,9 @@ impl MessageIndex for Message {
         use fantoch::run::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
-        // TODO: I think that we need that the dot info is shared across
-        // workers, and in that case here we can do a random, and not a shift
-        // based on the dot
+        // TODO: the dot info is shared across workers, and in this case we can
+        // select a random worker, not a selection based on the dot; do we want
+        // to do that?
         match self {
             // Protocol messages
             Self::MPropose { dot, .. } => worker_dot_index_shift(&dot),
