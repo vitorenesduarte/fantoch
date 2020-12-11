@@ -1,6 +1,6 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
-use crate::shared::Shared;
+use fantoch::shared::SharedMap;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, Rifl, ShardId};
 use fantoch::kvs::Key;
@@ -17,7 +17,7 @@ struct ClockAndPendingReads {
     pending_reads: HashSet<Rifl>,
 }
 // all clock's are protected by a mutex
-type Clocks = Arc<Shared<Key, Mutex<ClockAndPendingReads>>>;
+type Clocks = Arc<SharedMap<Key, Mutex<ClockAndPendingReads>>>;
 
 /// `bump_and_vote` grabs all locks before any change
 #[derive(Debug, Clone)]
@@ -124,7 +124,7 @@ mod common {
 
     pub(super) fn new() -> Clocks {
         // create shared clocks
-        let clocks = Shared::new();
+        let clocks = SharedMap::new();
         // wrap them in an arc
         Arc::new(clocks)
     }

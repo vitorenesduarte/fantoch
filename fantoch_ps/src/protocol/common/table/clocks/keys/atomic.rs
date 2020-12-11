@@ -1,6 +1,6 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
-use crate::shared::Shared;
+use fantoch::shared::SharedMap;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::Key;
@@ -13,14 +13,14 @@ use std::sync::Arc;
 pub struct AtomicKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
-    clocks: Arc<Shared<Key, AtomicU64>>,
+    clocks: Arc<SharedMap<Key, AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
     fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
         // create shared clocks
-        let clocks = Shared::new();
+        let clocks = SharedMap::new();
         // wrap them in an arc
         let clocks = Arc::new(clocks);
 
