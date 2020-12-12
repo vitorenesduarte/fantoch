@@ -11,6 +11,7 @@ use fantoch::protocol::{
     Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
+use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::RwLockWriteGuard;
@@ -158,9 +159,6 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             }
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed, time)
-            }
-            Message::MStable { stable } => {
-                self.handle_mstable(from, stable, time)
             }
         }
     }
@@ -467,7 +465,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             });
         } else {
             // if we're not running gc, remove the dot info now
-            self.cmds.gc_single(dot);
+            self.gc_command(dot);
         }
     }
 
@@ -613,30 +611,13 @@ impl<KC: KeyClocks> Caesar<KC> {
         self.gc_track.committed_by(from, committed);
         // compute newly stable dots
         let stable = self.gc_track.stable();
-        // create `ToForward` to self
-        if !stable.is_empty() {
-            self.to_processes.push(Action::ToForward {
-                msg: Message::MStable { stable },
-            });
-        }
-    }
 
-    fn handle_mstable(
-        &mut self,
-        from: ProcessId,
-        stable: Vec<(ProcessId, u64, u64)>,
-        _time: &dyn SysTime,
-    ) {
-        trace!(
-            "p{}: MStable({:?}) from {} | time={}",
-            self.id(),
-            stable,
-            from,
-            _time.micros()
-        );
-        assert_eq!(from, self.bp.process_id);
-        let stable_count = self.cmds.gc(stable);
-        self.bp.stable(stable_count);
+        // since the dot info is shared across workers, we don't need to send
+        // an MStable message to all the workers, as in the other protocols,
+        // we can do it right here
+        let dots: Vec<_> = util::dots(stable).collect();
+        self.bp.stable(dots.len());
+        dots.into_iter().for_each(|dot| self.gc_command(dot));
     }
 
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
@@ -666,20 +647,37 @@ impl<KC: KeyClocks> Caesar<KC> {
         info: &mut RwLockWriteGuard<'_, CaesarInfo>,
         new_clock: Clock,
     ) {
-        // first get the command
+        // get the command
         let cmd = info.cmd.as_ref().expect("command has been set");
 
-        // remove previous clock from key clocks if we added it before
-        let added_before = !info.clock.is_zero();
-        if added_before {
-            key_clocks.remove(&cmd, info.clock);
-        }
+        // remove previous clock (if any)
+        Self::remove_clock(key_clocks, cmd, info.clock);
 
         // add new clock to key clocks
         key_clocks.add(dot, &cmd, new_clock);
 
         // finally update the clock
         info.clock = new_clock;
+    }
+
+    fn remove_clock(key_clocks: &mut KC, cmd: &Command, clock: Clock) {
+        // remove previous clock from key clocks if we added it before
+        let added_before = !clock.is_zero();
+        if added_before {
+            key_clocks.remove(cmd, clock);
+        }
+    }
+
+    fn gc_command(&mut self, dot: Dot) {
+        if let Some(info) = self.cmds.gc_single(&dot) {
+            // get the command
+            let cmd = info.cmd.as_ref().expect("command has been set");
+
+            // remove previous clock (if any)
+            Self::remove_clock(&mut self.key_clocks, cmd, info.clock);
+        } else {
+            panic!("we're the single worker performing gc, so all commands should exist");
+        }
     }
 }
 
@@ -759,9 +757,6 @@ pub enum Message {
     MGarbageCollection {
         committed: VClock<ProcessId>,
     },
-    MStable {
-        stable: Vec<(ProcessId, u64, u64)>,
-    },
 }
 
 impl MessageIndex for Message {
@@ -784,7 +779,6 @@ impl MessageIndex for Message {
             Self::MGarbageCollection { .. } => {
                 worker_index_no_shift(GC_WORKER_INDEX)
             }
-            Self::MStable { .. } => None,
         }
     }
 }
@@ -821,7 +815,6 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
-    use fantoch::util;
 
     #[test]
     fn sequential_caesar_test() {

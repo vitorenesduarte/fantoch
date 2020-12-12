@@ -1,7 +1,6 @@
 use super::Info;
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::shared::{SharedMap, SharedMapRef};
-use crate::util;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -63,21 +62,11 @@ where
         })
     }
 
-    /// Performs garbage collection of stable dots.
-    /// Returns how many stable does were removed.
-    pub fn gc(&mut self, stable: Vec<(ProcessId, u64, u64)>) -> usize {
-        util::dots(stable)
-            .filter(|dot| {
-                // remove dot:
-                // - the dot may not exist locally if there are multiple workers
-                //   and this worker is not responsible for such dot
-                self.dot_to_info.remove(&dot).is_some()
-            })
-            .count()
-    }
-
-    /// Removes a command has been committed.
-    pub fn gc_single(&mut self, dot: Dot) {
-        assert!(self.dot_to_info.remove(&dot).is_some());
+    /// Removes a command.
+    #[must_use]
+    pub fn gc_single(&mut self, dot: &Dot) -> Option<I> {
+        self.dot_to_info
+            .remove(dot)
+            .map(|(_dot, lock)| lock.into_inner())
     }
 }
