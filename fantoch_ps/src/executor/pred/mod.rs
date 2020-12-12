@@ -51,7 +51,6 @@ impl PredecessorsGraph {
         let vertex_index = VertexIndex::new(process_id);
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
-        // create finder
         let metrics = ExecutorMetrics::new();
         // create to execute
         let to_execute = VecDeque::new();
@@ -82,8 +81,7 @@ impl PredecessorsGraph {
         &self.metrics
     }
 
-    /// Add a new command to phase one, i.e., where it waits for all its
-    /// dependencies to become committed.
+    /// Add a new command.
     pub fn add(
         &mut self,
         dot: Dot,
@@ -109,7 +107,7 @@ impl PredecessorsGraph {
         // index the command
         self.index_committed_command(dot, cmd, clock, deps, time);
 
-        // try all commands that are on pending on phase one due to this command
+        // try all commands that are pending on phase one due to this command
         self.try_phase_one_pending(dot, time);
 
         // move command to phase 1
@@ -170,6 +168,7 @@ impl PredecessorsGraph {
         );
 
         if non_committed_deps_count > 0 {
+            // if it has non committed deps, simply save that value
             vertex.set_missing_deps(non_committed_deps_count);
         } else {
             // move command to phase two
@@ -209,12 +208,15 @@ impl PredecessorsGraph {
                     dep_dot,
                     time.millis()
                 );
+                // get the dependency and check its clock to see if it should be
+                // consider
                 let dep_ref = self
                     .vertex_index
                     .find(&dep_dot)
                     .expect("non-executed dependency must exist");
                 let dep = dep_ref.borrow();
 
+                // only consider this dep if it has a lower clock
                 if dep.clock < vertex.clock {
                     trace!(
                         "p{}: Predecessors::move_2 non executed dep with lower clock {:?} | time = {}",
@@ -237,6 +239,7 @@ impl PredecessorsGraph {
         );
 
         if non_executed_deps_count > 0 {
+            // if it has committed but non executed deps, simply save that value
             vertex.set_missing_deps(non_executed_deps_count);
         } else {
             // save the command to be executed
@@ -274,8 +277,13 @@ impl PredecessorsGraph {
                 .find(&pending_dot)
                 .expect("command pending at phase one must exist");
             let mut vertex = vertex_ref.borrow_mut();
+
+            // a non-committed dep became committed, so update the number of
+            // missing deps at phase one
             vertex.decrease_missing_deps();
 
+            // check if there are no more missing deps, and if so, move the
+            // command to phase two
             if vertex.get_missing_deps() == 0 {
                 // move command to phase two
                 drop(vertex);
@@ -292,8 +300,13 @@ impl PredecessorsGraph {
                 .find(&pending_dot)
                 .expect("command pending at phase two must exist");
             let mut vertex = vertex_ref.borrow_mut();
+
+            // a non-executed dep became executed, so update the number of
+            // missing deps at phase two
             vertex.decrease_missing_deps();
 
+            // check if there are no more missing deps, and if so, save the
+            // command to be executed
             if vertex.get_missing_deps() == 0 {
                 // save the command to be executed
                 drop(vertex);

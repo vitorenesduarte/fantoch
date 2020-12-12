@@ -1,13 +1,12 @@
 use crate::id::Rifl;
 use crate::kvs::Key;
-use std::collections::BTreeMap;
+use crate::HashMap;
 
 /// This structure can be used to monitor the order in which commands are
-/// executed, per key. It can be used to all processes have the same order per
-/// key.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// executed, per key, and then check that all processes have the same order
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionOrderMonitor {
-    order_per_key: BTreeMap<Key, Vec<Rifl>>,
+    order_per_key: HashMap<Key, Vec<Rifl>>,
 }
 
 impl ExecutionOrderMonitor {

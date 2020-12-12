@@ -584,6 +584,7 @@ mod tests {
         );
     }
 
+    // TODO
     #[ignore]
     #[test]
     fn run_caesar_locked_test() {
@@ -843,11 +844,10 @@ mod tests {
     fn check_monitors(
         mut executor_monitors: Vec<(ProcessId, ExecutionOrderMonitor)>,
     ) {
-        // add all orders to a set and check that in the end there's a single
-        // one
+        // take the first monitor and check that all the other are equal
         let (process_a, monitor_a) = executor_monitors
             .pop()
-            .expect("there's more than on process in the test");
+            .expect("there's more than one process in the test");
         for (process_b, monitor_b) in executor_monitors {
             if monitor_a != monitor_b {
                 return compute_diff_on_monitors(

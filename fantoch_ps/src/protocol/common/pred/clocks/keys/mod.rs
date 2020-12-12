@@ -33,7 +33,7 @@ pub trait KeyClocks: Debug + Clone {
     /// If `higher` is set, it fills it with all the conflicting commands with a
     /// timestamp higher than `clock`.
     fn predecessors(
-        &mut self,
+        &self,
         dot: Dot,
         cmd: &Command,
         clock: Clock,
