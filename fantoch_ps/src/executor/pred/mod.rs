@@ -404,7 +404,7 @@ mod tests {
         // add cmd 1
         queue.add(dot_1, cmd_1.clone(), clock_1, deps_1, &time);
         // check commands ready to be executed
-        assert_eq!(queue.commands_to_execute(), vec![cmd_0, cmd_1]);
+        assert_eq!(queue.commands_to_execute(), vec![cmd_1, cmd_0]);
     }
 
     #[test]
