@@ -2,7 +2,9 @@ use crate::executor::pred::PredecessorsGraph;
 use crate::protocol::common::pred::Clock;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use fantoch::executor::{
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
@@ -18,6 +20,7 @@ pub struct PredecessorsExecutor {
     config: Config,
     graph: PredecessorsGraph,
     store: KVStore,
+    monitor: Option<ExecutionOrderMonitor>,
     to_clients: Vec<ExecutorResult>,
 }
 
@@ -27,6 +30,11 @@ impl Executor for PredecessorsExecutor {
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         let graph = PredecessorsGraph::new(process_id, &config);
         let store = KVStore::new();
+        let monitor = if config.executor_monitor_execution_order() {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
         let to_clients = Vec::new();
         Self {
             process_id,
@@ -34,6 +42,7 @@ impl Executor for PredecessorsExecutor {
             config,
             graph,
             store,
+            monitor,
             to_clients,
         }
     }
@@ -70,12 +79,17 @@ impl Executor for PredecessorsExecutor {
     fn metrics(&self) -> &ExecutorMetrics {
         &self.graph.metrics()
     }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
+    }
 }
 
 impl PredecessorsExecutor {
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results = cmd.execute(self.shard_id, &mut self.store);
+        let results =
+            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
         self.to_clients.extend(results);
     }
 }

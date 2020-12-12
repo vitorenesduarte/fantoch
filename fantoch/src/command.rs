@@ -1,4 +1,4 @@
-use crate::executor::ExecutorResult;
+use crate::executor::{ExecutionOrderMonitor, ExecutorResult};
 use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key};
 use crate::HashMap;
@@ -111,14 +111,17 @@ impl Command {
 
     /// Executes self in a `KVStore`, returning the resulting an iterator of
     /// `ExecutorResult`.
-    pub fn execute(
+    pub fn execute<'a>(
         self,
         shard_id: ShardId,
-        store: &mut KVStore,
-    ) -> impl Iterator<Item = ExecutorResult> + '_ {
+        store: &'a mut KVStore,
+        monitor: &'a mut Option<ExecutionOrderMonitor>,
+    ) -> impl Iterator<Item = ExecutorResult> + 'a {
         let rifl = self.rifl;
         self.into_iter(shard_id).map(move |(key, op)| {
-            let partial_result = store.execute(&key, op);
+            // execute this op
+            let partial_result =
+                store.execute_with_monitor(&key, op, rifl, monitor);
             ExecutorResult::new(rifl, key, partial_result)
         })
     }

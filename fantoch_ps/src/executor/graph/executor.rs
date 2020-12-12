@@ -2,7 +2,9 @@ use crate::executor::graph::DependencyGraph;
 use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use fantoch::executor::{
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
@@ -21,6 +23,7 @@ pub struct GraphExecutor {
     config: Config,
     graph: DependencyGraph,
     store: KVStore,
+    monitor: Option<ExecutionOrderMonitor>,
     to_clients: Vec<ExecutorResult>,
     to_executors: Vec<(ShardId, GraphExecutionInfo)>,
 }
@@ -33,6 +36,11 @@ impl Executor for GraphExecutor {
         let executor_index = 0;
         let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
+        let monitor = if config.executor_monitor_execution_order() {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
         let to_clients = Vec::new();
         let to_executors = Vec::new();
         Self {
@@ -42,6 +50,7 @@ impl Executor for GraphExecutor {
             config,
             graph,
             store,
+            monitor,
             to_clients,
             to_executors,
         }
@@ -103,6 +112,10 @@ impl Executor for GraphExecutor {
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.graph.metrics()
+    }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
     }
 }
 
@@ -176,7 +189,8 @@ impl GraphExecutor {
 
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results = cmd.execute(self.shard_id, &mut self.store);
+        let results =
+            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
         self.to_clients.extend(results);
     }
 }

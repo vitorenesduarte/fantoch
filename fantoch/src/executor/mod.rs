@@ -5,9 +5,13 @@ mod aggregate;
 // operations as soon as it receives them.
 mod basic;
 
+// This module contains the definition of `ExecutionOrderMonitor`.
+mod monitor;
+
 // Re-exports.
 pub use aggregate::AggregatePending;
 pub use basic::{BasicExecutionInfo, BasicExecutor};
+pub use monitor::ExecutionOrderMonitor;
 
 use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
@@ -71,6 +75,8 @@ pub trait Executor: Clone {
     fn parallel() -> bool;
 
     fn metrics(&self) -> &ExecutorMetrics;
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor>;
 }
 
 pub struct ToClientsIter<'a, E> {

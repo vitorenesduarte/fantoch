@@ -1,4 +1,5 @@
-use crate::HashMap;
+use crate::id::Rifl;
+use crate::{executor::ExecutionOrderMonitor, HashMap};
 use serde::{Deserialize, Serialize};
 
 // Definition of `Key` and `Value` types.
@@ -28,8 +29,27 @@ impl KVStore {
     }
 
     /// Executes a `KVOp` in the `KVStore`.
-    #[allow(clippy::ptr_arg)]
+    #[cfg(test)]
     pub fn execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
+        self.do_execute(key, op)
+    }
+
+    pub fn execute_with_monitor(
+        &mut self,
+        key: &Key,
+        op: KVOp,
+        rifl: Rifl,
+        monitor: &mut Option<ExecutionOrderMonitor>,
+    ) -> KVOpResult {
+        // update monitor, if we're monitoring
+        if let Some(monitor) = monitor {
+            monitor.add(&key, rifl);
+        }
+        self.do_execute(key, op)
+    }
+
+    #[allow(clippy::ptr_arg)]
+    fn do_execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
         match op {
             KVOp::Get => self.store.get(key).cloned(),
             KVOp::Put(value) => {
