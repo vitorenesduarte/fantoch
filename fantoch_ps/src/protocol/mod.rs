@@ -13,11 +13,15 @@ mod newt;
 // This module contains the definition of `FPaxos`.
 mod fpaxos;
 
+// This module contains the definition of `Caesar`.
+mod caesar;
+
 // This module contains common functionality for partial replication.
 mod partial;
 
 // Re-exports.
 pub use atlas::{AtlasLocked, AtlasSequential};
+pub use caesar::{CaesarLocked, CaesarSequential};
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
 pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
@@ -539,6 +543,58 @@ mod tests {
         assert_eq!(slow_paths, 0);
     }
 
+    // ---- caesar tests ---- //
+    #[test]
+    fn sim_caesar_3_1_test() {
+        let _slow_paths = sim_test::<CaesarSequential>(
+            config!(3, 1),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn sim_caesar_5_2_test() {
+        let _slow_paths = sim_test::<CaesarSequential>(
+            config!(5, 2),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn run_caesar_3_1_sequential_test() {
+        // caesar sequential can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarSequential>(
+            config!(3, 1),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[ignore]
+    #[test]
+    fn run_caesar_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let slow_paths = run_test::<CaesarLocked>(
+            config!(3, 1),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+        assert_eq!(slow_paths, 0);
+    }
+
     // ---- fpaxos tests ---- //
     #[test]
     fn sim_fpaxos_3_1_test() {
@@ -688,7 +744,7 @@ mod tests {
         check_metrics(config, commands_per_client, clients_per_process, metrics)
     }
 
-    fn sim_test<P: Protocol + Eq>(
+    fn sim_test<P: Protocol>(
         mut config: Config,
         commands_per_client: usize,
         clients_per_process: usize,

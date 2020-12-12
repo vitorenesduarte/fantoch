@@ -8,17 +8,17 @@ use std::cmp;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyClocks {
-    id: ProcessId,
+    process_id: ProcessId,
     shard_id: ShardId,
     clocks: HashMap<Key, u64>,
 }
 
 impl KeyClocks for SequentialKeyClocks {
     /// Create a new `SequentialKeyClocks` instance.
-    fn new(id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
         let clocks = HashMap::new();
         Self {
-            id,
+            process_id,
             shard_id,
             clocks,
         }
@@ -55,13 +55,13 @@ impl KeyClocks for SequentialKeyClocks {
                 None => self.clocks.entry(key.clone()).or_insert(0),
             };
 
-            Self::maybe_bump(self.id, key, current, up_to, votes);
+            Self::maybe_bump(self.process_id, key, current, up_to, votes);
         });
     }
 
     fn detached_all(&mut self, up_to: u64, votes: &mut Votes) {
         // vote on each key
-        let id = self.id;
+        let id = self.process_id;
         self.clocks.iter_mut().for_each(|(key, current)| {
             Self::maybe_bump(id, key, current, up_to, votes);
         });

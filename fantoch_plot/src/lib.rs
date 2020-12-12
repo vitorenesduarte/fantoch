@@ -320,7 +320,8 @@ pub fn latency_plot<R>(
             per_region_latency.into_iter().unzip();
 
         // compute the stddev between region latencies
-        // let stddev = fantoch_prof::metrics::Histogram::from(y.clone()).stddev().value().round() as u64;
+        // let hist = fantoch_prof::metrics::Histogram::from(y.clone());
+        // let stddev = hist.stddev().value().round() as u64;
         let stddev = 0;
         // add stddev as an error bar
         from_err.push(0);

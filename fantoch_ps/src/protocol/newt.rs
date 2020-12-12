@@ -11,8 +11,8 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVOp;
 use fantoch::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
+    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -29,11 +29,12 @@ pub type NewtLocked = Newt<LockedKeyClocks>;
 
 type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Newt<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
-    cmds: CommandsInfo<NewtInfo>,
+    cmds: SequentialCommandsInfo<NewtInfo>,
+    gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
     // set of detached votes
@@ -76,13 +77,15 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             write_quorum_size,
         );
         let key_clocks = KC::new(process_id, shard_id);
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),
             config.f(),
             fast_quorum_size,
+            write_quorum_size,
         );
+        let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let detached = Votes::new();
@@ -98,6 +101,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             bp,
             key_clocks,
             cmds,
+            gc_track,
             to_processes,
             to_executors,
             detached,
@@ -581,11 +585,8 @@ impl<KC: KeyClocks> Newt<KC> {
         let info = self.cmds.get(dot);
 
         if info.status == Status::START {
-            // TODO we missed the `MCollect` message and should try to recover
-            // the payload:
-            // - save this notification just in case we've received the
-            //   `MCollect` and `MCommit` in opposite orders (due to
-            //   multiplexing)
+            // save this notification just in case we've received the `MCollect`
+            // and `MCommit` in opposite orders (due to multiplexing)
             self.buffered_mcommits.insert(dot, (from, clock, votes));
             return;
         }
@@ -913,7 +914,7 @@ impl<KC: KeyClocks> Newt<KC> {
             _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
-        self.cmds.commit(dot);
+        self.gc_track.commit(dot);
     }
 
     // #[instrument(skip(self, from, committed, _time))]
@@ -930,9 +931,9 @@ impl<KC: KeyClocks> Newt<KC> {
             from,
             _time.micros()
         );
-        self.cmds.committed_by(from, committed);
+        self.gc_track.committed_by(from, committed);
         // compute newly stable dots
-        let stable = self.cmds.stable();
+        let stable = self.gc_track.stable();
         // create `ToForward` to self
         if !stable.is_empty() {
             self.to_processes.push(Action::ToForward {
@@ -969,7 +970,7 @@ impl<KC: KeyClocks> Newt<KC> {
         );
 
         // retrieve the committed clock
-        let committed = self.cmds.committed();
+        let committed = self.gc_track.committed();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -1136,6 +1137,7 @@ impl Info for NewtInfo {
         n: usize,
         f: usize,
         fast_quorum_size: usize,
+        _write_quorum_size: usize,
     ) -> Self {
         let initial_value = 0;
         Self {

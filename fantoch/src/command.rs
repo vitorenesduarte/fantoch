@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::FromIterator;
 
-const DEFAULT_SHARD_ID: ShardId = 0;
+pub const DEFAULT_SHARD_ID: ShardId = 0;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {

@@ -27,6 +27,9 @@ pub mod config;
 // and implementations of all protocols supported.
 pub mod protocol;
 
+// This module contains the definition of `SharedMap`.
+pub mod shared;
+
 // This module contains the definition of trait `SysTime` and its
 // implementations.
 pub mod time;

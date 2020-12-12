@@ -1,6 +1,6 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
-use crate::shared::Shared;
+use fantoch::shared::SharedMap;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::Key;
@@ -11,21 +11,21 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct AtomicKeyClocks {
-    id: ProcessId,
+    process_id: ProcessId,
     shard_id: ShardId,
-    clocks: Arc<Shared<Key, AtomicU64>>,
+    clocks: Arc<SharedMap<Key, AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
-    fn new(id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
         // create shared clocks
-        let clocks = Shared::new();
+        let clocks = SharedMap::new();
         // wrap them in an arc
         let clocks = Arc::new(clocks);
 
         Self {
-            id,
+            process_id,
             shard_id,
             clocks,
         }
@@ -59,7 +59,7 @@ impl KeyClocks for AtomicKeyClocks {
 
             // create vote range and save it
             up_to = cmp::max(up_to, previous_value + 1);
-            let vr = VoteRange::new(self.id, previous_value + 1, up_to);
+            let vr = VoteRange::new(self.process_id, previous_value + 1, up_to);
             votes.set(key.clone(), vec![vr]);
 
             // save final clock value
@@ -72,7 +72,9 @@ impl KeyClocks for AtomicKeyClocks {
         if clocks.len() > 1 {
             cmd.keys(self.shard_id).for_each(|key| {
                 let clock = self.clocks.get_or(key, || AtomicU64::default());
-                if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
+                if let Some(vr) =
+                    Self::maybe_bump(self.process_id, &clock, up_to)
+                {
                     votes.add(key, vr);
                 }
             })
@@ -84,7 +86,7 @@ impl KeyClocks for AtomicKeyClocks {
     fn detached(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         for key in cmd.keys(self.shard_id) {
             let clock = self.clocks.get_or(key, || AtomicU64::default());
-            if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
+            if let Some(vr) = Self::maybe_bump(self.process_id, &clock, up_to) {
                 votes.add(key, vr);
             }
         }
@@ -94,7 +96,7 @@ impl KeyClocks for AtomicKeyClocks {
         self.clocks.iter().for_each(|entry| {
             let key = entry.key();
             let clock = entry.value();
-            if let Some(vr) = Self::maybe_bump(self.id, &clock, up_to) {
+            if let Some(vr) = Self::maybe_bump(self.process_id, &clock, up_to) {
                 votes.add(key, vr);
             }
         });

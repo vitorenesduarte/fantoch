@@ -11,14 +11,15 @@ use crate::util;
 use crate::HashMap;
 use fantoch_prof::metrics::Histogram;
 use std::fmt;
+use std::fmt::Debug;
 use std::time::Duration;
 
 #[derive(PartialEq, Eq)]
-enum ScheduleAction<P: Protocol + Eq> {
+enum ScheduleAction<Message, PeriodicEvent> {
     SubmitToProc(ProcessId, Command),
-    SendToProc(ProcessId, ShardId, ProcessId, P::Message),
+    SendToProc(ProcessId, ShardId, ProcessId, Message),
     SendToClient(ClientId, CommandResult),
-    PeriodicEvent(ProcessId, P::PeriodicEvent, Duration),
+    PeriodicEvent(ProcessId, PeriodicEvent, Duration),
 }
 #[derive(Clone)]
 enum MessageRegion {
@@ -26,10 +27,10 @@ enum MessageRegion {
     Client(ClientId),
 }
 
-pub struct Runner<P: Protocol + Eq> {
+pub struct Runner<P: Protocol> {
     planet: Planet,
     simulation: Simulation<P>,
-    schedule: Schedule<ScheduleAction<P>>,
+    schedule: Schedule<ScheduleAction<P::Message, P::PeriodicEvent>>,
     // mapping from process identifier to its region
     process_to_region: HashMap<ProcessId, Region>,
     // mapping from client identifier to its region
@@ -50,7 +51,7 @@ enum SimulationStatus {
 
 impl<P> Runner<P>
 where
-    P: Protocol + Eq,
+    P: Protocol,
 {
     /// Create a new `Runner` from a `planet`, a `config`, and two lists of
     /// regions:
@@ -214,17 +215,11 @@ where
                 .expect("there should be a new action since stability is always running");
 
             match action {
+                ScheduleAction::PeriodicEvent(process_id, event, delay) => {
+                    self.handle_periodic_event(process_id, event, delay)
+                }
                 ScheduleAction::SubmitToProc(process_id, cmd) => {
-                    // get process and executor
-                    let (process, _executor, pending, time) =
-                        self.simulation.get_process(process_id);
-
-                    // register command in pending
-                    pending.wait_for(&cmd);
-
-                    // submit to process and schedule new actions
-                    process.submit(None, cmd, time);
-                    self.send_to_processes_and_executors(process_id);
+                    self.handle_submit_to_proc(process_id, cmd);
                 }
                 ScheduleAction::SendToProc(
                     from,
@@ -232,13 +227,12 @@ where
                     process_id,
                     msg,
                 ) => {
-                    // get process and executor
-                    let (process, _, _, time) =
-                        self.simulation.get_process(process_id);
-
-                    // handle message and schedule new actions
-                    process.handle(from, from_shard_id, msg, time);
-                    self.send_to_processes_and_executors(process_id);
+                    self.handle_send_to_proc(
+                        from,
+                        from_shard_id,
+                        process_id,
+                        msg,
+                    );
                 }
                 ScheduleAction::SendToClient(client_id, cmd_result) => {
                     // handle new command result in client
@@ -270,18 +264,6 @@ where
                         }
                     }
                 }
-                ScheduleAction::PeriodicEvent(process_id, event, delay) => {
-                    // get process
-                    let (process, _, _, time) =
-                        self.simulation.get_process(process_id);
-
-                    // handle event adn schedule new actions
-                    process.handle_event(event.clone(), time);
-                    self.send_to_processes_and_executors(process_id);
-
-                    // schedule the next periodic event
-                    self.schedule_event(process_id, event, delay);
-                }
             }
 
             // check if we're in extra simulation time; if yes, finish the
@@ -293,6 +275,51 @@ where
                 simulation_status = SimulationStatus::Done;
             }
         }
+    }
+
+    fn handle_periodic_event(
+        &mut self,
+        process_id: ProcessId,
+        event: P::PeriodicEvent,
+        delay: Duration,
+    ) {
+        // get process
+        let (process, _, _, time) = self.simulation.get_process(process_id);
+
+        // handle event adn schedule new actions
+        process.handle_event(event.clone(), time);
+        self.send_to_processes_and_executors(process_id);
+
+        // schedule the next periodic event
+        self.schedule_event(process_id, event, delay);
+    }
+
+    fn handle_submit_to_proc(&mut self, process_id: ProcessId, cmd: Command) {
+        // get process and executor
+        let (process, _executor, pending, time) =
+            self.simulation.get_process(process_id);
+
+        // register command in pending
+        pending.wait_for(&cmd);
+
+        // submit to process and schedule new actions
+        process.submit(None, cmd, time);
+        self.send_to_processes_and_executors(process_id);
+    }
+
+    fn handle_send_to_proc(
+        &mut self,
+        from: ProcessId,
+        from_shard_id: ShardId,
+        process_id: ProcessId,
+        msg: P::Message,
+    ) {
+        // get process and executor
+        let (process, _, _, time) = self.simulation.get_process(process_id);
+
+        // handle message and schedule new actions
+        process.handle(from, from_shard_id, msg, time);
+        self.send_to_processes_and_executors(process_id);
     }
 
     // (maybe) Schedules a new submit from a client.
@@ -365,27 +392,35 @@ where
                 Action::ToSend { target, msg } => {
                     // for each process in target, schedule message delivery
                     target.into_iter().for_each(|to| {
-                        // otherwise, create action and schedule it
-                        let action = ScheduleAction::SendToProc(
-                            process_id,
-                            shard_id,
-                            to,
-                            msg.clone(),
-                        );
-                        self.schedule_message(
-                            from_region.clone(),
-                            MessageRegion::Process(to),
-                            action,
-                        );
+                        // if message to self, deliver immediately
+                        if to == process_id {
+                            self.handle_send_to_proc(
+                                process_id,
+                                shard_id,
+                                process_id,
+                                msg.clone(),
+                            )
+                        } else {
+                            // otherwise, create action and schedule it
+                            let action = ScheduleAction::SendToProc(
+                                process_id,
+                                shard_id,
+                                to,
+                                msg.clone(),
+                            );
+                            self.schedule_message(
+                                from_region.clone(),
+                                MessageRegion::Process(to),
+                                action,
+                            );
+                        }
                     });
                 }
                 Action::ToForward { msg } => {
-                    let action = ScheduleAction::SendToProc(
+                    // deliver to-forward messages immediately
+                    self.handle_send_to_proc(
                         process_id, shard_id, process_id, msg,
                     );
-                    let from_region = from_region.clone();
-                    let to_region = from_region.clone();
-                    self.schedule_message(from_region, to_region, action);
                 }
             }
         }
@@ -412,7 +447,7 @@ where
         &mut self,
         from_region: MessageRegion,
         to_region: MessageRegion,
-        action: ScheduleAction<P>,
+        action: ScheduleAction<P::Message, P::PeriodicEvent>,
     ) {
         // get actual regions
         let from = self.compute_region(from_region);
@@ -545,7 +580,9 @@ where
     }
 }
 
-impl<P: Protocol + Eq> fmt::Debug for ScheduleAction<P> {
+impl<Message: Debug, PeriodicEvent: Debug> fmt::Debug
+    for ScheduleAction<Message, PeriodicEvent>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ScheduleAction::SubmitToProc(process_id, cmd) => {

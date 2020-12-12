@@ -1,47 +1,50 @@
-use crate::executor::GraphExecutor;
-use crate::protocol::common::graph::{
-    Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
+use crate::executor::PredecessorsExecutor;
+use crate::protocol::common::pred::{
+    Clock, KeyClocks, QuorumClocks, QuorumRetries, SequentialKeyClocks,
 };
-use crate::protocol::common::synod::{Synod, SynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics, SequentialCommandsInfo,
+    Action, BaseProcess, GCTrack, Info, LockedCommandsInfo, MessageIndex,
+    Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
+use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
+use parking_lot::RwLockWriteGuard;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use threshold::VClock;
 
-pub type EPaxosSequential = EPaxos<SequentialKeyDeps>;
-pub type EPaxosLocked = EPaxos<LockedKeyDeps>;
+// TODO: Sequential -> Locked
+type LockedKeyClocks = SequentialKeyClocks;
+pub type CaesarSequential = Caesar<SequentialKeyClocks>;
+pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
-type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
+type ExecutionInfo = <PredecessorsExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone)]
-pub struct EPaxos<KD: KeyDeps> {
+pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
-    key_deps: KD,
-    cmds: SequentialCommandsInfo<EPaxosInfo>,
+    key_clocks: KC,
+    cmds: LockedCommandsInfo<CaesarInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
-    // commit notifications that arrived before the initial `MCollect` message
+    // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
+    buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
 }
 
-impl<KD: KeyDeps> Protocol for EPaxos<KD> {
+impl<KC: KeyClocks> Protocol for Caesar<KC> {
     type Message = Message;
     type PeriodicEvent = PeriodicEvent;
-    type Executor = GraphExecutor;
+    type Executor = PredecessorsExecutor;
 
-    /// Creates a new `EPaxos` process.
+    /// Creates a new `Caesar` process.
     fn new(
         process_id: ProcessId,
         shard_id: ShardId,
@@ -49,7 +52,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size) =
-            config.epaxos_quorum_sizes();
+            config.caesar_quorum_sizes();
 
         // create protocol data-structures
         let bp = BaseProcess::new(
@@ -59,9 +62,9 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_deps = KD::new(shard_id);
+        let key_clocks = KC::new(process_id, shard_id);
         let f = Self::allowed_faults(config.n());
-        let cmds = SequentialCommandsInfo::new(
+        let cmds = LockedCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),
@@ -74,10 +77,10 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
         let to_executors = Vec::new();
         let buffered_commits = HashMap::new();
 
-        // create `EPaxos`
+        // create `Caesar`
         let protocol = Self {
             bp,
-            key_deps,
+            key_clocks,
             cmds,
             gc_track,
             to_processes,
@@ -130,32 +133,32 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
         time: &dyn SysTime,
     ) {
         match msg {
-            Message::MCollect {
+            Message::MPropose {
                 dot,
                 cmd,
                 quorum,
+                clock,
+            } => self.handle_mpropose(from, dot, cmd, quorum, clock, time),
+            Message::MProposeAck {
+                dot,
+                clock,
                 deps,
-            } => self.handle_mcollect(from, dot, cmd, quorum, deps, time),
-            Message::MCollectAck { dot, deps } => {
-                self.handle_mcollectack(from, dot, deps, time)
+                ok,
+            } => self.handle_mproposeack(from, dot, clock, deps, ok, time),
+            Message::MCommit { dot, clock, deps } => {
+                self.handle_mcommit(from, dot, clock, deps, time)
             }
-            Message::MCommit { dot, value } => {
-                self.handle_mcommit(from, dot, value, time)
+            Message::MRetry { dot, clock, deps } => {
+                self.handle_mretry(from, dot, clock, deps, time)
             }
-            Message::MConsensus { dot, ballot, value } => {
-                self.handle_mconsensus(from, dot, ballot, value, time)
-            }
-            Message::MConsensusAck { dot, ballot } => {
-                self.handle_mconsensusack(from, dot, ballot, time)
+            Message::MRetryAck { dot, deps } => {
+                self.handle_mretryack(from, dot, deps, time)
             }
             Message::MCommitDot { dot } => {
                 self.handle_mcommit_dot(from, dot, time)
             }
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed, time)
-            }
-            Message::MStable { stable } => {
-                self.handle_mstable(from, stable, time)
             }
         }
     }
@@ -180,7 +183,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     }
 
     fn parallel() -> bool {
-        KD::parallel()
+        KC::parallel()
     }
 
     fn leaderless() -> bool {
@@ -192,26 +195,25 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     }
 }
 
-impl<KD: KeyDeps> EPaxos<KD> {
-    /// EPaxos always tolerates a minority of faults.
+impl<KC: KeyClocks> Caesar<KC> {
+    /// Caesar always tolerates a minority of faults.
     pub fn allowed_faults(n: usize) -> usize {
         n / 2
     }
 
     /// Handles a submit operation by a client.
-    // #[instrument(skip(self, dot, cmd))]
     fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // compute its deps
-        let deps = self.key_deps.add_cmd(dot, &cmd, None);
+        // compute its clock
+        let clock = self.key_clocks.clock_next();
 
-        // create `MCollect` and target
-        let mcollect = Message::MCollect {
+        // create `MPropose` and target
+        let mpropose = Message::MPropose {
             dot,
             cmd,
-            deps,
+            clock,
             quorum: self.bp.fast_quorum(),
         };
         let target = self.bp.all();
@@ -219,32 +221,35 @@ impl<KD: KeyDeps> EPaxos<KD> {
         // save new action
         self.to_processes.push(Action::ToSend {
             target,
-            msg: mcollect,
+            msg: mpropose,
         });
     }
 
-    // #[instrument(skip(self, from, dot, cmd, quorum, remote_deps, time))]
-    fn handle_mcollect(
+    fn handle_mpropose(
         &mut self,
         from: ProcessId,
         dot: Dot,
         cmd: Command,
         quorum: HashSet<ProcessId>,
-        remote_deps: HashSet<Dependency>,
+        remote_clock: Clock,
         time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MCollect({:?}, {:?}, {:?}) from {} | time={}",
+            "p{}: MPropose({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
             cmd,
-            remote_deps,
+            remote_clock,
             from,
             time.micros()
         );
 
+        // merge clocks
+        self.key_clocks.clock_join(&remote_clock);
+
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -255,7 +260,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         if !quorum.contains(&self.bp.process_id) {
             // if not:
             // - simply save the payload and set status to `PAYLOAD`
-            // - if we received the `MCommit` before the `MCollect`, handle the
+            // - if we received the `MCommit` before the `MPropose`, handle the
             //   `MCommit` now
 
             info.status = Status::PAYLOAD;
@@ -263,89 +268,131 @@ impl<KD: KeyDeps> EPaxos<KD> {
 
             // check if there's a buffered commit notification; if yes, handle
             // the commit again (since now we have the payload)
-            if let Some((from, value)) = self.buffered_commits.remove(&dot) {
-                self.handle_mcommit(from, dot, value, time);
+            if let Some((from, clock, deps)) =
+                self.buffered_commits.remove(&dot)
+            {
+                drop(info);
+                drop(info_ref);
+                self.handle_mcommit(from, dot, clock, deps, time);
             }
             return;
         }
 
-        // check if it's a message from self
-        let message_from_self = from == self.bp.process_id;
-
-        let deps = if message_from_self {
-            // if it is, do not recompute deps
-            remote_deps
-        } else {
-            // otherwise, compute deps with the remote deps as past
-            self.key_deps.add_cmd(dot, &cmd, Some(remote_deps))
-        };
+        // compute set of predecessors
+        let mut blocking = HashSet::new();
+        let deps = self.key_clocks.predecessors(
+            dot,
+            &cmd,
+            remote_clock,
+            Some(&mut blocking),
+        );
 
         // update command info
-        info.status = Status::COLLECT;
-        info.quorum = quorum;
+        info.status = Status::PROPOSE;
         info.cmd = Some(cmd);
-        // create and set consensus value
-        let value = ConsensusValue::with(deps.clone());
-        assert!(info.synod.set_if_not_accepted(|| value));
+        info.deps = deps;
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
-        // create `MCollectAck` and target (only if not message from self)
-        if !message_from_self {
-            let mcollectack = Message::MCollectAck { dot, deps };
-            let target = singleton![from];
+        // we send an ok if no command is blocking this command
+        // TODO: add wait
+        let ok = blocking.is_empty();
 
-            // save new action
-            self.to_processes.push(Action::ToSend {
-                target,
-                msg: mcollectack,
-            });
-        }
+        // compute clock to send in the ack
+        let (clock, deps) = if ok {
+            (info.clock, info.deps.clone())
+        } else {
+            info.status = Status::REJECT;
+            // compute new timestamp for the command
+            let new_clock = self.key_clocks.clock_next();
+            // compute new set of predecessors for the command
+            let cmd = info.cmd.as_ref().expect("command has been set");
+            let blocking = None;
+            let new_deps =
+                self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
+            (new_clock, new_deps)
+        };
+
+        // create `MProposeAck` and target
+        let mproposeack = Message::MProposeAck {
+            dot,
+            clock,
+            deps,
+            ok,
+        };
+        let target = singleton![from];
+
+        // save new action
+        self.to_processes.push(Action::ToSend {
+            target,
+            msg: mproposeack,
+        });
     }
 
-    // #[instrument(skip(self, from, dot, deps, _time))]
-    fn handle_mcollectack(
+    fn handle_mproposeack(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        deps: HashSet<Dependency>,
+        clock: Clock,
+        deps: HashSet<Dot>,
+        ok: bool,
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MCollectAck({:?}, {:?}) from {} | time={}",
+            "p{}: MProposeAck({:?}, {:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
+            clock,
             deps,
+            ok,
             from,
             _time.micros()
         );
 
-        // it can't be a ack from self (see the `MCollect` handler)
-        assert_ne!(from, self.bp.process_id);
-
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
-        // do nothing if we're no longer COLLECT
-        if info.status != Status::COLLECT {
+        // do nothing if we're no longer PROPOSE or REJECT (yes, it seems that
+        // the coordinator can reject it's own command; this case was only
+        // occurring in the simulator, but with concurrency I think it can
+        // happen in the runner as well, as it will be tricky to ensure a level
+        // of atomicity where the coordinator never rejects its own command):
+        // - this ensures that once an MCommit/MRetry is sent in this handler,
+        //   further messages received are ignored
+        // - we can check this by asserting that `info.quorum_clocks.all()` is
+        //   false, before adding any new info
+        if !matches!(info.status, Status::PROPOSE | Status::REJECT) {
             return;
+        }
+        if info.quorum_clocks.all() {
+            panic!(
+                "p{}: {:?} already had all MProposeAck needed",
+                self.bp.process_id, dot
+            );
         }
 
         // update quorum deps
-        info.quorum_deps.add(from, deps);
+        info.quorum_clocks.add(from, clock, deps, ok);
 
         // check if we have all necessary replies
-        if info.quorum_deps.all() {
-            // compute the union while checking whether all deps reported are
-            // equal
-            let (final_deps, all_equal) = info.quorum_deps.check_union();
-
-            // create consensus value
-            let value = ConsensusValue::with(final_deps);
+        if info.quorum_clocks.all() {
+            // if yes, get the aggregated results
+            let (aggregated_clock, aggregated_deps, aggregated_ok) =
+                info.quorum_clocks.aggregated();
 
             // fast path condition: all reported deps were equal
-            if all_equal {
+            if aggregated_ok {
+                // in this, all processes have accepted the proposal by the
+                // coordinator; check that that's the case
+                assert_eq!(aggregated_clock, info.clock);
+
                 self.bp.fast_path();
                 // fast path: create `MCommit`
-                let mcommit = Message::MCommit { dot, value };
+                let mcommit = Message::MCommit {
+                    dot,
+                    clock: aggregated_clock,
+                    deps: aggregated_deps,
+                };
                 let target = self.bp.all();
 
                 // save new action
@@ -355,10 +402,14 @@ impl<KD: KeyDeps> EPaxos<KD> {
                 });
             } else {
                 self.bp.slow_path();
-                // slow path: create `MConsensus`
-                let ballot = info.synod.skip_prepare();
-                let mconsensus = Message::MConsensus { dot, ballot, value };
+                // slow path: create `MRetry`
+                let mconsensus = Message::MRetry {
+                    dot,
+                    clock: aggregated_clock,
+                    deps: aggregated_deps,
+                };
                 let target = self.bp.write_quorum();
+
                 // save new action
                 self.to_processes.push(Action::ToSend {
                     target,
@@ -368,29 +419,35 @@ impl<KD: KeyDeps> EPaxos<KD> {
         }
     }
 
-    // #[instrument(skip(self, from, dot, value, _time))]
     fn handle_mcommit(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        value: ConsensusValue,
+        clock: Clock,
+        deps: HashSet<Dot>,
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MCommit({:?}, {:?}) | time={}",
+            "p{}: MCommit({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
-            value.deps,
+            clock,
+            deps,
+            from,
             _time.micros()
         );
 
+        // merge clocks
+        self.key_clocks.clock_join(&clock);
+
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
         if info.status == Status::START {
-            // save this notification just in case we've received the `MCollect`
+            // save this notification just in case we've received the `MPropose`
             // and `MCommit` in opposite orders (due to multiplexing)
-            self.buffered_commits.insert(dot, (from, value));
+            self.buffered_commits.insert(dot, (from, clock, deps));
             return;
         }
 
@@ -399,24 +456,18 @@ impl<KD: KeyDeps> EPaxos<KD> {
             return;
         }
 
-        // check it's not a noop
-        assert_eq!(
-            value.is_noop, false,
-            "handling noop's is not implemented yet"
-        );
-
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::add(dot, cmd, value.deps.clone());
+        let execution_info = ExecutionInfo::new(dot, cmd, clock, deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
         info.status = Status::COMMIT;
+        info.deps = deps;
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
-        // handle commit in synod
-        let msg = SynodMessage::MChosen(value);
-        assert!(info.synod.handle(from, msg).is_none());
-
+        drop(info);
+        drop(info_ref);
         if self.gc_running() {
             // notify self with the committed dot
             self.to_processes.push(Action::ToForward {
@@ -424,102 +475,125 @@ impl<KD: KeyDeps> EPaxos<KD> {
             });
         } else {
             // if we're not running gc, remove the dot info now
-            self.cmds.gc_single(dot);
+            self.gc_command(dot);
         }
     }
 
-    // #[instrument(skip(self, from, dot, ballot, value, _time))]
-    fn handle_mconsensus(
+    fn handle_mretry(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        ballot: u64,
-        value: ConsensusValue,
+        clock: Clock,
+        deps: HashSet<Dot>,
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MConsensus({:?}, {}, {:?}) | time={}",
+            "p{}: MRetry({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
-            ballot,
-            value.deps,
+            clock,
+            deps,
+            from,
             _time.micros()
         );
 
+        // merge clocks
+        self.key_clocks.clock_join(&clock);
+
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
-        // compute message: that can either be nothing, an ack or an mcommit
-        let msg = match info
-            .synod
-            .handle(from, SynodMessage::MAccept(ballot, value))
-        {
-            Some(SynodMessage::MAccepted(ballot)) => {
-                // the accept message was accepted: create `MConsensusAck`
-                Message::MConsensusAck { dot, ballot }
-            }
-            Some(SynodMessage::MChosen(value)) => {
-                // the value has already been chosen: create `MCommit`
-                Message::MCommit { dot, value }
-            }
-            None => {
-                // ballot too low to be accepted: nothing to do
-                return;
-            }
-            _ => panic!(
-                "no other type of message should be output by Synod in the MConsensus handler"
-            ),
+        if matches!(info.status, Status::START | Status::COMMIT) {
+            // do nothing if we don't have the payload or if have already
+            // committed
+            return;
+        }
+
+        // update command info:
+        info.status = Status::ACCEPT;
+        info.deps = deps.clone();
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
+
+        // compute new set of predecessors for the command
+        let cmd = info.cmd.as_ref().expect("command has been set");
+        let blocking = None;
+        let mut new_deps =
+            self.key_clocks.predecessors(dot, cmd, clock, blocking);
+
+        // aggregate with incoming deps
+        new_deps.extend(deps);
+
+        // create message and target
+        let msg = Message::MRetryAck {
+            dot,
+            deps: new_deps,
         };
-
-        // create target
         let target = singleton![from];
 
         // save new action
         self.to_processes.push(Action::ToSend { target, msg });
     }
 
-    // #[instrument(skip(self, from, dot, ballot, _time))]
-    fn handle_mconsensusack(
+    fn handle_mretryack(
         &mut self,
         from: ProcessId,
         dot: Dot,
-        ballot: u64,
+        deps: HashSet<Dot>,
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MConsensusAck({:?}, {}) | time={}",
+            "p{}: MRetryAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
-            ballot,
+            deps,
+            from,
             _time.micros()
         );
 
         // get cmd info
-        let info = self.cmds.get(dot);
+        let info_ref = self.cmds.get(dot);
+        let mut info = info_ref.write();
 
-        // compute message: that can either be nothing or an mcommit
-        match info.synod.handle(from, SynodMessage::MAccepted(ballot)) {
-            Some(SynodMessage::MChosen(value)) => {
-                // enough accepts were gathered and the value has been chosen: create `MCommit` and target
-                let target = self.bp.all();
-                let mcommit = Message::MCommit { dot, value };
+        // do nothing if we're no longer ACCEPT:
+        // - this ensures that once an MCommit is sent in this handler,
+        //   further messages received are ignored
+        // - we can check this by asserting that `info.quorum_retries.all()` is
+        //   false, before adding any new info
+        if info.status != Status::ACCEPT {
+            return;
+        }
+        if info.quorum_retries.all() {
+            panic!(
+                "p{}: {:?} already had all MRetryAck needed",
+                self.bp.process_id, dot
+            );
+        }
 
-                // save new action
-                self.to_processes.push(Action::ToSend {
-                    target,
-                    msg: mcommit,
-                });
-            }
-            None => {
-                // not enough accepts yet: nothing to do
-            }
-            _ => panic!(
-                "no other type of message should be output by Synod in the MConsensusAck handler"
-            ),
+        // update quorum retries
+        info.quorum_retries.add(from, deps);
+
+        // check if we have all necessary replies
+        if info.quorum_retries.all() {
+            // if yes, get the aggregated results
+            let aggregated_deps = info.quorum_retries.aggregated();
+
+            // create message and target
+            let mcommit = Message::MCommit {
+                dot,
+                clock: info.clock,
+                deps: aggregated_deps,
+            };
+            let target = self.bp.all();
+
+            // save new action
+            self.to_processes.push(Action::ToSend {
+                target,
+                msg: mcommit,
+            });
         }
     }
 
-    // #[instrument(skip(self, from, dot, _time))]
     fn handle_mcommit_dot(
         &mut self,
         from: ProcessId,
@@ -536,7 +610,6 @@ impl<KD: KeyDeps> EPaxos<KD> {
         self.gc_track.commit(dot);
     }
 
-    // #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -553,34 +626,15 @@ impl<KD: KeyDeps> EPaxos<KD> {
         self.gc_track.committed_by(from, committed);
         // compute newly stable dots
         let stable = self.gc_track.stable();
-        // create `ToForward` to self
-        if !stable.is_empty() {
-            self.to_processes.push(Action::ToForward {
-                msg: Message::MStable { stable },
-            });
-        }
+
+        // since the dot info is shared across workers, we don't need to send
+        // an MStable message to all the workers, as in the other protocols,
+        // we can do it right here
+        let dots: Vec<_> = util::dots(stable).collect();
+        self.bp.stable(dots.len());
+        dots.into_iter().for_each(|dot| self.gc_command(dot));
     }
 
-    // #[instrument(skip(self, from, stable, _time))]
-    fn handle_mstable(
-        &mut self,
-        from: ProcessId,
-        stable: Vec<(ProcessId, u64, u64)>,
-        _time: &dyn SysTime,
-    ) {
-        trace!(
-            "p{}: MStable({:?}) from {} | time={}",
-            self.id(),
-            stable,
-            from,
-            _time.micros()
-        );
-        assert_eq!(from, self.bp.process_id);
-        let stable_count = self.cmds.gc(stable);
-        self.bp.stable(stable_count);
-    }
-
-    // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
         trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",
@@ -601,109 +655,122 @@ impl<KD: KeyDeps> EPaxos<KD> {
     fn gc_running(&self) -> bool {
         self.bp.config.gc_interval().is_some()
     }
-}
 
-// consensus value is a pair where the first component is a flag indicating
-// whether this is a noop and the second component is the command's dependencies
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConsensusValue {
-    is_noop: bool,
-    deps: HashSet<Dependency>,
-}
+    fn update_clock(
+        key_clocks: &mut KC,
+        dot: Dot,
+        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        new_clock: Clock,
+    ) {
+        // get the command
+        let cmd = info.cmd.as_ref().expect("command has been set");
 
-impl ConsensusValue {
-    fn bottom() -> Self {
-        let is_noop = false;
-        let deps = HashSet::new();
-        Self { is_noop, deps }
+        // remove previous clock (if any)
+        Self::remove_clock(key_clocks, cmd, info.clock);
+
+        // add new clock to key clocks
+        key_clocks.add(dot, &cmd, new_clock);
+
+        // finally update the clock
+        info.clock = new_clock;
     }
 
-    fn with(deps: HashSet<Dependency>) -> Self {
-        let is_noop = false;
-        Self { is_noop, deps }
+    fn remove_clock(key_clocks: &mut KC, cmd: &Command, clock: Clock) {
+        // remove previous clock from key clocks if we added it before
+        let added_before = !clock.is_zero();
+        if added_before {
+            key_clocks.remove(cmd, clock);
+        }
     }
-}
 
-fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
-    todo!("recovery not implemented yet")
-}
+    fn gc_command(&mut self, dot: Dot) {
+        if let Some(info) = self.cmds.gc_single(&dot) {
+            // get the command
+            let cmd = info.cmd.as_ref().expect("command has been set");
 
-// `EPaxosInfo` contains all information required in the life-cyle of a
-// `Command`
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct EPaxosInfo {
-    status: Status,
-    quorum: HashSet<ProcessId>,
-    synod: Synod<ConsensusValue>,
-    // `None` if not set yet
-    cmd: Option<Command>,
-    // `quorum_clocks` is used by the coordinator to compute the threshold
-    // clock when deciding whether to take the fast path
-    quorum_deps: QuorumDeps,
-}
-
-impl Info for EPaxosInfo {
-    fn new(
-        process_id: ProcessId,
-        _shard_id: ShardId,
-        n: usize,
-        f: usize,
-        fast_quorum_size: usize,
-        _write_quorum_size: usize,
-    ) -> Self {
-        // create bottom consensus value
-        let initial_value = ConsensusValue::bottom();
-
-        // although the fast quorum size is `fast_quorum_size`, we're going to
-        // initialize `QuorumClocks` with `fast_quorum_size - 1` since
-        // the clock reported by the coordinator shouldn't be considered
-        // in the fast path condition, and this clock is not necessary for
-        // correctness; for this to work, `MCollectAck`'s from self should be
-        // ignored, or not even created.
-        Self {
-            status: Status::START,
-            quorum: HashSet::new(),
-            synod: Synod::new(process_id, n, f, proposal_gen, initial_value),
-            cmd: None,
-            quorum_deps: QuorumDeps::new(fast_quorum_size - 1),
+            // remove previous clock (if any)
+            Self::remove_clock(&mut self.key_clocks, cmd, info.clock);
+        } else {
+            panic!("we're the single worker performing gc, so all commands should exist");
         }
     }
 }
 
-// `EPaxos` protocol messages
+// `CaesarInfo` contains all information required in the life-cyle of a
+// `Command`
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CaesarInfo {
+    status: Status,
+    // `None` if not set yet
+    cmd: Option<Command>,
+    clock: Clock,
+    deps: HashSet<Dot>,
+    // `quorum_clocks` is used by the coordinator to aggregate fast-quorum
+    // replies and make the fast-path decision
+    quorum_clocks: QuorumClocks,
+    // `quorum_retries` is used by the coordinator to aggregate dependencies
+    // reported in `MRetry` messages
+    quorum_retries: QuorumRetries,
+}
+
+impl Info for CaesarInfo {
+    fn new(
+        process_id: ProcessId,
+        _shard_id: ShardId,
+        _n: usize,
+        _f: usize,
+        fast_quorum_size: usize,
+        write_quorum_size: usize,
+    ) -> Self {
+        Self {
+            status: Status::START,
+            cmd: None,
+            clock: Clock::new(process_id),
+            deps: HashSet::new(),
+            quorum_clocks: QuorumClocks::new(
+                process_id,
+                fast_quorum_size,
+                write_quorum_size,
+            ),
+            quorum_retries: QuorumRetries::new(write_quorum_size),
+        }
+    }
+}
+
+// `Caesar` protocol messages
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
-    MCollect {
+    MPropose {
         dot: Dot,
         cmd: Command,
-        deps: HashSet<Dependency>,
+        clock: Clock,
         quorum: HashSet<ProcessId>,
     },
-    MCollectAck {
+    MProposeAck {
         dot: Dot,
-        deps: HashSet<Dependency>,
+        clock: Clock,
+        deps: HashSet<Dot>,
+        ok: bool,
     },
     MCommit {
         dot: Dot,
-        value: ConsensusValue,
+        clock: Clock,
+        deps: HashSet<Dot>,
     },
-    MConsensus {
+    MRetry {
         dot: Dot,
-        ballot: u64,
-        value: ConsensusValue,
+        clock: Clock,
+        deps: HashSet<Dot>,
     },
-    MConsensusAck {
+    MRetryAck {
         dot: Dot,
-        ballot: u64,
+        deps: HashSet<Dot>,
     },
     MCommitDot {
         dot: Dot,
     },
     MGarbageCollection {
         committed: VClock<ProcessId>,
-    },
-    MStable {
-        stable: Vec<(ProcessId, u64, u64)>,
     },
 }
 
@@ -712,19 +779,21 @@ impl MessageIndex for Message {
         use fantoch::run::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
+        // TODO: the dot info is shared across workers, and in this case we can
+        // select a random worker, not a selection based on the dot; do we want
+        // to do that?
         match self {
             // Protocol messages
-            Self::MCollect { dot, .. } => worker_dot_index_shift(&dot),
-            Self::MCollectAck { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MPropose { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MProposeAck { dot, .. } => worker_dot_index_shift(&dot),
             Self::MCommit { dot, .. } => worker_dot_index_shift(&dot),
-            Self::MConsensus { dot, .. } => worker_dot_index_shift(&dot),
-            Self::MConsensusAck { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MRetry { dot, .. } => worker_dot_index_shift(&dot),
+            Self::MRetryAck { dot, .. } => worker_dot_index_shift(&dot),
             // GC messages
             Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
                 worker_index_no_shift(GC_WORKER_INDEX)
             }
-            Self::MStable { .. } => None,
         }
     }
 }
@@ -748,7 +817,9 @@ impl MessageIndex for PeriodicEvent {
 enum Status {
     START,
     PAYLOAD,
-    COLLECT,
+    PROPOSE,
+    REJECT,
+    ACCEPT,
     COMMIT,
 }
 
@@ -759,19 +830,18 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
-    use fantoch::util;
 
     #[test]
-    fn sequential_epaxos_test() {
-        epaxos_flow::<SequentialKeyDeps>();
+    fn sequential_caesar_test() {
+        caesar_flow::<SequentialKeyClocks>();
     }
 
     #[test]
-    fn locked_epaxos_test() {
-        epaxos_flow::<LockedKeyDeps>();
+    fn locked_caesar_test() {
+        caesar_flow::<LockedKeyClocks>();
     }
 
-    fn epaxos_flow<KD: KeyDeps>() {
+    fn caesar_flow<KD: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -807,42 +877,45 @@ mod tests {
         let config = Config::new(n, f);
 
         // executors
-        let executor_1 = GraphExecutor::new(process_id_1, shard_id, config);
-        let executor_2 = GraphExecutor::new(process_id_2, shard_id, config);
-        let executor_3 = GraphExecutor::new(process_id_3, shard_id, config);
+        let executor_1 =
+            PredecessorsExecutor::new(process_id_1, shard_id, config);
+        let executor_2 =
+            PredecessorsExecutor::new(process_id_2, shard_id, config);
+        let executor_3 =
+            PredecessorsExecutor::new(process_id_3, shard_id, config);
 
-        // epaxos
-        let (mut epaxos_1, _) =
-            EPaxos::<KD>::new(process_id_1, shard_id, config);
-        let (mut epaxos_2, _) =
-            EPaxos::<KD>::new(process_id_2, shard_id, config);
-        let (mut epaxos_3, _) =
-            EPaxos::<KD>::new(process_id_3, shard_id, config);
+        // caesar
+        let (mut caesar_1, _) =
+            Caesar::<KD>::new(process_id_1, shard_id, config);
+        let (mut caesar_2, _) =
+            Caesar::<KD>::new(process_id_2, shard_id, config);
+        let (mut caesar_3, _) =
+            Caesar::<KD>::new(process_id_3, shard_id, config);
 
-        // discover processes in all epaxos
+        // discover processes in all caesar
         let sorted = util::sort_processes_by_distance(
             &europe_west2,
             &planet,
             processes.clone(),
         );
-        epaxos_1.discover(sorted);
+        caesar_1.discover(sorted);
         let sorted = util::sort_processes_by_distance(
             &europe_west3,
             &planet,
             processes.clone(),
         );
-        epaxos_2.discover(sorted);
+        caesar_2.discover(sorted);
         let sorted = util::sort_processes_by_distance(
             &us_west1,
             &planet,
             processes.clone(),
         );
-        epaxos_3.discover(sorted);
+        caesar_3.discover(sorted);
 
         // register processes
-        simulation.register_process(epaxos_1, executor_1);
-        simulation.register_process(epaxos_2, executor_2);
-        simulation.register_process(epaxos_3, executor_3);
+        simulation.register_process(caesar_1, executor_1);
+        simulation.register_process(caesar_2, executor_2);
+        simulation.register_process(caesar_3, executor_3);
 
         // client workload
         let shard_count = 1;
@@ -858,7 +931,7 @@ mod tests {
             payload_size,
         );
 
-        // create client 1 that is connected to epaxos 1
+        // create client 1 that is connected to caesar 1
         let client_id = 1;
         let client_region = europe_west2.clone();
         let status_frequency = None;
@@ -875,39 +948,51 @@ mod tests {
             .expect("there should be a first operation");
         let target = client_1.shard_process(&target_shard);
 
-        // check that `target` is epaxos 1
+        // check that `target` is caesar 1
         assert_eq!(target, process_id_1);
 
         // register client
         simulation.register_client(client_1);
 
-        // register command in executor and submit it in epaxos 1
+        // register command in executor and submit it in caesar 1
         let (process, _, pending, time) = simulation.get_process(target);
         pending.wait_for(&cmd);
         process.submit(None, cmd, time);
         let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
-        let mcollect = actions.pop().unwrap();
+        let mpropose = actions.pop().unwrap();
 
-        // check that the mcollect is being sent to *all* processes
+        // check that the mpropose is being sent to *all* processes
         let check_target = |target: &HashSet<ProcessId>| target.len() == n;
         assert!(
-            matches!(mcollect.clone(), Action::ToSend{target, ..} if check_target(&target))
+            matches!(mpropose.clone(), Action::ToSend{target, ..} if check_target(&target))
         );
 
-        // handle mcollects
-        let mut mcollectacks =
-            simulation.forward_to_processes((process_id_1, mcollect));
+        // handle mproposes
+        let mut mproposeacks =
+            simulation.forward_to_processes((process_id_1, mpropose));
 
-        // check that there's a single mcollectack
-        assert_eq!(mcollectacks.len(), 1);
+        // check that there are 3 mproposeacks
+        assert_eq!(mproposeacks.len(), 3);
 
-        // handle the *only* mcollectack
-        // - there's a single mcollectack since the initial coordinator does not
-        //   reply to itself
+        // handle the first mproposeack
+        let mcommits = simulation.forward_to_processes(
+            mproposeacks.pop().expect("there should be an mpropose ack"),
+        );
+        // no mcommit yet
+        assert!(mcommits.is_empty());
+
+        // handle the second mproposeack
+        let mcommits = simulation.forward_to_processes(
+            mproposeacks.pop().expect("there should be an mpropose ack"),
+        );
+        // no mcommit yet
+        assert!(mcommits.is_empty());
+
+        // handle the third mproposeack
         let mut mcommits = simulation.forward_to_processes(
-            mcollectacks.pop().expect("there should be an mcollect ack"),
+            mproposeacks.pop().expect("there should be an mpropose ack"),
         );
         // there's a commit now
         assert_eq!(mcommits.len(), 1);
@@ -961,11 +1046,11 @@ mod tests {
         let mut actions: Vec<_> = process.to_processes_iter().collect();
         // there's a single action
         assert_eq!(actions.len(), 1);
-        let mcollect = actions.pop().unwrap();
+        let mpropose = actions.pop().unwrap();
 
-        let check_msg = |msg: &Message| matches!(msg, Message::MCollect {dot, ..} if dot == &Dot::new(process_id_1, 2));
+        let check_msg = |msg: &Message| matches!(msg, Message::MPropose {dot, ..} if dot == &Dot::new(process_id_1, 2));
         assert!(
-            matches!(mcollect, Action::ToSend {msg, ..} if check_msg(&msg))
+            matches!(mpropose, Action::ToSend {msg, ..} if check_msg(&msg))
         );
     }
 }

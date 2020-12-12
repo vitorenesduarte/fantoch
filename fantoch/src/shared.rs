@@ -5,15 +5,17 @@ use dashmap::DashMap;
 use std::collections::BTreeSet;
 use std::hash::Hash;
 
-type SharedIter<'a, K, V> =
+pub type SharedMapIter<'a, K, V> =
     Iter<'a, K, V, RandomState, DashMap<K, V, RandomState>>;
 
+pub type SharedMapRef<'a, K, V> = Ref<'a, K, V>;
+
 #[derive(Debug, Clone)]
-pub struct Shared<K: Eq + Hash + Clone, V> {
+pub struct SharedMap<K: Eq + Hash + Clone, V> {
     shared: DashMap<K, V>,
 }
 
-impl<K, V> Shared<K, V>
+impl<K, V> SharedMap<K, V>
 where
     K: Eq + Hash + Clone,
 {
@@ -83,7 +85,7 @@ where
         self.shared.remove(key)
     }
 
-    pub fn iter(&self) -> SharedIter<'_, K, V> {
+    pub fn iter(&self) -> SharedMapIter<'_, K, V> {
         self.shared.iter()
     }
 

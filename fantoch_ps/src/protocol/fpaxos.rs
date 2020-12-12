@@ -15,7 +15,7 @@ use std::time::Duration;
 
 type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct FPaxos {
     bp: BaseProcess,
     leader: ProcessId,

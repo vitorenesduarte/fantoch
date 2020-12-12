@@ -3,12 +3,12 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 use std::time::Duration;
 
-pub struct Schedule<A: Eq> {
+pub struct Schedule<A> {
     queue: BinaryHeap<Reverse<QueueEntry<A>>>,
 }
 
 #[derive(PartialEq, Eq)]
-struct QueueEntry<A: Eq> {
+struct QueueEntry<A> {
     schedule_time: u64,
     action: A,
 }

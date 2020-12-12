@@ -1,11 +1,10 @@
 use super::tarjan::Vertex;
 use crate::protocol::common::graph::Dependency;
-use crate::shared::Shared;
-use dashmap::mapref::one::Ref as DashMapRef;
 use fantoch::config::Config;
 use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::info;
+use fantoch::shared::{SharedMap, SharedMapRef};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use parking_lot::{RwLock, RwLockReadGuard};
@@ -14,19 +13,19 @@ use std::sync::Arc;
 use std::time::Duration;
 use threshold::AEClock;
 
-pub type VertexRef<'a> = DashMapRef<'a, Dot, RwLock<Vertex>>;
+pub type VertexRef<'a> = SharedMapRef<'a, Dot, RwLock<Vertex>>;
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
     process_id: ProcessId,
-    index: Arc<Shared<Dot, RwLock<Vertex>>>,
+    index: Arc<SharedMap<Dot, RwLock<Vertex>>>,
 }
 
 impl VertexIndex {
     pub fn new(process_id: ProcessId) -> Self {
         Self {
             process_id,
-            index: Arc::new(Shared::new()),
+            index: Arc::new(SharedMap::new()),
         }
     }
 
@@ -40,10 +39,6 @@ impl VertexIndex {
     #[allow(dead_code)]
     pub fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
         self.index.iter().map(|entry| *entry.key())
-    }
-
-    pub fn contains(&self, dot: &Dot) -> bool {
-        self.index.contains_key(dot)
     }
 
     pub fn find(&self, dot: &Dot) -> Option<VertexRef<'_>> {

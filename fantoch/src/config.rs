@@ -228,7 +228,7 @@ impl Config {
     /// Computes `Caesar` fast and write quorum sizes.
     pub fn caesar_quorum_sizes(&self) -> (usize, usize) {
         let n = self.n;
-        let fast_quorum_size = (3 * n) / 4;
+        let fast_quorum_size = ((3 * n) / 4) + 1;
         let write_quorum_size = (n / 2) + 1;
         (fast_quorum_size, write_quorum_size)
     }
@@ -419,7 +419,7 @@ mod tests {
     fn caesar_parameters() {
         let ns = vec![3, 5, 7, 9, 11];
         // expected pairs of fast and write quorum sizes
-        let expected = vec![(2, 2), (3, 3), (5, 4), (6, 5), (8, 6)];
+        let expected = vec![(3, 2), (4, 3), (6, 4), (7, 5), (9, 6)];
 
         let fs: Vec<_> = ns
             .into_iter()

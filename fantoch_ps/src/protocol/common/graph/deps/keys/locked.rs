@@ -1,8 +1,8 @@
 use super::{Dependency, KeyDeps};
-use crate::shared::Shared;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ShardId};
 use fantoch::kvs::Key;
+use fantoch::shared::SharedMap;
 use fantoch::HashSet;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ struct LatestRW {
 #[derive(Debug, Clone)]
 pub struct LockedKeyDeps {
     shard_id: ShardId,
-    latest: Arc<Shared<Key, RwLock<LatestRW>>>,
+    latest: Arc<SharedMap<Key, RwLock<LatestRW>>>,
     latest_noop: Arc<RwLock<Latest>>,
 }
 
@@ -26,7 +26,7 @@ impl KeyDeps for LockedKeyDeps {
     fn new(shard_id: ShardId) -> Self {
         Self {
             shard_id,
-            latest: Arc::new(Shared::new()),
+            latest: Arc::new(SharedMap::new()),
             latest_noop: Arc::new(RwLock::new(None)),
         }
     }

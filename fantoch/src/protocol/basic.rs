@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
-    Action, BaseProcess, CommandsInfo, Info, MessageIndex, Protocol,
-    ProtocolMetrics,
+    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
+    ProtocolMetrics, SequentialCommandsInfo,
 };
 use crate::singleton;
 use crate::time::SysTime;
@@ -19,7 +19,8 @@ type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Basic {
     bp: BaseProcess,
-    cmds: CommandsInfo<BasicInfo>,
+    cmds: SequentialCommandsInfo<BasicInfo>,
+    gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
 }
@@ -47,13 +48,15 @@ impl Protocol for Basic {
             fast_quorum_size,
             write_quorum_size,
         );
-        let cmds = CommandsInfo::new(
+        let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
             config.n(),
             config.f(),
             fast_quorum_size,
+            write_quorum_size,
         );
+        let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
 
@@ -61,6 +64,7 @@ impl Protocol for Basic {
         let protocol = Self {
             bp,
             cmds,
+            gc_track,
             to_processes,
             to_executors,
         };
@@ -258,7 +262,7 @@ impl Basic {
     fn handle_mcommit_dot(&mut self, from: ProcessId, dot: Dot) {
         trace!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
-        self.cmds.commit(dot);
+        self.gc_track.commit(dot);
     }
 
     // #[instrument(skip(self, from, committed))]
@@ -269,9 +273,9 @@ impl Basic {
             committed,
             from
         );
-        self.cmds.committed_by(from, committed);
+        self.gc_track.committed_by(from, committed);
         // compute newly stable dots
-        let stable = self.cmds.stable();
+        let stable = self.gc_track.stable();
         // create `ToForward` to self
         if !stable.is_empty() {
             self.to_processes.push(Action::ToForward {
@@ -297,7 +301,7 @@ impl Basic {
         trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
-        let committed = self.cmds.committed();
+        let committed = self.gc_track.committed();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -326,6 +330,7 @@ impl Info for BasicInfo {
         _n: usize,
         _f: usize,
         fast_quorum_size: usize,
+        _write_quorum_size: usize,
     ) -> Self {
         // create bottom consensus value
         Self {

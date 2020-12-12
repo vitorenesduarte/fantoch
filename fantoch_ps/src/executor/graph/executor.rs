@@ -10,6 +10,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use fantoch::{debug, trace};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::iter::FromIterator;
 
 #[derive(Clone)]
@@ -119,7 +120,7 @@ impl GraphExecutor {
         // get more commands that are ready to be executed
         while let Some(cmd) = self.graph.command_to_execute() {
             trace!(
-                "p{}: @{} GraphExecutor::fetch_comands_to_execute {:?} | time = {}",
+                "p{}: @{} GraphExecutor::comands_to_execute {:?} | time = {}",
                 self.process_id,
                 self.executor_index,
                 cmd.rifl(),
@@ -178,9 +179,11 @@ impl GraphExecutor {
         let results = cmd.execute(self.shard_id, &mut self.store);
         self.to_clients.extend(results);
     }
+}
 
-    pub fn show_internal_status(&self) {
-        println!("{:?}", self.graph);
+impl fmt::Debug for GraphExecutor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#?}", self.graph)
     }
 }
 

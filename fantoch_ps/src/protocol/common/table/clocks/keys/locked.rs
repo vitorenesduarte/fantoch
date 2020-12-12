@@ -1,6 +1,6 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
-use crate::shared::Shared;
+use fantoch::shared::SharedMap;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, Rifl, ShardId};
 use fantoch::kvs::Key;
@@ -17,21 +17,21 @@ struct ClockAndPendingReads {
     pending_reads: HashSet<Rifl>,
 }
 // all clock's are protected by a mutex
-type Clocks = Arc<Shared<Key, Mutex<ClockAndPendingReads>>>;
+type Clocks = Arc<SharedMap<Key, Mutex<ClockAndPendingReads>>>;
 
 /// `bump_and_vote` grabs all locks before any change
 #[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
-    id: ProcessId,
+    process_id: ProcessId,
     shard_id: ShardId,
     clocks: Clocks,
 }
 
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
-    fn new(id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
         Self {
-            id,
+            process_id,
             shard_id,
             clocks: common::new(),
         }
@@ -86,7 +86,7 @@ impl KeyClocks for LockedKeyClocks {
                 let (key, _key_lock) = entry.0;
                 let mut guard = entry.1;
                 common::maybe_bump(
-                    self.id,
+                    self.process_id,
                     key,
                     &mut guard.clock,
                     up_to,
@@ -101,7 +101,7 @@ impl KeyClocks for LockedKeyClocks {
 
     fn detached(&mut self, cmd: &Command, up_to: u64, votes: &mut Votes) {
         common::detached(
-            self.id,
+            self.process_id,
             self.shard_id,
             &self.clocks,
             cmd,
@@ -111,7 +111,7 @@ impl KeyClocks for LockedKeyClocks {
     }
 
     fn detached_all(&mut self, up_to: u64, votes: &mut Votes) {
-        common::detached_all(self.id, &self.clocks, up_to, votes)
+        common::detached_all(self.process_id, &self.clocks, up_to, votes)
     }
 
     fn parallel() -> bool {
@@ -124,7 +124,7 @@ mod common {
 
     pub(super) fn new() -> Clocks {
         // create shared clocks
-        let clocks = Shared::new();
+        let clocks = SharedMap::new();
         // wrap them in an arc
         Arc::new(clocks)
     }

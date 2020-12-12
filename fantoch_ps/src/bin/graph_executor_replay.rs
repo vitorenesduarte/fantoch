@@ -33,7 +33,7 @@ async fn main() {
         executor.handle(execution_info, &time);
         let res: Vec<_> = executor.to_clients_iter().collect();
         assert!(res.is_empty());
-        executor.show_internal_status();
+        println!("{:?}", executor);
     }
 }
 
