@@ -334,7 +334,7 @@ mod tests {
 
         // by default, executor monitor execution order is false
         assert_eq!(config.executor_monitor_execution_order(), false);
-        // by that can change
+        // but that can change
         config.set_executor_monitor_execution_order(true);
         assert_eq!(config.executor_monitor_execution_order(), true);
 
