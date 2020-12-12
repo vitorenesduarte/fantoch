@@ -12,6 +12,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use fantoch::{debug, trace};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fmt;
 use std::iter::FromIterator;
 
@@ -24,7 +25,7 @@ pub struct GraphExecutor {
     graph: DependencyGraph,
     store: KVStore,
     monitor: Option<ExecutionOrderMonitor>,
-    to_clients: Vec<ExecutorResult>,
+    to_clients: VecDeque<ExecutorResult>,
     to_executors: Vec<(ShardId, GraphExecutionInfo)>,
 }
 
@@ -41,8 +42,8 @@ impl Executor for GraphExecutor {
         } else {
             None
         };
-        let to_clients = Vec::new();
-        let to_executors = Vec::new();
+        let to_clients = Default::default();
+        let to_executors = Default::default();
         Self {
             executor_index,
             process_id,
@@ -99,7 +100,7 @@ impl Executor for GraphExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn to_executors(&mut self) -> Option<(ShardId, GraphExecutionInfo)> {

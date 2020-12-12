@@ -911,7 +911,7 @@ mod tests {
             let key_order_a = key_order_a[first_different..last_equal].to_vec();
             let key_order_b = key_order_b[first_different..last_equal].to_vec();
             panic!(
-                "different execution orders on key {:?}\n   process {:?}: {:?}\n   process{:?}: {:?}",
+                "different execution orders on key {:?}\n   process {:?}: {:?}\n   process {:?}: {:?}",
                 key, process_a, key_order_a, process_b, key_order_b,
             )
         }

@@ -19,6 +19,7 @@ use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::HashSet;
 use fantoch::{debug, trace};
+use std::collections::VecDeque;
 use std::fmt;
 use threshold::AEClock;
 
@@ -33,7 +34,7 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
-    to_execute: Vec<Command>,
+    to_execute: VecDeque<Command>,
 }
 
 impl PredecessorsGraph {
@@ -53,7 +54,7 @@ impl PredecessorsGraph {
         // create finder
         let metrics = ExecutorMetrics::new();
         // create to execute
-        let to_execute = Vec::new();
+        let to_execute = VecDeque::new();
         PredecessorsGraph {
             process_id,
             executed_clock,
@@ -69,11 +70,11 @@ impl PredecessorsGraph {
     /// Returns a new command ready to be executed.
     #[must_use]
     pub fn command_to_execute(&mut self) -> Option<Command> {
-        self.to_execute.pop()
+        self.to_execute.pop_front()
     }
 
     #[cfg(test)]
-    fn commands_to_execute(&mut self) -> Vec<Command> {
+    fn commands_to_execute(&mut self) -> VecDeque<Command> {
         std::mem::take(&mut self.to_execute)
     }
 
@@ -326,7 +327,7 @@ impl PredecessorsGraph {
             .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
         // add command to commands to be executed
-        self.to_execute.push(cmd);
+        self.to_execute.push_back(cmd);
 
         // try commands pending at phase two due to this command
         self.try_phase_two_pending(dot, time);

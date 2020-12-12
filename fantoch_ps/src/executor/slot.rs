@@ -1,5 +1,4 @@
 use fantoch::command::Command;
-use fantoch::config::Config;
 use fantoch::executor::{
     ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
 };
@@ -9,6 +8,7 @@ use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 type Slot = u64;
 
@@ -22,7 +22,7 @@ pub struct SlotExecutor {
     // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
     metrics: ExecutorMetrics,
-    to_clients: Vec<ExecutorResult>,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for SlotExecutor {
@@ -40,7 +40,7 @@ impl Executor for SlotExecutor {
         // there's nothing to execute in the beginning
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
-        let to_clients = Vec::new();
+        let to_clients = Default::new();
         Self {
             shard_id,
             config,
@@ -75,7 +75,7 @@ impl Executor for SlotExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn parallel() -> bool {

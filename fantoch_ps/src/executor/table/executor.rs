@@ -9,6 +9,7 @@ use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 #[derive(Clone)]
 pub struct TableExecutor {
@@ -17,7 +18,7 @@ pub struct TableExecutor {
     store: KVStore,
     monitor: Option<ExecutionOrderMonitor>,
     metrics: ExecutorMetrics,
-    to_clients: Vec<ExecutorResult>,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for TableExecutor {
@@ -39,7 +40,7 @@ impl Executor for TableExecutor {
             None
         };
         let metrics = ExecutorMetrics::new();
-        let to_clients = Vec::new();
+        let to_clients = Default::default();
 
         Self {
             execute_at_commit: config.execute_at_commit(),
@@ -81,7 +82,7 @@ impl Executor for TableExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn parallel() -> bool {
@@ -111,7 +112,7 @@ impl TableExecutor {
                 rifl,
                 &mut self.monitor,
             );
-            self.to_clients.push(ExecutorResult::new(
+            self.to_clients.push_back(ExecutorResult::new(
                 rifl,
                 key.clone(),
                 op_result,

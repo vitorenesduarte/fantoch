@@ -12,6 +12,7 @@ use fantoch::time::SysTime;
 use fantoch::trace;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 #[derive(Clone)]
 pub struct PredecessorsExecutor {
@@ -21,7 +22,7 @@ pub struct PredecessorsExecutor {
     graph: PredecessorsGraph,
     store: KVStore,
     monitor: Option<ExecutionOrderMonitor>,
-    to_clients: Vec<ExecutorResult>,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for PredecessorsExecutor {
@@ -35,7 +36,7 @@ impl Executor for PredecessorsExecutor {
         } else {
             None
         };
-        let to_clients = Vec::new();
+        let to_clients = Default::default();
         Self {
             process_id,
             shard_id,
@@ -69,7 +70,7 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn parallel() -> bool {
