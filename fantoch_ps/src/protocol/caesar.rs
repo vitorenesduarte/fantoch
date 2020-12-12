@@ -297,18 +297,22 @@ impl<KC: KeyClocks> Caesar<KC> {
         // TODO: add wait
         let ok = blocking.is_empty();
 
-        // compute clock to send in the ack
+        // compute clock and deps to send in the ack
         let (clock, deps) = if ok {
             (info.clock, info.deps.clone())
         } else {
+            // if not ok, reject the coordinator's timestamp
             info.status = Status::REJECT;
+
             // compute new timestamp for the command
             let new_clock = self.key_clocks.clock_next();
+
             // compute new set of predecessors for the command
             let cmd = info.cmd.as_ref().expect("command has been set");
             let blocking = None;
             let new_deps =
                 self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
+
             (new_clock, new_deps)
         };
 
@@ -353,14 +357,14 @@ impl<KC: KeyClocks> Caesar<KC> {
         let mut info = info_ref.write();
 
         // do nothing if we're no longer PROPOSE or REJECT (yes, it seems that
-        // the coordinator can reject it's own command; this case was only
+        // the coordinator can reject its own command; this case was only
         // occurring in the simulator, but with concurrency I think it can
         // happen in the runner as well, as it will be tricky to ensure a level
         // of atomicity where the coordinator never rejects its own command):
         // - this ensures that once an MCommit/MRetry is sent in this handler,
         //   further messages received are ignored
         // - we can check this by asserting that `info.quorum_clocks.all()` is
-        //   false, before adding any new info
+        //   false, before adding any new info, as we do below
         if !matches!(info.status, Status::PROPOSE | Status::REJECT) {
             return;
         }
@@ -380,9 +384,9 @@ impl<KC: KeyClocks> Caesar<KC> {
             let (aggregated_clock, aggregated_deps, aggregated_ok) =
                 info.quorum_clocks.aggregated();
 
-            // fast path condition: all reported deps were equal
+            // fast path condition: all processes reported ok
             if aggregated_ok {
-                // in this, all processes have accepted the proposal by the
+                // in this case, all processes have accepted the proposal by the
                 // coordinator; check that that's the case
                 assert_eq!(aggregated_clock, info.clock);
 
@@ -559,7 +563,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // - this ensures that once an MCommit is sent in this handler,
         //   further messages received are ignored
         // - we can check this by asserting that `info.quorum_retries.all()` is
-        //   false, before adding any new info
+        //   false, before adding any new info, as we do below
         if info.status != Status::ACCEPT {
             return;
         }
@@ -624,6 +628,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
         self.gc_track.committed_by(from, committed);
+
         // compute newly stable dots
         let stable = self.gc_track.stable();
 
@@ -689,6 +694,9 @@ impl<KC: KeyClocks> Caesar<KC> {
             let cmd = info.cmd.as_ref().expect("command has been set");
 
             // remove previous clock (if any)
+            // TODO: we're gcing a command from the key clocks when it's
+            // committed at all processes but this may not be safe; I'm thinking
+            // that it should be when it's executed at all processes?
             Self::remove_clock(&mut self.key_clocks, cmd, info.clock);
         } else {
             panic!("we're the single worker performing gc, so all commands should exist");
@@ -782,6 +790,12 @@ impl MessageIndex for Message {
         // TODO: the dot info is shared across workers, and in this case we can
         // select a random worker, not a selection based on the dot; do we want
         // to do that?
+        // - maybe no; if we keep the current indexing we can at least be sure
+        //   that there won't be any other worker processing messages about
+        //   the same command concurrently (e.g. two MProposeAcks received
+        //   at the same time that are handled by different workers)
+        // - well, maybe the above is fine, since we're locking the command,
+        //   but maybe it's not good for performance
         match self {
             // Protocol messages
             Self::MPropose { dot, .. } => worker_dot_index_shift(&dot),
