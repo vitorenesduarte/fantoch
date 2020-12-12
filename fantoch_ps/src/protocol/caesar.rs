@@ -351,12 +351,17 @@ impl<KC: KeyClocks> Caesar<KC> {
         // get cmd info
         let info_ref = self.cmds.get(dot);
         let mut info = info_ref.write();
-        // do nothing if we're no longer PROPOSE:
+
+        // do nothing if we're no longer PROPOSE or REJECT (yes, it seems that
+        // the coordinator can reject it's own command; this case was only
+        // occurring in the simulator, but with concurrency I think it can
+        // happen in the runner as well, as it will be tricky to ensure a level
+        // of atomicity where the coordinator never rejects its own command):
         // - this ensures that once an MCommit/MRetry is sent in this handler,
         //   further messages received are ignored
         // - we can check this by asserting that `info.quorum_clocks.all()` is
         //   false, before adding any new info
-        if info.status != Status::PROPOSE {
+        if !matches!(info.status, Status::PROPOSE | Status::REJECT) {
             return;
         }
         assert!(!info.quorum_clocks.all());
