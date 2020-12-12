@@ -1,4 +1,5 @@
 use fantoch::command::Command;
+use fantoch::config::Config;
 use fantoch::executor::{
     ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
 };
@@ -40,7 +41,7 @@ impl Executor for SlotExecutor {
         // there's nothing to execute in the beginning
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
-        let to_clients = Default::new();
+        let to_clients = Default::default();
         Self {
             shard_id,
             config,
