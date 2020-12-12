@@ -1,19 +1,19 @@
 use crate::id::Rifl;
 use crate::kvs::Key;
-use crate::HashMap;
+use std::collections::BTreeMap;
 
 /// This structure can be used to monitor the order in which commands are
 /// executed, per key. It can be used to all processes have the same order per
 /// key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExecutionOrderMonitor {
-    order_per_key: HashMap<Key, Vec<Rifl>>,
+    order_per_key: BTreeMap<Key, Vec<Rifl>>,
 }
 
 impl ExecutionOrderMonitor {
     pub fn new() -> Self {
         Self {
-            order_per_key: HashMap::new(),
+            order_per_key: Default::default(),
         }
     }
 

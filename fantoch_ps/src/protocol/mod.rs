@@ -31,12 +31,13 @@ mod tests {
     use super::*;
     use fantoch::client::{KeyGen, Workload};
     use fantoch::config::Config;
+    use fantoch::executor::ExecutionOrderMonitor;
     use fantoch::id::ProcessId;
     use fantoch::planet::Planet;
     use fantoch::protocol::{Protocol, ProtocolMetricsKind};
     use fantoch::run::tests::{run_test_with_inspect_fun, tokio_test_runtime};
     use fantoch::sim::Runner;
-    use fantoch::HashMap;
+    use fantoch::{HashMap, HashSet};
     use std::time::Duration;
 
     // global test config
@@ -46,12 +47,15 @@ mod tests {
     const CLIENTS_PER_PROCESS: usize = 10;
 
     macro_rules! config {
-        ($n:expr, $f:expr) => {
-            Config::new($n, $f)
-        };
+        ($n:expr, $f:expr) => {{
+            let mut config = Config::new($n, $f);
+            config.set_executor_monitor_execution_order(true);
+            config
+        }};
         ($n:expr, $f:expr, $leader:expr) => {{
             let mut config = Config::new($n, $f);
             config.set_leader($leader);
+            config.set_executor_monitor_execution_order(true);
             config
         }};
     }
@@ -61,12 +65,14 @@ mod tests {
             let mut config = Config::new($n, $f);
             // always set `newt_detached_send_interval`
             config.set_newt_detached_send_interval(Duration::from_millis(100));
+            config.set_executor_monitor_execution_order(true);
             config
         }};
         ($n:expr, $f:expr, $clock_bump_interval:expr) => {{
             let mut config = newt_config!($n, $f);
             config.set_newt_tiny_quorums(true);
             config.set_newt_clock_bump_interval($clock_bump_interval);
+            config.set_executor_monitor_execution_order(true);
             config
         }};
     }
@@ -788,10 +794,11 @@ mod tests {
 
         // run simulation until the clients end + another 2 seconds
         let extra_sim_time = Some(Duration::from_secs(2));
-        let (metrics, _) = runner.run(extra_sim_time);
+        let (processes_metrics, executors_monitors, _) =
+            runner.run(extra_sim_time);
 
         // fetch slow paths and stable count from metrics
-        let metrics = metrics
+        let metrics = processes_metrics
             .into_iter()
             .map(|(process_id, process_metrics)| {
                 // get fast paths
@@ -819,7 +826,22 @@ mod tests {
             })
             .collect();
 
+        assert!(check_monitors(executors_monitors));
         check_metrics(config, commands_per_client, clients_per_process, metrics)
+    }
+
+    fn check_monitors(
+        executor_monitors: HashMap<ProcessId, Option<ExecutionOrderMonitor>>,
+    ) -> bool {
+        // add all orders to a set and check that in the end there's a single
+        // one
+        let mut orders = HashSet::new();
+        for (_, order) in executor_monitors {
+            let order =
+                order.expect("processes should be monitoring execution orders");
+            orders.insert(order);
+        }
+        orders.len() == 1
     }
 
     fn check_metrics(
