@@ -23,8 +23,7 @@ jobs:
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
       - name: Test fantoch
@@ -32,8 +31,7 @@ jobs:
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
       - name: Test fantoch_ps
@@ -41,8 +39,7 @@ jobs:
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
       - name: Test fantoch_bote
@@ -50,8 +47,7 @@ jobs:
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
       - name: Test fantoch_plot
@@ -62,8 +58,7 @@ jobs:
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
       - name: Check fantoch_exp
@@ -75,9 +70,9 @@ jobs:
           cargo hack check --feature-powerset --no-dev-deps
 
       - name: Coverage
-        uses: actions-rs/grcov@v0.1
-        with:
-          config: .github/grcov.yml
+        run: |
+           curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+           ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
       - name: Coveralls
         uses: coverallsapp/github-action@master
