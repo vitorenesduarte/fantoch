@@ -23,6 +23,7 @@ use fantoch::util;
 use fantoch::{debug, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fmt;
 use std::time::Duration;
 use threshold::AEClock;
@@ -56,7 +57,7 @@ pub struct DependencyGraph {
     // - `out_requests` dependencies to be able to order commands
     // - notifies remaining workers about what's been executed through
     //   `added_to_executed_clock`
-    to_execute: Vec<Command>,
+    to_execute: VecDeque<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
     added_to_executed_clock: HashSet<Dot>,
     // auxiliary workers (handles requests):
@@ -99,7 +100,7 @@ impl DependencyGraph {
         let finder = TarjanSCCFinder::new(process_id, shard_id, *config);
         let metrics = ExecutorMetrics::new();
         // create to execute
-        let to_execute = Vec::new();
+        let to_execute = Default::default();
         // create requests and request replies
         let out_requests = Default::default();
         // only track what's added to the executed clock if partial replication
@@ -130,7 +131,7 @@ impl DependencyGraph {
     /// Returns a new command ready to be executed.
     #[must_use]
     pub fn command_to_execute(&mut self) -> Option<Command> {
-        self.to_execute.pop()
+        self.to_execute.pop_front()
     }
 
     /// Returns which dots have been added to the executed clock.
@@ -156,7 +157,7 @@ impl DependencyGraph {
     }
 
     #[cfg(test)]
-    fn commands_to_execute(&mut self) -> Vec<Command> {
+    fn commands_to_execute(&mut self) -> VecDeque<Command> {
         std::mem::take(&mut self.to_execute)
     }
 
@@ -519,7 +520,7 @@ impl DependencyGraph {
                 .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
             // add command to commands to be executed
-            self.to_execute.push(cmd);
+            self.to_execute.push_back(cmd);
         })
     }
 
