@@ -34,6 +34,9 @@ pub struct Caesar<KC: KeyClocks> {
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
+    // retry requests that arrived before the initial `MPropose` message
+    // (this may be possible even without network failures due to multiplexing)
+    buffered_retries: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
@@ -75,6 +78,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
+        let buffered_retries = HashMap::new();
         let buffered_commits = HashMap::new();
 
         // create `Caesar`
@@ -85,6 +89,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             gc_track,
             to_processes,
             to_executors,
+            buffered_retries,
             buffered_commits,
         };
 
@@ -258,78 +263,84 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // check if part of fast quorum
         if !quorum.contains(&self.bp.process_id) {
-            // if not:
-            // - simply save the payload and set status to `PAYLOAD`
-            // - if we received the `MCommit` before the `MPropose`, handle the
-            //   `MCommit` now
-
+            // if not, simply save the payload and set status to `PAYLOAD`
             info.status = Status::PAYLOAD;
             info.cmd = Some(cmd);
+        } else {
+            // if yes, compute set of predecessors
+            let mut blocking = HashSet::new();
+            let deps = self.key_clocks.predecessors(
+                dot,
+                &cmd,
+                remote_clock,
+                Some(&mut blocking),
+            );
 
-            // check if there's a buffered commit notification; if yes, handle
-            // the commit again (since now we have the payload)
-            if let Some((from, clock, deps)) =
-                self.buffered_commits.remove(&dot)
-            {
-                drop(info);
-                drop(info_ref);
-                self.handle_mcommit(from, dot, clock, deps, time);
-            }
-            return;
+            // update command info
+            info.status = Status::PROPOSE;
+            info.cmd = Some(cmd);
+            info.deps = deps;
+            Self::update_clock(
+                &mut self.key_clocks,
+                dot,
+                &mut info,
+                remote_clock,
+            );
+
+            // we send an ok if no command is blocking this command
+            // TODO: add wait
+            let ok = blocking.is_empty();
+
+            // compute clock and deps to send in the ack
+            let (clock, deps) = if ok {
+                (info.clock, info.deps.clone())
+            } else {
+                // if not ok, reject the coordinator's timestamp
+                info.status = Status::REJECT;
+
+                // compute new timestamp for the command
+                let new_clock = self.key_clocks.clock_next();
+
+                // compute new set of predecessors for the command
+                let cmd = info.cmd.as_ref().expect("command has been set");
+                let blocking = None;
+                let new_deps =
+                    self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
+
+                (new_clock, new_deps)
+            };
+
+            // create `MProposeAck` and target
+            let mproposeack = Message::MProposeAck {
+                dot,
+                clock,
+                deps,
+                ok,
+            };
+            let target = singleton![from];
+
+            // save new action
+            self.to_processes.push(Action::ToSend {
+                target,
+                msg: mproposeack,
+            });
         }
 
-        // compute set of predecessors
-        let mut blocking = HashSet::new();
-        let deps = self.key_clocks.predecessors(
-            dot,
-            &cmd,
-            remote_clock,
-            Some(&mut blocking),
-        );
+        drop(info);
+        drop(info_ref);
 
-        // update command info
-        info.status = Status::PROPOSE;
-        info.cmd = Some(cmd);
-        info.deps = deps;
-        Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
+        // check if there's a buffered retry request; if yes, handle the retry
+        // again (since now we have the payload)
+        if let Some((from, clock, deps)) = self.buffered_retries.remove(&dot) {
+            self.handle_mretry(from, dot, clock, deps, time);
+        }
 
-        // we send an ok if no command is blocking this command
-        // TODO: add wait
-        let ok = blocking.is_empty();
-
-        // compute clock and deps to send in the ack
-        let (clock, deps) = if ok {
-            (info.clock, info.deps.clone())
-        } else {
-            // if not ok, reject the coordinator's timestamp
-            info.status = Status::REJECT;
-
-            // compute new timestamp for the command
-            let new_clock = self.key_clocks.clock_next();
-
-            // compute new set of predecessors for the command
-            let cmd = info.cmd.as_ref().expect("command has been set");
-            let blocking = None;
-            let new_deps =
-                self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
-
-            (new_clock, new_deps)
-        };
-
-        // create `MProposeAck` and target
-        let mproposeack = Message::MProposeAck {
-            dot,
-            clock,
-            deps,
-            ok,
-        };
-        let target = singleton![from];
-
-        // save new action
-        self.to_processes.push(Action::ToSend {
-            target,
-            msg: mproposeack,
-        });
+        // check if there's a buffered commit notification; if yes, handle the
+        // commit again (since now we have the payload)
+        if let Some((from, clock, deps)) = self.buffered_commits.remove(&dot) {
+            self.handle_mcommit(from, dot, clock, deps, time);
+        }
+        return;
     }
 
     fn handle_mproposeack(
@@ -508,9 +519,15 @@ impl<KC: KeyClocks> Caesar<KC> {
         let info_ref = self.cmds.get(dot);
         let mut info = info_ref.write();
 
-        if matches!(info.status, Status::START | Status::COMMIT) {
-            // do nothing if we don't have the payload or if have already
-            // committed
+        if info.status == Status::START {
+            // save this notification just in case we've received the `MPropose`
+            // and `MRetry` in opposite orders (due to multiplexing)
+            self.buffered_retries.insert(dot, (from, clock, deps));
+            return;
+        }
+
+        if info.status == Status::COMMIT {
+            // do nothing if we're already COMMIT
             return;
         }
 
