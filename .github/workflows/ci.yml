@@ -15,7 +15,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2020-09-04
+          toolchain: nightly-2020-12-10
           override: true
 
       - name: Test fantoch_prof
@@ -97,7 +97,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2020-09-04
+          toolchain: nightly-2020-12-10
           override: true
 
       - name: Test fantoch_plot
