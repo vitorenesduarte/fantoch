@@ -2,7 +2,9 @@ use crate::executor::graph::DependencyGraph;
 use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use fantoch::executor::{
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
@@ -10,6 +12,7 @@ use fantoch::time::SysTime;
 use fantoch::HashSet;
 use fantoch::{debug, trace};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fmt;
 use std::iter::FromIterator;
 
@@ -21,7 +24,8 @@ pub struct GraphExecutor {
     config: Config,
     graph: DependencyGraph,
     store: KVStore,
-    to_clients: Vec<ExecutorResult>,
+    monitor: Option<ExecutionOrderMonitor>,
+    to_clients: VecDeque<ExecutorResult>,
     to_executors: Vec<(ShardId, GraphExecutionInfo)>,
 }
 
@@ -33,8 +37,13 @@ impl Executor for GraphExecutor {
         let executor_index = 0;
         let graph = DependencyGraph::new(process_id, shard_id, &config);
         let store = KVStore::new();
-        let to_clients = Vec::new();
-        let to_executors = Vec::new();
+        let monitor = if config.executor_monitor_execution_order() {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
+        let to_clients = Default::default();
+        let to_executors = Default::default();
         Self {
             executor_index,
             process_id,
@@ -42,6 +51,7 @@ impl Executor for GraphExecutor {
             config,
             graph,
             store,
+            monitor,
             to_clients,
             to_executors,
         }
@@ -90,7 +100,7 @@ impl Executor for GraphExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn to_executors(&mut self) -> Option<(ShardId, GraphExecutionInfo)> {
@@ -103,6 +113,10 @@ impl Executor for GraphExecutor {
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.graph.metrics()
+    }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
     }
 }
 
@@ -176,7 +190,8 @@ impl GraphExecutor {
 
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results = cmd.execute(self.shard_id, &mut self.store);
+        let results =
+            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
         self.to_clients.extend(results);
     }
 }

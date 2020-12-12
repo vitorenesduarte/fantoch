@@ -2,20 +2,23 @@ use crate::executor::table::MultiVotesTable;
 use crate::protocol::common::table::VoteRange;
 use fantoch::config::Config;
 use fantoch::executor::{
-    Executor, ExecutorMetrics, ExecutorResult, MessageKey,
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+    MessageKey,
 };
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 #[derive(Clone)]
 pub struct TableExecutor {
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
+    monitor: Option<ExecutionOrderMonitor>,
     metrics: ExecutorMetrics,
-    to_clients: Vec<ExecutorResult>,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for TableExecutor {
@@ -31,13 +34,19 @@ impl Executor for TableExecutor {
             stability_threshold,
         );
         let store = KVStore::new();
+        let monitor = if config.executor_monitor_execution_order() {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
         let metrics = ExecutorMetrics::new();
-        let to_clients = Vec::new();
+        let to_clients = Default::default();
 
         Self {
             execute_at_commit: config.execute_at_commit(),
             table,
             store,
+            monitor,
             metrics,
             to_clients,
         }
@@ -73,7 +82,7 @@ impl Executor for TableExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn parallel() -> bool {
@@ -82,6 +91,10 @@ impl Executor for TableExecutor {
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.metrics
+    }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
     }
 }
 
@@ -93,8 +106,13 @@ impl TableExecutor {
     {
         to_execute.for_each(|(rifl, op)| {
             // execute op in the `KVStore`
-            let op_result = self.store.execute(&key, op);
-            self.to_clients.push(ExecutorResult::new(
+            let op_result = self.store.execute_with_monitor(
+                &key,
+                op,
+                rifl,
+                &mut self.monitor,
+            );
+            self.to_clients.push_back(ExecutorResult::new(
                 rifl,
                 key.clone(),
                 op_result,

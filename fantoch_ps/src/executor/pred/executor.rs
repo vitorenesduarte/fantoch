@@ -2,7 +2,9 @@ use crate::executor::pred::PredecessorsGraph;
 use crate::protocol::common::pred::Clock;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use fantoch::executor::{
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+};
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
@@ -10,6 +12,7 @@ use fantoch::time::SysTime;
 use fantoch::trace;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 #[derive(Clone)]
 pub struct PredecessorsExecutor {
@@ -18,7 +21,8 @@ pub struct PredecessorsExecutor {
     config: Config,
     graph: PredecessorsGraph,
     store: KVStore,
-    to_clients: Vec<ExecutorResult>,
+    monitor: Option<ExecutionOrderMonitor>,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for PredecessorsExecutor {
@@ -27,13 +31,19 @@ impl Executor for PredecessorsExecutor {
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         let graph = PredecessorsGraph::new(process_id, &config);
         let store = KVStore::new();
-        let to_clients = Vec::new();
+        let monitor = if config.executor_monitor_execution_order() {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
+        let to_clients = Default::default();
         Self {
             process_id,
             shard_id,
             config,
             graph,
             store,
+            monitor,
             to_clients,
         }
     }
@@ -60,7 +70,7 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn parallel() -> bool {
@@ -70,12 +80,17 @@ impl Executor for PredecessorsExecutor {
     fn metrics(&self) -> &ExecutorMetrics {
         &self.graph.metrics()
     }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
+    }
 }
 
 impl PredecessorsExecutor {
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results = cmd.execute(self.shard_id, &mut self.store);
+        let results =
+            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
         self.to_clients.extend(results);
     }
 }

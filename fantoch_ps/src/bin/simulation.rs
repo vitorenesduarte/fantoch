@@ -477,7 +477,8 @@ fn run<P: Protocol>(
         process_regions,
         client_regions,
     );
-    let (process_metrics, client_latencies) = runner.run(None);
+    let (process_metrics, _executors_monitors, client_latencies) =
+        runner.run(None);
 
     // compute clients stats
     let issued_commands = client_latencies

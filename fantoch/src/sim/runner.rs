@@ -1,6 +1,7 @@
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
+use crate::executor::ExecutionOrderMonitor;
 use crate::executor::Executor;
 use crate::id::{ClientId, ProcessId, ShardId};
 use crate::planet::{Planet, Region};
@@ -183,6 +184,7 @@ where
         extra_sim_time: Option<Duration>,
     ) -> (
         HashMap<ProcessId, ProtocolMetrics>,
+        HashMap<ProcessId, Option<ExecutionOrderMonitor>>,
         HashMap<Region, (usize, Histogram)>,
     ) {
         // start clients
@@ -201,7 +203,11 @@ where
         self.simulation_loop(extra_sim_time);
 
         // return processes metrics and client latencies
-        (self.processes_metrics(), self.clients_latencies())
+        (
+            self.processes_metrics(),
+            self.executors_monitors(),
+            self.clients_latencies(),
+        )
     }
 
     fn simulation_loop(&mut self, extra_sim_time: Option<Duration>) {
@@ -516,6 +522,12 @@ where
         self.check_processes(|process| process.metrics().clone())
     }
 
+    fn executors_monitors(
+        &mut self,
+    ) -> HashMap<ProcessId, Option<ExecutionOrderMonitor>> {
+        self.check_executors(|executor| executor.monitor().cloned())
+    }
+
     /// Get client's stats.
     /// TODO does this need to be mut?
     fn clients_latencies(&mut self) -> HashMap<Region, (usize, Histogram)> {
@@ -550,6 +562,25 @@ where
 
                 // compute process result
                 (process_id, f(&process))
+            })
+            .collect()
+    }
+
+    fn check_executors<F, R>(&mut self, f: F) -> HashMap<ProcessId, R>
+    where
+        F: Fn(&P::Executor) -> R,
+    {
+        let simulation = &mut self.simulation;
+
+        self.process_to_region
+            .keys()
+            .map(|&process_id| {
+                // get executor from simulation
+                let (_process, executor, _, _) =
+                    simulation.get_process(process_id);
+
+                // compute executor result
+                (process_id, f(&executor))
             })
             .collect()
     }
@@ -664,7 +695,7 @@ mod tests {
         );
 
         // run simulation until the clients end + another second second
-        let (processes_metrics, mut clients_latencies) =
+        let (processes_metrics, _executors_monitors, mut clients_latencies) =
             runner.run(Some(Duration::from_secs(1)));
 
         // check client stats

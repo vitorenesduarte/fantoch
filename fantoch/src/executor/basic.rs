@@ -1,5 +1,8 @@
 use crate::config::Config;
-use crate::executor::{Executor, ExecutorMetrics, ExecutorResult, MessageKey};
+use crate::executor::{
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+    MessageKey,
+};
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOp, KVStore, Key};
 use crate::time::SysTime;
@@ -34,7 +37,8 @@ impl Executor for BasicExecutor {
     fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         let BasicExecutionInfo { rifl, key, op } = info;
         // execute op in the `KVStore`
-        let op_result = self.store.execute(&key, op);
+        let op_result =
+            self.store.execute_with_monitor(&key, op, rifl, &mut None);
         self.to_clients
             .push(ExecutorResult::new(rifl, key, op_result));
     }
@@ -49,6 +53,10 @@ impl Executor for BasicExecutor {
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.metrics
+    }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        None
     }
 }
 

@@ -13,11 +13,14 @@ pub struct Config {
     shard_count: usize,
     /// if enabled, then execution is skipped
     execute_at_commit: bool,
-    // defines the interval between executor cleanups
+    /// defines the interval between executor cleanups
     executor_cleanup_interval: Duration,
-    // defines whether the executor should monitor pending commands, and if so,
-    // the interval between each monitor
+    /// defines whether the executor should monitor pending commands, and if so,
+    /// the interval between each monitor
     executor_monitor_pending_interval: Option<Duration>,
+    /// defines whether the executor should monitor the execution order of
+    /// commands
+    executor_monitor_execution_order: bool,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
     // starting leader process
@@ -51,6 +54,8 @@ impl Config {
         let executor_cleanup_interval = Duration::from_millis(5);
         // by default, pending commnads are not monitored
         let executor_monitor_pending_interval = None;
+        // by default, executors do not monitor execution order
+        let executor_monitor_execution_order = false;
         // by default, commands are deleted at commit time
         let gc_interval = None;
         // by default, there's no leader
@@ -70,6 +75,7 @@ impl Config {
             execute_at_commit,
             executor_cleanup_interval,
             executor_monitor_pending_interval,
+            executor_monitor_execution_order,
             gc_interval,
             leader,
             newt_tiny_quorums,
@@ -131,6 +137,20 @@ impl Config {
         interval: Duration,
     ) {
         self.executor_monitor_pending_interval = Some(interval);
+    }
+
+    /// Checks the whether executors should monitor execution order.
+    pub fn executor_monitor_execution_order(&self) -> bool {
+        self.executor_monitor_execution_order
+    }
+
+    /// Sets the executor monitor execution order.
+    pub fn set_executor_monitor_execution_order(
+        &mut self,
+        executor_monitor_execution_order: bool,
+    ) {
+        self.executor_monitor_execution_order =
+            executor_monitor_execution_order;
     }
 
     /// Checks the garbage collection interval.
@@ -311,6 +331,12 @@ mod tests {
         let interval = Duration::from_millis(1);
         config.set_executor_monitor_pending_interval(interval);
         assert_eq!(config.executor_monitor_pending_interval(), Some(interval));
+
+        // by default, executor monitor execution order is false
+        assert_eq!(config.executor_monitor_execution_order(), false);
+        // by that can change
+        config.set_executor_monitor_execution_order(true);
+        assert_eq!(config.executor_monitor_execution_order(), true);
 
         // by default, there's no garbage collection interval
         assert_eq!(config.gc_interval(), None);

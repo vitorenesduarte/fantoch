@@ -1,12 +1,15 @@
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorMetrics, ExecutorResult};
+use fantoch::executor::{
+    ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
+};
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::MessageIndex;
 use fantoch::time::SysTime;
 use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 type Slot = u64;
 
@@ -15,11 +18,12 @@ pub struct SlotExecutor {
     shard_id: ShardId,
     config: Config,
     store: KVStore,
+    monitor: Option<ExecutionOrderMonitor>,
     next_slot: Slot,
     // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
     metrics: ExecutorMetrics,
-    to_clients: Vec<ExecutorResult>,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for SlotExecutor {
@@ -27,16 +31,22 @@ impl Executor for SlotExecutor {
 
     fn new(_process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         let store = KVStore::new();
+        let monitor = if config.executor_monitor_execution_order() {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
         // the next slot to be executed is 1
         let next_slot = 1;
         // there's nothing to execute in the beginning
         let to_execute = HashMap::new();
         let metrics = ExecutorMetrics::new();
-        let to_clients = Vec::new();
+        let to_clients = Default::default();
         Self {
             shard_id,
             config,
             store,
+            monitor,
             next_slot,
             to_execute,
             metrics,
@@ -66,7 +76,7 @@ impl Executor for SlotExecutor {
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop()
+        self.to_clients.pop_front()
     }
 
     fn parallel() -> bool {
@@ -75,6 +85,10 @@ impl Executor for SlotExecutor {
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.metrics
+    }
+
+    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
     }
 }
 
@@ -90,7 +104,8 @@ impl SlotExecutor {
 
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results = cmd.execute(self.shard_id, &mut self.store);
+        let results =
+            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
         // update results if this rifl is pending
         self.to_clients.extend(results);
     }
