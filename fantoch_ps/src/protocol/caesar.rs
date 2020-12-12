@@ -364,7 +364,12 @@ impl<KC: KeyClocks> Caesar<KC> {
         if !matches!(info.status, Status::PROPOSE | Status::REJECT) {
             return;
         }
-        assert!(!info.quorum_clocks.all());
+        if info.quorum_clocks.all() {
+            panic!(
+                "p{}: {:?} already had all MProposeAck needed",
+                self.bp.process_id, dot
+            );
+        }
 
         // update quorum deps
         info.quorum_clocks.add(from, clock, deps, ok);
@@ -558,7 +563,12 @@ impl<KC: KeyClocks> Caesar<KC> {
         if info.status != Status::ACCEPT {
             return;
         }
-        assert!(!info.quorum_retries.all());
+        if info.quorum_retries.all() {
+            panic!(
+                "p{}: {:?} already had all MRetryAck needed",
+                self.bp.process_id, dot
+            );
+        }
 
         // update quorum retries
         info.quorum_retries.add(from, deps);
