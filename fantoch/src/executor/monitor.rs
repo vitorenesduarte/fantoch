@@ -36,4 +36,16 @@ impl ExecutionOrderMonitor {
             assert!(result.is_none());
         }
     }
+
+    pub fn get_order(&self, key: &Key) -> Option<&Vec<Rifl>> {
+        self.order_per_key.get(key)
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.order_per_key.keys()
+    }
+
+    pub fn len(&self) -> usize {
+        self.order_per_key.len()
+    }
 }

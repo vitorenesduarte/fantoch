@@ -32,12 +32,13 @@ mod tests {
     use fantoch::client::{KeyGen, Workload};
     use fantoch::config::Config;
     use fantoch::executor::ExecutionOrderMonitor;
-    use fantoch::id::ProcessId;
+    use fantoch::id::{ProcessId, Rifl};
+    use fantoch::kvs::Key;
     use fantoch::planet::Planet;
     use fantoch::protocol::{Protocol, ProtocolMetricsKind};
     use fantoch::run::tests::{run_test_with_inspect_fun, tokio_test_runtime};
     use fantoch::sim::Runner;
-    use fantoch::{HashMap, HashSet};
+    use fantoch::HashMap;
     use std::time::Duration;
 
     // global test config
@@ -826,22 +827,109 @@ mod tests {
             })
             .collect();
 
-        assert!(check_monitors(executors_monitors));
+        let executors_monitors: Vec<_> = executors_monitors
+            .into_iter()
+            .map(|(process_id, order)| {
+                let order = order
+                    .expect("processes should be monitoring execution orders");
+                (process_id, order)
+            })
+            .collect();
+        check_monitors(executors_monitors);
+
         check_metrics(config, commands_per_client, clients_per_process, metrics)
     }
 
     fn check_monitors(
-        executor_monitors: HashMap<ProcessId, Option<ExecutionOrderMonitor>>,
-    ) -> bool {
+        mut executor_monitors: Vec<(ProcessId, ExecutionOrderMonitor)>,
+    ) {
         // add all orders to a set and check that in the end there's a single
         // one
-        let mut orders = HashSet::new();
-        for (_, order) in executor_monitors {
-            let order =
-                order.expect("processes should be monitoring execution orders");
-            orders.insert(order);
+        let (process_a, monitor_a) = executor_monitors
+            .pop()
+            .expect("there's more than on process in the test");
+        for (process_b, monitor_b) in executor_monitors {
+            if monitor_a != monitor_b {
+                return compute_diff_on_monitors(
+                    process_a, monitor_a, process_b, monitor_b,
+                );
+            }
         }
-        orders.len() == 1
+    }
+
+    fn compute_diff_on_monitors(
+        process_a: ProcessId,
+        monitor_a: ExecutionOrderMonitor,
+        process_b: ProcessId,
+        monitor_b: ExecutionOrderMonitor,
+    ) {
+        assert_eq!(
+            monitor_a.len(),
+            monitor_b.len(),
+            "monitors should have the same number of keys"
+        );
+
+        for key in monitor_a.keys() {
+            let key_order_a = monitor_a
+                .get_order(key)
+                .expect("monitors should have the same keys");
+            let key_order_b = monitor_b
+                .get_order(key)
+                .expect("monitors should have the same keys");
+            compute_diff_on_key(
+                key,
+                process_a,
+                key_order_a,
+                process_b,
+                key_order_b,
+            );
+        }
+    }
+
+    fn compute_diff_on_key(
+        key: &Key,
+        process_a: ProcessId,
+        key_order_a: &Vec<Rifl>,
+        process_b: ProcessId,
+        key_order_b: &Vec<Rifl>,
+    ) {
+        assert_eq!(
+            key_order_a.len(),
+            key_order_b.len(),
+            "orders per key should have the same number of rifls"
+        );
+        let len = key_order_a.len();
+
+        if key_order_a != key_order_b {
+            let first_different =
+                find_different_rifl(key_order_a, key_order_b, 0..len);
+            let last_equal = 1 + find_different_rifl(
+                key_order_a,
+                key_order_b,
+                (0..len).rev(),
+            );
+            let key_order_a = key_order_a[first_different..last_equal].to_vec();
+            let key_order_b = key_order_b[first_different..last_equal].to_vec();
+            panic!(
+                "different execution orders on key {:?}\n   process {:?}: {:?}\n   process{:?}: {:?}",
+                key, process_a, key_order_a, process_b, key_order_b,
+            )
+        }
+    }
+
+    fn find_different_rifl(
+        key_order_a: &Vec<Rifl>,
+        key_order_b: &Vec<Rifl>,
+        range: impl Iterator<Item = usize>,
+    ) -> usize {
+        for i in range {
+            if key_order_a[i] != key_order_b[i] {
+                return i;
+            }
+        }
+        unreachable!(
+            "the execution orders are different, so we must never reach this"
+        )
     }
 
     fn check_metrics(
