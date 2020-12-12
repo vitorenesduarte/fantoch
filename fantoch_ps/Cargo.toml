@@ -15,7 +15,7 @@ max_level_debug = ["fantoch/max_level_debug"]
 max_level_trace = ["fantoch/max_level_trace"]
 
 [dependencies]
-ahash = "0.4.4"
+ahash = "0.6.2"
 clap = "2.33.3"
 color-eyre = "0.5.1"
 futures = { version = "0.3.5", default-features = false, features = [] }
