@@ -353,11 +353,15 @@ impl<KC: KeyClocks> Caesar<KC> {
         // get cmd info
         let info_ref = self.cmds.get(dot);
         let mut info = info_ref.write();
-
-        // do nothing if we're no longer PROPOSE
+        // do nothing if we're no longer PROPOSE:
+        // - this ensures that once an MCommit/MRetry is sent in this handler,
+        //   further messages received are ignored
+        // - we can check this by asserting that `info.quorum_clocks.all()` is
+        //   false, before adding any new info
         if info.status != Status::PROPOSE {
             return;
         }
+        assert!(!info.quorum_clocks.all());
 
         // update quorum deps
         info.quorum_clocks.add(from, clock, deps, ok);
@@ -416,11 +420,12 @@ impl<KC: KeyClocks> Caesar<KC> {
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MCommit({:?}, {:?}, {:?}) | time={}",
+            "p{}: MCommit({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
             clock,
             deps,
+            from,
             _time.micros()
         );
 
@@ -475,11 +480,12 @@ impl<KC: KeyClocks> Caesar<KC> {
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MRetry({:?}, {:?}, {:?}) | time={}",
+            "p{}: MRetry({:?}, {:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
             clock,
             deps,
+            from,
             _time.micros()
         );
 
@@ -529,10 +535,11 @@ impl<KC: KeyClocks> Caesar<KC> {
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MRetryAck({:?}, {:?}) | time={}",
+            "p{}: MRetryAck({:?}, {:?}) from {} | time={}",
             self.id(),
             dot,
             deps,
+            from,
             _time.micros()
         );
 
@@ -540,10 +547,15 @@ impl<KC: KeyClocks> Caesar<KC> {
         let info_ref = self.cmds.get(dot);
         let mut info = info_ref.write();
 
-        if info.status == Status::COMMIT {
-            // do nothing if have already committed
+        // do nothing if we're no longer ACCEPT:
+        // - this ensures that once an MCommit is sent in this handler,
+        //   further messages received are ignored
+        // - we can check this by asserting that `info.quorum_retries.all()` is
+        //   false, before adding any new info
+        if info.status != Status::ACCEPT {
             return;
         }
+        assert!(!info.quorum_retries.all());
 
         // update quorum retries
         info.quorum_retries.add(from, deps);
