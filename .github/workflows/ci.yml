@@ -3,8 +3,8 @@ name: Continuous integration
 on: [push, pull_request]
 
 jobs:
-  test:
-    name: Test Suite
+  test-and-coverage:
+    name: Test and Coverage
     runs-on: ubuntu-latest
 
     steps:
@@ -50,25 +50,6 @@ jobs:
           RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
-      - name: Test fantoch_plot
-        run: |
-          sudo apt-get install python3-dev python3-pip
-          pip3 install matplotlib
-          cd fantoch_plot/ && cargo test
-        env:
-          QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zinstrument-coverage'
-        timeout-minutes: 60
-
-      - name: Check fantoch_exp
-        run: cd fantoch_exp/ && cargo check
-
-      - name: Test feature combinations
-        run: |
-          cargo install cargo-hack
-          cargo hack check --feature-powerset --no-dev-deps
-
       - name: Coverage
         run: |
            rustup component add llvm-tools-preview
@@ -103,3 +84,37 @@ jobs:
           SLACK_ICON: https://avatars1.githubusercontent.com/u/44036562?s=48
           SLACK_TITLE: CI failure
           SLACK_USERNAME: CI
+
+  test-additional:
+    name: Test (additional)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2020-09-04
+          override: true
+
+      - name: Test fantoch_plot
+        run: |
+          sudo apt-get install python3-dev python3-pip
+          pip3 install matplotlib
+          cd fantoch_plot/ && cargo test
+        env:
+          QUICKCHECK_TESTS: '10000'
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zinstrument-coverage'
+        timeout-minutes: 60
+
+      - name: Check fantoch_exp
+        run: cd fantoch_exp/ && cargo check
+
+      - name: Test feature combinations
+        run: |
+          cargo install cargo-hack
+          cargo hack check --feature-powerset --no-dev-deps
