@@ -1,5 +1,5 @@
 ![Continuous integration](https://github.com/vitorenesduarte/fantoch/workflows/Continuous%20integration/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/vitorenesduarte/fantoch/badge.svg?branch=master)](https://coveralls.io/github/vitorenesduarte/fantoch?branch=master)
+[![codecov](https://codecov.io/gh/vitorenesduarte/fantoch/branch/master/graph/badge.svg?token=yqK2KnILVg)](https://codecov.io/gh/vitorenesduarte/fantoch)
 
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
