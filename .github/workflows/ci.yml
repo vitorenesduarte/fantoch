@@ -28,7 +28,9 @@ jobs:
       - name: Install grcov
         run: |
           rustup component add llvm-tools-preview
-          curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+          # curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+          curl https://raw.githubusercontent.com/vitorenesduarte/grcov/subfolder_same_as_root_bin/grcov --output grcov
+          chmod u+x grcov
 
       - name: Run grcov
         run: |
