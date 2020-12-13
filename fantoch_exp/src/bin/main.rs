@@ -108,20 +108,25 @@ async fn partial_replication_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtLocked, config!(n, 1, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        /* (Protocol::NewtLocked, config!(n, 1, false, None, false)),
+         * (Protocol::AtlasLocked, config!(n, 1, false, None, false)), */
     ];
 
     let clients_per_region = vec![
         // 256,
         // 1024,
-        // 1024 * 2, // for Atlas s=2,4 zipf=0.7 r=50%
+        // for Atlas s=2,4 zipf=0.7 r=50%:
+        // 1024 * 2,
         // 1024 * 4,
         // 1024 * 8,
-        // 1024 * 10, // for Atlas s=2 zipf=0.7 r=95%
-        // 1024 * 12, // for Atlas s=2 zipf=0.7 r=95%
+        // for Atlas s=2 zipf=0.7 r=95%:
+        // 1024 * 10,
+        // for Atlas s=2 zipf=0.7 r=95%:
+        // 1024 * 12,
         // 1024 * 16,
-        // 1024 * 20, // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95% 1024 * 24,
+        // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95%:
+        // 1024 * 20,
+        // 1024 * 24,
         // 1024 * 32,
         // 1024 * 34,
         // 1024 * 36,

@@ -577,8 +577,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         let mut info = info_ref.write();
 
         // do nothing if we're no longer ACCEPT:
-        // - this ensures that once an MCommit is sent in this handler,
-        //   further messages received are ignored
+        // - this ensures that once an MCommit is sent in this handler, further
+        //   messages received are ignored
         // - we can check this by asserting that `info.quorum_retries.all()` is
         //   false, before adding any new info, as we do below
         if info.status != Status::ACCEPT {
@@ -808,11 +808,11 @@ impl MessageIndex for Message {
         // select a random worker, not a selection based on the dot; do we want
         // to do that?
         // - maybe no; if we keep the current indexing we can at least be sure
-        //   that there won't be any other worker processing messages about
-        //   the same command concurrently (e.g. two MProposeAcks received
-        //   at the same time that are handled by different workers)
-        // - well, maybe the above is fine, since we're locking the command,
-        //   but maybe it's not good for performance
+        //   that there won't be any other worker processing messages about the
+        //   same command concurrently (e.g. two MProposeAcks received at the
+        //   same time that are handled by different workers)
+        // - well, maybe the above is fine, since we're locking the command, but
+        //   maybe it's not good for performance
         match self {
             // Protocol messages
             Self::MPropose { dot, .. } => worker_dot_index_shift(&dot),
@@ -1039,7 +1039,8 @@ mod tests {
         let to_sends = simulation.forward_to_processes(mcommit);
 
         // check the MCommitDot
-        let check_msg = |msg: &Message| matches!(msg, Message::MCommitDot {..});
+        let check_msg =
+            |msg: &Message| matches!(msg, Message::MCommitDot { .. });
         assert!(to_sends.into_iter().all(|(_, action)| {
             matches!(action, Action::ToForward { msg } if check_msg(&msg))
         }));

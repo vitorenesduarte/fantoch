@@ -138,8 +138,8 @@ async fn baremetal_setup(
     let parts: Vec<_> = ips.split(' ').collect();
     let mut ip = parts[0];
     // one of the veleta machines returns
-    // "169.254.0.2 10.10.5.204 11.1.212.203 172.17.0.1 192.168.224.1 172.28.0.1"
-    // and we want the "10.10.*.*";
+    // "169.254.0.2 10.10.5.204 11.1.212.203 172.17.0.1 192.168.224.1" and we
+    // want the "10.10.*.*";
     // thus, if more than one ip is returned, give preference to that one
     for part in parts {
         if part.starts_with("10.10") {

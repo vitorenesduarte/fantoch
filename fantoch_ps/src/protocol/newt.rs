@@ -1486,7 +1486,7 @@ mod tests {
         // check that the three actions are the forward of MCommitDot
         assert!(actions.into_iter().all(|(_, action)| {
             if let Action::ToForward { msg } = action {
-                matches!(msg, Message::MCommitDot {..})
+                matches!(msg, Message::MCommitDot { .. })
             } else {
                 false
             }

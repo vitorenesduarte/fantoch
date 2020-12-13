@@ -1,9 +1,9 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
-use fantoch::shared::SharedMap;
 use fantoch::command::Command;
 use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::Key;
+use fantoch::shared::SharedMap;
 use fantoch::HashSet;
 use std::cmp;
 use std::sync::atomic::{AtomicU64, Ordering};

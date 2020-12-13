@@ -569,7 +569,8 @@ mod tests {
             let conflict = left_keys.intersection(&right_keys).next().is_some();
 
             // if the commands conflict:
-            // - the one with the lower clock should be a dependency of the other
+            // - the one with the lower clock should be a dependency of the
+            //   other
             // - the one with the higher clock doesn't have to be a dependency
             //   of the other, but that can happen
             if conflict {

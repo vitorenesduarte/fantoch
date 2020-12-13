@@ -1094,7 +1094,8 @@ mod tests {
         let to_sends = simulation.forward_to_processes(mcommit);
 
         // check the MCommitDot
-        let check_msg = |msg: &Message| matches!(msg, Message::MCommitDot {..});
+        let check_msg =
+            |msg: &Message| matches!(msg, Message::MCommitDot { .. });
         assert!(to_sends.into_iter().all(|(_, action)| {
             matches!(action, Action::ToForward { msg } if check_msg(&msg))
         }));

@@ -15,8 +15,8 @@ pub struct Config {
     execute_at_commit: bool,
     /// defines the interval between executor cleanups
     executor_cleanup_interval: Duration,
-    /// defines whether the executor should monitor pending commands, and if so,
-    /// the interval between each monitor
+    /// defines whether the executor should monitor pending commands, and if
+    /// so, the interval between each monitor
     executor_monitor_pending_interval: Option<Duration>,
     /// defines whether the executor should monitor the execution order of
     /// commands
