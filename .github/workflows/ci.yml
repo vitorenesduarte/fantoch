@@ -26,18 +26,17 @@ jobs:
           RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
-      - name: Coverage
+      - name: Install grcov
         run: |
            rustup component add llvm-tools-preview
            curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+      - name: Run grcov
+        run: |
            ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
-      - name: Coveralls
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ./lcov.info
-          base-path: ./
+      - name: Upload to Codecov
+        run: |
+           bash <(curl -s https://codecov.io/bash) -f ./lcov.info
 
       - name: Slack (success)
         uses: rtCamp/action-slack-notify@v2.0.2
