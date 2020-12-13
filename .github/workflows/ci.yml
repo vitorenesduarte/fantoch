@@ -18,47 +18,19 @@ jobs:
           toolchain: nightly-2020-12-10
           override: true
 
-      - name: Test fantoch_prof
-        run: cd fantoch_prof/ && cargo test
+      - name: Test fantoch_prof, fantoch, fantoch_ps fantoch_bote
+        run: cargo test --lib -p fantoch_prof -p fantoch -p fantoch_ps -p fantoch_bote
         env:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
-          LLVM_PROFILE_FILE: 'fantoch_prof.profraw'
-        timeout-minutes: 60
-
-      - name: Test fantoch
-        run: cd fantoch/ && cargo test --features prof
-        env:
-          QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zinstrument-coverage'
-          LLVM_PROFILE_FILE: 'fantoch.profraw'
-        timeout-minutes: 60
-
-      - name: Test fantoch_ps
-        run: cd fantoch_ps/ && cargo test
-        env:
-          QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zinstrument-coverage'
-          LLVM_PROFILE_FILE: 'fantoch_ps.profraw'
-        timeout-minutes: 60
-
-      - name: Test fantoch_bote
-        run: cd fantoch_bote/ && cargo test
-        env:
-          QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zinstrument-coverage'
-          LLVM_PROFILE_FILE: 'fantoch_bote.profraw'
         timeout-minutes: 60
 
       - name: Coverage
         run: |
            rustup component add llvm-tools-preview
            curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
-           ./grcov $(find . -name "*.profraw" -print) --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
+           ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
       - name: Coveralls
         uses: coverallsapp/github-action@master
@@ -109,11 +81,6 @@ jobs:
           sudo apt-get install python3-dev python3-pip
           pip3 install matplotlib
           cd fantoch_plot/ && cargo test
-        env:
-          QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zinstrument-coverage'
-        timeout-minutes: 60
 
       - name: Check fantoch_exp
         run: cd fantoch_exp/ && cargo check
