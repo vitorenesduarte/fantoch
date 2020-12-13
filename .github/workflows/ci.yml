@@ -24,6 +24,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: 'fantoch_prof.profraw'
         timeout-minutes: 60
 
       - name: Test fantoch
@@ -32,6 +33,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: 'fantoch.profraw'
         timeout-minutes: 60
 
       - name: Test fantoch_ps
@@ -40,6 +42,7 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: 'fantoch_ps.profraw'
         timeout-minutes: 60
 
       - name: Test fantoch_bote
@@ -48,13 +51,14 @@ jobs:
           QUICKCHECK_TESTS: '10000'
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: 'fantoch_bote.profraw'
         timeout-minutes: 60
 
       - name: Coverage
         run: |
            rustup component add llvm-tools-preview
            curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
-           ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
+           ./grcov $(find . -name "*.profraw" -print) --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
       - name: Coveralls
         uses: coverallsapp/github-action@master
