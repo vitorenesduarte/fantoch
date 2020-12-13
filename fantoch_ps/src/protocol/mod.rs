@@ -662,21 +662,16 @@ mod tests {
     where
         P: Protocol,
     {
-        let fast_paths = worker
-            .metrics()
-            .get_aggregated(ProtocolMetricsKind::FastPath)
-            .cloned()
-            .unwrap_or_default() as usize;
-        let slow_paths = worker
-            .metrics()
-            .get_aggregated(ProtocolMetricsKind::SlowPath)
-            .cloned()
-            .unwrap_or_default() as usize;
-        let stable_count = worker
-            .metrics()
-            .get_aggregated(ProtocolMetricsKind::Stable)
-            .cloned()
-            .unwrap_or_default() as usize;
+        let metric = |kind| {
+            worker
+                .metrics()
+                .get_aggregated(kind)
+                .cloned()
+                .unwrap_or_default() as usize
+        };
+        let fast_paths = metric(ProtocolMetricsKind::FastPath);
+        let slow_paths = metric(ProtocolMetricsKind::SlowPath);
+        let stable_count = metric(ProtocolMetricsKind::Stable);
         (fast_paths, slow_paths, stable_count)
     }
 
@@ -937,8 +932,6 @@ mod tests {
         clients_per_process: usize,
         metrics: HashMap<ProcessId, (usize, usize, usize)>,
     ) -> usize {
-        // total commands per shard
-
         // total fast and slow paths count
         let mut total_fast_paths = 0;
         let mut total_slow_paths = 0;
@@ -957,20 +950,21 @@ mod tests {
             },
         );
 
-        // compute the min and max number of commands:
+        // compute the min and max number of MCommit messages:
         // - we have min, if all commmands accesss a single shard
         // - we have max, if all commmands accesss all shards
-        let min_total_commands =
-            commands_per_client * clients_per_process * config.n();
-        let max_total_commands = min_total_commands * config.shard_count();
+        let total_processes = config.n() * config.shard_count();
+        let total_clients = clients_per_process * total_processes;
+        let min_total_commits = commands_per_client * total_clients;
+        let max_total_commits = min_total_commits * config.shard_count();
 
         // check that all commands were committed (only for leaderless
         // protocols)
         if config.leader().is_none() {
             let total_commits = total_fast_paths + total_slow_paths;
             assert!(
-                total_commits >= min_total_commands
-                    && total_commits <= max_total_commands,
+                total_commits >= min_total_commits
+                    && total_commits <= max_total_commits,
                 "number of committed commands out of bounds"
             );
         }
@@ -979,16 +973,17 @@ mod tests {
         // - if there's a leader (i.e. FPaxos), GC will only prune commands at
         //   f+1 acceptors
         // - otherwise, GC will prune comands at all processes
+        //
+        // since GC only happens at the targetted shard, `gc_at` only considers
+        // the size of the shard (i.e., no need to multiply by
+        // `config.shard_count()`)
         let gc_at = if config.leader().is_some() {
             config.f() + 1
         } else {
             config.n()
-        } * config.shard_count();
-
-        // since GC only happens at the targetted shard, here we use
-        // `min_total_commands`
+        };
         assert_eq!(
-            gc_at * min_total_commands,
+            gc_at * min_total_commits,
             total_stable,
             "not all processes gced"
         );
