@@ -51,7 +51,13 @@ impl GCTrack {
         from: ProcessId,
         committed: VClock<ProcessId>,
     ) {
-        self.all_but_me.insert(from, committed);
+        if let Some(current) = self.all_but_me.get_mut(&from) {
+            // accumulate new knowledge; simply replacing it doesn't work since
+            // messages can be reordered
+            current.join(&committed);
+        } else {
+            self.all_but_me.insert(from, committed);
+        }
     }
 
     /// Computes the new set of stable dots.
