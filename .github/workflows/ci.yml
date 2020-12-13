@@ -28,15 +28,16 @@ jobs:
 
       - name: Install grcov
         run: |
-           rustup component add llvm-tools-preview
-           curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+          rustup component add llvm-tools-preview
+          curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+
       - name: Run grcov
         run: |
-           ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
+          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type coveralls --output-path ./coveralls.json --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*" --token ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to Codecov
         run: |
-           bash <(curl -s https://codecov.io/bash) -f ./lcov.info
+          bash <(curl -s https://codecov.io/bash) -f ./coveralls.json
 
       - name: Slack (success)
         uses: rtCamp/action-slack-notify@v2.0.2
