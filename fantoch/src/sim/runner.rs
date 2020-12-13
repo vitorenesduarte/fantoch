@@ -11,6 +11,7 @@ use crate::time::SysTime;
 use crate::util;
 use crate::HashMap;
 use fantoch_prof::metrics::Histogram;
+use rand::Rng;
 use std::fmt;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -41,6 +42,8 @@ pub struct Runner<P: Protocol> {
     // boolean indicating whether the runner should make the distance between
     // regions symmetric
     make_distances_symmetric: bool,
+    // boolean indicating whether the runner should reoder messages
+    reorder_messages: bool,
 }
 
 #[derive(PartialEq)]
@@ -163,6 +166,7 @@ where
             // clients
             client_count: client_id as usize,
             make_distances_symmetric: false,
+            reorder_messages: false,
         };
 
         // schedule periodic actions
@@ -175,6 +179,10 @@ where
 
     pub fn make_distances_symmetric(&mut self) {
         self.make_distances_symmetric = true;
+    }
+
+    pub fn reorder_messages(&mut self) {
+        self.reorder_messages = true;
     }
 
     /// Run the simulation. `extra_sim_time` indicates how much longer should
@@ -459,8 +467,17 @@ where
         let from = self.compute_region(from_region);
         let to = self.compute_region(to_region);
         // compute distance between regions
-        let distance = self.distance(from, to);
+        let mut distance = self.distance(from, to);
+
+        // check if we should reorder messages
+        if self.reorder_messages {
+            // if so, multiply distance by some random number between 0 and 2
+            let multiplier: f64 = rand::thread_rng().gen_range(0.0, 2.0);
+            distance = (distance as f64 * multiplier) as u64;
+        }
+
         // schedule action
+        let distance = Duration::from_millis(distance);
         self.schedule
             .schedule(self.simulation.time(), distance, action);
     }
@@ -494,7 +511,7 @@ where
 
     /// Computes the distance between two regions which is half the ping
     /// latency.
-    fn distance(&self, from: &Region, to: &Region) -> Duration {
+    fn distance(&self, from: &Region, to: &Region) -> u64 {
         let from_to = self
             .planet
             .ping_latency(from, to)
@@ -513,7 +530,7 @@ where
 
         // distance is half the ping latency
         let ms = ping / 2;
-        Duration::from_millis(ms)
+        ms
     }
 
     /// Get processes' metrics.

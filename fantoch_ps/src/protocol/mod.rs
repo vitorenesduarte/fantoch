@@ -794,6 +794,9 @@ mod tests {
             client_regions,
         );
 
+        // reorder network messages
+        runner.reorder_messages();
+
         // run simulation until the clients end + another 2 seconds
         let extra_sim_time = Some(Duration::from_secs(2));
         let (processes_metrics, executors_monitors, _) =
