@@ -33,11 +33,11 @@ jobs:
 
       - name: Run grcov
         run: |
-          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type coveralls --output-path ./coveralls.json --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*" --token ${{ secrets.GITHUB_TOKEN }}
+          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
       - name: Upload to Codecov
         run: |
-          bash <(curl -s https://codecov.io/bash) -f ./coveralls.json
+          bash <(curl -s https://codecov.io/bash) -f ./lcov.info
 
       - name: Slack (success)
         uses: rtCamp/action-slack-notify@v2.0.2
