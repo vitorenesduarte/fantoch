@@ -22,7 +22,6 @@ jobs:
         run: cargo test --lib -p fantoch_prof -p fantoch -p fantoch_ps -p fantoch_bote
         env:
           QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
