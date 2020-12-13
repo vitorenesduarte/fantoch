@@ -22,22 +22,23 @@ jobs:
         run: cargo test --lib -p fantoch_prof -p fantoch -p fantoch_ps -p fantoch_bote
         env:
           QUICKCHECK_TESTS: '10000'
-          CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zinstrument-coverage'
         timeout-minutes: 60
 
       - name: Install grcov
         run: |
           rustup component add llvm-tools-preview
-          curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+          # curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+          curl https://raw.githubusercontent.com/vitorenesduarte/grcov/subfolder_same_as_root_bin/grcov --output grcov
+          chmod u+x grcov
 
       - name: Run grcov
         run: |
-          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type coveralls --output-path ./coveralls.json --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*" --token ${{ secrets.GITHUB_TOKEN }}
+          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
       - name: Upload to Codecov
         run: |
-          bash <(curl -s https://codecov.io/bash) -f ./coveralls.json
+          bash <(curl -s https://codecov.io/bash) -f ./lcov.info
 
       - name: Slack (success)
         uses: rtCamp/action-slack-notify@v2.0.2
