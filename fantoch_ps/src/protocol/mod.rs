@@ -698,7 +698,6 @@ mod tests {
         config.set_shard_count(shard_count);
 
         // create workload
-        let shard_count = 1;
         let keys_per_command = 2;
         let key_gen = KeyGen::ConflictRate {
             conflict_rate: CONFLICT_RATE,
