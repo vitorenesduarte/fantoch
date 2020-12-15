@@ -48,9 +48,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // create tokio runtime
-    let mut runtime = tokio::runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(cpus)
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(cpus)
         .thread_name("sequencer-bench")
         .build()
         .expect("tokio runtime build should work");

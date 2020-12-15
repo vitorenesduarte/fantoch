@@ -70,13 +70,12 @@ async fn executor_task<P>(
     let mut to_clients = ToClients::new();
 
     // create executors info interval
-    let gen_cleanup_delay =
-        || time::delay_for(config.executor_cleanup_interval());
+    let gen_cleanup_delay = || time::sleep(config.executor_cleanup_interval());
     let mut cleanup_delay = gen_cleanup_delay();
 
     // create metrics interval
     let gen_metrics_delay =
-        || time::delay_for(super::metrics_logger::METRICS_INTERVAL);
+        || time::sleep(super::metrics_logger::METRICS_INTERVAL);
     let mut metrics_delay = gen_metrics_delay();
 
     // check if executors monitor pending interval is set
@@ -85,7 +84,7 @@ async fn executor_task<P>(
     {
         // create executors monitor pending interval
         let gen_monitor_pending_delay =
-            || time::delay_for(monitor_pending_interval);
+            || time::sleep(monitor_pending_interval);
         let mut monitor_pending_delay = gen_monitor_pending_delay();
 
         loop {
