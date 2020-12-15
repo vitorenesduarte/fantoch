@@ -725,7 +725,7 @@ async fn aws_bench(
         tracing::warn!("aws bench experiment error: {:?}", e);
     }
     tracing::info!("will wait 5 minutes before terminating spot instances");
-    tokio::time::delay_for(tokio::time::Duration::from_secs(300)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
 
     launcher.terminate_all().await?;
     Ok(())

@@ -7,19 +7,23 @@
 - [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
 - [FPaxos](https://fpaxos.github.io/), and thus Paxos as a special case: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)
   - implemented following [Paxos Made Moderately Complex](http://paxos.systems/), which enables a certain degree of parallelism at the leader
+- [Caesar](https://arxiv.org/abs/1704.03319): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/caesar.rs)
 - [Atlas](https://vitorenes.org/publication/enes-atlas/): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
 - Newt: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
 
+<!--
 Next:
 - Mencius: a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
+-->
 
 #### What does it do?
 
 - all protocols implement the [`Protocol`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/protocol/mod.rs) trait
-- this specification can then be used for both
-  - geo-distributed simulations that only output latency (infinite CPU is assumed)
-  - actually running the protocols (in any setting)
-- this is achieved by providing a "simulator" and a "runner" that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
+- this specification can then be used for
+  - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU is assumed)
+  - __running__ the protocols in a real setting
+  - (model checking is coming soon!)
+- this is achieved by providing a __"simulator"__ and a __"runner"__ that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
 
 ## License
 

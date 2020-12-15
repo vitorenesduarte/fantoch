@@ -154,7 +154,7 @@ where
                         "will try again in 1 second ({} out of {})",
                         tries, connect_retries
                     );
-                    tokio::time::delay_for(Duration::from_secs(1)).await;
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                 } else {
                     return Err(e.into());
                 }
@@ -173,7 +173,7 @@ where
 
 /// Listen on new connections and send them to parent process.
 async fn listener_task(
-    mut listener: TcpListener,
+    listener: TcpListener,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
     mut parent: ChannelSender<Connection>,

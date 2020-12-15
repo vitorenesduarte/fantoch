@@ -221,7 +221,7 @@ async fn run_experiment(
         // if yes, abort experiment if timeout triggers
         tokio::select! {
             result = start => result,
-            _ = tokio::time::delay_for(timeout) => {
+            _ = tokio::time::sleep(timeout) => {
                 return Err(Report::new(TimeoutError("start processes")));
             }
         }
@@ -244,7 +244,7 @@ async fn run_experiment(
         // if yes, abort experiment if timeout triggers
         tokio::select! {
             result = run_clients => result,
-            _ = tokio::time::delay_for(timeout) => {
+            _ = tokio::time::sleep(timeout) => {
                 return Err(Report::new(TimeoutError("run clients")));
             }
         }
@@ -290,7 +290,7 @@ async fn run_experiment(
         // if yes, abort experiment if timeout triggers
         tokio::select! {
             result = pull_metrics_and_stop => result,
-            _ = tokio::time::delay_for(timeout) => {
+            _ = tokio::time::sleep(timeout) => {
                 return Err(Report::new(TimeoutError("pull metrics and stop processes")));
             }
         }
@@ -555,9 +555,9 @@ async fn stop_processes(
         };
 
         // kill ssh process
-        if let Err(e) = pchild.kill() {
+        if let Err(e) = pchild.kill().await {
             tracing::warn!(
-                "error trying to kill ssh process {} with pid {}: {:?}",
+                "error trying to kill ssh process {:?} with pid {:?}: {:?}",
                 process_id,
                 pchild.id(),
                 e
@@ -641,7 +641,7 @@ async fn wait_process_started(
 
     let mut count = 0;
     while count != 1 {
-        tokio::time::delay_for(duration).await;
+        tokio::time::sleep(duration).await;
         let command =
             format!("grep -c 'process {} started' {}", process_id, log_file);
         let stdout = vm.exec(&command).await.wrap_err("grep -c")?;
@@ -668,7 +668,7 @@ async fn wait_process_ended(
 
     let mut count = 1;
     while count != 0 {
-        tokio::time::delay_for(duration).await;
+        tokio::time::sleep(duration).await;
         let command = format!(
             "lsof -i :{} -i :{} -sTCP:LISTEN | wc -l",
             config::port(process_id),
@@ -701,7 +701,7 @@ async fn wait_process_ended(
             // file
             let mut count = 1;
             while count != 0 {
-                tokio::time::delay_for(duration).await;
+                tokio::time::sleep(duration).await;
                 let command =
                     "ps -aux | grep flamegraph | grep -v grep | wc -l"
                         .to_string();
@@ -752,7 +752,7 @@ async fn wait_client_ended(
 
     let mut count = 0;
     while count != 1 {
-        tokio::time::delay_for(duration).await;
+        tokio::time::sleep(duration).await;
         let command = format!("grep -c 'all clients ended' {}", log_file);
         let stdout = vm.exec(&command).await.wrap_err("grep -c")?;
         if stdout.is_empty() {
@@ -790,10 +790,9 @@ async fn stop_dstats(
 ) -> Result<(), Report> {
     for mut dstat in dstats {
         // kill ssh process
-        dstat.kill().wrap_err("dstat kill")?;
-        if let Err(e) = dstat.kill() {
+        if let Err(e) = dstat.kill().await {
             tracing::warn!(
-                "error trying to kill ssh dstat {}: {:?}",
+                "error trying to kill ssh dstat {:?}: {:?}",
                 dstat.id(),
                 e
             );

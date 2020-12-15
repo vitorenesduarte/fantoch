@@ -922,7 +922,7 @@ pub mod tests {
         let task_semaphore = semaphore.clone();
         tokio::spawn(async move {
             println!("[task] will sleep for 5 seconds");
-            tokio::time::delay_for(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
             println!("[task] semaphore released!");
             task_semaphore.add_permits(1);
         });
@@ -1007,9 +1007,8 @@ pub mod tests {
 
     pub fn tokio_test_runtime() -> tokio::runtime::Runtime {
         // create tokio runtime
-        tokio::runtime::Builder::new()
-            .threaded_scheduler()
-            .core_threads(num_cpus::get())
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(num_cpus::get())
             .thread_stack_size(32 * 1024 * 1024) // 32MB
             .enable_io()
             .enable_time()
@@ -1283,7 +1282,7 @@ pub mod tests {
 
         // wait for the extra run time (if any)
         if let Some(extra_run_time) = extra_run_time {
-            tokio::time::delay_for(extra_run_time).await;
+            tokio::time::sleep(extra_run_time).await;
         }
 
         // inspect all processes (if there's an inspect function)

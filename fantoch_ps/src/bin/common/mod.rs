@@ -21,9 +21,8 @@ pub fn tokio_runtime(
     info!("cpus: {} of {}", cpus, available);
 
     // create tokio runtime
-    tokio::runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(cpus)
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(cpus)
         .thread_stack_size(stack_size)
         .enable_io()
         .enable_time()
