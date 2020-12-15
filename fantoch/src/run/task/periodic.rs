@@ -71,7 +71,7 @@ async fn periodic_loop_without_inspect<P, R>(
         0 => {
             // nothing to do, loop forever
             loop {
-                time::delay_for(Duration::from_secs(60 * 60)).await;
+                time::sleep(Duration::from_secs(60 * 60)).await;
             }
         }
         1 => {

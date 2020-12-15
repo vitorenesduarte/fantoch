@@ -22,7 +22,7 @@ pub async fn delay_task<M>(
             }
             Some((next_instant, _)) => {
                 tokio::select! {
-                    _ = time::delay_until(*next_instant) => {
+                    _ = time::sleep_until(*next_instant) => {
                         let msg = dequeue(&mut queue);
                         if let Err(e) = to.send(msg).await {
                             warn!("[delay_task] error forwarding message: {:?}", e);
@@ -104,7 +104,7 @@ mod tests {
         let writer = tokio::spawn(async move {
             for _ in 0..OPERATIONS {
                 let sleep_time = rand::thread_rng().gen_range(1, MAX_SLEEP + 1);
-                tokio::time::delay_for(Duration::from_millis(sleep_time)).await;
+                tokio::time::sleep(Duration::from_millis(sleep_time)).await;
                 let start = Instant::now();
                 // send to delay task
                 delay_tx.send(start).await.expect("operation sent");

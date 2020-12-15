@@ -17,16 +17,16 @@ max_level_trace = ["fantoch/max_level_trace"]
 [dependencies]
 ahash = "0.6.2"
 clap = "2.33.3"
-color-eyre = "0.5.1"
-futures = { version = "0.3.5", default-features = false, features = [] }
+color-eyre = "0.5.10"
+futures = { version = "0.3.8", default-features = false, features = [] }
 rand = "0.7.3"
-rayon = { version = "1.4.0", optional = true }
-serde = { version = "1.0.115", features = ["derive"] }
+rayon = { version = "1.5.0", optional = true }
+serde = { version = "1.0.118", features = ["derive"] }
 threshold = "0.8.15"
-tokio = { version = "0.2.22", features = ["full", "parking_lot"] }
-tracing = "0.1.19"
+tokio = { version = "0.3.6", features = ["full", "parking_lot"] }
+tracing = "0.1.22"
 tracing-appender = "0.1.1"
-parking_lot = "0.11.0"
+parking_lot = "0.11.1"
 num_cpus = "1.13.0"
 
 jemallocator = { version = "0.3.2", optional = true }
