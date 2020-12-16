@@ -138,12 +138,9 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         time: &dyn SysTime,
     ) {
         match msg {
-            Message::MPropose {
-                dot,
-                cmd,
-                quorum,
-                clock,
-            } => self.handle_mpropose(from, dot, cmd, quorum, clock, time),
+            Message::MPropose { dot, cmd, clock } => {
+                self.handle_mpropose(from, dot, cmd, clock, time)
+            }
             Message::MProposeAck {
                 dot,
                 clock,
@@ -215,12 +212,10 @@ impl<KC: KeyClocks> Caesar<KC> {
         let clock = self.key_clocks.clock_next();
 
         // create `MPropose` and target
-        let mpropose = Message::MPropose {
-            dot,
-            cmd,
-            clock,
-            quorum: self.bp.fast_quorum(),
-        };
+        let mpropose = Message::MPropose { dot, cmd, clock };
+        // here we send to everyone because we want the fastest fast quorum that
+        // replies with an ok (due to the waiting condition, this fast quorum
+        // may not be the closest one)
         let target = self.bp.all();
 
         // save new action
@@ -235,7 +230,6 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         cmd: Command,
-        quorum: HashSet<ProcessId>,
         remote_clock: Clock,
         time: &dyn SysTime,
     ) {
@@ -261,70 +255,58 @@ impl<KC: KeyClocks> Caesar<KC> {
             return;
         }
 
-        // check if part of fast quorum
-        if !quorum.contains(&self.bp.process_id) {
-            // if not, simply save the payload and set status to `PAYLOAD`
-            info.status = Status::PAYLOAD;
-            info.cmd = Some(cmd);
+        // if yes, compute set of predecessors
+        let mut blocking = HashSet::new();
+        let deps = self.key_clocks.predecessors(
+            dot,
+            &cmd,
+            remote_clock,
+            Some(&mut blocking),
+        );
+
+        // update command info
+        info.status = Status::PROPOSE;
+        info.cmd = Some(cmd);
+        info.deps = deps;
+        Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
+
+        // we send an ok if no command is blocking this command
+        // TODO: add wait
+        let ok = blocking.is_empty();
+
+        // compute clock and deps to send in the ack
+        let (clock, deps) = if ok {
+            (info.clock, info.deps.clone())
         } else {
-            // if yes, compute set of predecessors
-            let mut blocking = HashSet::new();
-            let deps = self.key_clocks.predecessors(
-                dot,
-                &cmd,
-                remote_clock,
-                Some(&mut blocking),
-            );
+            // if not ok, reject the coordinator's timestamp
+            info.status = Status::REJECT;
 
-            // update command info
-            info.status = Status::PROPOSE;
-            info.cmd = Some(cmd);
-            info.deps = deps;
-            Self::update_clock(
-                &mut self.key_clocks,
-                dot,
-                &mut info,
-                remote_clock,
-            );
+            // compute new timestamp for the command
+            let new_clock = self.key_clocks.clock_next();
 
-            // we send an ok if no command is blocking this command
-            // TODO: add wait
-            let ok = blocking.is_empty();
+            // compute new set of predecessors for the command
+            let cmd = info.cmd.as_ref().expect("command has been set");
+            let blocking = None;
+            let new_deps =
+                self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
 
-            // compute clock and deps to send in the ack
-            let (clock, deps) = if ok {
-                (info.clock, info.deps.clone())
-            } else {
-                // if not ok, reject the coordinator's timestamp
-                info.status = Status::REJECT;
+            (new_clock, new_deps)
+        };
 
-                // compute new timestamp for the command
-                let new_clock = self.key_clocks.clock_next();
+        // create `MProposeAck` and target
+        let mproposeack = Message::MProposeAck {
+            dot,
+            clock,
+            deps,
+            ok,
+        };
+        let target = singleton![from];
 
-                // compute new set of predecessors for the command
-                let cmd = info.cmd.as_ref().expect("command has been set");
-                let blocking = None;
-                let new_deps =
-                    self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
-
-                (new_clock, new_deps)
-            };
-
-            // create `MProposeAck` and target
-            let mproposeack = Message::MProposeAck {
-                dot,
-                clock,
-                deps,
-                ok,
-            };
-            let target = singleton![from];
-
-            // save new action
-            self.to_processes.push(Action::ToSend {
-                target,
-                msg: mproposeack,
-            });
-        }
+        // save new action
+        self.to_processes.push(Action::ToSend {
+            target,
+            msg: mproposeack,
+        });
 
         drop(info);
         drop(info_ref);
@@ -423,7 +405,10 @@ impl<KC: KeyClocks> Caesar<KC> {
                     clock: aggregated_clock,
                     deps: aggregated_deps,
                 };
-                let target = self.bp.write_quorum();
+                // here we send to everyone because this message may unblock
+                // blocked commads; by only sending it to a majority, we would
+                // potentially block commands unnecessarily
+                let target = self.bp.all();
 
                 // save new action
                 self.to_processes.push(Action::ToSend {
@@ -769,7 +754,6 @@ pub enum Message {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        quorum: HashSet<ProcessId>,
     },
     MProposeAck {
         dot: Dot,
@@ -847,7 +831,6 @@ impl MessageIndex for PeriodicEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
-    PAYLOAD,
     PROPOSE,
     REJECT,
     ACCEPT,
