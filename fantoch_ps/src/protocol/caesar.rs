@@ -400,16 +400,20 @@ impl<KC: KeyClocks> Caesar<KC> {
                 match reply {
                     Reply::ACCEPT => {
                         Self::accept_command(
+                            self.bp.process_id,
                             dot,
                             &mut info,
                             &mut self.to_processes,
+                            time,
                         );
                     }
                     Reply::REJECT => Self::reject_command(
+                        self.bp.process_id,
                         dot,
                         &mut info,
                         &mut self.key_clocks,
                         &mut self.to_processes,
+                        time,
                     ),
                     Reply::WAIT => {
                         // in this case, we should wait; simply update the set
@@ -876,6 +880,14 @@ impl<KC: KeyClocks> Caesar<KC> {
             if let Some(blocked_dot_info_ref) = self.cmds.get(blocked_dot) {
                 let mut blocked_dot_info = blocked_dot_info_ref.write();
 
+                trace!(
+                    "p{}: try_to_unblock({:?}) checking {:?} | time={}",
+                    self.bp.process_id,
+                    dot,
+                    blocked_dot,
+                    time.micros()
+                );
+
                 // only act if the blocked command is still at the `PROPOSE`
                 // phase
                 if blocked_dot_info.status == Status::PROPOSE {
@@ -896,31 +908,61 @@ impl<KC: KeyClocks> Caesar<KC> {
                             // ACCEPT the blocked command if it no longer has
                             // commands blocking it
                             Self::accept_command(
+                                self.bp.process_id,
                                 blocked_dot,
                                 &mut blocked_dot_info,
                                 &mut self.to_processes,
+                                time,
                             );
                         }
                     } else {
                         // REJECT the blocked command if it's not safe to ignore
                         // this command
                         Self::reject_command(
+                            self.bp.process_id,
                             blocked_dot,
                             &mut blocked_dot_info,
                             &mut self.key_clocks,
                             &mut self.to_processes,
+                            time,
                         );
                     }
+                } else {
+                    trace!(
+                        "p{}: try_to_unblock({:?}) {:?} no longer at PROPOSE | time={}",
+                        self.bp.process_id,
+                        dot,
+                        blocked_dot,
+                        time.micros()
+                    );
                 }
+            } else {
+                trace!(
+                    "p{}: try_to_unblock({:?}) {:?} already GCed | time={}",
+                    self.bp.process_id,
+                    dot,
+                    blocked_dot,
+                    time.micros()
+                );
             }
         }
     }
 
     fn accept_command(
+        _id: ProcessId,
         dot: Dot,
         info: &mut RwLockWriteGuard<'_, CaesarInfo>,
         to_processes: &mut Vec<Action<Self>>,
+        _time: &dyn SysTime,
     ) {
+        trace!(
+            "p{}: accept_command({:?}) with {:?} {:?}| time={}",
+            _id,
+            dot,
+            info.clock,
+            info.deps,
+            _time.micros()
+        );
         Self::send_mpropose_ack(
             dot,
             info.clock,
@@ -931,10 +973,12 @@ impl<KC: KeyClocks> Caesar<KC> {
     }
 
     fn reject_command(
+        _id: ProcessId,
         dot: Dot,
         info: &mut RwLockWriteGuard<'_, CaesarInfo>,
         key_clocks: &mut KC,
         to_processes: &mut Vec<Action<Self>>,
+        _time: &dyn SysTime,
     ) {
         // if not ok, reject the coordinator's timestamp
         info.status = Status::REJECT;
@@ -947,6 +991,14 @@ impl<KC: KeyClocks> Caesar<KC> {
         let blocking = None;
         let new_deps = key_clocks.predecessors(dot, cmd, new_clock, blocking);
 
+        trace!(
+            "p{}: reject_command({:?}) with {:?} {:?}| time={}",
+            _id,
+            dot,
+            new_clock,
+            new_deps,
+            _time.micros()
+        );
         Self::send_mpropose_ack(dot, new_clock, new_deps, false, to_processes);
     }
 
