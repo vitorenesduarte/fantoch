@@ -243,11 +243,14 @@ impl<KC: KeyClocks> Caesar<KC> {
             time.micros()
         );
 
+        // we use the following assumption in `Self::send_mpropose_ack`
+        assert_eq!(dot.source(), from);
+
         // merge clocks
         self.key_clocks.clock_join(&remote_clock);
 
         // get cmd info
-        let info_ref = self.cmds.get(dot);
+        let info_ref = self.cmds.get_or_default(dot);
         let mut info = info_ref.write();
 
         // discard message if no longer in START
@@ -256,12 +259,12 @@ impl<KC: KeyClocks> Caesar<KC> {
         }
 
         // if yes, compute set of predecessors
-        let mut blocking = HashSet::new();
+        let mut blocked_by = HashSet::new();
         let deps = self.key_clocks.predecessors(
             dot,
             &cmd,
             remote_clock,
-            Some(&mut blocking),
+            Some(&mut blocked_by),
         );
 
         // update command info
@@ -270,46 +273,115 @@ impl<KC: KeyClocks> Caesar<KC> {
         info.deps = deps;
         Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
-        // we send an ok if no command is blocking this command
-        // TODO: add wait
-        let ok = blocking.is_empty();
-
-        // compute clock and deps to send in the ack
-        let (clock, deps) = if ok {
-            (info.clock, info.deps.clone())
-        } else {
-            // if not ok, reject the coordinator's timestamp
-            info.status = Status::REJECT;
-
-            // compute new timestamp for the command
-            let new_clock = self.key_clocks.clock_next();
-
-            // compute new set of predecessors for the command
-            let cmd = info.cmd.as_ref().expect("command has been set");
-            let blocking = None;
-            let new_deps =
-                self.key_clocks.predecessors(dot, cmd, new_clock, blocking);
-
-            (new_clock, new_deps)
-        };
-
-        // create `MProposeAck` and target
-        let mproposeack = Message::MProposeAck {
-            dot,
-            clock,
-            deps,
-            ok,
-        };
-        let target = singleton![from];
-
-        // save new action
-        self.to_processes.push(Action::ToSend {
-            target,
-            msg: mproposeack,
-        });
-
+        // save command's clock and update `blocked_by` before unlocking it
+        let clock = info.clock;
+        info.blocked_by = blocked_by.clone();
+        let blocked_by_len = blocked_by.len();
         drop(info);
         drop(info_ref);
+
+        // we send an ok if no command is blocking this command
+        let ok = blocked_by.is_empty();
+
+        // decision tracks what we should do in the end, after iterating each
+        // of the commands that is blocking us
+        #[derive(PartialEq, Eq, Debug)]
+        enum Decision {
+            ACCEPT,
+            REJECT,
+            WAIT,
+        }
+        let mut decision = Decision::ACCEPT;
+        let mut not_blocked_by = HashSet::new();
+
+        if !ok {
+            // if there are command blocking us, iterate each of them and check
+            // if they are still blocking us (in the meantime, then may have
+            // moved to the `ACCEPT` or `COMMIT` phase, and we might be able to
+            // ignore them)
+            for blocked_by_dot in blocked_by {
+                if let Some(blocked_by_dot_ref) = self.cmds.get(dot) {
+                    // in this the command hasn't been GCed since we got it from
+                    // the key clocks
+                    let blocked_by_info = blocked_by_dot_ref.read();
+
+                    // check whether this command already has a "reasonable"
+                    // clock and dep
+                    let has_clock_and_dep = matches!(
+                        blocked_by_info.status,
+                        Status::ACCEPT | Status::COMMIT
+                    );
+                    if has_clock_and_dep {
+                        if Self::safe_to_ignore_check(
+                            dot,
+                            clock,
+                            blocked_by_info.clock,
+                            &blocked_by_info.deps,
+                        ) {
+                            // the command can be ignored
+                            not_blocked_by.insert(blocked_by_dot);
+                        } else {
+                            decision = Decision::REJECT;
+                            break;
+                        }
+                    } else {
+                        // upgrade lock guard to a mutable one
+                        drop(blocked_by_info);
+                        let mut blocked_by_info = blocked_by_dot_ref.write();
+                        // register that this command is blocking our
+                        // command
+                        blocked_by_info.blocking.insert(dot);
+                    }
+                } else {
+                    // otherwise, the command has been GCed, and in that case
+                    // we simply record that it should be ignored
+                    not_blocked_by.insert(blocked_by_dot);
+                }
+            }
+
+            if not_blocked_by.len() == blocked_by_len {
+                // if in the end it turns out that we're not blocked by any
+                // command, accept this command:
+                // - in this case, we must still have `Decision::WAIT`
+                assert_eq!(decision, Decision::WAIT);
+                decision = Decision::ACCEPT;
+            }
+        };
+
+        // since we unlocked this command, maybe in the meantime it has been
+        // GCed, and if so it can be imply ignored
+        if let Some(info_ref) = self.cmds.get(dot) {
+            let mut info = info_ref.write();
+
+            // only keep going if we're still at the PROPOSE phase
+            if info.status == Status::PROPOSE {
+                match decision {
+                    Decision::ACCEPT => {
+                        Self::accept_command(
+                            dot,
+                            &mut info,
+                            &mut self.to_processes,
+                        );
+                    }
+                    Decision::REJECT => Self::reject_command(
+                        dot,
+                        &mut info,
+                        &mut self.key_clocks,
+                        &mut self.to_processes,
+                    ),
+                    Decision::WAIT => {
+                        // in this case, we should wait; simply update the set
+                        // of commands we need to wait for (in the meantime we
+                        // may have decided to ignore some)
+                        for not_blocked_by_dot in not_blocked_by {
+                            info.blocked_by.remove(&not_blocked_by_dot);
+                        }
+                        // after this, we still must be blocking for some reason
+                        assert!(!info.blocked_by.is_empty());
+                    }
+                }
+            }
+        }
 
         // check if there's a buffered retry request; if yes, handle the retry
         // again (since now we have the payload)
@@ -322,7 +394,6 @@ impl<KC: KeyClocks> Caesar<KC> {
         if let Some((from, clock, deps)) = self.buffered_commits.remove(&dot) {
             self.handle_mcommit(from, dot, clock, deps, time);
         }
-        return;
     }
 
     fn handle_mproposeack(
@@ -346,7 +417,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // get cmd info
-        let info_ref = self.cmds.get(dot);
+        let info_ref = self.cmds.get_or_default(dot);
         let mut info = info_ref.write();
 
         // do nothing if we're no longer PROPOSE or REJECT (yes, it seems that
@@ -441,7 +512,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         self.key_clocks.clock_join(&clock);
 
         // get cmd info
-        let info_ref = self.cmds.get(dot);
+        let info_ref = self.cmds.get_or_default(dot);
         let mut info = info_ref.write();
 
         if info.status == Status::START {
@@ -463,11 +534,15 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // update command info:
         info.status = Status::COMMIT;
-        info.deps = deps;
+        info.deps = deps.clone();
         Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
+        // take set of commands that this command is blocking
+        let blocking = std::mem::take(&mut info.blocking);
         drop(info);
         drop(info_ref);
+        self.try_to_unblock(dot, clock, deps, blocking);
+
         if self.gc_running() {
             // notify self with the committed dot
             self.to_processes.push(Action::ToForward {
@@ -501,7 +576,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         self.key_clocks.clock_join(&clock);
 
         // get cmd info
-        let info_ref = self.cmds.get(dot);
+        let info_ref = self.cmds.get_or_default(dot);
         let mut info = info_ref.write();
 
         if info.status == Status::START {
@@ -528,7 +603,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             self.key_clocks.predecessors(dot, cmd, clock, blocking);
 
         // aggregate with incoming deps
-        new_deps.extend(deps);
+        new_deps.extend(deps.clone());
 
         // create message and target
         let msg = Message::MRetryAck {
@@ -539,6 +614,12 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // save new action
         self.to_processes.push(Action::ToSend { target, msg });
+
+        // take set of commands that this command is blocking
+        let blocking = std::mem::take(&mut info.blocking);
+        drop(info);
+        drop(info_ref);
+        self.try_to_unblock(dot, clock, deps, blocking);
     }
 
     fn handle_mretryack(
@@ -558,7 +639,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // get cmd info
-        let info_ref = self.cmds.get(dot);
+        let info_ref = self.cmds.get_or_default(dot);
         let mut info = info_ref.write();
 
         // do nothing if we're no longer ACCEPT:
@@ -704,6 +785,129 @@ impl<KC: KeyClocks> Caesar<KC> {
             panic!("we're the single worker performing gc, so all commands should exist");
         }
     }
+
+    fn safe_to_ignore_check(
+        my_dot: Dot,
+        my_clock: Clock,
+        their_clock: Clock,
+        their_deps: &HashSet<Dot>,
+    ) -> bool {
+        // since clocks can only increase, the clock of the blocking command
+        // must be higher than ours (otherwise it couldn't have been
+        // reported as blocking in the first place)
+        assert!(my_clock < their_clock);
+        // since we (currently) have a lower clock that this command, it is
+        // only safe to ignore it we are included in its dependencies
+        their_deps.contains(&my_dot)
+    }
+
+    fn try_to_unblock(
+        &mut self,
+        dot: Dot,
+        clock: Clock,
+        deps: HashSet<Dot>,
+        blocking: HashSet<Dot>,
+    ) {
+        for blocked_dot in blocking {
+            if let Some(blocked_dot_info_ref) = self.cmds.get(blocked_dot) {
+                let mut blocked_dot_info = blocked_dot_info_ref.write();
+
+                // only act if the blocked command is still at the `PROPOSE`
+                // phase
+                if blocked_dot_info.status == Status::PROPOSE {
+                    let safe_to_ignore = Self::safe_to_ignore_check(
+                        blocked_dot,
+                        blocked_dot_info.clock,
+                        clock,
+                        &deps,
+                    );
+                    if safe_to_ignore {
+                        // if it's safe to ignore the command, remove it from
+                        // the set of commands that are blocking this blocked
+                        // command
+                        blocked_dot_info.blocked_by.remove(&dot);
+                        if blocked_dot_info.blocked_by.is_empty() {
+                            // ACCEPT the blocked command if it no longer has
+                            // commands blocking it
+                            Self::accept_command(
+                                blocked_dot,
+                                &mut blocked_dot_info,
+                                &mut self.to_processes,
+                            );
+                        }
+                    } else {
+                        // REJECT the blocked command if it's not safe to ignore
+                        // this command
+                        Self::reject_command(
+                            blocked_dot,
+                            &mut blocked_dot_info,
+                            &mut self.key_clocks,
+                            &mut self.to_processes,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn accept_command(
+        dot: Dot,
+        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        to_processes: &mut Vec<Action<Self>>,
+    ) {
+        Self::send_mpropose_ack(
+            dot,
+            info.clock,
+            info.deps.clone(),
+            true,
+            to_processes,
+        )
+    }
+
+    fn reject_command(
+        dot: Dot,
+        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        key_clocks: &mut KC,
+        to_processes: &mut Vec<Action<Self>>,
+    ) {
+        // if not ok, reject the coordinator's timestamp
+        info.status = Status::REJECT;
+
+        // compute new timestamp for the command
+        let new_clock = key_clocks.clock_next();
+
+        // compute new set of predecessors for the command
+        let cmd = info.cmd.as_ref().expect("command has been set");
+        let blocking = None;
+        let new_deps = key_clocks.predecessors(dot, cmd, new_clock, blocking);
+
+        Self::send_mpropose_ack(dot, new_clock, new_deps, false, to_processes);
+    }
+
+    // helper to send an `MProposeAck`
+    fn send_mpropose_ack(
+        dot: Dot,
+        clock: Clock,
+        deps: HashSet<Dot>,
+        ok: bool,
+        to_processes: &mut Vec<Action<Self>>,
+    ) {
+        // create `MProposeAck` and target
+        let mproposeack = Message::MProposeAck {
+            dot,
+            clock,
+            deps,
+            ok,
+        };
+        let from = dot.source();
+        let target = singleton![from];
+
+        // save new action
+        to_processes.push(Action::ToSend {
+            target,
+            msg: mproposeack,
+        });
+    }
 }
 
 // `CaesarInfo` contains all information required in the life-cyle of a
@@ -715,6 +919,10 @@ struct CaesarInfo {
     cmd: Option<Command>,
     clock: Clock,
     deps: HashSet<Dot>,
+    // set of commands that this command is blocking
+    blocking: HashSet<Dot>,
+    // set of commands that this command is blocked by
+    blocked_by: HashSet<Dot>,
     // `quorum_clocks` is used by the coordinator to aggregate fast-quorum
     // replies and make the fast-path decision
     quorum_clocks: QuorumClocks,
@@ -737,6 +945,8 @@ impl Info for CaesarInfo {
             cmd: None,
             clock: Clock::new(process_id),
             deps: HashSet::new(),
+            blocking: HashSet::new(),
+            blocked_by: HashSet::new(),
             quorum_clocks: QuorumClocks::new(
                 process_id,
                 fast_quorum_size,
