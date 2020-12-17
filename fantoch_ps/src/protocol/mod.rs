@@ -35,7 +35,7 @@ mod tests {
     use fantoch::id::{ProcessId, Rifl};
     use fantoch::kvs::Key;
     use fantoch::planet::Planet;
-    use fantoch::protocol::{Protocol, ProtocolMetricsKind};
+    use fantoch::protocol::{Protocol, ProtocolMetrics, ProtocolMetricsKind};
     use fantoch::run::tests::{run_test_with_inspect_fun, tokio_test_runtime};
     use fantoch::sim::Runner;
     use fantoch::HashMap;
@@ -662,12 +662,12 @@ mod tests {
     where
         P: Protocol,
     {
+        extract_metrics(worker.metrics())
+    }
+
+    fn extract_metrics(metrics: &ProtocolMetrics) -> (usize, usize, usize) {
         let metric = |kind| {
-            worker
-                .metrics()
-                .get_aggregated(kind)
-                .cloned()
-                .unwrap_or_default() as usize
+            metrics.get_aggregated(kind).cloned().unwrap_or_default() as usize
         };
         let fast_paths = metric(ProtocolMetricsKind::FastPath);
         let slow_paths = metric(ProtocolMetricsKind::SlowPath);
@@ -788,8 +788,11 @@ mod tests {
             client_regions,
         );
 
-        // run simulation until the clients end + another 2 seconds
-        let extra_sim_time = Some(Duration::from_secs(2));
+        // reorder network messages
+        runner.reorder_messages();
+
+        // run simulation until the clients end + another 10 seconds (for GC)
+        let extra_sim_time = Some(Duration::from_secs(10));
         let (processes_metrics, executors_monitors, _) =
             runner.run(extra_sim_time);
 
@@ -797,27 +800,8 @@ mod tests {
         let metrics = processes_metrics
             .into_iter()
             .map(|(process_id, process_metrics)| {
-                // get fast paths
-                let fast_paths = process_metrics
-                    .get_aggregated(ProtocolMetricsKind::FastPath)
-                    .cloned()
-                    .unwrap_or_default()
-                    as usize;
-
-                // get slow paths
-                let slow_paths = process_metrics
-                    .get_aggregated(ProtocolMetricsKind::SlowPath)
-                    .cloned()
-                    .unwrap_or_default()
-                    as usize;
-
-                // get stable count
-                let stable_count = process_metrics
-                    .get_aggregated(ProtocolMetricsKind::Stable)
-                    .cloned()
-                    .unwrap_or_default()
-                    as usize;
-
+                let (fast_paths, slow_paths, stable_count) =
+                    extract_metrics(&process_metrics);
                 (process_id, (fast_paths, slow_paths, stable_count))
             })
             .collect();
