@@ -286,21 +286,30 @@ impl<KC: KeyClocks> Caesar<KC> {
         // decision tracks what we should do in the end, after iterating each
         // of the commands that is blocking us
         #[derive(PartialEq, Eq, Debug)]
-        enum Decision {
+        enum Reply {
             ACCEPT,
             REJECT,
             WAIT,
         }
-        let mut decision = Decision::ACCEPT;
+        let mut reply = Reply::WAIT;
         let mut not_blocked_by = HashSet::new();
 
-        if !ok {
+        if ok {
+            reply = Reply::ACCEPT;
+        } else {
             // if there are command blocking us, iterate each of them and check
             // if they are still blocking us (in the meantime, then may have
             // moved to the `ACCEPT` or `COMMIT` phase, and we might be able to
             // ignore them)
+            trace!(
+                "p{}: MPropose({:?}) blocked by {:?} | time={}",
+                self.id(),
+                dot,
+                blocked_by,
+                time.micros()
+            );
             for blocked_by_dot in blocked_by {
-                if let Some(blocked_by_dot_ref) = self.cmds.get(dot) {
+                if let Some(blocked_by_dot_ref) = self.cmds.get(blocked_by_dot) {
                     // in this the command hasn't been GCed since we got it from
                     // the key clocks
                     let blocked_by_info = blocked_by_dot_ref.read();
@@ -312,19 +321,37 @@ impl<KC: KeyClocks> Caesar<KC> {
                         Status::ACCEPT | Status::COMMIT
                     );
                     if has_clock_and_dep {
-                        if Self::safe_to_ignore_check(
+                        let safe_to_ignore = Self::safe_to_ignore(
+                            self.bp.process_id,
                             dot,
                             clock,
                             blocked_by_info.clock,
                             &blocked_by_info.deps,
-                        ) {
+                            time,
+                        );
+                        trace!(
+                            "p{}: MPropose({:?}) safe to ignore {:?}: {:?} | time={}",
+                            self.bp.process_id,
+                            dot,
+                            blocked_by_dot,
+                            safe_to_ignore,
+                            time.micros()
+                        );
+                        if safe_to_ignore {
                             // the command can be ignored
                             not_blocked_by.insert(blocked_by_dot);
                         } else {
-                            decision = Decision::REJECT;
+                            reply = Reply::REJECT;
                             break;
                         }
                     } else {
+                        trace!(
+                            "p{}: MPropose({:?}) still blocked by {:?} | time={}",
+                            self.bp.process_id,
+                            dot,
+                            blocked_by_dot,
+                            time.micros()
+                        );
                         // upgrade lock guard to a mutable one
                         drop(blocked_by_info);
                         let mut blocked_by_info = blocked_by_dot_ref.write();
@@ -333,6 +360,13 @@ impl<KC: KeyClocks> Caesar<KC> {
                         blocked_by_info.blocking.insert(dot);
                     }
                 } else {
+                    trace!(
+                        "p{}: MPropose({:?}) no longer blocked by {:?} | time={}",
+                        self.bp.process_id,
+                        dot,
+                        blocked_by_dot,
+                        time.micros()
+                    );
                     // otherwise, the command has been GCed, and in that case
                     // we simply record that it should be ignored
                     not_blocked_by.insert(blocked_by_dot);
@@ -343,10 +377,18 @@ impl<KC: KeyClocks> Caesar<KC> {
                 // if in the end it turns out that we're not blocked by any
                 // command, accept this command:
                 // - in this case, we must still have `Decision::WAIT`
-                assert_eq!(decision, Decision::WAIT);
-                decision = Decision::ACCEPT;
+                assert_eq!(reply, Reply::WAIT);
+                reply = Reply::ACCEPT;
             }
         };
+
+        trace!(
+            "p{}: MPropose({:?}) decision {:?} | time={}",
+            self.bp.process_id,
+            dot,
+            reply,
+            time.micros()
+        );
 
         // since we unlocked this command, maybe in the meantime it has been
         // GCed, and if so it can be imply ignored
@@ -355,21 +397,21 @@ impl<KC: KeyClocks> Caesar<KC> {
 
             // only keep going if we're still at the PROPOSE phase
             if info.status == Status::PROPOSE {
-                match decision {
-                    Decision::ACCEPT => {
+                match reply {
+                    Reply::ACCEPT => {
                         Self::accept_command(
                             dot,
                             &mut info,
                             &mut self.to_processes,
                         );
                     }
-                    Decision::REJECT => Self::reject_command(
+                    Reply::REJECT => Self::reject_command(
                         dot,
                         &mut info,
                         &mut self.key_clocks,
                         &mut self.to_processes,
                     ),
-                    Decision::WAIT => {
+                    Reply::WAIT => {
                         // in this case, we should wait; simply update the set
                         // of commands we need to wait for (in the meantime we
                         // may have decided to ignore some)
@@ -496,7 +538,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         dot: Dot,
         clock: Clock,
         deps: HashSet<Dot>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         trace!(
             "p{}: MCommit({:?}, {:?}, {:?}) from {} | time={}",
@@ -505,7 +547,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             clock,
             deps,
             from,
-            _time.micros()
+            time.micros()
         );
 
         // merge clocks
@@ -541,7 +583,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         let blocking = std::mem::take(&mut info.blocking);
         drop(info);
         drop(info_ref);
-        self.try_to_unblock(dot, clock, deps, blocking);
+        self.try_to_unblock(dot, clock, deps, blocking, time);
 
         if self.gc_running() {
             // notify self with the committed dot
@@ -560,7 +602,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         dot: Dot,
         clock: Clock,
         deps: HashSet<Dot>,
-        _time: &dyn SysTime,
+        time: &dyn SysTime,
     ) {
         trace!(
             "p{}: MRetry({:?}, {:?}, {:?}) from {} | time={}",
@@ -569,7 +611,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             clock,
             deps,
             from,
-            _time.micros()
+            time.micros()
         );
 
         // merge clocks
@@ -619,7 +661,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         let blocking = std::mem::take(&mut info.blocking);
         drop(info);
         drop(info_ref);
-        self.try_to_unblock(dot, clock, deps, blocking);
+        self.try_to_unblock(dot, clock, deps, blocking, time);
     }
 
     fn handle_mretryack(
@@ -786,12 +828,23 @@ impl<KC: KeyClocks> Caesar<KC> {
         }
     }
 
-    fn safe_to_ignore_check(
+    fn safe_to_ignore(
+        _id: ProcessId,
         my_dot: Dot,
         my_clock: Clock,
         their_clock: Clock,
         their_deps: &HashSet<Dot>,
+        _time: &dyn SysTime,
     ) -> bool {
+        trace!(
+            "p{}: safe_to_ignore({:?}, {:?}, {:?}, {:?}) | time={}",
+            _id,
+            my_dot,
+            my_clock,
+            their_clock,
+            their_deps,
+            _time.micros()
+        );
         // since clocks can only increase, the clock of the blocking command
         // must be higher than ours (otherwise it couldn't have been
         // reported as blocking in the first place)
@@ -807,7 +860,18 @@ impl<KC: KeyClocks> Caesar<KC> {
         clock: Clock,
         deps: HashSet<Dot>,
         blocking: HashSet<Dot>,
+        time: &dyn SysTime,
     ) {
+        trace!(
+            "p{}: try_to_unblock({:?}, {:?}, {:?}, {:?}) | time={}",
+            self.id(),
+            dot,
+            clock,
+            deps,
+            blocking,
+            time.micros()
+        );
+
         for blocked_dot in blocking {
             if let Some(blocked_dot_info_ref) = self.cmds.get(blocked_dot) {
                 let mut blocked_dot_info = blocked_dot_info_ref.write();
@@ -815,11 +879,13 @@ impl<KC: KeyClocks> Caesar<KC> {
                 // only act if the blocked command is still at the `PROPOSE`
                 // phase
                 if blocked_dot_info.status == Status::PROPOSE {
-                    let safe_to_ignore = Self::safe_to_ignore_check(
+                    let safe_to_ignore = Self::safe_to_ignore(
+                        self.bp.process_id,
                         blocked_dot,
                         blocked_dot_info.clock,
                         clock,
                         &deps,
+                        time,
                     );
                     if safe_to_ignore {
                         // if it's safe to ignore the command, remove it from
