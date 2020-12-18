@@ -18,7 +18,7 @@ use std::time::Duration;
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 macro_rules! config {
-    ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
+    ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr, $wait_condition:expr) => {{
         let mut config = Config::new($n, $f);
         config.set_newt_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
@@ -26,8 +26,19 @@ macro_rules! config {
         }
         // make sure detached votes are sent
         config.set_newt_detached_send_interval(Duration::from_millis(5));
+
+        // set caesar's wait condition
+        config.set_caesar_wait_condition($wait_condition);
+
         // make sure stability is running
-        config.set_gc_interval(Duration::from_millis(1000));
+        config.set_gc_interval(Duration::from_millis(10));
+
+        // make sure executed notification are being sent (which it will affect
+        // the protocols that have implemented such functionality)
+        config.set_executor_executed_notification_interval(
+            Duration::from_millis(10),
+        );
+
         config.set_skip_fast_ack($skip_fast_ack);
         config
     }};
@@ -161,23 +172,24 @@ fn newt(aws: bool) {
             vec![
                 // (protocol, (n, f, tiny quorums, clock bump interval, skip
                 // fast ack))
-                ("Atlas", config!(n, 1, false, None, false)),
-                // ("EPaxos", config!(n, 1, false, None, false)),
-                // ("FPaxos", config!(n, 1, false, None, false)),
-                ("Newt", config!(n, 1, false, None, false)),
+                ("Atlas", config!(n, 1, false, None, false, false)),
+                // ("EPaxos", config!(n, 1, false, None, false, false)),
+                // ("FPaxos", config!(n, 1, false, None, false, false)),
+                ("Newt", config!(n, 1, false, None, false, false)),
             ]
         } else if n == 5 {
             vec![
                 // (protocol, (n, f, tiny quorums, clock bump interval, skip
                 // fast ack))
-                // ("Atlas", config!(n, 1, false, None, false)),
-                // ("Atlas", config!(n, 2, false, None, false)),
-                // ("EPaxos", config!(n, 0, false, None, false)),
-                // ("FPaxos", config!(n, 1, false, None, false)),
-                // ("FPaxos", config!(n, 2, false, None, false)),
-                ("Newt", config!(n, 1, false, None, false)),
-                ("Newt", config!(n, 2, false, None, false)),
-                ("Caesar", config!(n, 2, false, None, false)),
+                // ("Atlas", config!(n, 1, false, None, false, false)),
+                // ("Atlas", config!(n, 2, false, None, false, false)),
+                // ("EPaxos", config!(n, 0, false, None, false, false)),
+                // ("FPaxos", config!(n, 1, false, None, false, false)),
+                // ("FPaxos", config!(n, 2, false, None, false, false)),
+                ("Newt", config!(n, 1, false, None, false, false)),
+                ("Newt", config!(n, 2, false, None, false, false)),
+                ("Caesar", config!(n, 2, false, None, false, false)),
+                ("Caesar", config!(n, 2, false, None, false, true)),
             ]
         } else {
             panic!("unsupported number of processes {}", n);
@@ -276,7 +288,7 @@ fn fairest_leader() {
     // let (planet, regions) = aws_planet();
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
-    let configs = vec![config!(5, 1, false, None, false)];
+    let configs = vec![config!(5, 1, false, None, false, false)];
 
     let clients_per_region = 1;
     // clients workload
@@ -552,9 +564,17 @@ fn handle_run_result(
         },
     );
 
+    let name = |protocol_name, wait_condition: bool| {
+        if protocol_name == "Caesar" && !wait_condition {
+            "CaesarNW"
+        } else {
+            protocol_name
+        }
+    };
+
     println!(
-        "{:<6} n = {} f = {} c = {:<9} | fast_paths = {:<7.1} {:?}",
-        protocol_name,
+        "{:<8} n = {} f = {} c = {:<9} | fast_paths = {:<7.1} {:?}",
+        name(protocol_name, config.caesar_wait_condition()),
         config.n(),
         config.f(),
         clients_per_region,
