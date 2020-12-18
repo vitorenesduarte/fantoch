@@ -7,8 +7,8 @@ use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, GCTrack, Info, LockedCommandsInfo, MessageIndex,
-    Protocol, ProtocolMetrics,
+    Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
+    MessageIndex, Protocol, ProtocolMetrics,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -156,9 +156,6 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MRetryAck { dot, deps } => {
                 self.handle_mretryack(from, dot, deps, time)
             }
-            Message::MCommitDot { dot } => {
-                self.handle_mcommit_dot(from, dot, time)
-            }
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed, time)
             }
@@ -172,6 +169,10 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
                 self.handle_event_garbage_collection(time)
             }
         }
+    }
+
+    fn handle_executed(&mut self, executed: Executed, _time: &dyn SysTime) {
+        self.gc_track.update_clock(executed);
     }
 
     /// Returns a new action to be sent to other processes.
@@ -309,7 +310,8 @@ impl<KC: KeyClocks> Caesar<KC> {
                 time.micros()
             );
             for blocked_by_dot in blocked_by {
-                if let Some(blocked_by_dot_ref) = self.cmds.get(blocked_by_dot) {
+                if let Some(blocked_by_dot_ref) = self.cmds.get(blocked_by_dot)
+                {
                     // in this the command hasn't been GCed since we got it from
                     // the key clocks
                     let blocked_by_info = blocked_by_dot_ref.read();
@@ -589,12 +591,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
 
-        if self.gc_running() {
-            // notify self with the committed dot
-            self.to_processes.push(Action::ToForward {
-                msg: Message::MCommitDot { dot },
-            });
-        } else {
+        if !self.gc_running() {
             // if we're not running gc, remove the dot info now
             self.gc_command(dot);
         }
@@ -727,22 +724,6 @@ impl<KC: KeyClocks> Caesar<KC> {
         }
     }
 
-    fn handle_mcommit_dot(
-        &mut self,
-        from: ProcessId,
-        dot: Dot,
-        _time: &dyn SysTime,
-    ) {
-        trace!(
-            "p{}: MCommitDot({:?}) | time={}",
-            self.id(),
-            dot,
-            _time.micros()
-        );
-        assert_eq!(from, self.bp.process_id);
-        self.gc_track.commit(dot);
-    }
-
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -756,7 +737,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             from,
             _time.micros()
         );
-        self.gc_track.committed_by(from, committed);
+        self.gc_track.update_clock_of(from, committed);
 
         // compute newly stable dots
         let stable = self.gc_track.stable();
@@ -777,7 +758,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // retrieve the committed clock
-        let committed = self.gc_track.committed();
+        let committed = self.gc_track.clock();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -1103,9 +1084,6 @@ pub enum Message {
         dot: Dot,
         deps: HashSet<Dot>,
     },
-    MCommitDot {
-        dot: Dot,
-    },
     MGarbageCollection {
         committed: VClock<ProcessId>,
     },
@@ -1133,7 +1111,6 @@ impl MessageIndex for Message {
             Self::MRetry { dot, .. } => worker_dot_index_shift(&dot),
             Self::MRetryAck { dot, .. } => worker_dot_index_shift(&dot),
             // GC messages
-            Self::MCommitDot { .. } => worker_index_no_shift(GC_WORKER_INDEX),
             Self::MGarbageCollection { .. } => {
                 worker_index_no_shift(GC_WORKER_INDEX)
             }
@@ -1349,12 +1326,8 @@ mod tests {
         // all processes handle it
         let to_sends = simulation.forward_to_processes(mcommit);
 
-        // check the MCommitDot
-        let check_msg =
-            |msg: &Message| matches!(msg, Message::MCommitDot { .. });
-        assert!(to_sends.into_iter().all(|(_, action)| {
-            matches!(action, Action::ToForward { msg } if check_msg(&msg))
-        }));
+        // there should be no new sends
+        assert!(to_sends.is_empty());
 
         // process 1 should have something to the executor
         let (process, executor, pending, time) =
