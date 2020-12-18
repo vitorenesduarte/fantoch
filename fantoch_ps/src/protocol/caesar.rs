@@ -40,6 +40,7 @@ pub struct Caesar<KC: KeyClocks> {
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    wait_condition: bool,
 }
 
 impl<KC: KeyClocks> Protocol for Caesar<KC> {
@@ -80,6 +81,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
         let buffered_commits = HashMap::new();
+        let wait_condition = config.caesar_wait_condition();
 
         // create `Caesar`
         let protocol = Self {
@@ -91,6 +93,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             to_executors,
             buffered_retries,
             buffered_commits,
+            wait_condition,
         };
 
         // create periodic events
@@ -297,6 +300,9 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         if ok {
             reply = Reply::ACCEPT;
+        } else if !self.wait_condition {
+            // if the wait condition is not enabled, reject right away
+            reply = Reply::REJECT;
         } else {
             // if there are command blocking us, iterate each of them and check
             // if they are still blocking us (in the meantime, then may have

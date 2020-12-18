@@ -35,6 +35,8 @@ pub struct Config {
     /// defines the interval the sending of `MDetached` messages in newt, if
     /// any
     newt_detached_send_interval: Option<Duration>,
+    /// defines whether caesar should employ the wait condition
+    caesar_wait_condition: bool,
     /// defines whether protocols should try to bypass the fast quorum process
     /// ack (which is only possible if the fast quorum size is 2)
     skip_fast_ack: bool,
@@ -71,6 +73,8 @@ impl Config {
         let newt_clock_bump_interval = None;
         // by default, `MDetached` messages are not sent
         let newt_detached_send_interval = None;
+        // by default, `caesar_wait_condition = false`
+        let caesar_wait_condition = false;
         // by default `skip_fast_ack = false;
         let skip_fast_ack = false;
         Self {
@@ -87,6 +91,7 @@ impl Config {
             newt_tiny_quorums,
             newt_clock_bump_interval,
             newt_detached_send_interval,
+            caesar_wait_condition,
             skip_fast_ack,
         }
     }
@@ -220,6 +225,16 @@ impl Config {
     /// Sets newt clock bump interval.
     pub fn set_newt_detached_send_interval(&mut self, interval: Duration) {
         self.newt_detached_send_interval = Some(interval);
+    }
+
+    /// Checks whether caesar's wait condition is enabled or not.
+    pub fn caesar_wait_condition(&self) -> bool {
+        self.caesar_wait_condition
+    }
+
+    /// Changes the value of `caesar_wait_condition`.
+    pub fn set_caesar_wait_condition(&mut self, caesar_wait_condition: bool) {
+        self.caesar_wait_condition = caesar_wait_condition;
     }
 
     /// Checks whether skip fast ack is enabled or not.
@@ -407,6 +422,17 @@ mod tests {
         let interval = Duration::from_millis(2);
         config.set_newt_detached_send_interval(interval);
         assert_eq!(config.newt_detached_send_interval(), Some(interval));
+
+        // by default, caesar wait condition is false
+        assert!(!config.caesar_wait_condition());
+
+        // if we change it to false, remains false
+        config.set_caesar_wait_condition(false);
+        assert!(!config.caesar_wait_condition());
+
+        // if we change it to true, it becomes true
+        config.set_caesar_wait_condition(true);
+        assert!(config.caesar_wait_condition());
 
         // by default, skip fast ack is false
         assert!(!config.skip_fast_ack());
