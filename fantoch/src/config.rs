@@ -15,6 +15,9 @@ pub struct Config {
     execute_at_commit: bool,
     /// defines the interval between executor cleanups
     executor_cleanup_interval: Duration,
+    /// defines the interval between between executed notifications sent to
+    /// the local worker process
+    executor_executed_notification_interval: Duration,
     /// defines whether the executor should monitor pending commands, and if
     /// so, the interval between each monitor
     executor_monitor_pending_interval: Option<Duration>,
@@ -52,6 +55,8 @@ impl Config {
         let execute_at_commit = false;
         // by default, executor cleanups happen every 5ms
         let executor_cleanup_interval = Duration::from_millis(5);
+        // by default, executed notifications happen every 5ms
+        let executor_executed_notification_interval = Duration::from_millis(5);
         // by default, pending commnads are not monitored
         let executor_monitor_pending_interval = None;
         // by default, executors do not monitor execution order
@@ -74,6 +79,7 @@ impl Config {
             shard_count,
             execute_at_commit,
             executor_cleanup_interval,
+            executor_executed_notification_interval,
             executor_monitor_pending_interval,
             executor_monitor_execution_order,
             gc_interval,
@@ -151,6 +157,19 @@ impl Config {
     ) {
         self.executor_monitor_execution_order =
             executor_monitor_execution_order;
+    }
+
+    /// Checks the executed notification interval.
+    pub fn executor_executed_notification_interval(&self) -> Duration {
+        self.executor_executed_notification_interval
+    }
+
+    /// Sets the executed notification interval.
+    pub fn set_executor_executed_notification_interval(
+        &mut self,
+        interval: Duration,
+    ) {
+        self.executor_executed_notification_interval = interval;
     }
 
     /// Checks the garbage collection interval.
@@ -323,6 +342,17 @@ mod tests {
         let interval = Duration::from_secs(2);
         config.set_executor_cleanup_interval(interval);
         assert_eq!(config.executor_cleanup_interval(), interval);
+
+        // by default, the executor executed notification interval is 5ms
+        assert_eq!(
+            config.executor_executed_notification_interval(),
+            Duration::from_millis(5)
+        );
+
+        // change its value and check it has changed
+        let interval = Duration::from_secs(10);
+        config.set_executor_executed_notification_interval(interval);
+        assert_eq!(config.executor_executed_notification_interval(), interval);
 
         // by default, there's executor monitor pending interval
         assert_eq!(config.executor_monitor_pending_interval(), None);
