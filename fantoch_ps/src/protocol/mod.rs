@@ -74,6 +74,14 @@ mod tests {
         }};
     }
 
+    macro_rules! caesar_config {
+        ($n:expr, $f:expr, $wait:expr) => {{
+            let mut config = Config::new($n, $f);
+            config.set_caesar_wait_condition($wait);
+            config
+        }};
+    }
+
     fn ci() -> bool {
         if let Ok(value) = std::env::var("CI") {
             // if ci is set, it should be a bool
@@ -548,30 +556,63 @@ mod tests {
 
     // ---- caesar tests ---- //
     #[test]
-    fn sim_caesar_3_1_test() {
+    fn sim_caesar_wait_3_1_test() {
         let _slow_paths = sim_test::<CaesarSequential>(
-            config!(3, 1),
+            caesar_config!(3, 1, true),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
     }
 
     #[test]
-    fn sim_caesar_5_2_test() {
+    fn sim_caesar_3_1_no_wait_test() {
         let _slow_paths = sim_test::<CaesarSequential>(
-            config!(5, 2),
+            caesar_config!(3, 1, false),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
     }
 
     #[test]
-    fn run_caesar_3_1_sequential_test() {
+    fn sim_caesar_5_2_wait_test() {
+        let _slow_paths = sim_test::<CaesarSequential>(
+            caesar_config!(5, 2, true),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn sim_caesar_5_2_no_wait_test() {
+        let _slow_paths = sim_test::<CaesarSequential>(
+            caesar_config!(5, 2, false),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn run_caesar_3_1_wait_sequential_test() {
         // caesar sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
         let _slow_paths = run_test::<CaesarSequential>(
-            config!(3, 1),
+            caesar_config!(3, 1, true),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn run_caesar_3_1_no_wait_sequential_test() {
+        // caesar sequential can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarSequential>(
+            caesar_config!(3, 1, false),
             SHARD_COUNT,
             workers,
             executors,
@@ -583,20 +624,73 @@ mod tests {
     // TODO
     #[ignore]
     #[test]
-    fn run_caesar_locked_test() {
+    fn run_caesar_3_1_wait_locked_test() {
         // caesar locked can handle as many workers as we want but only one
         // executor
         let workers = 4;
         let executors = 1;
-        let slow_paths = run_test::<CaesarLocked>(
-            config!(3, 1),
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(3, 1, true),
             SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+    }
+
+    // TODO
+    #[ignore]
+    #[test]
+    fn run_caesar_3_1_no_wait_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(3, 1, false),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    // TODO
+    #[ignore]
+    #[test]
+    fn run_caesar_5_2_wait_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(5, 2, true),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    // TODO
+    #[ignore]
+    #[test]
+    fn run_caesar_5_2_no_wait_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(5, 2, false),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
     }
 
     // ---- fpaxos tests ---- //

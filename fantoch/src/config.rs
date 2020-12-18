@@ -73,8 +73,8 @@ impl Config {
         let newt_clock_bump_interval = None;
         // by default, `MDetached` messages are not sent
         let newt_detached_send_interval = None;
-        // by default, `caesar_wait_condition = false`
-        let caesar_wait_condition = false;
+        // by default, `caesar_wait_condition = true`
+        let caesar_wait_condition = true;
         // by default `skip_fast_ack = false;
         let skip_fast_ack = false;
         Self {
@@ -423,16 +423,16 @@ mod tests {
         config.set_newt_detached_send_interval(interval);
         assert_eq!(config.newt_detached_send_interval(), Some(interval));
 
-        // by default, caesar wait condition is false
-        assert!(!config.caesar_wait_condition());
+        // by default, caesar wait condition is true
+        assert!(config.caesar_wait_condition());
 
-        // if we change it to false, remains false
-        config.set_caesar_wait_condition(false);
-        assert!(!config.caesar_wait_condition());
-
-        // if we change it to true, it becomes true
+        // if we change it to true, remains true
         config.set_caesar_wait_condition(true);
         assert!(config.caesar_wait_condition());
+
+        // if we change it to false, it becomes false
+        config.set_caesar_wait_condition(false);
+        assert!(!config.caesar_wait_condition());
 
         // by default, skip fast ack is false
         assert!(!config.skip_fast_ack());
