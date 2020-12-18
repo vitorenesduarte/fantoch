@@ -38,9 +38,20 @@ where
         }
     }
 
+    /// Returns the `Info` associated with `Dot` in case it exists.
+    pub fn get(
+        &mut self,
+        dot: Dot,
+    ) -> Option<SharedMapRef<'_, Dot, RwLock<I>>> {
+        self.dot_to_info.get(&dot)
+    }
+
     /// Returns the `Info` associated with `Dot`.
     /// If no `Info` is associated, an empty `Info` is returned.
-    pub fn get(&mut self, dot: Dot) -> SharedMapRef<'_, Dot, RwLock<I>> {
+    pub fn get_or_default(
+        &mut self,
+        dot: Dot,
+    ) -> SharedMapRef<'_, Dot, RwLock<I>> {
         // borrow everything we need so that the borrow checker does not
         // complain
         let process_id = self.process_id;

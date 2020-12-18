@@ -15,6 +15,9 @@ pub struct Config {
     execute_at_commit: bool,
     /// defines the interval between executor cleanups
     executor_cleanup_interval: Duration,
+    /// defines the interval between between executed notifications sent to
+    /// the local worker process
+    executor_executed_notification_interval: Duration,
     /// defines whether the executor should monitor pending commands, and if
     /// so, the interval between each monitor
     executor_monitor_pending_interval: Option<Duration>,
@@ -32,6 +35,8 @@ pub struct Config {
     /// defines the interval the sending of `MDetached` messages in newt, if
     /// any
     newt_detached_send_interval: Option<Duration>,
+    /// defines whether caesar should employ the wait condition
+    caesar_wait_condition: bool,
     /// defines whether protocols should try to bypass the fast quorum process
     /// ack (which is only possible if the fast quorum size is 2)
     skip_fast_ack: bool,
@@ -52,6 +57,8 @@ impl Config {
         let execute_at_commit = false;
         // by default, executor cleanups happen every 5ms
         let executor_cleanup_interval = Duration::from_millis(5);
+        // by default, executed notifications happen every 5ms
+        let executor_executed_notification_interval = Duration::from_millis(5);
         // by default, pending commnads are not monitored
         let executor_monitor_pending_interval = None;
         // by default, executors do not monitor execution order
@@ -66,6 +73,8 @@ impl Config {
         let newt_clock_bump_interval = None;
         // by default, `MDetached` messages are not sent
         let newt_detached_send_interval = None;
+        // by default, `caesar_wait_condition = true`
+        let caesar_wait_condition = true;
         // by default `skip_fast_ack = false;
         let skip_fast_ack = false;
         Self {
@@ -74,6 +83,7 @@ impl Config {
             shard_count,
             execute_at_commit,
             executor_cleanup_interval,
+            executor_executed_notification_interval,
             executor_monitor_pending_interval,
             executor_monitor_execution_order,
             gc_interval,
@@ -81,6 +91,7 @@ impl Config {
             newt_tiny_quorums,
             newt_clock_bump_interval,
             newt_detached_send_interval,
+            caesar_wait_condition,
             skip_fast_ack,
         }
     }
@@ -153,6 +164,19 @@ impl Config {
             executor_monitor_execution_order;
     }
 
+    /// Checks the executed notification interval.
+    pub fn executor_executed_notification_interval(&self) -> Duration {
+        self.executor_executed_notification_interval
+    }
+
+    /// Sets the executed notification interval.
+    pub fn set_executor_executed_notification_interval(
+        &mut self,
+        interval: Duration,
+    ) {
+        self.executor_executed_notification_interval = interval;
+    }
+
     /// Checks the garbage collection interval.
     pub fn gc_interval(&self) -> Option<Duration> {
         self.gc_interval
@@ -201,6 +225,16 @@ impl Config {
     /// Sets newt clock bump interval.
     pub fn set_newt_detached_send_interval(&mut self, interval: Duration) {
         self.newt_detached_send_interval = Some(interval);
+    }
+
+    /// Checks whether caesar's wait condition is enabled or not.
+    pub fn caesar_wait_condition(&self) -> bool {
+        self.caesar_wait_condition
+    }
+
+    /// Changes the value of `caesar_wait_condition`.
+    pub fn set_caesar_wait_condition(&mut self, caesar_wait_condition: bool) {
+        self.caesar_wait_condition = caesar_wait_condition;
     }
 
     /// Checks whether skip fast ack is enabled or not.
@@ -324,6 +358,17 @@ mod tests {
         config.set_executor_cleanup_interval(interval);
         assert_eq!(config.executor_cleanup_interval(), interval);
 
+        // by default, the executor executed notification interval is 5ms
+        assert_eq!(
+            config.executor_executed_notification_interval(),
+            Duration::from_millis(5)
+        );
+
+        // change its value and check it has changed
+        let interval = Duration::from_secs(10);
+        config.set_executor_executed_notification_interval(interval);
+        assert_eq!(config.executor_executed_notification_interval(), interval);
+
         // by default, there's executor monitor pending interval
         assert_eq!(config.executor_monitor_pending_interval(), None);
 
@@ -377,6 +422,17 @@ mod tests {
         let interval = Duration::from_millis(2);
         config.set_newt_detached_send_interval(interval);
         assert_eq!(config.newt_detached_send_interval(), Some(interval));
+
+        // by default, caesar wait condition is true
+        assert!(config.caesar_wait_condition());
+
+        // if we change it to true, remains true
+        config.set_caesar_wait_condition(true);
+        assert!(config.caesar_wait_condition());
+
+        // if we change it to false, it becomes false
+        config.set_caesar_wait_condition(false);
+        assert!(!config.caesar_wait_condition());
 
         // by default, skip fast ack is false
         assert!(!config.skip_fast_ack());

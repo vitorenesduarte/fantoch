@@ -2,7 +2,7 @@ use super::execution_logger;
 use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, ProcessId, ShardId};
-use crate::protocol::{Action, Protocol};
+use crate::protocol::{Action, Executed, Protocol};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
@@ -390,6 +390,7 @@ pub fn start_processes<P, R>(
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
     periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P, R>>,
+    executors_to_workers_rxs: Vec<ExecutedReceiver>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     to_executors: ToExecutors<P>,
@@ -414,13 +415,17 @@ where
     let incoming = reader_to_workers_rxs
         .into_iter()
         .zip(client_to_workers_rxs.into_iter())
-        .zip(periodic_to_workers_rxs.into_iter());
+        .zip(periodic_to_workers_rxs.into_iter())
+        .zip(executors_to_workers_rxs.into_iter());
 
     // create executor workers
     incoming
         .enumerate()
         .map(
-            |(worker_index, ((from_readers, from_clients), from_periodic))| {
+            |(
+                worker_index,
+                (((from_readers, from_clients), from_periodic), from_executors),
+            )| {
                 // create task
                 let task = process_task::<P, R>(
                     worker_index,
@@ -428,6 +433,7 @@ where
                     from_readers,
                     from_clients,
                     from_periodic,
+                    from_executors,
                     to_writers.clone(),
                     reader_to_workers.clone(),
                     to_executors.clone(),
@@ -464,6 +470,7 @@ async fn process_task<P, R>(
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
     mut from_periodic: PeriodicEventReceiver<P, R>,
+    mut from_executors: ExecutedReceiver,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut reader_to_workers: ReaderToWorkers<P>,
     mut to_executors: ToExecutors<P>,
@@ -487,6 +494,9 @@ async fn process_task<P, R>(
             }
             event = from_periodic.recv() => {
                 selected_from_periodic_task(worker_index, event, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
+            }
+            executed = from_executors.recv() => {
+                selected_from_executors(worker_index, executed, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
             }
             cmd = from_clients.recv() => {
                 selected_from_client(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
@@ -809,4 +819,59 @@ async fn handle_from_periodic_task<P, R>(
             }
         }
     }
+}
+
+async fn selected_from_executors<P>(
+    worker_index: usize,
+    executed: Option<Executed>,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
+    to_executors: &mut ToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
+    time: &RunTime,
+) where
+    P: Protocol + 'static,
+{
+    trace!("[server] from executor: {:?}", executed);
+    if let Some(executed) = executed {
+        handle_from_executors(
+            worker_index,
+            executed,
+            process,
+            to_writers,
+            reader_to_workers,
+            to_executors,
+            to_execution_logger,
+            time,
+        )
+        .await
+    } else {
+        warn!("[server] error while receiving message from executors");
+    }
+}
+
+async fn handle_from_executors<P>(
+    worker_index: usize,
+    executed: Executed,
+    process: &mut P,
+    to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
+    reader_to_workers: &mut ReaderToWorkers<P>,
+    to_executors: &mut ToExecutors<P>,
+    to_execution_logger: &mut Option<ExecutionInfoSender<P>>,
+    time: &RunTime,
+) where
+    P: Protocol + 'static,
+{
+    process.handle_executed(executed, time);
+    send_to_processes_and_executors(
+        worker_index,
+        process,
+        to_writers,
+        reader_to_workers,
+        to_executors,
+        to_execution_logger,
+        time,
+    )
+    .await;
 }

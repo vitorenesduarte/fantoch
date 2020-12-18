@@ -310,6 +310,14 @@ where
         workers,
     );
 
+    // create forward channels: executors -> workers
+    let (executors_to_workers, executors_to_workers_rxs) =
+        ExecutorsToWorkers::new(
+            "executors_to_workers",
+            process_channel_buffer_size,
+            workers,
+        );
+
     // create forward channels: client -> workers
     let (client_to_workers, client_to_workers_rxs) = ClientToWorkers::new(
         "client_to_workers",
@@ -388,6 +396,7 @@ where
         config,
         to_executors_rxs,
         client_to_executors_rxs,
+        executors_to_workers,
         shard_writers,
         to_executors.clone(),
         executor_to_metrics_logger,
@@ -399,6 +408,7 @@ where
         reader_to_workers_rxs,
         client_to_workers_rxs,
         periodic_to_workers_rxs,
+        executors_to_workers_rxs,
         to_writers,
         reader_to_workers,
         to_executors,

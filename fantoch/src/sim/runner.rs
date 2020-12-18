@@ -21,7 +21,8 @@ enum ScheduleAction<Message, PeriodicEvent> {
     SubmitToProc(ProcessId, Command),
     SendToProc(ProcessId, ShardId, ProcessId, Message),
     SendToClient(ClientId, CommandResult),
-    PeriodicEvent(ProcessId, PeriodicEvent, Duration),
+    PeriodicProcessEvent(ProcessId, PeriodicEvent, Duration),
+    PeriodicExecutedNotification(ProcessId, Duration),
 }
 #[derive(Clone)]
 enum MessageRegion {
@@ -78,7 +79,8 @@ where
 
         // create processes
         let mut processes = Vec::with_capacity(config.n());
-        let mut periodic_actions = Vec::new();
+        let mut periodic_process_events = Vec::new();
+        let mut periodic_executed_notifications = Vec::new();
 
         // there's a single shard
         let shard_id = 0;
@@ -92,12 +94,18 @@ where
                     P::new(process_id, shard_id, config);
                 processes.push((region.clone(), process));
 
-                // save periodic actions
-                periodic_actions.extend(
+                // save periodic process events
+                periodic_process_events.extend(
                     process_events
                         .into_iter()
                         .map(|(event, delay)| (process_id, event, delay)),
                 );
+
+                // save periodic executed notification
+                let executed_notification_interval =
+                    config.executor_executed_notification_interval();
+                periodic_executed_notifications
+                    .push((process_id, executed_notification_interval));
 
                 (process_id, shard_id, region)
             })
@@ -169,9 +177,14 @@ where
             reorder_messages: false,
         };
 
-        // schedule periodic actions
-        for (process_id, event, delay) in periodic_actions {
-            runner.schedule_event(process_id, event, delay);
+        // schedule periodic process events
+        for (process_id, event, delay) in periodic_process_events {
+            runner.schedule_periodic_process_event(process_id, event, delay);
+        }
+
+        // schedule periodic executed notifications
+        for (process_id, delay) in periodic_executed_notifications {
+            runner.schedule_periodic_executed_notification(process_id, delay)
         }
 
         runner
@@ -229,9 +242,18 @@ where
                 .expect("there should be a new action since stability is always running");
 
             match action {
-                ScheduleAction::PeriodicEvent(process_id, event, delay) => {
-                    self.handle_periodic_event(process_id, event, delay)
+                ScheduleAction::PeriodicProcessEvent(
+                    process_id,
+                    event,
+                    delay,
+                ) => {
+                    self.handle_periodic_process_event(process_id, event, delay)
                 }
+                ScheduleAction::PeriodicExecutedNotification(
+                    process_id,
+                    delay,
+                ) => self
+                    .handle_periodic_executed_notification(process_id, delay),
                 ScheduleAction::SubmitToProc(process_id, cmd) => {
                     self.handle_submit_to_proc(process_id, cmd);
                 }
@@ -291,7 +313,7 @@ where
         }
     }
 
-    fn handle_periodic_event(
+    fn handle_periodic_process_event(
         &mut self,
         process_id: ProcessId,
         event: P::PeriodicEvent,
@@ -305,7 +327,26 @@ where
         self.send_to_processes_and_executors(process_id);
 
         // schedule the next periodic event
-        self.schedule_event(process_id, event, delay);
+        self.schedule_periodic_process_event(process_id, event, delay);
+    }
+
+    fn handle_periodic_executed_notification(
+        &mut self,
+        process_id: ProcessId,
+        delay: Duration,
+    ) {
+        // get process and executor
+        let (process, executor, _, time) =
+            self.simulation.get_process(process_id);
+
+        // handle executed and schedule new actions
+        if let Some(executed) = executor.executed(time) {
+            process.handle_executed(executed, time);
+            self.send_to_processes_and_executors(process_id);
+        }
+
+        // schedule the next periodic event
+        self.schedule_periodic_executed_notification(process_id, delay);
     }
 
     fn handle_submit_to_proc(&mut self, process_id: ProcessId, cmd: Command) {
@@ -482,15 +523,29 @@ where
             .schedule(self.simulation.time(), distance, action);
     }
 
-    /// Schedules the next periodic event.
-    fn schedule_event(
+    /// Schedules the next periodic process event.
+    fn schedule_periodic_process_event(
         &mut self,
         process_id: ProcessId,
         event: P::PeriodicEvent,
         delay: Duration,
     ) {
         // create action
-        let action = ScheduleAction::PeriodicEvent(process_id, event, delay);
+        let action =
+            ScheduleAction::PeriodicProcessEvent(process_id, event, delay);
+        self.schedule
+            .schedule(self.simulation.time(), delay, action);
+    }
+
+    /// Schedules the next periodic executed notification.
+    fn schedule_periodic_executed_notification(
+        &mut self,
+        process_id: ProcessId,
+        delay: Duration,
+    ) {
+        // create action
+        let action =
+            ScheduleAction::PeriodicExecutedNotification(process_id, delay);
         self.schedule
             .schedule(self.simulation.time(), delay, action);
     }
@@ -649,11 +704,20 @@ impl<Message: Debug, PeriodicEvent: Debug> fmt::Debug
             ScheduleAction::SendToClient(client_id, cmd_result) => {
                 write!(f, "SendToClient({}, {:?})", client_id, cmd_result)
             }
-            ScheduleAction::PeriodicEvent(process_id, event, delay) => write!(
-                f,
-                "PeriodicEvent({}, {:?}, {:?})",
-                process_id, event, delay
-            ),
+            ScheduleAction::PeriodicProcessEvent(process_id, event, delay) => {
+                write!(
+                    f,
+                    "PeriodicProcessEvent({}, {:?}, {:?})",
+                    process_id, event, delay
+                )
+            }
+            ScheduleAction::PeriodicExecutedNotification(process_id, delay) => {
+                write!(
+                    f,
+                    "PeriodicExecutedNotification({}, {:?})",
+                    process_id, delay
+                )
+            }
         }
     }
 }

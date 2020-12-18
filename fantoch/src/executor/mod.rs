@@ -16,7 +16,7 @@ pub use monitor::ExecutionOrderMonitor;
 use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
-use crate::protocol::MessageIndex;
+use crate::protocol::{Executed, MessageIndex};
 use crate::time::SysTime;
 use crate::util;
 use fantoch_prof::metrics::Metrics;
@@ -70,6 +70,14 @@ pub trait Executor: Clone {
     #[must_use]
     fn to_executors_iter(&mut self) -> ToExecutorsIter<'_, Self> {
         ToExecutorsIter { executor: self }
+    }
+
+    #[must_use]
+    fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
+        // protocols that are interested in notifying the worker
+        // `GC_WORKER_INDEX` (see fantoch::run::prelude) with these executed
+        // notifications should overwrite this
+        None
     }
 
     fn parallel() -> bool;

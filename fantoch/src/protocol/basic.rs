@@ -262,7 +262,7 @@ impl Basic {
     fn handle_mcommit_dot(&mut self, from: ProcessId, dot: Dot) {
         trace!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
-        self.gc_track.commit(dot);
+        self.gc_track.add_to_clock(dot);
     }
 
     // #[instrument(skip(self, from, committed))]
@@ -273,7 +273,7 @@ impl Basic {
             committed,
             from
         );
-        self.gc_track.committed_by(from, committed);
+        self.gc_track.update_clock_of(from, committed);
         // compute newly stable dots
         let stable = self.gc_track.stable();
         // create `ToForward` to self
@@ -301,7 +301,7 @@ impl Basic {
         trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
-        let committed = self.gc_track.committed();
+        let committed = self.gc_track.clock();
 
         // save new action
         self.to_processes.push(Action::ToSend {

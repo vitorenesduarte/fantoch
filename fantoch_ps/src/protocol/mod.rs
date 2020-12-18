@@ -49,14 +49,12 @@ mod tests {
 
     macro_rules! config {
         ($n:expr, $f:expr) => {{
-            let mut config = Config::new($n, $f);
-            config.set_executor_monitor_execution_order(true);
+            let config = Config::new($n, $f);
             config
         }};
         ($n:expr, $f:expr, $leader:expr) => {{
             let mut config = Config::new($n, $f);
             config.set_leader($leader);
-            config.set_executor_monitor_execution_order(true);
             config
         }};
     }
@@ -66,14 +64,20 @@ mod tests {
             let mut config = Config::new($n, $f);
             // always set `newt_detached_send_interval`
             config.set_newt_detached_send_interval(Duration::from_millis(100));
-            config.set_executor_monitor_execution_order(true);
             config
         }};
         ($n:expr, $f:expr, $clock_bump_interval:expr) => {{
             let mut config = newt_config!($n, $f);
             config.set_newt_tiny_quorums(true);
             config.set_newt_clock_bump_interval($clock_bump_interval);
-            config.set_executor_monitor_execution_order(true);
+            config
+        }};
+    }
+
+    macro_rules! caesar_config {
+        ($n:expr, $f:expr, $wait:expr) => {{
+            let mut config = Config::new($n, $f);
+            config.set_caesar_wait_condition($wait);
             config
         }};
     }
@@ -552,30 +556,63 @@ mod tests {
 
     // ---- caesar tests ---- //
     #[test]
-    fn sim_caesar_3_1_test() {
+    fn sim_caesar_wait_3_1_test() {
         let _slow_paths = sim_test::<CaesarSequential>(
-            config!(3, 1),
+            caesar_config!(3, 1, true),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
     }
 
     #[test]
-    fn sim_caesar_5_2_test() {
+    fn sim_caesar_3_1_no_wait_test() {
         let _slow_paths = sim_test::<CaesarSequential>(
-            config!(5, 2),
+            caesar_config!(3, 1, false),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
     }
 
     #[test]
-    fn run_caesar_3_1_sequential_test() {
+    fn sim_caesar_5_2_wait_test() {
+        let _slow_paths = sim_test::<CaesarSequential>(
+            caesar_config!(5, 2, true),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn sim_caesar_5_2_no_wait_test() {
+        let _slow_paths = sim_test::<CaesarSequential>(
+            caesar_config!(5, 2, false),
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn run_caesar_3_1_wait_sequential_test() {
         // caesar sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
         let _slow_paths = run_test::<CaesarSequential>(
-            config!(3, 1),
+            caesar_config!(3, 1, true),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    #[test]
+    fn run_caesar_3_1_no_wait_sequential_test() {
+        // caesar sequential can only handle one worker and one executor
+        let workers = 1;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarSequential>(
+            caesar_config!(3, 1, false),
             SHARD_COUNT,
             workers,
             executors,
@@ -587,20 +624,73 @@ mod tests {
     // TODO
     #[ignore]
     #[test]
-    fn run_caesar_locked_test() {
+    fn run_caesar_3_1_wait_locked_test() {
         // caesar locked can handle as many workers as we want but only one
         // executor
         let workers = 4;
         let executors = 1;
-        let slow_paths = run_test::<CaesarLocked>(
-            config!(3, 1),
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(3, 1, true),
             SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+    }
+
+    // TODO
+    #[ignore]
+    #[test]
+    fn run_caesar_3_1_no_wait_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(3, 1, false),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    // TODO
+    #[ignore]
+    #[test]
+    fn run_caesar_5_2_wait_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(5, 2, true),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+    }
+
+    // TODO
+    #[ignore]
+    #[test]
+    fn run_caesar_5_2_no_wait_locked_test() {
+        // caesar locked can handle as many workers as we want but only one
+        // executor
+        let workers = 4;
+        let executors = 1;
+        let _slow_paths = run_test::<CaesarLocked>(
+            caesar_config!(5, 2, false),
+            SHARD_COUNT,
+            workers,
+            executors,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
     }
 
     // ---- fpaxos tests ---- //
@@ -686,11 +776,7 @@ mod tests {
     where
         P: Protocol + Send + 'static,
     {
-        // make sure stability is running
-        config.set_gc_interval(Duration::from_millis(100));
-
-        // set number of shards
-        config.set_shard_count(shard_count);
+        update_config(&mut config, shard_count);
 
         // create workload
         let keys_per_command = 2;
@@ -751,14 +837,13 @@ mod tests {
         commands_per_client: usize,
         clients_per_process: usize,
     ) -> usize {
-        // make sure stability is running
-        config.set_gc_interval(Duration::from_millis(100));
+        let shard_count = 1;
+        update_config(&mut config, shard_count);
 
         // planet
         let planet = Planet::new();
 
         // clients workload
-        let shard_count = 1;
         let keys_per_command = 2;
         let payload_size = 1;
         let key_gen = KeyGen::ConflictRate {
@@ -817,6 +902,23 @@ mod tests {
         check_monitors(executors_monitors);
 
         check_metrics(config, commands_per_client, clients_per_process, metrics)
+    }
+
+    fn update_config(config: &mut Config, shard_count: usize) {
+        // make sure execution order is monitored
+        config.set_executor_monitor_execution_order(true);
+
+        // make sure stability is running
+        config.set_gc_interval(Duration::from_millis(100));
+
+        // make sure executed notification are being sent (which it will affect
+        // the protocols that have implemented such functionality)
+        config.set_executor_executed_notification_interval(
+            Duration::from_millis(100),
+        );
+
+        // set number of shards
+        config.set_shard_count(shard_count);
     }
 
     fn check_monitors(

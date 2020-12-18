@@ -11,52 +11,59 @@ pub struct GCTrack {
     n: usize,
     // the next 3 variables will be updated by the single process responsible
     // for GC
-    committed: AEClock<ProcessId>,
+    my_clock: AEClock<ProcessId>,
     all_but_me: HashMap<ProcessId, VClock<ProcessId>>,
     previous_stable: VClock<ProcessId>,
 }
 
 impl GCTrack {
     pub fn new(process_id: ProcessId, shard_id: ShardId, n: usize) -> Self {
-        // committed clocks from all processes but self
+        // clocks from all processes but self
         let all_but_me = HashMap::with_capacity(n - 1);
 
         Self {
             process_id,
             shard_id,
             n,
-            committed: Self::bottom_aeclock(shard_id, n),
+            my_clock: Self::bottom_aeclock(shard_id, n),
             all_but_me,
             previous_stable: Self::bottom_vclock(shard_id, n),
         }
     }
 
-    /// Records that a command has been committed.
-    pub fn commit(&mut self, dot: Dot) {
-        self.committed.add(&dot.source(), dot.sequence());
-        // make sure we don't record dots from other shards
-        debug_assert_eq!(self.committed.len(), self.n);
-    }
-
-    /// Returns a clock representing the set of commands committed locally.
-    /// Note that there might be more commands committed than the ones being
+    /// Returns a clock representing the set of commands recorded locally.
+    /// Note that there might be more commands recorded than the ones being
     /// represented by the returned clock.
-    pub fn committed(&self) -> VClock<ProcessId> {
-        self.committed.frontier()
+    pub fn clock(&self) -> VClock<ProcessId> {
+        self.my_clock.frontier()
     }
 
-    /// Records that set of `committed` commands by process `from`.
-    pub fn committed_by(
+    /// Records this command.
+    pub fn add_to_clock(&mut self, dot: Dot) {
+        self.my_clock.add(&dot.source(), dot.sequence());
+        // make sure we don't record dots from other shards
+        debug_assert_eq!(self.my_clock.len(), self.n);
+    }
+
+    /// Updates local clock. It assumes that the clock passed as argument is
+    /// monotonic.
+    pub fn update_clock(&mut self, clock: AEClock<ProcessId>) {
+        self.my_clock = clock;
+        debug_assert_eq!(self.my_clock.len(), self.n);
+    }
+
+    /// Records that set of commands by process `from`.
+    pub fn update_clock_of(
         &mut self,
         from: ProcessId,
-        committed: VClock<ProcessId>,
+        clock: VClock<ProcessId>,
     ) {
         if let Some(current) = self.all_but_me.get_mut(&from) {
             // accumulate new knowledge; simply replacing it doesn't work since
             // messages can be reordered
-            current.join(&committed);
+            current.join(&clock);
         } else {
-            self.all_but_me.insert(from, committed);
+            self.all_but_me.insert(from, clock);
         }
     }
 
@@ -118,7 +125,7 @@ impl GCTrack {
         }
 
         // start from our own frontier
-        let mut stable = self.committed.frontier();
+        let mut stable = self.my_clock.frontier();
         // and intersect with all the other clocks
         self.all_but_me.values().for_each(|clock| {
             stable.meet(clock);
@@ -160,7 +167,7 @@ mod tests {
         let mut gc2 = GCTrack::new(2, shard_id, n);
 
         // there's nothing committed and nothing stable
-        assert_eq!(gc.committed(), vclock(0, 0));
+        assert_eq!(gc.clock(), vclock(0, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
@@ -170,32 +177,32 @@ mod tests {
         let dot13 = Dot::new(1, 3);
 
         // and commit dot12 locally
-        gc.commit(dot12);
+        gc.add_to_clock(dot12);
 
         // this doesn't change anything
-        assert_eq!(gc.committed(), vclock(0, 0));
+        assert_eq!(gc.clock(), vclock(0, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // however, if we also commit dot11, the committed clock will change
-        gc.commit(dot11);
-        assert_eq!(gc.committed(), vclock(2, 0));
+        gc.add_to_clock(dot11);
+        assert_eq!(gc.clock(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // if we update with the committed clock from process 2 nothing changes
-        gc.committed_by(2, gc2.committed());
-        assert_eq!(gc.committed(), vclock(2, 0));
+        gc.update_clock_of(2, gc2.clock());
+        assert_eq!(gc.clock(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's commit dot11 and dot13 at process 2
-        gc2.commit(dot11);
-        gc2.commit(dot13);
+        gc2.add_to_clock(dot11);
+        gc2.add_to_clock(dot13);
 
         // now dot11 is stable at process 1
-        gc.committed_by(2, gc2.committed());
-        assert_eq!(gc.committed(), vclock(2, 0));
+        gc.update_clock_of(2, gc2.clock());
+        assert_eq!(gc.clock(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(1, 0));
         assert_eq!(stable_dots(gc.stable()), vec![dot11]);
 
@@ -204,12 +211,12 @@ mod tests {
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's commit dot13 at process 1 and dot12 at process 2
-        gc.commit(dot13);
-        gc2.commit(dot12);
+        gc.add_to_clock(dot13);
+        gc2.add_to_clock(dot12);
 
         // now both dot12 and dot13 are stable at process 1
-        gc.committed_by(2, gc2.committed());
-        assert_eq!(gc.committed(), vclock(3, 0));
+        gc.update_clock_of(2, gc2.clock());
+        assert_eq!(gc.clock(), vclock(3, 0));
         assert_eq!(gc.stable_clock(), vclock(3, 0));
         assert_eq!(stable_dots(gc.stable()), vec![dot12, dot13]);
         assert_eq!(stable_dots(gc.stable()), vec![]);

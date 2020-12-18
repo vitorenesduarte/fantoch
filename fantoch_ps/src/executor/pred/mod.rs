@@ -77,6 +77,10 @@ impl PredecessorsGraph {
         std::mem::take(&mut self.to_execute)
     }
 
+    fn executed(&self) -> AEClock<ProcessId> {
+        self.executed_clock.clone()
+    }
+
     fn metrics(&self) -> &ExecutorMetrics {
         &self.metrics
     }

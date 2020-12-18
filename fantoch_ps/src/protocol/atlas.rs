@@ -652,7 +652,7 @@ impl<KD: KeyDeps> Atlas<KD> {
             _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
-        self.gc_track.commit(dot);
+        self.gc_track.add_to_clock(dot);
     }
 
     // #[instrument(skip(self, from, committed, _time))]
@@ -669,7 +669,7 @@ impl<KD: KeyDeps> Atlas<KD> {
             from,
             _time.micros()
         );
-        self.gc_track.committed_by(from, committed);
+        self.gc_track.update_clock_of(from, committed);
         // compute newly stable dots
         let stable = self.gc_track.stable();
         // create `ToForward` to self
@@ -708,7 +708,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         );
 
         // retrieve the committed clock
-        let committed = self.gc_track.committed();
+        let committed = self.gc_track.clock();
 
         // save new action
         self.to_processes.push(Action::ToSend {
