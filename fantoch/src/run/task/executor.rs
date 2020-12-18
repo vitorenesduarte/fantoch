@@ -134,6 +134,10 @@ async fn executor_task<P>(
                     cleanup_tick(&mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
                     cleanup_delay = gen_cleanup_delay();
                 }
+                _ = &mut executed_notification_delay => {
+                    executed_notification_tick::<P>(&mut executor, &mut executors_to_workers, &time).await;
+                    executed_notification_delay = gen_executed_notification_delay();
+                }
                 _ = &mut metrics_delay  => {
                     metrics_tick::<P>(executor_index, &mut executor, &mut to_metrics_logger).await;
                     metrics_delay = gen_metrics_delay();

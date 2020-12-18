@@ -689,6 +689,12 @@ mod tests {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
 
+        // make sure executed notification are being sent (which it will affect
+        // the protocols that have implemented such functionality)
+        config.set_executor_executed_notification_interval(
+            Duration::from_millis(100),
+        );
+
         // set number of shards
         config.set_shard_count(shard_count);
 
