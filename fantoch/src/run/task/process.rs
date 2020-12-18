@@ -499,7 +499,7 @@ async fn process_task<P, R>(
                 selected_from_executors(worker_index, executed, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
             }
             cmd = from_clients.recv() => {
-                selected_from_client(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
+                selected_from_clients(worker_index, cmd, &mut process, &mut to_writers, &mut reader_to_workers, &mut to_executors, &mut to_execution_logger, &time).await
             }
             _ = interval.tick()  => {
                 if let Some(to_metrics_logger) = to_metrics_logger.as_mut() {
@@ -695,7 +695,7 @@ pub async fn send_to_one_writer<P>(
     }
 }
 
-async fn selected_from_client<P>(
+async fn selected_from_clients<P>(
     worker_index: usize,
     cmd: Option<(Option<Dot>, Command)>,
     process: &mut P,
@@ -709,7 +709,7 @@ async fn selected_from_client<P>(
 {
     trace!("[server] from clients: {:?}", cmd);
     if let Some((dot, cmd)) = cmd {
-        handle_from_client(
+        handle_from_clients(
             worker_index,
             dot,
             cmd,
@@ -722,11 +722,11 @@ async fn selected_from_client<P>(
         )
         .await
     } else {
-        warn!("[server] error while receiving new command from executor");
+        warn!("[server] error while receiving new command from clients");
     }
 }
 
-async fn handle_from_client<P>(
+async fn handle_from_clients<P>(
     worker_index: usize,
     dot: Option<Dot>,
     cmd: Command,
@@ -833,7 +833,7 @@ async fn selected_from_executors<P>(
 ) where
     P: Protocol + 'static,
 {
-    trace!("[server] from executor: {:?}", executed);
+    trace!("[server] from executors: {:?}", executed);
     if let Some(executed) = executed {
         handle_from_executors(
             worker_index,

@@ -284,9 +284,6 @@ impl<KC: KeyClocks> Caesar<KC> {
         drop(info);
         drop(info_ref);
 
-        // we send an ok if no command is blocking this command
-        let ok = blocked_by.is_empty();
-
         // decision tracks what we should do in the end, after iterating each
         // of the commands that is blocking us
         #[derive(PartialEq, Eq, Debug)]
@@ -298,16 +295,19 @@ impl<KC: KeyClocks> Caesar<KC> {
         let mut reply = Reply::WAIT;
         let mut not_blocked_by = HashSet::new();
 
+        // we send an ok if no command is blocking this command
+        let ok = blocked_by.is_empty();
+
         if ok {
             reply = Reply::ACCEPT;
         } else if !self.wait_condition {
             // if the wait condition is not enabled, reject right away
             reply = Reply::REJECT;
         } else {
-            // if there are command blocking us, iterate each of them and check
+            // if there are commands blocking us, iterate each of them and check
             // if they are still blocking us (in the meantime, then may have
-            // moved to the `ACCEPT` or `COMMIT` phase, and we might be able to
-            // ignore them)
+            // been moved to the `ACCEPT` or `COMMIT` phase, and in that case we
+            // might be able to ignore them)
             trace!(
                 "p{}: MPropose({:?}) blocked by {:?} | time={}",
                 self.id(),
@@ -318,17 +318,19 @@ impl<KC: KeyClocks> Caesar<KC> {
             for blocked_by_dot in blocked_by {
                 if let Some(blocked_by_dot_ref) = self.cmds.get(blocked_by_dot)
                 {
-                    // in this the command hasn't been GCed since we got it from
-                    // the key clocks
+                    // in this case, this the command hasn't been GCed since we
+                    // got it from the key clocks, so we need to consider it
                     let blocked_by_info = blocked_by_dot_ref.read();
 
-                    // check whether this command already has a "reasonable"
+                    // check whether this command has already a "good enough"
                     // clock and dep
                     let has_clock_and_dep = matches!(
                         blocked_by_info.status,
                         Status::ACCEPT | Status::COMMIT
                     );
                     if has_clock_and_dep {
+                        // if the clock and dep are "good enough", check if we
+                        // can ignore the command
                         let safe_to_ignore = Self::safe_to_ignore(
                             self.bp.process_id,
                             dot,
@@ -346,13 +348,21 @@ impl<KC: KeyClocks> Caesar<KC> {
                             time.micros()
                         );
                         if safe_to_ignore {
-                            // the command can be ignored
+                            // the command can be ignored, and so we register
+                            // that this command is in fact not blocking our
+                            // command
                             not_blocked_by.insert(blocked_by_dot);
                         } else {
+                            // if there's a single command that can't be
+                            // ignored, our command must be rejected, and so we
+                            // `break` as there's no point in checking all the
+                            // other commands
                             reply = Reply::REJECT;
                             break;
                         }
                     } else {
+                        // if the clock and dep are not "good enough", we're
+                        // blocked by this command
                         trace!(
                             "p{}: MPropose({:?}) still blocked by {:?} | time={}",
                             self.bp.process_id,
@@ -363,8 +373,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                         // upgrade lock guard to a mutable one
                         drop(blocked_by_info);
                         let mut blocked_by_info = blocked_by_dot_ref.write();
-                        // register that this command is blocking our
-                        // command
+                        // register that this command is blocking our command
                         blocked_by_info.blocking.insert(dot);
                     }
                 } else {
@@ -375,8 +384,9 @@ impl<KC: KeyClocks> Caesar<KC> {
                         blocked_by_dot,
                         time.micros()
                     );
-                    // otherwise, the command has been GCed, and in that case
-                    // we simply record that it should be ignored
+                    // in this case, the command has been GCed, and for that
+                    // reason we simply record that it can be ignored
+                    // (as it has already been executed at all processes)
                     not_blocked_by.insert(blocked_by_dot);
                 }
             }
@@ -384,7 +394,8 @@ impl<KC: KeyClocks> Caesar<KC> {
             if not_blocked_by.len() == blocked_by_len {
                 // if in the end it turns out that we're not blocked by any
                 // command, accept this command:
-                // - in this case, we must still have `Decision::WAIT`
+                // - in this case, we must still have `Reply::WAIT`, or in other
+                //   words, it can't be `Reply::REJECT`
                 assert_eq!(reply, Reply::WAIT);
                 reply = Reply::ACCEPT;
             }
@@ -398,44 +409,49 @@ impl<KC: KeyClocks> Caesar<KC> {
             time.micros()
         );
 
-        // since we unlocked this command, maybe in the meantime it has been
-        // GCed, and if so it can be imply ignored
-        if let Some(info_ref) = self.cmds.get(dot) {
-            let mut info = info_ref.write();
+        // it's not possible that the command was GCed; for that, we would need
+        // to have executed it, but that's just not possible, as only this
+        // workers handles messages about this command; for this reason, we can
+        // have the `expect` below
+        let info_ref = self
+            .cmds
+            .get(dot)
+            .expect("the command must not have been GCed in the meantime");
+        let mut info = info_ref.write();
 
-            // only keep going if we're still at the PROPOSE phase
-            if info.status == Status::PROPOSE {
-                match reply {
-                    Reply::ACCEPT => {
-                        Self::accept_command(
-                            self.bp.process_id,
-                            dot,
-                            &mut info,
-                            &mut self.to_processes,
-                            time,
-                        );
-                    }
-                    Reply::REJECT => Self::reject_command(
-                        self.bp.process_id,
-                        dot,
-                        &mut info,
-                        &mut self.key_clocks,
-                        &mut self.to_processes,
-                        time,
-                    ),
-                    Reply::WAIT => {
-                        // in this case, we should wait; simply update the set
-                        // of commands we need to wait for (in the meantime we
-                        // may have decided to ignore some)
-                        for not_blocked_by_dot in not_blocked_by {
-                            info.blocked_by.remove(&not_blocked_by_dot);
-                        }
-                        // after this, we still must be blocking for some reason
-                        assert!(!info.blocked_by.is_empty());
-                    }
+        // for the same reason as above, the command phase must still be
+        // `Status::PROPOSE`
+        assert_eq!(info.status, Status::PROPOSE);
+
+        match reply {
+            Reply::ACCEPT => Self::accept_command(
+                self.bp.process_id,
+                dot,
+                &mut info,
+                &mut self.to_processes,
+                time,
+            ),
+            Reply::REJECT => Self::reject_command(
+                self.bp.process_id,
+                dot,
+                &mut info,
+                &mut self.key_clocks,
+                &mut self.to_processes,
+                time,
+            ),
+            Reply::WAIT => {
+                // in this case, we simply update the set of commands we need to
+                // wait for (since we may have decided to ignore some above)
+                for not_blocked_by_dot in not_blocked_by {
+                    info.blocked_by.remove(&not_blocked_by_dot);
                 }
+                // after this, we must still be blocked by some command
+                assert!(!info.blocked_by.is_empty());
             }
         }
+
+        drop(info);
+        drop(info_ref);
 
         // check if there's a buffered retry request; if yes, handle the retry
         // again (since now we have the payload)
@@ -591,14 +607,15 @@ impl<KC: KeyClocks> Caesar<KC> {
         info.deps = deps.clone();
         Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
-        // take set of commands that this command is blocking
+        // take the set of commands that this command is blocking and try to
+        // unblock them
         let blocking = std::mem::take(&mut info.blocking);
         drop(info);
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
 
+        // if we're not running gc, remove the dot info now
         if !self.gc_running() {
-            // if we're not running gc, remove the dot info now
             self.gc_command(dot);
         }
     }
@@ -664,7 +681,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         // save new action
         self.to_processes.push(Action::ToSend { target, msg });
 
-        // take set of commands that this command is blocking
+        // take the set of commands that this command is blocking and try to
+        // unblock them
         let blocking = std::mem::take(&mut info.blocking);
         drop(info);
         drop(info_ref);
@@ -840,8 +858,8 @@ impl<KC: KeyClocks> Caesar<KC> {
         // must be higher than ours (otherwise it couldn't have been
         // reported as blocking in the first place)
         assert!(my_clock < their_clock);
-        // since we (currently) have a lower clock that this command, it is
-        // only safe to ignore it we are included in its dependencies
+        // since we (currently) have a lower clock than the command blocking us,
+        // it is only safe to ignore it if we are included in its dependencies
         their_deps.contains(&my_dot)
     }
 
@@ -864,19 +882,19 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         for blocked_dot in blocking {
+            trace!(
+                "p{}: try_to_unblock({:?}) checking {:?} | time={}",
+                self.bp.process_id,
+                dot,
+                blocked_dot,
+                time.micros()
+            );
+
             if let Some(blocked_dot_info_ref) = self.cmds.get(blocked_dot) {
                 let mut blocked_dot_info = blocked_dot_info_ref.write();
 
-                trace!(
-                    "p{}: try_to_unblock({:?}) checking {:?} | time={}",
-                    self.bp.process_id,
-                    dot,
-                    blocked_dot,
-                    time.micros()
-                );
-
-                // only act if the blocked command is still at the `PROPOSE`
-                // phase
+                // we only need to accept/reject the blocked command if the
+                // command is still at the `PROPOSE` phase
                 if blocked_dot_info.status == Status::PROPOSE {
                     let safe_to_ignore = Self::safe_to_ignore(
                         self.bp.process_id,
@@ -891,6 +909,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                         // the set of commands that are blocking this blocked
                         // command
                         blocked_dot_info.blocked_by.remove(&dot);
+
                         if blocked_dot_info.blocked_by.is_empty() {
                             // ACCEPT the blocked command if it no longer has
                             // commands blocking it
@@ -904,7 +923,9 @@ impl<KC: KeyClocks> Caesar<KC> {
                         }
                     } else {
                         // REJECT the blocked command if it's not safe to ignore
-                        // this command
+                        // this command; this means that we reject the command
+                        // ASAP (i.e. we don't wait for all commands that are
+                        // blocking us)
                         Self::reject_command(
                             self.bp.process_id,
                             blocked_dot,

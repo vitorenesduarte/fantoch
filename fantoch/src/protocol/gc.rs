@@ -52,7 +52,7 @@ impl GCTrack {
         debug_assert_eq!(self.my_clock.len(), self.n);
     }
 
-    /// Records that set of commands by process `from`.
+    /// Records the set of commands by process `from`.
     pub fn update_clock_of(
         &mut self,
         from: ProcessId,

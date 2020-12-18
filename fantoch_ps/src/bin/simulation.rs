@@ -33,8 +33,8 @@ macro_rules! config {
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(10));
 
-        // make sure executed notification are being sent (which it will affect
-        // the protocols that have implemented such functionality)
+        // make sure executed notification are being sent (which will only
+        // affect the protocols that have implemented such functionality)
         config.set_executor_executed_notification_interval(
             Duration::from_millis(10),
         );
@@ -199,8 +199,8 @@ fn newt(aws: bool) {
             println!("CONFLICTS: {:?}", conflict_rate);
             clients_per_region.iter().for_each(|&clients| {
                 configs.iter().for_each(|&(protocol, mut config)| {
-                    // TODO check if the protocol is leader-based, and if yes, run
-                    // for all possible leader configurations
+                    // TODO check if the protocol is leader-based, and if yes,
+                    // run for all possible leader configurations
 
                     // set leader if FPaxos
                     if protocol == "FPaxos" {

@@ -101,7 +101,7 @@ where
                         .map(|(event, delay)| (process_id, event, delay)),
                 );
 
-                // save periodic executed notification
+                // save periodic executed notifications
                 let executed_notification_interval =
                     config.executor_executed_notification_interval();
                 periodic_executed_notifications
