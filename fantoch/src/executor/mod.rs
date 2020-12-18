@@ -16,15 +16,13 @@ pub use monitor::ExecutionOrderMonitor;
 use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
-use crate::protocol::MessageIndex;
+use crate::protocol::{Executed, MessageIndex};
 use crate::time::SysTime;
 use crate::util;
 use fantoch_prof::metrics::Metrics;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
-use std::time::Duration;
-use threshold::VClock;
 
 pub trait Executor: Clone {
     // TODO why is Send needed?
@@ -75,15 +73,10 @@ pub trait Executor: Clone {
     }
 
     #[must_use]
-    fn executed(&self) -> Option<(usize, VClock<ProcessId>, Duration)> {
-        // - the first component specifies the index of local worker process
-        // - the second component represents the set of `Dot`s that have been
-        //   executed at this executor (TODO: is there a more general
-        //   representation?)
-        // - the third component represents the delay between now and when this
-        //   method should be called again
-        // protocols that are interested in these notifications should overwrite
-        // this
+    fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
+        // protocols that are interested in notifying the worker
+        // `GC_WORKER_INDEX` (see fantoch::run::prelude) with these executed
+        // notifications should overwrite this
         None
     }
 
