@@ -3,7 +3,7 @@ use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use crate::id::{ClientId, Dot, ProcessId, ShardId};
-use crate::protocol::{MessageIndex, Protocol, ProtocolMetrics};
+use crate::protocol::{Executed, MessageIndex, Protocol, ProtocolMetrics};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -83,6 +83,7 @@ impl<P: Protocol> POEMessage<P> {
 }
 
 // list of channels used to communicate between tasks
+// TODO: remove most of these as it doesn't really help reading the code
 pub type ReaderReceiver<P> =
     ChannelReceiver<(ProcessId, ShardId, <P as Protocol>::Message)>;
 pub type WriterReceiver<P> = ChannelReceiver<Arc<POEMessage<P>>>;
@@ -94,6 +95,7 @@ pub type ServerToClientReceiver = ChannelReceiver<CommandResult>;
 pub type ServerToClientSender = ChannelSender<CommandResult>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
 pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
+pub type ExecutedReceiver = ChannelReceiver<Executed>;
 pub type SubmitReceiver = ChannelReceiver<(Option<Dot>, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
@@ -178,10 +180,19 @@ where
     }
 }
 
-// 4. executors receive messages from clients
+// 4. the worker `GC_WORKER_INDEX` receives executed notification messages from
+// executors
+pub type ExecutorsToWorkers = pool::ToPool<Executed>;
+impl pool::PoolIndex for Executed {
+    fn index(&self) -> Option<(usize, usize)> {
+        worker_index_no_shift(GC_WORKER_INDEX)
+    }
+}
+
+// 5. executors receive messages from clients
 pub type ClientToExecutors = pool::ToPool<ClientToExecutor>;
 
-// 5. executors receive messages from workers and reader tasks
+// 6. executors receive messages from workers and reader tasks
 pub type ToExecutors<P> =
     pool::ToPool<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
 // The following allows <<P as Protocol>::Executor as Executor>::ExecutionInfo

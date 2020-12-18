@@ -17,6 +17,7 @@ pub fn start_executors<P>(
     config: Config,
     to_executors_rxs: Vec<ExecutionInfoReceiver<P>>,
     client_to_executors_rxs: Vec<ClientToExecutorReceiver>,
+    executors_to_workers: ExecutorsToWorkers,
     shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
     to_executors: ToExecutors<P>,
     to_metrics_logger: Option<ExecutorMetricsSender>,
@@ -40,6 +41,7 @@ pub fn start_executors<P>(
             config,
             from_workers,
             from_clients,
+            executors_to_workers.clone(),
             shard_writers.clone(),
             to_executors.clone(),
             to_metrics_logger.clone(),
@@ -54,6 +56,7 @@ async fn executor_task<P>(
     config: Config,
     mut from_workers: ExecutionInfoReceiver<P>,
     mut from_clients: ClientToExecutorReceiver,
+    mut executors_to_workers: ExecutorsToWorkers,
     mut shard_writers: HashMap<ShardId, Vec<WriterSender<P>>>,
     mut to_executors: ToExecutors<P>,
     mut to_metrics_logger: Option<ExecutorMetricsSender>,
@@ -69,9 +72,14 @@ async fn executor_task<P>(
     // holder of all client info
     let mut to_clients = ToClients::new();
 
-    // create executors info interval
+    // create executors cleanup interval
     let gen_cleanup_delay = || time::sleep(config.executor_cleanup_interval());
     let mut cleanup_delay = gen_cleanup_delay();
+
+    // create executors executed notification delay
+    let gen_executed_notification_delay =
+        || time::sleep(config.executor_executed_notification_interval());
+    let mut executed_notification_delay = gen_executed_notification_delay();
 
     // create metrics interval
     let gen_metrics_delay =
@@ -102,6 +110,10 @@ async fn executor_task<P>(
                 _ = &mut cleanup_delay => {
                     cleanup_tick(&mut executor, shard_id, &mut shard_writers, &mut to_executors, &mut to_clients, &time).await;
                     cleanup_delay = gen_cleanup_delay();
+                }
+                _ = &mut executed_notification_delay => {
+                    executed_notification_tick::<P>(&mut executor, &mut executors_to_workers, &time).await;
+                    executed_notification_delay = gen_executed_notification_delay();
                 }
                 _ = &mut metrics_delay => {
                     metrics_tick::<P>(executor_index, &mut executor, &mut to_metrics_logger).await;
@@ -274,6 +286,26 @@ async fn cleanup_tick<P>(
     executor.cleanup(time);
     fetch_results(executor, shard_id, shard_writers, to_executors, to_clients)
         .await;
+}
+
+async fn executed_notification_tick<P>(
+    executor: &mut P::Executor,
+    executors_to_workers: &mut ExecutorsToWorkers,
+    time: &RunTime,
+) where
+    P: Protocol + 'static,
+{
+    trace!("[executor] executed");
+    // TODO: if `executor.executed` takes `&self` instead of `&mut self`, rustc
+    // complains that `&P::Executor` is not `Send`; why is that?
+    if let Some(executed) = executor.executed(time) {
+        if let Err(e) = executors_to_workers.forward(executed).await {
+            warn!(
+                "[executor] error while sending executed to workers: {:?}",
+                e
+            );
+        }
+    }
 }
 
 async fn metrics_tick<P>(
