@@ -49,14 +49,12 @@ mod tests {
 
     macro_rules! config {
         ($n:expr, $f:expr) => {{
-            let mut config = Config::new($n, $f);
-            config.set_executor_monitor_execution_order(true);
+            let config = Config::new($n, $f);
             config
         }};
         ($n:expr, $f:expr, $leader:expr) => {{
             let mut config = Config::new($n, $f);
             config.set_leader($leader);
-            config.set_executor_monitor_execution_order(true);
             config
         }};
     }
@@ -66,14 +64,12 @@ mod tests {
             let mut config = Config::new($n, $f);
             // always set `newt_detached_send_interval`
             config.set_newt_detached_send_interval(Duration::from_millis(100));
-            config.set_executor_monitor_execution_order(true);
             config
         }};
         ($n:expr, $f:expr, $clock_bump_interval:expr) => {{
             let mut config = newt_config!($n, $f);
             config.set_newt_tiny_quorums(true);
             config.set_newt_clock_bump_interval($clock_bump_interval);
-            config.set_executor_monitor_execution_order(true);
             config
         }};
     }
@@ -686,17 +682,7 @@ mod tests {
     where
         P: Protocol + Send + 'static,
     {
-        // make sure stability is running
-        config.set_gc_interval(Duration::from_millis(100));
-
-        // make sure executed notification are being sent (which it will affect
-        // the protocols that have implemented such functionality)
-        config.set_executor_executed_notification_interval(
-            Duration::from_millis(100),
-        );
-
-        // set number of shards
-        config.set_shard_count(shard_count);
+        update_config(&mut config, shard_count);
 
         // create workload
         let keys_per_command = 2;
@@ -757,14 +743,13 @@ mod tests {
         commands_per_client: usize,
         clients_per_process: usize,
     ) -> usize {
-        // make sure stability is running
-        config.set_gc_interval(Duration::from_millis(100));
+        let shard_count = 1;
+        update_config(&mut config, shard_count);
 
         // planet
         let planet = Planet::new();
 
         // clients workload
-        let shard_count = 1;
         let keys_per_command = 2;
         let payload_size = 1;
         let key_gen = KeyGen::ConflictRate {
@@ -823,6 +808,23 @@ mod tests {
         check_monitors(executors_monitors);
 
         check_metrics(config, commands_per_client, clients_per_process, metrics)
+    }
+
+    fn update_config(config: &mut Config, shard_count: usize) {
+        // make sure execution order is monitored
+        config.set_executor_monitor_execution_order(true);
+
+        // make sure stability is running
+        config.set_gc_interval(Duration::from_millis(100));
+
+        // make sure executed notification are being sent (which it will affect
+        // the protocols that have implemented such functionality)
+        config.set_executor_executed_notification_interval(
+            Duration::from_millis(100),
+        );
+
+        // set number of shards
+        config.set_shard_count(shard_count);
     }
 
     fn check_monitors(
