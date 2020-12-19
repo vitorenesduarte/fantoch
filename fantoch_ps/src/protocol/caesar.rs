@@ -8,7 +8,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
-    MessageIndex, Protocol, ProtocolMetrics,
+    MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -447,6 +447,9 @@ impl<KC: KeyClocks> Caesar<KC> {
                 }
                 // after this, we must still be blocked by some command
                 assert!(!info.blocked_by.is_empty());
+
+                // save the current time as the moment where we started waiting
+                info.wait_start_time_ms = Some(time.millis());
             }
         }
 
@@ -896,6 +899,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                 // we only need to accept/reject the blocked command if the
                 // command is still at the `PROPOSE` phase
                 if blocked_dot_info.status == Status::PROPOSE {
+                    let mut end_of_wait = false;
                     let safe_to_ignore = Self::safe_to_ignore(
                         self.bp.process_id,
                         blocked_dot,
@@ -920,6 +924,8 @@ impl<KC: KeyClocks> Caesar<KC> {
                                 &mut self.to_processes,
                                 time,
                             );
+                            // we're done waiting
+                            end_of_wait = true;
                         }
                     } else {
                         // REJECT the blocked command if it's not safe to ignore
@@ -933,6 +939,24 @@ impl<KC: KeyClocks> Caesar<KC> {
                             &mut self.key_clocks,
                             &mut self.to_processes,
                             time,
+                        );
+                        // we're done waiting
+                        end_of_wait = true;
+                    }
+
+                    if end_of_wait {
+                        // get wait start and end time
+                        let wait_start_time_ms =
+                            blocked_dot_info.wait_start_time_ms.take().expect(
+                                "a blocked command must have a wait start time",
+                            );
+                        let wait_end_time_ms = time.millis();
+
+                        // compute total wait time and collect this metric
+                        let wait_time = wait_end_time_ms - wait_start_time_ms;
+                        self.bp.collect_metric(
+                            ProtocolMetricsKind::WaitConditionDelay,
+                            wait_time,
                         );
                     }
                 } else {
@@ -1055,6 +1079,9 @@ struct CaesarInfo {
     // `quorum_retries` is used by the coordinator to aggregate dependencies
     // reported in `MRetry` messages
     quorum_retries: QuorumRetries,
+    // time in milliseconds where this process decided to start the wait
+    // condition
+    wait_start_time_ms: Option<u64>,
 }
 
 impl Info for CaesarInfo {
@@ -1079,6 +1106,7 @@ impl Info for CaesarInfo {
                 write_quorum_size,
             ),
             quorum_retries: QuorumRetries::new(write_quorum_size),
+            wait_start_time_ms: None,
         }
     }
 }

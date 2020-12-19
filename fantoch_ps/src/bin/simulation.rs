@@ -202,8 +202,9 @@ fn newt(aws: bool) {
                 println!("CONFLICTS: {:?}", conflict_rate);
                 clients_per_region.iter().for_each(|&clients| {
                     configs.iter().for_each(|&(protocol, mut config)| {
-                        // TODO check if the protocol is leader-based, and if yes,
-                        // run for all possible leader configurations
+                        // TODO check if the protocol is leader-based, and if
+                        // yes, run for all possible
+                        // leader configurations
 
                         // set leader if FPaxos
                         if protocol == "FPaxos" {

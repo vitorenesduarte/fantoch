@@ -182,7 +182,6 @@ impl BaseProcess {
     }
 
     // Increment fast path count.
-    // TODO  rename
     pub fn fast_path(&mut self) {
         self.metrics.aggregate(ProtocolMetricsKind::FastPath, 1);
     }
@@ -196,6 +195,11 @@ impl BaseProcess {
     pub fn stable(&mut self, len: usize) {
         self.metrics
             .aggregate(ProtocolMetricsKind::Stable, len as u64);
+    }
+
+    // Collect a new metric.
+    pub fn collect_metric(&mut self, kind: ProtocolMetricsKind, value: u64) {
+        self.metrics.collect(kind, value);
     }
 }
 

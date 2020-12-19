@@ -148,6 +148,7 @@ pub enum ProtocolMetricsKind {
     FastPath,
     SlowPath,
     Stable,
+    WaitConditionDelay,
 }
 
 impl Debug for ProtocolMetricsKind {
@@ -156,6 +157,9 @@ impl Debug for ProtocolMetricsKind {
             ProtocolMetricsKind::FastPath => write!(f, "fast_path"),
             ProtocolMetricsKind::SlowPath => write!(f, "slow_path"),
             ProtocolMetricsKind::Stable => write!(f, "stable"),
+            ProtocolMetricsKind::WaitConditionDelay => {
+                write!(f, "wait_condition_delay")
+            }
         }
     }
 }
