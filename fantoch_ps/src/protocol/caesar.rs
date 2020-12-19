@@ -262,6 +262,11 @@ impl<KC: KeyClocks> Caesar<KC> {
             return;
         }
 
+        // register start time if we're the coordinator
+        if dot.source() == from {
+            info.start_time_ms = Some(time.millis());
+        }
+
         // if yes, compute set of predecessors
         let mut blocked_by = HashSet::new();
         let deps = self.key_clocks.predecessors(
@@ -598,6 +603,21 @@ impl<KC: KeyClocks> Caesar<KC> {
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             return;
+        }
+
+        // register commit time if we're the coordinator
+        if dot.source() == from {
+            let start_time_ms = info.start_time_ms.take().expect(
+                "the command should have been started by its coordinator",
+            );
+            let end_time_ms = time.millis();
+
+            // compute commit latency and collect this metric
+            let commit_latency = end_time_ms - start_time_ms;
+            self.bp.collect_metric(
+                ProtocolMetricsKind::CommitLatency,
+                commit_latency,
+            );
         }
 
         // create execution info
@@ -952,11 +972,11 @@ impl<KC: KeyClocks> Caesar<KC> {
                             );
                         let wait_end_time_ms = time.millis();
 
-                        // compute total wait time and collect this metric
-                        let wait_time = wait_end_time_ms - wait_start_time_ms;
+                        // compute wait condition delay and collect this metric
+                        let wait_delay = wait_end_time_ms - wait_start_time_ms;
                         self.bp.collect_metric(
                             ProtocolMetricsKind::WaitConditionDelay,
-                            wait_time,
+                            wait_delay,
                         );
                     }
                 } else {
@@ -1079,7 +1099,9 @@ struct CaesarInfo {
     // `quorum_retries` is used by the coordinator to aggregate dependencies
     // reported in `MRetry` messages
     quorum_retries: QuorumRetries,
-    // time in milliseconds where this process decided to start the wait
+    // time in milliseconds when the coordinator received the command
+    start_time_ms: Option<u64>,
+    // time in milliseconds when this process decided to start the wait
     // condition
     wait_start_time_ms: Option<u64>,
 }
@@ -1106,6 +1128,7 @@ impl Info for CaesarInfo {
                 write_quorum_size,
             ),
             quorum_retries: QuorumRetries::new(write_quorum_size),
+            start_time_ms: None,
             wait_start_time_ms: None,
         }
     }

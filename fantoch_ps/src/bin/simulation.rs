@@ -549,6 +549,7 @@ fn handle_run_result(
     let mut fast_paths = 0;
     let mut slow_paths = 0;
     let mut wait_condition_delay = Histogram::new();
+    let mut commit_latency = Histogram::new();
     let mut execution_delay = Histogram::new();
 
     // show processes stats
@@ -570,6 +571,8 @@ fn handle_run_result(
                 .unwrap_or_default();
             let process_wait_condition_delay = process_metrics
                 .get_collected(ProtocolMetricsKind::WaitConditionDelay);
+            let process_commit_latency =
+                process_metrics.get_collected(ProtocolMetricsKind::CommitLatency);
             let executor_execution_delay = executor_metrics
                 .get_collected(ExecutorMetricsKind::ExecutionDelay);
 
@@ -577,6 +580,9 @@ fn handle_run_result(
             slow_paths += process_slow_paths;
             if let Some(h) = process_wait_condition_delay {
                 wait_condition_delay.merge(h);
+            }
+            if let Some(h) = process_commit_latency {
+                commit_latency.merge(h);
             }
             if let Some(h) = executor_execution_delay {
                 execution_delay.merge(h);
@@ -588,7 +594,7 @@ fn handle_run_result(
     let fp_percentage = (fast_paths as f64 * 100f64) / total as f64;
 
     // compute clients stats
-    let histogram = client_latencies.into_iter().fold(
+    let execution_latency = client_latencies.into_iter().fold(
         Histogram::new(),
         |mut histogram_acc, (region, (_issued_commands, histogram))| {
             println!("region = {:<14} | {:?}", region.name(), histogram);
@@ -613,11 +619,12 @@ fn handle_run_result(
         config.f(),
         clients_per_region
     );
-    println!("{} | latency             : {:?}", prefix, histogram);
-    println!("{} | fast path rate      : {:<7.1}", prefix, fp_percentage);
     println!(
         "{} | wait condition delay: {:?}",
         prefix, wait_condition_delay
     );
+    println!("{} | commit latency      : {:?}", prefix, commit_latency);
+    println!("{} | execution latency   : {:?}", prefix, execution_latency);
     println!("{} | execution delay     : {:?}", prefix, execution_delay);
+    println!("{} | fast path rate      : {:<7.1}", prefix, fp_percentage);
 }
