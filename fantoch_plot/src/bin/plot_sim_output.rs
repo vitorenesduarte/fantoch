@@ -50,6 +50,7 @@ enum PlotType {
     WaitConditionDelay,
     CommitLatency,
     ExecutionLatency,
+    ExecutionDelay,
 }
 
 impl PlotType {
@@ -58,6 +59,7 @@ impl PlotType {
             PlotType::WaitConditionDelay => "Wait Condition Delay",
             PlotType::CommitLatency => "Commit Latency",
             PlotType::ExecutionLatency => "Execution Latency",
+            PlotType::ExecutionDelay => "Execution Delay",
         }
     }
 }
@@ -68,6 +70,7 @@ impl fmt::Debug for PlotType {
             PlotType::WaitConditionDelay => write!(f, "wait_condition_delay"),
             PlotType::CommitLatency => write!(f, "commit_latency"),
             PlotType::ExecutionLatency => write!(f, "execution_latency"),
+            PlotType::ExecutionDelay => write!(f, "execution_delay"),
         }
     }
 }
@@ -151,6 +154,7 @@ fn plot_data(all_data: HashMap<Config, Data>) -> Result<(), Report> {
         PlotType::WaitConditionDelay,
         PlotType::CommitLatency,
         PlotType::ExecutionLatency,
+        PlotType::ExecutionDelay,
     ];
     let metric_types =
         vec![MetricType::Avg, MetricType::P99, MetricType::P99_9];
@@ -193,7 +197,6 @@ fn plot(
     cs: Vec<usize>,
     all_data: &HashMap<Config, Data>,
 ) -> Result<(), Report> {
-    let mut skip = false;
     let data: Vec<_> = cs
         .into_iter()
         .map(|c| {
@@ -220,7 +223,6 @@ fn plot(
                         // there can only be no value if the plot type is wait
                         // condition
                         assert_eq!(plot_type, PlotType::WaitConditionDelay);
-                        skip = true;
                         0
                     }
                 })
@@ -228,22 +230,10 @@ fn plot(
             (c, values)
         })
         .collect();
-    if skip {
-        Ok(())
-    } else {
-        let title =
-            format!("{} (pool size = {:?})", plot_type.title(), pool_size);
-        let output_file =
-            format!("{}_{:?}_{:?}.pdf", pool_size, metric_type, plot_type);
-        latency_plot(
-            title,
-            metric_type,
-            conflicts,
-            data,
-            PLOT_DIR,
-            &output_file,
-        )
-    }
+    let title = format!("{} (pool size = {:?})", plot_type.title(), pool_size);
+    let output_file =
+        format!("{}_{:?}_{:?}.pdf", pool_size, metric_type, plot_type);
+    latency_plot(title, metric_type, conflicts, data, PLOT_DIR, &output_file)
 }
 
 fn latency_plot(
@@ -356,6 +346,7 @@ fn get_plot_value(
         PlotType::WaitConditionDelay => &data.wait_condition_delay,
         PlotType::CommitLatency => &data.commit_latency,
         PlotType::ExecutionLatency => &data.execution_latency,
+        PlotType::ExecutionDelay => &data.execution_delay,
     };
     histogram.as_ref().map(|histogram| match metric_type {
         MetricType::Avg => histogram.avg,
