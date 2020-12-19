@@ -237,18 +237,22 @@ impl Histogram {
 
 impl fmt::Debug for Histogram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "min={:<6} max={:<6} std={:<6} avg={:<6} p95={:<6} p99={:<6} p99.9={:<6} p99.99={:<6}",
-            self.min().value().round(),
-            self.max().value().round(),
-            self.stddev().value().round(),
-            self.mean().value().round(),
-            self.percentile(0.95).value().round(),
-            self.percentile(0.99).value().round(),
-            self.percentile(0.999).value().round(),
-            self.percentile(0.9999).value().round()
-        )
+        if self.values.is_empty() {
+            write!(f, "(empty)")
+        } else {
+            write!(
+                f,
+                "avg={:<5} std={:<5} p95={:<5} p99={:<5} p99.9={:<5} p99.99={:<5} min={:<5} max={:<5}",
+                self.mean().value().round(),
+                self.stddev().value().round(),
+                self.percentile(0.95).value().round(),
+                self.percentile(0.99).value().round(),
+                self.percentile(0.999).value().round(),
+                self.percentile(0.9999).value().round(),
+                self.min().value().round(),
+                self.max().value().round(),
+            )
+        }
     }
 }
 

@@ -755,10 +755,12 @@ mod tests {
     where
         P: Protocol,
     {
-        extract_metrics(worker.metrics())
+        extract_process_metrics(worker.metrics())
     }
 
-    fn extract_metrics(metrics: &ProtocolMetrics) -> (usize, usize, usize) {
+    fn extract_process_metrics(
+        metrics: &ProtocolMetrics,
+    ) -> (usize, usize, usize) {
         let metric = |kind| {
             metrics.get_aggregated(kind).cloned().unwrap_or_default() as usize
         };
@@ -875,15 +877,14 @@ mod tests {
 
         // run simulation until the clients end + another 10 seconds (for GC)
         let extra_sim_time = Some(Duration::from_secs(10));
-        let (processes_metrics, executors_monitors, _) =
-            runner.run(extra_sim_time);
+        let (metrics, executors_monitors, _) = runner.run(extra_sim_time);
 
         // fetch slow paths and stable count from metrics
-        let metrics = processes_metrics
+        let metrics = metrics
             .into_iter()
-            .map(|(process_id, process_metrics)| {
+            .map(|(process_id, (process_metrics, _executors_metrics))| {
                 let (fast_paths, slow_paths, stable_count) =
-                    extract_metrics(&process_metrics);
+                    extract_process_metrics(&process_metrics);
                 (process_id, (fast_paths, slow_paths, stable_count))
             })
             .collect();

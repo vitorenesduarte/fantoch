@@ -1,13 +1,11 @@
+use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
+use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::ProcessId;
 use fantoch::planet::{Planet, Region};
-use fantoch::protocol::{Protocol, ProtocolMetrics};
+use fantoch::protocol::{Protocol, ProtocolMetrics, ProtocolMetricsKind};
 use fantoch::sim::Runner;
 use fantoch::HashMap;
-use fantoch::{
-    client::{KeyGen, Workload},
-    protocol::ProtocolMetricsKind,
-};
 use fantoch_prof::metrics::Histogram;
 use fantoch_ps::protocol::{
     AtlasSequential, CaesarSequential, EPaxosSequential, FPaxos, NewtSequential,
@@ -164,7 +162,7 @@ fn newt(aws: bool) {
     let ns = vec![5];
     let clients_per_region = vec![128, 256, 512];
     let pool_sizes = vec![100, 50, 10, 1];
-    let conflicts = vec![0, 1, 2, 5, 10, 20, 100];
+    let conflicts = vec![0, 1, 2, 5, 10, 20];
 
     ns.into_par_iter().for_each(|n| {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
@@ -182,8 +180,8 @@ fn newt(aws: bool) {
             vec![
                 // (protocol, (n, f, tiny quorums, clock bump interval, skip
                 // fast ack))
-                ("Atlas", config!(n, 1, false, None, false, false)),
-                ("Atlas", config!(n, 2, false, None, false, false)),
+                // ("Atlas", config!(n, 1, false, None, false, false)),
+                // ("Atlas", config!(n, 2, false, None, false, false)),
                 // ("EPaxos", config!(n, 0, false, None, false, false)),
                 // ("FPaxos", config!(n, 1, false, None, false, false)),
                 // ("FPaxos", config!(n, 2, false, None, false, false)),
@@ -233,8 +231,7 @@ fn newt(aws: bool) {
                         let client_regions = regions.clone();
                         let planet = planet.clone();
 
-                        let (process_metrics, client_latencies) = match protocol
-                        {
+                        let (metrics, client_latencies) = match protocol {
                             "Atlas" => run::<AtlasSequential>(
                                 config,
                                 workload,
@@ -281,7 +278,7 @@ fn newt(aws: bool) {
                             protocol,
                             config,
                             clients,
-                            process_metrics,
+                            metrics,
                             client_latencies,
                         );
                     })
@@ -327,7 +324,7 @@ fn fairest_leader() {
             let client_regions = regions.clone();
             let planet = planet.clone();
 
-            let (_process_metrics, client_latencies) = run::<FPaxos>(
+            let (_, client_latencies) = run::<FPaxos>(
                 config,
                 workload,
                 clients_per_region,
@@ -506,7 +503,7 @@ fn run<P: Protocol>(
     client_regions: Vec<Region>,
     planet: Planet,
 ) -> (
-    HashMap<ProcessId, ProtocolMetrics>,
+    HashMap<ProcessId, (ProtocolMetrics, ExecutorMetrics)>,
     HashMap<Region, (usize, Histogram)>,
 ) {
     // compute number of regions and total number of expected commands per
@@ -524,8 +521,7 @@ fn run<P: Protocol>(
         process_regions,
         client_regions,
     );
-    let (process_metrics, _executors_monitors, client_latencies) =
-        runner.run(None);
+    let (metrics, _executors_monitors, client_latencies) = runner.run(None);
 
     // compute clients stats
     let issued_commands = client_latencies
@@ -540,33 +536,53 @@ fn run<P: Protocol>(
         );
     }
 
-    (process_metrics, client_latencies)
+    (metrics, client_latencies)
 }
 
 fn handle_run_result(
     protocol_name: &str,
     config: Config,
     clients_per_region: usize,
-    process_metrics: HashMap<ProcessId, ProtocolMetrics>,
+    metrics: HashMap<ProcessId, (ProtocolMetrics, ExecutorMetrics)>,
     client_latencies: HashMap<Region, (usize, Histogram)>,
 ) {
-    // show processes stats
     let mut fast_paths = 0;
     let mut slow_paths = 0;
-    process_metrics
-        .into_iter()
-        .for_each(|(process_id, metrics)| {
-            println!("process {} metrics:", process_id);
-            println!("{:?}", metrics);
-            fast_paths += metrics
+    let mut wait_condition_delay = Histogram::new();
+    let mut execution_delay = Histogram::new();
+
+    // show processes stats
+    metrics.into_iter().for_each(
+        |(process_id, (process_metrics, executor_metrics))| {
+            println!("{}:", process_id);
+            println!("  process metrics:");
+            println!("{:?}", process_metrics);
+            println!("  executor metrics:");
+            println!("{:?}", executor_metrics);
+
+            let process_fast_paths = process_metrics
                 .get_aggregated(ProtocolMetricsKind::FastPath)
                 .cloned()
                 .unwrap_or_default();
-            slow_paths += metrics
+            let process_slow_paths = process_metrics
                 .get_aggregated(ProtocolMetricsKind::SlowPath)
                 .cloned()
                 .unwrap_or_default();
-        });
+            let process_wait_condition_delay = process_metrics
+                .get_collected(ProtocolMetricsKind::WaitConditionDelay);
+            let executor_execution_delay = executor_metrics
+                .get_collected(ExecutorMetricsKind::ExecutionDelay);
+
+            fast_paths += process_fast_paths;
+            slow_paths += process_slow_paths;
+            if let Some(h) = process_wait_condition_delay {
+                wait_condition_delay.merge(h);
+            }
+            if let Some(h) = executor_execution_delay {
+                execution_delay.merge(h);
+            }
+        },
+    );
     // compute the percentage of fast paths
     let total = fast_paths + slow_paths;
     let fp_percentage = (fast_paths as f64 * 100f64) / total as f64;
@@ -590,13 +606,18 @@ fn handle_run_result(
         }
     };
 
-    println!(
-        "{:<8} n = {} f = {} c = {:<9} | fast_paths = {:<7.1} {:?}",
+    let prefix = format!(
+        "{:<8} n = {} f = {} c = {:<3}",
         name(protocol_name, config.caesar_wait_condition()),
         config.n(),
         config.f(),
-        clients_per_region,
-        fp_percentage,
-        histogram
+        clients_per_region
     );
+    println!("{} | latency             : {:?}", prefix, histogram);
+    println!("{} | fast path rate      : {:<7.1}", prefix, fp_percentage);
+    println!(
+        "{} | wait condition delay: {:?}",
+        prefix, wait_condition_delay
+    );
+    println!("{} | execution delay     : {:?}", prefix, execution_delay);
 }
