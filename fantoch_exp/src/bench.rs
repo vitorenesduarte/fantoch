@@ -103,7 +103,7 @@ pub async fn bench_experiment(
                     panic!("NewtAtomic doesn't support read-only commands")
                 }
 
-                if let KeyGen::ConflictRate { .. } = workload.key_gen() {
+                if let KeyGen::ConflictPool { .. } = workload.key_gen() {
                     if workload.shard_count() > 1 {
                         // the conflict rate key gen is weird in partial
                         // replication; for example, consider the case where

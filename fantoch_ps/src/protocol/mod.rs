@@ -44,7 +44,10 @@ mod tests {
     // global test config
     const SHARD_COUNT: usize = 1;
     const COMMANDS_PER_CLIENT: usize = 100;
-    const CONFLICT_RATE: usize = 50;
+    const KEY_GEN: KeyGen = KeyGen::ConflictPool {
+        conflict_rate: 50,
+        pool_size: 1,
+    };
     const CLIENTS_PER_PROCESS: usize = 10;
 
     macro_rules! config {
@@ -780,13 +783,10 @@ mod tests {
 
         // create workload
         let keys_per_command = 2;
-        let key_gen = KeyGen::ConflictRate {
-            conflict_rate: CONFLICT_RATE,
-        };
         let payload_size = 1;
         let workload = Workload::new(
             shard_count,
-            key_gen,
+            KEY_GEN,
             keys_per_command,
             commands_per_client,
             payload_size,
@@ -846,12 +846,9 @@ mod tests {
         // clients workload
         let keys_per_command = 2;
         let payload_size = 1;
-        let key_gen = KeyGen::ConflictRate {
-            conflict_rate: CONFLICT_RATE,
-        };
         let workload = Workload::new(
             shard_count,
-            key_gen,
+            KEY_GEN,
             keys_per_command,
             commands_per_client,
             payload_size,

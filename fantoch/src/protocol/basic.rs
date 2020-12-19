@@ -468,7 +468,12 @@ mod tests {
         // client workload
         let shard_count = 1;
         let keys_per_command = 1;
-        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
+        let conflict_rate = 100;
+        let pool_size = 1;
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate,
+            pool_size,
+        };
         let commands_per_client = 10;
         let payload_size = 100;
         let workload = Workload::new(

@@ -30,7 +30,7 @@ fn main() {
         println!("zipf = {}", coefficient);
         let key_gen = KeyGen::Zipf {
             coefficient,
-            keys_per_shard: 1_000_000,
+            total_keys_per_shard: 1_000_000,
         };
 
         // add row start to csvs

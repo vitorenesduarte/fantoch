@@ -154,7 +154,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // for read_only_percentage in vec![100, 95, 50] {
         for read_only_percentage in vec![0] {
             let key_gen = KeyGen::Zipf {
-                keys_per_shard: 1_000_000,
+                total_keys_per_shard: 1_000_000,
                 coefficient,
             };
             let mut workload = Workload::new(
@@ -243,8 +243,14 @@ async fn increasing_load_plot() -> Result<(), Report> {
     let cpus = 12;
 
     let key_gens = vec![
-        KeyGen::ConflictRate { conflict_rate: 2 },
-        KeyGen::ConflictRate { conflict_rate: 10 },
+        KeyGen::ConflictPool {
+            conflict_rate: 2,
+            pool_size: 1,
+        },
+        KeyGen::ConflictPool {
+            conflict_rate: 10,
+            pool_size: 1,
+        },
     ];
 
     let mut workloads = Vec::new();
@@ -322,7 +328,10 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
     let payload_size = 100;
     let cpus = 8;
 
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
     let key_gens = vec![key_gen];
 
     let mut workloads = Vec::new();
@@ -422,7 +431,7 @@ async fn whatever_plot() -> Result<(), Report> {
         2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
     ];
     let key_gens = coefficients.into_iter().map(|coefficient| KeyGen::Zipf {
-        keys_per_shard: 1_000_000,
+        total_keys_per_shard: 1_000_000,
         coefficient,
     });
 

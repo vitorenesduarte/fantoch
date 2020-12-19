@@ -1034,7 +1034,7 @@ pub fn inter_machine_scalability_plot(
             // refine search
             let key_gen = KeyGen::Zipf {
                 coefficient,
-                keys_per_shard: 1_000_000,
+                total_keys_per_shard: 1_000_000,
             };
             search
                 .shard_count(shard_count)

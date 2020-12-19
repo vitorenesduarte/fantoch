@@ -41,7 +41,10 @@ fn fairness_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAIRNESS <<<<<<<<");
     let results_dir = "../results_fairness_and_tail_latency";
     // fixed parameters
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
     let payload_size = 100;
     let protocols = vec![
         (Protocol::NewtAtomic, 1),
@@ -116,7 +119,10 @@ fn tail_latency_plot() -> Result<(), Report> {
     println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
     let results_dir = "../results_fairness_and_tail_latency";
     // fixed parameters
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
     let payload_size = 100;
     let protocols = vec![
         (Protocol::NewtAtomic, 1),
@@ -175,8 +181,14 @@ fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
     let results_dir = "../results_increasing_load";
     // fixed parameters
-    let top_key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
-    let bottom_key_gen = KeyGen::ConflictRate { conflict_rate: 10 };
+    let top_key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
+    let bottom_key_gen = KeyGen::ConflictPool {
+        conflict_rate: 10,
+        pool_size: 1,
+    };
     let payload_size = 4096;
     let n = 5;
     let leader = 1;
@@ -312,7 +324,7 @@ fn scalability_plot() -> Result<(), Report> {
         .map(|coefficient| {
             // create key gen
             let key_gen = KeyGen::Zipf {
-                keys_per_shard: 1_000_000,
+                total_keys_per_shard: 1_000_000,
                 coefficient,
             };
             let mut search = Search::new(n, f, protocol);
@@ -428,7 +440,7 @@ fn partial_replication_plot() -> Result<(), Report> {
         let search_refine = |search: &mut Search, coefficient: f64| {
             let key_gen = KeyGen::Zipf {
                 coefficient,
-                keys_per_shard: 1_000_000,
+                total_keys_per_shard: 1_000_000,
             };
             search
                 .key_gen(key_gen)
@@ -508,7 +520,7 @@ fn partial_replication_all() -> Result<(), Report> {
     ] {
         let key_gen = KeyGen::Zipf {
             coefficient,
-            keys_per_shard: 1_000_000,
+            total_keys_per_shard: 1_000_000,
         };
         key_gens.push((key_gen, x_range, y_range));
     }
@@ -917,7 +929,7 @@ fn multi_key_all() -> Result<(), Report> {
                 // create key generator
                 let key_gen = KeyGen::Zipf {
                     coefficient: zipf_coefficient,
-                    keys_per_shard: 1_000_000,
+                    total_keys_per_shard: 1_000_000,
                 };
 
                 // generate throughput-something plot
@@ -1132,7 +1144,10 @@ fn single_key_all() -> Result<(), Report> {
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
-        KeyGen::ConflictRate { conflict_rate: 2 },
+        KeyGen::ConflictPool {
+            conflict_rate: 2,
+            pool_size: 1,
+        },
         /* KeyGen::ConflictRate { conflict_rate: 10 },
          * KeyGen::Zipf {
          *     keys_per_shard: 1_000_000,

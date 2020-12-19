@@ -163,6 +163,7 @@ fn newt(aws: bool) {
 
     let ns = vec![5];
     let clients_per_region = vec![128, 256, 512];
+    let pool_sizes = vec![100, 50, 10, 1];
     let conflicts = vec![0, 1, 2, 5, 10, 20, 100];
 
     ns.into_par_iter().for_each(|n| {
@@ -181,13 +182,13 @@ fn newt(aws: bool) {
             vec![
                 // (protocol, (n, f, tiny quorums, clock bump interval, skip
                 // fast ack))
-                // ("Atlas", config!(n, 1, false, None, false, false)),
-                // ("Atlas", config!(n, 2, false, None, false, false)),
+                ("Atlas", config!(n, 1, false, None, false, false)),
+                ("Atlas", config!(n, 2, false, None, false, false)),
                 // ("EPaxos", config!(n, 0, false, None, false, false)),
                 // ("FPaxos", config!(n, 1, false, None, false, false)),
                 // ("FPaxos", config!(n, 2, false, None, false, false)),
-                ("Newt", config!(n, 1, false, None, false, false)),
-                ("Newt", config!(n, 2, false, None, false, false)),
+                // ("Newt", config!(n, 1, false, None, false, false)),
+                // ("Newt", config!(n, 2, false, None, false, false)),
                 ("Caesar", config!(n, 2, false, None, false, false)),
                 ("Caesar", config!(n, 2, false, None, false, true)),
             ]
@@ -195,87 +196,94 @@ fn newt(aws: bool) {
             panic!("unsupported number of processes {}", n);
         };
 
-        conflicts.iter().for_each(|&conflict_rate| {
-            println!("CONFLICTS: {:?}", conflict_rate);
-            clients_per_region.iter().for_each(|&clients| {
-                configs.iter().for_each(|&(protocol, mut config)| {
-                    // TODO check if the protocol is leader-based, and if yes,
-                    // run for all possible leader configurations
+        pool_sizes.iter().for_each(|&pool_size| {
+            println!("POOL_SIZE: {:?}", pool_size);
+            conflicts.iter().for_each(|&conflict_rate| {
+                println!("CONFLICTS: {:?}", conflict_rate);
+                clients_per_region.iter().for_each(|&clients| {
+                    configs.iter().for_each(|&(protocol, mut config)| {
+                        // TODO check if the protocol is leader-based, and if yes,
+                        // run for all possible leader configurations
 
-                    // set leader if FPaxos
-                    if protocol == "FPaxos" {
-                        config.set_leader(1);
-                    }
+                        // set leader if FPaxos
+                        if protocol == "FPaxos" {
+                            config.set_leader(1);
+                        }
 
-                    // clients workload
-                    let shard_count = 1;
-                    let key_gen = KeyGen::ConflictRate { conflict_rate };
-                    let keys_per_command = 1;
-                    let commands_per_client = 200;
-                    let payload_size = 0;
-                    let workload = Workload::new(
-                        shard_count,
-                        key_gen,
-                        keys_per_command,
-                        commands_per_client,
-                        payload_size,
-                    );
+                        // clients workload
+                        let shard_count = 1;
+                        let key_gen = KeyGen::ConflictPool {
+                            conflict_rate,
+                            pool_size,
+                        };
+                        let keys_per_command = 1;
+                        let commands_per_client = 200;
+                        let payload_size = 0;
+                        let workload = Workload::new(
+                            shard_count,
+                            key_gen,
+                            keys_per_command,
+                            commands_per_client,
+                            payload_size,
+                        );
 
-                    // process regions, client regions and planet
-                    let process_regions = regions.clone();
-                    let client_regions = regions.clone();
-                    let planet = planet.clone();
+                        // process regions, client regions and planet
+                        let process_regions = regions.clone();
+                        let client_regions = regions.clone();
+                        let planet = planet.clone();
 
-                    let (process_metrics, client_latencies) = match protocol {
-                        "Atlas" => run::<AtlasSequential>(
+                        let (process_metrics, client_latencies) = match protocol
+                        {
+                            "Atlas" => run::<AtlasSequential>(
+                                config,
+                                workload,
+                                clients,
+                                process_regions,
+                                client_regions,
+                                planet,
+                            ),
+                            "EPaxos" => run::<EPaxosSequential>(
+                                config,
+                                workload,
+                                clients,
+                                process_regions,
+                                client_regions,
+                                planet,
+                            ),
+                            "FPaxos" => run::<FPaxos>(
+                                config,
+                                workload,
+                                clients,
+                                process_regions,
+                                client_regions,
+                                planet,
+                            ),
+                            "Newt" => run::<NewtSequential>(
+                                config,
+                                workload,
+                                clients,
+                                process_regions,
+                                client_regions,
+                                planet,
+                            ),
+                            "Caesar" => run::<CaesarSequential>(
+                                config,
+                                workload,
+                                clients,
+                                process_regions,
+                                client_regions,
+                                planet,
+                            ),
+                            _ => panic!("unsupported protocol {:?}", protocol),
+                        };
+                        handle_run_result(
+                            protocol,
                             config,
-                            workload,
                             clients,
-                            process_regions,
-                            client_regions,
-                            planet,
-                        ),
-                        "EPaxos" => run::<EPaxosSequential>(
-                            config,
-                            workload,
-                            clients,
-                            process_regions,
-                            client_regions,
-                            planet,
-                        ),
-                        "FPaxos" => run::<FPaxos>(
-                            config,
-                            workload,
-                            clients,
-                            process_regions,
-                            client_regions,
-                            planet,
-                        ),
-                        "Newt" => run::<NewtSequential>(
-                            config,
-                            workload,
-                            clients,
-                            process_regions,
-                            client_regions,
-                            planet,
-                        ),
-                        "Caesar" => run::<CaesarSequential>(
-                            config,
-                            workload,
-                            clients,
-                            process_regions,
-                            client_regions,
-                            planet,
-                        ),
-                        _ => panic!("unsupported protocol {:?}", protocol),
-                    };
-                    handle_run_result(
-                        protocol,
-                        config,
-                        clients,
-                        process_metrics,
-                        client_latencies,
-                    );
+                            process_metrics,
+                            client_latencies,
+                        );
+                    })
                 })
             })
         })
@@ -293,7 +301,10 @@ fn fairest_leader() {
     let clients_per_region = 1;
     // clients workload
     let shard_count = 1;
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
     let keys_per_command = 1;
     let commands_per_client = 500;
     let payload_size = 0;
@@ -364,7 +375,10 @@ fn equidistant<P: Protocol>(protocol_name: &str) {
 
     // clients workload
     let shard_count = 1;
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
     let keys_per_command = 1;
     let total_commands = 500;
     let payload_size = 0;
@@ -433,7 +447,10 @@ fn increasing_regions<P: Protocol>(protocol_name: &str) {
 
     // clients workload
     let shard_count = 1;
-    let key_gen = KeyGen::ConflictRate { conflict_rate: 2 };
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
     let keys_per_command = 1;
     let total_commands = 500;
     let payload_size = 0;
