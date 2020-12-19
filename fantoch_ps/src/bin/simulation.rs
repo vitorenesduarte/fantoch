@@ -187,7 +187,7 @@ fn newt(aws: bool) {
                 // ("FPaxos", config!(n, 2, false, None, false, false)),
                 // ("Newt", config!(n, 1, false, None, false, false)),
                 // ("Newt", config!(n, 2, false, None, false, false)),
-                ("Caesar", config!(n, 2, false, None, false, false)),
+                // ("Caesar", config!(n, 2, false, None, false, false)),
                 ("Caesar", config!(n, 2, false, None, false, true)),
             ]
         } else {
@@ -571,8 +571,8 @@ fn handle_run_result(
                 .unwrap_or_default();
             let process_wait_condition_delay = process_metrics
                 .get_collected(ProtocolMetricsKind::WaitConditionDelay);
-            let process_commit_latency =
-                process_metrics.get_collected(ProtocolMetricsKind::CommitLatency);
+            let process_commit_latency = process_metrics
+                .get_collected(ProtocolMetricsKind::CommitLatency);
             let executor_execution_delay = executor_metrics
                 .get_collected(ExecutorMetricsKind::ExecutionDelay);
 

@@ -35,7 +35,7 @@ macro_rules! pydict {
                 res = Err(e);
             }
         )*
-        pytry!($py, res)
+        $crate::pytry!($py, res)
     }};
     ($py:expr, $($tup:expr,)*) => {{
         $crate::pydict![$py, $($tup),*]
