@@ -160,9 +160,9 @@ fn newt(aws: bool) {
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
     let ns = vec![5];
-    let clients_per_region = vec![128, 256, 512];
+    let clients_per_region = vec![64, 128, 256, 512];
     let pool_sizes = vec![100, 50, 10, 1];
-    let conflicts = vec![0, 1, 2, 5, 10, 20];
+    let conflicts = vec![0, 2, 10, 30, 50, 100];
 
     ns.into_par_iter().for_each(|n| {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
@@ -198,8 +198,8 @@ fn newt(aws: bool) {
             println!("POOL_SIZE: {:?}", pool_size);
             conflicts.iter().for_each(|&conflict_rate| {
                 println!("CONFLICTS: {:?}", conflict_rate);
-                clients_per_region.iter().for_each(|&clients| {
-                    configs.iter().for_each(|&(protocol, mut config)| {
+                clients_per_region.par_iter().for_each(|&clients| {
+                    configs.par_iter().for_each(|&(protocol, mut config)| {
                         // TODO check if the protocol is leader-based, and if
                         // yes, run for all possible
                         // leader configurations

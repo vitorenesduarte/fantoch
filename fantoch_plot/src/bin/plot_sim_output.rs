@@ -159,15 +159,15 @@ fn plot_data(all_data: HashMap<Config, Data>) -> Result<(), Report> {
     let metric_types =
         vec![MetricType::Avg, MetricType::P99, MetricType::P99_9];
     let pool_sizes = vec![100, 50, 10, 1];
-    let conflicts = vec![0, 1, 2, 5, 10, 20];
+    let conflicts = vec![0, 2, 10, 30, 50, 100];
     let protocol = String::from("Caesar");
     let n = 5;
     let f = 2;
-    let cs = vec![128, 256, 512];
+    let cs = vec![64, 128, 256, 512];
 
-    for plot_type in plot_types.clone() {
-        for metric_type in metric_types.clone() {
-            for pool_size in pool_sizes.clone() {
+    for pool_size in pool_sizes.clone() {
+        for plot_type in plot_types.clone() {
+            for metric_type in metric_types.clone() {
                 plot(
                     plot_type,
                     metric_type,
@@ -244,16 +244,16 @@ fn latency_plot(
     output_dir: Option<&str>,
     output_file: &str,
 ) -> Result<(), Report> {
-    const FULL_REGION_WIDTH: f64 = 10f64;
-    const MAX_COMBINATIONS: usize = 3;
-    // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
-    const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
+    const BLOCK_WIDTH: f64 = 10f64;
+    const MAX_COMBINATIONS: usize = 4;
+    // 80% of `BLOCK_WIDTH ` when `MAX_COMBINATIONS` is reached
+    const BAR_WIDTH: f64 = BLOCK_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
 
-    assert_eq!(data.len(), 3);
+    assert_eq!(data.len(), MAX_COMBINATIONS);
 
     // compute x: one per region
     let x: Vec<_> = (0..conflicts.len())
-        .map(|i| i as f64 * FULL_REGION_WIDTH)
+        .map(|i| i as f64 * BLOCK_WIDTH)
         .collect();
 
     // we need to shift all to the left by half of the number of combinations
@@ -288,12 +288,9 @@ fn latency_plot(
         // bar style
         let kwargs = fantoch_plot::pydict!(
             py,
-            // ("label", label),
             ("width", BAR_WIDTH),
             ("edgecolor", "black"),
             ("linewidth", 1),
-            /* ("color", color),
-             * ("hatch", hatch), */
         );
         let line = ax.bar(x, y, Some(kwargs))?;
         plotted += 1;
@@ -321,7 +318,15 @@ fn latency_plot(
     ax.set_title(&title)?;
 
     // legend
-    fantoch_plot::add_legend(plotted, Some(legends), None, None, py, &ax)?;
+    let y_bbox_to_anchor = Some(1.24);
+    fantoch_plot::add_legend(
+        plotted,
+        Some(legends),
+        None,
+        y_bbox_to_anchor,
+        py,
+        &ax,
+    )?;
 
     // end plot
     fantoch_plot::end_plot(
@@ -341,7 +346,11 @@ fn get_plot_value(
     config: &Config,
     all_data: &HashMap<Config, Data>,
 ) -> Option<usize> {
-    let data = all_data.get(config).expect("config should exist");
+    let data = if let Some(data) = all_data.get(config) {
+        data
+    } else {
+        panic!("config {:?} should exist", config);
+    };
     let histogram = match plot_type {
         PlotType::WaitConditionDelay => &data.wait_condition_delay,
         PlotType::CommitLatency => &data.commit_latency,
