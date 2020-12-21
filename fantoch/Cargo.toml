@@ -21,7 +21,7 @@ color-eyre = "0.5.10"
 dashmap = { git = "https://github.com/vitorenesduarte/dashmap", rev = "82deaa28771f225d3969b451fee30a3b9047514b" }
 flate2 = "1.0.19"
 futures = { version = "0.3.8", default-features = false, features = ["alloc"] }
-griddle = { version = "0.3.2", features = ["serde"], optional = true }
+griddle = { version = "0.4.1", features = ["serde"], optional = true }
 hashbrown = { version = "0.9.1", features = ["serde"] }
 parking_lot = "0.11.1"
 num_cpus = "1.13.0"
