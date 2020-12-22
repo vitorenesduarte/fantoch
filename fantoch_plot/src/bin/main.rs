@@ -39,7 +39,8 @@ fn eurosys() -> Result<(), Report> {
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAIRNESS <<<<<<<<");
-    let results_dir = "../results_fairness_and_tail_latency";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -117,7 +118,8 @@ fn fairness_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
     println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
-    let results_dir = "../results_fairness_and_tail_latency";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -179,7 +181,8 @@ fn tail_latency_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
-    let results_dir = "../results_increasing_load";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_increasing_load";
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -344,7 +347,8 @@ fn scalability_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn partial_replication_plot() -> Result<(), Report> {
     println!(">>>>>>>> PARTIAL REPLICATION <<<<<<<<");
-    let results_dir = "../results_partial_replication";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_partial_replication";
     // fixed parameters
     let top_coefficient = 0.5;
     let bottom_coefficient = 0.7;
