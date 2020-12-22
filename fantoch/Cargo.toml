@@ -25,7 +25,7 @@ griddle = { version = "0.4.1", features = ["serde"], optional = true }
 hashbrown = { version = "0.9.1", features = ["serde"] }
 parking_lot = "0.11.1"
 num_cpus = "1.13.0"
-rand = "0.7.3"
+rand = "0.8.0"
 serde = { version = "1.0.118", features = ["derive"] }
 threshold = "0.8.15"
 tokio = { version = "0.3.6", features = ["full", "parking_lot"] }
@@ -33,6 +33,6 @@ tokio-util = { version = "0.5.1", features = ["codec"] }
 tracing = "0.1.22"
 tracing-appender = "0.1.1"
 tracing-subscriber = "0.2.15"
-zipf = "6.1.0"
+zipf = { git = "https://github.com/vitorenesduarte/rust-zipf", rev = "e7da017bcde5dbd003b9b689494d8b526868b1be" }
 
 fantoch_prof = { path = "../fantoch_prof" }

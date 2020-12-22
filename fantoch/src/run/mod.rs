@@ -1339,7 +1339,7 @@ pub mod tests {
     // adapted from: https://github.com/rust-lang-nursery/rust-cookbook/issues/500
     fn get_available_port() -> u16 {
         loop {
-            let port = rand::thread_rng().gen_range(1025, 65535);
+            let port = rand::thread_rng().gen_range(1025..65535);
             if port_is_available(port) {
                 return port;
             }

@@ -512,7 +512,7 @@ where
         // check if we should reorder messages
         if self.reorder_messages {
             // if so, multiply distance by some random number between 0 and 10
-            let multiplier: f64 = rand::thread_rng().gen_range(0.0, 10.0);
+            let multiplier: f64 = rand::thread_rng().gen_range(0.0..10.0);
             distance = (distance as f64 * multiplier) as u64;
         }
 

@@ -175,7 +175,7 @@ async fn client(
         let mut command = BTreeSet::new();
         while command.len() < keys_per_command {
             // generate random key
-            let key = rand::thread_rng().gen_range(0, keys_number);
+            let key = rand::thread_rng().gen_range(0..keys_number);
             command.insert(key);
         }
 

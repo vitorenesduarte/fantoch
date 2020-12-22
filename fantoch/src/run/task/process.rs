@@ -685,7 +685,7 @@ pub async fn send_to_one_writer<P>(
     P: Protocol + 'static,
 {
     // pick a random one
-    let writer_index = rand::thread_rng().gen_range(0, writers.len());
+    let writer_index = rand::thread_rng().gen_range(0..writers.len());
 
     if let Err(e) = writers[writer_index].send(msg).await {
         warn!(

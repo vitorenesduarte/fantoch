@@ -101,7 +101,7 @@ impl KeyGenState {
         let should_conflict = true_if_random_is_less_than(conflict_rate);
         if should_conflict {
             // if it should conflict, select a random key from the pool
-            let random_key = rand::thread_rng().gen_range(0, pool_size);
+            let random_key = rand::thread_rng().gen_range(0..pool_size);
             format!("{}{}", CONFLICT_COLOR, random_key)
         } else {
             // avoid conflict with unique client key
@@ -123,6 +123,6 @@ pub fn true_if_random_is_less_than(percentage: usize) -> bool {
     match percentage {
         0 => false,
         100 => true,
-        _ => rand::thread_rng().gen_range(0, 100) < percentage,
+        _ => rand::thread_rng().gen_range(0..100) < percentage,
     }
 }

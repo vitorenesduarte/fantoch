@@ -74,7 +74,7 @@ macro_rules! config {
         let mut config = Config::new($n, $f);
         config.set_newt_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
-            config.set_newt_clock_bump_interval(interval);
+            config.set_newt_clock_bump_interval::<Option<Duration>>(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
         config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);

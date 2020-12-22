@@ -4,7 +4,8 @@ use crate::id::{RiflGen, ShardId};
 use crate::kvs::{KVOp, Key, Value};
 use crate::trace;
 use crate::HashMap;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::iter;
 
@@ -199,7 +200,7 @@ impl Workload {
     fn gen_cmd_value(&self) -> Value {
         let mut rng = rand::thread_rng();
         iter::repeat(())
-            .map(|_| rng.sample(Alphanumeric))
+            .map(|_| rng.sample(Alphanumeric) as char)
             .take(self.payload_size)
             .collect()
     }
