@@ -20,7 +20,7 @@ macro_rules! config {
         let mut config = Config::new($n, $f);
         config.set_newt_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
-            config.set_newt_clock_bump_interval(interval);
+            config.set_newt_clock_bump_interval::<Option<Duration>>(interval);
         }
         // make sure detached votes are sent
         config.set_newt_detached_send_interval(Duration::from_millis(5));
