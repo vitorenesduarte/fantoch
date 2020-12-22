@@ -1450,4 +1450,136 @@ mod tests {
             matches!(mpropose, Action::ToSend {msg, ..} if check_msg(&msg))
         );
     }
+
+    #[test]
+    fn caesar_livelock() {
+        // there's a single shard
+        let shard_id = 0;
+
+        // processes
+        let processes = vec![(1, shard_id), (2, shard_id), (3, shard_id)];
+
+        // create system time
+        let time = SimTime::new();
+
+        // n and f
+        let n = 3;
+        let f = 1;
+        let config = Config::new(n, f);
+
+        // caesar
+        let (mut caesar_1, _) = CaesarSequential::new(1, shard_id, config);
+        let (mut caesar_2, _) = CaesarSequential::new(2, shard_id, config);
+        let (mut caesar_3, _) = CaesarSequential::new(3, shard_id, config);
+
+        // discover processes in all caesar (the order doesn't matter)
+        caesar_1.discover(processes.clone());
+        caesar_2.discover(processes.clone());
+        caesar_3.discover(processes.clone());
+
+        // client workload: all commands conflict
+        let shard_count = 1;
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate: 100,
+            pool_size: 1,
+        };
+        let keys_per_command = 1;
+        let commands_per_client = 10;
+        let payload_size = 0;
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            commands_per_client,
+            payload_size,
+        );
+
+        // create client that will send all commands
+        let mut client = Client::new(1, workload, None);
+
+        // generate a new command by the client
+        let mut next_cmd = || {
+            let (_, cmd) = client
+                .next_cmd(&time)
+                .expect("there should be a next command");
+            cmd
+        };
+
+        // retrieve a single outgoing message from process
+        let retrieve_single_msg = |caesar: &mut CaesarSequential| {
+            let mut actions: Vec<_> = caesar.to_processes_iter().collect();
+            assert_eq!(actions.len(), 1);
+            let action = actions.pop().unwrap();
+            match action {
+                Action::ToSend { msg, .. } => msg,
+                _ => panic!("expecting Action::ToSend"),
+            }
+        };
+
+        // submit a command, take the mpropose, handle it locally and return it
+        let mut submit = |caesar: &mut CaesarSequential| {
+            caesar.submit(None, next_cmd(), &time);
+            let mpropose = retrieve_single_msg(caesar);
+
+            // handle the mpropose locally and ignore the mpropose ack
+            caesar.handle(caesar.id(), shard_id, mpropose.clone(), &time);
+            let _mpropose_ack = retrieve_single_msg(caesar);
+
+            // return the mpropose
+            mpropose
+        };
+
+        let handle = |caesar: &mut CaesarSequential, from, msg| {
+            caesar.handle(from, shard_id, msg, &time);
+            let actions: Vec<_> = caesar.to_processes_iter().collect();
+            assert!(actions.is_empty());
+        };
+
+        // submit two commands at process 1 and one command at the other two
+        let mpropose_1 = submit(&mut caesar_1);
+        let mpropose_2 = submit(&mut caesar_2);
+        let mpropose_3 = submit(&mut caesar_3);
+        let mpropose_4 = submit(&mut caesar_1);
+
+        // handle:
+        // - mpropose_1 at process 2
+        // - mpropose_2 at process 3
+        // - mpropose_3 at process 1
+        // and check that no new message is produced (i.e. the commands are
+        // blocked in the wait condition)
+        handle(&mut caesar_2, 1, mpropose_1);
+        handle(&mut caesar_3, 2, mpropose_2);
+        handle(&mut caesar_1, 3, mpropose_3);
+
+        // submit one command at each process
+        let mpropose_5 = submit(&mut caesar_2);
+        let mpropose_6 = submit(&mut caesar_3);
+        let mpropose_7 = submit(&mut caesar_1);
+
+        // handle:
+        // - mpropose_4 at process 2
+        // - mpropose_5 at process 3
+        // - mpropose_6 at process 1
+        // and check that no new message is produced (i.e. the commands are
+        // blocked in the wait condition)
+        handle(&mut caesar_2, 1, mpropose_4);
+        handle(&mut caesar_3, 2, mpropose_5);
+        handle(&mut caesar_1, 3, mpropose_6);
+
+        // submit one command at each process
+        let mpropose_8 = submit(&mut caesar_2);
+        let mpropose_9 = submit(&mut caesar_3);
+        // this sequence could continue here, but let's stop
+        let _mpropose_10 = submit(&mut caesar_1);
+
+        // handle:
+        // - mpropose_7 at process 2
+        // - mpropose_8 at process 3
+        // - mpropose_9 at process 1
+        // and check that no new message is produced (i.e. the commands are
+        // blocked in the wait condition)
+        handle(&mut caesar_2, 1, mpropose_7);
+        handle(&mut caesar_3, 2, mpropose_8);
+        handle(&mut caesar_1, 3, mpropose_9);
+    }
 }
