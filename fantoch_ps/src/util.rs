@@ -34,12 +34,12 @@ mod tests {
         // get random
         let mut rng = rand::thread_rng();
         // select keys per command
-        let key_number = rng.gen_range(1, max_keys_per_command + 1);
+        let key_number = rng.gen_range(1..(max_keys_per_command + 1));
         // generate command data
         let cmd_data: Vec<_> = (0..key_number)
             .map(|_| {
                 // select random key
-                let key = format!("{}", rng.gen_range(0, keys_number));
+                let key = format!("{}", rng.gen_range(0..keys_number));
                 let value = String::from("");
                 (key, KVOp::Put(value))
             })
