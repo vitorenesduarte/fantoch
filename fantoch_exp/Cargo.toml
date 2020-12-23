@@ -27,7 +27,7 @@ serde_json = "1.0.60"
 tracing = { version = "0.1.22" }
 tracing-futures = { version = "0.2.4", optional = true }
 tracing-subscriber = { version = "0.2.15", optional = true }
-tokio = { version = "0.3.6", features = ["time"], optional = true }
+tokio = { git = "https://github.com/tokio-rs/tokio", rev = "575938d4579e6fe6a89b700aadb0ae2bbab5483b", features = ["time"], optional = true }
 tsunami = { git = "https://github.com/jonhoo/tsunami", rev = "b6dbda556e7c813f05c54dd6d3e842a1f54d0eeb", default-features = false, features = ["aws", "baremetal"], optional = true }
 
 fantoch = { path = "../fantoch" }

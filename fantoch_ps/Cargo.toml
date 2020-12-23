@@ -23,7 +23,7 @@ rand = "0.8.0"
 rayon = { version = "1.5.0", optional = true }
 serde = { version = "1.0.118", features = ["derive"] }
 threshold = "0.8.15"
-tokio = { version = "0.3.6", features = ["full", "parking_lot"] }
+tokio = { git = "https://github.com/tokio-rs/tokio", rev = "575938d4579e6fe6a89b700aadb0ae2bbab5483b", features = ["full", "parking_lot"] }
 tracing = "0.1.22"
 tracing-appender = "0.1.1"
 parking_lot = "0.11.1"

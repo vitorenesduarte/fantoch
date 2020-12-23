@@ -103,7 +103,8 @@ mod tests {
         // spawn writer
         let writer = tokio::spawn(async move {
             for _ in 0..OPERATIONS {
-                let sleep_time = rand::thread_rng().gen_range(1..(MAX_SLEEP + 1));
+                let sleep_time =
+                    rand::thread_rng().gen_range(1..(MAX_SLEEP + 1));
                 tokio::time::sleep(Duration::from_millis(sleep_time)).await;
                 let start = Instant::now();
                 // send to delay task
