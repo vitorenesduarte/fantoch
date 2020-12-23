@@ -28,8 +28,8 @@ num_cpus = "1.13.0"
 rand = "0.8.0"
 serde = { version = "1.0.118", features = ["derive"] }
 threshold = "0.8.15"
-tokio = { git = "https://github.com/tokio-rs/tokio", rev = "575938d4579e6fe6a89b700aadb0ae2bbab5483b", features = ["full", "parking_lot"] }
-tokio-util = { git = "https://github.com/tokio-rs/tokio", rev = "575938d4579e6fe6a89b700aadb0ae2bbab5483b", features = ["codec"] }
+tokio = { version = "1.0.0", features = ["full", "parking_lot"] }
+tokio-util = { version = "0.6.0", features = ["codec"] }
 tracing = "0.1.22"
 tracing-appender = "0.1.1"
 tracing-subscriber = "0.2.15"
