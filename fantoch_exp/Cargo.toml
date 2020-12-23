@@ -24,11 +24,11 @@ rusoto_credential = { version = "0.45.0", optional = true }
 rusoto_ec2 = { version = "0.45.0", optional = true }
 serde = { version = "1.0.118", features = ["derive"] }
 serde_json = "1.0.60"
-tracing = { version = "0.1.22" }
+tracing = "0.1.22"
 tracing-futures = { version = "0.2.4", optional = true }
 tracing-subscriber = { version = "0.2.15", optional = true }
 tokio = { version = "1.0.0", features = ["time"], optional = true }
-tsunami = { git = "https://github.com/jonhoo/tsunami", rev = "b6dbda556e7c813f05c54dd6d3e842a1f54d0eeb", default-features = false, features = ["aws", "baremetal"], optional = true }
+tsunami = { version = "0.11.0-beta.10", default-features = false, features = ["aws", "baremetal"], optional = true }
 
 fantoch = { path = "../fantoch" }
 
