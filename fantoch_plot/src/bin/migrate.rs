@@ -2,6 +2,7 @@ use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
+use fantoch::id::ProcessId;
 use fantoch::planet::Planet;
 use fantoch_exp::{
     ExperimentConfig, FantochFeature, PlacementFlat, Protocol, RunMode,
@@ -9,21 +10,75 @@ use fantoch_exp::{
 };
 use fantoch_plot::ResultsDB;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum PreviousKeyGen {
+    ConflictPool {
+        conflict_rate: usize,
+        pool_size: usize,
+    },
+    Zipf {
+        coefficient: f64,
+        keys_per_shard: usize,
+    },
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PreviousWorkload {
     /// number of shards
     shard_count: u64,
     // key generator
-    key_gen: KeyGen,
+    key_gen: PreviousKeyGen,
     /// number of keys accessed by the command
     keys_per_command: usize,
     /// number of commands to be submitted in this workload
     commands_per_client: usize,
+    /// percentage of read-only commands
+    read_only_percentage: usize,
     /// size of payload in command (in bytes)
     payload_size: usize,
     /// number of commands already issued in this workload
     command_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreviousConfig {
+    /// number of processes
+    n: usize,
+    /// number of tolerated faults
+    f: usize,
+    /// number of shards
+    shard_count: usize,
+    /// if enabled, then execution is skipped
+    execute_at_commit: bool,
+    /// defines the interval between executor cleanups
+    executor_cleanup_interval: Duration,
+    /// defines the interval between between executed notifications sent to
+    /// the local worker process
+    executor_executed_notification_interval: Duration,
+    /// defines whether the executor should monitor pending commands, and if
+    /// so, the interval between each monitor
+    executor_monitor_pending_interval: Option<Duration>,
+    /// defines whether the executor should monitor the execution order of
+    /// commands
+    executor_monitor_execution_order: bool,
+    /// defines the interval between garbage collections
+    gc_interval: Option<Duration>,
+    // starting leader process
+    leader: Option<ProcessId>,
+    /// defines whether newt should employ tiny quorums or not
+    newt_tiny_quorums: bool,
+    /// defines the interval between clock bumps, if any
+    newt_clock_bump_interval: Option<Duration>,
+    /// defines the interval the sending of `MDetached` messages in newt, if
+    /// any
+    newt_detached_send_interval: Option<Duration>,
+    /// defines whether caesar should employ the wait condition
+    caesar_wait_condition: bool,
+    /// defines whether protocols should try to bypass the fast quorum process
+    /// ack (which is only possible if the fast quorum size is 2)
+    skip_fast_ack: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -34,7 +89,7 @@ pub struct PreviousExperimentConfig {
     pub features: Vec<FantochFeature>,
     pub testbed: Testbed,
     pub protocol: Protocol,
-    pub config: Config,
+    pub config: PreviousConfig,
     pub clients_per_region: usize,
     pub workload: PreviousWorkload,
     pub process_tcp_nodelay: bool,
@@ -51,9 +106,9 @@ pub struct PreviousExperimentConfig {
 
 fn main() -> Result<(), Report> {
     for results_dir in vec![
-        "../results_fairness",
-        "../results_increasing_load",
-        "../results_scalability",
+        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency",
+        "/home/vitor.enes/eurosys_results/results_increasing_load",
+        "/home/vitor.enes/eurosys_results/results_partial_replication",
     ] {
         // load results
         let timestamps =
@@ -77,14 +132,70 @@ fn main() -> Result<(), Report> {
 
             match previous {
                 Ok(previous) => {
+                    let key_gen = match previous.workload.key_gen {
+                        PreviousKeyGen::ConflictPool {
+                            conflict_rate,
+                            pool_size,
+                        } => KeyGen::ConflictPool {
+                            conflict_rate,
+                            pool_size,
+                        },
+                        PreviousKeyGen::Zipf {
+                            coefficient,
+                            keys_per_shard,
+                        } => KeyGen::Zipf {
+                            coefficient,
+                            total_keys_per_shard: keys_per_shard,
+                        },
+                    };
+
+                    // create workoad
                     let mut workload = Workload::new(
                         previous.workload.shard_count as usize,
-                        previous.workload.key_gen,
+                        key_gen,
                         previous.workload.keys_per_command,
                         previous.workload.commands_per_client,
                         previous.workload.payload_size,
                     );
-                    workload.set_read_only_percentage(0);
+                    // NOTE THAT `set_read_only_percentage` IS REQUIRED!
+                    workload.set_read_only_percentage(
+                        previous.workload.read_only_percentage,
+                    );
+
+                    let mut config =
+                        Config::new(previous.config.n, previous.config.f);
+                    config.set_shard_count(previous.config.shard_count);
+                    config.set_execute_at_commit(
+                        previous.config.execute_at_commit,
+                    );
+                    config.set_executor_cleanup_interval(
+                        previous.config.executor_cleanup_interval,
+                    );
+                    config.set_executor_executed_notification_interval(
+                        previous.config.executor_executed_notification_interval,
+                    );
+                    config.set_executor_monitor_pending_interval(
+                        previous.config.executor_monitor_pending_interval,
+                    );
+                    config.set_executor_monitor_execution_order(
+                        previous.config.executor_monitor_execution_order,
+                    );
+                    config.set_gc_interval(previous.config.gc_interval);
+                    config.set_leader(previous.config.leader);
+                    config.set_newt_tiny_quorums(
+                        previous.config.newt_tiny_quorums,
+                    );
+                    config.set_newt_clock_bump_interval(
+                        previous.config.newt_clock_bump_interval,
+                    );
+                    config.set_newt_detached_send_interval(
+                        previous.config.newt_detached_send_interval,
+                    );
+                    config.set_caesar_wait_condition(
+                        previous.config.caesar_wait_condition,
+                    );
+                    config.set_skip_fast_ack(previous.config.skip_fast_ack);
+
                     let exp_config = ExperimentConfig {
                         placement: previous.placement,
                         planet: previous.planet,
@@ -92,7 +203,7 @@ fn main() -> Result<(), Report> {
                         features: previous.features,
                         testbed: previous.testbed,
                         protocol: previous.protocol,
-                        config: previous.config,
+                        config,
                         clients_per_region: previous.clients_per_region,
                         process_tcp_nodelay: previous.process_tcp_nodelay,
                         tcp_buffer_size: previous.tcp_buffer_size,

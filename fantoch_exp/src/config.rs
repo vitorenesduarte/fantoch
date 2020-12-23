@@ -320,13 +320,16 @@ impl ClientConfig {
     pub fn to_args(&self) -> Vec<String> {
         use fantoch::client::KeyGen;
         let key_gen = match self.workload.key_gen() {
-            KeyGen::ConflictRate { conflict_rate } => {
-                format!("conflict_rate,{}", conflict_rate)
+            KeyGen::ConflictPool {
+                conflict_rate,
+                pool_size,
+            } => {
+                format!("conflict_pool,{},{}", conflict_rate, pool_size)
             }
             KeyGen::Zipf {
                 coefficient,
-                keys_per_shard,
-            } => format!("zipf,{},{}", coefficient, keys_per_shard),
+                total_keys_per_shard,
+            } => format!("zipf,{},{}", coefficient, total_keys_per_shard),
         };
         let mut args = args![
             "--ids",

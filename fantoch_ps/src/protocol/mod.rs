@@ -44,7 +44,10 @@ mod tests {
     // global test config
     const SHARD_COUNT: usize = 1;
     const COMMANDS_PER_CLIENT: usize = 100;
-    const CONFLICT_RATE: usize = 50;
+    const KEY_GEN: KeyGen = KeyGen::ConflictPool {
+        conflict_rate: 50,
+        pool_size: 1,
+    };
     const CLIENTS_PER_PROCESS: usize = 10;
 
     macro_rules! config {
@@ -752,10 +755,12 @@ mod tests {
     where
         P: Protocol,
     {
-        extract_metrics(worker.metrics())
+        extract_process_metrics(worker.metrics())
     }
 
-    fn extract_metrics(metrics: &ProtocolMetrics) -> (usize, usize, usize) {
+    fn extract_process_metrics(
+        metrics: &ProtocolMetrics,
+    ) -> (usize, usize, usize) {
         let metric = |kind| {
             metrics.get_aggregated(kind).cloned().unwrap_or_default() as usize
         };
@@ -780,13 +785,10 @@ mod tests {
 
         // create workload
         let keys_per_command = 2;
-        let key_gen = KeyGen::ConflictRate {
-            conflict_rate: CONFLICT_RATE,
-        };
         let payload_size = 1;
         let workload = Workload::new(
             shard_count,
-            key_gen,
+            KEY_GEN,
             keys_per_command,
             commands_per_client,
             payload_size,
@@ -846,12 +848,9 @@ mod tests {
         // clients workload
         let keys_per_command = 2;
         let payload_size = 1;
-        let key_gen = KeyGen::ConflictRate {
-            conflict_rate: CONFLICT_RATE,
-        };
         let workload = Workload::new(
             shard_count,
-            key_gen,
+            KEY_GEN,
             keys_per_command,
             commands_per_client,
             payload_size,
@@ -878,15 +877,14 @@ mod tests {
 
         // run simulation until the clients end + another 10 seconds (for GC)
         let extra_sim_time = Some(Duration::from_secs(10));
-        let (processes_metrics, executors_monitors, _) =
-            runner.run(extra_sim_time);
+        let (metrics, executors_monitors, _) = runner.run(extra_sim_time);
 
         // fetch slow paths and stable count from metrics
-        let metrics = processes_metrics
+        let metrics = metrics
             .into_iter()
-            .map(|(process_id, process_metrics)| {
+            .map(|(process_id, (process_metrics, _executors_metrics))| {
                 let (fast_paths, slow_paths, stable_count) =
-                    extract_metrics(&process_metrics);
+                    extract_process_metrics(&process_metrics);
                 (process_id, (fast_paths, slow_paths, stable_count))
             })
             .collect();

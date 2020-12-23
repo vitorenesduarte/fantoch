@@ -2,7 +2,7 @@
 
 mod db;
 mod fmt;
-mod plot;
+pub mod plot;
 
 // Re-exports.
 pub use db::{ExperimentData, LatencyPrecision, ResultsDB, Search};
@@ -1034,7 +1034,7 @@ pub fn inter_machine_scalability_plot(
             // refine search
             let key_gen = KeyGen::Zipf {
                 coefficient,
-                keys_per_shard: 1_000_000,
+                total_keys_per_shard: 1_000_000,
             };
             search
                 .shard_count(shard_count)
@@ -1784,7 +1784,7 @@ fn percentiles() -> impl Iterator<Item = f64> {
 }
 
 // https://matplotlib.org/3.3.1/api/_as_gen/matplotlib.pyplot.subplots_adjust.html?highlight=subplots_adjust#matplotlib.pyplot.subplots_adjust
-fn start_plot<'a>(
+pub fn start_plot<'a>(
     py: Python<'a>,
     plt: &'a PyPlot<'a>,
     kwargs: Option<&PyDict>,
@@ -1808,7 +1808,7 @@ fn start_plot<'a>(
     Ok((fig, ax))
 }
 
-fn end_plot(
+pub fn end_plot(
     something_plotted: bool,
     output_dir: Option<&str>,
     output_file: &str,
@@ -1849,7 +1849,7 @@ fn end_plot(
     Ok(())
 }
 
-fn add_legend(
+pub fn add_legend(
     plotted: usize,
     legends: Option<BTreeMap<usize, (&PyAny, String)>>,
     x_bbox_to_anchor: Option<f64>,

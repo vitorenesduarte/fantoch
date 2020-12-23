@@ -1004,7 +1004,7 @@ mod tests {
                     // otherwise, make them depend on each other (maybe both
                     // ways)
                     let mut rng = rand::thread_rng();
-                    match rng.gen_range(0, 3) {
+                    match rng.gen_range(0..3) {
                         0 => {
                             // left depends on right
                             left_deps.insert(*right);

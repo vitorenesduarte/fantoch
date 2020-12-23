@@ -1,8 +1,7 @@
 use crate::client::{Client, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;
-use crate::executor::ExecutionOrderMonitor;
-use crate::executor::Executor;
+use crate::executor::{ExecutionOrderMonitor, Executor, ExecutorMetrics};
 use crate::id::{ClientId, ProcessId, ShardId};
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
@@ -204,7 +203,7 @@ where
         &mut self,
         extra_sim_time: Option<Duration>,
     ) -> (
-        HashMap<ProcessId, ProtocolMetrics>,
+        HashMap<ProcessId, (ProtocolMetrics, ExecutorMetrics)>,
         HashMap<ProcessId, Option<ExecutionOrderMonitor>>,
         HashMap<Region, (usize, Histogram)>,
     ) {
@@ -223,9 +222,9 @@ where
         // run simulation loop
         self.simulation_loop(extra_sim_time);
 
-        // return processes metrics and client latencies
+        // return metrics and client latencies
         (
-            self.processes_metrics(),
+            self.metrics(),
             self.executors_monitors(),
             self.clients_latencies(),
         )
@@ -513,7 +512,7 @@ where
         // check if we should reorder messages
         if self.reorder_messages {
             // if so, multiply distance by some random number between 0 and 10
-            let multiplier: f64 = rand::thread_rng().gen_range(0.0, 10.0);
+            let multiplier: f64 = rand::thread_rng().gen_range(0.0..10.0);
             distance = (distance as f64 * multiplier) as u64;
         }
 
@@ -588,16 +587,24 @@ where
         ms
     }
 
-    /// Get processes' metrics.
+    /// Get metrics from processes and executors.
     /// TODO does this need to be mut?
-    fn processes_metrics(&mut self) -> HashMap<ProcessId, ProtocolMetrics> {
-        self.check_processes(|process| process.metrics().clone())
+    fn metrics(
+        &mut self,
+    ) -> HashMap<ProcessId, (ProtocolMetrics, ExecutorMetrics)> {
+        self.check_processes_and_executors(|process, executor| {
+            let process_metrics = process.metrics().clone();
+            let executor_metrics = executor.metrics().clone();
+            (process_metrics, executor_metrics)
+        })
     }
 
     fn executors_monitors(
         &mut self,
     ) -> HashMap<ProcessId, Option<ExecutionOrderMonitor>> {
-        self.check_executors(|executor| executor.monitor().cloned())
+        self.check_processes_and_executors(|_process, executor| {
+            executor.monitor().cloned()
+        })
     }
 
     /// Get client's stats.
@@ -619,40 +626,24 @@ where
         )
     }
 
-    fn check_processes<F, R>(&mut self, f: F) -> HashMap<ProcessId, R>
+    fn check_processes_and_executors<F, R>(
+        &mut self,
+        f: F,
+    ) -> HashMap<ProcessId, R>
     where
-        F: Fn(&P) -> R,
+        F: Fn(&P, &P::Executor) -> R,
     {
         let simulation = &mut self.simulation;
 
         self.process_to_region
             .keys()
             .map(|&process_id| {
-                // get process from simulation
-                let (process, _executor, _, _) =
+                // get process and executor from simulation
+                let (process, executor, _, _) =
                     simulation.get_process(process_id);
 
                 // compute process result
-                (process_id, f(&process))
-            })
-            .collect()
-    }
-
-    fn check_executors<F, R>(&mut self, f: F) -> HashMap<ProcessId, R>
-    where
-        F: Fn(&P::Executor) -> R,
-    {
-        let simulation = &mut self.simulation;
-
-        self.process_to_region
-            .keys()
-            .map(|&process_id| {
-                // get executor from simulation
-                let (_process, executor, _, _) =
-                    simulation.get_process(process_id);
-
-                // compute executor result
-                (process_id, f(&executor))
+                (process_id, f(&process, &executor))
             })
             .collect()
     }
@@ -743,7 +734,12 @@ mod tests {
         // clients workload
         let shard_count = 1;
         let keys_per_command = 1;
-        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
+        let pool_size = 1;
+        let conflict_rate = 100;
+        let key_gen = KeyGen::ConflictPool {
+            pool_size,
+            conflict_rate,
+        };
         let commands_per_client = 1000;
         let payload_size = 100;
         let workload = Workload::new(
@@ -776,7 +772,7 @@ mod tests {
         );
 
         // run simulation until the clients end + another second second
-        let (processes_metrics, _executors_monitors, mut clients_latencies) =
+        let (metrics, _executors_monitors, mut clients_latencies) =
             runner.run(Some(Duration::from_secs(1)));
 
         // check client stats
@@ -793,18 +789,20 @@ mod tests {
         assert_eq!(us_west2_issued, expected);
 
         // check process stats
-        processes_metrics.values().into_iter().for_each(|metrics| {
-            // check stability has run
-            let stable_count = metrics
-                .get_aggregated(ProtocolMetricsKind::Stable)
-                .expect("stability should have happened");
+        metrics.values().into_iter().for_each(
+            |(process_metrics, _executor_metrics)| {
+                // check stability has run
+                let stable_count = process_metrics
+                    .get_aggregated(ProtocolMetricsKind::Stable)
+                    .expect("stability should have happened");
 
-            // check that all commands were gc-ed:
-            // - since we have clients in two regions, the total number of
-            //   commands is two times the expected per region
-            let total_commands = (expected * 2) as u64;
-            assert!(*stable_count == total_commands)
-        });
+                // check that all commands were gc-ed:
+                // - since we have clients in two regions, the total number of
+                //   commands is two times the expected per region
+                let total_commands = (expected * 2) as u64;
+                assert!(*stable_count == total_commands)
+            },
+        );
 
         // return stats for both regions
         (us_west1, us_west2)

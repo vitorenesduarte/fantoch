@@ -10,7 +10,10 @@ use std::time::Duration;
 const RANGE_SEP: &str = "-";
 const DEFAULT_KEYS_PER_COMMAND: usize = 1;
 const DEFAULT_SHARD_COUNT: usize = 1;
-const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictRate { conflict_rate: 100 };
+const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictPool {
+    conflict_rate: 100,
+    pool_size: 1,
+};
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_READ_ONLY_PERCENTAGE: usize = 0;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
@@ -94,7 +97,7 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
             Arg::with_name("key_gen")
                 .long("key_gen")
                 .value_name("KEY_GEN")
-                .help("representation of a key generator; possible values 'conflict_rate,100' where 100 is the conflict rate, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys (per shard) in the distribution; default: 'conflict_rate,100'")
+                .help("representation of a key generator; possible values 'conflict_pool,100,1' where 100 is the conflict rate and 1 the pool size, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys (per shard) in the distribution; default: 'conflict_rate,100,1'")
                 .takes_value(true),
         )
         .arg(
@@ -321,14 +324,17 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                 _ => panic!("invalid specification of key generator: {:?}", key_gen)
             };
             match parts[0] {
-                "conflict_rate" => {
-                    if parts.len() != 2 {
-                        panic!("conflict_rate key generator takes a single argument");
+                "conflict_pool" => {
+                    if parts.len() != 3 {
+                        panic!("conflict_pool key generator takes two arguments");
                     }
                     let conflict_rate = parts[1]
                         .parse::<usize>()
                         .expect("conflict rate should be a number");
-                    KeyGen::ConflictRate { conflict_rate }
+                    let pool_size = parts[2]
+                        .parse::<usize>()
+                        .expect("pool size should be a number");
+                    KeyGen::ConflictPool { conflict_rate, pool_size }
                 }
                 "zipf" => {
                     if parts.len() != 3 {
@@ -341,7 +347,7 @@ fn parse_key_gen(key_gen: Option<&str>) -> KeyGen {
                         .parse::<usize>()
                         .expect("number of keys (per shard) in the zipf distribution should be a number");
                         KeyGen::Zipf {
-                            coefficient, keys_per_shard
+                            coefficient, total_keys_per_shard: keys_per_shard
                         }
                 }
                 kgen => panic!("invalid key generator type: {}", kgen),

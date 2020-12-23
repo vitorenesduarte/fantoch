@@ -143,11 +143,11 @@ impl Config {
     }
 
     /// Sets the executor monitor pending interval.
-    pub fn set_executor_monitor_pending_interval(
-        &mut self,
-        interval: Duration,
-    ) {
-        self.executor_monitor_pending_interval = Some(interval);
+    pub fn set_executor_monitor_pending_interval<I>(&mut self, interval: I)
+    where
+        I: Into<Option<Duration>>,
+    {
+        self.executor_monitor_pending_interval = interval.into();
     }
 
     /// Checks the whether executors should monitor execution order.
@@ -183,8 +183,11 @@ impl Config {
     }
 
     /// Sets the garbage collection interval.
-    pub fn set_gc_interval(&mut self, interval: Duration) {
-        self.gc_interval = Some(interval);
+    pub fn set_gc_interval<I>(&mut self, interval: I)
+    where
+        I: Into<Option<Duration>>,
+    {
+        self.gc_interval = interval.into();
     }
 
     /// Checks whether a starting leader has been defined.
@@ -193,8 +196,11 @@ impl Config {
     }
 
     /// Sets the starting leader.
-    pub fn set_leader(&mut self, leader: ProcessId) {
-        self.leader = Some(leader);
+    pub fn set_leader<L>(&mut self, leader: L)
+    where
+        L: Into<Option<ProcessId>>,
+    {
+        self.leader = leader.into();
     }
 
     /// Checks whether newt tiny quorums is enabled or not.
@@ -213,8 +219,11 @@ impl Config {
     }
 
     /// Sets newt clock bump interval.
-    pub fn set_newt_clock_bump_interval(&mut self, interval: Duration) {
-        self.newt_clock_bump_interval = Some(interval);
+    pub fn set_newt_clock_bump_interval<I>(&mut self, interval: I)
+    where
+        I: Into<Option<Duration>>,
+    {
+        self.newt_clock_bump_interval = interval.into();
     }
 
     /// Checks newt
@@ -223,8 +232,11 @@ impl Config {
     }
 
     /// Sets newt clock bump interval.
-    pub fn set_newt_detached_send_interval(&mut self, interval: Duration) {
-        self.newt_detached_send_interval = Some(interval);
+    pub fn set_newt_detached_send_interval<I>(&mut self, interval: I)
+    where
+        I: Into<Option<Duration>>,
+    {
+        self.newt_detached_send_interval = interval.into();
     }
 
     /// Checks whether caesar's wait condition is enabled or not.

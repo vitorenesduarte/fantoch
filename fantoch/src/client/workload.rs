@@ -4,7 +4,8 @@ use crate::id::{RiflGen, ShardId};
 use crate::kvs::{KVOp, Key, Value};
 use crate::trace;
 use crate::HashMap;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::iter;
 
@@ -35,11 +36,16 @@ impl Workload {
         payload_size: usize,
     ) -> Self {
         // check for valid workloads
-        if let KeyGen::ConflictRate { conflict_rate } = key_gen {
+        if let KeyGen::ConflictPool {
+            pool_size,
+            conflict_rate,
+        } = key_gen
+        {
             assert!(
                 conflict_rate <= 100,
                 "the conflict rate must be less or equal to 100"
             );
+            assert!(pool_size >= 1, "the pool size should be at least 1");
             if conflict_rate == 100 && keys_per_command > 1 {
                 panic!("invalid workload; can't generate more than one key when the conflict_rate is 100");
             }
@@ -194,7 +200,7 @@ impl Workload {
     fn gen_cmd_value(&self) -> Value {
         let mut rng = rand::thread_rng();
         iter::repeat(())
-            .map(|_| rng.sample(Alphanumeric))
+            .map(|_| rng.sample(Alphanumeric) as char)
             .take(self.payload_size)
             .collect()
     }
@@ -208,8 +214,11 @@ impl Workload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::key_gen::CONFLICT_COLOR;
     use crate::kvs::KVOp;
+
+    const POOL_SIZE: usize = 1;
+    // since the pool size is 1, the conflict color must be the following
+    const CONFLICT_COLOR: &str = "CONFLICT0";
 
     #[test]
     fn gen_cmd_key() {
@@ -224,8 +233,10 @@ mod tests {
         let payload_size = 100;
 
         // create conflicting workload
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate: 100,
+            pool_size: POOL_SIZE,
+        };
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -244,8 +255,10 @@ mod tests {
         );
 
         // create non-conflicting workload
-        let conflict_rate = 0;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate: 0,
+            pool_size: POOL_SIZE,
+        };
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -274,8 +287,10 @@ mod tests {
         let payload_size = 10;
 
         // create workload
-        let conflict_rate = 100;
-        let key_gen = KeyGen::ConflictRate { conflict_rate };
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate: 100,
+            pool_size: POOL_SIZE,
+        };
         let mut workload = Workload::new(
             shard_count,
             key_gen,
@@ -343,7 +358,10 @@ mod tests {
             let payload_size = 0;
 
             // create workload
-            let key_gen = KeyGen::ConflictRate { conflict_rate };
+            let key_gen = KeyGen::ConflictPool {
+                conflict_rate,
+                pool_size: POOL_SIZE,
+            };
             let mut workload = Workload::new(
                 shard_count,
                 key_gen,
@@ -397,7 +415,7 @@ mod tests {
         // create workload
         let key_gen = KeyGen::Zipf {
             coefficient: 0.1,
-            keys_per_shard: 1_000_000,
+            total_keys_per_shard: 1_000_000,
         };
         let mut workload = Workload::new(
             shard_count,

@@ -8,7 +8,7 @@ use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
-    MessageIndex, Protocol, ProtocolMetrics,
+    MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
 use fantoch::util;
@@ -262,6 +262,11 @@ impl<KC: KeyClocks> Caesar<KC> {
             return;
         }
 
+        // register start time if we're the coordinator
+        if dot.source() == from {
+            info.start_time_ms = Some(time.millis());
+        }
+
         // if yes, compute set of predecessors
         let mut blocked_by = HashSet::new();
         let deps = self.key_clocks.predecessors(
@@ -447,6 +452,9 @@ impl<KC: KeyClocks> Caesar<KC> {
                 }
                 // after this, we must still be blocked by some command
                 assert!(!info.blocked_by.is_empty());
+
+                // save the current time as the moment where we started waiting
+                info.wait_start_time_ms = Some(time.millis());
             }
         }
 
@@ -595,6 +603,21 @@ impl<KC: KeyClocks> Caesar<KC> {
         if info.status == Status::COMMIT {
             // do nothing if we're already COMMIT
             return;
+        }
+
+        // register commit time if we're the coordinator
+        if dot.source() == from {
+            let start_time_ms = info.start_time_ms.take().expect(
+                "the command should have been started by its coordinator",
+            );
+            let end_time_ms = time.millis();
+
+            // compute commit latency and collect this metric
+            let commit_latency = end_time_ms - start_time_ms;
+            self.bp.collect_metric(
+                ProtocolMetricsKind::CommitLatency,
+                commit_latency,
+            );
         }
 
         // create execution info
@@ -896,6 +919,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                 // we only need to accept/reject the blocked command if the
                 // command is still at the `PROPOSE` phase
                 if blocked_dot_info.status == Status::PROPOSE {
+                    let mut end_of_wait = false;
                     let safe_to_ignore = Self::safe_to_ignore(
                         self.bp.process_id,
                         blocked_dot,
@@ -920,6 +944,8 @@ impl<KC: KeyClocks> Caesar<KC> {
                                 &mut self.to_processes,
                                 time,
                             );
+                            // we're done waiting
+                            end_of_wait = true;
                         }
                     } else {
                         // REJECT the blocked command if it's not safe to ignore
@@ -933,6 +959,24 @@ impl<KC: KeyClocks> Caesar<KC> {
                             &mut self.key_clocks,
                             &mut self.to_processes,
                             time,
+                        );
+                        // we're done waiting
+                        end_of_wait = true;
+                    }
+
+                    if end_of_wait {
+                        // get wait start and end time
+                        let wait_start_time_ms =
+                            blocked_dot_info.wait_start_time_ms.take().expect(
+                                "a blocked command must have a wait start time",
+                            );
+                        let wait_end_time_ms = time.millis();
+
+                        // compute wait condition delay and collect this metric
+                        let wait_delay = wait_end_time_ms - wait_start_time_ms;
+                        self.bp.collect_metric(
+                            ProtocolMetricsKind::WaitConditionDelay,
+                            wait_delay,
                         );
                     }
                 } else {
@@ -1055,6 +1099,11 @@ struct CaesarInfo {
     // `quorum_retries` is used by the coordinator to aggregate dependencies
     // reported in `MRetry` messages
     quorum_retries: QuorumRetries,
+    // time in milliseconds when the coordinator received the command
+    start_time_ms: Option<u64>,
+    // time in milliseconds when this process decided to start the wait
+    // condition
+    wait_start_time_ms: Option<u64>,
 }
 
 impl Info for CaesarInfo {
@@ -1079,6 +1128,8 @@ impl Info for CaesarInfo {
                 write_quorum_size,
             ),
             quorum_retries: QuorumRetries::new(write_quorum_size),
+            start_time_ms: None,
+            wait_start_time_ms: None,
         }
     }
 }
@@ -1265,7 +1316,10 @@ mod tests {
 
         // client workload
         let shard_count = 1;
-        let key_gen = KeyGen::ConflictRate { conflict_rate: 100 };
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate: 100,
+            pool_size: 1,
+        };
         let keys_per_command = 1;
         let commands_per_client = 10;
         let payload_size = 100;
@@ -1395,5 +1449,137 @@ mod tests {
         assert!(
             matches!(mpropose, Action::ToSend {msg, ..} if check_msg(&msg))
         );
+    }
+
+    #[test]
+    fn caesar_livelock() {
+        // there's a single shard
+        let shard_id = 0;
+
+        // processes
+        let processes = vec![(1, shard_id), (2, shard_id), (3, shard_id)];
+
+        // create system time
+        let time = SimTime::new();
+
+        // n and f
+        let n = 3;
+        let f = 1;
+        let config = Config::new(n, f);
+
+        // caesar
+        let (mut caesar_1, _) = CaesarSequential::new(1, shard_id, config);
+        let (mut caesar_2, _) = CaesarSequential::new(2, shard_id, config);
+        let (mut caesar_3, _) = CaesarSequential::new(3, shard_id, config);
+
+        // discover processes in all caesar (the order doesn't matter)
+        caesar_1.discover(processes.clone());
+        caesar_2.discover(processes.clone());
+        caesar_3.discover(processes.clone());
+
+        // client workload: all commands conflict
+        let shard_count = 1;
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate: 100,
+            pool_size: 1,
+        };
+        let keys_per_command = 1;
+        let commands_per_client = 10;
+        let payload_size = 0;
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            commands_per_client,
+            payload_size,
+        );
+
+        // create client that will send all commands
+        let mut client = Client::new(1, workload, None);
+
+        // generate a new command by the client
+        let mut next_cmd = || {
+            let (_, cmd) = client
+                .next_cmd(&time)
+                .expect("there should be a next command");
+            cmd
+        };
+
+        // retrieve a single outgoing message from process
+        let retrieve_single_msg = |caesar: &mut CaesarSequential| {
+            let mut actions: Vec<_> = caesar.to_processes_iter().collect();
+            assert_eq!(actions.len(), 1);
+            let action = actions.pop().unwrap();
+            match action {
+                Action::ToSend { msg, .. } => msg,
+                _ => panic!("expecting Action::ToSend"),
+            }
+        };
+
+        // submit a command, take the mpropose, handle it locally and return it
+        let mut submit = |caesar: &mut CaesarSequential| {
+            caesar.submit(None, next_cmd(), &time);
+            let mpropose = retrieve_single_msg(caesar);
+
+            // handle the mpropose locally and ignore the mpropose ack
+            caesar.handle(caesar.id(), shard_id, mpropose.clone(), &time);
+            let _mpropose_ack = retrieve_single_msg(caesar);
+
+            // return the mpropose
+            mpropose
+        };
+
+        let handle = |caesar: &mut CaesarSequential, from, msg| {
+            caesar.handle(from, shard_id, msg, &time);
+            let actions: Vec<_> = caesar.to_processes_iter().collect();
+            assert!(actions.is_empty());
+        };
+
+        // submit two commands at process 1 and one command at the other two
+        let mpropose_1 = submit(&mut caesar_1);
+        let mpropose_2 = submit(&mut caesar_2);
+        let mpropose_3 = submit(&mut caesar_3);
+        let mpropose_4 = submit(&mut caesar_1);
+
+        // handle:
+        // - mpropose_1 at process 2
+        // - mpropose_2 at process 3
+        // - mpropose_3 at process 1
+        // and check that no new message is produced (i.e. the commands are
+        // blocked in the wait condition)
+        handle(&mut caesar_2, 1, mpropose_1);
+        handle(&mut caesar_3, 2, mpropose_2);
+        handle(&mut caesar_1, 3, mpropose_3);
+
+        // submit one command at each process
+        let mpropose_5 = submit(&mut caesar_2);
+        let mpropose_6 = submit(&mut caesar_3);
+        let mpropose_7 = submit(&mut caesar_1);
+
+        // handle:
+        // - mpropose_4 at process 2
+        // - mpropose_5 at process 3
+        // - mpropose_6 at process 1
+        // and check that no new message is produced (i.e. the commands are
+        // blocked in the wait condition)
+        handle(&mut caesar_2, 1, mpropose_4);
+        handle(&mut caesar_3, 2, mpropose_5);
+        handle(&mut caesar_1, 3, mpropose_6);
+
+        // submit one command at each process
+        let mpropose_8 = submit(&mut caesar_2);
+        let mpropose_9 = submit(&mut caesar_3);
+        // this sequence could continue here, but let's stop
+        let _mpropose_10 = submit(&mut caesar_1);
+
+        // handle:
+        // - mpropose_7 at process 2
+        // - mpropose_8 at process 3
+        // - mpropose_9 at process 1
+        // and check that no new message is produced (i.e. the commands are
+        // blocked in the wait condition)
+        handle(&mut caesar_2, 1, mpropose_7);
+        handle(&mut caesar_3, 2, mpropose_8);
+        handle(&mut caesar_1, 3, mpropose_9);
     }
 }

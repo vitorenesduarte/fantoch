@@ -972,7 +972,12 @@ pub mod tests {
         // create workload
         let keys_per_command = 1;
         let shard_count = 1;
-        let key_gen = KeyGen::ConflictRate { conflict_rate: 50 };
+        let conflict_rate = 50;
+        let pool_size = 1;
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate,
+            pool_size,
+        };
         let commands_per_client = 100;
         let payload_size = 1;
         let workload = Workload::new(
@@ -1334,7 +1339,7 @@ pub mod tests {
     // adapted from: https://github.com/rust-lang-nursery/rust-cookbook/issues/500
     fn get_available_port() -> u16 {
         loop {
-            let port = rand::thread_rng().gen_range(1025, 65535);
+            let port = rand::thread_rng().gen_range(1025..65535);
             if port_is_available(port) {
                 return port;
             }
