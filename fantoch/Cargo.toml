@@ -33,6 +33,6 @@ tokio-util = { version = "0.6.0", features = ["codec"] }
 tracing = "0.1.22"
 tracing-appender = "0.1.1"
 tracing-subscriber = "0.2.15"
-zipf = { git = "https://github.com/vitorenesduarte/rust-zipf", rev = "e7da017bcde5dbd003b9b689494d8b526868b1be" }
+zipf = "7.0.0"
 
 fantoch_prof = { path = "../fantoch_prof" }
