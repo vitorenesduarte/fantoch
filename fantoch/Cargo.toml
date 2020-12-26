@@ -7,7 +7,8 @@ authors = ["Vitor Enes <vitorenesduarte@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = []
+default = ["run"]
+run = ["tokio", "tokio-util"]
 amortize = ["griddle"]
 prof = []
 max_level_debug = []
@@ -28,11 +29,11 @@ num_cpus = "1.13.0"
 rand = "0.8.0"
 serde = { version = "1.0.118", features = ["derive"] }
 threshold = "0.8.15"
-tokio = { version = "1.0.0", features = ["full", "parking_lot"] }
-tokio-util = { version = "0.6.0", features = ["codec"] }
+tokio = { version = "1.0.1", features = ["full", "parking_lot"], optional = true }
+tokio-util = { version = "0.6.0", features = ["codec"], optional = true }
 tracing = "0.1.22"
 tracing-appender = "0.1.1"
 tracing-subscriber = "0.2.15"
-zipf = { git = "https://github.com/vitorenesduarte/rust-zipf", rev = "e7da017bcde5dbd003b9b689494d8b526868b1be" }
+zipf = "7.0.0"
 
 fantoch_prof = { path = "../fantoch_prof" }

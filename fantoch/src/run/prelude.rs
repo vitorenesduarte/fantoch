@@ -3,36 +3,11 @@ use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use crate::id::{ClientId, Dot, ProcessId, ShardId};
+use crate::load_balance::*;
 use crate::protocol::{Executed, MessageIndex, Protocol, ProtocolMetrics};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
-
-// the worker index that should be used by leader-based protocols
-pub const LEADER_WORKER_INDEX: usize = 0;
-
-// the worker index that should be for garbage collection:
-// - it's okay to be the same as the leader index because this value is not used
-//   by leader-based protocols
-// - e.g. in fpaxos, the gc only runs in the acceptor worker
-pub const GC_WORKER_INDEX: usize = 0;
-
-pub const WORKERS_INDEXES_RESERVED: usize = 2;
-
-pub fn worker_index_no_shift(index: usize) -> Option<(usize, usize)> {
-    // when there's no shift, the index must be either 0 or 1
-    assert!(index < WORKERS_INDEXES_RESERVED);
-    Some((0, index))
-}
-
-// note: reserved indexing always reserve the first two workers
-pub const fn worker_index_shift(index: usize) -> Option<(usize, usize)> {
-    Some((WORKERS_INDEXES_RESERVED, index))
-}
-
-pub fn worker_dot_index_shift(dot: &Dot) -> Option<(usize, usize)> {
-    worker_index_shift(dot.sequence() as usize)
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProcessHi {

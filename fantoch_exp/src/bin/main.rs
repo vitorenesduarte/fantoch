@@ -17,7 +17,8 @@ use tsunami::Tsunami;
 
 // timeouts
 const fn minutes(minutes: u64) -> Duration {
-    Duration::from_secs(3600 * minutes)
+    let one_minute = 60;
+    Duration::from_secs(one_minute * minutes)
 }
 const EXPERIMENT_TIMEOUTS: ExperimentTimeouts = ExperimentTimeouts {
     start: Some(minutes(20)),
@@ -734,7 +735,7 @@ async fn aws_bench(
         tracing::warn!("aws bench experiment error: {:?}", e);
     }
     tracing::info!("will wait 5 minutes before terminating spot instances");
-    tokio::time::sleep(tokio::time::Duration::from_secs(60 * 5)).await;
+    tokio::time::delay_for(tokio::time::Duration::from_secs(60 * 5)).await;
 
     launcher.terminate_all().await?;
     Ok(())

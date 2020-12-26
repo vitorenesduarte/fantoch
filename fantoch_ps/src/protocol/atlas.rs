@@ -870,7 +870,7 @@ pub enum Message {
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{
+        use fantoch::load_balance::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
         match self {
@@ -903,7 +903,7 @@ pub enum PeriodicEvent {
 
 impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
+        use fantoch::load_balance::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
             Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
         }

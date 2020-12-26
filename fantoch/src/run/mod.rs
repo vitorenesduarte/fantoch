@@ -75,12 +75,6 @@ pub mod task;
 
 const CONNECT_RETRIES: usize = 100;
 
-// Re-exports.
-pub use prelude::{
-    worker_dot_index_shift, worker_index_no_shift, worker_index_shift,
-    GC_WORKER_INDEX, LEADER_WORKER_INDEX, WORKERS_INDEXES_RESERVED,
-};
-
 use crate::client::{Client, ClientData, Workload};
 use crate::command::{Command, CommandResult};
 use crate::config::Config;

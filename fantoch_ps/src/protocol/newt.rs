@@ -1237,7 +1237,7 @@ const CLOCK_BUMP_WORKER_INDEX: usize = 1;
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{
+        use fantoch::load_balance::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
         debug_assert_eq!(GC_WORKER_INDEX, 0);
@@ -1281,7 +1281,7 @@ pub enum PeriodicEvent {
 
 impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{worker_index_no_shift, GC_WORKER_INDEX};
+        use fantoch::load_balance::{worker_index_no_shift, GC_WORKER_INDEX};
         debug_assert_eq!(GC_WORKER_INDEX, 0);
 
         match self {
