@@ -86,7 +86,7 @@ setup() {
         fi
 
         # install flamegraph
-        cargo install flamegraph
+        cargo install flamegraph --version 0.4.0
         flamegraph --help
         ;;
     "heaptrack")
