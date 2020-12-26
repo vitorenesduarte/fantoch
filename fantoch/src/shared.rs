@@ -1,7 +1,7 @@
-use ahash::RandomState;
 use dashmap::iter::Iter;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use std::collections::hash_map::RandomState;
 use std::collections::BTreeSet;
 use std::hash::Hash;
 
