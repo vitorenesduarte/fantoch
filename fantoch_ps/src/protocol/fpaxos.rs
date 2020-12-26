@@ -413,12 +413,14 @@ pub enum Message {
     },
 }
 
-const LEADER_WORKER_INDEX: usize = fantoch::run::LEADER_WORKER_INDEX;
+const LEADER_WORKER_INDEX: usize = fantoch::load_balance::LEADER_WORKER_INDEX;
 const ACCEPTOR_WORKER_INDEX: usize = 1;
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::{worker_index_no_shift, worker_index_shift};
+        use fantoch::load_balance::{
+            worker_index_no_shift, worker_index_shift,
+        };
         match self {
             Self::MForwardSubmit { .. } => {
                 // forward commands to the leader worker
@@ -461,7 +463,7 @@ pub enum PeriodicEvent {
 
 impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use fantoch::run::worker_index_no_shift;
+        use fantoch::load_balance::worker_index_no_shift;
         match self {
             Self::GarbageCollection => {
                 worker_index_no_shift(ACCEPTOR_WORKER_INDEX)

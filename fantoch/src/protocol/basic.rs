@@ -353,7 +353,7 @@ pub enum Message {
 
 impl MessageIndex for Message {
     fn index(&self) -> Option<(usize, usize)> {
-        use crate::run::{
+        use crate::load_balance::{
             worker_dot_index_shift, worker_index_no_shift, GC_WORKER_INDEX,
         };
         match self {
@@ -378,7 +378,7 @@ pub enum PeriodicEvent {
 
 impl MessageIndex for PeriodicEvent {
     fn index(&self) -> Option<(usize, usize)> {
-        use crate::run::{worker_index_no_shift, GC_WORKER_INDEX};
+        use crate::load_balance::{worker_index_no_shift, GC_WORKER_INDEX};
         match self {
             Self::GarbageCollection => worker_index_no_shift(GC_WORKER_INDEX),
         }
