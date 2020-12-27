@@ -1,13 +1,15 @@
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{Executor, ExecutorResult};
+use fantoch::executor::Executor;
 use fantoch::id::ProcessId;
 use fantoch::protocol::{Action, Protocol};
 use fantoch::time::RunTime;
 use fantoch::util;
-use stateright::actor::{Actor, Event, Id, InitIn, NextIn, Out};
-use std::collections::{HashMap, HashSet};
+use fantoch::{HashMap, HashSet};
+use stateright::actor::{Actor, Id};
 use std::marker::PhantomData;
+
+const SHARD_ID: u64 = 0;
 
 pub struct ProtocolActor<P: Protocol> {
     config: Config,
@@ -32,7 +34,7 @@ where
     }
 
     fn check_topology(n: usize, topology: HashMap<ProcessId, Vec<ProcessId>>) {
-        let ids = Self::usort(util::process_ids(n));
+        let ids = Self::usort(util::process_ids(SHARD_ID, n));
         let keys = Self::usort(topology.keys().cloned());
         assert_eq!(ids, keys);
         for peers in topology.values() {
@@ -78,65 +80,66 @@ where
 {
     type Msg = KV<<P as Protocol>::Message>;
     type State = ProtocolActorState<P>;
-
-    fn init(i: InitIn<Self>, o: &mut Out<Self>) {
-        // fetch id and config
-        let process_id: ProcessId = usize::from(i.id) as ProcessId;
-        let config = i.context.config;
-
-        // our ids range from 1..n
-        assert!(process_id > 0);
-
-        // create protocol
-        let (mut protocol, periodic_events) = P::new(process_id, config);
-
-        if !periodic_events.is_empty() {
-            todo!("schedule periodic events: {:?}", periodic_events);
-        }
-
-        // discover peers
-        let peers = i
-            .context
-            .topology
-            .get(&process_id)
-            .cloned()
-            .expect("each process should have a set of peers");
-        protocol.discover(peers);
-
-        // create executor
-        let executor = <<P as Protocol>::Executor>::new(process_id, config);
-
-        // set actor state
-        let state = ProtocolActorState { protocol, executor };
-        o.set_state(state);
-    }
-
-    fn next(i: NextIn<Self>, o: &mut Out<Self>) {
-        // get current protocol state
-        let mut state = i.state.clone();
-
-        // get msg received
-        let Event::Receive(from, msg) = i.event;
-        let from = to_process_id(from);
-
-        // handle msg
-        let to_sends = match msg {
-            KV::Access(cmd) => Self::handle_submit(cmd, &mut state),
-            KV::Internal(msg) => Self::handle_msg(from, msg, &mut state),
-        };
-
-        // send new messages
-        for (recipients, msg) in to_sends {
-            let recipients: Vec<_> =
-                recipients.into_iter().map(from_process_id).collect();
-            let msg = KV::Internal(msg);
-            o.broadcast(&recipients, &msg);
-        }
-
-        // set new protocol state
-        o.set_state(state);
-    }
 }
+
+//     fn init(i: InitIn<Self>, o: &mut Out<Self>) {
+//         // fetch id and config
+//         let process_id: ProcessId = usize::from(i.id) as ProcessId;
+//         let config = i.context.config;
+
+//         // our ids range from 1..n
+//         assert!(process_id > 0);
+
+//         // create protocol
+//         let (mut protocol, periodic_events) = P::new(process_id, config);
+
+//         if !periodic_events.is_empty() {
+//             todo!("schedule periodic events: {:?}", periodic_events);
+//         }
+
+//         // discover peers
+//         let peers = i
+//             .context
+//             .topology
+//             .get(&process_id)
+//             .cloned()
+//             .expect("each process should have a set of peers");
+//         protocol.discover(peers);
+
+//         // create executor
+//         let executor = <<P as Protocol>::Executor>::new(process_id, config);
+
+//         // set actor state
+//         let state = ProtocolActorState { protocol, executor };
+//         o.set_state(state);
+//     }
+
+//     fn next(i: NextIn<Self>, o: &mut Out<Self>) {
+//         // get current protocol state
+//         let mut state = i.state.clone();
+
+//         // get msg received
+//         let Event::Receive(from, msg) = i.event;
+//         let from = to_process_id(from);
+
+//         // handle msg
+//         let to_sends = match msg {
+//             KV::Access(cmd) => Self::handle_submit(cmd, &mut state),
+//             KV::Internal(msg) => Self::handle_msg(from, msg, &mut state),
+//         };
+
+//         // send new messages
+//         for (recipients, msg) in to_sends {
+//             let recipients: Vec<_> =
+//                 recipients.into_iter().map(from_process_id).collect();
+//             let msg = KV::Internal(msg);
+//             o.broadcast(&recipients, &msg);
+//         }
+
+//         // set new protocol state
+//         o.set_state(state);
+//     }
+// }
 
 impl<P> ProtocolActor<P>
 where
@@ -147,8 +150,9 @@ where
         cmd: Command,
         state: &mut ProtocolActorState<P>,
     ) -> Vec<(HashSet<ProcessId>, P::Message)> {
-        let actions = state.protocol.submit(None, cmd, &RunTime);
-        Self::handle_actions(actions, state)
+        state.protocol.submit(None, cmd, &RunTime);
+        Self::handle_to_executors(state);
+        Self::handle_to_processes(state)
     }
 
     #[must_use]
@@ -158,32 +162,32 @@ where
         state: &mut ProtocolActorState<P>,
     ) -> Vec<(HashSet<ProcessId>, P::Message)> {
         // handle message
-        let actions = state.protocol.handle(from, msg, &RunTime);
+        state.protocol.handle(from, SHARD_ID, msg, &RunTime);
+        Self::handle_to_executors(state);
+        Self::handle_to_processes(state)
+    }
 
+    fn handle_to_executors(state: &mut ProtocolActorState<P>) {
         // handle new execution info
-        for execution_info in state.protocol.to_executor() {
-            for executor_result in state.executor.handle(execution_info) {
-                match executor_result {
-                    ExecutorResult::Ready(cmd_result) => {
-                        todo!("send result to client: {:?}", cmd_result)
-                    }
-                    ExecutorResult::Partial(_, _, _) => {
-                        panic!("executor result cannot be partial")
-                    }
-                }
+        for execution_info in state.protocol.to_executors_iter() {
+            state.executor.handle(execution_info, &RunTime);
+            // assert that there's nothing to other executors (since we're
+            // assuming full replication (and only Janus needs that in partial
+            // replication))
+            assert!(state.executor.to_executors().is_none());
+            for executor_result in state.executor.to_clients_iter() {
+                todo!("send result to client: {:?}", executor_result);
             }
         }
-
-        Self::handle_actions(actions, state)
     }
 
     #[must_use]
-    fn handle_actions(
-        actions: Vec<Action<P>>,
+    fn handle_to_processes(
         state: &mut ProtocolActorState<P>,
     ) -> Vec<(HashSet<ProcessId>, P::Message)> {
         // get the id of this process
         let process_id = state.protocol.id();
+        let actions: Vec<_> = state.protocol.to_processes_iter().collect();
 
         // handle all new actions
         actions

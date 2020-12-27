@@ -16,6 +16,6 @@ csv = "1.1.5"
 rayon = "1.5.0"
 serde = "1.0.118"
 
-fantoch = { path = "../fantoch" }
+fantoch = { path = "../fantoch", default-features = false }
 fantoch_prof = { path = "../fantoch_prof" }
 fantoch_exp = { path = "../fantoch_exp", default-features = false }
