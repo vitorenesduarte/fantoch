@@ -43,11 +43,12 @@ impl RunMode {
     pub fn run_command(
         &self,
         process_type: ProcessType,
+        env_vars: &str,
         binary: &str,
     ) -> String {
         let run_command = format!("./fantoch/target/release/{}", binary);
         match self {
-            Self::Release => run_command,
+            Self::Release => format!("{} {}", env_vars, run_command),
             Self::Flamegraph => {
                 // compute flamegraph file
                 let flamegraph_file = config::run_file(
@@ -58,11 +59,13 @@ impl RunMode {
                 let perf_file = config::run_file(process_type, "perf.data");
                 // `source` is needed in order for `flamegraph` to be found
                 format!(
-                    "source ~/.cargo/env && flamegraph -o {} -c 'record -F 997 --call-graph dwarf -g -o {}' {}",
-                    flamegraph_file, perf_file, run_command
+                    "source ~/.cargo/env && {} flamegraph -v -o {} -c 'record -F 997 --call-graph dwarf -g -o {}' {}",
+                    env_vars, flamegraph_file, perf_file, run_command
                 )
             }
-            Self::Heaptrack => format!("heaptrack {}", run_command),
+            Self::Heaptrack => {
+                format!("{} heaptrack {}", env_vars, run_command)
+            }
         }
     }
 }

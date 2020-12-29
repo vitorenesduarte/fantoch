@@ -416,10 +416,10 @@ pub fn fantoch_setup(
     testbed: Testbed,
 ) -> Box<
     dyn for<'r> Fn(
-        &'r tsunami::Machine<'_>,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
-    > + Send
+            &'r tsunami::Machine<'_>,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
+        > + Send
         + Sync
         + 'static,
 > {
@@ -452,7 +452,7 @@ pub fn fantoch_setup(
                         args![testbed, mode, branch, features, "2>&1"],
                     )
                     .await?;
-                tracing::debug!("full output:\n{}", stdout);
+                tracing::trace!("full output:\n{}", stdout);
                 // check if there was no warning about the packages we need
                 let all_available = vec![
                     "build-essential",
@@ -497,10 +497,10 @@ pub fn fantoch_setup(
 
 pub fn veleta_fantoch_setup() -> Box<
     dyn for<'r> Fn(
-        &'r tsunami::Machine<'_>,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
-    > + Send
+            &'r tsunami::Machine<'_>,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
+        > + Send
         + Sync
         + 'static,
 > {
@@ -533,7 +533,7 @@ pub async fn local_fantoch_setup(
             args![testbed, mode, branch, features, "2>&1"],
         )
         .await?;
-    tracing::debug!("full output:\n{}", stdout);
+    tracing::trace!("full output:\n{}", stdout);
     Ok(())
 }
 
@@ -558,13 +558,7 @@ pub fn fantoch_bin_script(
         "RUST_LOG={}={},fantoch={},fantoch_ps={}",
         binary, max_log_level, max_log_level, max_log_level,
     );
-    let run_command = run_mode.run_command(process_type, binary);
+    let run_command = run_mode.run_command(process_type, &env_vars, binary);
     let args = args.join(" ");
-    format!(
-        "{} {} {} > {} 2>&1",
-        env_vars,
-        run_command,
-        args,
-        err_file.to_string()
-    )
+    format!("{} {} > {} 2>&1", run_command, args, err_file.to_string())
 }
