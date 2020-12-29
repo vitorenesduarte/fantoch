@@ -23,6 +23,7 @@ pub struct Basic {
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
+    buffered_mcommits: HashSet<Dot>,
 }
 
 impl Protocol for Basic {
@@ -59,6 +60,7 @@ impl Protocol for Basic {
         let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
+        let buffered_mcommits = HashSet::new();
 
         // create `Basic`
         let protocol = Self {
@@ -67,6 +69,7 @@ impl Protocol for Basic {
             gc_track,
             to_processes,
             to_executors,
+            buffered_mcommits,
         };
 
         // create periodic events
@@ -114,11 +117,11 @@ impl Protocol for Basic {
         _time: &dyn SysTime,
     ) {
         match msg {
-            Message::MStore { dot, cmd } => self.handle_mstore(from, dot, cmd),
-            Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
-            Message::MCommit { dot, cmd } => {
-                self.handle_mcommit(from, dot, cmd)
+            Message::MStore { dot, cmd, quorum } => {
+                self.handle_mstore(from, dot, cmd, quorum)
             }
+            Message::MStoreAck { dot } => self.handle_mstoreack(from, dot),
+            Message::MCommit { dot } => self.handle_mcommit(dot),
             Message::MCommitDot { dot } => self.handle_mcommit_dot(from, dot),
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed)
@@ -171,8 +174,9 @@ impl Basic {
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
         // create `MStore` and target
-        let mstore = Message::MStore { dot, cmd };
-        let target = self.bp.fast_quorum();
+        let quorum = self.bp.fast_quorum();
+        let mstore = Message::MStore { dot, cmd, quorum };
+        let target = self.bp.all();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -182,8 +186,21 @@ impl Basic {
     }
 
     // #[instrument(skip(self, from, dot, cmd))]
-    fn handle_mstore(&mut self, from: ProcessId, dot: Dot, cmd: Command) {
-        trace!("p{}: MStore({:?}, {:?}) from {}", self.id(), dot, cmd, from);
+    fn handle_mstore(
+        &mut self,
+        from: ProcessId,
+        dot: Dot,
+        cmd: Command,
+        quorum: HashSet<ProcessId>,
+    ) {
+        trace!(
+            "p{}: MStore({:?}, {:?}, {:?}) from {}",
+            self.id(),
+            dot,
+            cmd,
+            quorum,
+            from
+        );
 
         // get cmd info
         let info = self.cmds.get(dot);
@@ -191,15 +208,24 @@ impl Basic {
         // update command info
         info.cmd = Some(cmd);
 
-        // create `MStoreAck` and target
-        let mstoreack = Message::MStoreAck { dot };
-        let target = singleton![from];
+        // reply if we're part of the quorum
+        if quorum.contains(&self.id()) {
+            // create `MStoreAck` and target
+            let mstoreack = Message::MStoreAck { dot };
+            let target = singleton![from];
 
-        // save new action
-        self.to_processes.push(Action::ToSend {
-            target,
-            msg: mstoreack,
-        })
+            // save new action
+            self.to_processes.push(Action::ToSend {
+                target,
+                msg: mstoreack,
+            })
+        }
+
+        // check if there's a buffered commit notification; if yes, handle
+        // the commit again (since now we have the payload)
+        if self.buffered_mcommits.remove(&dot) {
+            self.handle_mcommit(dot);
+        }
     }
 
     // #[instrument(skip(self, from, dot))]
@@ -214,10 +240,7 @@ impl Basic {
 
         // check if we have all necessary replies
         if info.acks.len() == self.bp.config.basic_quorum_size() {
-            let mcommit = Message::MCommit {
-                dot,
-                cmd: info.cmd.clone().expect("command should exist"),
-            };
+            let mcommit = Message::MCommit { dot };
             let target = self.bp.all();
 
             // save new action
@@ -228,33 +251,37 @@ impl Basic {
         }
     }
 
-    // #[instrument(skip(self, _from, dot, cmd))]
-    fn handle_mcommit(&mut self, _from: ProcessId, dot: Dot, cmd: Command) {
-        trace!("p{}: MCommit({:?}, {:?})", self.id(), dot, cmd);
+    // #[instrument(skip(self, dot))]
+    fn handle_mcommit(&mut self, dot: Dot) {
+        trace!("p{}: MCommit({:?})", self.id(), dot);
 
-        // // get cmd info and its rifl
+        // get cmd info and its rifl
         let info = self.cmds.get(dot);
 
-        // // update command info
-        info.cmd = Some(cmd.clone());
+        // check if we have received the initial `MStore`
+        if let Some(cmd) = info.cmd.as_ref() {
+            // if so, create execution info:
+            // - one entry per key being accessed will be created, which allows the
+            //   basic executor to run in parallel
+            let rifl = cmd.rifl();
+            let execution_info = cmd
+                .clone()
+                .into_iter(self.bp.shard_id)
+                .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
+            self.to_executors.extend(execution_info);
 
-        // create execution info:
-        // - one entry per key being accessed will be created, which allows the
-        //   basic executor to run in parallel
-        let rifl = cmd.rifl();
-        let execution_info = cmd
-            .into_iter(self.bp.shard_id)
-            .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
-        self.to_executors.extend(execution_info);
-
-        if self.gc_running() {
-            // notify self with the committed dot
-            self.to_processes.push(Action::ToForward {
-                msg: Message::MCommitDot { dot },
-            });
+            if self.gc_running() {
+                // notify self with the committed dot
+                self.to_processes.push(Action::ToForward {
+                    msg: Message::MCommitDot { dot },
+                });
+            } else {
+                // if we're not running gc, remove the dot info now
+                self.cmds.gc_single(dot);
+            }
         } else {
-            // if we're not running gc, remove the dot info now
-            self.cmds.gc_single(dot);
+            // if not, buffer this `MCommit` notification
+            self.buffered_mcommits.insert(dot);
         }
     }
 
@@ -343,12 +370,26 @@ impl Info for BasicInfo {
 // `Basic` protocol messages
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Message {
-    MStore { dot: Dot, cmd: Command },
-    MStoreAck { dot: Dot },
-    MCommit { dot: Dot, cmd: Command },
-    MCommitDot { dot: Dot },
-    MGarbageCollection { committed: VClock<ProcessId> },
-    MStable { stable: Vec<(ProcessId, u64, u64)> },
+    MStore {
+        dot: Dot,
+        cmd: Command,
+        quorum: HashSet<ProcessId>,
+    },
+    MStoreAck {
+        dot: Dot,
+    },
+    MCommit {
+        dot: Dot,
+    },
+    MCommitDot {
+        dot: Dot,
+    },
+    MGarbageCollection {
+        committed: VClock<ProcessId>,
+    },
+    MStable {
+        stable: Vec<(ProcessId, u64, u64)>,
+    },
 }
 
 impl MessageIndex for Message {
