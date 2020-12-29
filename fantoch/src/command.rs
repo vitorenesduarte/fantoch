@@ -126,7 +126,18 @@ impl Command {
         })
     }
 
-    // Creates an iterator without ops on keys that do not belong to `shard`.
+    // Creates an iterator with ops on keys that belong to `shard_id`.
+    pub fn iter(
+        &self,
+        shard_id: ShardId,
+    ) -> impl Iterator<Item = (&Key, &KVOp)> {
+        self.shard_to_ops
+            .get(&shard_id)
+            .map(|shard_ops| shard_ops.iter())
+            .unwrap_or_else(|| self._empty_keys.iter())
+    }
+
+    // Creates an iterator with ops on keys that belong to `shard_id`.
     pub fn into_iter(
         mut self,
         shard_id: ShardId,

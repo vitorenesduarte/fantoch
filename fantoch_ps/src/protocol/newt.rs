@@ -597,27 +597,33 @@ impl<KC: KeyClocks> Newt<KC> {
         }
 
         // create execution info
-        let cmd = info.cmd.clone().expect("there should be a command payload");
+        let cmd = info
+            .cmd
+            .as_ref()
+            .expect("there should be a command payload");
         let rifl = cmd.rifl();
-        let execution_info =
-            cmd.into_iter(self.bp.shard_id).map(|(key, op)| {
-                // find votes on this key
-                let key_votes = votes.remove(&key);
-                let key_votes = match op {
-                    KVOp::Get => {
-                        assert!(
-                            key_votes.is_none(),
-                            "Get's should have no votes"
-                        );
-                        Vec::new()
-                    }
-                    KVOp::Put(_) => key_votes.expect("Put's should have votes"),
-                    _ => {
-                        panic!("unsupported operation: {:?}", op);
-                    }
-                };
-                ExecutionInfo::votes(dot, clock, rifl, key, op, key_votes)
-            });
+        let execution_info = cmd.iter(self.bp.shard_id).map(|(key, op)| {
+            // find votes on this key
+            let key_votes = votes.remove(&key);
+            let key_votes = match op {
+                KVOp::Get => {
+                    assert!(key_votes.is_none(), "Get's should have no votes");
+                    Vec::new()
+                }
+                KVOp::Put(_) => key_votes.expect("Put's should have votes"),
+                _ => {
+                    panic!("unsupported operation: {:?}", op);
+                }
+            };
+            ExecutionInfo::votes(
+                dot,
+                clock,
+                rifl,
+                key.clone(),
+                op.clone(),
+                key_votes,
+            )
+        });
         self.to_executors.extend(execution_info);
 
         // update command info:

@@ -261,13 +261,12 @@ impl Basic {
         // check if we have received the initial `MStore`
         if let Some(cmd) = info.cmd.as_ref() {
             // if so, create execution info:
-            // - one entry per key being accessed will be created, which allows the
-            //   basic executor to run in parallel
+            // - one entry per key being accessed will be created, which allows
+            //   the basic executor to run in parallel
             let rifl = cmd.rifl();
-            let execution_info = cmd
-                .clone()
-                .into_iter(self.bp.shard_id)
-                .map(|(key, op)| BasicExecutionInfo::new(rifl, key, op));
+            let execution_info = cmd.iter(self.bp.shard_id).map(|(key, op)| {
+                BasicExecutionInfo::new(rifl, key.clone(), op.clone())
+            });
             self.to_executors.extend(execution_info);
 
             if self.gc_running() {
