@@ -557,10 +557,8 @@ mod tests {
         assert_eq!(actions.len(), 1);
         let mstore = actions.pop().unwrap();
 
-        // check that the mstore is being sent to 2 processes
-        let check_target = |target: &HashSet<ProcessId>| {
-            target.len() == 2 * f && target.contains(&1) && target.contains(&2)
-        };
+        // check that the mstore is being sent to all processes
+        let check_target = |target: &HashSet<ProcessId>| target.len() == n;
         assert!(
             matches!(mstore.clone(), Action::ToSend {target, ..} if check_target(&target))
         );
@@ -570,7 +568,7 @@ mod tests {
             simulation.forward_to_processes((process_id_1, mstore));
 
         // check that there are 2 mstoreacks
-        assert_eq!(mstoreacks.len(), 2 * f);
+        assert_eq!(mstoreacks.len(), 2);
 
         // handle the first mstoreack
         let mcommits = simulation.forward_to_processes(
