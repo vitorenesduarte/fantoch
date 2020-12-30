@@ -258,24 +258,24 @@ fn workers_executors_and_leader(
     protocol: Protocol,
     config: &mut Config,
 ) -> (usize, usize) {
-    let we = |executors| (WORKERS + EXECUTORS - executors, executors);
+    let f = |executors| (WORKERS + EXECUTORS - executors, executors);
     // for all protocol but newt, create a single executor
     match protocol {
         // 1 extra executor for partial replication
-        Protocol::AtlasLocked => we(2),
+        Protocol::AtlasLocked => f(2),
         // 1 extra executor for partial replication (although, not implemented
         // yet)
-        Protocol::EPaxosLocked => we(2),
+        Protocol::EPaxosLocked => f(2),
         // Caesar implementation is sequential for both workers and executors
         Protocol::Caesar => (1, 1),
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);
-            we(1)
+            f(1)
         }
-        Protocol::NewtAtomic => we(EXECUTORS),
-        Protocol::NewtLocked => we(EXECUTORS),
-        Protocol::Basic => we(EXECUTORS),
+        Protocol::NewtAtomic => f(EXECUTORS),
+        Protocol::NewtLocked => f(EXECUTORS),
+        Protocol::Basic => f(EXECUTORS),
     }
 }
 
