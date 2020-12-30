@@ -21,10 +21,11 @@ impl PlotFmt {
         match protocol {
             Protocol::AtlasLocked => "Atlas",
             Protocol::EPaxosLocked => "EPaxos",
+            Protocol::Caesar => "Caesar",
             Protocol::FPaxos => "FPaxos",
             Protocol::NewtAtomic => "Aeon",
             Protocol::NewtLocked => "Newt-L",
-            Protocol::Basic => "Basic",
+            Protocol::Basic => "Inconsistent",
         }
     }
 
@@ -41,6 +42,7 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 2) => "#16a085",
             // (Protocol::EPaxosLocked, _) => "#227093",
             (Protocol::EPaxosLocked, _) => "#444444",
+            (Protocol::Caesar, _) => "#444444",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
@@ -74,6 +76,7 @@ impl PlotFmt {
             (Protocol::FPaxos, 1) => "/", // 1
             (Protocol::FPaxos, 2) => "\\",
             (Protocol::EPaxosLocked, _) => "//", // 3
+            (Protocol::Caesar, _) => "//",
             (Protocol::AtlasLocked, 1) => "///", // 2
             (Protocol::AtlasLocked, 2) => "\\\\\\",
             (Protocol::NewtLocked, 1) => "////", // 4
@@ -94,6 +97,7 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 1) => "o",
             (Protocol::AtlasLocked, 2) => "s",
             (Protocol::EPaxosLocked, _) => "D",
+            (Protocol::Caesar, _) => "D",
             (Protocol::FPaxos, 1) => "+",
             (Protocol::FPaxos, 2) => "x",
             (Protocol::NewtAtomic, 1) => "v",
@@ -114,6 +118,7 @@ impl PlotFmt {
         match (protocol, f) {
             (Protocol::AtlasLocked, _) => "--",
             (Protocol::EPaxosLocked, _) => ":",
+            (Protocol::Caesar, _) => ":",
             (Protocol::FPaxos, _) => "-.",
             (Protocol::NewtAtomic, _) => "-",
             (Protocol::NewtLocked, _) => "-",

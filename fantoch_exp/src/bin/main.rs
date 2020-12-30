@@ -65,9 +65,11 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
+    Protocol::Basic,
     Protocol::AtlasLocked,
     Protocol::NewtAtomic,
-    Protocol::NewtLocked,
+    Protocol::FPaxos,
+    Protocol::Caesar,
 ];
 
 macro_rules! config {
@@ -178,13 +180,13 @@ async fn partial_replication_plot() -> Result<(), Report> {
         .iter_mut()
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
-    // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
-
     // init logging
     let progress = TracingProgressBar::init(
         (workloads.len() * clients_per_region.len() * configs.len()) as u64,
     );
+
+    // create AWS planet
+    let planet = Some(Planet::from("../latency_aws"));
 
     baremetal_bench(
         regions,
@@ -218,6 +220,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        // (Protocol::Basic, config!(n, 1, false, None, false)),
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
         (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
         (Protocol::FPaxos, config!(n, 1, false, None, false)),
@@ -276,13 +279,13 @@ async fn increasing_load_plot() -> Result<(), Report> {
         .iter_mut()
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
-    // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
-
     // init logging
     let progress = TracingProgressBar::init(
         (workloads.len() * clients_per_region.len() * configs.len()) as u64,
     );
+
+    // create AWS planet
+    let planet = Some(Planet::from("../latency_aws"));
 
     baremetal_bench(
         regions,
@@ -320,9 +323,11 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+        // (Protocol::Caesar, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![256];
+    // let clients_per_region = vec![256, 512];
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -359,9 +364,14 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (workloads.len() * clients_per_region.len() * configs.len()) as u64,
     );
 
+    // // create AWS planet
+    // let planet = Some(Planet::from("../latency_aws"));
+
+    // baremetal_bench(
     aws_bench(
         regions,
         shard_count,
+        // planet,
         configs,
         clients_per_region,
         workloads,
@@ -560,14 +570,14 @@ async fn whatever_plot() -> Result<(), Report> {
         .iter_mut()
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
-    // create AWS planet
-    // let planet = Some(Planet::from("../latency_aws"));
-    let planet = None; // if delay is not to be injected
-
     // init logging
     let progress = TracingProgressBar::init(
         (workloads.len() * clients_per_region.len() * configs.len()) as u64,
     );
+
+    // create AWS planet
+    // let planet = Some(Planet::from("../latency_aws"));
+    let planet = None; // if delay is not to be injected
 
     baremetal_bench(
         regions,
