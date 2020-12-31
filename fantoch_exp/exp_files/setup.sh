@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-# flag indicating whether we should just remove previous installations
-RUST_TOOLCHAIN="1.45.0"
+RUST_TOOLCHAIN="1.49.0"
 # RUST_TOOLCHAIN="nightly-2020-06-10"
+
+# flag indicating whether we should just remove previous installations
 NUKE_RUST="false"
 NUKE_FANTOCH="false"
 FANTOCH_PACKAGE="fantoch_ps"
@@ -22,7 +23,8 @@ setup() {
     sudo apt-get install -y \
             build-essential \
             pkg-config \
-            libssl-dev
+            libssl-dev \
+            git
 
     # install chrony if in aws
     if [ "${aws}" == "true" ]; then
