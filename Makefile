@@ -1,9 +1,7 @@
 t: test
 
 test:
-	cd fantoch && cargo test --release && cd ..
-	cd fantoch_ps && cargo test --release && cd ..
-	cd fantoch_plot && cargo test --release && cd ..
+	cargo test --lib -p fantoch_prof -p fantoch -p fantoch_ps -p fantoch_bote
 	cargo hack check --feature-powerset --no-dev-deps
 
 fmt:
