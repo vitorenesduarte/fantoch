@@ -364,7 +364,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (workloads.len() * clients_per_region.len() * configs.len()) as u64,
     );
 
-    // // create AWS planet
+    // create AWS planet
     // let planet = Some(Planet::from("../latency_aws"));
 
     // baremetal_bench(
@@ -745,7 +745,7 @@ async fn aws_bench(
         tracing::warn!("aws bench experiment error: {:?}", e);
     }
     tracing::info!("will wait 5 minutes before terminating spot instances");
-    tokio::time::delay_for(tokio::time::Duration::from_secs(60 * 5)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(60 * 5)).await;
 
     launcher.terminate_all().await?;
     Ok(())

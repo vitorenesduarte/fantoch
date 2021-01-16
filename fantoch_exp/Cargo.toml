@@ -20,7 +20,7 @@ indicatif = "0.15.0"
 flate2 = "1.0.19"
 futures = { version = "0.3.8", default-features = false, features = [], optional = true }
 rusoto_core = { version = "0.46.0", optional = true }
-rusoto_credential = { verion = "0.46.0", optional = true }
+rusoto_credential = { version = "0.46.0", optional = true }
 rusoto_ec2 = { version = "0.46.0", optional = true }
 serde = { version = "1.0.118", features = ["derive"] }
 serde_json = "1.0.60"
@@ -28,7 +28,7 @@ tracing = "0.1.22"
 tracing-futures = { version = "0.2.4", optional = true }
 tracing-subscriber = { version = "0.2.15", optional = true }
 tokio = { version = "1.0.1", features = ["full"], optional = true }
-tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "743941efcc42d6c527df0c2ffb4d45e412a69f0a", default-features = false, features = ["aws", "baremetal"], optional = true }
+tsunami = { git = "https://github.com/vitorenesduarte/tsunami", rev = "9229fd515310660c9bbbe1b2303d1e00d691fe8a", default-features = false, features = ["aws", "baremetal"], optional = true }
 
 fantoch = { path = "../fantoch", default-features = false }
 
