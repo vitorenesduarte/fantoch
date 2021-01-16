@@ -29,7 +29,7 @@ num_cpus = "1.13.0"
 rand = "0.8.0"
 serde = { version = "1.0.118", features = ["derive"] }
 threshold = "0.8.15"
-tokio = { version = "1.0.1", features = ["full", "parking_lot"], optional = true }
+tokio = { version = "1.0.2", features = ["full", "parking_lot"], optional = true }
 tokio-util = { version = "0.6.0", features = ["codec"], optional = true }
 tracing = "0.1.22"
 tracing-appender = "0.1.1"

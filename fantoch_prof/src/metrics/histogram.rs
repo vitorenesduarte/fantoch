@@ -330,6 +330,7 @@ mod proptests {
     use super::*;
     use crate::elapsed;
     use crate::HashMap;
+    use quickcheck::TestResult;
     use quickcheck_macros::quickcheck;
     use std::hash::Hash;
     use std::iter::FromIterator;
@@ -351,10 +352,20 @@ mod proptests {
     type K = u64;
 
     #[quickcheck]
-    fn merge_check(map: Vec<(K, usize)>, other: Vec<(K, usize)>) -> bool {
+    fn merge_check(map: Vec<(K, usize)>, other: Vec<(K, usize)>) -> TestResult {
         // create hashmaps and merge them
         let mut hashmap = HashMap::from_iter(map.clone());
         let other_hashmap = HashMap::from_iter(other.clone());
+
+        for (key, value) in hashmap.iter() {
+            if let Some(other_value) = other_hashmap.get(key) {
+                let overflow = value.checked_add(*other_value).is_none();
+                if overflow {
+                    return TestResult::discard();
+                }
+            }
+        }
+
         let (naive_time, _) =
             elapsed!(hash_merge(&mut hashmap, &other_hashmap));
 
@@ -367,7 +378,8 @@ mod proptests {
         // show merge times
         println!("{} {}", naive_time.as_nanos(), time.as_nanos());
 
-        btreemap == BTreeMap::from_iter(hashmap)
+        let result = btreemap == BTreeMap::from_iter(hashmap);
+        TestResult::from_bool(result)
     }
 }
 

@@ -738,7 +738,7 @@ mod proptests {
     }
 
     impl Arbitrary for Action {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             // generate source: either 1 or 2
             let source: ProcessId = Arbitrary::arbitrary(g);
             let source = bound_id(source, 2);
@@ -758,7 +758,7 @@ mod proptests {
 
     // generate a quorum of size `Q` (`Q - 1` actually as `from` is always part
     // of the quorum)
-    fn arbitrary_quorum<G: Gen>(source: ProcessId, g: &mut G) -> Quorum {
+    fn arbitrary_quorum(source: ProcessId, g: &mut Gen) -> Quorum {
         // compute expected size
         let expected_size: usize = (Q - 1)
             .try_into()

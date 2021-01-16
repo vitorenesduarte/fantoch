@@ -9,10 +9,10 @@ license = "MIT/Apache-2.0"
 [dependencies]
 dashmap = "4.0.0"
 jemallocator = "0.3.2"
-quanta = "0.6.5"
+quanta = "0.7.0"
 serde = { version = "1.0.118", features = ["derive"] }
 tracing = "0.1.22"
 
 [dev-dependencies]
-quickcheck = "0.9.2"
-quickcheck_macros = "0.9.1"
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"
