@@ -1,6 +1,7 @@
 use crate::executor::ExecutorMetrics;
 use crate::protocol::ProtocolMetrics;
 use crate::run::prelude::*;
+use crate::run::task;
 use crate::HashMap;
 use crate::{info, trace, warn};
 use serde::{Deserialize, Serialize};
@@ -77,7 +78,7 @@ pub async fn metrics_logger_task(
                 // likely we won't end up with a corrupted file if we're shutdown in the middle
                 // of this.
                 let tmp = format!("{}_tmp", metrics_file);
-                if let Err(e) = crate::run::serialize_and_compress(&global_metrics, &tmp) {
+                if let Err(e) = task::util::serialize_and_compress(&global_metrics, &tmp) {
                     panic!("[metrics_logger] couldn't serialize metrics: {:?}", e);
                 }
                 // rename file

@@ -77,7 +77,7 @@ pub mod task;
 
 const CONNECT_RETRIES: usize = 100;
 
-use crate::client::{ClientData, Workload};
+use crate::client::Workload;
 use crate::config::Config;
 use crate::executor::Executor;
 use crate::hash_map::HashMap;
@@ -87,7 +87,6 @@ use crate::protocol::Protocol;
 use color_eyre::Report;
 use futures::stream::{FuturesUnordered, StreamExt};
 use prelude::*;
-use serde::Serialize;
 use std::fmt::Debug;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -422,22 +421,6 @@ where
     Ok(())
 }
 
-async fn ask_ping_task(
-    mut to_ping: SortedProcessesSender,
-) -> Vec<(ProcessId, ShardId)> {
-    let (tx, mut rx) = chan::channel(1);
-    if let Err(e) = to_ping.send(tx).await {
-        panic!("error sending request to ping task: {:?}", e);
-    }
-    if let Some(sorted_processes) = rx.recv().await {
-        sorted_processes
-    } else {
-        panic!("error receiving reply from ping task");
-    }
-}
-
-const MAX_CLIENT_CONNECTIONS: usize = 128;
-
 pub async fn client<A>(
     ids: Vec<ClientId>,
     addresses: Vec<A>,
@@ -451,97 +434,32 @@ pub async fn client<A>(
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
-    // create client pool
-    let mut pool = Vec::with_capacity(MAX_CLIENT_CONNECTIONS);
-    // init each entry
-    pool.resize_with(MAX_CLIENT_CONNECTIONS, Vec::new);
-
-    // assign each client to a client worker
-    ids.into_iter().enumerate().for_each(|(index, client_id)| {
-        let index = index % MAX_CLIENT_CONNECTIONS;
-        pool[index].push(client_id);
-    });
-
-    // start each client worker in pool
-    let handles = pool.into_iter().filter_map(|client_ids| {
-        // only start a client for this pool index if any client id was assigned
-        // to it
-        if !client_ids.is_empty() {
-            // start the open loop client if some interval was provided
-            let handle = if let Some(interval) = interval {
-                task::spawn(task::client::open_loop_client::<A>(
-                    client_ids,
-                    addresses.clone(),
-                    interval,
-                    workload,
-                    CONNECT_RETRIES,
-                    tcp_nodelay,
-                    channel_buffer_size,
-                    status_frequency,
-                ))
-            } else {
-                task::spawn(task::client::closed_loop_client::<A>(
-                    client_ids,
-                    addresses.clone(),
-                    workload,
-                    CONNECT_RETRIES,
-                    tcp_nodelay,
-                    channel_buffer_size,
-                    status_frequency,
-                ))
-            };
-            Some(handle)
-        } else {
-            None
-        }
-    });
-
-    // wait for all clients to complete and aggregate their metrics
-    let mut data = ClientData::new();
-
-    let mut handles = handles.collect::<FuturesUnordered<_>>();
-    while let Some(join_result) = handles.next().await {
-        let clients = join_result?.expect("client should run correctly");
-        for client in clients {
-            info!("client {} ended", client.id());
-            data.merge(client.data());
-            info!("metrics from {} collected", client.id());
-        }
-    }
-
-    if let Some(file) = metrics_file {
-        info!("will write client data to {}", file);
-        serialize_and_compress(&data, &file)?;
-    }
-
-    info!("all clients ended");
-    Ok(())
+    task::client::client(
+        ids,
+        addresses,
+        interval,
+        workload,
+        CONNECT_RETRIES,
+        tcp_nodelay,
+        channel_buffer_size,
+        status_frequency,
+        metrics_file,
+    )
+    .await
 }
 
-// TODO make this async
-fn serialize_and_compress<T: Serialize>(
-    data: &T,
-    file: &str,
-) -> Result<(), Report> {
-    // if the file does not exist it will be created, otherwise truncated
-    std::fs::File::create(file)
-        .ok()
-        // create a buf writer
-        .map(std::io::BufWriter::new)
-        // compress using gzip
-        .map(|buffer| {
-            flate2::write::GzEncoder::new(buffer, flate2::Compression::best())
-        })
-        // and try to serialize
-        .map(|writer| {
-            bincode::serialize_into(writer, data)
-                .expect("error serializing data")
-        })
-        .unwrap_or_else(|| {
-            panic!("couldn't save serialized data in file {:?}", file)
-        });
-
-    Ok(())
+async fn ask_ping_task(
+    mut to_ping: SortedProcessesSender,
+) -> Vec<(ProcessId, ShardId)> {
+    let (tx, mut rx) = chan::channel(1);
+    if let Err(e) = to_ping.send(tx).await {
+        panic!("error sending request to ping task: {:?}", e);
+    }
+    if let Some(sorted_processes) = rx.recv().await {
+        sorted_processes
+    } else {
+        panic!("error receiving reply from ping task");
+    }
 }
 
 // TODO this is `pub` so that `fantoch_ps` can run these `run_test` for the

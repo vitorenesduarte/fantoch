@@ -1,4 +1,4 @@
-use crate::client::{Client,Workload};
+use crate::client::{Client, ClientData, Workload};
 use crate::command::{Command, CommandResult};
 use crate::hash_map::{Entry, HashMap};
 use crate::id::{ClientId, ProcessId, Rifl, ShardId};
@@ -9,11 +9,96 @@ use crate::run::task;
 use crate::time::{RunTime, SysTime};
 use crate::HashSet;
 use crate::{info, trace, warn};
+use color_eyre::Report;
+use futures::stream::{FuturesUnordered, StreamExt};
 use std::fmt::Debug;
 use std::time::Duration;
 use tokio::net::ToSocketAddrs;
 
-pub async fn closed_loop_client<A>(
+const MAX_CLIENT_CONNECTIONS: usize = 128;
+
+pub async fn client<A>(
+    ids: Vec<ClientId>,
+    addresses: Vec<A>,
+    interval: Option<Duration>,
+    workload: Workload,
+    connect_retries: usize,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
+    status_frequency: Option<usize>,
+    metrics_file: Option<String>,
+) -> Result<(), Report>
+where
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
+{
+    // create client pool
+    let mut pool = Vec::with_capacity(MAX_CLIENT_CONNECTIONS);
+    // init each entry
+    pool.resize_with(MAX_CLIENT_CONNECTIONS, Vec::new);
+
+    // assign each client to a client worker
+    ids.into_iter().enumerate().for_each(|(index, client_id)| {
+        let index = index % MAX_CLIENT_CONNECTIONS;
+        pool[index].push(client_id);
+    });
+
+    // start each client worker in pool
+    let handles = pool.into_iter().filter_map(|client_ids| {
+        // only start a client for this pool index if any client id was assigned
+        // to it
+        if !client_ids.is_empty() {
+            // start the open loop client if some interval was provided
+            let handle = if let Some(interval) = interval {
+                task::spawn(task::client::open_loop_client::<A>(
+                    client_ids,
+                    addresses.clone(),
+                    interval,
+                    workload,
+                    connect_retries,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                    status_frequency,
+                ))
+            } else {
+                task::spawn(task::client::closed_loop_client::<A>(
+                    client_ids,
+                    addresses.clone(),
+                    workload,
+                    connect_retries,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                    status_frequency,
+                ))
+            };
+            Some(handle)
+        } else {
+            None
+        }
+    });
+
+    // wait for all clients to complete and aggregate their metrics
+    let mut data = ClientData::new();
+
+    let mut handles = handles.collect::<FuturesUnordered<_>>();
+    while let Some(join_result) = handles.next().await {
+        let clients = join_result?.expect("client should run correctly");
+        for client in clients {
+            info!("client {} ended", client.id());
+            data.merge(client.data());
+            info!("metrics from {} collected", client.id());
+        }
+    }
+
+    if let Some(file) = metrics_file {
+        info!("will write client data to {}", file);
+        task::util::serialize_and_compress(&data, &file)?;
+    }
+
+    info!("all clients ended");
+    Ok(())
+}
+
+async fn closed_loop_client<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
     workload: Workload,
@@ -94,7 +179,7 @@ where
     )
 }
 
-pub async fn open_loop_client<A>(
+async fn open_loop_client<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
     interval: Duration,
