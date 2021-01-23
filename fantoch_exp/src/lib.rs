@@ -140,7 +140,6 @@ impl Protocol {
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Testbed {
-    // MultiRegionAws,
     Aws,
     Baremetal,
     Local,

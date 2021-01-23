@@ -30,17 +30,17 @@ fn main() -> Result<(), Report> {
 fn eurosys() -> Result<(), Report> {
     fairness_plot()?;
     tail_latency_plot()?;
-    increasing_load_plot()?;
+    // increasing_load_plot()?;
     // scalability_plot()?;
-    partial_replication_plot()?;
+    // partial_replication_plot()?;
+    // single_key_all()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAIRNESS <<<<<<<<");
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
+    let results_dir = "../results_fairness_and_tail_latency_2";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -54,8 +54,9 @@ fn fairness_plot() -> Result<(), Report> {
         (Protocol::NewtAtomic, 2),
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 2),
+        (Protocol::Caesar, 2),
     ];
-    let legend_order = vec![0, 2, 4, 1, 3, 5];
+    let legend_order = vec![0, 2, 4, 1, 3, 5, 6];
     let n = 5;
     let clients_per_region = 512;
     let error_bar = ErrorBar::Without;
@@ -73,7 +74,9 @@ fn fairness_plot() -> Result<(), Report> {
                     // if fpaxos, don't filter by key gen as contention does not
                     // affect the results
                 }
-                Protocol::AtlasLocked | Protocol::NewtAtomic => {
+                Protocol::AtlasLocked
+                | Protocol::NewtAtomic
+                | Protocol::Caesar => {
                     search.key_gen(key_gen);
                 }
                 _ => {
@@ -118,8 +121,8 @@ fn fairness_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
     println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
+    // let results_dir = "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
+    let results_dir = "../results_fairness_and_tail_latency_2";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -131,6 +134,7 @@ fn tail_latency_plot() -> Result<(), Report> {
         (Protocol::NewtAtomic, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
+        (Protocol::Caesar, 2),
         // (Protocol::FPaxos, 1),
         (Protocol::EPaxosLocked, 2),
     ];
@@ -238,6 +242,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 1),
         (Protocol::FPaxos, 2),
+        // (Protocol::Basic, 1),
         // (Protocol::EPaxosLocked, 2),
     ];
 
@@ -1144,7 +1149,8 @@ fn multi_key_all() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
-    let results_dir = "../results_tail_latency";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_increasing_load";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
@@ -1152,36 +1158,16 @@ fn single_key_all() -> Result<(), Report> {
             conflict_rate: 2,
             pool_size: 1,
         },
-        /* KeyGen::ConflictRate { conflict_rate: 10 },
-         * KeyGen::Zipf {
-         *     keys_per_shard: 1_000_000,
-         *     coefficient: 0.5,
-         * },
-         * KeyGen::Zipf {
-         *     keys_per_shard: 1_000_000,
-         *     coefficient: 0.6,
-         * },
-         * KeyGen::Zipf {
-         *     keys_per_shard: 1_000_000,
-         *     coefficient: 0.7,
-         * },
-         * KeyGen::Zipf {
-         *     keys_per_shard: 1_000_000,
-         *     coefficient: 0.8,
-         * },
-         * KeyGen::Zipf {
-         *     keys_per_shard: 1_000_000,
-         *     coefficient: 0.9,
-         * },
-         * KeyGen::Zipf {
-         *     keys_per_shard: 1_000_000,
-         *     coefficient: 1.0,
-         * }, */
+        KeyGen::ConflictPool {
+            conflict_rate: 10,
+            pool_size: 1,
+        },
     ];
-    let payload_size = 100;
+    let payload_size = 4096;
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::AtlasLocked,
+        Protocol::EPaxosLocked,
         Protocol::FPaxos,
     ];
     let leader = 1;
@@ -1203,7 +1189,7 @@ fn single_key_all() -> Result<(), Report> {
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    for n in vec![3, 5] {
+    for n in vec![5] {
         for key_gen in key_gens.clone() {
             let search_refine = |search: &mut Search, key_gen: KeyGen| {
                 match search.protocol {
@@ -1211,7 +1197,9 @@ fn single_key_all() -> Result<(), Report> {
                         // if fpaxos, don't filter by key gen as
                         // contention does not affect the results
                     }
-                    Protocol::AtlasLocked | Protocol::NewtAtomic => {
+                    Protocol::AtlasLocked
+                    | Protocol::NewtAtomic
+                    | Protocol::EPaxosLocked => {
                         search.key_gen(key_gen);
                     }
                     _ => {
@@ -1309,7 +1297,8 @@ fn single_key_all() -> Result<(), Report> {
                                     // contention does not affect the results
                                 }
                                 Protocol::AtlasLocked
-                                | Protocol::NewtAtomic => {
+                                | Protocol::NewtAtomic
+                                | Protocol::EPaxosLocked => {
                                     search.key_gen(key_gen);
                                 }
                                 _ => {
@@ -1366,6 +1355,7 @@ fn single_key_all() -> Result<(), Report> {
                 }
 
                 // generate latency plot
+                /*
                 let mut shown = false;
                 for error_bar in vec![
                     ErrorBar::Without,
@@ -1407,10 +1397,14 @@ fn single_key_all() -> Result<(), Report> {
                         shown = true;
                     }
                 }
+                */
 
                 // create searches without fpaxos for cdf plots
-                let protocols =
-                    vec![Protocol::NewtAtomic, Protocol::AtlasLocked];
+                let protocols = vec![
+                    Protocol::NewtAtomic,
+                    Protocol::AtlasLocked,
+                    Protocol::EPaxosLocked,
+                ];
                 let searches: Vec<_> =
                     protocol_combinations(n, protocols.clone())
                         .into_iter()
