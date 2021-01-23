@@ -69,8 +69,10 @@ mod pool;
 // This module contains the common read-write (+serde) utilities.
 pub mod rw;
 
-// This module contains the implementation of channels, clients, connections,
-// executors, process workers, ...
+// This module contains the definition of `ChannelSender` and `ChannelReceiver`.
+pub mod chan;
+
+// This module contains the implementaion on client-side and server-side logic.
 pub mod task;
 
 const CONNECT_RETRIES: usize = 100;
@@ -227,7 +229,6 @@ where
     );
 
     // connect to all processes
-    // TODO: rename process to worker
     let (ips, to_writers) = task::server::connect_to_all::<A, P>(
         process_id,
         shard_id,
@@ -343,9 +344,9 @@ where
     let (worker_to_metrics_logger, executor_to_metrics_logger) =
         if let Some(metrics_file) = metrics_file {
             let (worker_to_metrics_logger, from_workers) =
-                task::channel(process_channel_buffer_size);
+                chan::channel(process_channel_buffer_size);
             let (executor_to_metrics_logger, from_executors) =
-                task::channel(process_channel_buffer_size);
+                chan::channel(process_channel_buffer_size);
             task::spawn(task::server::metrics_logger::metrics_logger_task(
                 metrics_file,
                 from_workers,
@@ -427,7 +428,7 @@ where
 async fn ask_ping_task(
     mut to_ping: SortedProcessesSender,
 ) -> Vec<(ProcessId, ShardId)> {
-    let (tx, mut rx) = task::channel(1);
+    let (tx, mut rx) = chan::channel(1);
     if let Err(e) = to_ping.send(tx).await {
         panic!("error sending request to ping task: {:?}", e);
     }
@@ -701,12 +702,9 @@ where
         };
 
         // say hi
-        // TODO: move function to task::client
-        let (process_id, shard_id) = task::server::client::client_say_hi(
-            client_ids.clone(),
-            &mut connection,
-        )
-        .await?;
+        let (process_id, shard_id) =
+            task::client::client_say_hi(client_ids.clone(), &mut connection)
+                .await?;
 
         // update set of processes to be discovered by the client
         assert!(to_discover.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
@@ -716,8 +714,7 @@ where
     }
 
     // start client read-write task
-    // TODO: move function to task::client
-    let (read, process_to_write) = task::server::client::start_client_rw_tasks(
+    let (read, process_to_write) = task::client::start_client_rw_tasks(
         &client_ids,
         channel_buffer_size,
         connections,
@@ -1200,7 +1197,7 @@ pub mod tests {
             let execution_log = Some(format!("p{}.execution_log", process_id));
 
             // create inspect channel and save sender side
-            let (inspect_tx, inspect) = task::channel(1);
+            let (inspect_tx, inspect) = chan::channel(1);
             inspect_channels.insert(process_id, inspect_tx);
 
             // spawn processes
@@ -1304,7 +1301,7 @@ pub mod tests {
 
         if let Some(inspect_fun) = inspect_fun {
             // create reply channel
-            let (reply_chan_tx, mut reply_chan) = task::channel(1);
+            let (reply_chan_tx, mut reply_chan) = chan::channel(1);
 
             // contact all processes
             for (process_id, mut inspect_tx) in inspect_channels {
@@ -1322,7 +1319,7 @@ pub mod tests {
 
     async fn gather_workers_replies<R>(
         workers: usize,
-        reply_chan: &mut task::chan::ChannelReceiver<R>,
+        reply_chan: &mut chan::ChannelReceiver<R>,
     ) -> Vec<R> {
         let mut replies = Vec::with_capacity(workers);
         for _ in 0..workers {

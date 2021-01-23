@@ -1,5 +1,4 @@
-// This module contains the definition of `ChannelSender` and `ChannelReceiver`.
-pub mod chan;
+mod util;
 
 // This module contains server's side logic.
 pub mod server;
@@ -7,12 +6,9 @@ pub mod server;
 // This module contains client's side logic.
 pub mod client;
 
-// Re-exports.
-pub use chan::channel;
-
+use crate::run::chan::{self, ChannelReceiver, ChannelSender};
 use crate::run::rw::Connection;
 use crate::{info, trace, warn};
-use chan::{ChannelReceiver, ChannelSender};
 use color_eyre::Report;
 use std::fmt::Debug;
 use std::future::Future;
@@ -41,7 +37,7 @@ where
     // create channel and:
     // - pass the producer-end of the channel to producer
     // - return the consumer-end of the channel to the caller
-    let (tx, rx) = channel(channel_buffer_size);
+    let (tx, rx) = chan::channel(channel_buffer_size);
     spawn(producer(tx));
     rx
 }
@@ -60,7 +56,7 @@ where
     // create channel and:
     // - pass a clone of the producer-end of the channel to each producer
     // - return the consumer-end of the channel to the caller
-    let (tx, rx) = channel(channel_buffer_size);
+    let (tx, rx) = chan::channel(channel_buffer_size);
     for arg in args {
         spawn(producer(arg, tx.clone()));
     }
@@ -79,7 +75,7 @@ where
     // create channel and:
     // - pass the consumer-end of the channel to the consumer
     // - return the producer-end of the channel to the caller
-    let (tx, rx) = channel(channel_buffer_size);
+    let (tx, rx) = chan::channel(channel_buffer_size);
     spawn(consumer(rx));
     tx
 }
@@ -99,8 +95,8 @@ where
     //   2nd channel to the task
     // - return the consumer-end of the 1st channel and the producer-end of the
     //   2nd channel to the caller
-    let (tx1, rx1) = channel(channel_buffer_size);
-    let (tx2, rx2) = channel(channel_buffer_size);
+    let (tx1, rx1) = chan::channel(channel_buffer_size);
+    let (tx2, rx2) = chan::channel(channel_buffer_size);
     spawn(task(tx1, rx2));
     (rx1, tx2)
 }

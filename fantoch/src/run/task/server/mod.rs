@@ -28,6 +28,7 @@ pub mod metrics_logger;
 use crate::config::Config;
 use crate::id::{ProcessId, ShardId};
 use crate::protocol::Protocol;
+use crate::run::chan;
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
@@ -255,7 +256,7 @@ where
 
         // get list set of writers to this process and create writer channels
         let txs = writers.entry(peer_id).or_insert_with(Vec::new);
-        let (mut writer_tx, writer_rx) = task::channel(channel_buffer_size);
+        let (mut writer_tx, writer_rx) = chan::channel(channel_buffer_size);
 
         // name the channel accordingly
         writer_tx.set_name(format!(
@@ -281,7 +282,7 @@ where
 
         let tx = if let Some(delay) = connection_delay {
             // if connection has a delay, spawn a delay task for this writer
-            let (mut delay_tx, delay_rx) = task::channel(channel_buffer_size);
+            let (mut delay_tx, delay_rx) = chan::channel(channel_buffer_size);
 
             // name the channel accordingly
             delay_tx.set_name(format!(
