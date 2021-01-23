@@ -98,6 +98,8 @@ where
     Ok(())
 }
 
+async fn batcher() {}
+
 async fn closed_loop_client<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
@@ -128,21 +130,22 @@ where
     // create pending
     let mut pending = ShardsPending::new();
 
+    // track which clients are finished (i.e. all their commands have completed)
+    let mut finished = HashSet::with_capacity(clients.len());
+    // track which clients are workload finished
+    let mut workload_finished = HashSet::with_capacity(clients.len());
+
     // generate the first message of each client
     for (_client_id, client) in clients.iter_mut() {
-        let workload_finished = None;
         next_cmd(
             client,
             &time,
             &mut process_to_writer,
             &mut pending,
-            workload_finished,
+            &mut workload_finished,
         )
         .await;
     }
-
-    // track which clients are finished (i.e. all their commands have completed)
-    let mut finished = HashSet::with_capacity(clients.len());
 
     // wait for results and generate/submit new commands while there are
     // commands to be generated
@@ -158,17 +161,17 @@ where
         );
         if let Some(client) = client {
             // if client hasn't finished, issue a new command
-            let workload_finished = None;
             next_cmd(
                 client,
                 &time,
                 &mut process_to_writer,
                 &mut pending,
-                workload_finished,
+                &mut workload_finished,
             )
             .await;
         }
     }
+    assert_eq!(workload_finished.len(), finished.len());
 
     // return clients
     Some(
@@ -228,12 +231,13 @@ where
                 for (client_id, client) in clients.iter_mut(){
                     // if the client hasn't finished, try to issue a new command
                     if !workload_finished.contains(client_id) {
-                        next_cmd(client, &time, &mut process_to_writer, &mut pending, Some(&mut workload_finished)).await;
+                        next_cmd(client, &time, &mut process_to_writer, &mut pending, &mut workload_finished).await;
                     }
                 }
             }
         }
     }
+    assert_eq!(workload_finished.len(), finished.len());
 
     // return clients
     Some(
@@ -322,7 +326,7 @@ async fn next_cmd(
     time: &dyn SysTime,
     process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
     pending: &mut ShardsPending,
-    mut workload_finished: Option<&mut HashSet<ClientId>>,
+    workload_finished: &mut HashSet<ClientId>,
 ) {
     if let Some((target_shard, cmd)) = client.next_cmd(time) {
         // register command in pending (which will aggregate several
@@ -340,9 +344,7 @@ async fn next_cmd(
         send_to_shard(&client, process_to_writer, &target_shard, msg).await
     } else {
         // record that this client has finished its workload
-        if let Some(workload_finished) = workload_finished.as_mut() {
-            assert!(workload_finished.insert(client.id()));
-        }
+        assert!(workload_finished.insert(client.id()));
     }
 }
 
