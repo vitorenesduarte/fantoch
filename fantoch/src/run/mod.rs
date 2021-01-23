@@ -228,7 +228,7 @@ where
 
     // connect to all processes
     // TODO: rename process to worker
-    let (ips, to_writers) = task::server::process::connect_to_all::<A, P>(
+    let (ips, to_writers) = task::server::connect_to_all::<A, P>(
         process_id,
         shard_id,
         config,
