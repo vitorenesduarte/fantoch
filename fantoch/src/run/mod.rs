@@ -70,7 +70,7 @@ mod pool;
 pub mod rw;
 
 // This module contains the implementation of channels, clients, connections,
-// executors, and process workers.
+// executors, process workers, ...
 pub mod task;
 
 const CONNECT_RETRIES: usize = 100;
@@ -203,7 +203,7 @@ where
     }
 
     // (maybe) start tracer
-    task::spawn(task::tracer::tracer_task(tracer_show_interval));
+    task::spawn(task::server::tracer::tracer_task(tracer_show_interval));
 
     // check ports are different
     assert!(port != client_port);
@@ -227,7 +227,8 @@ where
     );
 
     // connect to all processes
-    let (ips, to_writers) = task::process::connect_to_all::<A, P>(
+    // TODO: rename process to worker
+    let (ips, to_writers) = task::server::process::connect_to_all::<A, P>(
         process_id,
         shard_id,
         config,
@@ -248,7 +249,7 @@ where
     let sorted_processes = if let Some(sorted_processes) = sorted_processes {
         // in this case, we already have the sorted processes, so simply span
         // the ping task without a parent and return what we have
-        task::spawn(task::ping::ping_task(
+        task::spawn(task::server::ping::ping_task(
             ping_interval,
             process_id,
             shard_id,
@@ -261,7 +262,7 @@ where
         // it for the sorted processes
         let to_ping = task::spawn_consumer(process_channel_buffer_size, |rx| {
             let parent = Some(rx);
-            task::ping::ping_task(
+            task::server::ping::ping_task(
                 ping_interval,
                 process_id,
                 shard_id,
@@ -327,7 +328,7 @@ where
     );
 
     // start client listener
-    task::client::start_listener(
+    task::server::client::start_listener(
         process_id,
         shard_id,
         client_listener,
@@ -345,7 +346,7 @@ where
                 task::channel(process_channel_buffer_size);
             let (executor_to_metrics_logger, from_executors) =
                 task::channel(process_channel_buffer_size);
-            task::spawn(task::metrics_logger::metrics_logger_task(
+            task::spawn(task::server::metrics_logger::metrics_logger_task(
                 metrics_file,
                 from_workers,
                 from_executors,
@@ -367,7 +368,7 @@ where
     assert!(connect_ok, "process should have discovered successfully");
 
     // spawn periodic task
-    task::spawn(task::periodic::periodic_task(
+    task::spawn(task::server::periodic::periodic_task(
         process_events,
         periodic_to_workers,
         inspect_chan,
@@ -384,7 +385,7 @@ where
     }
 
     // start executors
-    task::executor::start_executors::<P>(
+    task::server::executor::start_executors::<P>(
         process_id,
         shard_id,
         config,
@@ -397,7 +398,7 @@ where
     );
 
     // start process workers
-    let handles = task::process::start_processes::<P, R>(
+    let handles = task::server::process::start_processes::<P, R>(
         process,
         reader_to_workers_rxs,
         client_to_workers_rxs,
@@ -700,9 +701,12 @@ where
         };
 
         // say hi
-        let (process_id, shard_id) =
-            task::client::client_say_hi(client_ids.clone(), &mut connection)
-                .await?;
+        // TODO: move function to task::client
+        let (process_id, shard_id) = task::server::client::client_say_hi(
+            client_ids.clone(),
+            &mut connection,
+        )
+        .await?;
 
         // update set of processes to be discovered by the client
         assert!(to_discover.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
@@ -712,7 +716,8 @@ where
     }
 
     // start client read-write task
-    let (read, process_to_write) = task::client::start_client_rw_tasks(
+    // TODO: move function to task::client
+    let (read, process_to_write) = task::server::client::start_client_rw_tasks(
         &client_ids,
         channel_buffer_size,
         connections,

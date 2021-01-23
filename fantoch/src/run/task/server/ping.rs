@@ -1,4 +1,4 @@
-use super::chan::ChannelSender;
+use crate::run::task::chan::ChannelSender;
 use crate::id::{ProcessId, ShardId};
 use crate::run::prelude::*;
 use crate::HashMap;

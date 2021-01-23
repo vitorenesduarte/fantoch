@@ -5,7 +5,7 @@ use color_eyre::eyre::{self, WrapErr};
 use color_eyre::Report;
 use fantoch::client::ClientData;
 use fantoch::planet::Region;
-use fantoch::run::task::metrics_logger::ProcessMetrics;
+use fantoch::run::task::server::metrics_logger::ProcessMetrics;
 use fantoch_exp::{ExperimentConfig, ProcessType, SerializationFormat};
 use rayon::prelude::*;
 use std::collections::HashMap;

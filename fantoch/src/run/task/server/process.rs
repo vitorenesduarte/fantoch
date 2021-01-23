@@ -56,7 +56,7 @@ where
 
     // spawn listener
     let mut from_listener = task::spawn_producer(channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
+        task::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
     // create list of in and out connections:
@@ -71,7 +71,7 @@ where
     for (address, delay) in addresses {
         // create `multiplexing` connections per address
         for _ in 0..multiplexing {
-            let mut connection = super::connect(
+            let mut connection = task::connect(
                 &address,
                 tcp_nodelay,
                 tcp_buffer_size,

@@ -242,7 +242,7 @@ async fn fetch_info_to_executors<P>(
         } else {
             let msg_to_send = Arc::new(POEMessage::Executor(execution_info));
             if let Some(channels) = shard_writers.get_mut(&target_shard) {
-                crate::run::task::process::send_to_one_writer::<P>(
+                crate::run::task::server::process::send_to_one_writer::<P>(
                     "executor",
                     msg_to_send,
                     channels,

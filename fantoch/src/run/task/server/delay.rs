@@ -1,4 +1,4 @@
-use super::chan::{ChannelReceiver, ChannelSender};
+use crate::run::task::chan::{ChannelReceiver, ChannelSender};
 use crate::warn;
 use std::collections::VecDeque;
 use tokio::time::{self, Duration, Instant};

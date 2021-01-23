@@ -3,6 +3,7 @@ use crate::executor::{AggregatePending, ExecutorResult};
 use crate::id::{AtomicDotGen, ClientId, ProcessId, ShardId};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
+use crate::run::task;
 use crate::HashMap;
 use crate::{info, trace, warn};
 use tokio::net::TcpListener;
@@ -17,7 +18,7 @@ pub fn start_listener(
     tcp_nodelay: bool,
     client_channel_buffer_size: usize,
 ) {
-    super::spawn(client_listener_task(
+    task::spawn(client_listener_task(
         process_id,
         shard_id,
         listener,
@@ -43,8 +44,8 @@ async fn client_listener_task(
 ) {
     // start listener task
     let tcp_buffer_size = 0;
-    let mut rx = super::spawn_producer(client_channel_buffer_size, |tx| {
-        super::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
+    let mut rx = task::spawn_producer(client_channel_buffer_size, |tx| {
+        task::listener_task(listener, tcp_nodelay, tcp_buffer_size, tx)
     });
 
     loop {
@@ -55,7 +56,7 @@ async fn client_listener_task(
                 // start client server task and give it the producer-end of the
                 // channel in order for this client to notify
                 // parent
-                super::spawn(client_server_task(
+                task::spawn(client_server_task(
                     process_id,
                     shard_id,
                     atomic_dot_gen.clone(),
@@ -139,7 +140,7 @@ async fn server_receive_hi(
 
     // create channel where the executors will write executor results
     let (mut executor_results_tx, executor_results_rx) =
-        super::channel(client_channel_buffer_size);
+        task::channel(client_channel_buffer_size);
 
     // set channels name
     let ids_repr = ids_repr(&client_ids);
@@ -302,14 +303,14 @@ pub fn start_client_rw_tasks(
     // shard, we'll have all rw tasks will write to the same channel; this means
     // the client will read from a single channel (and potentially receive
     // messages from any of the shards)
-    let (mut s2c_tx, s2c_rx) = super::channel(channel_buffer_size);
+    let (mut s2c_tx, s2c_rx) = task::channel(channel_buffer_size);
     s2c_tx.set_name(format!("server_to_client_{}", ids_repr(&client_ids)));
 
     let mut process_to_tx = HashMap::with_capacity(connections.len());
     for (process_id, connection) in connections {
         // create client-to-server channels: since clients may send operations
         // to different shards, we create one client-to-rw channel per rw task
-        let (mut c2s_tx, c2s_rx) = super::channel(channel_buffer_size);
+        let (mut c2s_tx, c2s_rx) = task::channel(channel_buffer_size);
         c2s_tx.set_name(format!(
             "client_to_server_{}_{}",
             process_id,
@@ -317,7 +318,7 @@ pub fn start_client_rw_tasks(
         ));
 
         // spawn rw task
-        super::spawn(client_rw_task(connection, s2c_tx.clone(), c2s_rx));
+        task::spawn(client_rw_task(connection, s2c_tx.clone(), c2s_rx));
         process_to_tx.insert(process_id, c2s_tx);
     }
     (s2c_rx, process_to_tx)
