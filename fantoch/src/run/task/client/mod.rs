@@ -15,7 +15,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 use tokio::net::ToSocketAddrs;
 
-const MAX_CLIENT_CONNECTIONS: usize = 128;
+const MAX_CLIENT_CONNECTIONS: usize = 32;
 
 pub async fn client<A>(
     ids: Vec<ClientId>,
@@ -49,7 +49,7 @@ where
         if !client_ids.is_empty() {
             // start the open loop client if some interval was provided
             let handle = if let Some(interval) = interval {
-                task::spawn(task::client::open_loop_client::<A>(
+                task::spawn(open_loop_client::<A>(
                     client_ids,
                     addresses.clone(),
                     interval,
@@ -60,7 +60,7 @@ where
                     status_frequency,
                 ))
             } else {
-                task::spawn(task::client::closed_loop_client::<A>(
+                task::spawn(closed_loop_client::<A>(
                     client_ids,
                     addresses.clone(),
                     workload,
@@ -287,8 +287,7 @@ where
 
         // say hi
         let (process_id, shard_id) =
-            task::client::client_say_hi(client_ids.clone(), &mut connection)
-                .await?;
+            client_say_hi(client_ids.clone(), &mut connection).await?;
 
         // update set of processes to be discovered by the client
         assert!(to_discover.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
@@ -298,11 +297,8 @@ where
     }
 
     // start client read-write task
-    let (read, process_to_write) = task::client::start_client_rw_tasks(
-        &client_ids,
-        channel_buffer_size,
-        connections,
-    );
+    let (read, process_to_write) =
+        start_client_rw_tasks(&client_ids, channel_buffer_size, connections);
 
     // create clients
     let clients = client_ids
