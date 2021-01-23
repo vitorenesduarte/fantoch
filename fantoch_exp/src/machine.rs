@@ -137,8 +137,7 @@ impl<'a> Machine<'a> {
             from,
             to,
         );
-        tracing::debug!("{}", scp_command);
-        Self::create_command(scp_command).status().await?;
+        Self::create_command(scp_command).output().await?;
         Ok(())
     }
 
@@ -164,7 +163,7 @@ impl<'a> Machine<'a> {
             from,
             to,
         );
-        Self::create_command(scp_command).status().await?;
+        Self::create_command(scp_command).output().await?;
         Ok(())
     }
 
@@ -174,7 +173,7 @@ impl<'a> Machine<'a> {
     ) -> Result<(), Report> {
         let cp_command =
             format!("cp {} {}", from.as_ref().display(), to.as_ref().display());
-        Self::create_command(cp_command).status().await?;
+        Self::create_command(cp_command).output().await?;
         Ok(())
     }
 

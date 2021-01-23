@@ -55,8 +55,8 @@ const MAX_LEVEL_RUN_TIME: tracing::Level = tracing::Level::INFO;
 const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Release;
 
-// heaptrack run
-// const FEATURES: &[FantochFeature] = &[]; // heaptrack doesn't support jemalloc
+// heaptrack run (no jemalloc feature as heaptrack doesn't support it)
+// const FEATURES: &[FantochFeature] = &[];
 // const RUN_MODE: RunMode = RunMode::Heaptrack;
 
 // flamegraph run

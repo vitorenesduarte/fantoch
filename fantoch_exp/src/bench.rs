@@ -58,8 +58,8 @@ pub async fn bench_experiment(
     progress: TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
-    if tracer_show_interval.is_some() {
-        panic!("vitor: you should set the 'prof' feature for this to work!");
+    if let Some(interval) = tracer_show_interval {
+        panic!("found tracer should interval ({}) without the 'prof' feature being set", interval);
     }
 
     match testbed {
@@ -968,16 +968,13 @@ async fn pull_metrics_files(
     match process_type {
         ProcessType::Server(process_id) => {
             tracing::info!(
-                "all process {:?} metric files pulled in region {:?}",
+                "process {:?} metric files pulled in region {:?}",
                 process_id,
                 region
             );
         }
         ProcessType::Client(_) => {
-            tracing::info!(
-                "all client metric files pulled in region {:?}",
-                region
-            );
+            tracing::info!("client metric files pulled in region {:?}", region);
         }
     }
 

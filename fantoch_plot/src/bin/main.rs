@@ -28,9 +28,9 @@ fn main() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    fairness_plot()?;
-    tail_latency_plot()?;
-    // increasing_load_plot()?;
+    // fairness_plot()?;
+    // tail_latency_plot()?;
+    increasing_load_plot()?;
     // scalability_plot()?;
     // partial_replication_plot()?;
     // single_key_all()?;
@@ -121,7 +121,8 @@ fn fairness_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
     println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
-    // let results_dir = "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
+    // let results_dir =
+    // "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
     let results_dir = "../results_fairness_and_tail_latency_2";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
@@ -185,8 +186,7 @@ fn tail_latency_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_increasing_load";
+    let results_dir = "../results_increasing_load";
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -224,6 +224,7 @@ fn increasing_load_plot() -> Result<(), Report> {
             Protocol::AtlasLocked
             | Protocol::NewtAtomic
             | Protocol::EPaxosLocked
+            | Protocol::Caesar
             | Protocol::Basic => {
                 search.key_gen(key_gen);
             }
@@ -242,8 +243,9 @@ fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 1),
         (Protocol::FPaxos, 2),
-        // (Protocol::Basic, 1),
-        // (Protocol::EPaxosLocked, 2),
+        (Protocol::Caesar, 2),
+        /* (Protocol::Basic, 1),
+         * (Protocol::EPaxosLocked, 2), */
     ];
 
     let path = format!("plot_increasing_load_heatmap_{}.pdf", top_key_gen);
