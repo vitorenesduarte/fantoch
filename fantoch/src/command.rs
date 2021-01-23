@@ -27,19 +27,16 @@ impl Command {
         // a command is read-only if all ops are `Get`s
         let read_only = shard_to_ops
             .values()
-            .all(|shard_ops| shard_ops.iter().all(|(_, op)| op == &KVOp::Get));
+            .all(|shard_ops| shard_ops.values().all(|op| op == &KVOp::Get));
 
-        // check that if it's not read-only, then no op is a `Get`
+        // check that if it's not read-only, then it's write-only
         // - we can probably support this easily, but just for sanity let's
-        // assume that either all ops are `Get`s or none are
+        // assume that the command is either read-only or write-only
         if !read_only {
-            let no_gets = shard_to_ops.values().all(|shard_ops| {
-                shard_ops.iter().all(|(_, op)| op != &KVOp::Get)
-            });
-            assert!(
-                no_gets,
-                "non-read-only commands cannot contain Get operations"
-            );
+            let write_only = shard_to_ops
+                .values()
+                .all(|shard_ops| shard_ops.values().all(|op| op != &KVOp::Get));
+            assert!(write_only, "commands are either read-only or write-only");
         }
         Self {
             rifl,
