@@ -178,17 +178,16 @@ impl fmt::Debug for Command {
 
 /// Structure that aggregates partial results of multi-key commands.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommandResult {
+pub struct CommandResultBuilder {
     rifl: Rifl,
     key_count: usize,
     results: HashMap<Key, KVOpResult>,
 }
 
-impl CommandResult {
-    /// Creates a new `CommandResult` given the number of keys accessed by
-    /// the command.
+impl CommandResultBuilder {
+    /// Creates a new `CommandResultBuilder` given the number of keys accessed by the command.
     pub fn new(rifl: Rifl, key_count: usize) -> Self {
-        CommandResult {
+        CommandResultBuilder {
             rifl,
             key_count,
             results: HashMap::new(),
@@ -197,19 +196,31 @@ impl CommandResult {
 
     /// Adds a partial command result to the overall result.
     /// Returns a boolean indicating whether the full result is ready.
-    pub fn add_partial(&mut self, key: Key, result: KVOpResult) -> bool {
+    pub fn add_partial(&mut self, key: Key, result: KVOpResult) {
         // add op result for `key`
         let res = self.results.insert(key, result);
 
         // assert there was nothing about this `key` previously
         assert!(res.is_none());
+    }
 
+    pub fn ready(&self) -> bool {
         // we're ready if the number of partial results equals `key_count`
         self.results.len() == self.key_count
     }
+}
 
-    pub fn increment_key_count(&mut self) {
-        self.key_count += 1;
+/// Structure that aggregates partial results of multi-key commands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandResult {
+    rifl: Rifl,
+    results: HashMap<Key, KVOpResult>,
+}
+
+impl CommandResult {
+    /// Creates a new `CommandResult`.
+    pub fn new(rifl: Rifl, results: HashMap<Key, KVOpResult>) -> Self {
+        CommandResult { rifl, results }
     }
 
     /// Returns the command identifier.
@@ -220,6 +231,16 @@ impl CommandResult {
     /// Returns the commands results.
     pub fn results(&self) -> &HashMap<Key, KVOpResult> {
         &self.results
+    }
+}
+
+impl From<CommandResultBuilder> for CommandResult {
+    fn from(cmd_result_builder: CommandResultBuilder) -> Self {
+        assert!(cmd_result_builder.ready());
+        Self {
+            rifl: cmd_result_builder.rifl,
+            results: cmd_result_builder.results,
+        }
     }
 }
 

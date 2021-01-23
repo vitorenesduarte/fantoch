@@ -1,4 +1,4 @@
-use crate::command::{Command, CommandResult};
+use crate::command::{Command, CommandResult, CommandResultBuilder};
 use crate::executor::ExecutorResult;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::trace;
@@ -9,7 +9,7 @@ use crate::HashMap;
 pub struct AggregatePending {
     process_id: ProcessId,
     shard_id: ShardId,
-    pending: HashMap<Rifl, CommandResult>,
+    pending: HashMap<Rifl, CommandResultBuilder>,
 }
 
 impl AggregatePending {
@@ -39,24 +39,9 @@ impl AggregatePending {
         );
 
         // create `CommandResult`
-        let cmd_result = CommandResult::new(rifl, key_count);
+        let cmd_result = CommandResultBuilder::new(rifl, key_count);
         // add it to pending
         self.pending.insert(rifl, cmd_result).is_none()
-    }
-
-    /// Increases the number of expected notifications on some `Rifl` by one.
-    pub fn wait_for_rifl(&mut self, rifl: Rifl) {
-        trace!(
-            "p{}: AggregatePending::wait_for_rifl {:?}",
-            self.process_id,
-            rifl
-        );
-        // maybe update `CommandResult`
-        let cmd_result = self
-            .pending
-            .entry(rifl)
-            .or_insert_with(|| CommandResult::new(rifl, 0));
-        cmd_result.increment_key_count();
     }
 
     /// Adds a new partial command result.
@@ -74,19 +59,23 @@ impl AggregatePending {
         // (if it's not part of pending, it means that it is from a client from
         // another newt process, and `pending.wait_for*` has not been
         // called)
-        let cmd_result = self.pending.get_mut(&rifl)?;
+        let cmd_result_builder = self.pending.get_mut(&rifl)?;
 
         // add partial result and check if it's ready
-        let is_ready = cmd_result.add_partial(key, op_result);
-        if is_ready {
+        cmd_result_builder.add_partial(key, op_result);
+        if cmd_result_builder.ready() {
             trace!(
                 "p{}: AggregatePending::add_partial {:?} is ready",
                 self.process_id,
                 rifl
             );
-            // if it is, remove it from pending and return it as
-            // ready
-            self.pending.remove(&rifl)
+            // if it is, remove it from pending
+            let cmd_result_builder = self
+                .pending
+                .remove(&rifl)
+                .expect("command result builder must exist");
+            // finally, build the command result
+            Some(cmd_result_builder.into())
         } else {
             trace!(
                 "p{}: AggregatePending::add_partial {:?} is not ready",

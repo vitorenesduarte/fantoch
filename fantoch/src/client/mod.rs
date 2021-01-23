@@ -267,7 +267,7 @@ mod tests {
 
         // creates a fake command result from a command
         let fake_result =
-            |cmd: Command| vec![CommandResult::new(cmd.rifl(), 0)];
+            |cmd: Command| vec![CommandResult::new(cmd.rifl(), HashMap::new())];
 
         // start client at time 0
         let (shard_id, cmd) = client
