@@ -553,7 +553,7 @@ impl ShardsPending {
                     rifl.source(),
                     rifl,
                     results.len(),
-                    *shard_count
+                    expected.shard_count
                 );
 
                 // return results if we have one `CommandResult` per shard
