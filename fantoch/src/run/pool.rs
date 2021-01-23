@@ -1,5 +1,4 @@
-use crate::run::task;
-use crate::run::task::chan::{ChannelReceiver, ChannelSender};
+use crate::run::chan::{self, ChannelReceiver, ChannelSender};
 use color_eyre::Report;
 use std::fmt::Debug;
 
@@ -33,7 +32,7 @@ where
         // - return the receiver-side so it can be used by the pool workers
         let rxs = (0..pool_size)
             .map(|index| {
-                let (mut tx, rx) = task::chan::channel(channel_buffer_size);
+                let (mut tx, rx) = chan::channel(channel_buffer_size);
                 tx.set_name(format!("{:?}_{}", name, index));
                 pool.push(tx);
                 rx

@@ -4,7 +4,7 @@ use fantoch::executor::ExecutorMetrics;
 use fantoch::id::ProcessId;
 use fantoch::planet::Region;
 use fantoch::protocol::ProtocolMetrics;
-use fantoch::run::task::metrics_logger::ProcessMetrics;
+use fantoch::run::task::server::metrics_logger::ProcessMetrics;
 use fantoch_prof::metrics::Histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

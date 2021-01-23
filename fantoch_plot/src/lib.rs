@@ -189,7 +189,7 @@ pub fn latency_plot<R>(
     f: impl Fn(&ExperimentData) -> R,
 ) -> Result<Vec<(Search, R)>, Report> {
     const FULL_REGION_WIDTH: f64 = 10f64;
-    const MAX_COMBINATIONS: usize = 6;
+    const MAX_COMBINATIONS: usize = 7;
     // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
     const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
 
@@ -212,13 +212,13 @@ pub fn latency_plot<R>(
         let mut base = index as f64 - shift_left + shift_right;
 
         // HACK to separate move `f = 1` (i.e. the first 3 searches) a bit to
-        // the left and `f = 2` (i.e. the second 3 searches) a bit to the right
-        if search_count == 6 {
+        // the left and `f = 2` (i.e. the remaining 4 searches) a bit to the right
+        if search_count == 7 {
             if search.f == 1 && index < 3 {
-                base -= 0.25;
+                base += 0.25;
             }
             if search.f == 2 && index >= 3 {
-                base += 0.25;
+                base += 0.75;
             }
         }
         // compute combination's shift
@@ -394,7 +394,19 @@ pub fn latency_plot<R>(
     ax.set_ylabel(&ylabel, None)?;
 
     // legend
-    add_legend(plotted, Some(legends), None, None, py, &ax)?;
+    // HACK:
+    let legend_column_spacing =
+        if search_count == 7 { Some(1.25) } else { None };
+    let x_bbox_to_anchor = Some(0.48);
+    add_legend(
+        plotted,
+        Some(legends),
+        x_bbox_to_anchor,
+        None,
+        legend_column_spacing,
+        py,
+        &ax,
+    )?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -437,7 +449,7 @@ pub fn cdf_plot(
     inner_cdf_plot_style(py, &ax, None, latency_precision)?;
 
     // legend
-    add_legend(plotted, None, None, None, py, &ax)?;
+    add_legend(plotted, None, None, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -519,6 +531,7 @@ pub fn cdf_plot_split(
                     None,
                     None,
                     y_bbox_to_anchor,
+                    None,
                     py,
                     &ax,
                 )?;
@@ -695,7 +708,7 @@ pub fn throughput_something_plot(
     ax.set_ylabel(&y_label, None)?;
 
     // legend
-    add_legend(plotted, None, None, None, py, &ax)?;
+    add_legend(plotted, None, None, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -1112,7 +1125,7 @@ pub fn inter_machine_scalability_plot(
     }
 
     // legend
-    add_legend(plotted, None, None, None, py, &ax)?;
+    add_legend(plotted, None, None, None, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -1211,6 +1224,7 @@ where
                     None,
                     x_bbox_to_anchor,
                     y_bbox_to_anchor,
+                    None,
                     py,
                     &ax,
                 )?;
@@ -1366,7 +1380,7 @@ where
             };
             let (_, _, exp_data) = exp_data.pop().unwrap();
 
-            let exp_data = match search.protocol {
+            let dstats = match search.protocol {
                 Protocol::FPaxos => {
                     // if fpaxos, use data from the leader
                     exp_data
@@ -1382,10 +1396,10 @@ where
 
             // get data
             let value = match heatmap_metric {
-                HeatmapMetric::NetSend => exp_data.net_send.mean(),
-                HeatmapMetric::NetRecv => exp_data.net_recv.mean(),
+                HeatmapMetric::NetSend => dstats.net_send.mean(),
+                HeatmapMetric::NetRecv => dstats.net_recv.mean(),
                 HeatmapMetric::CPU => {
-                    exp_data.cpu_usr.mean() + exp_data.cpu_sys.mean()
+                    dstats.cpu_usr.mean() + dstats.cpu_sys.mean()
                 }
             };
             let utilization = heatmap_metric.utilization(value);
@@ -1597,10 +1611,18 @@ pub fn process_metrics_table(
     output_file: &str,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    let col_labels =
-        vec!["fast", "slow", "gc", "delay (ms)", "chains", "out", "in"];
+    let col_labels = vec![
+        "fast",
+        "slow",
+        "(%)",
+        "gc",
+        "delay (ms)",
+        "chains",
+        "out",
+        "in",
+    ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.12, 0.12, 0.12, 0.24, 0.24, 0.12, 0.12];
+    let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.23, 0.23, 0.11, 0.11];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -1642,10 +1664,10 @@ pub fn process_metrics_table(
             MetricsType::ClientGlobal => panic!("unsupported metrics type ClientGlobal in process_metrics_table"),
         };
 
-        let fmt = |n: &u64| {
-            if *n > 1_000_000 {
+        let fmt = |n: u64| {
+            if n > 1_000_000 {
                 format!("{}M", n / 1_000_000)
-            } else if *n > 1_000 {
+            } else if n > 1_000 {
                 format!("{}K", n / 1_000)
             } else {
                 format!("{}", n)
@@ -1655,13 +1677,19 @@ pub fn process_metrics_table(
         // fetch all cell data
         let fast_path = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::FastPath)
-            .map(|fast_path| fmt(fast_path));
+            .cloned()
+            .unwrap_or_default();
         let slow_path = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::SlowPath)
-            .map(|slow_path| fmt(slow_path));
+            .cloned()
+            .unwrap_or_default();
+        let fp_rate = (fast_path * 100) as f64 / (fast_path + slow_path) as f64;
+        let fast_path = Some(fmt(fast_path));
+        let slow_path = Some(fmt(slow_path));
+        let fp_rate = Some(format!("{:.1}", fp_rate));
         let gced = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::Stable)
-            .map(|gced| fmt(gced));
+            .map(|gced| fmt(*gced));
         let execution_delay = executor_metrics
             .get_collected(ExecutorMetricsKind::ExecutionDelay)
             .map(|execution_delay| {
@@ -1683,14 +1711,15 @@ pub fn process_metrics_table(
             });
         let out_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::OutRequests)
-            .map(|out_requests| fmt(out_requests));
+            .map(|out_requests| fmt(*out_requests));
         let in_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequests)
-            .map(|in_requests| fmt(in_requests));
+            .map(|in_requests| fmt(*in_requests));
         // create cell
         let cell = vec![
             fast_path,
             slow_path,
+            fp_rate,
             gced,
             execution_delay,
             chain_size,
@@ -1849,11 +1878,14 @@ pub fn end_plot(
     Ok(())
 }
 
+/// `legends` is a mapping from legend order to a pair of the matplotlib object
+/// and its legend.
 pub fn add_legend(
     plotted: usize,
     legends: Option<BTreeMap<usize, (&PyAny, String)>>,
     x_bbox_to_anchor: Option<f64>,
     y_bbox_to_anchor: Option<f64>,
+    column_spacing: Option<f64>,
     py: Python<'_>,
     ax: &Axes<'_>,
 ) -> Result<(), Report> {
@@ -1899,6 +1931,10 @@ pub fn add_legend(
         ("edgecolor", "white"),
         ("ncol", legend_ncol),
     );
+    // set spacing between columns if it was defined
+    if let Some(column_spacing) = column_spacing {
+        kwargs.set_item("columnspacing", column_spacing)?;
+    }
     let legends = legends.map(|map| map.into_iter().map(|(_, l)| l).collect());
     ax.legend(legends, Some(kwargs))?;
 

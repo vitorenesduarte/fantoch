@@ -56,7 +56,7 @@ const FEATURES: &[FantochFeature] = &[FantochFeature::Jemalloc];
 const RUN_MODE: RunMode = RunMode::Release;
 
 // heaptrack run
-// const FEATURES: &[FantochFeature] = &[];
+// const FEATURES: &[FantochFeature] = &[]; // heaptrack doesn't support jemalloc
 // const RUN_MODE: RunMode = RunMode::Heaptrack;
 
 // flamegraph run
@@ -69,6 +69,7 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
     Protocol::AtlasLocked,
     Protocol::NewtAtomic,
     Protocol::FPaxos,
+    Protocol::EPaxosLocked,
     Protocol::Caesar,
 ];
 
@@ -304,7 +305,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
-    let results_dir = "../results_fairness_and_tail_latency";
+    let results_dir = "../results_fairness_and_tail_latency_2";
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
@@ -323,11 +324,10 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        // (Protocol::Caesar, config!(n, 2, false, None, false)),
+        (Protocol::Caesar, config!(n, 2, false, None, false)),
     ];
 
-    let clients_per_region = vec![256];
-    // let clients_per_region = vec![256, 512];
+    let clients_per_region = vec![256, 512];
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -352,7 +352,10 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |_, _, _| false;
+    let skip = |protocol, _, clients| {
+        // only run FPaxos with 512 clients
+        protocol == Protocol::FPaxos && clients != 512
+    };
 
     // set shards in each config
     configs

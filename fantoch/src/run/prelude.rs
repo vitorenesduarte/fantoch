@@ -1,5 +1,5 @@
+use super::chan::{ChannelReceiver, ChannelSender};
 use super::pool;
-use super::task::chan::{ChannelReceiver, ChannelSender};
 use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use crate::id::{ClientId, Dot, ProcessId, ShardId};

@@ -1,4 +1,4 @@
-use super::chan::{ChannelReceiver, ChannelSender};
+use crate::run::chan::{ChannelReceiver, ChannelSender};
 use crate::warn;
 use std::collections::VecDeque;
 use tokio::time::{self, Duration, Instant};
@@ -67,6 +67,7 @@ fn deadline(delay: Duration) -> Instant {
 
 #[cfg(test)]
 mod tests {
+    use crate::run::chan;
     use rand::Rng;
     use tokio::time::{Duration, Instant};
 
@@ -77,9 +78,8 @@ mod tests {
     #[tokio::test]
     async fn delay_test() {
         // make sure there's enough space in the buffer channel
-        let (tx, mut rx) = crate::run::task::channel::<Instant>(OPERATIONS * 2);
-        let (mut delay_tx, delay_rx) =
-            crate::run::task::channel::<Instant>(OPERATIONS * 2);
+        let (tx, mut rx) = chan::channel::<Instant>(OPERATIONS * 2);
+        let (mut delay_tx, delay_rx) = chan::channel::<Instant>(OPERATIONS * 2);
 
         // spawn delay task
         tokio::spawn(super::delay_task(delay_rx, tx, DELAY));

@@ -324,6 +324,7 @@ fn latency_plot(
         Some(legends),
         None,
         y_bbox_to_anchor,
+        None,
         py,
         &ax,
     )?;
