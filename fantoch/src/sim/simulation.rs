@@ -140,7 +140,7 @@ where
         // handle command result
         // TODO: we should aggregate command results if we have more than one
         // shard in simulation
-        client.handle(vec![cmd_result], time);
+        client.cmd_finished(cmd_result.rifl(), time);
         // and generate the next command
         client.next_cmd(time).map(|(target_shard, cmd)| {
             let target = client.shard_process(&target_shard);

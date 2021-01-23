@@ -388,13 +388,14 @@ fn do_handle_cmd_result<'a>(
     pending: &mut ShardsPending,
     finished: &mut HashSet<ClientId>,
 ) -> Option<&'a mut Client> {
-    if let Some((client_id, cmd_results)) = pending.add(cmd_result) {
+    if let Some(rifl) = pending.add(cmd_result) {
+        let client_id = rifl.source();
         let client = clients
             .get_mut(&client_id)
             .expect("[client] command result should belong to a client");
 
         // handle command results and check if client is finished
-        if client.handle(cmd_results, time) {
+        if client.cmd_finished(rifl, time) {
             // record that this client is finished
             info!("client {:?} exited loop", client_id);
             assert!(finished.insert(client_id));
@@ -508,8 +509,13 @@ async fn client_rw_task(
     }
 }
 
+struct Expected {
+    shard_count: usize,
+    total_key_count: usize,
+}
+
 struct ShardsPending {
-    pending: HashMap<Rifl, (usize, Vec<CommandResult>)>,
+    pending: HashMap<Rifl, (Expected, Vec<CommandResult>)>,
 }
 
 impl ShardsPending {
@@ -522,23 +528,23 @@ impl ShardsPending {
     fn register(&mut self, cmd: &Command) {
         let rifl = cmd.rifl();
         trace!("c{}: register {:?}", rifl.source(), rifl);
-        let shard_count = cmd.shard_count();
-        let results = Vec::with_capacity(shard_count);
-        let res = self.pending.insert(rifl, (shard_count, results));
+        let expected = Expected {
+            shard_count: cmd.shard_count(),
+            total_key_count: cmd.total_key_count(),
+        };
+        let results = Vec::with_capacity(expected.shard_count);
+        let res = self.pending.insert(rifl, (expected, results));
         assert!(res.is_none());
     }
 
-    // Add new `CommandResult` and return all the `CommandResult` if we have the
-    // results from all shards.
-    fn add(
-        &mut self,
-        result: CommandResult,
-    ) -> Option<(ClientId, Vec<CommandResult>)> {
+    // Add new `CommandResult`. Return a `Rifl` if some command got the
+    // `CommandResult`s from each of the shards accessed.
+    fn add(&mut self, result: CommandResult) -> Option<Rifl> {
         let rifl = result.rifl();
         trace!("c{}: received {:?}", rifl.source(), rifl);
         match self.pending.entry(rifl) {
             Entry::Occupied(mut entry) => {
-                let (shard_count, results) = entry.get_mut();
+                let (expected, results) = entry.get_mut();
                 // add new result
                 results.push(result);
 
@@ -554,9 +560,15 @@ impl ShardsPending {
                 // - TODO: add an assert checking that indeed these
                 //   `CommandResult` came from different shards, and are not
                 //   sent by the same shard
-                if results.len() == *shard_count {
-                    let (_, results) = entry.remove();
-                    Some((rifl.source(), results))
+                if results.len() == expected.shard_count {
+                    // assert that all keys accessed got a result
+                    let results_key_count: usize = results
+                        .into_iter()
+                        .map(|cmd_result| cmd_result.results().len())
+                        .sum();
+                    assert_eq!(results_key_count, expected.total_key_count);
+                    entry.remove();
+                    Some(rifl)
                 } else {
                     None
                 }

@@ -17,11 +17,11 @@ pub use key_gen::KeyGen;
 pub use pending::Pending;
 pub use workload::Workload;
 
-use crate::command::{Command, CommandResult};
-use crate::id::{ClientId, ProcessId, RiflGen, ShardId};
+use crate::command::Command;
+use crate::id::{ClientId, ProcessId, Rifl, RiflGen, ShardId};
 use crate::time::SysTime;
+use crate::HashMap;
 use crate::{info, trace};
-use crate::{HashMap, HashSet};
 use key_gen::KeyGenState;
 
 pub struct Client {
@@ -112,19 +112,7 @@ impl Client {
     /// Handle executed command and return a boolean indicating whether we have
     /// generated all commands and receive all the corresponding command
     /// results.
-    pub fn handle(
-        &mut self,
-        cmd_results: Vec<CommandResult>,
-        time: &dyn SysTime,
-    ) -> bool {
-        // make sure that results belong to the same rifl
-        let mut rifls = HashSet::with_capacity(1);
-        for cmd_result in cmd_results {
-            rifls.insert(cmd_result.rifl());
-        }
-        assert_eq!(rifls.len(), 1);
-        let rifl = rifls.into_iter().next().unwrap();
-
+    pub fn cmd_finished(&mut self, rifl: Rifl, time: &dyn SysTime) -> bool {
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(rifl, time);
         trace!(
@@ -265,10 +253,6 @@ mod tests {
         // create system time
         let mut time = SimTime::new();
 
-        // creates a fake command result from a command
-        let fake_result =
-            |cmd: Command| vec![CommandResult::new(cmd.rifl(), HashMap::new())];
-
         // start client at time 0
         let (shard_id, cmd) = client
             .next_cmd(&time)
@@ -279,7 +263,7 @@ mod tests {
 
         // handle result at time 10
         time.add_millis(10);
-        client.handle(fake_result(cmd), &time);
+        client.cmd_finished(cmd.rifl(), &time);
         let next = client.next_cmd(&time);
 
         // check there's next command
@@ -291,7 +275,7 @@ mod tests {
 
         // handle result at time 15
         time.add_millis(5);
-        client.handle(fake_result(cmd), &time);
+        client.cmd_finished(cmd.rifl(), &time);
         let next = client.next_cmd(&time);
 
         // check there's no next command

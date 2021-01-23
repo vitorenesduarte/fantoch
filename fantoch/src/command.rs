@@ -185,7 +185,8 @@ pub struct CommandResultBuilder {
 }
 
 impl CommandResultBuilder {
-    /// Creates a new `CommandResultBuilder` given the number of keys accessed by the command.
+    /// Creates a new `CommandResultBuilder` given the number of keys accessed
+    /// by the command.
     pub fn new(rifl: Rifl, key_count: usize) -> Self {
         CommandResultBuilder {
             rifl,
