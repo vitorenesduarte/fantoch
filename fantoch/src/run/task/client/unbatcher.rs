@@ -22,13 +22,15 @@ pub async fn unbatcher(
             from_batcher = from.recv() => {
                 let handle_from_batcher = handle_from_batcher(from_batcher, &mut shard_to_writer, &mut pending).await;
                 if let Err(e) = handle_from_batcher {
-                    warn!("[batcher] {:?}", e);
+                    warn!("[unbatcher] {:?}", e);
+                    break;
                 }
             }
             from_server = read.recv() => {
                 let handle_from_server = handle_from_server(from_server, &mut to, &mut pending).await;
                 if let Err(e) = handle_from_server {
-                    warn!("[batcher] {:?}", e);
+                    warn!("[unbatcher] {:?}", e);
+                    break;
                 }
             }
         }
