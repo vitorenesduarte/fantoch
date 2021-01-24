@@ -819,7 +819,7 @@ async fn stop_dstats(
         stops.push(stop_dstat(vm));
     }
     for result in futures::future::join_all(stops).await {
-        let _ = result.wrap_err("stop_dstat")?;
+        let _ = result?;
     }
     Ok(())
 }
@@ -1049,7 +1049,7 @@ pub async fn cleanup(
     // stop dstats in all machines
     stop_dstats(machines, Vec::new())
         .await
-        .wrap_err("stop_dstat")?;
+        .wrap_err("stop_dstats")?;
 
     // do the rest of the cleanup
     let mut cleanups = Vec::new();

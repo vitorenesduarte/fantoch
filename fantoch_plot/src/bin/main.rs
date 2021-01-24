@@ -197,6 +197,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         pool_size: 1,
     };
     let payload_size = 4096;
+    let batch_max_size = 1;
     let n = 5;
     let leader = 1;
 
@@ -232,8 +233,10 @@ fn increasing_load_plot() -> Result<(), Report> {
                 panic!("unsupported protocol: {:?}", search.protocol);
             }
         }
-        // filter by payload size in all protocols
-        search.payload_size(payload_size);
+        // filter by payload size and batch max size in all protocols
+        search
+            .payload_size(payload_size)
+            .batch_max_size(batch_max_size);
     };
 
     let protocols = vec![

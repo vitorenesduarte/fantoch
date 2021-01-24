@@ -240,6 +240,14 @@ impl ResultsDB {
                     }
                 }
 
+                // filter out configurations with different batch_max_size (if
+                // set)
+                if let Some(batch_max_size) = search.batch_max_size {
+                    if exp_config.batch_max_size != batch_max_size {
+                        return false;
+                    }
+                }
+
                 // if this exp config was not filtered-out until now, then
                 // return it
                 true
