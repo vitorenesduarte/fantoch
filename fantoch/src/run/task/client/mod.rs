@@ -155,13 +155,16 @@ where
     while finished.len() < clients.len() {
         // and wait for next result
         let from_unbatcher = unbatcher_rx.recv().await;
-        let client = handle_ready_rifls(
+        let ready_clients = handle_ready_rifls(
             &mut clients,
             &time,
             from_unbatcher,
             &mut finished,
         );
-        if let Some(client) = client {
+        for client_id in ready_clients {
+            let client = clients
+                .get_mut(&client_id)
+                .expect("[client] ready client should exist");
             // if client hasn't finished, issue a new command
             next_cmd(client, &time, &mut batcher_tx, &mut workload_finished)
                 .await;
@@ -408,14 +411,14 @@ async fn next_cmd(
     }
 }
 
-/// Handles new ready rifls. Returns the client if a new COMMAND COMPLETED and
-/// the client did NOT FINISH.
-fn handle_ready_rifls<'a>(
-    clients: &'a mut HashMap<ClientId, Client>,
+/// Handles new ready rifls. Returns the client ids of clients with a new
+/// command finished.
+fn handle_ready_rifls(
+    clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
     from_unbatcher: Option<Vec<Rifl>>,
     finished: &mut HashSet<ClientId>,
-) -> Option<&'a mut Client> {
+) -> Vec<ClientId> {
     if let Some(rifls) = from_unbatcher {
         do_handle_ready_rifls(clients, time, rifls, finished)
     } else {
@@ -423,28 +426,31 @@ fn handle_ready_rifls<'a>(
     }
 }
 
-fn do_handle_ready_rifls<'a>(
-    clients: &'a mut HashMap<ClientId, Client>,
+fn do_handle_ready_rifls(
+    clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    mut rifls: Vec<Rifl>,
+    rifls: Vec<Rifl>,
     finished: &mut HashSet<ClientId>,
-) -> Option<&'a mut Client> {
-    // TODO: handle all rifl
-    let rifl = rifls.pop().unwrap();
-    let client_id = rifl.source();
-    let client = clients
-        .get_mut(&client_id)
-        .expect("[client] command result should belong to a client");
+) -> Vec<ClientId> {
+    rifls
+        .into_iter()
+        .filter_map(move |rifl| {
+            let client_id = rifl.source();
+            let client = clients
+                .get_mut(&client_id)
+                .expect("[client] command result should belong to a client");
 
-    // handle command results and check if client is finished
-    if client.cmd_finished(rifl, time) {
-        // record that this client is finished
-        info!("client {:?} exited loop", client_id);
-        assert!(finished.insert(client_id));
-        None
-    } else {
-        Some(client)
-    }
+            // handle command results and check if client is finished
+            if client.cmd_finished(rifl, time) {
+                // record that this client is finished
+                info!("client {:?} exited loop", client_id);
+                assert!(finished.insert(client_id));
+                None
+            } else {
+                Some(client_id)
+            }
+        })
+        .collect()
 }
 
 async fn client_say_hi(
