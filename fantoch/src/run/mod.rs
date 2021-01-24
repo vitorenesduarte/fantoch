@@ -824,7 +824,7 @@ pub mod tests {
                 };
 
                 // batching config
-                let batch_max_size = 5;
+                let batch_max_size = 1;
                 let batch_max_delay = Duration::from_millis(1);
 
                 // spawn client
