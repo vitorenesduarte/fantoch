@@ -155,7 +155,7 @@ where
     while finished.len() < clients.len() {
         // and wait for next result
         let from_unbatcher = unbatcher_rx.recv().await;
-        let client = handle_cmd_result(
+        let client = handle_ready_rifls(
             &mut clients,
             &time,
             from_unbatcher,
@@ -217,7 +217,7 @@ where
     while finished.len() < clients.len() {
         tokio::select! {
             from_unbatcher = unbatcher_rx.recv() => {
-                handle_cmd_result(
+                handle_ready_rifls(
                     &mut clients,
                     &time,
                     from_unbatcher,
@@ -257,7 +257,7 @@ async fn client_setup<A>(
     status_frequency: Option<usize>,
 ) -> Option<(
     HashMap<ClientId, Client>,
-    ChannelReceiver<Rifl>,
+    ChannelReceiver<Vec<Rifl>>,
     ChannelSender<(ShardId, Command)>,
 )>
 where
@@ -350,7 +350,7 @@ async fn spawn_batcher_and_unbatcher(
     shard_to_writer: HashMap<ShardId, ChannelSender<ClientToServer>>,
 ) -> Option<(
     HashMap<ClientId, Client>,
-    ChannelReceiver<Rifl>,
+    ChannelReceiver<Vec<Rifl>>,
     ChannelSender<(ShardId, Command)>,
 )> {
     // TODO: take these from configuration
@@ -408,27 +408,29 @@ async fn next_cmd(
     }
 }
 
-/// Handles a command result. Returns the client if a new COMMAND COMPLETED and
+/// Handles new ready rifls. Returns the client if a new COMMAND COMPLETED and
 /// the client did NOT FINISH.
-fn handle_cmd_result<'a>(
+fn handle_ready_rifls<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    from_unbatcher: Option<Rifl>,
+    from_unbatcher: Option<Vec<Rifl>>,
     finished: &mut HashSet<ClientId>,
 ) -> Option<&'a mut Client> {
-    if let Some(rifl) = from_unbatcher {
-        do_handle_cmd_result(clients, time, rifl, finished)
+    if let Some(rifls) = from_unbatcher {
+        do_handle_ready_rifls(clients, time, rifls, finished)
     } else {
         panic!("[client] error while receiving message from client read-write task");
     }
 }
 
-fn do_handle_cmd_result<'a>(
+fn do_handle_ready_rifls<'a>(
     clients: &'a mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    rifl: Rifl,
+    mut rifls: Vec<Rifl>,
     finished: &mut HashSet<ClientId>,
 ) -> Option<&'a mut Client> {
+    // TODO: handle all rifl
+    let rifl = rifls.pop().unwrap();
     let client_id = rifl.source();
     let client = clients
         .get_mut(&client_id)

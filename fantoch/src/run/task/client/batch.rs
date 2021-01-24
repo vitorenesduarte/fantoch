@@ -52,6 +52,11 @@ impl Batch {
         self.rifls.len()
     }
 
+    pub fn unpack(self) -> (ShardId, Command, Vec<Rifl>) {
+        let target_shard = self.target_shard();
+        (target_shard, self.cmd, self.rifls)
+    }
+
     /// Computes the target shard as the shard most selected as the target
     /// shard. Assume that the batch is non-empty.
     fn target_shard(&self) -> ShardId {
@@ -67,10 +72,6 @@ impl Batch {
         *count_to_shard.pop().map(|(_, shard_id)| shard_id).unwrap()
     }
 
-    pub fn unpack(self) -> (ShardId, Command, Vec<Rifl>) {
-        let target_shard = self.target_shard();
-        (target_shard, self.cmd, self.rifls)
-    }
 }
 
 #[cfg(test)]
