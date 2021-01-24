@@ -447,7 +447,7 @@ fn do_cmd_recv(
 ) -> Vec<ClientId> {
     rifls
         .into_iter()
-        .filter_map(move |rifl| {
+        .map(move |rifl| {
             // find client that sent this command
             let client_id = rifl.source();
             let client = clients
@@ -462,10 +462,8 @@ fn do_cmd_recv(
                 // record that this client is finished
                 info!("client {:?} exited loop", client_id);
                 assert!(finished.insert(client_id));
-                None
-            } else {
-                Some(client_id)
             }
+            client_id
         })
         .collect()
 }
