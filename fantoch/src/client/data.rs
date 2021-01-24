@@ -37,6 +37,25 @@ impl ClientData {
             .map(|(time, latencies)| (*time, latencies.len()))
     }
 
+    pub fn throughput(&self) -> f64 {
+        let mut seconds_to_ops: HashMap<_, f64> = HashMap::new();
+        for (time_millis, ops) in self.data.iter() {
+            let time_seconds = time_millis / 1000;
+            let current_ops = seconds_to_ops.entry(time_seconds).or_default();
+            *current_ops += ops.len() as f64;
+        }
+
+        // incremental averaging to prevent (a potential) overflow
+        let mut average = 0f64;
+        let mut count = 0f64;
+        for value in seconds_to_ops.values() {
+            average = (average * count + value) / (count + 1f64);
+            count += 1f64;
+        }
+        average
+        // seconds_to_ops.values().sum::<u64>() as f64 / seconds_to_ops.len() as f64
+    }
+
     /// Compute start and end times for this client.
     pub fn start_and_end(&self) -> Option<(u64, u64)> {
         let mut times: Vec<_> = self.data.keys().collect();

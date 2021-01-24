@@ -20,6 +20,8 @@ pub struct ExperimentData {
     pub global_client_dstats: DstatCompress,
     pub client_latency: HashMap<Region, MicrosHistogramCompress>,
     pub global_client_latency: MicrosHistogramCompress,
+    pub client_throughput: HashMap<Region, f64>,
+    pub global_client_throughput: f64,
 }
 
 impl ExperimentData {
@@ -61,10 +63,16 @@ impl ExperimentData {
         // compress global client dstat
         let global_client_dstats = DstatCompress::from(&global_client_dstats);
 
-        // create latency histogram per region
+        // create latency histogram per region (and also compute throughput)
+        let mut client_throughput =
+            HashMap::with_capacity(client_metrics.len());
         let client_latency = client_metrics
             .into_iter()
             .map(|(region, client_data)| {
+                // compute throughput
+                let throughput = client_data.throughput();
+                client_throughput.insert(region.clone(), throughput);
+
                 // create latency histogram
                 let latency = Self::extract_micros(client_data.latency_data());
                 let histogram = Histogram::from(latency);
@@ -74,7 +82,8 @@ impl ExperimentData {
             })
             .collect();
 
-        // create global latency histogram
+        // create global latency histogram (and also compute throughput)
+        let global_client_throughput = global_client_metrics.throughput();
         let latency =
             Self::extract_micros(global_client_metrics.latency_data());
         let global_client_latency = Histogram::from(latency);
@@ -91,6 +100,8 @@ impl ExperimentData {
             client_latency,
             global_client_dstats,
             global_client_latency,
+            client_throughput,
+            global_client_throughput,
         }
     }
 

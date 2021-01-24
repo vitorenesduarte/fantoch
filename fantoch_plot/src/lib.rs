@@ -736,11 +736,8 @@ pub fn inner_throughput_something_plot(
         // check `n`
         assert_eq!(search.n, n, "inner_throughput_something_plot: value of n in search doesn't match the provided");
 
-        // keep track of average latency that will be used to compute throughput
-        let mut avg_latency = Vec::with_capacity(clients_per_region.len());
-
-        // compute y: values for each number of clients
-        let mut y = Vec::with_capacity(clients_per_region.len());
+        // x and y values for each number of clients
+        let mut values = Vec::with_capacity(clients_per_region.len());
         for &clients in clients_per_region.iter() {
             // refine search
             search.clients_per_region(clients);
@@ -754,8 +751,7 @@ pub fn inner_throughput_something_plot(
                         PlotFmt::protocol_name(search.protocol),
                         search.f
                     );
-                    avg_latency.push(0f64);
-                    y.push(0f64);
+                    values.push((0f64, 0f64));
                     continue;
                 }
                 1 => (),
@@ -771,17 +767,16 @@ pub fn inner_throughput_something_plot(
             };
             let (_, _, exp_data) = exp_data.pop().unwrap();
 
-            // get average latency
-            let avg = exp_data
-                .global_client_latency
-                .mean(latency_precision)
-                .round();
-            avg_latency.push(avg);
+            // compute x value (throughput)
+            let x_value = exp_data.global_client_throughput;
 
-            // compute y value to be plotted
+            // compute y value (latency)
             let y_value = match y_axis {
                 ThroughputYAxis::Latency(latency) => match latency {
-                    LatencyMetric::Average => avg,
+                    LatencyMetric::Average => exp_data
+                        .global_client_latency
+                        .mean(latency_precision)
+                        .round(),
                     LatencyMetric::Percentile(percentile) => exp_data
                         .global_client_latency
                         .percentile(percentile, latency_precision)
@@ -796,36 +791,24 @@ pub fn inner_throughput_something_plot(
                 }
             };
 
-            y.push(y_value);
+            values.push((x_value, y_value));
         }
 
         // compute x: compute throughput given average latency and number of
         // clients
         let mut max_throughput = 0;
-        let (x, y): (Vec<_>, Vec<_>) = avg_latency
+        let (x, y): (Vec<_>, Vec<_>) = values
             .into_iter()
-            .zip(y.iter())
-            .zip(clients_per_region.iter())
-            .filter_map(|((avg_latency, &y_value), &clients)| {
-                if avg_latency == 0f64 {
-                    None
-                } else {
-                    let throughput = compute_throughput(
-                        n,
-                        clients,
-                        avg_latency,
-                        latency_precision,
-                    );
-                    // compute K ops
-                    let x = throughput / 1000f64;
+            .map(|(throughput, avg_latency)| {
+                // compute K ops
+                let x = throughput / 1000f64;
 
-                    // update max throughput
-                    max_throughput = std::cmp::max(max_throughput, x as usize);
+                // update max throughput
+                max_throughput = std::cmp::max(max_throughput, x as usize);
 
-                    // round y
-                    let y = y_value.round() as usize;
-                    Some((x, y))
-                }
+                // round y
+                let y = avg_latency.round() as usize;
+                (x, y)
             })
             .unzip();
 
@@ -862,23 +845,6 @@ pub fn inner_throughput_something_plot(
     }
 
     Ok(max_throughputs)
-}
-
-fn compute_throughput(
-    n: usize,
-    clients: usize,
-    avg_latency: f64,
-    latency_precision: LatencyPrecision,
-) -> f64 {
-    // compute throughput using the average latency:
-    // - since the average latency has two possible precisions, compute
-    //   throughput accordingly
-    let per_second = match latency_precision {
-        LatencyPrecision::Micros => 1_000_000f64 / avg_latency,
-        LatencyPrecision::Millis => 1_000f64 / avg_latency,
-    };
-    let per_site = clients as f64 * per_second;
-    n as f64 * per_site
 }
 
 pub fn heatmap_plot<F>(
@@ -936,9 +902,6 @@ pub fn intra_machine_scalability_plot(
     cpus: Vec<usize>,
     db: &ResultsDB,
 ) -> Result<(), Report> {
-    // the precision does not matter, but we still need one
-    let latency_precision = LatencyPrecision::Micros;
-
     for mut search in searches {
         let mut ys = Vec::with_capacity(cpus.len());
         for cpus in cpus.iter() {
@@ -952,21 +915,10 @@ pub fn intra_machine_scalability_plot(
             let exp_data = db.find(search)?;
             let max_throughput = exp_data
                 .into_iter()
-                .map(|(_, exp_config, exp_data)| {
+                .map(|(_, _, exp_data)| {
                     // compute throughput for each result matching this search
                     // (we can have several, with different number of clients)
-                    // - first get average latency
-                    // - and the compute throughput
-                    let avg_latency = exp_data
-                        .global_client_latency
-                        .mean(latency_precision)
-                        .round();
-                    let throughput = compute_throughput(
-                        n,
-                        exp_config.clients_per_region,
-                        avg_latency,
-                        latency_precision,
-                    );
+                    let throughput = exp_data.global_client_throughput;
                     // compute K ops
                     (throughput / 1000f64) as u64
                 })
@@ -1036,9 +988,6 @@ pub fn inter_machine_scalability_plot(
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
-    // the precision does not matter, but we still need one
-    let latency_precision = LatencyPrecision::Micros;
-
     for (shift, mut search) in searches.clone() {
         let mut y = Vec::new();
         for (shard_count, keys_per_command, coefficient) in settings.clone() {
@@ -1059,21 +1008,10 @@ pub fn inter_machine_scalability_plot(
             let exp_data = db.find(search)?;
             let max_throughput = exp_data
                 .into_iter()
-                .map(|(_, exp_config, exp_data)| {
+                .map(|(_, _, exp_data)| {
                     // compute throughput for each result matching this search
                     // (we can have several, with different number of clients)
-                    // - first get average latency
-                    // - and the compute throughput
-                    let avg_latency = exp_data
-                        .global_client_latency
-                        .mean(latency_precision)
-                        .round();
-                    let throughput = compute_throughput(
-                        n,
-                        exp_config.clients_per_region,
-                        avg_latency,
-                        latency_precision,
-                    );
+                    let throughput = exp_data.global_client_throughput;
                     // compute K ops
                     (throughput / 1000f64) as u64
                 })
