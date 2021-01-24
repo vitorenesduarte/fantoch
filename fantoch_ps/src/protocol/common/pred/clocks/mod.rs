@@ -5,7 +5,7 @@ mod keys;
 mod quorum;
 
 // Re-exports.
-pub use keys::{KeyClocks, SequentialKeyClocks};
+pub use keys::{KeyClocks, LockedKeyClocks, SequentialKeyClocks};
 pub use quorum::{QuorumClocks, QuorumRetries};
 
 use fantoch::id::ProcessId;

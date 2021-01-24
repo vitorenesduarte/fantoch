@@ -1,7 +1,11 @@
 // This module contains the definition of `SequentialKeyClocks`.
 mod sequential;
 
+// This module contains the definition of `LockedKeyClocks`.
+mod locked;
+
 // Re-exports.
+pub use locked::LockedKeyClocks;
 pub use sequential::SequentialKeyClocks;
 
 use super::Clock;

@@ -1,6 +1,7 @@
 use crate::executor::PredecessorsExecutor;
 use crate::protocol::common::pred::{
-    Clock, KeyClocks, QuorumClocks, QuorumRetries, SequentialKeyClocks,
+    Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
+    SequentialKeyClocks,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -19,8 +20,6 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use threshold::VClock;
 
-// TODO: Sequential -> Locked
-type LockedKeyClocks = SequentialKeyClocks;
 pub type CaesarSequential = Caesar<SequentialKeyClocks>;
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
