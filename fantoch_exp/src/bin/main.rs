@@ -38,14 +38,17 @@ const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(10);
 const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> = None;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
-const TRACER_SHOW_INTERVAL: Option<usize> = None;
+const TRACER_SHOW_INTERVAL: Option<Duration> = None;
 
 // clients config
 const COMMANDS_PER_CLIENT_WAN: usize = 500;
 const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 
+// batching config
+const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
+
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "batching_32";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -95,8 +98,8 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    fairness_and_tail_latency_plot().await
-    // increasing_load_plot().await
+    // fairness_and_tail_latency_plot().await
+    increasing_load_plot().await
     // partial_replication_plot().await
 }
 
@@ -172,6 +175,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
             workloads.push(workload);
         }
     }
+    let batch_max_size = 1;
 
     // don't skip
     let skip = |_, _, _| false;
@@ -196,6 +200,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -228,7 +233,8 @@ async fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
-        (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+        // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+        (Protocol::Caesar, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -269,6 +275,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
+    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
@@ -295,6 +302,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -351,6 +359,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
+    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // only run FPaxos with 512 clients
@@ -378,6 +387,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -460,6 +470,7 @@ async fn whatever_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
+    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
@@ -589,6 +600,7 @@ async fn whatever_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -603,6 +615,7 @@ async fn whatever_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         skip,
         progress,
     )
@@ -613,6 +626,7 @@ async fn whatever_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         skip,
         progress,
     ).await
@@ -627,6 +641,7 @@ async fn local_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    batch_max_size: usize,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -653,6 +668,7 @@ where
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -672,6 +688,7 @@ async fn baremetal_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    batch_max_size: usize,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -705,6 +722,7 @@ where
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -723,6 +741,7 @@ async fn aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    batch_max_size: usize,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -736,6 +755,7 @@ async fn aws_bench(
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -763,6 +783,7 @@ async fn do_aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    batch_max_size: usize,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -795,6 +816,7 @@ async fn do_aws_bench(
         configs,
         clients_per_region,
         workloads,
+        batch_max_size,
         cpus,
         skip,
         progress,
@@ -813,6 +835,7 @@ async fn run_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    batch_max_size: usize,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -829,6 +852,8 @@ async fn run_bench(
         TRACER_SHOW_INTERVAL,
         clients_per_region,
         workloads,
+        batch_max_size,
+        BATCH_MAX_DELAY,
         cpus,
         skip,
         EXPERIMENT_TIMEOUTS,

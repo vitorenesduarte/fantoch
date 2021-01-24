@@ -9,19 +9,19 @@ use tokio::time::{self, Duration};
 
 struct BatchingConfig {
     batch_max_size: usize,
-    batch_delay: Duration,
+    batch_max_delay: Duration,
 }
 
 pub async fn batcher(
     mut from: ChannelReceiver<(ShardId, Command)>,
     mut to: ChannelSender<Batch>,
     batch_max_size: usize,
-    batch_delay: Duration,
+    batch_max_delay: Duration,
 ) {
     // create batching config
     let config = BatchingConfig {
         batch_max_size,
-        batch_delay,
+        batch_max_delay,
     };
     // variable to hold the next batch to be sent
     let mut next_batch = None;
@@ -74,7 +74,7 @@ async fn add_to_batch(
             }
             None => {
                 // create a new batch only with this command
-                let deadline = task::util::deadline(config.batch_delay);
+                let deadline = task::util::deadline(config.batch_max_delay);
                 let batch = Batch::new(target_shard, cmd, deadline);
                 *next_batch = Some(batch);
             }

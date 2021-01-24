@@ -37,6 +37,8 @@ pub async fn client<A>(
     addresses: Vec<A>,
     interval: Option<Duration>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     connect_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -69,6 +71,8 @@ where
                     addresses.clone(),
                     interval,
                     workload,
+                    batch_max_size,
+                    batch_max_delay,
                     connect_retries,
                     tcp_nodelay,
                     channel_buffer_size,
@@ -79,6 +83,8 @@ where
                     client_ids,
                     addresses.clone(),
                     workload,
+                    batch_max_size,
+                    batch_max_delay,
                     connect_retries,
                     tcp_nodelay,
                     channel_buffer_size,
@@ -117,6 +123,8 @@ async fn closed_loop_client<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     connect_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -133,6 +141,8 @@ where
         client_ids,
         addresses,
         workload,
+        batch_max_size,
+        batch_max_delay,
         connect_retries,
         tcp_nodelay,
         channel_buffer_size,
@@ -186,6 +196,8 @@ async fn open_loop_client<A>(
     addresses: Vec<A>,
     interval: Duration,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     connect_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -202,6 +214,8 @@ where
         client_ids,
         addresses,
         workload,
+        batch_max_size,
+        batch_max_delay,
         connect_retries,
         tcp_nodelay,
         channel_buffer_size,
@@ -254,6 +268,8 @@ async fn client_setup<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     client_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -337,6 +353,8 @@ where
 
     spawn_batcher_and_unbatcher(
         client_ids,
+        batch_max_size,
+        batch_max_delay,
         clients,
         channel_buffer_size,
         read,
@@ -347,6 +365,8 @@ where
 
 async fn spawn_batcher_and_unbatcher(
     client_ids: Vec<ClientId>,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     clients: HashMap<ClientId, Client>,
     channel_buffer_size: usize,
     read: ChannelReceiver<CommandResult>,
@@ -356,10 +376,6 @@ async fn spawn_batcher_and_unbatcher(
     ChannelReceiver<Vec<Rifl>>,
     ChannelSender<(ShardId, Command)>,
 )> {
-    // TODO: take these from configuration
-    let batch_max_size = 1;
-    let batch_delay = Duration::from_millis(5);
-
     let (mut batcher_tx, batcher_rx) = chan::channel(channel_buffer_size);
     batcher_tx
         .set_name(format!("to_batcher_{}", super::util::ids_repr(&client_ids)));
@@ -378,7 +394,7 @@ async fn spawn_batcher_and_unbatcher(
         batcher_rx,
         to_unbatcher_tx,
         batch_max_size,
-        batch_delay,
+        batch_max_delay,
     ));
 
     // spawn unbatcher

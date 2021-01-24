@@ -8,6 +8,7 @@ use fantoch::planet::{Planet, Region};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Duration;
 
 pub type RegionIndex = usize;
 pub type Placement = HashMap<(Region, ShardId), (ProcessId, RegionIndex)>;
@@ -27,7 +28,8 @@ const PROCESS_TCP_NODELAY: bool = true;
 // by default, each socket stream is buffered (with a buffer of size 8KBs),
 // which should greatly reduce the number of syscalls for small-sized messages
 const PROCESS_TCP_BUFFER_SIZE: usize = 5 * 1024 * 1024; // 5MB
-const PROCESS_TCP_FLUSH_INTERVAL: Option<usize> = Some(2);
+const PROCESS_TCP_FLUSH_INTERVAL: Option<Duration> =
+    Some(Duration::from_millis(2));
 
 // if this value is 100, the run doesn't finish, which probably means there's a
 // deadlock somewhere with 1000 we can see that channels fill up sometimes with
@@ -49,9 +51,9 @@ const CLIENT_STACK_SIZE: Option<usize> = None; // default is 8MB
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
 #[cfg(feature = "exp")]
-const TRACER_SHOW_INTERVAL: Option<usize> = None;
+const TRACER_SHOW_INTERVAL: Option<Duration> = None;
 #[cfg(feature = "exp")]
-const PING_INTERVAL: Option<usize> = Some(500); // every 500ms
+const PING_INTERVAL: Option<Duration> = Some(Duration::from_millis(500));
 
 #[cfg(feature = "exp")]
 // const STATUS_FREQUENCY: Option<usize> = None;
@@ -72,15 +74,15 @@ pub struct ProtocolConfig {
     config: Config,
     tcp_nodelay: bool,
     tcp_buffer_size: usize,
-    tcp_flush_interval: Option<usize>,
+    tcp_flush_interval: Option<Duration>,
     process_channel_buffer_size: usize,
     client_channel_buffer_size: usize,
     workers: usize,
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<usize>,
-    ping_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
+    ping_interval: Option<Duration>,
     metrics_file: String,
     stack_size: Option<usize>,
     cpus: usize,
@@ -127,7 +129,7 @@ impl ProtocolConfig {
         }
     }
 
-    pub fn set_tracer_show_interval(&mut self, interval: usize) {
+    pub fn set_tracer_show_interval(&mut self, interval: Duration) {
         self.tracer_show_interval = Some(interval);
     }
 
@@ -207,7 +209,7 @@ impl ProtocolConfig {
             self.tcp_buffer_size
         ]);
         if let Some(interval) = self.tcp_flush_interval {
-            args.extend(args!["--tcp_flush_interval", interval]);
+            args.extend(args!["--tcp_flush_interval", interval.as_millis()]);
         }
         args.extend(args![
             "--process_channel_buffer_size",
@@ -225,10 +227,10 @@ impl ProtocolConfig {
             args.extend(args!["--execution_log", log]);
         }
         if let Some(interval) = self.tracer_show_interval {
-            args.extend(args!["--tracer_show_interval", interval]);
+            args.extend(args!["--tracer_show_interval", interval.as_millis()]);
         }
         if let Some(interval) = self.ping_interval {
-            args.extend(args!["--ping_interval", interval]);
+            args.extend(args!["--ping_interval", interval.as_millis()]);
         }
         args.extend(args!["--metrics_file", self.metrics_file]);
         if let Some(stack_size) = self.stack_size {
@@ -285,6 +287,8 @@ pub struct ClientConfig {
     id_end: usize,
     ips: Vec<(ProcessId, String)>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     status_frequency: Option<usize>,
@@ -301,6 +305,8 @@ impl ClientConfig {
         id_end: usize,
         ips: Vec<(ProcessId, String)>,
         workload: Workload,
+        batch_max_size: usize,
+        batch_max_delay: Duration,
         metrics_file: String,
         log_file: String,
     ) -> Self {
@@ -309,6 +315,8 @@ impl ClientConfig {
             id_end,
             ips,
             workload,
+            batch_max_size,
+            batch_max_delay,
             tcp_nodelay: CLIENT_TCP_NODELAY,
             channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
             status_frequency: STATUS_FREQUENCY,
@@ -350,6 +358,10 @@ impl ClientConfig {
             self.workload.payload_size(),
             "--read_only_percentage",
             self.workload.read_only_percentage(),
+            "--batch_max_size",
+            self.batch_max_size,
+            "--batch_max_delay",
+            self.batch_max_delay.as_millis(),
             "--tcp_nodelay",
             self.tcp_nodelay,
             "--channel_buffer_size",
@@ -392,9 +404,11 @@ pub struct ExperimentConfig {
     pub config: Config,
     pub clients_per_region: usize,
     pub workload: Workload,
+    pub batch_max_size: usize,
+    pub batch_max_delay: Duration,
     pub process_tcp_nodelay: bool,
     pub tcp_buffer_size: usize,
-    pub tcp_flush_interval: Option<usize>,
+    pub tcp_flush_interval: Option<Duration>,
     pub process_channel_buffer_size: usize,
     pub cpus: usize,
     pub workers: usize,
@@ -415,6 +429,8 @@ impl ExperimentConfig {
         mut config: Config,
         clients_per_region: usize,
         workload: Workload,
+        batch_max_size: usize,
+        batch_max_delay: Duration,
         cpus: usize,
     ) -> Self {
         let (workers, executors) =
@@ -444,6 +460,8 @@ impl ExperimentConfig {
             executors,
             multiplexing: MULTIPLEXING,
             workload,
+            batch_max_size,
+            batch_max_delay,
             client_tcp_nodelay: CLIENT_TCP_NODELAY,
             client_channel_buffer_size: CLIENT_CHANNEL_BUFFER_SIZE,
         }
