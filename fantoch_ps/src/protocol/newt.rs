@@ -9,7 +9,6 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::kvs::KVOp;
 use fantoch::protocol::{
     Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
@@ -602,25 +601,15 @@ impl<KC: KeyClocks> Newt<KC> {
             .as_ref()
             .expect("there should be a command payload");
         let rifl = cmd.rifl();
-        let execution_info = cmd.iter(self.bp.shard_id).map(|(key, op)| {
+        let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
-            let key_votes = votes.remove(&key);
-            let key_votes = match op {
-                KVOp::Get => {
-                    assert!(key_votes.is_none(), "Get's should have no votes");
-                    Vec::new()
-                }
-                KVOp::Put(_) => key_votes.expect("Put's should have votes"),
-                _ => {
-                    panic!("unsupported operation: {:?}", op);
-                }
-            };
+            let key_votes = votes.remove(&key).unwrap_or_default();
             ExecutionInfo::votes(
                 dot,
                 clock,
                 rifl,
                 key.clone(),
-                op.clone(),
+                ops.clone(),
                 key_votes,
             )
         });
@@ -643,7 +632,6 @@ impl<KC: KeyClocks> Newt<KC> {
             });
         } else {
             // try to generate detached votes
-            let cmd = info.cmd.as_ref().unwrap();
             self.key_clocks.detached(cmd, clock, &mut self.detached);
         }
 

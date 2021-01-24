@@ -50,13 +50,13 @@ impl MultiVotesTable {
         clock: u64,
         rifl: Rifl,
         key: &Key,
-        op: KVOp,
+        ops: Vec<KVOp>,
         votes: Vec<VoteRange>,
-    ) -> impl Iterator<Item = (Rifl, KVOp)> {
+    ) -> impl Iterator<Item = (Rifl, Vec<KVOp>)> {
         // add ops and votes to the votes tables, and at the same time
         // compute which ops are safe to be executed
         self.update_table(key, |table| {
-            table.add(dot, clock, rifl, op, votes);
+            table.add(dot, clock, rifl, ops, votes);
             table.stable_ops()
         })
     }
@@ -66,7 +66,7 @@ impl MultiVotesTable {
         &mut self,
         key: &Key,
         votes: Vec<VoteRange>,
-    ) -> impl Iterator<Item = (Rifl, KVOp)> {
+    ) -> impl Iterator<Item = (Rifl, Vec<KVOp>)> {
         // add detached votes to the votes tables, and at the same time compute
         // which ops are safe to be executed
         self.update_table(key, |table| {
@@ -80,7 +80,7 @@ impl MultiVotesTable {
     fn update_table<F, I>(&mut self, key: &Key, update: F) -> I
     where
         F: FnOnce(&mut VotesTable) -> I,
-        I: Iterator<Item = (Rifl, KVOp)>,
+        I: Iterator<Item = (Rifl, Vec<KVOp>)>,
     {
         let table = match self.tables.get_mut(key) {
             Some(table) => table,
@@ -113,7 +113,7 @@ struct VotesTable {
     // this buffer saves us always allocating a vector when computing the
     // stable clock (see `stable_clock`)
     frontiers_buffer: Vec<u64>,
-    ops: BTreeMap<SortId, (Rifl, KVOp)>,
+    ops: BTreeMap<SortId, (Rifl, Vec<KVOp>)>,
 }
 
 impl VotesTable {
@@ -144,7 +144,7 @@ impl VotesTable {
         dot: Dot,
         clock: u64,
         rifl: Rifl,
-        op: KVOp,
+        ops: Vec<KVOp>,
         votes: Vec<VoteRange>,
     ) {
         // create sort identifier:
@@ -162,7 +162,7 @@ impl VotesTable {
         );
 
         // add op to the sorted list of ops to be executed
-        let res = self.ops.insert(sort_id, (rifl, op));
+        let res = self.ops.insert(sort_id, (rifl, ops));
         // and check there was nothing there for this exact same position
         assert!(res.is_none());
 
@@ -197,7 +197,7 @@ impl VotesTable {
     }
 
     // #[instrument(skip(self))]
-    fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, KVOp)> {
+    fn stable_ops(&mut self) -> impl Iterator<Item = (Rifl, Vec<KVOp>)> {
         // compute *next* stable sort id:
         // - if clock 10 is stable, then we can execute all ops with an id
         //   smaller than `(11,0)`
@@ -302,7 +302,7 @@ mod tests {
         // in this example we'll use the dot as rifl
 
         // a1
-        let a1 = KVOp::Put(String::from("A1"));
+        let a1 = vec![KVOp::Put(String::from("A1"))];
         // assumes a single client per process that has the same id as the
         // process
         // p1, final clock = 1
@@ -317,7 +317,7 @@ mod tests {
         ];
 
         // c1
-        let c1 = KVOp::Put(String::from("C1"));
+        let c1 = vec![KVOp::Put(String::from("C1"))];
         // p3, final clock = 3
         let c1_dot = Dot::new(process_id_3, 1);
         let c1_clock = 3;
@@ -330,7 +330,7 @@ mod tests {
         ];
 
         // d1
-        let d1 = KVOp::Put(String::from("D1"));
+        let d1 = vec![KVOp::Put(String::from("D1"))];
         // p4, final clock = 3
         let d1_dot = Dot::new(process_id_4, 1);
         let d1_clock = 3;
@@ -343,7 +343,7 @@ mod tests {
         ];
 
         // e1
-        let e1 = KVOp::Put(String::from("E1"));
+        let e1 = vec![KVOp::Put(String::from("E1"))];
         // p5, final clock = 4
         let e1_dot = Dot::new(process_id_5, 1);
         let e1_clock = 4;
@@ -356,7 +356,7 @@ mod tests {
         ];
 
         // e2
-        let e2 = KVOp::Put(String::from("E2"));
+        let e2 = vec![KVOp::Put(String::from("E2"))];
         // p5, final clock = 5
         let e2_dot = Dot::new(process_id_5, 2);
         let e2_clock = 5;
@@ -462,7 +462,7 @@ mod tests {
         // in this example we'll use the dot as rifl
 
         // a1
-        let a1 = KVOp::Put(String::from("A1"));
+        let a1 = vec![KVOp::Put(String::from("A1"))];
         // p1, final clock = 1
         let a1_dot = Dot::new(process_id_1, 1);
         let a1_clock = 1;
@@ -480,7 +480,7 @@ mod tests {
         assert_eq!(stable, vec![]);
 
         // c1
-        let c1 = KVOp::Put(String::from("C1"));
+        let c1 = vec![KVOp::Put(String::from("C1"))];
         // p3, final clock = 2
         let c1_dot = Dot::new(process_id_3, 1);
         let c1_clock = 2;
@@ -499,7 +499,7 @@ mod tests {
         assert_eq!(stable, vec![]);
 
         // e1
-        let e1 = KVOp::Put(String::from("E1"));
+        let e1 = vec![KVOp::Put(String::from("E1"))];
         // p5, final clock = 1
         let e1_dot = Dot::new(process_id_5, 1);
         let e1_clock = 1;
@@ -517,7 +517,7 @@ mod tests {
         assert_eq!(stable, vec![(a1_rifl, a1.clone()), (e1_rifl, e1.clone())]);
 
         // a2
-        let a2 = KVOp::Put(String::from("A2"));
+        let a2 = vec![KVOp::Put(String::from("A2"))];
         // p1, final clock = 3
         let a2_dot = Dot::new(process_id_1, 2);
         let a2_clock = 3;
@@ -536,7 +536,7 @@ mod tests {
         assert_eq!(stable, vec![]);
 
         // d1
-        let d1 = KVOp::Put(String::from("D1"));
+        let d1 = vec![KVOp::Put(String::from("D1"))];
         // p4, final clock = 3
         let d1_dot = Dot::new(process_id_4, 1);
         let d1_clock = 3;

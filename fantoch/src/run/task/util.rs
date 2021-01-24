@@ -1,6 +1,13 @@
 use crate::id::ClientId;
 use color_eyre::Report;
 use serde::Serialize;
+use tokio::time::{Duration, Instant};
+
+pub fn deadline(delay: Duration) -> Instant {
+    Instant::now()
+        .checked_add(delay)
+        .expect("deadline should exist")
+}
 
 pub fn ids_repr(client_ids: &Vec<ClientId>) -> String {
     client_ids

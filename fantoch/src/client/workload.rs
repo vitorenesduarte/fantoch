@@ -173,7 +173,7 @@ impl Workload {
             };
             // compute key's shard and save op
             let shard_id = self.shard_id(&key);
-            ops.entry(shard_id).or_default().insert(key, op);
+            ops.entry(shard_id).or_default().insert(key, vec![op]);
 
             // target shard is the shard of the first key generated
             target_shard = target_shard.or(Some(shard_id));
@@ -312,11 +312,14 @@ mod tests {
             {
                 // since there's a single shard, keys should be on shard 0
                 assert_eq!(target_shard, 0);
-                let (key, value) = cmd.into_iter(target_shard).next().unwrap();
+                let (key, mut ops) =
+                    cmd.into_iter(target_shard).next().unwrap();
                 // since the conflict is 100, the key should be `CONFLICT_COLOR`
                 assert_eq!(key, CONFLICT_COLOR);
+                assert_eq!(ops.len(), 1);
+                let op = ops.pop().unwrap();
                 // check that the value size is `payload_size`
-                if let KVOp::Put(payload) = value {
+                if let KVOp::Put(payload) = op {
                     assert_eq!(payload.len(), payload_size);
                 } else {
                     panic!("workload should generate PUT commands");

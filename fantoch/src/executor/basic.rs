@@ -35,12 +35,12 @@ impl Executor for BasicExecutor {
     }
 
     fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
-        let BasicExecutionInfo { rifl, key, op } = info;
+        let BasicExecutionInfo { rifl, key, ops } = info;
         // execute op in the `KVStore`
-        let op_result =
-            self.store.execute_with_monitor(&key, op, rifl, &mut None);
+        let partial_results =
+            self.store.execute_with_monitor(&key, ops, rifl, &mut None);
         self.to_clients
-            .push(ExecutorResult::new(rifl, key, op_result));
+            .push(ExecutorResult::new(rifl, key, partial_results));
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
@@ -64,12 +64,12 @@ impl Executor for BasicExecutor {
 pub struct BasicExecutionInfo {
     rifl: Rifl,
     key: Key,
-    op: KVOp,
+    ops: Vec<KVOp>,
 }
 
 impl BasicExecutionInfo {
-    pub fn new(rifl: Rifl, key: Key, op: KVOp) -> Self {
-        Self { rifl, key, op }
+    pub fn new(rifl: Rifl, key: Key, ops: Vec<KVOp>) -> Self {
+        Self { rifl, key, ops }
     }
 }
 

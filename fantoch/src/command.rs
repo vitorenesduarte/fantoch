@@ -11,37 +11,21 @@ pub const DEFAULT_SHARD_ID: ShardId = 0;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
-    shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
-    read_only: bool,
+    shard_to_ops: HashMap<ShardId, HashMap<Key, Vec<KVOp>>>,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean
-    _empty_keys: HashMap<Key, KVOp>,
+    _empty_keys: HashMap<Key, Vec<KVOp>>,
 }
 
 impl Command {
     /// Create a new `Command`.
     pub fn new(
         rifl: Rifl,
-        shard_to_ops: HashMap<ShardId, HashMap<Key, KVOp>>,
+        shard_to_ops: HashMap<ShardId, HashMap<Key, Vec<KVOp>>>,
     ) -> Self {
-        // a command is read-only if all ops are `Get`s
-        let read_only = shard_to_ops
-            .values()
-            .all(|shard_ops| shard_ops.values().all(|op| op == &KVOp::Get));
-
-        // check that if it's not read-only, then it's write-only
-        // - we can probably support this easily, but just for sanity let's
-        // assume that the command is either read-only or write-only
-        if !read_only {
-            let write_only = shard_to_ops
-                .values()
-                .all(|shard_ops| shard_ops.values().all(|op| op != &KVOp::Get));
-            assert!(write_only, "commands are either read-only or write-only");
-        }
         Self {
             rifl,
             shard_to_ops,
-            read_only,
             _empty_keys: HashMap::new(),
         }
     }
@@ -52,7 +36,9 @@ impl Command {
         iter: I,
     ) -> Self {
         // store all keys in the default shard
-        let inner = HashMap::from_iter(iter);
+        let inner = HashMap::from_iter(
+            iter.into_iter().map(|(key, op)| (key, vec![op])),
+        );
         let shard_to_ops =
             HashMap::from_iter(std::iter::once((DEFAULT_SHARD_ID, inner)));
         Self::new(rifl, shard_to_ops)
@@ -60,7 +46,12 @@ impl Command {
 
     /// Checks if the command is read-only.
     pub fn read_only(&self) -> bool {
-        self.read_only
+        // a command is read-only if all ops are `Get`s
+        self.shard_to_ops.values().all(|shard_ops| {
+            shard_ops
+                .values()
+                .all(|ops| ops.iter().all(|op| op == &KVOp::Get))
+        })
     }
 
     /// Checks if the command is replicated by `shard_id`.
@@ -87,7 +78,7 @@ impl Command {
         self.shard_to_ops.values().map(|ops| ops.len()).sum()
     }
 
-    /// Returns references to the keys modified by this command on the shard
+    /// Returns references to the keys accessed by this command on the shard
     /// provided.
     pub fn keys(&self, shard_id: ShardId) -> impl Iterator<Item = &Key> {
         self.shard_to_ops
@@ -115,11 +106,11 @@ impl Command {
         monitor: &'a mut Option<ExecutionOrderMonitor>,
     ) -> impl Iterator<Item = ExecutorResult> + 'a {
         let rifl = self.rifl;
-        self.into_iter(shard_id).map(move |(key, op)| {
+        self.into_iter(shard_id).map(move |(key, ops)| {
             // execute this op
-            let partial_result =
-                store.execute_with_monitor(&key, op, rifl, monitor);
-            ExecutorResult::new(rifl, key, partial_result)
+            let partial_results =
+                store.execute_with_monitor(&key, ops, rifl, monitor);
+            ExecutorResult::new(rifl, key, partial_results)
         })
     }
 
@@ -127,7 +118,7 @@ impl Command {
     pub fn iter(
         &self,
         shard_id: ShardId,
-    ) -> impl Iterator<Item = (&Key, &KVOp)> {
+    ) -> impl Iterator<Item = (&Key, &Vec<KVOp>)> {
         self.shard_to_ops
             .get(&shard_id)
             .map(|shard_ops| shard_ops.iter())
@@ -138,7 +129,7 @@ impl Command {
     pub fn into_iter(
         mut self,
         shard_id: ShardId,
-    ) -> impl Iterator<Item = (Key, KVOp)> {
+    ) -> impl Iterator<Item = (Key, Vec<KVOp>)> {
         self.shard_to_ops
             .remove(&shard_id)
             .map(|shard_ops| shard_ops.into_iter())
@@ -161,6 +152,17 @@ impl Command {
             .map(|shard_ops| shard_ops.contains_key(key))
             .unwrap_or(false)
     }
+
+    /// Adds the operations in the `other` command to this command.
+    pub fn merge(&mut self, other: Command) {
+        for (shard_id, shard_ops) in other.shard_to_ops {
+            let current_shard_ops =
+                self.shard_to_ops.entry(shard_id).or_default();
+            for (key, ops) in shard_ops {
+                current_shard_ops.entry(key).or_default().extend(ops);
+            }
+        }
+    }
 }
 
 impl fmt::Debug for Command {
@@ -181,7 +183,7 @@ impl fmt::Debug for Command {
 pub struct CommandResultBuilder {
     rifl: Rifl,
     key_count: usize,
-    results: HashMap<Key, KVOpResult>,
+    results: HashMap<Key, Vec<KVOpResult>>,
 }
 
 impl CommandResultBuilder {
@@ -197,9 +199,9 @@ impl CommandResultBuilder {
 
     /// Adds a partial command result to the overall result.
     /// Returns a boolean indicating whether the full result is ready.
-    pub fn add_partial(&mut self, key: Key, result: KVOpResult) {
+    pub fn add_partial(&mut self, key: Key, partial_results: Vec<KVOpResult>) {
         // add op result for `key`
-        let res = self.results.insert(key, result);
+        let res = self.results.insert(key, partial_results);
 
         // assert there was nothing about this `key` previously
         assert!(res.is_none());
@@ -215,12 +217,12 @@ impl CommandResultBuilder {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommandResult {
     rifl: Rifl,
-    results: HashMap<Key, KVOpResult>,
+    results: HashMap<Key, Vec<KVOpResult>>,
 }
 
 impl CommandResult {
     /// Creates a new `CommandResult`.
-    pub fn new(rifl: Rifl, results: HashMap<Key, KVOpResult>) -> Self {
+    pub fn new(rifl: Rifl, results: HashMap<Key, Vec<KVOpResult>>) -> Self {
         CommandResult { rifl, results }
     }
 
@@ -230,7 +232,7 @@ impl CommandResult {
     }
 
     /// Returns the commands results.
-    pub fn results(&self) -> &HashMap<Key, KVOpResult> {
+    pub fn results(&self) -> &HashMap<Key, Vec<KVOpResult>> {
         &self.results
     }
 }

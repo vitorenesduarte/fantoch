@@ -28,28 +28,36 @@ impl KVStore {
         Default::default()
     }
 
-    /// Executes a `KVOp` in the `KVStore`.
+    /// Executes `KVOp`s in the `KVStore`.
     #[cfg(test)]
     pub fn execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
-        self.do_execute(key, op)
+        let mut results = self.do_execute(key, vec![op]);
+        assert_eq!(results.len(), 1);
+        results.pop().unwrap()
     }
 
     pub fn execute_with_monitor(
         &mut self,
         key: &Key,
-        op: KVOp,
+        ops: Vec<KVOp>,
         rifl: Rifl,
         monitor: &mut Option<ExecutionOrderMonitor>,
-    ) -> KVOpResult {
+    ) -> Vec<KVOpResult> {
         // update monitor, if we're monitoring
         if let Some(monitor) = monitor {
             monitor.add(&key, rifl);
         }
-        self.do_execute(key, op)
+        self.do_execute(key, ops)
     }
 
     #[allow(clippy::ptr_arg)]
-    fn do_execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
+    fn do_execute(&mut self, key: &Key, ops: Vec<KVOp>) -> Vec<KVOpResult> {
+        ops.into_iter()
+            .map(|op| self.do_execute_op(key, op))
+            .collect()
+    }
+
+    fn do_execute_op(&mut self, key: &Key, op: KVOp) -> KVOpResult {
         match op {
             KVOp::Get => self.store.get(key).cloned(),
             KVOp::Put(value) => {

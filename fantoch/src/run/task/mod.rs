@@ -80,8 +80,8 @@ where
     tx
 }
 
-/// Spawns a producer and a consumer, returning one two channel: one
-/// consumer-end and one producer-end of the. channel.
+/// Spawns a producer/consumer, returning two channels: the consumer-end and the
+/// producer-end of the channels.
 pub fn spawn_producer_and_consumer<M, N, F>(
     channel_buffer_size: usize,
     task: impl FnOnce(ChannelSender<M>, ChannelReceiver<N>) -> F,

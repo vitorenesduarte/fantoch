@@ -52,7 +52,7 @@ impl AggregatePending {
         let ExecutorResult {
             rifl,
             key,
-            op_result,
+            partial_results,
         } = executor_result;
         // get current value:
         // - if it's not part of pending, then ignore it
@@ -62,7 +62,7 @@ impl AggregatePending {
         let cmd_result_builder = self.pending.get_mut(&rifl)?;
 
         // add partial result and check if it's ready
-        cmd_result_builder.add_partial(key, op_result);
+        cmd_result_builder.add_partial(key, partial_results);
         if cmd_result_builder.ready() {
             trace!(
                 "p{}: AggregatePending::add_partial {:?} is ready",
@@ -140,7 +140,7 @@ mod tests {
         let res = pending.add_executor_result(ExecutorResult::new(
             get_ab_rifl,
             key_b.clone(),
-            get_b_res,
+            vec![get_b_res],
         ));
         assert!(res.is_none());
 
@@ -149,7 +149,7 @@ mod tests {
         let res = pending.add_executor_result(ExecutorResult::new(
             put_a_rifl,
             key_a.clone(),
-            put_a_res.clone(),
+            vec![put_a_res.clone()],
         ));
         assert!(res.is_none());
 
@@ -160,7 +160,7 @@ mod tests {
         let res = pending.add_executor_result(ExecutorResult::new(
             put_a_rifl,
             key_a.clone(),
-            put_a_res.clone(),
+            vec![put_a_res.clone()],
         ));
         assert!(res.is_some());
 
@@ -170,14 +170,14 @@ mod tests {
         assert_eq!(res.results().len(), 1);
 
         // check that there was nothing in the kvs before
-        assert_eq!(res.results().get(&key_a).unwrap(), &None);
+        assert_eq!(res.results().get(&key_a).unwrap(), &vec![None]);
 
         // add the result of put b and assert that the command is ready
         let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
         let res = pending.add_executor_result(ExecutorResult::new(
             put_b_rifl,
             key_b.clone(),
-            put_b_res,
+            vec![put_b_res],
         ));
 
         // check that there's only one result (since the command accessed a
@@ -186,14 +186,14 @@ mod tests {
         assert_eq!(res.results().len(), 1);
 
         // check that there was nothing in the kvs before
-        assert_eq!(res.results().get(&key_b).unwrap(), &None);
+        assert_eq!(res.results().get(&key_b).unwrap(), &vec![None]);
 
         // add the result of get a and assert that the command is ready
         let get_a_res = store.execute(&key_a, KVOp::Get);
         let res = pending.add_executor_result(ExecutorResult::new(
             get_ab_rifl,
             key_a.clone(),
-            get_a_res,
+            vec![get_a_res],
         ));
         assert!(res.is_some());
 
@@ -203,7 +203,7 @@ mod tests {
         assert_eq!(res.results().len(), 2);
 
         // check that `get_ab` saw `put_a` but not `put_b`
-        assert_eq!(res.results().get(&key_a).unwrap(), &Some(foo));
-        assert_eq!(res.results().get(&key_b).unwrap(), &None);
+        assert_eq!(res.results().get(&key_a).unwrap(), &vec![Some(foo)]);
+        assert_eq!(res.results().get(&key_b).unwrap(), &vec![None]);
     }
 }
