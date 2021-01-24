@@ -1,3 +1,6 @@
+// Implementation of the read-write task;
+mod rw;
+
 // Implementation of `ShardsPending`.
 mod pending;
 
@@ -61,17 +64,16 @@ where
         if !client_ids.is_empty() {
             // start the open loop client if some interval was provided
             let handle = if let Some(interval) = interval {
-                // task::spawn(open_loop_client::<A>(
-                //     client_ids,
-                //     addresses.clone(),
-                //     interval,
-                //     workload,
-                //     connect_retries,
-                //     tcp_nodelay,
-                //     channel_buffer_size,
-                //     status_frequency,
-                // ))
-                todo!()
+                task::spawn(open_loop_client::<A>(
+                    client_ids,
+                    addresses.clone(),
+                    interval,
+                    workload,
+                    connect_retries,
+                    tcp_nodelay,
+                    channel_buffer_size,
+                    status_frequency,
+                ))
             } else {
                 task::spawn(closed_loop_client::<A>(
                     client_ids,
@@ -176,72 +178,74 @@ where
     )
 }
 
-// async fn open_loop_client<A>(
-//     client_ids: Vec<ClientId>,
-//     addresses: Vec<A>,
-//     interval: Duration,
-//     workload: Workload,
-//     client_retries: usize,
-//     tcp_nodelay: bool,
-//     channel_buffer_size: usize,
-//     status_frequency: Option<usize>,
-// ) -> Option<Vec<Client>>
-// where
-//     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
-// {
-//     // create system time
-//     let time = RunTime;
+async fn open_loop_client<A>(
+    client_ids: Vec<ClientId>,
+    addresses: Vec<A>,
+    interval: Duration,
+    workload: Workload,
+    connect_retries: usize,
+    tcp_nodelay: bool,
+    channel_buffer_size: usize,
+    status_frequency: Option<usize>,
+) -> Option<Vec<Client>>
+where
+    A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
+{
+    // create system time
+    let time = RunTime;
 
-//     // setup client
-//     let (mut clients, mut reader, mut process_to_writer) = client_setup(
-//         client_ids,
-//         addresses,
-//         workload,
-//         client_retries,
-//         tcp_nodelay,
-//         channel_buffer_size,
-//         status_frequency,
-//     )
-//     .await?;
+    // setup client
+    let (mut clients, mut unbatcher_rx, mut batcher_tx) = client_setup(
+        client_ids,
+        addresses,
+        workload,
+        connect_retries,
+        tcp_nodelay,
+        channel_buffer_size,
+        status_frequency,
+    )
+    .await?;
 
-//     // create pending
-//     let mut pending = ShardsPending::new();
+    // create interval
+    let mut interval = tokio::time::interval(interval);
 
-//     // create interval
-//     let mut interval = tokio::time::interval(interval);
+    // track which clients are finished (i.e. all their commands have completed)
+    let mut finished = HashSet::with_capacity(clients.len());
+    // track which clients are workload finished
+    let mut workload_finished = HashSet::with_capacity(clients.len());
 
-//     // track which clients are finished (i.e. all their commands have
-// completed)     let mut finished = HashSet::with_capacity(clients.len());
-//     // track which clients are workload finished
-//     let mut workload_finished = HashSet::with_capacity(clients.len());
+    while finished.len() < clients.len() {
+        tokio::select! {
+            from_unbatcher = unbatcher_rx.recv() => {
+                handle_cmd_result(
+                    &mut clients,
+                    &time,
+                    from_unbatcher,
+                    &mut finished,
+                );
+            }
+            _ = interval.tick() => {
+                // submit new command on every tick for each connected client
+                // (if there are still commands to be generated)
+                for (client_id, client) in clients.iter_mut(){
+                    // if the client hasn't finished, try to issue a new command
+                    if !workload_finished.contains(client_id) {
+                        next_cmd(client, &time, &mut batcher_tx, &mut workload_finished).await;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(workload_finished.len(), finished.len());
 
-//     while finished.len() < clients.len() {
-//         tokio::select! {
-//             from_server = reader.recv() => {
-//                 handle_cmd_result(&mut clients, &time, from_server, &mut
-// pending, &mut finished);             }
-//             _ = interval.tick() => {
-//                 // submit new command on every tick for each connected client
-// (if there are still commands to be generated)                 for (client_id,
-// client) in clients.iter_mut(){                     // if the client hasn't
-// finished, try to issue a new command                     if
-// !workload_finished.contains(client_id) {
-// next_cmd(client, &time, &mut process_to_writer, &mut pending, &mut
-// workload_finished).await;                     }
-//                 }
-//             }
-//         }
-//     }
-//     assert_eq!(workload_finished.len(), finished.len());
-
-//     // return clients
-//     Some(
-//         clients
-//             .into_iter()
-//             .map(|(_client_id, client)| client)
-//             .collect(),
-//     )
-// }
+    // return clients
+    Some(
+        clients
+            .into_iter()
+            .map(|(_client_id, client)| client)
+            .collect(),
+    )
+}
 
 async fn client_setup<A>(
     client_ids: Vec<ClientId>,
@@ -296,8 +300,11 @@ where
     }
 
     // start client read-write task
-    let (read, mut process_to_writer) =
-        start_client_rw_tasks(&client_ids, channel_buffer_size, connections);
+    let (read, mut process_to_writer) = rw::start_client_rw_tasks(
+        &client_ids,
+        channel_buffer_size,
+        connections,
+    );
 
     // create mapping from shard id to client read-write task
     let shard_to_write = shard_to_process
@@ -465,75 +472,5 @@ async fn client_say_hi(
     } else {
         warn!("[client] clients {:?} couldn't receive process id from connected process", client_ids);
         None
-    }
-}
-
-fn start_client_rw_tasks(
-    client_ids: &Vec<ClientId>,
-    channel_buffer_size: usize,
-    connections: Vec<(ProcessId, Connection)>,
-) -> (
-    ChannelReceiver<CommandResult>,
-    HashMap<ProcessId, ChannelSender<ClientToServer>>,
-) {
-    // create server-to-client channels: although we keep one connection per
-    // shard, we'll have all rw tasks will write to the same channel; this means
-    // the client will read from a single channel (and potentially receive
-    // messages from any of the shards)
-    let (mut s2c_tx, s2c_rx) = chan::channel(channel_buffer_size);
-    s2c_tx.set_name(format!(
-        "server_to_client_{}",
-        super::util::ids_repr(&client_ids)
-    ));
-
-    let mut process_to_tx = HashMap::with_capacity(connections.len());
-    for (process_id, connection) in connections {
-        // create client-to-server channels: since clients may send operations
-        // to different shards, we create one client-to-rw channel per rw task
-        let (mut c2s_tx, c2s_rx) = chan::channel(channel_buffer_size);
-        c2s_tx.set_name(format!(
-            "client_to_server_{}_{}",
-            process_id,
-            super::util::ids_repr(&client_ids)
-        ));
-
-        // spawn rw task
-        task::spawn(client_rw_task(connection, s2c_tx.clone(), c2s_rx));
-        process_to_tx.insert(process_id, c2s_tx);
-    }
-    (s2c_rx, process_to_tx)
-}
-
-async fn client_rw_task(
-    mut connection: Connection,
-    mut to_parent: ServerToClientSender,
-    mut from_parent: ClientToServerReceiver,
-) {
-    loop {
-        tokio::select! {
-            to_client = connection.recv() => {
-                trace!("[client_rw] to client: {:?}", to_client);
-                if let Some(to_client) = to_client {
-                    if let Err(e) = to_parent.send(to_client).await {
-                        warn!("[client_rw] error while sending message from server to parent: {:?}", e);
-                    }
-                } else {
-                    warn!("[client_rw] error while receiving message from server to parent");
-                    break;
-                }
-            }
-            to_server = from_parent.recv() => {
-                trace!("[client_rw] from client: {:?}", to_server);
-                if let Some(to_server) = to_server {
-                    if let Err(e) = connection.send(&to_server).await {
-                        warn!("[client_rw] error while sending message to server: {:?}", e);
-                    }
-                } else {
-                    warn!("[client_rw] error while receiving message from parent to server");
-                    // in this case it means that the parent (the client) is done, and so we can exit the loop
-                    break;
-                }
-            }
-        }
     }
 }
