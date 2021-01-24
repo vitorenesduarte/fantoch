@@ -48,7 +48,7 @@ const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "batching_32";
+const BRANCH: &str = "master";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -73,7 +73,7 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
     Protocol::NewtAtomic,
     Protocol::FPaxos,
     Protocol::EPaxosLocked,
-    Protocol::Caesar,
+    Protocol::CaesarLocked,
 ];
 
 macro_rules! config {
@@ -149,6 +149,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // 1024 * 128,
         1024 * 144,
     ];
+    let batch_max_size = 1;
 
     let shard_count = 6;
     let keys_per_command = 2;
@@ -175,7 +176,6 @@ async fn partial_replication_plot() -> Result<(), Report> {
             workloads.push(workload);
         }
     }
-    let batch_max_size = 1;
 
     // don't skip
     let skip = |_, _, _| false;
@@ -234,7 +234,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        (Protocol::Caesar, config!(n, 2, false, None, false)),
+        // (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -247,10 +247,26 @@ async fn increasing_load_plot() -> Result<(), Report> {
         1024 * 16,
         1024 * 20,
     ];
+    // let clients_per_region = vec![
+    //     32,
+    //     1024,
+    //     1024 * 4,
+    //     1024 * 16,
+    //     1024 * 24,
+    //     1024 * 32,
+    //     1024 * 40,
+    //     1024 * 48,
+    //     1024 * 56,
+    //     1024 * 60,
+    //     1024 * 64,
+    // ];
+    let batch_max_size = 1;
+    // let batch_max_size = 10000;
 
     let shard_count = 1;
     let keys_per_command = 1;
     let payload_size = 4096;
+    // let payload_size = 100;
     let cpus = 12;
 
     let key_gens = vec![
@@ -275,7 +291,6 @@ async fn increasing_load_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
-    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
@@ -332,10 +347,11 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        (Protocol::Caesar, config!(n, 2, false, None, false)),
+        (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![256, 512];
+    let batch_max_size = 1;
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -359,7 +375,6 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
-    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // only run FPaxos with 512 clients
@@ -443,6 +458,7 @@ async fn whatever_plot() -> Result<(), Report> {
         // 1024 * 16,
         // 1024 * 32,
     ];
+    let batch_max_size = 1;
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -470,7 +486,6 @@ async fn whatever_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
-    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients

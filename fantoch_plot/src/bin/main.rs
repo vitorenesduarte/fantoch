@@ -54,7 +54,7 @@ fn fairness_plot() -> Result<(), Report> {
         (Protocol::NewtAtomic, 2),
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 2),
-        (Protocol::Caesar, 2),
+        (Protocol::CaesarLocked, 2),
     ];
     let legend_order = vec![0, 2, 4, 1, 3, 5, 6];
     let n = 5;
@@ -76,7 +76,7 @@ fn fairness_plot() -> Result<(), Report> {
                 }
                 Protocol::AtlasLocked
                 | Protocol::NewtAtomic
-                | Protocol::Caesar => {
+                | Protocol::CaesarLocked => {
                     search.key_gen(key_gen);
                 }
                 _ => {
@@ -135,7 +135,7 @@ fn tail_latency_plot() -> Result<(), Report> {
         (Protocol::NewtAtomic, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
-        (Protocol::Caesar, 2),
+        (Protocol::CaesarLocked, 2),
         // (Protocol::FPaxos, 1),
         (Protocol::EPaxosLocked, 2),
     ];
@@ -186,7 +186,8 @@ fn tail_latency_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
-    let results_dir = "../results_increasing_load";
+    // let results_dir = "../results_increasing_load";
+    let results_dir = "/home/vitor.enes/eurosys_results/results_increasing_load";
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -198,6 +199,8 @@ fn increasing_load_plot() -> Result<(), Report> {
     };
     let payload_size = 4096;
     let batch_max_size = 1;
+    // let payload_size = 100;
+    // let batch_max_size = 10000;
     let n = 5;
     let leader = 1;
 
@@ -212,6 +215,22 @@ fn increasing_load_plot() -> Result<(), Report> {
         1024 * 16,
         1024 * 20,
     ];
+    // let clients_per_region = vec![
+    //     32,
+    //     // 512,
+    //     1024,
+    //     // 1024 * 2,
+    //     1024 * 4,
+    //     // 1024 * 8,
+    //     1024 * 16,
+    //     1024 * 24,
+    //     1024 * 32,
+    //     1024 * 40,
+    //     1024 * 48,
+    //     1024 * 56,
+    //     1024 * 60,
+    //     1024 * 64,
+    // ];
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
@@ -225,7 +244,7 @@ fn increasing_load_plot() -> Result<(), Report> {
             Protocol::AtlasLocked
             | Protocol::NewtAtomic
             | Protocol::EPaxosLocked
-            | Protocol::Caesar
+            | Protocol::CaesarLocked
             | Protocol::Basic => {
                 search.key_gen(key_gen);
             }
@@ -246,7 +265,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 1),
         (Protocol::FPaxos, 2),
-        (Protocol::Caesar, 2),
+        (Protocol::CaesarLocked, 2),
         /* (Protocol::Basic, 1),
          * (Protocol::EPaxosLocked, 2), */
     ];

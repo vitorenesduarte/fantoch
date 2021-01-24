@@ -156,10 +156,6 @@ impl LockedKeyClocks {
     {
         // get a mutable reference to current commands
         let commands = self.clocks.get_or(key, || RwLock::default());
-        // let commands = match self.clocks.get_mut(key) {
-        //     Some(commands) => commands,
-        //     None => self.clocks.entry(key.clone()).or_default(),
-        // };
         // apply function and return its result
         f(commands)
     }
