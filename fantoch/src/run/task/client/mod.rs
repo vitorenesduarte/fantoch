@@ -156,8 +156,8 @@ where
     let mut workload_finished = HashSet::with_capacity(clients.len());
 
     // generate the first message of each client
-    for (_client_id, client) in clients.iter_mut() {
-        next_cmd(client, &time, &mut batcher_tx, &mut workload_finished).await;
+    for client in clients.values_mut() {
+        cmd_send(client, &time, &mut batcher_tx, &mut workload_finished).await;
     }
 
     // wait for results and generate/submit new commands while there are
@@ -165,18 +165,14 @@ where
     while finished.len() < clients.len() {
         // and wait for next result
         let from_unbatcher = unbatcher_rx.recv().await;
-        let ready_clients = handle_ready_rifls(
-            &mut clients,
-            &time,
-            from_unbatcher,
-            &mut finished,
-        );
+        let ready_clients =
+            cmd_recv(&mut clients, &time, from_unbatcher, &mut finished);
         for client_id in ready_clients {
             let client = clients
                 .get_mut(&client_id)
                 .expect("[client] ready client should exist");
             // if client hasn't finished, issue a new command
-            next_cmd(client, &time, &mut batcher_tx, &mut workload_finished)
+            cmd_send(client, &time, &mut batcher_tx, &mut workload_finished)
                 .await;
         }
     }
@@ -234,7 +230,7 @@ where
     while finished.len() < clients.len() {
         tokio::select! {
             from_unbatcher = unbatcher_rx.recv() => {
-                handle_ready_rifls(
+                cmd_recv(
                     &mut clients,
                     &time,
                     from_unbatcher,
@@ -247,7 +243,7 @@ where
                 for (client_id, client) in clients.iter_mut(){
                     // if the client hasn't finished, try to issue a new command
                     if !workload_finished.contains(client_id) {
-                        next_cmd(client, &time, &mut batcher_tx, &mut workload_finished).await;
+                        cmd_send(client, &time, &mut batcher_tx, &mut workload_finished).await;
                     }
                 }
             }
@@ -411,38 +407,39 @@ async fn spawn_batcher_and_unbatcher(
 
 /// Generate the next command, returning a boolean representing whether a new
 /// command was generated or not.
-async fn next_cmd(
+async fn cmd_send(
     client: &mut Client,
     time: &dyn SysTime,
     to_batcher: &mut ChannelSender<(ShardId, Command)>,
     workload_finished: &mut HashSet<ClientId>,
 ) {
-    if let Some(next) = client.next_cmd(time) {
+    if let Some(next) = client.cmd_send(time) {
         if let Err(e) = to_batcher.send(next).await {
             warn!("[client] error forwarding batch: {:?}", e);
         }
     } else {
         // record that this client has finished its workload
+        assert!(client.workload_finished());
         assert!(workload_finished.insert(client.id()));
     }
 }
 
 /// Handles new ready rifls. Returns the client ids of clients with a new
 /// command finished.
-fn handle_ready_rifls(
+fn cmd_recv(
     clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
     from_unbatcher: Option<Vec<Rifl>>,
     finished: &mut HashSet<ClientId>,
 ) -> Vec<ClientId> {
     if let Some(rifls) = from_unbatcher {
-        do_handle_ready_rifls(clients, time, rifls, finished)
+        do_cmd_recv(clients, time, rifls, finished)
     } else {
         panic!("[client] error while receiving message from client read-write task");
     }
 }
 
-fn do_handle_ready_rifls(
+fn do_cmd_recv(
     clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
     rifls: Vec<Rifl>,
@@ -451,13 +448,17 @@ fn do_handle_ready_rifls(
     rifls
         .into_iter()
         .filter_map(move |rifl| {
+            // find client that sent this command
             let client_id = rifl.source();
             let client = clients
                 .get_mut(&client_id)
                 .expect("[client] command result should belong to a client");
 
-            // handle command results and check if client is finished
-            if client.cmd_finished(rifl, time) {
+            // handle command results
+            client.cmd_recv(rifl, time);
+
+            // check if client is finished
+            if client.finished() {
                 // record that this client is finished
                 info!("client {:?} exited loop", client_id);
                 assert!(finished.insert(client_id));

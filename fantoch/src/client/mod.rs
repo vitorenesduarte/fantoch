@@ -88,7 +88,7 @@ impl Client {
     }
 
     /// Generates the next command in this client's workload.
-    pub fn next_cmd(
+    pub fn cmd_send(
         &mut self,
         time: &dyn SysTime,
     ) -> Option<(ShardId, Command)> {
@@ -112,7 +112,7 @@ impl Client {
     /// Handle executed command and return a boolean indicating whether we have
     /// generated all commands and receive all the corresponding command
     /// results.
-    pub fn cmd_finished(&mut self, rifl: Rifl, time: &dyn SysTime) -> bool {
+    pub fn cmd_recv(&mut self, rifl: Rifl, time: &dyn SysTime) {
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(rifl, time);
         trace!(
@@ -134,7 +134,13 @@ impl Client {
                 );
             }
         }
+    }
 
+    pub fn workload_finished(&self) -> bool {
+        self.workload.finished()
+    }
+
+    pub fn finished(&self) -> bool {
         // we're done once:
         // - the workload is finished and
         // - pending is empty
@@ -255,7 +261,7 @@ mod tests {
 
         // start client at time 0
         let (shard_id, cmd) = client
-            .next_cmd(&time)
+            .cmd_send(&time)
             .expect("there should a first operation");
         let process_id = client.shard_process(&shard_id);
         // process_id should be 2
@@ -263,8 +269,8 @@ mod tests {
 
         // handle result at time 10
         time.add_millis(10);
-        client.cmd_finished(cmd.rifl(), &time);
-        let next = client.next_cmd(&time);
+        client.cmd_recv(cmd.rifl(), &time);
+        let next = client.cmd_send(&time);
 
         // check there's next command
         assert!(next.is_some());
@@ -275,8 +281,8 @@ mod tests {
 
         // handle result at time 15
         time.add_millis(5);
-        client.cmd_finished(cmd.rifl(), &time);
-        let next = client.next_cmd(&time);
+        client.cmd_recv(cmd.rifl(), &time);
+        let next = client.cmd_send(&time);
 
         // check there's no next command
         assert!(next.is_none());

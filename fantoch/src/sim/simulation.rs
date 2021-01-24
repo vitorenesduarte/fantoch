@@ -67,7 +67,7 @@ where
                 let client = client.get_mut();
                 // start client
                 let (target_shard, cmd) = client
-                    .next_cmd(time)
+                    .cmd_send(time)
                     .expect("clients should submit at least one command");
                 let process_id = client.shard_process(&target_shard);
                 (client.id(), process_id, cmd)
@@ -140,9 +140,9 @@ where
         // handle command result
         // TODO: we should aggregate command results if we have more than one
         // shard in simulation
-        client.cmd_finished(cmd_result.rifl(), time);
+        client.cmd_recv(cmd_result.rifl(), time);
         // and generate the next command
-        client.next_cmd(time).map(|(target_shard, cmd)| {
+        client.cmd_send(time).map(|(target_shard, cmd)| {
             let target = client.shard_process(&target_shard);
             (target, cmd)
         })

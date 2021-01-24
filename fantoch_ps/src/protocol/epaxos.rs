@@ -874,7 +874,7 @@ mod tests {
 
         // start client
         let (target_shard, cmd) = client_1
-            .next_cmd(&time)
+            .cmd_send(&time)
             .expect("there should be a first operation");
         let target = client_1.shard_process(&target_shard);
 
