@@ -92,9 +92,11 @@ pub struct PreviousExperimentConfig {
     pub config: PreviousConfig,
     pub clients_per_region: usize,
     pub workload: PreviousWorkload,
+    pub batch_max_size: usize,
+    pub batch_max_delay: Duration,
     pub process_tcp_nodelay: bool,
     pub tcp_buffer_size: usize,
-    pub tcp_flush_interval: Option<usize>,
+    pub tcp_flush_interval: Option<Duration>,
     pub process_channel_buffer_size: usize,
     pub cpus: usize,
     pub workers: usize,
@@ -106,9 +108,12 @@ pub struct PreviousExperimentConfig {
 
 fn main() -> Result<(), Report> {
     for results_dir in vec![
-        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency",
-        "/home/vitor.enes/eurosys_results/results_increasing_load",
-        "/home/vitor.enes/eurosys_results/results_partial_replication",
+        // "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency",
+        // "/home/vitor.enes/eurosys_results/results_increasing_load",
+        // "/home/vitor.enes/eurosys_results/results_partial_replication",
+        // "/home/vitor.enes/fantoch/results_fairness_and_tail_latency",
+        // "/home/vitor.enes/fantoch/results_fairness_and_tail_latency_2",
+        // "/home/vitor.enes/fantoch/results_increasing_load",
     ] {
         // load results
         let timestamps =
@@ -118,6 +123,7 @@ fn main() -> Result<(), Report> {
             // read the configuration of this experiment
             let exp_config_path =
                 format!("{}/exp_config.json", timestamp.path().display());
+            println!("migrating {}", exp_config_path);
             let previous: Result<PreviousExperimentConfig, _> =
                 fantoch_exp::deserialize(
                     &exp_config_path,
@@ -215,6 +221,8 @@ fn main() -> Result<(), Report> {
                         executors: previous.executors,
                         multiplexing: previous.multiplexing,
                         workload,
+                        batch_max_size: previous.batch_max_size,
+                        batch_max_delay: previous.batch_max_delay,
                         client_tcp_nodelay: previous.client_tcp_nodelay,
                         client_channel_buffer_size: previous
                             .client_channel_buffer_size,

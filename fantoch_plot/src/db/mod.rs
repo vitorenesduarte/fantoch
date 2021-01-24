@@ -25,6 +25,7 @@ pub struct Search {
     pub keys_per_command: Option<usize>,
     pub read_only_percentage: Option<usize>,
     pub payload_size: Option<usize>,
+    pub batch_max_size: Option<usize>,
 }
 
 impl Search {
@@ -41,6 +42,7 @@ impl Search {
             keys_per_command: None,
             read_only_percentage: None,
             payload_size: None,
+            batch_max_size: None,
         }
     }
 
@@ -87,6 +89,11 @@ impl Search {
 
     pub fn payload_size(&mut self, payload_size: usize) -> &mut Self {
         self.payload_size = Some(payload_size);
+        self
+    }
+
+    pub fn batch_max_size(&mut self, batch_max_size: usize) -> &mut Self {
+        self.batch_max_size = Some(batch_max_size);
         self
     }
 }

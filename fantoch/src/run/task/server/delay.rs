@@ -1,4 +1,5 @@
 use crate::run::chan::{ChannelReceiver, ChannelSender};
+use crate::run::task;
 use crate::warn;
 use std::collections::VecDeque;
 use tokio::time::{self, Duration, Instant};
@@ -45,8 +46,9 @@ fn enqueue<M>(
     error_shown: &mut bool,
 ) {
     if let Some(msg) = msg {
-        queue.push_back((deadline(delay), msg));
+        queue.push_back((task::util::deadline(delay), msg));
     } else {
+        // TODO: replace this with an error, as in `batcher.rs`
         if !*error_shown {
             *error_shown = true;
             warn!("[delay_task] error receiving message from parent");
@@ -57,12 +59,6 @@ fn enqueue<M>(
 fn dequeue<M>(queue: &mut VecDeque<(Instant, M)>) -> M {
     let (_, msg) = queue.pop_front().expect("a first element should exist");
     msg
-}
-
-fn deadline(delay: Duration) -> Instant {
-    Instant::now()
-        .checked_add(delay)
-        .expect("deadline should exist")
 }
 
 #[cfg(test)]

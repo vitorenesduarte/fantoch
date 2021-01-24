@@ -1344,7 +1344,7 @@ mod tests {
 
         // start client
         let (target_shard, cmd) = client_1
-            .next_cmd(&time)
+            .cmd_send(&time)
             .expect("there should be a first operation");
         let target = client_1.shard_process(&target_shard);
 
@@ -1500,7 +1500,7 @@ mod tests {
         // generate a new command by the client
         let mut next_cmd = || {
             let (_, cmd) = client
-                .next_cmd(&time)
+                .cmd_send(&time)
                 .expect("there should be a next command");
             cmd
         };

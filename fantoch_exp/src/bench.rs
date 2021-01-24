@@ -48,9 +48,11 @@ pub async fn bench_experiment(
     testbed: Testbed,
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
-    tracer_show_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     experiment_timeouts: ExperimentTimeouts,
@@ -58,8 +60,8 @@ pub async fn bench_experiment(
     progress: TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
-    if tracer_show_interval.is_some() {
-        panic!("vitor: you should set the 'prof' feature for this to work!");
+    if let Some(interval) = tracer_show_interval {
+        panic!("found tracer should interval ({:?}) without the 'prof' feature being set", interval);
     }
 
     match testbed {
@@ -149,6 +151,8 @@ pub async fn bench_experiment(
                         tracer_show_interval,
                         clients,
                         *workload,
+                        batch_max_size,
+                        batch_max_delay,
                         cpus,
                         experiment_timeouts,
                         &exp_dir,
@@ -193,9 +197,11 @@ async fn run_experiment(
     planet: &Option<Planet>,
     protocol: Protocol,
     config: Config,
-    tracer_show_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
     clients_per_region: usize,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     cpus: usize,
     experiment_timeouts: ExperimentTimeouts,
     exp_dir: &str,
@@ -235,6 +241,8 @@ async fn run_experiment(
     let run_clients = run_clients(
         clients_per_region,
         workload,
+        batch_max_size,
+        batch_max_delay,
         machines,
         process_ips,
         &mut dstats,
@@ -268,6 +276,8 @@ async fn run_experiment(
         config,
         clients_per_region,
         workload,
+        batch_max_size,
+        batch_max_delay,
         cpus,
     );
 
@@ -308,7 +318,7 @@ async fn start_processes(
     planet: &Option<Planet>,
     protocol: Protocol,
     config: Config,
-    tracer_show_interval: Option<usize>,
+    tracer_show_interval: Option<Duration>,
     cpus: usize,
     dstats: &mut Vec<tokio::process::Child>,
 ) -> Result<(Ips, HashMap<ProcessId, (Region, tokio::process::Child)>), Report>
@@ -432,6 +442,8 @@ fn maybe_inject_delay(
 async fn run_clients(
     clients_per_region: usize,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     machines: &Machines<'_>,
     process_ips: Ips,
     dstats: &mut Vec<tokio::process::Child>,
@@ -482,6 +494,8 @@ async fn run_clients(
             id_end,
             ips,
             workload,
+            batch_max_size,
+            batch_max_delay,
             metrics_file,
             log_file,
         );
@@ -805,7 +819,7 @@ async fn stop_dstats(
         stops.push(stop_dstat(vm));
     }
     for result in futures::future::join_all(stops).await {
-        let _ = result.wrap_err("stop_dstat")?;
+        let _ = result?;
     }
     Ok(())
 }
@@ -968,16 +982,13 @@ async fn pull_metrics_files(
     match process_type {
         ProcessType::Server(process_id) => {
             tracing::info!(
-                "all process {:?} metric files pulled in region {:?}",
+                "process {:?} metric files pulled in region {:?}",
                 process_id,
                 region
             );
         }
         ProcessType::Client(_) => {
-            tracing::info!(
-                "all client metric files pulled in region {:?}",
-                region
-            );
+            tracing::info!("client metric files pulled in region {:?}", region);
         }
     }
 
@@ -1038,7 +1049,7 @@ pub async fn cleanup(
     // stop dstats in all machines
     stop_dstats(machines, Vec::new())
         .await
-        .wrap_err("stop_dstat")?;
+        .wrap_err("stop_dstats")?;
 
     // do the rest of the cleanup
     let mut cleanups = Vec::new();

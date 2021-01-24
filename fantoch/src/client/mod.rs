@@ -17,11 +17,11 @@ pub use key_gen::KeyGen;
 pub use pending::Pending;
 pub use workload::Workload;
 
-use crate::command::{Command, CommandResult};
-use crate::id::{ClientId, ProcessId, RiflGen, ShardId};
+use crate::command::Command;
+use crate::id::{ClientId, ProcessId, Rifl, RiflGen, ShardId};
 use crate::time::SysTime;
+use crate::HashMap;
 use crate::{info, trace};
-use crate::{HashMap, HashSet};
 use key_gen::KeyGenState;
 
 pub struct Client {
@@ -88,7 +88,7 @@ impl Client {
     }
 
     /// Generates the next command in this client's workload.
-    pub fn next_cmd(
+    pub fn cmd_send(
         &mut self,
         time: &dyn SysTime,
     ) -> Option<(ShardId, Command)> {
@@ -112,19 +112,7 @@ impl Client {
     /// Handle executed command and return a boolean indicating whether we have
     /// generated all commands and receive all the corresponding command
     /// results.
-    pub fn handle(
-        &mut self,
-        cmd_results: Vec<CommandResult>,
-        time: &dyn SysTime,
-    ) -> bool {
-        // make sure that results belong to the same rifl
-        let mut rifls = HashSet::with_capacity(1);
-        for cmd_result in cmd_results {
-            rifls.insert(cmd_result.rifl());
-        }
-        assert_eq!(rifls.len(), 1);
-        let rifl = rifls.into_iter().next().unwrap();
-
+    pub fn cmd_recv(&mut self, rifl: Rifl, time: &dyn SysTime) {
         // end command in pending and save command latency
         let (latency, end_time) = self.pending.end(rifl, time);
         trace!(
@@ -146,7 +134,13 @@ impl Client {
                 );
             }
         }
+    }
 
+    pub fn workload_finished(&self) -> bool {
+        self.workload.finished()
+    }
+
+    pub fn finished(&self) -> bool {
         // we're done once:
         // - the workload is finished and
         // - pending is empty
@@ -265,13 +259,9 @@ mod tests {
         // create system time
         let mut time = SimTime::new();
 
-        // creates a fake command result from a command
-        let fake_result =
-            |cmd: Command| vec![CommandResult::new(cmd.rifl(), 0)];
-
         // start client at time 0
         let (shard_id, cmd) = client
-            .next_cmd(&time)
+            .cmd_send(&time)
             .expect("there should a first operation");
         let process_id = client.shard_process(&shard_id);
         // process_id should be 2
@@ -279,8 +269,8 @@ mod tests {
 
         // handle result at time 10
         time.add_millis(10);
-        client.handle(fake_result(cmd), &time);
-        let next = client.next_cmd(&time);
+        client.cmd_recv(cmd.rifl(), &time);
+        let next = client.cmd_send(&time);
 
         // check there's next command
         assert!(next.is_some());
@@ -291,8 +281,8 @@ mod tests {
 
         // handle result at time 15
         time.add_millis(5);
-        client.handle(fake_result(cmd), &time);
-        let next = client.next_cmd(&time);
+        client.cmd_recv(cmd.rifl(), &time);
+        let next = client.cmd_send(&time);
 
         // check there's no next command
         assert!(next.is_none());

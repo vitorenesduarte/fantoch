@@ -1,8 +1,23 @@
+// Implementation of the read-write task;
+mod rw;
+
+// Implementation of `ShardsPending`.
+mod pending;
+
+// Definition of `Batch`.
+mod batch;
+
+// Implementation of a batcher.
+mod batcher;
+
+// Implementation of an unbatcher.
+mod unbatcher;
+
 use crate::client::{Client, ClientData, Workload};
 use crate::command::{Command, CommandResult};
-use crate::hash_map::{Entry, HashMap};
+use crate::hash_map::HashMap;
 use crate::id::{ClientId, ProcessId, Rifl, ShardId};
-use crate::run::chan;
+use crate::run::chan::{self, ChannelReceiver, ChannelSender};
 use crate::run::prelude::*;
 use crate::run::rw::Connection;
 use crate::run::task;
@@ -15,13 +30,15 @@ use std::fmt::Debug;
 use std::time::Duration;
 use tokio::net::ToSocketAddrs;
 
-const MAX_CLIENT_CONNECTIONS: usize = 128;
+const MAX_CLIENT_CONNECTIONS: usize = 32;
 
 pub async fn client<A>(
     ids: Vec<ClientId>,
     addresses: Vec<A>,
     interval: Option<Duration>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     connect_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -49,21 +66,25 @@ where
         if !client_ids.is_empty() {
             // start the open loop client if some interval was provided
             let handle = if let Some(interval) = interval {
-                task::spawn(task::client::open_loop_client::<A>(
+                task::spawn(open_loop_client::<A>(
                     client_ids,
                     addresses.clone(),
                     interval,
                     workload,
+                    batch_max_size,
+                    batch_max_delay,
                     connect_retries,
                     tcp_nodelay,
                     channel_buffer_size,
                     status_frequency,
                 ))
             } else {
-                task::spawn(task::client::closed_loop_client::<A>(
+                task::spawn(closed_loop_client::<A>(
                     client_ids,
                     addresses.clone(),
                     workload,
+                    batch_max_size,
+                    batch_max_delay,
                     connect_retries,
                     tcp_nodelay,
                     channel_buffer_size,
@@ -102,6 +123,8 @@ async fn closed_loop_client<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     connect_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
@@ -114,10 +137,12 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut clients, mut reader, mut process_to_writer) = client_setup(
+    let (mut clients, mut unbatcher_rx, mut batcher_tx) = client_setup(
         client_ids,
         addresses,
         workload,
+        batch_max_size,
+        batch_max_delay,
         connect_retries,
         tcp_nodelay,
         channel_buffer_size,
@@ -125,50 +150,33 @@ where
     )
     .await?;
 
-    // create pending
-    let mut pending = ShardsPending::new();
-
-    // generate the first message of each client
-    for (_client_id, client) in clients.iter_mut() {
-        let workload_finished = None;
-        next_cmd(
-            client,
-            &time,
-            &mut process_to_writer,
-            &mut pending,
-            workload_finished,
-        )
-        .await;
-    }
-
     // track which clients are finished (i.e. all their commands have completed)
     let mut finished = HashSet::with_capacity(clients.len());
+    // track which clients are workload finished
+    let mut workload_finished = HashSet::with_capacity(clients.len());
+
+    // generate the first message of each client
+    for client in clients.values_mut() {
+        cmd_send(client, &time, &mut batcher_tx, &mut workload_finished).await;
+    }
 
     // wait for results and generate/submit new commands while there are
     // commands to be generated
     while finished.len() < clients.len() {
         // and wait for next result
-        let from_server = reader.recv().await;
-        let client = handle_cmd_result(
-            &mut clients,
-            &time,
-            from_server,
-            &mut pending,
-            &mut finished,
-        );
-        if let Some(client) = client {
+        let from_unbatcher = unbatcher_rx.recv().await;
+        let ready_clients =
+            cmd_recv(&mut clients, &time, from_unbatcher, &mut finished);
+        for client_id in ready_clients {
+            let client = clients
+                .get_mut(&client_id)
+                .expect("[client] ready client should exist");
             // if client hasn't finished, issue a new command
-            let workload_finished = None;
-            next_cmd(
-                client,
-                &time,
-                &mut process_to_writer,
-                &mut pending,
-                workload_finished,
-            )
-            .await;
+            cmd_send(client, &time, &mut batcher_tx, &mut workload_finished)
+                .await;
         }
     }
+    assert_eq!(workload_finished.len(), finished.len());
 
     // return clients
     Some(
@@ -184,7 +192,9 @@ async fn open_loop_client<A>(
     addresses: Vec<A>,
     interval: Duration,
     workload: Workload,
-    client_retries: usize,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
+    connect_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     status_frequency: Option<usize>,
@@ -196,19 +206,18 @@ where
     let time = RunTime;
 
     // setup client
-    let (mut clients, mut reader, mut process_to_writer) = client_setup(
+    let (mut clients, mut unbatcher_rx, mut batcher_tx) = client_setup(
         client_ids,
         addresses,
         workload,
-        client_retries,
+        batch_max_size,
+        batch_max_delay,
+        connect_retries,
         tcp_nodelay,
         channel_buffer_size,
         status_frequency,
     )
     .await?;
-
-    // create pending
-    let mut pending = ShardsPending::new();
 
     // create interval
     let mut interval = tokio::time::interval(interval);
@@ -220,20 +229,27 @@ where
 
     while finished.len() < clients.len() {
         tokio::select! {
-            from_server = reader.recv() => {
-                handle_cmd_result(&mut clients, &time, from_server, &mut pending, &mut finished);
+            from_unbatcher = unbatcher_rx.recv() => {
+                cmd_recv(
+                    &mut clients,
+                    &time,
+                    from_unbatcher,
+                    &mut finished,
+                );
             }
             _ = interval.tick() => {
-                // submit new command on every tick for each connected client (if there are still commands to be generated)
+                // submit new command on every tick for each connected client
+                // (if there are still commands to be generated)
                 for (client_id, client) in clients.iter_mut(){
                     // if the client hasn't finished, try to issue a new command
                     if !workload_finished.contains(client_id) {
-                        next_cmd(client, &time, &mut process_to_writer, &mut pending, Some(&mut workload_finished)).await;
+                        cmd_send(client, &time, &mut batcher_tx, &mut workload_finished).await;
                     }
                 }
             }
         }
     }
+    assert_eq!(workload_finished.len(), finished.len());
 
     // return clients
     Some(
@@ -248,19 +264,21 @@ async fn client_setup<A>(
     client_ids: Vec<ClientId>,
     addresses: Vec<A>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     client_retries: usize,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     status_frequency: Option<usize>,
 ) -> Option<(
     HashMap<ClientId, Client>,
-    ServerToClientReceiver,
-    HashMap<ProcessId, ClientToServerSender>,
+    ChannelReceiver<Vec<Rifl>>,
+    ChannelSender<(ShardId, Command)>,
 )>
 where
     A: ToSocketAddrs + Clone + Debug + Send + 'static + Sync,
 {
-    let mut to_discover = HashMap::with_capacity(addresses.len());
+    let mut shard_to_process = HashMap::with_capacity(addresses.len());
     let mut connections = Vec::with_capacity(addresses.len());
 
     // connect to each address (one per shard)
@@ -287,127 +305,167 @@ where
 
         // say hi
         let (process_id, shard_id) =
-            task::client::client_say_hi(client_ids.clone(), &mut connection)
-                .await?;
+            client_say_hi(client_ids.clone(), &mut connection).await?;
 
         // update set of processes to be discovered by the client
-        assert!(to_discover.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
+        assert!(shard_to_process.insert(shard_id, process_id).is_none(), "client shouldn't try to connect to the same shard more than once, only to the closest one");
 
         // update list of connected processes
         connections.push((process_id, connection));
     }
 
     // start client read-write task
-    let (read, process_to_write) = task::client::start_client_rw_tasks(
+    let (read, mut process_to_writer) = rw::start_client_rw_tasks(
         &client_ids,
         channel_buffer_size,
         connections,
     );
 
+    // create mapping from shard id to client read-write task
+    let shard_to_write = shard_to_process
+        .into_iter()
+        .map(|(shard_id, process_id)| {
+            let writer = process_to_writer
+                .remove(&process_id)
+                .expect("a rw-task should exist for each process id");
+            (shard_id, writer)
+        })
+        .collect();
+    assert!(
+        process_to_writer.is_empty(),
+        "all rw-tasks should be associated with some shard"
+    );
+
     // create clients
     let clients = client_ids
-        .into_iter()
-        .map(|client_id| {
-            let mut client = Client::new(client_id, workload, status_frequency);
-            // discover processes
-            client.connect(to_discover.clone());
+        .iter()
+        .map(|&client_id| {
+            let client = Client::new(client_id, workload, status_frequency);
+            // no need to discover as the `unbatcher` will do the job of
+            // selecting the closest process
             (client_id, client)
         })
         .collect();
 
+    spawn_batcher_and_unbatcher(
+        client_ids,
+        batch_max_size,
+        batch_max_delay,
+        clients,
+        channel_buffer_size,
+        read,
+        shard_to_write,
+    )
+    .await
+}
+
+async fn spawn_batcher_and_unbatcher(
+    client_ids: Vec<ClientId>,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
+    clients: HashMap<ClientId, Client>,
+    channel_buffer_size: usize,
+    read: ChannelReceiver<CommandResult>,
+    shard_to_writer: HashMap<ShardId, ChannelSender<ClientToServer>>,
+) -> Option<(
+    HashMap<ClientId, Client>,
+    ChannelReceiver<Vec<Rifl>>,
+    ChannelSender<(ShardId, Command)>,
+)> {
+    let (mut batcher_tx, batcher_rx) = chan::channel(channel_buffer_size);
+    batcher_tx
+        .set_name(format!("to_batcher_{}", super::util::ids_repr(&client_ids)));
+    let (mut to_unbatcher_tx, to_unbatcher_rx) =
+        chan::channel(channel_buffer_size);
+    to_unbatcher_tx.set_name(format!(
+        "to_unbatcher_{}",
+        super::util::ids_repr(&client_ids)
+    ));
+    let (mut to_client_tx, to_client_rx) = chan::channel(channel_buffer_size);
+    to_client_tx
+        .set_name(format!("to_client_{}", super::util::ids_repr(&client_ids)));
+
+    // spawn batcher
+    task::spawn(batcher::batcher(
+        batcher_rx,
+        to_unbatcher_tx,
+        batch_max_size,
+        batch_max_delay,
+    ));
+
+    // spawn unbatcher
+    task::spawn(unbatcher::unbatcher(
+        to_unbatcher_rx,
+        to_client_tx,
+        read,
+        shard_to_writer,
+    ));
+
     // return clients and their means to communicate with the service
-    Some((clients, read, process_to_write))
+    Some((clients, to_client_rx, batcher_tx))
 }
 
 /// Generate the next command, returning a boolean representing whether a new
 /// command was generated or not.
-async fn next_cmd(
+async fn cmd_send(
     client: &mut Client,
     time: &dyn SysTime,
-    process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
-    pending: &mut ShardsPending,
-    mut workload_finished: Option<&mut HashSet<ClientId>>,
+    to_batcher: &mut ChannelSender<(ShardId, Command)>,
+    workload_finished: &mut HashSet<ClientId>,
 ) {
-    if let Some((target_shard, cmd)) = client.next_cmd(time) {
-        // register command in pending (which will aggregate several
-        // `CommandResult`s if the command acesses more than one shard)
-        pending.register(&cmd);
-
-        // 1. register the command in all shards but the target shard
-        for shard in cmd.shards().filter(|shard| **shard != target_shard) {
-            let msg = ClientToServer::Register(cmd.clone());
-            send_to_shard(&client, process_to_writer, shard, msg).await
+    if let Some(next) = client.cmd_send(time) {
+        if let Err(e) = to_batcher.send(next).await {
+            warn!("[client] error forwarding batch: {:?}", e);
         }
-
-        // 2. submit the command to the target shard
-        let msg = ClientToServer::Submit(cmd);
-        send_to_shard(&client, process_to_writer, &target_shard, msg).await
     } else {
         // record that this client has finished its workload
-        if let Some(workload_finished) = workload_finished.as_mut() {
-            assert!(workload_finished.insert(client.id()));
-        }
+        assert!(client.workload_finished());
+        assert!(workload_finished.insert(client.id()));
     }
 }
 
-async fn send_to_shard(
-    client: &Client,
-    process_to_writer: &mut HashMap<ProcessId, ClientToServerSender>,
-    shard_id: &ShardId,
-    msg: ClientToServer,
-) {
-    // find closest process on this shard
-    let process_id = client.shard_process(shard_id);
-    // find process writer
-    let writer = process_to_writer
-        .get_mut(&process_id)
-        .expect("[client] dind't find writer for target process");
-    if let Err(e) = writer.send(msg).await {
-        warn!("[client] error while sending message to client read-write task: {:?}", e);
-    }
-}
-
-/// Handles a command result. Returns the client if a new COMMAND COMPLETED and
-/// the client did NOT FINISH.
-fn handle_cmd_result<'a>(
-    clients: &'a mut HashMap<ClientId, Client>,
+/// Handles new ready rifls. Returns the client ids of clients with a new
+/// command finished.
+fn cmd_recv(
+    clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    from_server: Option<CommandResult>,
-    pending: &mut ShardsPending,
+    from_unbatcher: Option<Vec<Rifl>>,
     finished: &mut HashSet<ClientId>,
-) -> Option<&'a mut Client> {
-    if let Some(cmd_result) = from_server {
-        do_handle_cmd_result(clients, time, cmd_result, pending, finished)
+) -> Vec<ClientId> {
+    if let Some(rifls) = from_unbatcher {
+        do_cmd_recv(clients, time, rifls, finished)
     } else {
         panic!("[client] error while receiving message from client read-write task");
     }
 }
 
-fn do_handle_cmd_result<'a>(
-    clients: &'a mut HashMap<ClientId, Client>,
+fn do_cmd_recv(
+    clients: &mut HashMap<ClientId, Client>,
     time: &dyn SysTime,
-    cmd_result: CommandResult,
-    pending: &mut ShardsPending,
+    rifls: Vec<Rifl>,
     finished: &mut HashSet<ClientId>,
-) -> Option<&'a mut Client> {
-    if let Some((client_id, cmd_results)) = pending.add(cmd_result) {
-        let client = clients
-            .get_mut(&client_id)
-            .expect("[client] command result should belong to a client");
+) -> Vec<ClientId> {
+    rifls
+        .into_iter()
+        .map(move |rifl| {
+            // find client that sent this command
+            let client_id = rifl.source();
+            let client = clients
+                .get_mut(&client_id)
+                .expect("[client] command result should belong to a client");
 
-        // handle command results and check if client is finished
-        if client.handle(cmd_results, time) {
-            // record that this client is finished
-            info!("client {:?} exited loop", client_id);
-            assert!(finished.insert(client_id));
-            None
-        } else {
-            Some(client)
-        }
-    } else {
-        // no new command completed, so return non
-        None
-    }
+            // handle command results
+            client.cmd_recv(rifl, time);
+
+            // check if client is finished
+            if client.finished() {
+                // record that this client is finished
+                info!("client {:?} exited loop", client_id);
+                assert!(finished.insert(client_id));
+            }
+            client_id
+        })
+        .collect()
 }
 
 async fn client_say_hi(
@@ -437,135 +495,5 @@ async fn client_say_hi(
     } else {
         warn!("[client] clients {:?} couldn't receive process id from connected process", client_ids);
         None
-    }
-}
-
-fn start_client_rw_tasks(
-    client_ids: &Vec<ClientId>,
-    channel_buffer_size: usize,
-    connections: Vec<(ProcessId, Connection)>,
-) -> (
-    ServerToClientReceiver,
-    HashMap<ProcessId, ClientToServerSender>,
-) {
-    // create server-to-client channels: although we keep one connection per
-    // shard, we'll have all rw tasks will write to the same channel; this means
-    // the client will read from a single channel (and potentially receive
-    // messages from any of the shards)
-    let (mut s2c_tx, s2c_rx) = chan::channel(channel_buffer_size);
-    s2c_tx.set_name(format!(
-        "server_to_client_{}",
-        super::util::ids_repr(&client_ids)
-    ));
-
-    let mut process_to_tx = HashMap::with_capacity(connections.len());
-    for (process_id, connection) in connections {
-        // create client-to-server channels: since clients may send operations
-        // to different shards, we create one client-to-rw channel per rw task
-        let (mut c2s_tx, c2s_rx) = chan::channel(channel_buffer_size);
-        c2s_tx.set_name(format!(
-            "client_to_server_{}_{}",
-            process_id,
-            super::util::ids_repr(&client_ids)
-        ));
-
-        // spawn rw task
-        task::spawn(client_rw_task(connection, s2c_tx.clone(), c2s_rx));
-        process_to_tx.insert(process_id, c2s_tx);
-    }
-    (s2c_rx, process_to_tx)
-}
-
-async fn client_rw_task(
-    mut connection: Connection,
-    mut to_parent: ServerToClientSender,
-    mut from_parent: ClientToServerReceiver,
-) {
-    loop {
-        tokio::select! {
-            to_client = connection.recv() => {
-                trace!("[client_rw] to client: {:?}", to_client);
-                if let Some(to_client) = to_client {
-                    if let Err(e) = to_parent.send(to_client).await {
-                        warn!("[client_rw] error while sending message from server to parent: {:?}", e);
-                    }
-                } else {
-                    warn!("[client_rw] error while receiving message from server to parent");
-                    break;
-                }
-            }
-            to_server = from_parent.recv() => {
-                trace!("[client_rw] from client: {:?}", to_server);
-                if let Some(to_server) = to_server {
-                    if let Err(e) = connection.send(&to_server).await {
-                        warn!("[client_rw] error while sending message to server: {:?}", e);
-                    }
-                } else {
-                    warn!("[client_rw] error while receiving message from parent to server");
-                    // in this case it means that the parent (the client) is done, and so we can exit the loop
-                    break;
-                }
-            }
-        }
-    }
-}
-
-struct ShardsPending {
-    pending: HashMap<Rifl, (usize, Vec<CommandResult>)>,
-}
-
-impl ShardsPending {
-    fn new() -> Self {
-        Self {
-            pending: HashMap::new(),
-        }
-    }
-
-    fn register(&mut self, cmd: &Command) {
-        let rifl = cmd.rifl();
-        trace!("c{}: register {:?}", rifl.source(), rifl);
-        let shard_count = cmd.shard_count();
-        let results = Vec::with_capacity(shard_count);
-        let res = self.pending.insert(rifl, (shard_count, results));
-        assert!(res.is_none());
-    }
-
-    // Add new `CommandResult` and return all the `CommandResult` if we have the
-    // results from all shards.
-    fn add(
-        &mut self,
-        result: CommandResult,
-    ) -> Option<(ClientId, Vec<CommandResult>)> {
-        let rifl = result.rifl();
-        trace!("c{}: received {:?}", rifl.source(), rifl);
-        match self.pending.entry(rifl) {
-            Entry::Occupied(mut entry) => {
-                let (shard_count, results) = entry.get_mut();
-                // add new result
-                results.push(result);
-
-                trace!(
-                    "c{}: {:?} {}/{}",
-                    rifl.source(),
-                    rifl,
-                    results.len(),
-                    *shard_count
-                );
-
-                // return results if we have one `CommandResult` per shard
-                // - TODO: add an assert checking that indeed these
-                //   `CommandResult` came from different shards, and are not
-                //   sent by the same shard
-                if results.len() == *shard_count {
-                    let (_, results) = entry.remove();
-                    Some((rifl.source(), results))
-                } else {
-                    None
-                }
-            }
-            Entry::Vacant(_) => panic!(
-                "received command result about a rifl we didn't register for"
-            ),
-        }
     }
 }

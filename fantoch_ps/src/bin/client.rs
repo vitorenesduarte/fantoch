@@ -17,12 +17,16 @@ const DEFAULT_KEY_GEN: KeyGen = KeyGen::ConflictPool {
 const DEFAULT_COMMANDS_PER_CLIENT: usize = 1000;
 const DEFAULT_READ_ONLY_PERCENTAGE: usize = 0;
 const DEFAULT_PAYLOAD_SIZE: usize = 100;
+const DEFAULT_BATCH_MAX_SIZE: usize = 1;
+const DEFAULT_BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 type ClientArgs = (
     Vec<ClientId>,
     Vec<String>,
     Option<Duration>,
     Workload,
+    usize,
+    Duration,
     bool,
     usize,
     Option<usize>,
@@ -38,6 +42,8 @@ fn main() -> Result<(), Report> {
         addresses,
         interval,
         workload,
+        batch_max_size,
+        batch_max_delay,
         tcp_nodelay,
         channel_buffer_size,
         status_frequency,
@@ -51,6 +57,8 @@ fn main() -> Result<(), Report> {
         addresses,
         interval,
         workload,
+        batch_max_size,
+        batch_max_delay,
         tcp_nodelay,
         channel_buffer_size,
         status_frequency,
@@ -129,6 +137,20 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("batch_max_size")
+                .long("batch_max_size")
+                .value_name("BATCH_MAX_SIZE")
+                .help("max size of the batch; default: 1 (i.e., no batching)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("batch_max_delay")
+                .long("batch_max_delay")
+                .value_name("BATCH_MAX_DELAY")
+                .help("max delay of a batch; default: 5 (milliseconds)")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
@@ -197,6 +219,12 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
         matches.value_of("read_only_percentage"),
         matches.value_of("payload_size"),
     );
+
+    let batch_max_size =
+        parse_batch_max_size(matches.value_of("batch_max_size"));
+    let batch_max_delay =
+        parse_batch_max_delay(matches.value_of("batch_max_delay"));
+
     let tcp_nodelay =
         common::parse_tcp_nodelay(matches.value_of("tcp_nodelay"));
     let channel_buffer_size = common::parse_channel_buffer_size(
@@ -212,6 +240,8 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
     info!("client number: {}", ids.len());
     info!("addresses: {:?}", addresses);
     info!("workload: {:?}", workload);
+    info!("batch_max_size: {:?}", batch_max_size);
+    info!("batch_max_delay: {:?}", batch_max_delay);
     info!("tcp_nodelay: {:?}", tcp_nodelay);
     info!("channel buffer size: {:?}", channel_buffer_size);
     info!("status frequency: {:?}", status_frequency);
@@ -223,6 +253,8 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
         addresses,
         interval,
         workload,
+        batch_max_size,
+        batch_max_delay,
         tcp_nodelay,
         channel_buffer_size,
         status_frequency,
@@ -261,13 +293,15 @@ fn parse_addresses(addresses: Option<&str>) -> Vec<String> {
         .collect()
 }
 
-fn parse_interval(interval: Option<&str>) -> Option<Duration> {
-    interval.map(|interval| {
-        let millis = interval
-            .parse::<u64>()
-            .expect("interval should be a number");
+fn parse_millis_duration(millis: Option<&str>) -> Option<Duration> {
+    millis.map(|millis| {
+        let millis = millis.parse::<u64>().expect("millis should be a number");
         Duration::from_millis(millis)
     })
+}
+
+fn parse_interval(interval: Option<&str>) -> Option<Duration> {
+    parse_millis_duration(interval)
 }
 
 fn parse_workload(
@@ -384,6 +418,20 @@ fn parse_payload_size(number: Option<&str>) -> usize {
                 .expect("payload size should be a number")
         })
         .unwrap_or(DEFAULT_PAYLOAD_SIZE)
+}
+
+fn parse_batch_max_size(number: Option<&str>) -> usize {
+    number
+        .map(|number| {
+            number
+                .parse::<usize>()
+                .expect("batch max size should be a number")
+        })
+        .unwrap_or(DEFAULT_BATCH_MAX_SIZE)
+}
+
+fn parse_batch_max_delay(duration: Option<&str>) -> Duration {
+    parse_millis_duration(duration).unwrap_or(DEFAULT_BATCH_MAX_DELAY)
 }
 
 fn parse_status_frequency(status_frequency: Option<&str>) -> Option<usize> {

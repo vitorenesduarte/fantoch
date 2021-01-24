@@ -61,14 +61,15 @@ impl Executor for TableExecutor {
                 clock,
                 rifl,
                 key,
-                op,
+                ops,
                 votes,
             } => {
                 if self.execute_at_commit {
-                    self.execute(key, std::iter::once((rifl, op)));
+                    self.execute(key, std::iter::once((rifl, ops)));
                 } else {
-                    let to_execute =
-                        self.table.add_votes(dot, clock, rifl, &key, op, votes);
+                    let to_execute = self
+                        .table
+                        .add_votes(dot, clock, rifl, &key, ops, votes);
                     self.execute(key, to_execute);
                 }
             }
@@ -102,20 +103,20 @@ impl TableExecutor {
     // #[instrument(skip(self, key, to_execute))]
     fn execute<I>(&mut self, key: Key, to_execute: I)
     where
-        I: Iterator<Item = (Rifl, KVOp)>,
+        I: Iterator<Item = (Rifl, Vec<KVOp>)>,
     {
-        to_execute.for_each(|(rifl, op)| {
-            // execute op in the `KVStore`
-            let op_result = self.store.execute_with_monitor(
+        to_execute.for_each(|(rifl, ops)| {
+            // execute ops in the `KVStore`
+            let partial_results = self.store.execute_with_monitor(
                 &key,
-                op,
+                ops,
                 rifl,
                 &mut self.monitor,
             );
             self.to_clients.push_back(ExecutorResult::new(
                 rifl,
                 key.clone(),
-                op_result,
+                partial_results,
             ));
         })
     }
@@ -127,7 +128,7 @@ pub enum TableExecutionInfo {
         clock: u64,
         rifl: Rifl,
         key: Key,
-        op: KVOp,
+        ops: Vec<KVOp>,
         votes: Vec<VoteRange>,
     },
     DetachedVotes {
@@ -142,7 +143,7 @@ impl TableExecutionInfo {
         clock: u64,
         rifl: Rifl,
         key: Key,
-        op: KVOp,
+        ops: Vec<KVOp>,
         votes: Vec<VoteRange>,
     ) -> Self {
         TableExecutionInfo::Votes {
@@ -150,7 +151,7 @@ impl TableExecutionInfo {
             clock,
             rifl,
             key,
-            op,
+            ops,
             votes,
         }
     }

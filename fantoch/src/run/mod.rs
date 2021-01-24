@@ -426,6 +426,8 @@ pub async fn client<A>(
     addresses: Vec<A>,
     interval: Option<Duration>,
     workload: Workload,
+    batch_max_size: usize,
+    batch_max_delay: Duration,
     tcp_nodelay: bool,
     channel_buffer_size: usize,
     status_frequency: Option<usize>,
@@ -439,6 +441,8 @@ where
         addresses,
         interval,
         workload,
+        batch_max_size,
+        batch_max_delay,
         CONNECT_RETRIES,
         tcp_nodelay,
         channel_buffer_size,
@@ -819,6 +823,10 @@ pub mod tests {
                     _ => panic!("n mod 2 should be in [0,1]"),
                 };
 
+                // batching config
+                let batch_max_size = 1;
+                let batch_max_delay = Duration::from_millis(1);
+
                 // spawn client
                 let status_frequency = None;
                 let metrics_file =
@@ -828,6 +836,8 @@ pub mod tests {
                     addresses,
                     interval,
                     workload,
+                    batch_max_size,
+                    batch_max_delay,
                     tcp_nodelay,
                     client_channel_buffer_size,
                     status_frequency,

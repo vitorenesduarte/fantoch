@@ -212,7 +212,8 @@ pub fn latency_plot<R>(
         let mut base = index as f64 - shift_left + shift_right;
 
         // HACK to separate move `f = 1` (i.e. the first 3 searches) a bit to
-        // the left and `f = 2` (i.e. the remaining 4 searches) a bit to the right
+        // the left and `f = 2` (i.e. the remaining 4 searches) a bit to the
+        // right
         if search_count == 7 {
             if search.f == 1 && index < 3 {
                 base += 0.25;

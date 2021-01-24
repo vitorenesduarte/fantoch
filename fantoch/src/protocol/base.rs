@@ -417,7 +417,7 @@ mod tests {
 
         // check replicated by
         let mut ops = HashMap::new();
-        ops.insert(String::from("a"), KVOp::Get);
+        ops.insert(String::from("a"), vec![KVOp::Get]);
 
         // create command replicated by shard 0
         let rifl = Rifl::new(1, 1);

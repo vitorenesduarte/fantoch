@@ -169,15 +169,15 @@ fn key_index(key: &Key) -> (usize, usize) {
 pub struct ExecutorResult {
     pub rifl: Rifl,
     pub key: Key,
-    pub op_result: KVOpResult,
+    pub partial_results: Vec<KVOpResult>,
 }
 
 impl ExecutorResult {
-    pub fn new(rifl: Rifl, key: Key, op_result: KVOpResult) -> Self {
+    pub fn new(rifl: Rifl, key: Key, partial_results: Vec<KVOpResult>) -> Self {
         ExecutorResult {
             rifl,
             key,
-            op_result,
+            partial_results,
         }
     }
 }

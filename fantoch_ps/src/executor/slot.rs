@@ -175,11 +175,11 @@ mod tests {
         // - we don't expect rifl 1 because we will not wait for it in the
         //   executor
         let mut expected_results = BTreeMap::new();
-        expected_results.insert(rifl_1, None);
-        expected_results.insert(rifl_2, Some(String::from("1")));
-        expected_results.insert(rifl_3, Some(String::from("1")));
-        expected_results.insert(rifl_4, Some(String::from("2")));
-        expected_results.insert(rifl_5, Some(String::from("2")));
+        expected_results.insert(rifl_1, vec![None]);
+        expected_results.insert(rifl_2, vec![Some(String::from("1"))]);
+        expected_results.insert(rifl_3, vec![Some(String::from("1"))]);
+        expected_results.insert(rifl_4, vec![Some(String::from("2"))]);
+        expected_results.insert(rifl_5, vec![Some(String::from("2"))]);
 
         // check the execution order for all possible permutations
         infos.permutation().for_each(|p| {
@@ -203,7 +203,10 @@ mod tests {
                                 key, executor_result.key,
                                 "expected key not in partial"
                             );
-                            (executor_result.rifl, executor_result.op_result)
+                            (
+                                executor_result.rifl,
+                                executor_result.partial_results,
+                            )
                         })
                         .collect::<Vec<_>>()
                 })
