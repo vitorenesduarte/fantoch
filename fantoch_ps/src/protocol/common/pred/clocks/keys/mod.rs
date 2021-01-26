@@ -1,8 +1,8 @@
 // This module contains the definition of `LockedKeyClocks`.
-mod sequential;
+mod locked;
 
 // Re-exports.
-pub use sequential::LockedKeyClocks;
+pub use locked::LockedKeyClocks;
 
 use super::Clock;
 use fantoch::command::Command;
