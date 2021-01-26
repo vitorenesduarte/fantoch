@@ -21,7 +21,7 @@ fn main() -> Result<(), Report> {
 
     // partial_replication_all()?;
     // multi_key()?;
-    // single_key()?;
+    // single_key_all()?;
     eurosys()?;
     Ok(())
 }
@@ -33,7 +33,6 @@ fn eurosys() -> Result<(), Report> {
     increasing_load_plot()?;
     // scalability_plot()?;
     // partial_replication_plot()?;
-    // single_key_all()?;
     Ok(())
 }
 
@@ -214,14 +213,13 @@ fn increasing_load_plot() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 20,
+        // 1024 * 24,
+        // 1024 * 28,
     ];
     // let clients_per_region = vec![
     //     32,
-    //     // 512,
     //     1024,
-    //     // 1024 * 2,
     //     1024 * 4,
-    //     // 1024 * 8,
     //     1024 * 16,
     //     1024 * 24,
     //     1024 * 32,
@@ -265,9 +263,11 @@ fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 1),
         (Protocol::FPaxos, 2),
+        /*
         (Protocol::CaesarLocked, 2),
-        /* (Protocol::Basic, 1),
-         * (Protocol::EPaxosLocked, 2), */
+        (Protocol::Basic, 1),
+        (Protocol::EPaxosLocked, 2),
+        */
     ];
 
     let path = format!("plot_increasing_load_heatmap_{}.pdf", top_key_gen);
@@ -1182,12 +1182,13 @@ fn single_key_all() -> Result<(), Report> {
             conflict_rate: 2,
             pool_size: 1,
         },
-        KeyGen::ConflictPool {
-            conflict_rate: 10,
-            pool_size: 1,
-        },
+        // KeyGen::ConflictPool {
+        //     conflict_rate: 10,
+        //     pool_size: 1,
+        // },
     ];
     let payload_size = 4096;
+    let batch_max_size = 1;
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::AtlasLocked,
@@ -1208,6 +1209,13 @@ fn single_key_all() -> Result<(), Report> {
         1024 * 12,
         1024 * 16,
         1024 * 20,
+        1024 * 24,
+        1024 * 32,
+        1024 * 40,
+        1024 * 48,
+        1024 * 56,
+        1024 * 60,
+        1024 * 64,
     ];
 
     // load results
@@ -1231,7 +1239,9 @@ fn single_key_all() -> Result<(), Report> {
                     }
                 }
                 // filter by payload size in all protocols
-                search.payload_size(payload_size);
+                search
+                    .payload_size(payload_size)
+                    .batch_max_size(batch_max_size);
             };
 
             // create searches
@@ -1336,7 +1346,8 @@ fn single_key_all() -> Result<(), Report> {
                             // all protocols
                             search
                                 .clients_per_region(clients_per_region)
-                                .payload_size(payload_size);
+                                .payload_size(payload_size)
+                                .batch_max_size(batch_max_size);
                             search
                         })
                         .collect();
@@ -1437,7 +1448,8 @@ fn single_key_all() -> Result<(), Report> {
                             search
                                 .key_gen(key_gen)
                                 .clients_per_region(clients_per_region)
-                                .payload_size(payload_size);
+                                .payload_size(payload_size)
+                                .batch_max_size(batch_max_size);
                             search
                         })
                         .collect();

@@ -233,8 +233,8 @@ async fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
-        // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        // (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
+        /* (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+         * (Protocol::CaesarLocked, config!(n, 2, false, None, false)), */
     ];
 
     let clients_per_region = vec![
@@ -246,6 +246,8 @@ async fn increasing_load_plot() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 20,
+        // 1024 * 24,
+        // 1024 * 28,
     ];
     // let clients_per_region = vec![
     //     32,
