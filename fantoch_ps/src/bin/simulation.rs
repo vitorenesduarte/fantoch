@@ -8,7 +8,7 @@ use fantoch::sim::Runner;
 use fantoch::HashMap;
 use fantoch_prof::metrics::Histogram;
 use fantoch_ps::protocol::{
-    AtlasSequential, CaesarSequential, EPaxosSequential, FPaxos, NewtSequential,
+    AtlasSequential, CaesarLocked, EPaxosSequential, FPaxos, NewtSequential,
 };
 use rayon::prelude::*;
 use std::time::Duration;
@@ -264,7 +264,7 @@ fn newt(aws: bool) {
                                 client_regions,
                                 planet,
                             ),
-                            "Caesar" => run::<CaesarSequential>(
+                            "Caesar" => run::<CaesarLocked>(
                                 config,
                                 workload,
                                 clients,
