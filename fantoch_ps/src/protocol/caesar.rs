@@ -16,7 +16,7 @@ use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::RwLockWriteGuard;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{iter::FromIterator, time::Duration};
 use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
@@ -324,13 +324,13 @@ impl<KC: KeyClocks> Caesar<KC> {
                     // got it from the key clocks, so we need to consider it
                     let blocked_by_info = blocked_by_dot_ref.read();
 
-                    // check whether this command has already a "good enough"
-                    // clock and dep
-                    let has_clock_and_dep = matches!(
+                    // check whether this command has already safe clock and dep
+                    // values (i.e. safe for us to make a decision based on them)
+                    let has_safe_clock_and_dep = matches!(
                         blocked_by_info.status,
                         Status::ACCEPT | Status::COMMIT
                     );
-                    if has_clock_and_dep {
+                    if has_safe_clock_and_dep {
                         // if the clock and dep are "good enough", check if we
                         // can ignore the command
                         let safe_to_ignore = Self::safe_to_ignore(
@@ -363,8 +363,8 @@ impl<KC: KeyClocks> Caesar<KC> {
                             break;
                         }
                     } else {
-                        // if the clock and dep are not "good enough", we're
-                        // blocked by this command
+                        // if the clock and dep are not safe yet, we're blocked
+                        // by this command until they are
                         trace!(
                             "p{}: MPropose({:?}) still blocked by {:?} | time={}",
                             self.bp.process_id,
@@ -900,8 +900,9 @@ impl<KC: KeyClocks> Caesar<KC> {
             blocking,
             time.micros()
         );
+        let mut blocking = Vec::from_iter(blocking);
 
-        for blocked_dot in blocking {
+        while let Some(blocked_dot) = blocking.pop() {
             trace!(
                 "p{}: try_to_unblock({:?}) checking {:?} | time={}",
                 self.bp.process_id,
@@ -916,6 +917,14 @@ impl<KC: KeyClocks> Caesar<KC> {
                 // we only need to accept/reject the blocked command if the
                 // command is still at the `PROPOSE` phase
                 if blocked_dot_info.status == Status::PROPOSE {
+                    // check if the command has started its wait time
+                    if blocked_dot_info.wait_start_time_ms.is_none() {
+                        // if not, then we should wait until it has
+                        // TODO: this is basically a busy loop
+                        blocking.push(blocked_dot);
+                        continue;
+                    }
+
                     let mut end_of_wait = false;
                     let safe_to_ignore = Self::safe_to_ignore(
                         self.bp.process_id,
