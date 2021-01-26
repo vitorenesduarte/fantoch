@@ -2,42 +2,53 @@ use super::{Clock, KeyClocks};
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::Key;
+use fantoch::shared::{SharedMap, SharedMapRef};
 use fantoch::{HashMap, HashSet};
+use parking_lot::{Mutex, RwLock};
 use std::cmp::Ordering;
+use std::sync::Arc;
 
 // timestamps are unique and thus it's enough to store one command `Dot` per
 // timestamp.
 // Note: this `Clock` should correspond to the `clock` stored in Caesar process.
 type CommandsPerKey = HashMap<Clock, Dot>;
 
+// all clock's are protected by a rwlock
+type Clocks = Arc<SharedMap<Key, RwLock<CommandsPerKey>>>;
+
+// TODO: remove `SequentialKeyClocks` as this is a copy-paste, just with thread
+// safety
+
 #[derive(Debug, Clone)]
-pub struct SequentialKeyClocks {
+pub struct LockedKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
-    seq: u64,
-    clocks: HashMap<Key, CommandsPerKey>,
+    seq: Arc<Mutex<u64>>,
+    clocks: Clocks,
 }
 
-impl KeyClocks for SequentialKeyClocks {
+impl KeyClocks for LockedKeyClocks {
     /// Create a new `KeyClocks` instance.
     fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
         Self {
             process_id,
             shard_id,
-            seq: 0,
-            clocks: HashMap::new(),
+            seq: Arc::new(Mutex::new(0)),
+            clocks: Arc::new(SharedMap::new()),
         }
     }
 
     // Generate the next clock.
     fn clock_next(&mut self) -> Clock {
-        self.seq += 1;
-        Clock::from(self.seq, self.process_id)
+        let mut seq = self.seq.lock();
+        *seq += 1;
+        Clock::from(*seq, self.process_id)
     }
 
     // Joins with remote clock.
     fn clock_join(&mut self, other: &Clock) {
-        self.seq = std::cmp::max(self.seq, other.seq);
+        let mut seq = self.seq.lock();
+        *seq = std::cmp::max(*seq, other.seq);
     }
 
     // Adds a new command with some tentative timestamp.
@@ -47,8 +58,9 @@ impl KeyClocks for SequentialKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // add ourselves to the set of commands and assert there was no
             // command with the same timestamp
-            let res = self
-                .update_commands(key, |commands| commands.insert(clock, dot));
+            let res = self.update_commands(key, |commands| {
+                commands.write().insert(clock, dot)
+            });
             assert!(
                 res.is_none(),
                 "can't add a timestamp belonging to a command already added"
@@ -62,8 +74,9 @@ impl KeyClocks for SequentialKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // remove ourselves from the set of commands and assert that we were
             // indeed in the set
-            let res =
-                self.update_commands(key, |commands| commands.remove(&clock));
+            let res = self.update_commands(key, |commands| {
+                commands.write().remove(&clock)
+            });
             assert!(
                 res.is_some(),
                 "can't remove a timestamp belonging to a command never added"
@@ -87,7 +100,7 @@ impl KeyClocks for SequentialKeyClocks {
         let mut predecessors = HashSet::new();
         cmd.keys(self.shard_id).for_each(|key| {
             self.apply_if_commands_contains_key(key, |commands| {
-                for (cmd_clock, cmd_dot) in commands {
+                for (cmd_clock, cmd_dot) in commands.read().iter() {
                     match cmd_clock.cmp(&clock) {
                         Ordering::Less => {
                             // if it has a timestamp smaller than `clock`, add
@@ -119,18 +132,18 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     fn parallel() -> bool {
-        false
+        true
     }
 }
 
-impl SequentialKeyClocks {
+impl LockedKeyClocks {
     fn apply_if_commands_contains_key<F, R>(
         &self,
         key: &Key,
         mut f: F,
     ) -> Option<R>
     where
-        F: FnMut(&CommandsPerKey) -> R,
+        F: FnMut(SharedMapRef<'_, Key, RwLock<CommandsPerKey>>) -> R,
     {
         // get a reference to current commands
         self.clocks.get(key).map(|commands| {
@@ -141,13 +154,10 @@ impl SequentialKeyClocks {
 
     fn update_commands<F, R>(&mut self, key: &Key, mut f: F) -> R
     where
-        F: FnMut(&mut CommandsPerKey) -> R,
+        F: FnMut(SharedMapRef<'_, Key, RwLock<CommandsPerKey>>) -> R,
     {
         // get a mutable reference to current commands
-        let commands = match self.clocks.get_mut(key) {
-            Some(commands) => commands,
-            None => self.clocks.entry(key.clone()).or_default(),
-        };
+        let commands = self.clocks.get_or(key, || RwLock::default());
         // apply function and return its result
         f(commands)
     }
@@ -169,7 +179,7 @@ mod tests {
         let p1 = 1;
         let p2 = 2;
         let shard_id = 0;
-        let mut key_clocks = SequentialKeyClocks::new(p1, shard_id);
+        let mut key_clocks = LockedKeyClocks::new(p1, shard_id);
 
         assert_eq!(key_clocks.clock_next(), Clock::from(1, p1));
         assert_eq!(key_clocks.clock_next(), Clock::from(2, p1));
@@ -190,7 +200,7 @@ mod tests {
     fn predecessors_test() {
         let p1 = 1;
         let shard_id = 0;
-        let mut key_clocks = SequentialKeyClocks::new(p1, shard_id);
+        let mut key_clocks = LockedKeyClocks::new(p1, shard_id);
 
         // create command on key A
         let cmd_a = Command::from(
@@ -228,7 +238,7 @@ mod tests {
         let clock_3 = Clock::from(3, p1);
         let clock_4 = Clock::from(4, p1);
 
-        let check = |key_clocks: &SequentialKeyClocks,
+        let check = |key_clocks: &LockedKeyClocks,
                      cmd: &Command,
                      clock: Clock,
                      expected_blocking: HashSet<Dot>,

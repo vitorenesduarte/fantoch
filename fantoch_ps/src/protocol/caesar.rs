@@ -1,7 +1,6 @@
 use crate::executor::PredecessorsExecutor;
 use crate::protocol::common::pred::{
     Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
-    SequentialKeyClocks,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -20,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use threshold::VClock;
 
-pub type CaesarSequential = Caesar<SequentialKeyClocks>;
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
 type ExecutionInfo = <PredecessorsExecutor as Executor>::ExecutionInfo;
@@ -1228,11 +1226,6 @@ mod tests {
     use fantoch::time::SimTime;
 
     #[test]
-    fn sequential_caesar_test() {
-        caesar_flow::<SequentialKeyClocks>();
-    }
-
-    #[test]
     fn locked_caesar_test() {
         caesar_flow::<LockedKeyClocks>();
     }
@@ -1467,9 +1460,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // caesar
-        let (mut caesar_1, _) = CaesarSequential::new(1, shard_id, config);
-        let (mut caesar_2, _) = CaesarSequential::new(2, shard_id, config);
-        let (mut caesar_3, _) = CaesarSequential::new(3, shard_id, config);
+        let (mut caesar_1, _) = CaesarLocked::new(1, shard_id, config);
+        let (mut caesar_2, _) = CaesarLocked::new(2, shard_id, config);
+        let (mut caesar_3, _) = CaesarLocked::new(3, shard_id, config);
 
         // discover processes in all caesar (the order doesn't matter)
         caesar_1.discover(processes.clone());
@@ -1505,7 +1498,7 @@ mod tests {
         };
 
         // retrieve a single outgoing message from process
-        let retrieve_single_msg = |caesar: &mut CaesarSequential| {
+        let retrieve_single_msg = |caesar: &mut CaesarLocked| {
             let mut actions: Vec<_> = caesar.to_processes_iter().collect();
             assert_eq!(actions.len(), 1);
             let action = actions.pop().unwrap();
@@ -1516,7 +1509,7 @@ mod tests {
         };
 
         // submit a command, take the mpropose, handle it locally and return it
-        let mut submit = |caesar: &mut CaesarSequential| {
+        let mut submit = |caesar: &mut CaesarLocked| {
             caesar.submit(None, next_cmd(), &time);
             let mpropose = retrieve_single_msg(caesar);
 
@@ -1528,7 +1521,7 @@ mod tests {
             mpropose
         };
 
-        let handle = |caesar: &mut CaesarSequential, from, msg| {
+        let handle = |caesar: &mut CaesarLocked, from, msg| {
             caesar.handle(from, shard_id, msg, &time);
             let actions: Vec<_> = caesar.to_processes_iter().collect();
             assert!(actions.is_empty());

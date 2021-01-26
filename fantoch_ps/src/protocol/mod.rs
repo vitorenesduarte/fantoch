@@ -21,7 +21,7 @@ mod partial;
 
 // Re-exports.
 pub use atlas::{AtlasLocked, AtlasSequential};
-pub use caesar::{CaesarLocked, CaesarSequential};
+pub use caesar::CaesarLocked;
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
 pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
@@ -560,7 +560,7 @@ mod tests {
     // ---- caesar tests ---- //
     #[test]
     fn sim_caesar_wait_3_1_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(3, 1, true),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -569,7 +569,7 @@ mod tests {
 
     #[test]
     fn sim_caesar_3_1_no_wait_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(3, 1, false),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn sim_caesar_5_2_wait_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(5, 2, true),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn sim_caesar_5_2_no_wait_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(5, 2, false),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -599,7 +599,7 @@ mod tests {
         // caesar sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        let _slow_paths = run_test::<CaesarSequential>(
+        let _slow_paths = run_test::<CaesarLocked>(
             caesar_config!(3, 1, true),
             SHARD_COUNT,
             workers,
@@ -614,7 +614,7 @@ mod tests {
         // caesar sequential can only handle one worker and one executor
         let workers = 1;
         let executors = 1;
-        let _slow_paths = run_test::<CaesarSequential>(
+        let _slow_paths = run_test::<CaesarLocked>(
             caesar_config!(3, 1, false),
             SHARD_COUNT,
             workers,
