@@ -4,7 +4,7 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::Key;
 use fantoch::shared::{SharedMap, SharedMapRef};
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ type Clocks = Arc<SharedMap<Key, RwLock<CommandsPerKey>>>;
 pub struct LockedKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
-    seq: u64,
+    seq: Arc<Mutex<u64>>,
     clocks: Clocks,
 }
 
@@ -33,20 +33,22 @@ impl KeyClocks for LockedKeyClocks {
         Self {
             process_id,
             shard_id,
-            seq: 0,
+            seq: Arc::new(Mutex::new(0)),
             clocks: Arc::new(SharedMap::new()),
         }
     }
 
     // Generate the next clock.
     fn clock_next(&mut self) -> Clock {
-        self.seq += 1;
-        Clock::from(self.seq, self.process_id)
+        let mut seq = self.seq.lock();
+        *seq += 1;
+        Clock::from(*seq, self.process_id)
     }
 
     // Joins with remote clock.
     fn clock_join(&mut self, other: &Clock) {
-        self.seq = std::cmp::max(self.seq, other.seq);
+        let mut seq = self.seq.lock();
+        *seq = std::cmp::max(*seq, other.seq);
     }
 
     // Adds a new command with some tentative timestamp.
