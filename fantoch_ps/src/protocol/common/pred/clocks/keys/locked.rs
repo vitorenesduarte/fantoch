@@ -16,9 +16,6 @@ type CommandsPerKey = HashMap<Clock, Dot>;
 // all clock's are protected by a rwlock
 type Clocks = Arc<SharedMap<Key, RwLock<CommandsPerKey>>>;
 
-// TODO: remove `SequentialKeyClocks` as this is a copy-paste, just with thread
-// safety
-
 #[derive(Debug, Clone)]
 pub struct LockedKeyClocks {
     process_id: ProcessId,
