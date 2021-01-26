@@ -799,16 +799,21 @@ pub fn inner_throughput_something_plot(
         let mut max_throughput = 0;
         let (x, y): (Vec<_>, Vec<_>) = values
             .into_iter()
-            .map(|(throughput, avg_latency)| {
-                // compute K ops
-                let x = throughput / 1000f64;
+            .filter_map(|(throughput, avg_latency)| {
+                if throughput == 0f64 {
+                    assert_eq!(avg_latency, 0f64);
+                    None
+                } else {
+                    // compute K ops
+                    let x = throughput / 1000f64;
 
-                // update max throughput
-                max_throughput = std::cmp::max(max_throughput, x as usize);
+                    // update max throughput
+                    max_throughput = std::cmp::max(max_throughput, x as usize);
 
-                // round y
-                let y = avg_latency.round() as usize;
-                (x, y)
+                    // round y
+                    let y = avg_latency.round() as usize;
+                    Some((x, y))
+                }
             })
             .unzip();
 
