@@ -9,8 +9,8 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::{Executed, MessageIndex};
 use fantoch::time::SysTime;
-use fantoch::trace;
 use fantoch::HashSet;
+use fantoch::{info, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -75,7 +75,7 @@ impl Executor for PredecessorsExecutor {
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
         let executed = self.graph.executed().clone();
-        println!(
+        info!(
             "p{}: PredecessorsExecutor::executed {:?} | time = {}",
             self.process_id,
             executed,

@@ -6,7 +6,7 @@ use crate::run::prelude::*;
 use crate::run::task;
 use crate::time::RunTime;
 use crate::HashMap;
-use crate::{debug, trace, warn};
+use crate::{debug, info, trace, warn};
 use std::sync::Arc;
 use tokio::time;
 
@@ -24,7 +24,7 @@ pub fn start_executors<P>(
 ) where
     P: Protocol + 'static,
 {
-    println!(">>>> start executors");
+    info!(">>>> start executors");
     // zip rxs'
     let incoming = to_executors_rxs
         .into_iter()
@@ -66,7 +66,7 @@ async fn executor_task<P>(
 {
     // set executor index
     executor.set_executor_index(executor_index);
-    println!(">>>> start executor {}", executor_index);
+    info!(">>>> start executor {}", executor_index);
 
     // create time
     let time = RunTime;
@@ -85,7 +85,7 @@ async fn executor_task<P>(
     let gen_executed_notification_delay =
         || sleep(config.executor_executed_notification_interval());
     let mut executed_notification_delay = gen_executed_notification_delay();
-    println!(
+    info!(
         ">>>> executed notification delay {:?}",
         executed_notification_delay
     );
@@ -307,7 +307,7 @@ async fn executed_notification_tick<P>(
 ) where
     P: Protocol + 'static,
 {
-    println!("[executor] executed");
+    info!("[executor] executed");
     // TODO: if `executor.executed` takes `&self` instead of `&mut self`, rustc
     // complains that `&P::Executor` is not `Send`; why is that?
     if let Some(executed) = executor.executed(time) {
