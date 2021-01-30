@@ -1127,7 +1127,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
 // `CaesarInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct CaesarInfo {
     status: Status,
     // `None` if not set yet
