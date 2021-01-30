@@ -16,7 +16,8 @@ use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::RwLockWriteGuard;
 use serde::{Deserialize, Serialize};
-use std::{iter::FromIterator, time::Duration};
+use std::mem;
+use std::time::Duration;
 use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
@@ -37,6 +38,8 @@ pub struct Caesar<KC: KeyClocks> {
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    // `try_to_unblock` calls to be repeated
+    try_to_unblock_again: Vec<(Dot, Clock, HashSet<Dot>, HashSet<Dot>)>,
     wait_condition: bool,
 }
 
@@ -78,6 +81,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
         let buffered_commits = HashMap::new();
+        let try_to_unblock_again = Vec::new();
         let wait_condition = config.caesar_wait_condition();
 
         // create `Caesar`
@@ -90,6 +94,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             to_executors,
             buffered_retries,
             buffered_commits,
+            try_to_unblock_again,
             wait_condition,
         };
 
@@ -159,6 +164,13 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MGarbageCollection { committed } => {
                 self.handle_mgc(from, committed, time)
             }
+        }
+
+        // every time a new message is processed, try to unblock commands that
+        // couldn't be unblocked in the previous attempt
+        let try_to_unblock_again = mem::take(&mut self.try_to_unblock_again);
+        for (dot, clock, deps, blocking) in try_to_unblock_again {
+            self.try_to_unblock(dot, clock, deps, blocking, time)
         }
     }
 
@@ -274,7 +286,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // update command info
-        info.status = Status::PROPOSE;
+        info.status = Status::PROPOSE_BEGIN;
         info.cmd = Some(cmd);
         info.deps = deps;
         Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
@@ -295,7 +307,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             WAIT,
         }
         let mut reply = Reply::WAIT;
-        let mut not_blocked_by = HashSet::new();
+        let mut blocked_by_to_ignore = HashSet::new();
 
         // we send an ok if no command is blocking this command
         let ok = blocked_by.is_empty();
@@ -353,7 +365,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                             // the command can be ignored, and so we register
                             // that this command is in fact not blocking our
                             // command
-                            not_blocked_by.insert(blocked_by_dot);
+                            blocked_by_to_ignore.insert(blocked_by_dot);
                         } else {
                             // if there's a single command that can't be
                             // ignored, our command must be rejected, and so we
@@ -389,11 +401,11 @@ impl<KC: KeyClocks> Caesar<KC> {
                     // in this case, the command has been GCed, and for that
                     // reason we simply record that it can be ignored
                     // (as it has already been executed at all processes)
-                    not_blocked_by.insert(blocked_by_dot);
+                    blocked_by_to_ignore.insert(blocked_by_dot);
                 }
             }
 
-            if not_blocked_by.len() == blocked_by_len {
+            if blocked_by_to_ignore.len() == blocked_by_len {
                 // if in the end it turns out that we're not blocked by any
                 // command, accept this command:
                 // - in this case, we must still have `Reply::WAIT`, or in other
@@ -422,8 +434,11 @@ impl<KC: KeyClocks> Caesar<KC> {
         let mut info = info_ref.write();
 
         // for the same reason as above, the command phase must still be
-        // `Status::PROPOSE`
-        assert_eq!(info.status, Status::PROPOSE);
+        // `Status::PROPOSE_BEGIN`
+        assert_eq!(info.status, Status::PROPOSE_BEGIN);
+
+        // update it to `Status::PROPOSE_END`
+        info.status = Status::PROPOSE_END;
 
         match reply {
             Reply::ACCEPT => Self::accept_command(
@@ -444,8 +459,8 @@ impl<KC: KeyClocks> Caesar<KC> {
             Reply::WAIT => {
                 // in this case, we simply update the set of commands we need to
                 // wait for (since we may have decided to ignore some above)
-                for not_blocked_by_dot in not_blocked_by {
-                    info.blocked_by.remove(&not_blocked_by_dot);
+                for to_ignore_dot in blocked_by_to_ignore {
+                    info.blocked_by.remove(&to_ignore_dot);
                 }
                 // after this, we must still be blocked by some command
                 assert!(!info.blocked_by.is_empty());
@@ -495,7 +510,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         let info_ref = self.cmds.get_or_default(dot);
         let mut info = info_ref.write();
 
-        // do nothing if we're no longer PROPOSE or REJECT (yes, it seems that
+        // do nothing if we're no longer PROPOSE_END or REJECT (yes, it seems that
         // the coordinator can reject its own command; this case was only
         // occurring in the simulator, but with concurrency I think it can
         // happen in the runner as well, as it will be tricky to ensure a level
@@ -504,7 +519,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         //   further messages received are ignored
         // - we can check this by asserting that `info.quorum_clocks.all()` is
         //   false, before adding any new info, as we do below
-        if !matches!(info.status, Status::PROPOSE | Status::REJECT) {
+        if !matches!(info.status, Status::PROPOSE_END | Status::REJECT) {
             return;
         }
         if info.quorum_clocks.all() {
@@ -900,9 +915,12 @@ impl<KC: KeyClocks> Caesar<KC> {
             blocking,
             time.micros()
         );
-        let mut blocking = Vec::from_iter(blocking);
 
-        while let Some(blocked_dot) = blocking.pop() {
+        // set of commands that are in the `PROPOSE_BEGIN` phase and can't be
+        // unblocked yet
+        let mut at_propose_begin = HashSet::new();
+
+        for blocked_dot in blocking {
             trace!(
                 "p{}: try_to_unblock({:?}) checking {:?} | time={}",
                 self.bp.process_id,
@@ -915,16 +933,12 @@ impl<KC: KeyClocks> Caesar<KC> {
                 let mut blocked_dot_info = blocked_dot_info_ref.write();
 
                 // we only need to accept/reject the blocked command if the
-                // command is still at the `PROPOSE` phase
-                if blocked_dot_info.status == Status::PROPOSE {
-                    // check if the command has started its wait time
-                    if blocked_dot_info.wait_start_time_ms.is_none() {
-                        // if not, then we should wait until it has
-                        // TODO: this is basically a busy loop
-                        blocking.push(blocked_dot);
-                        continue;
-                    }
-
+                // command is still at the `PROPOSE_END` phase:
+                // - if the command is still at `PROPOSE_BEGIN` we should try to
+                // unblock it later
+                if blocked_dot_info.status == Status::PROPOSE_BEGIN {
+                    at_propose_begin.insert(blocked_dot);
+                } else if blocked_dot_info.status == Status::PROPOSE_END {
                     let mut end_of_wait = false;
                     let safe_to_ignore = Self::safe_to_ignore(
                         self.bp.process_id,
@@ -1003,6 +1017,15 @@ impl<KC: KeyClocks> Caesar<KC> {
                     time.micros()
                 );
             }
+        }
+
+        if !at_propose_begin.is_empty() {
+            self.try_to_unblock_again.push((
+                dot,
+                clock,
+                deps,
+                at_propose_begin,
+            ));
         }
     }
 
@@ -1217,10 +1240,12 @@ impl MessageIndex for PeriodicEvent {
 }
 
 /// `Status` of commands.
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
-    PROPOSE,
+    PROPOSE_BEGIN,
+    PROPOSE_END,
     REJECT,
     ACCEPT,
     COMMIT,
