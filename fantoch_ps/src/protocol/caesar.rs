@@ -638,6 +638,12 @@ impl<KC: KeyClocks> Caesar<KC> {
             );
         }
 
+        // register deps len
+        self.bp.collect_metric(
+            ProtocolMetricsKind::CommittedDepsLen,
+            deps.len() as u64,
+        );
+
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
         let execution_info = ExecutionInfo::new(dot, cmd, clock, deps.clone());

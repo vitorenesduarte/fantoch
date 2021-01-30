@@ -150,6 +150,7 @@ pub enum ProtocolMetricsKind {
     Stable,
     CommitLatency,
     WaitConditionDelay,
+    CommittedDepsLen,
 }
 
 impl Debug for ProtocolMetricsKind {
@@ -163,6 +164,9 @@ impl Debug for ProtocolMetricsKind {
             }
             ProtocolMetricsKind::WaitConditionDelay => {
                 write!(f, "wait_condition_delay")
+            }
+            ProtocolMetricsKind::CommittedDepsLen => {
+                write!(f, "committed_deps_len")
             }
         }
     }
