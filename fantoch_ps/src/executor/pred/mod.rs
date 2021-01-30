@@ -107,6 +107,9 @@ impl PredecessorsGraph {
             time.millis()
         );
 
+        // we assume that commands to not depend on themselves
+        assert!(!deps.contains(&dot));
+
         if self.execute_at_commit {
             self.execute(dot, cmd, time);
         } else {
@@ -439,69 +442,6 @@ mod tests {
         queue.add(dot_1, cmd_1.clone(), clock_1, deps_1, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_1, cmd_0]);
-    }
-
-    #[test]
-    // This bug was occuring due to commands possibly depending on themselves.
-    // This bug was fixed by removing the command from its set of dependencies.
-    fn already_mutably_borrowed_regression_test() {
-        let create_cmd = |dot: Dot| {
-            // rifl equal to dot
-            let rifl = Rifl::new(dot.source() as u64, dot.sequence());
-            let client_key = dot.source().to_string();
-            let conflict_key = "conflict".to_string();
-            Arc::new(Command::from(
-                rifl,
-                vec![
-                    (client_key, KVOp::Put(String::new())),
-                    (conflict_key, KVOp::Put(String::new())),
-                ],
-            ))
-        };
-        // create queue
-        let p1 = 1;
-        let p2 = 2;
-        let p3 = 3;
-        let n = 3;
-        let f = 1;
-        let config = Config::new(n, f);
-        let mut queue = PredecessorsGraph::new(p1, &config);
-        let time = RunTime;
-
-        // create dots
-        let dot_21 = Dot::new(p2, 1);
-        let dot_11 = Dot::new(p1, 1);
-        let dot_31 = Dot::new(p3, 1);
-
-        // cmd (2, 1)
-        let cmd_21 = create_cmd(dot_21);
-        let clock_21 = Clock::from(2, p3);
-        let deps_21 = deps(vec![dot_11, dot_21, dot_31]);
-
-        // cmd (1, 1)
-        let cmd_11 = create_cmd(dot_11);
-        let clock_11 = Clock::from(2, p2);
-        let deps_11 = deps(vec![dot_11, dot_21, dot_31]);
-
-        // cmd (3, 1)
-        let cmd_31 = create_cmd(dot_31);
-        let clock_31 = Clock::from(1, p3);
-        let deps_31 = deps(vec![dot_11, dot_21]);
-
-        // add cmd (2, 1)
-        queue.add(dot_21, cmd_21.clone(), clock_21, deps_21, &time);
-        // check commands ready to be executed
-        assert!(queue.commands_to_execute().is_empty());
-
-        // add cmd (1, 1)
-        queue.add(dot_11, cmd_11.clone(), clock_11, deps_11, &time);
-        // check commands ready to be executed
-        assert!(queue.commands_to_execute().is_empty());
-
-        // add cmd (3, 1)
-        queue.add(dot_31, cmd_31.clone(), clock_31, deps_31, &time);
-        // check commands ready to be executed
-        assert_eq!(queue.commands_to_execute(), vec![cmd_31, cmd_11, cmd_21]);
     }
 
     #[test]
