@@ -184,6 +184,12 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
     }
 
     fn handle_executed(&mut self, executed: Executed, _time: &dyn SysTime) {
+        println!(
+            "p{}: handle_executed({:?}) | time={}",
+            self.id(),
+            executed,
+            _time.micros()
+        );
         self.gc_track.update_clock(executed);
     }
 
@@ -789,7 +795,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
-        trace!(
+        println!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             executed,
@@ -805,7 +811,14 @@ impl<KC: KeyClocks> Caesar<KC> {
         // an MStable message to all the workers, as in the other protocols,
         // we can do it right here
         let dots: Vec<_> = util::dots(stable).collect();
-        self.bp.stable(dots.len());
+        let stable_count = dots.len();
+        println!(
+            "p{}: MGarbageCollection stable_count: {} | time={}",
+            self.id(),
+            stable_count,
+            _time.micros()
+        );
+        self.bp.stable(stable_count);
         dots.into_iter().for_each(|dot| self.gc_command(dot));
     }
 
