@@ -9,8 +9,8 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
 use fantoch::protocol::{Executed, MessageIndex};
 use fantoch::time::SysTime;
+use fantoch::trace;
 use fantoch::HashSet;
-use fantoch::{info, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -49,23 +49,19 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn handle(&mut self, info: PredecessorsExecutionInfo, time: &dyn SysTime) {
-        if self.config.execute_at_commit() {
-            self.execute(info.cmd);
-        } else {
-            // handle new command
-            self.graph
-                .add(info.dot, info.cmd, info.clock, info.deps, time);
+        // handle new command
+        self.graph
+            .add(info.dot, info.cmd, info.clock, info.deps, time);
 
-            // get more commands that are ready to be executed
-            while let Some(cmd) = self.graph.command_to_execute() {
-                trace!(
-                    "p{}: PredecessorsExecutor::comands_to_execute {:?} | time = {}",
-                    self.process_id,
-                    cmd.rifl(),
-                    time.millis()
-                );
-                self.execute(cmd);
-            }
+        // get more commands that are ready to be executed
+        while let Some(cmd) = self.graph.command_to_execute() {
+            trace!(
+                "p{}: PredecessorsExecutor::comands_to_execute {:?} | time = {}",
+                self.process_id,
+                cmd.rifl(),
+                time.millis()
+            );
+            self.execute(cmd);
         }
     }
 
@@ -75,7 +71,7 @@ impl Executor for PredecessorsExecutor {
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
         let executed = self.graph.executed().clone();
-        info!(
+        trace!(
             "p{}: PredecessorsExecutor::executed {:?} | time = {}",
             self.process_id,
             executed,

@@ -12,7 +12,7 @@ use fantoch::protocol::{
 };
 use fantoch::time::SysTime;
 use fantoch::util;
-use fantoch::{info, singleton, trace};
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::RwLockWriteGuard;
 use serde::{Deserialize, Serialize};
@@ -184,7 +184,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
     }
 
     fn handle_executed(&mut self, executed: Executed, _time: &dyn SysTime) {
-        info!(
+        trace!(
             "p{}: handle_executed({:?}) | time={}",
             self.id(),
             executed,
@@ -795,7 +795,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
-        info!(
+        trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             executed,
@@ -812,7 +812,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // we can do it right here
         let dots: Vec<_> = util::dots(stable).collect();
         let stable_count = dots.len();
-        info!(
+        trace!(
             "p{}: MGarbageCollection stable_count: {} | time={}",
             self.id(),
             stable_count,

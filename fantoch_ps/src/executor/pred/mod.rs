@@ -35,6 +35,7 @@ pub struct PredecessorsGraph {
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
     to_execute: VecDeque<Command>,
+    execute_at_commit: bool,
 }
 
 impl PredecessorsGraph {
@@ -54,6 +55,7 @@ impl PredecessorsGraph {
         let metrics = ExecutorMetrics::new();
         // create to execute
         let to_execute = VecDeque::new();
+        let execute_at_commit = config.execute_at_commit();
         PredecessorsGraph {
             process_id,
             executed_clock,
@@ -63,6 +65,7 @@ impl PredecessorsGraph {
             phase_two_pending_index,
             metrics,
             to_execute,
+            execute_at_commit,
         }
     }
 
@@ -103,30 +106,34 @@ impl PredecessorsGraph {
             time.millis()
         );
 
-        // it's possible that a command ends up depending on itself, and it
-        // that case it should be ignored; for that reason, we remove it
-        // right away, before any further processing
-        deps.remove(&dot);
+        if self.execute_at_commit {
+            self.execute(dot, cmd, time);
+        } else {
+            // it's possible that a command ends up depending on itself, and it
+            // that case it should be ignored; for that reason, we remove it
+            // right away, before any further processing
+            deps.remove(&dot);
 
-        // index the command
-        self.index_committed_command(dot, cmd, clock, deps, time);
+            // index the command
+            self.index_committed_command(dot, cmd, clock, deps, time);
 
-        // try all commands that are pending on phase one due to this command
-        self.try_phase_one_pending(dot, time);
+            // try all commands that are pending on phase one due to this command
+            self.try_phase_one_pending(dot, time);
 
-        // move command to phase 1
-        self.move_to_phase_one(dot, time);
+            // move command to phase 1
+            self.move_to_phase_one(dot, time);
 
-        trace!(
-            "p{}: Predecessors::log committed {:?} | executed {:?} | index {:?} | time = {}",
-            self.process_id,
-            self.committed_clock,
-            self.executed_clock,
-            self.vertex_index
-                .dots()
-                .collect::<std::collections::BTreeSet<_>>(),
-            time.millis()
-        );
+            trace!(
+                "p{}: Predecessors::log committed {:?} | executed {:?} | index {:?} | time = {}",
+                self.process_id,
+                self.committed_clock,
+                self.executed_clock,
+                self.vertex_index
+                    .dots()
+                    .collect::<std::collections::BTreeSet<_>>(),
+                time.millis()
+            );
+        }
     }
 
     fn move_to_phase_one(&mut self, dot: Dot, time: &dyn SysTime) {
@@ -327,9 +334,6 @@ impl PredecessorsGraph {
             time.millis()
         );
 
-        // mark dot as executed
-        assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
-
         // remove from vertex index
         let vertex = self
             .vertex_index
@@ -343,11 +347,26 @@ impl PredecessorsGraph {
         self.metrics
             .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
-        // add command to commands to be executed
-        self.to_execute.push_back(cmd);
+        // mark dot as executed and add command to commands to be executed
+        self.execute(dot, cmd, time);
 
         // try commands pending at phase two due to this command
         self.try_phase_two_pending(dot, time);
+    }
+
+    fn execute(&mut self, dot: Dot, cmd: Command, _time: &dyn SysTime) {
+        trace!(
+            "p{}: Predecessors::update_executed {:?} | time = {}",
+            self.process_id,
+            dot,
+            _time.millis()
+        );
+
+        // mark dot as executed
+        assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
+
+        // add command to commands to be executed
+        self.to_execute.push_back(cmd);
     }
 }
 
