@@ -74,7 +74,14 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
-        Some(self.graph.executed())
+        let executed = self.graph.executed().clone();
+        println!(
+            "p{}: PredecessorsExecutor::executed {:?} | time = {}",
+            self.process_id,
+            executed,
+            _time.millis()
+        );
+        Some(executed)
     }
 
     fn parallel() -> bool {
