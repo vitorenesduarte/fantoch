@@ -14,7 +14,7 @@ use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLockWriteGuard;
+use parking_lot::MutexGuard;
 use serde::{Deserialize, Serialize};
 use std::mem;
 use std::sync::Arc;
@@ -271,7 +271,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -341,7 +341,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                 {
                     // in this case, this the command hasn't been GCed since we
                     // got it from the key clocks, so we need to consider it
-                    let blocked_by_info = blocked_by_dot_ref.read();
+                    let mut blocked_by_info = blocked_by_dot_ref.lock();
 
                     // check whether this command has already safe clock and dep
                     // values (i.e. safe for us to make a decision based on
@@ -392,9 +392,6 @@ impl<KC: KeyClocks> Caesar<KC> {
                             blocked_by_dot,
                             time.micros()
                         );
-                        // upgrade lock guard to a mutable one
-                        drop(blocked_by_info);
-                        let mut blocked_by_info = blocked_by_dot_ref.write();
                         // register that this command is blocking our command
                         blocked_by_info.blocking.insert(dot);
                     }
@@ -439,7 +436,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             .cmds
             .get(dot)
             .expect("the command must not have been GCed in the meantime");
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // for the same reason as above, the command phase must still be
         // `Status::PROPOSE_BEGIN`
@@ -516,7 +513,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // do nothing if we're no longer PROPOSE_END or REJECT (yes, it seems
         // that the coordinator can reject its own command; this case
@@ -612,7 +609,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         if info.status == Status::START {
             // save this notification just in case we've received the `MPropose`
@@ -700,7 +697,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         if info.status == Status::START {
             // save this notification just in case we've received the `MPropose`
@@ -765,7 +762,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // do nothing if we're no longer ACCEPT:
         // - this ensures that once an MCommit is sent in this handler, further
@@ -863,7 +860,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn update_clock(
         key_clocks: &mut KC,
         dot: Dot,
-        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        info: &mut MutexGuard<'_, CaesarInfo>,
         new_clock: Clock,
     ) {
         // get the command
@@ -957,7 +954,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             );
 
             if let Some(blocked_dot_info_ref) = self.cmds.get(blocked_dot) {
-                let mut blocked_dot_info = blocked_dot_info_ref.write();
+                let mut blocked_dot_info = blocked_dot_info_ref.lock();
 
                 // we only need to accept/reject the blocked command if the
                 // command is still at the `PROPOSE_END` phase:
@@ -980,6 +977,15 @@ impl<KC: KeyClocks> Caesar<KC> {
                         // the set of commands that are blocking this blocked
                         // command
                         blocked_dot_info.blocked_by.remove(&dot);
+
+                        trace!(
+                            "p{}: try_to_unblock({:?}) {:?} can ignore me but is still blocked by {:?} | time={}",
+                            self.bp.process_id,
+                            dot,
+                            blocked_dot,
+                            blocked_dot_info.blocked_by,
+                            time.micros()
+                        );
 
                         if blocked_dot_info.blocked_by.is_empty() {
                             // ACCEPT the blocked command if it no longer has
@@ -1059,7 +1065,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn accept_command(
         _id: ProcessId,
         dot: Dot,
-        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        info: &mut MutexGuard<'_, CaesarInfo>,
         to_processes: &mut Vec<Action<Self>>,
         _time: &dyn SysTime,
     ) {
@@ -1083,7 +1089,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn reject_command(
         _id: ProcessId,
         dot: Dot,
-        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        info: &mut MutexGuard<'_, CaesarInfo>,
         key_clocks: &mut KC,
         to_processes: &mut Vec<Action<Self>>,
         _time: &dyn SysTime,
