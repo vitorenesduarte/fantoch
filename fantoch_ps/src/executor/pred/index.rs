@@ -5,13 +5,14 @@ use fantoch::id::{Dot, ProcessId};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cell::RefCell;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Vertex {
     pub dot: Dot,
-    pub cmd: Command,
+    pub cmd: Arc<Command>,
     pub clock: Clock,
-    pub deps: HashSet<Dot>,
+    pub deps: Arc<HashSet<Dot>>,
     pub start_time_ms: u64,
     missing_deps: usize,
 }
@@ -19,9 +20,9 @@ pub struct Vertex {
 impl Vertex {
     pub fn new(
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<HashSet<Dot>>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time_ms = time.millis();
@@ -53,7 +54,7 @@ impl Vertex {
     }
 
     /// Consumes the vertex, returning its command.
-    pub fn into_command(self, time: &dyn SysTime) -> (u64, Command) {
+    pub fn into_command(self, time: &dyn SysTime) -> (u64, Arc<Command>) {
         let end_time_ms = time.millis();
         let duration_ms = end_time_ms - self.start_time_ms;
         (duration_ms, self.cmd)

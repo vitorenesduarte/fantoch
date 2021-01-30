@@ -1,7 +1,7 @@
 use super::Info;
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::shared::{SharedMap, SharedMapRef};
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -12,7 +12,7 @@ pub struct LockedCommandsInfo<I: Info> {
     f: usize,
     fast_quorum_size: usize,
     write_quorum_size: usize,
-    dot_to_info: Arc<SharedMap<Dot, RwLock<I>>>,
+    dot_to_info: Arc<SharedMap<Dot, Mutex<I>>>,
 }
 
 impl<I> LockedCommandsInfo<I>
@@ -39,10 +39,7 @@ where
     }
 
     /// Returns the `Info` associated with `Dot` in case it exists.
-    pub fn get(
-        &mut self,
-        dot: Dot,
-    ) -> Option<SharedMapRef<'_, Dot, RwLock<I>>> {
+    pub fn get(&mut self, dot: Dot) -> Option<SharedMapRef<'_, Dot, Mutex<I>>> {
         self.dot_to_info.get(&dot)
     }
 
@@ -51,7 +48,7 @@ where
     pub fn get_or_default(
         &mut self,
         dot: Dot,
-    ) -> SharedMapRef<'_, Dot, RwLock<I>> {
+    ) -> SharedMapRef<'_, Dot, Mutex<I>> {
         // borrow everything we need so that the borrow checker does not
         // complain
         let process_id = self.process_id;
@@ -69,7 +66,7 @@ where
                 fast_quorum_size,
                 write_quorum_size,
             );
-            RwLock::new(info)
+            Mutex::new(info)
         })
     }
 

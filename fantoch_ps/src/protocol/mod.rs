@@ -21,7 +21,7 @@ mod partial;
 
 // Re-exports.
 pub use atlas::{AtlasLocked, AtlasSequential};
-pub use caesar::{CaesarLocked, CaesarSequential};
+pub use caesar::CaesarLocked;
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
 pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
@@ -168,27 +168,11 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_3_1_sequential_test() {
-        // newt sequential can only handle one worker but many executors
-        let workers = 1;
-        let executors = 4;
-        let slow_paths = run_test::<NewtSequential>(
-            newt_config!(3, 1),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
     fn run_newt_3_1_atomic_test() {
         // newt atomic can handle as many workers as we want but we may want to
         // only have one executor
-        let workers = 4;
-        let executors = 1;
+        let workers = 3;
+        let executors = 3;
         let slow_paths = run_test::<NewtAtomic>(
             newt_config!(3, 1),
             SHARD_COUNT,
@@ -202,10 +186,8 @@ mod tests {
 
     #[test]
     fn run_newt_3_1_locked_test() {
-        // newt locked can handle as many workers as we want but we may want to
-        // only have one executor
-        let workers = 4;
-        let executors = 1;
+        let workers = 3;
+        let executors = 3;
         let slow_paths = run_test::<NewtLocked>(
             newt_config!(3, 1),
             SHARD_COUNT,
@@ -219,8 +201,8 @@ mod tests {
 
     #[test]
     fn run_real_time_newt_3_1_atomic_test() {
-        let workers = 2;
-        let executors = 2;
+        let workers = 3;
+        let executors = 3;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
         let slow_paths = run_test::<NewtAtomic>(
@@ -230,49 +212,14 @@ mod tests {
             executors,
             commands_per_client,
             clients_per_process,
-        );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
-    fn run_real_time_newt_3_1_locked_test() {
-        let workers = 2;
-        let executors = 2;
-        let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let clock_bump_interval = Duration::from_millis(500);
-        let slow_paths = run_test::<NewtLocked>(
-            newt_config!(3, 1, clock_bump_interval),
-            SHARD_COUNT,
-            workers,
-            executors,
-            commands_per_client,
-            clients_per_process,
-        );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
-    fn run_newt_5_1_sequential_test() {
-        // newt sequential can only handle one worker but many executors
-        let workers = 1;
-        let executors = 4;
-        let slow_paths = run_test::<NewtSequential>(
-            newt_config!(5, 1),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
         );
         assert_eq!(slow_paths, 0);
     }
 
     #[test]
     fn run_newt_5_1_atomic_test() {
-        // newt atomic can handle as many workers as we want but we may want to
-        // only have one executor
-        let workers = 4;
-        let executors = 1;
+        let workers = 3;
+        let executors = 3;
         let slow_paths = run_test::<NewtAtomic>(
             newt_config!(5, 1),
             SHARD_COUNT,
@@ -285,54 +232,18 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_5_1_locked_test() {
-        // newt locked can handle as many workers as we want but we may want to
-        // only have one executor
-        let workers = 4;
-        let executors = 1;
-        let slow_paths = run_test::<NewtLocked>(
-            newt_config!(5, 1),
+    fn run_newt_5_2_atomic_test() {
+        let workers = 3;
+        let executors = 3;
+        let slow_paths = run_test::<NewtAtomic>(
+            newt_config!(5, 2),
             SHARD_COUNT,
             workers,
             executors,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
-    fn run_real_time_newt_5_1_atomic_test() {
-        let workers = 2;
-        let executors = 2;
-        let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let clock_bump_interval = Duration::from_millis(500);
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(5, 1, clock_bump_interval),
-            SHARD_COUNT,
-            workers,
-            executors,
-            commands_per_client,
-            clients_per_process,
-        );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
-    fn run_real_time_newt_5_1_locked_test() {
-        let workers = 2;
-        let executors = 2;
-        let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let clock_bump_interval = Duration::from_millis(500);
-        let slow_paths = run_test::<NewtLocked>(
-            newt_config!(5, 1, clock_bump_interval),
-            SHARD_COUNT,
-            workers,
-            executors,
-            commands_per_client,
-            clients_per_process,
-        );
-        assert_eq!(slow_paths, 0);
+        assert!(slow_paths > 0);
     }
 
     // ---- newt (partial replication) tests ---- //
@@ -416,22 +327,6 @@ mod tests {
             CLIENTS_PER_PROCESS,
         );
         assert!(slow_paths > 0);
-    }
-
-    #[test]
-    fn run_atlas_3_1_sequential_test() {
-        // atlas sequential can only handle one worker and one executor
-        let workers = 1;
-        let executors = 1;
-        let slow_paths = run_test::<AtlasSequential>(
-            config!(3, 1),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-        assert_eq!(slow_paths, 0);
     }
 
     #[test]
@@ -525,23 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn run_epaxos_3_1_sequential_test() {
-        // epaxos sequential can only handle one worker and one executor
-        let workers = 1;
-        let executors = 1;
-        let slow_paths = run_test::<EPaxosSequential>(
-            config!(3, 1),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-        assert_eq!(slow_paths, 0);
-    }
-
-    #[test]
-    fn run_epaxos_locked_test() {
+    fn run_epaxos_3_1_locked_test() {
         // epaxos locked can handle as many workers as we want but only one
         // executor
         let workers = 4;
@@ -560,7 +439,7 @@ mod tests {
     // ---- caesar tests ---- //
     #[test]
     fn sim_caesar_wait_3_1_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(3, 1, true),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -569,7 +448,7 @@ mod tests {
 
     #[test]
     fn sim_caesar_3_1_no_wait_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(3, 1, false),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -578,7 +457,7 @@ mod tests {
 
     #[test]
     fn sim_caesar_5_2_wait_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(5, 2, true),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
@@ -587,45 +466,13 @@ mod tests {
 
     #[test]
     fn sim_caesar_5_2_no_wait_test() {
-        let _slow_paths = sim_test::<CaesarSequential>(
+        let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(5, 2, false),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
     }
 
-    #[test]
-    fn run_caesar_3_1_wait_sequential_test() {
-        // caesar sequential can only handle one worker and one executor
-        let workers = 1;
-        let executors = 1;
-        let _slow_paths = run_test::<CaesarSequential>(
-            caesar_config!(3, 1, true),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-    }
-
-    #[test]
-    fn run_caesar_3_1_no_wait_sequential_test() {
-        // caesar sequential can only handle one worker and one executor
-        let workers = 1;
-        let executors = 1;
-        let _slow_paths = run_test::<CaesarSequential>(
-            caesar_config!(3, 1, false),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-    }
-
-    // TODO
-    #[ignore]
     #[test]
     fn run_caesar_3_1_wait_locked_test() {
         // caesar locked can handle as many workers as we want but only one
@@ -642,25 +489,6 @@ mod tests {
         );
     }
 
-    // TODO
-    #[ignore]
-    #[test]
-    fn run_caesar_3_1_no_wait_locked_test() {
-        // caesar locked can handle as many workers as we want but only one
-        // executor
-        let workers = 4;
-        let executors = 1;
-        let _slow_paths = run_test::<CaesarLocked>(
-            caesar_config!(3, 1, false),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-    }
-
-    // TODO
     #[ignore]
     #[test]
     fn run_caesar_5_2_wait_locked_test() {
@@ -670,24 +498,6 @@ mod tests {
         let executors = 1;
         let _slow_paths = run_test::<CaesarLocked>(
             caesar_config!(5, 2, true),
-            SHARD_COUNT,
-            workers,
-            executors,
-            COMMANDS_PER_CLIENT,
-            CLIENTS_PER_PROCESS,
-        );
-    }
-
-    // TODO
-    #[ignore]
-    #[test]
-    fn run_caesar_5_2_no_wait_locked_test() {
-        // caesar locked can handle as many workers as we want but only one
-        // executor
-        let workers = 4;
-        let executors = 1;
-        let _slow_paths = run_test::<CaesarLocked>(
-            caesar_config!(5, 2, false),
             SHARD_COUNT,
             workers,
             executors,

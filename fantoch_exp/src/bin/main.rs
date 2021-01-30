@@ -34,6 +34,7 @@ const CLIENT_INSTANCE_TYPE: &str = "m5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
+const EXECUTE_AT_COMMIT: bool = false;
 const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(10);
 const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> = None;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
@@ -48,7 +49,7 @@ const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "batching_32";
+const BRANCH: &str = "caesar_parallel";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -68,12 +69,12 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
-    Protocol::Basic,
-    Protocol::AtlasLocked,
-    Protocol::NewtAtomic,
-    Protocol::FPaxos,
-    Protocol::EPaxosLocked,
-    Protocol::Caesar,
+    // Protocol::Basic,
+    // Protocol::AtlasLocked,
+    // Protocol::NewtAtomic,
+    // Protocol::FPaxos,
+    // Protocol::EPaxosLocked,
+    Protocol::CaesarLocked,
 ];
 
 macro_rules! config {
@@ -84,6 +85,7 @@ macro_rules! config {
             config.set_newt_clock_bump_interval::<Option<Duration>>(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
+        config.set_execute_at_commit(EXECUTE_AT_COMMIT);
         config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
         if let Some(interval) = EXECUTOR_MONITOR_PENDING_INTERVAL {
             config.set_executor_monitor_pending_interval(interval);
@@ -149,6 +151,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // 1024 * 128,
         1024 * 144,
     ];
+    let batch_max_size = 1;
 
     let shard_count = 6;
     let keys_per_command = 2;
@@ -175,7 +178,6 @@ async fn partial_replication_plot() -> Result<(), Report> {
             workloads.push(workload);
         }
     }
-    let batch_max_size = 1;
 
     // don't skip
     let skip = |_, _, _| false;
@@ -227,14 +229,14 @@ async fn increasing_load_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::Basic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        (Protocol::FPaxos, config!(n, 2, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        (Protocol::Caesar, config!(n, 2, false, None, false)),
+        (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -246,11 +248,29 @@ async fn increasing_load_plot() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 20,
+        // 1024 * 24,
+        // 1024 * 28,
     ];
+    // let clients_per_region = vec![
+    //     32,
+    //     1024,
+    //     1024 * 4,
+    //     1024 * 16,
+    //     1024 * 24,
+    //     1024 * 32,
+    //     1024 * 40,
+    //     1024 * 48,
+    //     1024 * 56,
+    //     1024 * 60,
+    //     1024 * 64,
+    // ];
+    let batch_max_size = 1;
+    // let batch_max_size = 10000;
 
     let shard_count = 1;
     let keys_per_command = 1;
     let payload_size = 4096;
+    // let payload_size = 100;
     let cpus = 12;
 
     let key_gens = vec![
@@ -275,7 +295,6 @@ async fn increasing_load_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
-    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
@@ -332,10 +351,11 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        (Protocol::Caesar, config!(n, 2, false, None, false)),
+        (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![256, 512];
+    let batch_max_size = 1;
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -359,7 +379,6 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
-    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // only run FPaxos with 512 clients
@@ -443,6 +462,7 @@ async fn whatever_plot() -> Result<(), Report> {
         // 1024 * 16,
         // 1024 * 32,
     ];
+    let batch_max_size = 1;
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -470,7 +490,6 @@ async fn whatever_plot() -> Result<(), Report> {
         );
         workloads.push(workload);
     }
-    let batch_max_size = 1;
 
     let skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients

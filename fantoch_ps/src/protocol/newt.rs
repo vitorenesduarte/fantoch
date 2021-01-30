@@ -1107,7 +1107,7 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
 
 // `NewtInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct NewtInfo {
     status: Status,
     quorum: HashSet<ProcessId>,

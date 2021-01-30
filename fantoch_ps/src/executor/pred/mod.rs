@@ -21,6 +21,7 @@ use fantoch::HashSet;
 use fantoch::{debug, trace};
 use std::collections::VecDeque;
 use std::fmt;
+use std::sync::Arc;
 use threshold::AEClock;
 
 #[derive(Clone)]
@@ -34,7 +35,8 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
-    to_execute: VecDeque<Command>,
+    to_execute: VecDeque<Arc<Command>>,
+    execute_at_commit: bool,
 }
 
 impl PredecessorsGraph {
@@ -54,6 +56,7 @@ impl PredecessorsGraph {
         let metrics = ExecutorMetrics::new();
         // create to execute
         let to_execute = VecDeque::new();
+        let execute_at_commit = config.execute_at_commit();
         PredecessorsGraph {
             process_id,
             executed_clock,
@@ -63,22 +66,23 @@ impl PredecessorsGraph {
             phase_two_pending_index,
             metrics,
             to_execute,
+            execute_at_commit,
         }
     }
 
     /// Returns a new command ready to be executed.
     #[must_use]
-    pub fn command_to_execute(&mut self) -> Option<Command> {
+    pub fn command_to_execute(&mut self) -> Option<Arc<Command>> {
         self.to_execute.pop_front()
     }
 
     #[cfg(test)]
-    fn commands_to_execute(&mut self) -> VecDeque<Command> {
+    fn commands_to_execute(&mut self) -> VecDeque<Arc<Command>> {
         std::mem::take(&mut self.to_execute)
     }
 
-    fn executed(&self) -> AEClock<ProcessId> {
-        self.executed_clock.clone()
+    fn executed(&self) -> &AEClock<ProcessId> {
+        &self.executed_clock
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -89,9 +93,9 @@ impl PredecessorsGraph {
     pub fn add(
         &mut self,
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         clock: Clock,
-        mut deps: HashSet<Dot>,
+        deps: Arc<HashSet<Dot>>,
         time: &dyn SysTime,
     ) {
         debug!(
@@ -103,30 +107,33 @@ impl PredecessorsGraph {
             time.millis()
         );
 
-        // it's possible that a command ends up depending on itself, and it
-        // that case it should be ignored; for that reason, we remove it
-        // right away, before any further processing
-        deps.remove(&dot);
+        // we assume that commands to not depend on themselves
+        assert!(!deps.contains(&dot));
 
-        // index the command
-        self.index_committed_command(dot, cmd, clock, deps, time);
+        if self.execute_at_commit {
+            self.execute(dot, cmd, time);
+        } else {
+            // index the command
+            self.index_committed_command(dot, cmd, clock, deps, time);
 
-        // try all commands that are pending on phase one due to this command
-        self.try_phase_one_pending(dot, time);
+            // try all commands that are pending on phase one due to this
+            // command
+            self.try_phase_one_pending(dot, time);
 
-        // move command to phase 1
-        self.move_to_phase_one(dot, time);
+            // move command to phase 1
+            self.move_to_phase_one(dot, time);
 
-        trace!(
-            "p{}: Predecessors::log committed {:?} | executed {:?} | index {:?} | time = {}",
-            self.process_id,
-            self.committed_clock,
-            self.executed_clock,
-            self.vertex_index
-                .dots()
-                .collect::<std::collections::BTreeSet<_>>(),
-            time.millis()
-        );
+            trace!(
+                "p{}: Predecessors::log committed {:?} | executed {:?} | index {:?} | time = {}",
+                self.process_id,
+                self.committed_clock,
+                self.executed_clock,
+                self.vertex_index
+                    .dots()
+                    .collect::<std::collections::BTreeSet<_>>(),
+                time.millis()
+            );
+        }
     }
 
     fn move_to_phase_one(&mut self, dot: Dot, time: &dyn SysTime) {
@@ -255,9 +262,9 @@ impl PredecessorsGraph {
     fn index_committed_command(
         &mut self,
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<HashSet<Dot>>,
         time: &dyn SysTime,
     ) {
         // mark dot as committed
@@ -327,9 +334,6 @@ impl PredecessorsGraph {
             time.millis()
         );
 
-        // mark dot as executed
-        assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
-
         // remove from vertex index
         let vertex = self
             .vertex_index
@@ -343,11 +347,26 @@ impl PredecessorsGraph {
         self.metrics
             .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
-        // add command to commands to be executed
-        self.to_execute.push_back(cmd);
+        // mark dot as executed and add command to commands to be executed
+        self.execute(dot, cmd, time);
 
         // try commands pending at phase two due to this command
         self.try_phase_two_pending(dot, time);
+    }
+
+    fn execute(&mut self, dot: Dot, cmd: Arc<Command>, _time: &dyn SysTime) {
+        trace!(
+            "p{}: Predecessors::update_executed {:?} | time = {}",
+            self.process_id,
+            dot,
+            _time.millis()
+        );
+
+        // mark dot as executed
+        assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
+
+        // add command to commands to be executed
+        self.to_execute.push_back(cmd);
     }
 }
 
@@ -379,8 +398,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::iter::FromIterator;
 
-    fn deps(deps: Vec<Dot>) -> HashSet<Dot> {
-        HashSet::from_iter(deps)
+    fn deps(deps: Vec<Dot>) -> Arc<HashSet<Dot>> {
+        Arc::new(HashSet::from_iter(deps))
     }
 
     #[test]
@@ -399,18 +418,18 @@ mod tests {
         let dot_1 = Dot::new(p2, 1);
 
         // cmd 0
-        let cmd_0 = Command::from(
+        let cmd_0 = Arc::new(Command::from(
             Rifl::new(1, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
-        );
+        ));
         let clock_0 = Clock::from(2, p1);
         let deps_0 = deps(vec![dot_1]);
 
         // cmd 1
-        let cmd_1 = Command::from(
+        let cmd_1 = Arc::new(Command::from(
             Rifl::new(2, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
-        );
+        ));
         let clock_1 = Clock::from(1, p2);
         let deps_1 = deps(vec![dot_0]);
 
@@ -423,69 +442,6 @@ mod tests {
         queue.add(dot_1, cmd_1.clone(), clock_1, deps_1, &time);
         // check commands ready to be executed
         assert_eq!(queue.commands_to_execute(), vec![cmd_1, cmd_0]);
-    }
-
-    #[test]
-    // This bug was occuring due to commands possibly depending on themselves.
-    // This bug was fixed by removing the command from its set of dependencies.
-    fn already_mutably_borrowed_regression_test() {
-        let create_cmd = |dot: Dot| {
-            // rifl equal to dot
-            let rifl = Rifl::new(dot.source() as u64, dot.sequence());
-            let client_key = dot.source().to_string();
-            let conflict_key = "conflict".to_string();
-            Command::from(
-                rifl,
-                vec![
-                    (client_key, KVOp::Put(String::new())),
-                    (conflict_key, KVOp::Put(String::new())),
-                ],
-            )
-        };
-        // create queue
-        let p1 = 1;
-        let p2 = 2;
-        let p3 = 3;
-        let n = 3;
-        let f = 1;
-        let config = Config::new(n, f);
-        let mut queue = PredecessorsGraph::new(p1, &config);
-        let time = RunTime;
-
-        // create dots
-        let dot_21 = Dot::new(p2, 1);
-        let dot_11 = Dot::new(p1, 1);
-        let dot_31 = Dot::new(p3, 1);
-
-        // cmd (2, 1)
-        let cmd_21 = create_cmd(dot_21);
-        let clock_21 = Clock::from(2, p3);
-        let deps_21 = deps(vec![dot_11, dot_21, dot_31]);
-
-        // cmd (1, 1)
-        let cmd_11 = create_cmd(dot_11);
-        let clock_11 = Clock::from(2, p2);
-        let deps_11 = deps(vec![dot_11, dot_21, dot_31]);
-
-        // cmd (3, 1)
-        let cmd_31 = create_cmd(dot_31);
-        let clock_31 = Clock::from(1, p3);
-        let deps_31 = deps(vec![dot_11, dot_21]);
-
-        // add cmd (2, 1)
-        queue.add(dot_21, cmd_21.clone(), clock_21, deps_21, &time);
-        // check commands ready to be executed
-        assert!(queue.commands_to_execute().is_empty());
-
-        // add cmd (1, 1)
-        queue.add(dot_11, cmd_11.clone(), clock_11, deps_11, &time);
-        // check commands ready to be executed
-        assert!(queue.commands_to_execute().is_empty());
-
-        // add cmd (3, 1)
-        queue.add(dot_31, cmd_31.clone(), clock_31, deps_31, &time);
-        // check commands ready to be executed
-        assert_eq!(queue.commands_to_execute(), vec![cmd_31, cmd_11, cmd_21]);
     }
 
     #[test]
@@ -503,7 +459,7 @@ mod tests {
     fn random_adds(
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, HashSet<Dot>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)> {
         let mut rng = rand::thread_rng();
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
@@ -604,14 +560,14 @@ mod tests {
             .into_iter()
             .map(|(dot, (keys, clock, deps_cell))| {
                 let deps = deps_cell.into_inner();
-                (dot, keys, clock, deps)
+                (dot, keys, clock, Arc::new(deps))
             })
             .collect()
     }
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, HashSet<Dot>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -623,7 +579,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, HashSet<Dot>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
@@ -647,7 +603,7 @@ mod tests {
                 let value = String::from("");
                 (key, KVOp::Put(value))
             });
-            let cmd = Command::from(rifl, ops);
+            let cmd = Arc::new(Command::from(rifl, ops));
 
             // add to the set of all rifls
             assert!(all_rifls.insert(rifl));

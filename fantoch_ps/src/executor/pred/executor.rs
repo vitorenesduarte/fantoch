@@ -13,6 +13,7 @@ use fantoch::trace;
 use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct PredecessorsExecutor {
@@ -49,23 +50,19 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn handle(&mut self, info: PredecessorsExecutionInfo, time: &dyn SysTime) {
-        if self.config.execute_at_commit() {
-            self.execute(info.cmd);
-        } else {
-            // handle new command
-            self.graph
-                .add(info.dot, info.cmd, info.clock, info.deps, time);
+        // handle new command
+        self.graph
+            .add(info.dot, info.cmd, info.clock, info.deps, time);
 
-            // get more commands that are ready to be executed
-            while let Some(cmd) = self.graph.command_to_execute() {
-                trace!(
-                    "p{}: PredecessorsExecutor::comands_to_execute {:?} | time = {}",
-                    self.process_id,
-                    cmd.rifl(),
-                    time.millis()
-                );
-                self.execute(cmd);
-            }
+        // get more commands that are ready to be executed
+        while let Some(cmd) = self.graph.command_to_execute() {
+            trace!(
+                "p{}: PredecessorsExecutor::comands_to_execute {:?} | time = {}",
+                self.process_id,
+                cmd.rifl(),
+                time.millis()
+            );
+            self.execute(cmd);
         }
     }
 
@@ -74,7 +71,14 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
-        Some(self.graph.executed())
+        let executed = self.graph.executed().clone();
+        trace!(
+            "p{}: PredecessorsExecutor::executed {:?} | time = {}",
+            self.process_id,
+            executed,
+            _time.millis()
+        );
+        Some(executed)
     }
 
     fn parallel() -> bool {
@@ -91,7 +95,11 @@ impl Executor for PredecessorsExecutor {
 }
 
 impl PredecessorsExecutor {
-    fn execute(&mut self, cmd: Command) {
+    fn execute(&mut self, cmd: Arc<Command>) {
+        // take the command inside the arc if we're the last with a
+        // reference to it (otherwise, clone the command)
+        let cmd =
+            Arc::try_unwrap(cmd).unwrap_or_else(|cmd| cmd.as_ref().clone());
         // execute the command
         let results =
             cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
@@ -99,20 +107,20 @@ impl PredecessorsExecutor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredecessorsExecutionInfo {
     dot: Dot,
-    cmd: Command,
+    cmd: Arc<Command>,
     clock: Clock,
-    deps: HashSet<Dot>,
+    deps: Arc<HashSet<Dot>>,
 }
 
 impl PredecessorsExecutionInfo {
     pub fn new(
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<HashSet<Dot>>,
     ) -> Self {
         Self {
             dot,

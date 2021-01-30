@@ -1,6 +1,6 @@
 use crate::executor::PredecessorsExecutor;
 use crate::protocol::common::pred::{
-    Clock, KeyClocks, QuorumClocks, QuorumRetries, SequentialKeyClocks,
+    Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -14,14 +14,13 @@ use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLockWriteGuard;
+use parking_lot::MutexGuard;
 use serde::{Deserialize, Serialize};
+use std::mem;
+use std::sync::Arc;
 use std::time::Duration;
 use threshold::VClock;
 
-// TODO: Sequential -> Locked
-type LockedKeyClocks = SequentialKeyClocks;
-pub type CaesarSequential = Caesar<SequentialKeyClocks>;
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
 type ExecutionInfo = <PredecessorsExecutor as Executor>::ExecutionInfo;
@@ -40,6 +39,8 @@ pub struct Caesar<KC: KeyClocks> {
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    // `try_to_unblock` calls to be repeated
+    try_to_unblock_again: Vec<(Dot, Clock, Arc<HashSet<Dot>>, HashSet<Dot>)>,
     wait_condition: bool,
 }
 
@@ -81,6 +82,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
         let buffered_commits = HashMap::new();
+        let try_to_unblock_again = Vec::new();
         let wait_condition = config.caesar_wait_condition();
 
         // create `Caesar`
@@ -93,6 +95,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             to_executors,
             buffered_retries,
             buffered_commits,
+            try_to_unblock_again,
             wait_condition,
         };
 
@@ -159,9 +162,16 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MRetryAck { dot, deps } => {
                 self.handle_mretryack(from, dot, deps, time)
             }
-            Message::MGarbageCollection { committed } => {
-                self.handle_mgc(from, committed, time)
+            Message::MGarbageCollection { executed } => {
+                self.handle_mgc(from, executed, time)
             }
+        }
+
+        // every time a new message is processed, try to unblock commands that
+        // couldn't be unblocked in the previous attempt
+        let try_to_unblock_again = mem::take(&mut self.try_to_unblock_again);
+        for (dot, clock, deps, blocking) in try_to_unblock_again {
+            self.try_to_unblock(dot, clock, deps, blocking, time)
         }
     }
 
@@ -175,6 +185,12 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
     }
 
     fn handle_executed(&mut self, executed: Executed, _time: &dyn SysTime) {
+        trace!(
+            "p{}: handle_executed({:?}) | time={}",
+            self.id(),
+            executed,
+            _time.micros()
+        );
         self.gc_track.update_clock(executed);
     }
 
@@ -255,7 +271,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // discard message if no longer in START
         if info.status != Status::START {
@@ -277,9 +293,9 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // update command info
-        info.status = Status::PROPOSE;
-        info.cmd = Some(cmd);
-        info.deps = deps;
+        info.status = Status::PROPOSE_BEGIN;
+        info.cmd = Some(Arc::new(cmd));
+        info.deps = Arc::new(deps);
         Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
         // save command's clock and update `blocked_by` before unlocking it
@@ -298,7 +314,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             WAIT,
         }
         let mut reply = Reply::WAIT;
-        let mut not_blocked_by = HashSet::new();
+        let mut blocked_by_to_ignore = HashSet::new();
 
         // we send an ok if no command is blocking this command
         let ok = blocked_by.is_empty();
@@ -325,15 +341,16 @@ impl<KC: KeyClocks> Caesar<KC> {
                 {
                     // in this case, this the command hasn't been GCed since we
                     // got it from the key clocks, so we need to consider it
-                    let blocked_by_info = blocked_by_dot_ref.read();
+                    let mut blocked_by_info = blocked_by_dot_ref.lock();
 
-                    // check whether this command has already a "good enough"
-                    // clock and dep
-                    let has_clock_and_dep = matches!(
+                    // check whether this command has already safe clock and dep
+                    // values (i.e. safe for us to make a decision based on
+                    // them)
+                    let has_safe_clock_and_dep = matches!(
                         blocked_by_info.status,
                         Status::ACCEPT | Status::COMMIT
                     );
-                    if has_clock_and_dep {
+                    if has_safe_clock_and_dep {
                         // if the clock and dep are "good enough", check if we
                         // can ignore the command
                         let safe_to_ignore = Self::safe_to_ignore(
@@ -356,7 +373,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                             // the command can be ignored, and so we register
                             // that this command is in fact not blocking our
                             // command
-                            not_blocked_by.insert(blocked_by_dot);
+                            blocked_by_to_ignore.insert(blocked_by_dot);
                         } else {
                             // if there's a single command that can't be
                             // ignored, our command must be rejected, and so we
@@ -366,8 +383,8 @@ impl<KC: KeyClocks> Caesar<KC> {
                             break;
                         }
                     } else {
-                        // if the clock and dep are not "good enough", we're
-                        // blocked by this command
+                        // if the clock and dep are not safe yet, we're blocked
+                        // by this command until they are
                         trace!(
                             "p{}: MPropose({:?}) still blocked by {:?} | time={}",
                             self.bp.process_id,
@@ -375,9 +392,6 @@ impl<KC: KeyClocks> Caesar<KC> {
                             blocked_by_dot,
                             time.micros()
                         );
-                        // upgrade lock guard to a mutable one
-                        drop(blocked_by_info);
-                        let mut blocked_by_info = blocked_by_dot_ref.write();
                         // register that this command is blocking our command
                         blocked_by_info.blocking.insert(dot);
                     }
@@ -392,11 +406,11 @@ impl<KC: KeyClocks> Caesar<KC> {
                     // in this case, the command has been GCed, and for that
                     // reason we simply record that it can be ignored
                     // (as it has already been executed at all processes)
-                    not_blocked_by.insert(blocked_by_dot);
+                    blocked_by_to_ignore.insert(blocked_by_dot);
                 }
             }
 
-            if not_blocked_by.len() == blocked_by_len {
+            if blocked_by_to_ignore.len() == blocked_by_len {
                 // if in the end it turns out that we're not blocked by any
                 // command, accept this command:
                 // - in this case, we must still have `Reply::WAIT`, or in other
@@ -422,11 +436,14 @@ impl<KC: KeyClocks> Caesar<KC> {
             .cmds
             .get(dot)
             .expect("the command must not have been GCed in the meantime");
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // for the same reason as above, the command phase must still be
-        // `Status::PROPOSE`
-        assert_eq!(info.status, Status::PROPOSE);
+        // `Status::PROPOSE_BEGIN`
+        assert_eq!(info.status, Status::PROPOSE_BEGIN);
+
+        // update it to `Status::PROPOSE_END`
+        info.status = Status::PROPOSE_END;
 
         match reply {
             Reply::ACCEPT => Self::accept_command(
@@ -447,8 +464,8 @@ impl<KC: KeyClocks> Caesar<KC> {
             Reply::WAIT => {
                 // in this case, we simply update the set of commands we need to
                 // wait for (since we may have decided to ignore some above)
-                for not_blocked_by_dot in not_blocked_by {
-                    info.blocked_by.remove(&not_blocked_by_dot);
+                for to_ignore_dot in blocked_by_to_ignore {
+                    info.blocked_by.remove(&to_ignore_dot);
                 }
                 // after this, we must still be blocked by some command
                 assert!(!info.blocked_by.is_empty());
@@ -496,18 +513,19 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
-        // do nothing if we're no longer PROPOSE or REJECT (yes, it seems that
-        // the coordinator can reject its own command; this case was only
-        // occurring in the simulator, but with concurrency I think it can
-        // happen in the runner as well, as it will be tricky to ensure a level
-        // of atomicity where the coordinator never rejects its own command):
+        // do nothing if we're no longer PROPOSE_END or REJECT (yes, it seems
+        // that the coordinator can reject its own command; this case
+        // was only occurring in the simulator, but with concurrency I
+        // think it can happen in the runner as well, as it will be
+        // tricky to ensure a level of atomicity where the coordinator
+        // never rejects its own command):
         // - this ensures that once an MCommit/MRetry is sent in this handler,
         //   further messages received are ignored
         // - we can check this by asserting that `info.quorum_clocks.all()` is
         //   false, before adding any new info, as we do below
-        if !matches!(info.status, Status::PROPOSE | Status::REJECT) {
+        if !matches!(info.status, Status::PROPOSE_END | Status::REJECT) {
             return;
         }
         if info.quorum_clocks.all() {
@@ -573,7 +591,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        mut deps: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -591,7 +609,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         if info.status == Status::START {
             // save this notification just in case we've received the `MPropose`
@@ -620,19 +638,32 @@ impl<KC: KeyClocks> Caesar<KC> {
             );
         }
 
-        // create execution info
-        let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::new(dot, cmd, clock, deps.clone());
-        self.to_executors.push(execution_info);
+        // register deps len
+        self.bp.collect_metric(
+            ProtocolMetricsKind::CommittedDepsLen,
+            deps.len() as u64,
+        );
+
+        // it's possible that a command ends up depending on itself;
+        // the executor assumes that that is not the case, so we remove it right
+        // away, before forwarding the command to the executor
+        deps.remove(&dot);
 
         // update command info:
         info.status = Status::COMMIT;
-        info.deps = deps.clone();
+        info.deps = Arc::new(deps);
         Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
+
+        // create execution info
+        let cmd = info.cmd.clone().expect("there should be a command payload");
+        let execution_info =
+            ExecutionInfo::new(dot, cmd, clock, info.deps.clone());
+        self.to_executors.push(execution_info);
 
         // take the set of commands that this command is blocking and try to
         // unblock them
         let blocking = std::mem::take(&mut info.blocking);
+        let deps = info.deps.clone();
         drop(info);
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
@@ -666,7 +697,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         if info.status == Status::START {
             // save this notification just in case we've received the `MPropose`
@@ -682,7 +713,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // update command info:
         info.status = Status::ACCEPT;
-        info.deps = deps.clone();
+        info.deps = Arc::new(deps.clone());
         Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
         // compute new set of predecessors for the command
@@ -692,7 +723,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             self.key_clocks.predecessors(dot, cmd, clock, blocking);
 
         // aggregate with incoming deps
-        new_deps.extend(deps.clone());
+        new_deps.extend(deps);
 
         // create message and target
         let msg = Message::MRetryAck {
@@ -707,6 +738,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // take the set of commands that this command is blocking and try to
         // unblock them
         let blocking = std::mem::take(&mut info.blocking);
+        let deps = info.deps.clone();
         drop(info);
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
@@ -730,7 +762,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // get cmd info
         let info_ref = self.cmds.get_or_default(dot);
-        let mut info = info_ref.write();
+        let mut info = info_ref.lock();
 
         // do nothing if we're no longer ACCEPT:
         // - this ensures that once an MCommit is sent in this handler, further
@@ -774,17 +806,17 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        committed: VClock<ProcessId>,
+        executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
-            committed,
+            executed,
             from,
             _time.micros()
         );
-        self.gc_track.update_clock_of(from, committed);
+        self.gc_track.update_clock_of(from, executed);
 
         // compute newly stable dots
         let stable = self.gc_track.stable();
@@ -793,7 +825,14 @@ impl<KC: KeyClocks> Caesar<KC> {
         // an MStable message to all the workers, as in the other protocols,
         // we can do it right here
         let dots: Vec<_> = util::dots(stable).collect();
-        self.bp.stable(dots.len());
+        let stable_count = dots.len();
+        trace!(
+            "p{}: MGarbageCollection stable_count: {} | time={}",
+            self.id(),
+            stable_count,
+            _time.micros()
+        );
+        self.bp.stable(stable_count);
         dots.into_iter().for_each(|dot| self.gc_command(dot));
     }
 
@@ -804,13 +843,13 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        // retrieve the executed clock
+        let executed = self.gc_track.clock();
 
         // save new action
         self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
-            msg: Message::MGarbageCollection { committed },
+            msg: Message::MGarbageCollection { executed },
         });
     }
 
@@ -821,7 +860,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn update_clock(
         key_clocks: &mut KC,
         dot: Dot,
-        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        info: &mut MutexGuard<'_, CaesarInfo>,
         new_clock: Clock,
     ) {
         // get the command
@@ -851,9 +890,6 @@ impl<KC: KeyClocks> Caesar<KC> {
             let cmd = info.cmd.as_ref().expect("command has been set");
 
             // remove previous clock (if any)
-            // TODO: we're gcing a command from the key clocks when it's
-            // committed at all processes but this may not be safe; I'm thinking
-            // that it should be when it's executed at all processes?
             Self::remove_clock(&mut self.key_clocks, cmd, info.clock);
         } else {
             panic!("we're the single worker performing gc, so all commands should exist");
@@ -890,7 +926,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<HashSet<Dot>>,
         blocking: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
@@ -904,6 +940,10 @@ impl<KC: KeyClocks> Caesar<KC> {
             time.micros()
         );
 
+        // set of commands that are in the `PROPOSE_BEGIN` phase and can't be
+        // unblocked yet
+        let mut at_propose_begin = HashSet::new();
+
         for blocked_dot in blocking {
             trace!(
                 "p{}: try_to_unblock({:?}) checking {:?} | time={}",
@@ -914,11 +954,15 @@ impl<KC: KeyClocks> Caesar<KC> {
             );
 
             if let Some(blocked_dot_info_ref) = self.cmds.get(blocked_dot) {
-                let mut blocked_dot_info = blocked_dot_info_ref.write();
+                let mut blocked_dot_info = blocked_dot_info_ref.lock();
 
                 // we only need to accept/reject the blocked command if the
-                // command is still at the `PROPOSE` phase
-                if blocked_dot_info.status == Status::PROPOSE {
+                // command is still at the `PROPOSE_END` phase:
+                // - if the command is still at `PROPOSE_BEGIN` we should try to
+                // unblock it later
+                if blocked_dot_info.status == Status::PROPOSE_BEGIN {
+                    at_propose_begin.insert(blocked_dot);
+                } else if blocked_dot_info.status == Status::PROPOSE_END {
                     let mut end_of_wait = false;
                     let safe_to_ignore = Self::safe_to_ignore(
                         self.bp.process_id,
@@ -933,6 +977,15 @@ impl<KC: KeyClocks> Caesar<KC> {
                         // the set of commands that are blocking this blocked
                         // command
                         blocked_dot_info.blocked_by.remove(&dot);
+
+                        trace!(
+                            "p{}: try_to_unblock({:?}) {:?} can ignore me but is still blocked by {:?} | time={}",
+                            self.bp.process_id,
+                            dot,
+                            blocked_dot,
+                            blocked_dot_info.blocked_by,
+                            time.micros()
+                        );
 
                         if blocked_dot_info.blocked_by.is_empty() {
                             // ACCEPT the blocked command if it no longer has
@@ -998,12 +1051,21 @@ impl<KC: KeyClocks> Caesar<KC> {
                 );
             }
         }
+
+        if !at_propose_begin.is_empty() {
+            self.try_to_unblock_again.push((
+                dot,
+                clock,
+                deps,
+                at_propose_begin,
+            ));
+        }
     }
 
     fn accept_command(
         _id: ProcessId,
         dot: Dot,
-        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        info: &mut MutexGuard<'_, CaesarInfo>,
         to_processes: &mut Vec<Action<Self>>,
         _time: &dyn SysTime,
     ) {
@@ -1018,7 +1080,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         Self::send_mpropose_ack(
             dot,
             info.clock,
-            info.deps.clone(),
+            info.deps.as_ref().clone(),
             true,
             to_processes,
         )
@@ -1027,7 +1089,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn reject_command(
         _id: ProcessId,
         dot: Dot,
-        info: &mut RwLockWriteGuard<'_, CaesarInfo>,
+        info: &mut MutexGuard<'_, CaesarInfo>,
         key_clocks: &mut KC,
         to_processes: &mut Vec<Action<Self>>,
         _time: &dyn SysTime,
@@ -1082,13 +1144,13 @@ impl<KC: KeyClocks> Caesar<KC> {
 
 // `CaesarInfo` contains all information required in the life-cyle of a
 // `Command`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct CaesarInfo {
     status: Status,
     // `None` if not set yet
-    cmd: Option<Command>,
+    cmd: Option<Arc<Command>>,
     clock: Clock,
-    deps: HashSet<Dot>,
+    deps: Arc<HashSet<Dot>>,
     // set of commands that this command is blocking
     blocking: HashSet<Dot>,
     // set of commands that this command is blocked by
@@ -1119,7 +1181,7 @@ impl Info for CaesarInfo {
             status: Status::START,
             cmd: None,
             clock: Clock::new(process_id),
-            deps: HashSet::new(),
+            deps: Arc::new(HashSet::new()),
             blocking: HashSet::new(),
             blocked_by: HashSet::new(),
             quorum_clocks: QuorumClocks::new(
@@ -1163,7 +1225,7 @@ pub enum Message {
         deps: HashSet<Dot>,
     },
     MGarbageCollection {
-        committed: VClock<ProcessId>,
+        executed: VClock<ProcessId>,
     },
 }
 
@@ -1211,10 +1273,12 @@ impl MessageIndex for PeriodicEvent {
 }
 
 /// `Status` of commands.
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
     START,
-    PROPOSE,
+    PROPOSE_BEGIN,
+    PROPOSE_END,
     REJECT,
     ACCEPT,
     COMMIT,
@@ -1227,11 +1291,6 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
-
-    #[test]
-    fn sequential_caesar_test() {
-        caesar_flow::<SequentialKeyClocks>();
-    }
 
     #[test]
     fn locked_caesar_test() {
@@ -1468,9 +1527,9 @@ mod tests {
         let config = Config::new(n, f);
 
         // caesar
-        let (mut caesar_1, _) = CaesarSequential::new(1, shard_id, config);
-        let (mut caesar_2, _) = CaesarSequential::new(2, shard_id, config);
-        let (mut caesar_3, _) = CaesarSequential::new(3, shard_id, config);
+        let (mut caesar_1, _) = CaesarLocked::new(1, shard_id, config);
+        let (mut caesar_2, _) = CaesarLocked::new(2, shard_id, config);
+        let (mut caesar_3, _) = CaesarLocked::new(3, shard_id, config);
 
         // discover processes in all caesar (the order doesn't matter)
         caesar_1.discover(processes.clone());
@@ -1506,7 +1565,7 @@ mod tests {
         };
 
         // retrieve a single outgoing message from process
-        let retrieve_single_msg = |caesar: &mut CaesarSequential| {
+        let retrieve_single_msg = |caesar: &mut CaesarLocked| {
             let mut actions: Vec<_> = caesar.to_processes_iter().collect();
             assert_eq!(actions.len(), 1);
             let action = actions.pop().unwrap();
@@ -1517,7 +1576,7 @@ mod tests {
         };
 
         // submit a command, take the mpropose, handle it locally and return it
-        let mut submit = |caesar: &mut CaesarSequential| {
+        let mut submit = |caesar: &mut CaesarLocked| {
             caesar.submit(None, next_cmd(), &time);
             let mpropose = retrieve_single_msg(caesar);
 
@@ -1529,7 +1588,7 @@ mod tests {
             mpropose
         };
 
-        let handle = |caesar: &mut CaesarSequential, from, msg| {
+        let handle = |caesar: &mut CaesarLocked, from, msg| {
             caesar.handle(from, shard_id, msg, &time);
             let actions: Vec<_> = caesar.to_processes_iter().collect();
             assert!(actions.is_empty());

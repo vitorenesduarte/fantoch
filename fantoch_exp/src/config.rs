@@ -268,8 +268,7 @@ fn workers_executors_and_leader(
         // 1 extra executor for partial replication (although, not implemented
         // yet)
         Protocol::EPaxosLocked => f(2),
-        // Caesar implementation is sequential for both workers and executors
-        Protocol::Caesar => (1, 1),
+        Protocol::CaesarLocked => f(1),
         Protocol::FPaxos => {
             // in the case of paxos, also set a leader
             config.set_leader(LEADER);

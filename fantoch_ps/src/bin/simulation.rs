@@ -8,7 +8,7 @@ use fantoch::sim::Runner;
 use fantoch::HashMap;
 use fantoch_prof::metrics::Histogram;
 use fantoch_ps::protocol::{
-    AtlasSequential, CaesarSequential, EPaxosSequential, FPaxos, NewtSequential,
+    AtlasSequential, CaesarLocked, EPaxosSequential, FPaxos, NewtSequential,
 };
 use rayon::prelude::*;
 use std::time::Duration;
@@ -160,9 +160,21 @@ fn newt(aws: bool) {
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
     let ns = vec![5];
-    let clients_per_region = vec![64, 128, 256, 512];
-    let pool_sizes = vec![100, 50, 10, 1];
-    let conflicts = vec![0, 2, 10, 30, 50, 100];
+    // let clients_per_region = vec![64, 128, 256, 512];
+    // let pool_sizes = vec![100, 50, 10, 1];
+    // let conflicts = vec![0, 2, 10, 30, 50, 100];
+    let clients_per_region = vec![
+        32,
+        512,
+        1024,
+        1024 * 2,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 20,
+    ];
+    let pool_sizes = vec![1];
+    let conflicts = vec![2];
 
     ns.into_par_iter().for_each(|n| {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
@@ -264,7 +276,7 @@ fn newt(aws: bool) {
                                 client_regions,
                                 planet,
                             ),
-                            "Caesar" => run::<CaesarSequential>(
+                            "Caesar" => run::<CaesarLocked>(
                                 config,
                                 workload,
                                 clients,

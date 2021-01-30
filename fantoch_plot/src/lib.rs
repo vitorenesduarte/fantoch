@@ -1560,13 +1560,15 @@ pub fn process_metrics_table(
         "slow",
         "(%)",
         "gc",
-        "delay (ms)",
-        "chains",
-        "out",
-        "in",
+        "wait delay (ms)",
+        "exec delay (ms)",
+        // "chains",
+        "deps size"
+        // "out",
+        // "in",
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.23, 0.23, 0.11, 0.11];
+    let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.24, 0.20, 0.24];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -1634,41 +1636,59 @@ pub fn process_metrics_table(
         let gced = protocol_metrics
             .get_aggregated(ProtocolMetricsKind::Stable)
             .map(|gced| fmt(*gced));
-        let execution_delay = executor_metrics
-            .get_collected(ExecutorMetricsKind::ExecutionDelay)
-            .map(|execution_delay| {
-                format!(
-                    "{} ± {}",
-                    execution_delay.mean().round(),
-                    execution_delay.stddev().round()
-                )
-            });
-        let chain_size = executor_metrics
-            .get_collected(ExecutorMetricsKind::ChainSize)
-            .map(|chain_size| {
+        let wait_condition_delay = protocol_metrics
+            .get_collected(ProtocolMetricsKind::WaitConditionDelay)
+            .map(|delay| {
                 format!(
                     "{} ± {} [{}]",
-                    chain_size.mean().round(),
-                    chain_size.stddev().round(),
-                    chain_size.max().value().round()
+                    delay.mean().round(),
+                    delay.stddev().round(),
+                    delay.max().value().round()
                 )
             });
-        let out_requests = executor_metrics
-            .get_aggregated(ExecutorMetricsKind::OutRequests)
-            .map(|out_requests| fmt(*out_requests));
-        let in_requests = executor_metrics
-            .get_aggregated(ExecutorMetricsKind::InRequests)
-            .map(|in_requests| fmt(*in_requests));
+        let execution_delay = executor_metrics
+            .get_collected(ExecutorMetricsKind::ExecutionDelay)
+            .map(|delay| {
+                format!("{} ± {}", delay.mean().round(), delay.stddev().round())
+            });
+        // let chain_size = executor_metrics
+        //     .get_collected(ExecutorMetricsKind::ChainSize)
+        //     .map(|chain_size| {
+        //         format!(
+        //             "{} ± {} [{}]",
+        //             chain_size.mean().round(),
+        //             chain_size.stddev().round(),
+        //             chain_size.max().value().round()
+        //         )
+        //     });
+        let deps_size = protocol_metrics
+            .get_collected(ProtocolMetricsKind::CommittedDepsLen)
+            .map(|deps_size| {
+                format!(
+                    "{} ± {} [{}]",
+                    deps_size.mean().round(),
+                    deps_size.stddev().round(),
+                    deps_size.max().value().round()
+                )
+            });
+        // let out_requests = executor_metrics
+        //     .get_aggregated(ExecutorMetricsKind::OutRequests)
+        //     .map(|out_requests| fmt(*out_requests));
+        // let in_requests = executor_metrics
+        //     .get_aggregated(ExecutorMetricsKind::InRequests)
+        //     .map(|in_requests| fmt(*in_requests));
         // create cell
         let cell = vec![
             fast_path,
             slow_path,
             fp_rate,
             gced,
+            wait_condition_delay,
             execution_delay,
-            chain_size,
-            out_requests,
-            in_requests,
+            // chain_size,
+            deps_size,
+            /* out_requests,
+             * in_requests, */
         ];
         // format cell
         let fmt_cell_data =

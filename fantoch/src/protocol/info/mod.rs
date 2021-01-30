@@ -10,7 +10,7 @@ pub use sequential::SequentialCommandsInfo;
 
 use crate::id::{ProcessId, ShardId};
 
-pub trait Info: Eq {
+pub trait Info {
     fn new(
         process_id: ProcessId,
         shard_id: ShardId,

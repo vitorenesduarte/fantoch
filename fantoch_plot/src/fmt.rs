@@ -21,7 +21,7 @@ impl PlotFmt {
         match protocol {
             Protocol::AtlasLocked => "Atlas",
             Protocol::EPaxosLocked => "EPaxos",
-            Protocol::Caesar => "Caesar",
+            Protocol::CaesarLocked => "Caesar",
             Protocol::FPaxos => "FPaxos",
             Protocol::NewtAtomic => "Aeon",
             Protocol::NewtLocked => "Newt-L",
@@ -31,7 +31,7 @@ impl PlotFmt {
 
     pub fn label(protocol: Protocol, f: usize) -> String {
         match protocol {
-            Protocol::EPaxosLocked | Protocol::Caesar => {
+            Protocol::EPaxosLocked | Protocol::CaesarLocked => {
                 Self::protocol_name(protocol).to_string()
             }
             _ => format!("{} f = {}", Self::protocol_name(protocol), f),
@@ -44,7 +44,7 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 2) => "#16a085",
             // (Protocol::EPaxosLocked, _) => "#227093",
             (Protocol::EPaxosLocked, _) => "#444444",
-            (Protocol::Caesar, _) => "#bdc3c7",
+            (Protocol::CaesarLocked, _) => "#bdc3c7",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::NewtAtomic, 1) => "#f1c40f",
@@ -78,7 +78,7 @@ impl PlotFmt {
             (Protocol::FPaxos, 1) => "/", // 1
             (Protocol::FPaxos, 2) => "\\",
             (Protocol::EPaxosLocked, _) => "//", // 3
-            (Protocol::Caesar, _) => "\\\\",
+            (Protocol::CaesarLocked, _) => "\\\\",
             (Protocol::AtlasLocked, 1) => "///", // 2
             (Protocol::AtlasLocked, 2) => "\\\\\\",
             (Protocol::NewtLocked, 1) => "////", // 4
@@ -99,7 +99,7 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 1) => "o",
             (Protocol::AtlasLocked, 2) => "s",
             (Protocol::EPaxosLocked, _) => "D",
-            (Protocol::Caesar, _) => "H",
+            (Protocol::CaesarLocked, _) => "H",
             (Protocol::FPaxos, 1) => "+",
             (Protocol::FPaxos, 2) => "x",
             (Protocol::NewtAtomic, 1) => "v",
@@ -120,7 +120,7 @@ impl PlotFmt {
         match (protocol, f) {
             (Protocol::AtlasLocked, _) => "--",
             (Protocol::EPaxosLocked, _) => ":",
-            (Protocol::Caesar, _) => ":",
+            (Protocol::CaesarLocked, _) => ":",
             (Protocol::FPaxos, _) => "-.",
             (Protocol::NewtAtomic, _) => "-",
             (Protocol::NewtLocked, _) => "-",
