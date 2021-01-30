@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
 use std::iter::FromIterator;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct GraphExecutor {
@@ -188,7 +189,11 @@ impl GraphExecutor {
         }
     }
 
-    fn execute(&mut self, cmd: Command) {
+    fn execute(&mut self, cmd: Arc<Command>) {
+        // take the command inside the arc if we're the last with a
+        // reference to it (otherwise, clone the command)
+        let cmd =
+            Arc::try_unwrap(cmd).unwrap_or_else(|cmd| cmd.as_ref().clone());
         // execute the command
         let results =
             cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
@@ -206,7 +211,7 @@ impl fmt::Debug for GraphExecutor {
 pub enum GraphExecutionInfo {
     Add {
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         deps: HashSet<Dependency>,
     },
     Request {
@@ -222,7 +227,7 @@ pub enum GraphExecutionInfo {
 }
 
 impl GraphExecutionInfo {
-    pub fn add(dot: Dot, cmd: Command, deps: HashSet<Dependency>) -> Self {
+    pub fn add(dot: Dot, cmd: Arc<Command>, deps: HashSet<Dependency>) -> Self {
         Self::Add { dot, cmd, deps }
     }
 

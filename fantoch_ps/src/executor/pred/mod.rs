@@ -35,7 +35,7 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
-    to_execute: VecDeque<Command>,
+    to_execute: VecDeque<Arc<Command>>,
     execute_at_commit: bool,
 }
 
@@ -72,12 +72,12 @@ impl PredecessorsGraph {
 
     /// Returns a new command ready to be executed.
     #[must_use]
-    pub fn command_to_execute(&mut self) -> Option<Command> {
+    pub fn command_to_execute(&mut self) -> Option<Arc<Command>> {
         self.to_execute.pop_front()
     }
 
     #[cfg(test)]
-    fn commands_to_execute(&mut self) -> VecDeque<Command> {
+    fn commands_to_execute(&mut self) -> VecDeque<Arc<Command>> {
         std::mem::take(&mut self.to_execute)
     }
 
@@ -93,7 +93,7 @@ impl PredecessorsGraph {
     pub fn add(
         &mut self,
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         clock: Clock,
         deps: Arc<HashSet<Dot>>,
         time: &dyn SysTime,
@@ -259,7 +259,7 @@ impl PredecessorsGraph {
     fn index_committed_command(
         &mut self,
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         clock: Clock,
         deps: Arc<HashSet<Dot>>,
         time: &dyn SysTime,
@@ -351,7 +351,7 @@ impl PredecessorsGraph {
         self.try_phase_two_pending(dot, time);
     }
 
-    fn execute(&mut self, dot: Dot, cmd: Command, _time: &dyn SysTime) {
+    fn execute(&mut self, dot: Dot, cmd: Arc<Command>, _time: &dyn SysTime) {
         trace!(
             "p{}: Predecessors::update_executed {:?} | time = {}",
             self.process_id,
@@ -415,18 +415,18 @@ mod tests {
         let dot_1 = Dot::new(p2, 1);
 
         // cmd 0
-        let cmd_0 = Command::from(
+        let cmd_0 = Arc::new(Command::from(
             Rifl::new(1, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
-        );
+        ));
         let clock_0 = Clock::from(2, p1);
         let deps_0 = deps(vec![dot_1]);
 
         // cmd 1
-        let cmd_1 = Command::from(
+        let cmd_1 = Arc::new(Command::from(
             Rifl::new(2, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
-        );
+        ));
         let clock_1 = Clock::from(1, p2);
         let deps_1 = deps(vec![dot_0]);
 
@@ -450,13 +450,13 @@ mod tests {
             let rifl = Rifl::new(dot.source() as u64, dot.sequence());
             let client_key = dot.source().to_string();
             let conflict_key = "conflict".to_string();
-            Command::from(
+            Arc::new(Command::from(
                 rifl,
                 vec![
                     (client_key, KVOp::Put(String::new())),
                     (conflict_key, KVOp::Put(String::new())),
                 ],
-            )
+            ))
         };
         // create queue
         let p1 = 1;
@@ -663,7 +663,7 @@ mod tests {
                 let value = String::from("");
                 (key, KVOp::Put(value))
             });
-            let cmd = Command::from(rifl, ops);
+            let cmd = Arc::new(Command::from(rifl, ops));
 
             // add to the set of all rifls
             assert!(all_rifls.insert(rifl));

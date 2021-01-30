@@ -71,7 +71,6 @@ impl Batch {
         // return the shard id with the highest count
         *count_to_shard.pop().map(|(_, shard_id)| shard_id).unwrap()
     }
-
 }
 
 #[cfg(test)]

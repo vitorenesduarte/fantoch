@@ -9,6 +9,7 @@ use fantoch::HashSet;
 use fantoch::{debug, trace};
 use std::cmp;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use threshold::AEClock;
 
 /// commands are sorted inside an SCC given their dot
@@ -322,7 +323,7 @@ impl TarjanSCCFinder {
 #[derive(Debug, Clone)]
 pub struct Vertex {
     pub dot: Dot,
-    pub cmd: Command,
+    pub cmd: Arc<Command>,
     pub deps: Vec<Dependency>,
     pub start_time_ms: u64,
     // specific to tarjan's algorithm
@@ -334,7 +335,7 @@ pub struct Vertex {
 impl Vertex {
     pub fn new(
         dot: Dot,
-        cmd: Command,
+        cmd: Arc<Command>,
         deps: Vec<Dependency>,
         time: &dyn SysTime,
     ) -> Self {
@@ -351,7 +352,7 @@ impl Vertex {
     }
 
     /// Consumes the vertex, returning its command.
-    pub fn into_command(self, time: &dyn SysTime) -> (u64, Command) {
+    pub fn into_command(self, time: &dyn SysTime) -> (u64, Arc<Command>) {
         let end_time_ms = time.millis();
         let duration_ms = end_time_ms - self.start_time_ms;
         (duration_ms, self.cmd)

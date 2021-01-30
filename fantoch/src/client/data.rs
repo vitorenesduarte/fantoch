@@ -53,7 +53,8 @@ impl ClientData {
             count += 1f64;
         }
         average
-        // seconds_to_ops.values().sum::<u64>() as f64 / seconds_to_ops.len() as f64
+        // seconds_to_ops.values().sum::<u64>() as f64 / seconds_to_ops.len() as
+        // f64
     }
 
     /// Compute start and end times for this client.
