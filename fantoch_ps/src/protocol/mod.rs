@@ -489,6 +489,7 @@ mod tests {
         );
     }
 
+    #[ignore]
     #[test]
     fn run_caesar_5_2_wait_locked_test() {
         // caesar locked can handle as many workers as we want but only one
