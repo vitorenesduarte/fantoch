@@ -1641,15 +1641,19 @@ pub fn process_metrics_table(
             .map(|delay| {
                 format!(
                     "{} ± {} [{}]",
-                    delay.mean().round(),
-                    delay.stddev().round(),
+                    delay.mean().value().round(),
+                    delay.stddev().value().round(),
                     delay.max().value().round()
                 )
             });
         let execution_delay = executor_metrics
             .get_collected(ExecutorMetricsKind::ExecutionDelay)
             .map(|delay| {
-                format!("{} ± {}", delay.mean().round(), delay.stddev().round())
+                format!(
+                    "{} ± {}",
+                    delay.mean().value().round(),
+                    delay.stddev().value().round()
+                )
             });
         // let chain_size = executor_metrics
         //     .get_collected(ExecutorMetricsKind::ChainSize)
@@ -1666,8 +1670,8 @@ pub fn process_metrics_table(
             .map(|deps_size| {
                 format!(
                     "{} ± {} [{}]",
-                    deps_size.mean().round(),
-                    deps_size.stddev().round(),
+                    deps_size.mean().value().round(),
+                    deps_size.stddev().value().round(),
                     deps_size.max().value().round()
                 )
             });

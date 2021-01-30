@@ -332,7 +332,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
-    let results_dir = "../results_fairness_and_tail_latency_2";
+    let results_dir = "../results_fairness_and_tail_latency";
     let regions = vec![
         Region::EuWest1,
         Region::UsWest1,
