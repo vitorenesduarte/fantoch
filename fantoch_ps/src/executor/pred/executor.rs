@@ -11,7 +11,6 @@ use fantoch::protocol::{Executed, MessageIndex};
 use fantoch::time::SysTime;
 use fantoch::trace;
 use fantoch::HashSet;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -109,7 +108,7 @@ pub struct PredecessorsExecutionInfo {
     dot: Dot,
     cmd: Command,
     clock: Clock,
-    deps: Arc<Mutex<HashSet<Dot>>>,
+    deps: Arc<HashSet<Dot>>,
 }
 
 impl PredecessorsExecutionInfo {
@@ -117,7 +116,7 @@ impl PredecessorsExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<Mutex<HashSet<Dot>>>,
+        deps: Arc<HashSet<Dot>>,
     ) -> Self {
         Self {
             dot,
