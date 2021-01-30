@@ -243,7 +243,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert!(slow_paths > 0);
     }
 
     // ---- newt (partial replication) tests ---- //
