@@ -161,8 +161,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MRetryAck { dot, deps } => {
                 self.handle_mretryack(from, dot, deps, time)
             }
-            Message::MGarbageCollection { committed } => {
-                self.handle_mgc(from, committed, time)
+            Message::MGarbageCollection { executed } => {
+                self.handle_mgc(from, executed, time)
             }
         }
 
@@ -786,17 +786,17 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        committed: VClock<ProcessId>,
+        executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
-            committed,
+            executed,
             from,
             _time.micros()
         );
-        self.gc_track.update_clock_of(from, committed);
+        self.gc_track.update_clock_of(from, executed);
 
         // compute newly stable dots
         let stable = self.gc_track.stable();
@@ -816,13 +816,13 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        // retrieve the executed clock
+        let executed = self.gc_track.clock();
 
         // save new action
         self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
-            msg: Message::MGarbageCollection { committed },
+            msg: Message::MGarbageCollection { executed },
         });
     }
 
@@ -863,9 +863,6 @@ impl<KC: KeyClocks> Caesar<KC> {
             let cmd = info.cmd.as_ref().expect("command has been set");
 
             // remove previous clock (if any)
-            // TODO: we're gcing a command from the key clocks when it's
-            // committed at all processes but this may not be safe; I'm thinking
-            // that it should be when it's executed at all processes?
             Self::remove_clock(&mut self.key_clocks, cmd, info.clock);
         } else {
             panic!("we're the single worker performing gc, so all commands should exist");
@@ -1192,7 +1189,7 @@ pub enum Message {
         deps: HashSet<Dot>,
     },
     MGarbageCollection {
-        committed: VClock<ProcessId>,
+        executed: VClock<ProcessId>,
     },
 }
 
