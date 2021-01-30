@@ -24,6 +24,7 @@ pub fn start_executors<P>(
 ) where
     P: Protocol + 'static,
 {
+    println!(">>>> start executors");
     // zip rxs'
     let incoming = to_executors_rxs
         .into_iter()
@@ -65,6 +66,7 @@ async fn executor_task<P>(
 {
     // set executor index
     executor.set_executor_index(executor_index);
+    println!(">>>> start executor {}", executor_index);
 
     // create time
     let time = RunTime;
@@ -83,6 +85,10 @@ async fn executor_task<P>(
     let gen_executed_notification_delay =
         || sleep(config.executor_executed_notification_interval());
     let mut executed_notification_delay = gen_executed_notification_delay();
+    println!(
+        ">>>> executed notification delay {:?}",
+        executed_notification_delay
+    );
 
     // create metrics interval
     let gen_metrics_delay = || sleep(super::metrics_logger::METRICS_INTERVAL);
