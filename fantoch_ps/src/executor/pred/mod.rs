@@ -19,8 +19,10 @@ use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::HashSet;
 use fantoch::{debug, trace};
+use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::fmt;
+use std::sync::Arc;
 use threshold::AEClock;
 
 #[derive(Clone)]
@@ -94,7 +96,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        mut deps: HashSet<Dot>,
+        deps: Arc<Mutex<HashSet<Dot>>>,
         time: &dyn SysTime,
     ) {
         debug!(
@@ -112,7 +114,7 @@ impl PredecessorsGraph {
             // it's possible that a command ends up depending on itself, and it
             // that case it should be ignored; for that reason, we remove it
             // right away, before any further processing
-            deps.remove(&dot);
+            deps.lock().remove(&dot);
 
             // index the command
             self.index_committed_command(dot, cmd, clock, deps, time);
@@ -153,7 +155,7 @@ impl PredecessorsGraph {
 
         // compute number of non yet committed dependencies
         let mut non_committed_deps_count = 0;
-        for dep_dot in vertex.deps.iter() {
+        for dep_dot in vertex.deps.lock().iter() {
             let committed = self
                 .committed_clock
                 .contains(&dep_dot.source(), dep_dot.sequence());
@@ -207,7 +209,7 @@ impl PredecessorsGraph {
 
         // compute number of yet executed dependencies
         let mut non_executed_deps_count = 0;
-        for dep_dot in vertex.deps.iter() {
+        for dep_dot in vertex.deps.lock().iter() {
             // consider only non-executed dependencies with a lower clock
             let executed = self
                 .executed_clock
@@ -264,7 +266,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<Mutex<HashSet<Dot>>>,
         time: &dyn SysTime,
     ) {
         // mark dot as committed
@@ -398,8 +400,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::iter::FromIterator;
 
-    fn deps(deps: Vec<Dot>) -> HashSet<Dot> {
-        HashSet::from_iter(deps)
+    fn deps(deps: Vec<Dot>) -> Arc<Mutex<HashSet<Dot>>> {
+        Arc::new(Mutex::new(HashSet::from_iter(deps)))
     }
 
     #[test]
@@ -522,7 +524,8 @@ mod tests {
     fn random_adds(
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, HashSet<Dot>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<Mutex<HashSet<Dot>>>)>
+    {
         let mut rng = rand::thread_rng();
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
@@ -623,14 +626,19 @@ mod tests {
             .into_iter()
             .map(|(dot, (keys, clock, deps_cell))| {
                 let deps = deps_cell.into_inner();
-                (dot, keys, clock, deps)
+                (dot, keys, clock, Arc::new(Mutex::new(deps)))
             })
             .collect()
     }
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, HashSet<Dot>)>,
+        mut args: Vec<(
+            Dot,
+            Option<BTreeSet<Key>>,
+            Clock,
+            Arc<Mutex<HashSet<Dot>>>,
+        )>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -642,7 +650,12 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, HashSet<Dot>)>,
+        args: Vec<(
+            Dot,
+            Option<BTreeSet<Key>>,
+            Clock,
+            Arc<Mutex<HashSet<Dot>>>,
+        )>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;

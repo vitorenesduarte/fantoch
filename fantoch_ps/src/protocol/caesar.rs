@@ -14,9 +14,10 @@ use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
-use parking_lot::RwLockWriteGuard;
+use parking_lot::{Mutex, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 use std::mem;
+use std::sync::Arc;
 use std::time::Duration;
 use threshold::VClock;
 
@@ -39,7 +40,8 @@ pub struct Caesar<KC: KeyClocks> {
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
     // `try_to_unblock` calls to be repeated
-    try_to_unblock_again: Vec<(Dot, Clock, HashSet<Dot>, HashSet<Dot>)>,
+    try_to_unblock_again:
+        Vec<(Dot, Clock, Arc<Mutex<HashSet<Dot>>>, HashSet<Dot>)>,
     wait_condition: bool,
 }
 
@@ -294,7 +296,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // update command info
         info.status = Status::PROPOSE_BEGIN;
         info.cmd = Some(cmd);
-        info.deps = deps;
+        *info.deps.lock() = deps;
         Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
         // save command's clock and update `blocked_by` before unlocking it
@@ -356,7 +358,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                             dot,
                             clock,
                             blocked_by_info.clock,
-                            &blocked_by_info.deps,
+                            &blocked_by_info.deps.lock(),
                             time,
                         );
                         trace!(
@@ -644,19 +646,21 @@ impl<KC: KeyClocks> Caesar<KC> {
             deps.len() as u64,
         );
 
-        // create execution info
-        let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::new(dot, cmd, clock, deps.clone());
-        self.to_executors.push(execution_info);
-
         // update command info:
         info.status = Status::COMMIT;
-        info.deps = deps.clone();
+        *info.deps.lock() = deps;
         Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
+
+        // create execution info
+        let cmd = info.cmd.clone().expect("there should be a command payload");
+        let execution_info =
+            ExecutionInfo::new(dot, cmd, clock, info.deps.clone());
+        self.to_executors.push(execution_info);
 
         // take the set of commands that this command is blocking and try to
         // unblock them
         let blocking = std::mem::take(&mut info.blocking);
+        let deps = info.deps.clone();
         drop(info);
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
@@ -706,7 +710,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // update command info:
         info.status = Status::ACCEPT;
-        info.deps = deps.clone();
+        *info.deps.lock() = deps.clone();
         Self::update_clock(&mut self.key_clocks, dot, &mut info, clock);
 
         // compute new set of predecessors for the command
@@ -716,7 +720,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             self.key_clocks.predecessors(dot, cmd, clock, blocking);
 
         // aggregate with incoming deps
-        new_deps.extend(deps.clone());
+        new_deps.extend(deps);
 
         // create message and target
         let msg = Message::MRetryAck {
@@ -731,6 +735,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // take the set of commands that this command is blocking and try to
         // unblock them
         let blocking = std::mem::take(&mut info.blocking);
+        let deps = info.deps.clone();
         drop(info);
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
@@ -918,7 +923,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<Mutex<HashSet<Dot>>>,
         blocking: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
@@ -961,7 +966,7 @@ impl<KC: KeyClocks> Caesar<KC> {
                         blocked_dot,
                         blocked_dot_info.clock,
                         clock,
-                        &deps,
+                        &deps.lock(),
                         time,
                     );
                     if safe_to_ignore {
@@ -1063,7 +1068,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         Self::send_mpropose_ack(
             dot,
             info.clock,
-            info.deps.clone(),
+            info.deps.lock().clone(),
             true,
             to_processes,
         )
@@ -1133,7 +1138,7 @@ struct CaesarInfo {
     // `None` if not set yet
     cmd: Option<Command>,
     clock: Clock,
-    deps: HashSet<Dot>,
+    deps: Arc<Mutex<HashSet<Dot>>>,
     // set of commands that this command is blocking
     blocking: HashSet<Dot>,
     // set of commands that this command is blocked by
@@ -1164,7 +1169,7 @@ impl Info for CaesarInfo {
             status: Status::START,
             cmd: None,
             clock: Clock::new(process_id),
-            deps: HashSet::new(),
+            deps: Arc::new(Mutex::new(HashSet::new())),
             blocking: HashSet::new(),
             blocked_by: HashSet::new(),
             quorum_clocks: QuorumClocks::new(

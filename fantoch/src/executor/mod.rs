@@ -28,8 +28,6 @@ pub trait Executor: Clone {
     // TODO why is Send needed?
     type ExecutionInfo: Debug
         + Clone
-        + PartialEq
-        + Eq
         + Serialize
         + DeserializeOwned
         + Send

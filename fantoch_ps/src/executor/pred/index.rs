@@ -4,6 +4,8 @@ use fantoch::hash_map::HashMap;
 use fantoch::id::{Dot, ProcessId};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::cell::RefCell;
 
 #[derive(Debug, Clone)]
@@ -11,7 +13,7 @@ pub struct Vertex {
     pub dot: Dot,
     pub cmd: Command,
     pub clock: Clock,
-    pub deps: HashSet<Dot>,
+    pub deps: Arc<Mutex<HashSet<Dot>>>,
     pub start_time_ms: u64,
     missing_deps: usize,
 }
@@ -21,7 +23,7 @@ impl Vertex {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: Arc<Mutex<HashSet<Dot>>>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time_ms = time.millis();
