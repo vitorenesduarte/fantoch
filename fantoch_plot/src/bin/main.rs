@@ -21,7 +21,7 @@ fn main() -> Result<(), Report> {
 
     // partial_replication_all()?;
     // multi_key()?;
-    // single_key_all()?;
+    single_key_all()?;
     eurosys()?;
     Ok(())
 }
@@ -263,8 +263,8 @@ fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 1),
         (Protocol::FPaxos, 2),
-        /*
         (Protocol::CaesarLocked, 2),
+        /*
         (Protocol::Basic, 1),
         (Protocol::EPaxosLocked, 2),
         */
@@ -1201,6 +1201,7 @@ fn single_key_all() -> Result<(), Report> {
     // generate throughput-latency plot
     let clients_per_region = vec![
         32,
+        256,
         512,
         1024,
         1024 * 2,
@@ -1231,7 +1232,8 @@ fn single_key_all() -> Result<(), Report> {
                     }
                     Protocol::AtlasLocked
                     | Protocol::NewtAtomic
-                    | Protocol::EPaxosLocked => {
+                    | Protocol::EPaxosLocked
+                    | Protocol::CaesarLocked => {
                         search.key_gen(key_gen);
                     }
                     _ => {
@@ -1332,7 +1334,8 @@ fn single_key_all() -> Result<(), Report> {
                                 }
                                 Protocol::AtlasLocked
                                 | Protocol::NewtAtomic
-                                | Protocol::EPaxosLocked => {
+                                | Protocol::EPaxosLocked
+                                | Protocol::CaesarLocked => {
                                     search.key_gen(key_gen);
                                 }
                                 _ => {

@@ -34,6 +34,7 @@ const CLIENT_INSTANCE_TYPE: &str = "m5.2xlarge";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
 // processes config
+const EXECUTE_AT_COMMIT: bool = false;
 const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(10);
 const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> = None;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
@@ -48,7 +49,7 @@ const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "caesar_parallel";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -68,11 +69,11 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
-    Protocol::Basic,
-    Protocol::AtlasLocked,
-    Protocol::NewtAtomic,
-    Protocol::FPaxos,
-    Protocol::EPaxosLocked,
+    // Protocol::Basic,
+    // Protocol::AtlasLocked,
+    // Protocol::NewtAtomic,
+    // Protocol::FPaxos,
+    // Protocol::EPaxosLocked,
     Protocol::CaesarLocked,
 ];
 
@@ -84,6 +85,7 @@ macro_rules! config {
             config.set_newt_clock_bump_interval::<Option<Duration>>(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
+        config.set_execute_at_commit(EXECUTE_AT_COMMIT);
         config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
         if let Some(interval) = EXECUTOR_MONITOR_PENDING_INTERVAL {
             config.set_executor_monitor_pending_interval(interval);
@@ -227,14 +229,14 @@ async fn increasing_load_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::Basic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        (Protocol::FPaxos, config!(n, 2, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
-        /* (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-         * (Protocol::CaesarLocked, config!(n, 2, false, None, false)), */
+        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        // (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+        (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region = vec![

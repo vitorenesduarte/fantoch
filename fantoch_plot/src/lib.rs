@@ -1562,11 +1562,13 @@ pub fn process_metrics_table(
         "gc",
         "delay (ms)",
         "chains",
-        "out",
-        "in",
+        "deps size"
+        // "out",
+        // "in",
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.23, 0.23, 0.11, 0.11];
+    // let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.23, 0.23, 0.11, 0.11];
+    let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.23, 0.23, 0.22];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -1653,12 +1655,22 @@ pub fn process_metrics_table(
                     chain_size.max().value().round()
                 )
             });
-        let out_requests = executor_metrics
-            .get_aggregated(ExecutorMetricsKind::OutRequests)
-            .map(|out_requests| fmt(*out_requests));
-        let in_requests = executor_metrics
-            .get_aggregated(ExecutorMetricsKind::InRequests)
-            .map(|in_requests| fmt(*in_requests));
+        let deps_size = protocol_metrics
+            .get_collected(ProtocolMetricsKind::CommittedDepsLen)
+            .map(|deps_size| {
+                format!(
+                    "{} ± {} [{}]",
+                    deps_size.mean().round(),
+                    deps_size.stddev().round(),
+                    deps_size.max().value().round()
+                )
+            });
+        // let out_requests = executor_metrics
+        //     .get_aggregated(ExecutorMetricsKind::OutRequests)
+        //     .map(|out_requests| fmt(*out_requests));
+        // let in_requests = executor_metrics
+        //     .get_aggregated(ExecutorMetricsKind::InRequests)
+        //     .map(|in_requests| fmt(*in_requests));
         // create cell
         let cell = vec![
             fast_path,
@@ -1667,8 +1679,9 @@ pub fn process_metrics_table(
             gced,
             execution_delay,
             chain_size,
-            out_requests,
-            in_requests,
+            deps_size,
+            /* out_requests,
+             * in_requests, */
         ];
         // format cell
         let fmt_cell_data =
