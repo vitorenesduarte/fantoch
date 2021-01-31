@@ -15,7 +15,7 @@ use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
@@ -1207,26 +1207,85 @@ pub enum Message {
     MProposeAck {
         dot: Dot,
         clock: Clock,
+        #[serde(deserialize_with = "deserialize_deps")]
         deps: HashSet<Dot>,
         ok: bool,
     },
     MCommit {
         dot: Dot,
         clock: Clock,
+        #[serde(deserialize_with = "deserialize_deps")]
         deps: HashSet<Dot>,
     },
     MRetry {
         dot: Dot,
         clock: Clock,
+        #[serde(deserialize_with = "deserialize_deps")]
         deps: HashSet<Dot>,
     },
     MRetryAck {
         dot: Dot,
+        #[serde(deserialize_with = "deserialize_deps")]
         deps: HashSet<Dot>,
     },
     MGarbageCollection {
         executed: VClock<ProcessId>,
     },
+}
+
+// The following is a copy of std's deserialize method for `HashSet`s
+// (see here: https://github.com/rust-lang/hashbrown/blob/83ac6fd0d364bc220f7d24cc234bc0c4ab30b3ae/src/external_trait_impls/serde.rs#L116-L162)
+// with the exception of the size hint which is not cautious (see DIFF below),
+// i.e. it doesn't limit the maximum size hint size to be 4096
+// (see here: https://github.com/serde-rs/serde/blob/9a84622c5648a91674708bad14e4c54fc7ca721c/serde/src/private/size_hint.rs#L13)
+fn deserialize_deps<'de, T, D>(deserializer: D) -> Result<HashSet<T>, D::Error>
+where
+    T: Deserialize<'de> + Eq + std::hash::Hash,
+    D: Deserializer<'de>,
+{
+    use core::fmt;
+    use core::hash::{BuildHasher, Hash};
+    use core::marker::PhantomData;
+    use serde::de::{SeqAccess, Visitor};
+
+    struct SeqVisitor<T, S> {
+        marker: PhantomData<HashSet<T, S>>,
+    }
+
+    impl<'de, T, S> Visitor<'de> for SeqVisitor<T, S>
+    where
+        T: Deserialize<'de> + Eq + Hash,
+        S: BuildHasher + Default,
+    {
+        type Value = HashSet<T, S>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a sequence")
+        }
+
+        #[cfg_attr(feature = "inline-more", inline)]
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut values = HashSet::with_capacity_and_hasher(
+                // DIFF
+                seq.size_hint().unwrap_or(0),
+                S::default(),
+            );
+
+            while let Some(value) = seq.next_element()? {
+                values.insert(value);
+            }
+
+            Ok(values)
+        }
+    }
+
+    let visitor = SeqVisitor {
+        marker: PhantomData,
+    };
+    deserializer.deserialize_seq(visitor)
 }
 
 impl MessageIndex for Message {
