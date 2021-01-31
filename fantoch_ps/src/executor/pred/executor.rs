@@ -71,7 +71,7 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
-        let executed = self.graph.executed().clone();
+        let executed = self.graph.executed().frontier().clone();
         trace!(
             "p{}: PredecessorsExecutor::executed {:?} | time = {}",
             self.process_id,

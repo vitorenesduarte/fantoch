@@ -57,8 +57,8 @@ impl Config {
         let execute_at_commit = false;
         // by default, executor cleanups happen every 5ms
         let executor_cleanup_interval = Duration::from_millis(5);
-        // by default, executed notifications happen every 5ms
-        let executor_executed_notification_interval = Duration::from_millis(5);
+        // by default, executed notifications happen every 50ms
+        let executor_executed_notification_interval = Duration::from_millis(50);
         // by default, pending commnads are not monitored
         let executor_monitor_pending_interval = None;
         // by default, executors do not monitor execution order

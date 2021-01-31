@@ -2,7 +2,7 @@ use crate::id::{Dot, ProcessId, ShardId};
 use crate::trace;
 use crate::util;
 use crate::HashMap;
-use threshold::{AEClock, EventSet, VClock};
+use threshold::{AEClock, AboveExSet, EventSet, VClock};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GCTrack {
@@ -47,8 +47,14 @@ impl GCTrack {
 
     /// Updates local clock. It assumes that the clock passed as argument is
     /// monotonic.
-    pub fn update_clock(&mut self, clock: AEClock<ProcessId>) {
-        self.my_clock = clock;
+    pub fn update_clock(&mut self, clock: VClock<ProcessId>) {
+        // TODO: move this to `threshold-rs`
+        self.my_clock =
+            AEClock::from(clock.into_iter().map(|(actor, event_set)| {
+                let event_set =
+                    AboveExSet::from(event_set.frontier(), std::iter::empty());
+                (actor, event_set)
+            }));
         debug_assert_eq!(self.my_clock.len(), self.n);
     }
 
