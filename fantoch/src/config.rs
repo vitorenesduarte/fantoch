@@ -370,10 +370,10 @@ mod tests {
         config.set_executor_cleanup_interval(interval);
         assert_eq!(config.executor_cleanup_interval(), interval);
 
-        // by default, the executor executed notification interval is 5ms
+        // by default, the executor executed notification interval is 50ms
         assert_eq!(
             config.executor_executed_notification_interval(),
-            Duration::from_millis(5)
+            Duration::from_millis(50)
         );
 
         // change its value and check it has changed
