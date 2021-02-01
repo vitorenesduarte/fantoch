@@ -15,7 +15,6 @@ use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
 use threshold::VClock;
 
@@ -285,7 +284,7 @@ impl<KD: KeyDeps> Atlas<KD> {
             //   `MCommit` now
 
             info.status = Status::PAYLOAD;
-            info.cmd = Some(Arc::new(cmd));
+            info.cmd = Some(cmd);
 
             // check if there's a buffered commit notification; if yes, handle
             // the commit again (since now we have the payload)
@@ -309,7 +308,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         // update command info
         info.status = Status::COLLECT;
         info.quorum = quorum;
-        info.cmd = Some(Arc::new(cmd));
+        info.cmd = Some(cmd);
         // create and set consensus value
         let value = ConsensusValue::with(deps.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
@@ -784,7 +783,7 @@ struct AtlasInfo {
     quorum: HashSet<ProcessId>,
     synod: Synod<ConsensusValue>,
     // `None` if not set yet
-    cmd: Option<Arc<Command>>,
+    cmd: Option<Command>,
     // `quorum_deps` is used by the coordinator to compute the threshold
     // deps when deciding whether to take the fast path
     quorum_deps: QuorumDeps,

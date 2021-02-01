@@ -291,7 +291,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // update command info
         info.status = Status::PROPOSE_BEGIN;
-        info.cmd = Some(Arc::new(cmd));
+        info.cmd = Some(cmd);
         info.deps = Arc::new(deps);
         Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
@@ -1145,7 +1145,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 struct CaesarInfo {
     status: Status,
     // `None` if not set yet
-    cmd: Option<Arc<Command>>,
+    cmd: Option<Command>,
     clock: Clock,
     deps: Arc<HashSet<Dot>>,
     // set of commands that this command is blocking

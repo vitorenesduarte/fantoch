@@ -25,7 +25,6 @@ use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
-use std::sync::Arc;
 use std::time::Duration;
 use threshold::AEClock;
 
@@ -58,7 +57,7 @@ pub struct DependencyGraph {
     // - `out_requests` dependencies to be able to order commands
     // - notifies remaining workers about what's been executed through
     //   `added_to_executed_clock`
-    to_execute: VecDeque<Arc<Command>>,
+    to_execute: VecDeque<Command>,
     out_requests: HashMap<ShardId, HashSet<Dot>>,
     added_to_executed_clock: HashSet<Dot>,
     // auxiliary workers (handles requests):
@@ -131,7 +130,7 @@ impl DependencyGraph {
 
     /// Returns a new command ready to be executed.
     #[must_use]
-    pub fn command_to_execute(&mut self) -> Option<Arc<Command>> {
+    pub fn command_to_execute(&mut self) -> Option<Command> {
         self.to_execute.pop_front()
     }
 
@@ -158,7 +157,7 @@ impl DependencyGraph {
     }
 
     #[cfg(test)]
-    fn commands_to_execute(&mut self) -> VecDeque<Arc<Command>> {
+    fn commands_to_execute(&mut self) -> VecDeque<Command> {
         std::mem::take(&mut self.to_execute)
     }
 
@@ -216,7 +215,7 @@ impl DependencyGraph {
     pub fn handle_add(
         &mut self,
         dot: Dot,
-        cmd: Arc<Command>,
+        cmd: Command,
         deps: Vec<Dependency>,
         time: &dyn SysTime,
     ) {
@@ -331,7 +330,7 @@ impl DependencyGraph {
                     self.out_request_replies.entry(from).or_default().push(
                         RequestReply::Info {
                             dot,
-                            cmd: vertex.cmd.as_ref().clone(),
+                            cmd: vertex.cmd.clone(),
                             deps: vertex.deps.clone(),
                         },
                     )
@@ -393,7 +392,7 @@ impl DependencyGraph {
             match info {
                 RequestReply::Info { dot, cmd, deps } => {
                     // add requested command to our graph
-                    self.handle_add(dot, Arc::new(cmd), deps, time)
+                    self.handle_add(dot, cmd, deps, time)
                 }
                 RequestReply::Executed { dot } => {
                     // update executed clock
@@ -730,17 +729,17 @@ mod tests {
         let dot_1 = Dot::new(2, 1);
 
         // cmd 0
-        let cmd_0 = Arc::new(Command::from(
+        let cmd_0 = Command::from(
             Rifl::new(1, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
-        ));
+        );
         let deps_0 = vec![dep(dot_1, shard_id)];
 
         // cmd 1
-        let cmd_1 = Arc::new(Command::from(
+        let cmd_1 = Command::from(
             Rifl::new(2, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
-        ));
+        );
         let deps_1 = vec![dep(dot_0, shard_id)];
 
         // add cmd 0
@@ -1077,7 +1076,7 @@ mod tests {
                 let value = String::from("");
                 (key, KVOp::Put(value))
             });
-            let cmd = Arc::new(Command::from(rifl, ops));
+            let cmd = Command::from(rifl, ops);
 
             // add to the set of all rifls
             assert!(all_rifls.insert(rifl));
@@ -1145,10 +1144,10 @@ mod tests {
     fn check_sccs_found_with_missing_dep() -> bool {
         let conflicting_command = || {
             let rifl = Rifl::new(1, 1);
-            Arc::new(Command::from(
+            Command::from(
                 rifl,
                 vec![(String::from("CONF"), KVOp::Put(String::new()))],
-            ))
+            )
         };
 
         // create queue
