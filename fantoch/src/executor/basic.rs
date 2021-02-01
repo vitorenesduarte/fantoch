@@ -7,6 +7,7 @@ use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOp, KVStore, Key};
 use crate::time::SysTime;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct BasicExecutor {
@@ -36,6 +37,10 @@ impl Executor for BasicExecutor {
 
     fn handle(&mut self, info: Self::ExecutionInfo, _time: &dyn SysTime) {
         let BasicExecutionInfo { rifl, key, ops } = info;
+        // take the ops inside the arc if we're the last with a
+        // reference to it (otherwise, clone them)
+        let ops =
+            Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
         // execute op in the `KVStore`
         let partial_results =
             self.store.execute_with_monitor(&key, ops, rifl, &mut None);
@@ -64,11 +69,11 @@ impl Executor for BasicExecutor {
 pub struct BasicExecutionInfo {
     rifl: Rifl,
     key: Key,
-    ops: Vec<KVOp>,
+    ops: Arc<Vec<KVOp>>,
 }
 
 impl BasicExecutionInfo {
-    pub fn new(rifl: Rifl, key: Key, ops: Vec<KVOp>) -> Self {
+    pub fn new(rifl: Rifl, key: Key, ops: Arc<Vec<KVOp>>) -> Self {
         Self { rifl, key, ops }
     }
 }

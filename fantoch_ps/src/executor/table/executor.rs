@@ -10,6 +10,7 @@ use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct TableExecutor {
@@ -103,9 +104,13 @@ impl TableExecutor {
     // #[instrument(skip(self, key, to_execute))]
     fn execute<I>(&mut self, key: Key, to_execute: I)
     where
-        I: Iterator<Item = (Rifl, Vec<KVOp>)>,
+        I: Iterator<Item = (Rifl, Arc<Vec<KVOp>>)>,
     {
         to_execute.for_each(|(rifl, ops)| {
+            // take the ops inside the arc if we're the last with a
+            // reference to it (otherwise, clone them)
+            let ops =
+                Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
             // execute ops in the `KVStore`
             let partial_results = self.store.execute_with_monitor(
                 &key,
@@ -128,7 +133,7 @@ pub enum TableExecutionInfo {
         clock: u64,
         rifl: Rifl,
         key: Key,
-        ops: Vec<KVOp>,
+        ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     },
     DetachedVotes {
@@ -143,7 +148,7 @@ impl TableExecutionInfo {
         clock: u64,
         rifl: Rifl,
         key: Key,
-        ops: Vec<KVOp>,
+        ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
         TableExecutionInfo::Votes {

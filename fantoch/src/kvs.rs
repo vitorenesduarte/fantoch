@@ -61,15 +61,9 @@ impl KVStore {
         match op {
             KVOp::Get => self.store.get(key).cloned(),
             KVOp::Put(value) => {
-                // only clone key if not already in the KVS
-                if let Some((key, previous_value)) =
-                    self.store.remove_entry(key)
-                {
-                    self.store.insert(key, value);
-                    Some(previous_value)
-                } else {
-                    self.store.insert(key.clone(), value)
-                }
+                // don't return the previous value
+                self.store.insert(key.clone(), value);
+                None
             }
             KVOp::Delete => self.store.remove(key),
         }

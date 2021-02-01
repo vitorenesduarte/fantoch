@@ -312,8 +312,8 @@ mod tests {
             {
                 // since there's a single shard, keys should be on shard 0
                 assert_eq!(target_shard, 0);
-                let (key, mut ops) =
-                    cmd.into_iter(target_shard).next().unwrap();
+                let (key, ops) = cmd.into_iter(target_shard).next().unwrap();
+                let mut ops = ops.as_ref().clone();
                 // since the conflict is 100, the key should be `CONFLICT_COLOR`
                 assert_eq!(key, CONFLICT_COLOR);
                 assert_eq!(ops.len(), 1);

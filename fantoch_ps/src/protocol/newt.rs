@@ -1298,8 +1298,8 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::executor::Executor;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
