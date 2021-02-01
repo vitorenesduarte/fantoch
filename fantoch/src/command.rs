@@ -26,7 +26,18 @@ impl Command {
     ) -> Self {
         Self {
             rifl,
-            shard_to_ops: todo!(),
+            shard_to_ops: shard_to_ops
+                .into_iter()
+                .map(|(shard_id, shard_ops)| {
+                    (
+                        shard_id,
+                        shard_ops
+                            .into_iter()
+                            .map(|(key, ops)| (key, Arc::new(ops)))
+                            .collect(),
+                    )
+                })
+                .collect(),
             _empty_keys: HashMap::new(),
         }
     }
