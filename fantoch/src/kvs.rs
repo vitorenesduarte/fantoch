@@ -104,7 +104,11 @@ mod tests {
         // put key_a z -> some(x)
         assert_eq!(
             store.execute(&key_a, KVOp::Put(z.clone())),
+            None,
+            /*
+            the following is correct if Put returns the previous value
             Some(x.clone())
+             */
         );
         // get key_a    -> some(z)
         assert_eq!(store.execute(&key_a, KVOp::Get), Some(z.clone()));
