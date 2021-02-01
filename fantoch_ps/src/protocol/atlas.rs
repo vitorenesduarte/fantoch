@@ -1,4 +1,4 @@
-use crate::executor::GraphExecutor;
+use crate::executor::{GraphExecutionInfo, GraphExecutor};
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
@@ -6,7 +6,6 @@ use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::partial::{self, ShardsCommits};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
@@ -23,8 +22,6 @@ use threshold::VClock;
 pub type AtlasSequential = Atlas<SequentialKeyDeps>;
 pub type AtlasLocked = Atlas<LockedKeyDeps>;
 
-type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
-
 #[derive(Debug, Clone)]
 pub struct Atlas<KD: KeyDeps> {
     bp: BaseProcess,
@@ -32,7 +29,7 @@ pub struct Atlas<KD: KeyDeps> {
     cmds: SequentialCommandsInfo<AtlasInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<GraphExecutionInfo>,
     // set of processes in my shard
     shard_processes: HashSet<ProcessId>,
     // commit notifications that arrived before the initial `MCollect` message
@@ -192,7 +189,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<GraphExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -445,7 +442,7 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // create execution info
         let execution_info =
-            ExecutionInfo::add(dot, cmd.clone(), value.deps.clone());
+            GraphExecutionInfo::add(dot, cmd.clone(), value.deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -924,6 +921,7 @@ enum Status {
 mod tests {
     use super::*;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;

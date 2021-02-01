@@ -1095,7 +1095,7 @@ pub fn throughput_latency_plot_split<GInput, G, RInput, R>(
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
-) -> Result<(), Report>
+) -> Result<(Vec<(Search, usize)>, Vec<(Search, usize)>), Report>
 where
     GInput: Clone,
     G: Fn(GInput) -> Search,
@@ -1124,6 +1124,7 @@ where
 
     // keep track of the number of plotted instances
     let mut plotted = 0;
+    let mut result = (Vec::new(), Vec::new());
 
     for (subplot, search_refine_input) in vec![
         (1, top_search_refine_input),
@@ -1139,7 +1140,7 @@ where
                 search
             })
             .collect();
-        inner_throughput_something_plot(
+        let max_throughputs = inner_throughput_something_plot(
             py,
             &ax,
             searches,
@@ -1153,6 +1154,12 @@ where
             db,
             &mut plotted,
         )?;
+
+        match subplot {
+            1 => result.0 = max_throughputs,
+            2 => result.1 = max_throughputs,
+            _ => unreachable!(),
+        }
 
         // set legend and labels:
         // - set legend
@@ -1192,7 +1199,7 @@ where
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
 
-    Ok(())
+    Ok(result)
 }
 
 pub fn heatmap_plot_split<F>(

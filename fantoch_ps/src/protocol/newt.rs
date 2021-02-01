@@ -1,4 +1,4 @@
-use crate::executor::TableExecutor;
+use crate::executor::{TableExecutionInfo, TableExecutor};
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::common::table::{
     AtomicKeyClocks, KeyClocks, LockedKeyClocks, QuorumClocks,
@@ -7,7 +7,6 @@ use crate::protocol::common::table::{
 use crate::protocol::partial::{self, ShardsCommits};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
@@ -26,8 +25,6 @@ pub type NewtSequential = Newt<SequentialKeyClocks>;
 pub type NewtAtomic = Newt<AtomicKeyClocks>;
 pub type NewtLocked = Newt<LockedKeyClocks>;
 
-type ExecutionInfo = <TableExecutor as Executor>::ExecutionInfo;
-
 #[derive(Debug, Clone)]
 pub struct Newt<KC: KeyClocks> {
     bp: BaseProcess,
@@ -35,7 +32,7 @@ pub struct Newt<KC: KeyClocks> {
     cmds: SequentialCommandsInfo<NewtInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<TableExecutionInfo>,
     // set of detached votes
     detached: Votes,
     // commit notifications that arrived before the initial `MCollect` message
@@ -248,7 +245,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<TableExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -604,7 +601,7 @@ impl<KC: KeyClocks> Newt<KC> {
         let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
             let key_votes = votes.remove(&key).unwrap_or_default();
-            ExecutionInfo::votes(
+            TableExecutionInfo::votes(
                 dot,
                 clock,
                 rifl,
@@ -712,7 +709,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // create execution info
         let execution_info = detached.into_iter().map(|(key, key_votes)| {
-            ExecutionInfo::detached_votes(key, key_votes)
+            TableExecutionInfo::detached_votes(key, key_votes)
         });
         self.to_executors.extend(execution_info);
     }
@@ -1301,6 +1298,7 @@ enum Status {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fantoch::executor::Executor;
     use fantoch::client::{Client, KeyGen, Workload};
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;

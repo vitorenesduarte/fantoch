@@ -1,11 +1,10 @@
-use crate::executor::GraphExecutor;
+use crate::executor::{GraphExecutionInfo, GraphExecutor};
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
@@ -22,8 +21,6 @@ use threshold::VClock;
 pub type EPaxosSequential = EPaxos<SequentialKeyDeps>;
 pub type EPaxosLocked = EPaxos<LockedKeyDeps>;
 
-type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
-
 #[derive(Debug, Clone)]
 pub struct EPaxos<KD: KeyDeps> {
     bp: BaseProcess,
@@ -31,7 +28,7 @@ pub struct EPaxos<KD: KeyDeps> {
     cmds: SequentialCommandsInfo<EPaxosInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<GraphExecutionInfo>,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
@@ -176,7 +173,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<GraphExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -408,7 +405,8 @@ impl<KD: KeyDeps> EPaxos<KD> {
 
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::add(dot, cmd, value.deps.clone());
+        let execution_info =
+            GraphExecutionInfo::add(dot, cmd, value.deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -757,6 +755,7 @@ enum Status {
 mod tests {
     use super::*;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;

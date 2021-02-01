@@ -1,8 +1,7 @@
-use crate::executor::SlotExecutor;
+use crate::executor::{SlotExecutionInfo, SlotExecutor};
 use crate::protocol::common::synod::{GCTrack, MultiSynod, MultiSynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, MessageIndex, Protocol, ProtocolMetrics,
@@ -13,8 +12,6 @@ use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-type ExecutionInfo = <SlotExecutor as Executor>::ExecutionInfo;
-
 #[derive(Debug, Clone)]
 pub struct FPaxos {
     bp: BaseProcess,
@@ -22,7 +19,7 @@ pub struct FPaxos {
     multi_synod: MultiSynod<Command>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<SlotExecutionInfo>,
 }
 
 impl Protocol for FPaxos {
@@ -148,7 +145,7 @@ impl Protocol for FPaxos {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<SlotExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -328,7 +325,7 @@ impl FPaxos {
         );
 
         // create execution info
-        let execution_info = ExecutionInfo::new(slot, cmd);
+        let execution_info = SlotExecutionInfo::new(slot, cmd);
         self.to_executors.push(execution_info);
 
         if self.gc_running() {
@@ -476,6 +473,7 @@ impl MessageIndex for PeriodicEvent {
 mod tests {
     use super::*;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
