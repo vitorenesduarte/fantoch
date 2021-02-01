@@ -34,10 +34,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::time::Duration;
-use threshold::AEClock;
+use threshold::VClock;
 
 // Compact representation of which `Dot`s have been executed.
-pub type Executed = AEClock<ProcessId>;
+pub type Executed = VClock<ProcessId>;
 
 pub trait Protocol: Debug + Clone {
     type Message: Debug
