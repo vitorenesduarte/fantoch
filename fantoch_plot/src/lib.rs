@@ -961,7 +961,7 @@ pub fn inter_machine_scalability_plot(
 
     assert!(
         searches.len() == MAX_COMBINATIONS,
-        "inter_machine_scalability_plot: expected same number of seaches as the max number of combinations"
+        "inter_machine_scalability_plot: expected same number of searches as the max number of combinations"
     );
 
     // compute x: one per setting
@@ -1057,6 +1057,136 @@ pub fn inter_machine_scalability_plot(
     plt.text(0.0, -190.0, "2 shards", kwargs)?;
     plt.text(20.0, -190.0, "4 shards", kwargs)?;
     plt.text(40.0, -190.0, "6 shards", kwargs)?;
+
+    // set labels
+    let ylabel = String::from("max. throughput (K ops/s)");
+    ax.set_ylabel(&ylabel, None)?;
+
+    // maybe set y limits
+    if let Some((y_min, y_max)) = y_range {
+        let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
+        ax.set_ylim(Some(kwargs))?;
+    }
+
+    // legend
+    add_legend(plotted, None, None, None, None, py, &ax)?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+    Ok(())
+}
+
+pub fn batching_plot(
+    searches: Vec<Search>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    n: usize,
+    settings: Vec<(usize, usize)>,
+    y_range: Option<(f64, f64)>,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report> {
+    const FULL_PER_GROUP_WIDTH: f64 = 10f64;
+    const MAX_COMBINATIONS: usize = 2;
+    // 80% of `FULL_PER_GROUP_WIDTH` when `MAX_COMBINATIONS` is reached
+    const BAR_WIDTH: f64 = FULL_PER_GROUP_WIDTH * 0.6 / MAX_COMBINATIONS as f64;
+
+    assert!(
+        searches.len() <= MAX_COMBINATIONS,
+        "batching_plot: expected a number of searches smaller than the max number of combinations"
+    );
+
+    // compute x: one per setting
+    let x: Vec<_> = (0..settings.len())
+        .map(|i| i as f64 * FULL_PER_GROUP_WIDTH)
+        .collect();
+
+    // we need to shift all to the left by half of the number of searches
+    let search_count = searches.len();
+    let shift_left = search_count as f64 / 2f64;
+    // we also need to shift half bar to the right
+    let shift_right = 0.5;
+    let searches = searches.into_iter().enumerate().map(|(index, search)| {
+        // compute index according to shifts
+        let base = index as f64 - shift_left + shift_right;
+        // compute combination's shift
+        let shift = base * BAR_WIDTH;
+        (shift, search)
+    });
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    for (shift, mut search) in searches.clone() {
+        let mut y = Vec::new();
+        for (batch_max_size, payload_size) in settings.clone() {
+            // check `n`
+            assert_eq!(search.n, n, "batching_plot: value of n in search doesn't match the provided");
+
+            search
+                .batch_max_size(batch_max_size)
+                .payload_size(payload_size);
+
+            // execute search
+            let exp_data = db.find(search)?;
+            let max_throughput = exp_data
+                .into_iter()
+                .map(|(_, _, exp_data)| {
+                    // compute throughput for each result matching this search
+                    // (we can have several, with different number of clients)
+                    let throughput = exp_data.global_client_throughput;
+                    // compute K ops
+                    (throughput / 1000f64) as u64
+                })
+                .max();
+
+            let max_throughput = max_throughput.unwrap_or_default();
+            y.push(max_throughput);
+        }
+
+        // compute x: shift all values by `shift`
+        let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
+        println!("x: {:?} | y: {:?}", x, y);
+
+        // plot it
+        let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
+        ax.bar(x, y, Some(kwargs))?;
+        plotted += 1;
+    }
+
+    // set xticks
+    ax.set_xticks(x, None)?;
+
+    let mut payload_sizes = BTreeSet::new();
+    let labels: Vec<_> = settings
+        .into_iter()
+        .map(|(max_batch_size, payload_size)| {
+            payload_sizes.insert(payload_size);
+            match max_batch_size {
+                1 => "OFF",
+                10000 => "ON",
+                _ => panic!("unsupported max batch size: {}", max_batch_size),
+            }
+        })
+        .collect();
+    let fontdict = pydict!(py, ("fontsize", 7.5));
+    let kwargs = pydict!(py, ("fontdict", fontdict));
+    ax.set_xticklabels(labels, Some(kwargs))?;
+
+    // check that the number of payloads is 3
+    assert!(payload_sizes.len() == 3, "unsupported number of payloads");
+    let kwargs = None;
+    plt.text(0.0, -150.0, "256 bytes", kwargs)?;
+    plt.text(20.0, -150.0, "1024 bytes", kwargs)?;
+    plt.text(40.0, -150.0, "4096 bytes", kwargs)?;
 
     // set labels
     let ylabel = String::from("max. throughput (K ops/s)");
