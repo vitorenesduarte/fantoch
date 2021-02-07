@@ -21,7 +21,7 @@ Next:
 
 - all protocols implement the [`Protocol`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/protocol/mod.rs) trait
 - this specification can then be used for
-  - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU is assumed)
+  - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU and network bandwidth are assumed)
   - __running__ the protocols in a real setting
   - (model checking is coming soon!)
 - this is achieved by providing a __"simulator"__ and a __"runner"__ that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
