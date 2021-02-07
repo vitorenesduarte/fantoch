@@ -5,3 +5,4 @@ target/
 .log_*
 */*.execution_log
 *DS_Store
+results_*

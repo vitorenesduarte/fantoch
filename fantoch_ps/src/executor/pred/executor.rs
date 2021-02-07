@@ -95,11 +95,7 @@ impl Executor for PredecessorsExecutor {
 }
 
 impl PredecessorsExecutor {
-    fn execute(&mut self, cmd: Arc<Command>) {
-        // take the command inside the arc if we're the last with a
-        // reference to it (otherwise, clone the command)
-        let cmd =
-            Arc::try_unwrap(cmd).unwrap_or_else(|cmd| cmd.as_ref().clone());
+    fn execute(&mut self, cmd: Command) {
         // execute the command
         let results =
             cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
@@ -110,7 +106,7 @@ impl PredecessorsExecutor {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredecessorsExecutionInfo {
     dot: Dot,
-    cmd: Arc<Command>,
+    cmd: Command,
     clock: Clock,
     deps: Arc<HashSet<Dot>>,
 }
@@ -118,7 +114,7 @@ pub struct PredecessorsExecutionInfo {
 impl PredecessorsExecutionInfo {
     pub fn new(
         dot: Dot,
-        cmd: Arc<Command>,
+        cmd: Command,
         clock: Clock,
         deps: Arc<HashSet<Dot>>,
     ) -> Self {

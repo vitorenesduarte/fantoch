@@ -1,10 +1,9 @@
-use crate::executor::PredecessorsExecutor;
+use crate::executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 use crate::protocol::common::pred::{
     Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
@@ -23,8 +22,6 @@ use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
-type ExecutionInfo = <PredecessorsExecutor as Executor>::ExecutionInfo;
-
 #[derive(Debug, Clone)]
 pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
@@ -32,7 +29,7 @@ pub struct Caesar<KC: KeyClocks> {
     cmds: LockedCommandsInfo<CaesarInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_retries: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
@@ -200,7 +197,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<PredecessorsExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -294,7 +291,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // update command info
         info.status = Status::PROPOSE_BEGIN;
-        info.cmd = Some(Arc::new(cmd));
+        info.cmd = Some(cmd);
         info.deps = Arc::new(deps);
         Self::update_clock(&mut self.key_clocks, dot, &mut info, remote_clock);
 
@@ -657,7 +654,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
         let execution_info =
-            ExecutionInfo::new(dot, cmd, clock, info.deps.clone());
+            PredecessorsExecutionInfo::new(dot, cmd, clock, info.deps.clone());
         self.to_executors.push(execution_info);
 
         // take the set of commands that this command is blocking and try to
@@ -1148,7 +1145,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 struct CaesarInfo {
     status: Status,
     // `None` if not set yet
-    cmd: Option<Arc<Command>>,
+    cmd: Option<Command>,
     clock: Clock,
     deps: Arc<HashSet<Dot>>,
     // set of commands that this command is blocking
@@ -1347,6 +1344,7 @@ enum Status {
 mod tests {
     use super::*;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;

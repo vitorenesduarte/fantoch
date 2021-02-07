@@ -264,9 +264,10 @@ impl Basic {
             // - one entry per key being accessed will be created, which allows
             //   the basic executor to run in parallel
             let rifl = cmd.rifl();
-            let execution_info = cmd.iter(self.bp.shard_id).map(|(key, op)| {
-                BasicExecutionInfo::new(rifl, key.clone(), op.clone())
-            });
+            let execution_info =
+                cmd.iter(self.bp.shard_id).map(|(key, ops)| {
+                    BasicExecutionInfo::new(rifl, key.clone(), ops.clone())
+                });
             self.to_executors.extend(execution_info);
 
             if self.gc_running() {

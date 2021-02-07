@@ -5,16 +5,17 @@ use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::FromIterator;
+use std::sync::Arc;
 
 pub const DEFAULT_SHARD_ID: ShardId = 0;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     rifl: Rifl,
-    shard_to_ops: HashMap<ShardId, HashMap<Key, Vec<KVOp>>>,
+    shard_to_ops: HashMap<ShardId, HashMap<Key, Arc<Vec<KVOp>>>>,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean
-    _empty_keys: HashMap<Key, Vec<KVOp>>,
+    _empty_keys: HashMap<Key, Arc<Vec<KVOp>>>,
 }
 
 impl Command {
@@ -25,7 +26,18 @@ impl Command {
     ) -> Self {
         Self {
             rifl,
-            shard_to_ops,
+            shard_to_ops: shard_to_ops
+                .into_iter()
+                .map(|(shard_id, shard_ops)| {
+                    (
+                        shard_id,
+                        shard_ops
+                            .into_iter()
+                            .map(|(key, ops)| (key, Arc::new(ops)))
+                            .collect(),
+                    )
+                })
+                .collect(),
             _empty_keys: HashMap::new(),
         }
     }
@@ -107,6 +119,10 @@ impl Command {
     ) -> impl Iterator<Item = ExecutorResult> + 'a {
         let rifl = self.rifl;
         self.into_iter(shard_id).map(move |(key, ops)| {
+            // take the ops inside the arc if we're the last with a
+            // reference to it (otherwise, clone them)
+            let ops =
+                Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
             // execute this op
             let partial_results =
                 store.execute_with_monitor(&key, ops, rifl, monitor);
@@ -118,7 +134,7 @@ impl Command {
     pub fn iter(
         &self,
         shard_id: ShardId,
-    ) -> impl Iterator<Item = (&Key, &Vec<KVOp>)> {
+    ) -> impl Iterator<Item = (&Key, &Arc<Vec<KVOp>>)> {
         self.shard_to_ops
             .get(&shard_id)
             .map(|shard_ops| shard_ops.iter())
@@ -129,7 +145,7 @@ impl Command {
     pub fn into_iter(
         mut self,
         shard_id: ShardId,
-    ) -> impl Iterator<Item = (Key, Vec<KVOp>)> {
+    ) -> impl Iterator<Item = (Key, Arc<Vec<KVOp>>)> {
         self.shard_to_ops
             .remove(&shard_id)
             .map(|shard_ops| shard_ops.into_iter())
@@ -159,7 +175,9 @@ impl Command {
             let current_shard_ops =
                 self.shard_to_ops.entry(shard_id).or_default();
             for (key, ops) in shard_ops {
-                current_shard_ops.entry(key).or_default().extend(ops);
+                let ops = Arc::try_unwrap(ops).expect("a command to be merged into another command should have not been cloned");
+                let current_ops = current_shard_ops.entry(key).or_default();
+                Arc::get_mut(current_ops).expect("a command should only be cloned after all merges have occurred").extend(ops);
             }
         }
     }

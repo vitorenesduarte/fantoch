@@ -145,6 +145,7 @@ mod tests {
         let rifl_3 = Rifl::new(3, 1);
         let rifl_4 = Rifl::new(4, 1);
         let rifl_5 = Rifl::new(5, 1);
+        let rifl_6 = Rifl::new(6, 1);
 
         // create commands
         let key = String::from("a");
@@ -162,14 +163,7 @@ mod tests {
             rifl_5,
             vec![(key.clone(), KVOp::Put(String::from("3")))],
         );
-
-        // create execution info
-        let ei_1 = SlotExecutionInfo::new(1, cmd_1);
-        let ei_2 = SlotExecutionInfo::new(2, cmd_2);
-        let ei_3 = SlotExecutionInfo::new(3, cmd_3);
-        let ei_4 = SlotExecutionInfo::new(4, cmd_4);
-        let ei_5 = SlotExecutionInfo::new(5, cmd_5);
-        let mut infos = vec![ei_1, ei_2, ei_3, ei_4, ei_5];
+        let cmd_6 = Command::from(rifl_6, vec![(key.clone(), KVOp::Get)]);
 
         // create expected results:
         // - we don't expect rifl 1 because we will not wait for it in the
@@ -177,9 +171,19 @@ mod tests {
         let mut expected_results = BTreeMap::new();
         expected_results.insert(rifl_1, vec![None]);
         expected_results.insert(rifl_2, vec![Some(String::from("1"))]);
-        expected_results.insert(rifl_3, vec![Some(String::from("1"))]);
+        expected_results.insert(rifl_3, vec![None]);
         expected_results.insert(rifl_4, vec![Some(String::from("2"))]);
-        expected_results.insert(rifl_5, vec![Some(String::from("2"))]);
+        expected_results.insert(rifl_5, vec![None]);
+        expected_results.insert(rifl_6, vec![Some(String::from("3"))]);
+
+        // create execution info
+        let ei_1 = SlotExecutionInfo::new(1, cmd_1);
+        let ei_2 = SlotExecutionInfo::new(2, cmd_2);
+        let ei_3 = SlotExecutionInfo::new(3, cmd_3);
+        let ei_4 = SlotExecutionInfo::new(4, cmd_4);
+        let ei_5 = SlotExecutionInfo::new(5, cmd_5);
+        let ei_6 = SlotExecutionInfo::new(6, cmd_6);
+        let mut infos = vec![ei_1, ei_2, ei_3, ei_4, ei_5, ei_6];
 
         // check the execution order for all possible permutations
         infos.permutation().for_each(|p| {

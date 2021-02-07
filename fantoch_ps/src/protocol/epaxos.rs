@@ -1,11 +1,10 @@
-use crate::executor::GraphExecutor;
+use crate::executor::{GraphExecutionInfo, GraphExecutor};
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
 use crate::protocol::common::synod::{Synod, SynodMessage};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
@@ -15,14 +14,11 @@ use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
 use threshold::VClock;
 
 pub type EPaxosSequential = EPaxos<SequentialKeyDeps>;
 pub type EPaxosLocked = EPaxos<LockedKeyDeps>;
-
-type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone)]
 pub struct EPaxos<KD: KeyDeps> {
@@ -31,7 +27,7 @@ pub struct EPaxos<KD: KeyDeps> {
     cmds: SequentialCommandsInfo<EPaxosInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<GraphExecutionInfo>,
     // commit notifications that arrived before the initial `MCollect` message
     // (this may be possible even without network failures due to multiplexing)
     buffered_commits: HashMap<Dot, (ProcessId, ConsensusValue)>,
@@ -176,7 +172,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<GraphExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -260,7 +256,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
             //   `MCommit` now
 
             info.status = Status::PAYLOAD;
-            info.cmd = Some(Arc::new(cmd));
+            info.cmd = Some(cmd);
 
             // check if there's a buffered commit notification; if yes, handle
             // the commit again (since now we have the payload)
@@ -284,7 +280,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
         // update command info
         info.status = Status::COLLECT;
         info.quorum = quorum;
-        info.cmd = Some(Arc::new(cmd));
+        info.cmd = Some(cmd);
         // create and set consensus value
         let value = ConsensusValue::with(deps.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
@@ -408,7 +404,8 @@ impl<KD: KeyDeps> EPaxos<KD> {
 
         // create execution info
         let cmd = info.cmd.clone().expect("there should be a command payload");
-        let execution_info = ExecutionInfo::add(dot, cmd, value.deps.clone());
+        let execution_info =
+            GraphExecutionInfo::add(dot, cmd, value.deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -637,7 +634,7 @@ struct EPaxosInfo {
     quorum: HashSet<ProcessId>,
     synod: Synod<ConsensusValue>,
     // `None` if not set yet
-    cmd: Option<Arc<Command>>,
+    cmd: Option<Command>,
     // `quorum_clocks` is used by the coordinator to compute the threshold
     // clock when deciding whether to take the fast path
     quorum_deps: QuorumDeps,
@@ -757,6 +754,7 @@ enum Status {
 mod tests {
     use super::*;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;

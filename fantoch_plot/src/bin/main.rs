@@ -21,7 +21,7 @@ fn main() -> Result<(), Report> {
 
     // partial_replication_all()?;
     // multi_key()?;
-    single_key_all()?;
+    // single_key_all()?;
     eurosys()?;
     Ok(())
 }
@@ -30,7 +30,8 @@ fn main() -> Result<(), Report> {
 fn eurosys() -> Result<(), Report> {
     // fairness_plot()?;
     // tail_latency_plot()?;
-    increasing_load_plot()?;
+    // increasing_load_plot()?;
+    batching_plot()?;
     // scalability_plot()?;
     // partial_replication_plot()?;
     Ok(())
@@ -185,8 +186,9 @@ fn tail_latency_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
-    // let results_dir = "../results_increasing_load";
-    let results_dir = "/home/vitor.enes/eurosys_results/results_increasing_load";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_increasing_load";
+
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -198,8 +200,6 @@ fn increasing_load_plot() -> Result<(), Report> {
     };
     let payload_size = 4096;
     let batch_max_size = 1;
-    // let payload_size = 100;
-    // let batch_max_size = 10000;
     let n = 5;
     let leader = 1;
 
@@ -213,8 +213,6 @@ fn increasing_load_plot() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 20,
-        // 1024 * 24,
-        // 1024 * 28,
     ];
     // let clients_per_region = vec![
     //     32,
@@ -325,6 +323,155 @@ fn increasing_load_plot() -> Result<(), Report> {
         PLOT_DIR,
         &path,
         &db,
+    )?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn batching_plot() -> Result<(), Report> {
+    println!(">>>>>>>> BATCHING <<<<<<<<");
+    let results_dir = "../results_increasing_load";
+
+    // fixed parameters
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
+    let empty_key_gen = KeyGen::ConflictPool {
+        conflict_rate: 0,
+        pool_size: 1,
+    };
+
+    let n = 5;
+    let protocols = vec![
+        (Protocol::NewtAtomic, 1),
+        // (Protocol::NewtAtomic, 2),
+        (Protocol::FPaxos, 1),
+        // (Protocol::FPaxos, 2),
+    ];
+    let search_gen = |(protocol, f)| Search::new(n, f, protocol);
+
+    let settings = vec![
+        // (batch_max_size, payload_size)
+        (1, 256),
+        (10000, 256),
+        (1, 1024),
+        (10000, 1024),
+        (1, 4096),
+        (10000, 4096),
+    ];
+    let n = 5;
+    let leader = 1;
+
+    // generate throughput-latency plot
+    let clients_per_region = vec![
+        32,
+        512,
+        1024,
+        1024 * 2,
+        1024 * 4,
+        1024 * 8,
+        1024 * 16,
+        1024 * 20,
+        1024 * 24,
+        1024 * 32,
+        1024 * 36,
+        1024 * 40,
+        1024 * 44,
+        1024 * 48,
+        1024 * 52,
+        1024 * 56,
+        1024 * 60,
+        1024 * 64,
+    ];
+
+    // load results
+    let db = ResultsDB::load(results_dir).wrap_err("load results")?;
+
+    for (batch_max_size, payload_size) in settings.clone() {
+        let search_refine = |search: &mut Search, key_gen: KeyGen| {
+            // filter by key gen payload size and batch max size in all
+            // protocols
+            search
+                .key_gen(key_gen)
+                .payload_size(payload_size)
+                .batch_max_size(batch_max_size);
+        };
+
+        let path = format!(
+            "plot_batching_heatmap_{}_{}.pdf",
+            batch_max_size, payload_size
+        );
+        fantoch_plot::heatmap_plot_split(
+            n,
+            protocols.clone(),
+            clients_per_region.clone(),
+            key_gen,
+            search_refine,
+            leader,
+            PLOT_DIR,
+            &path,
+            &db,
+        )?;
+
+        let style_fun = None;
+        let latency_precision = LatencyPrecision::Millis;
+        let x_range = None;
+        let y_range = Some((100.0, 2000.0));
+        let y_log_scale = true;
+        let x_bbox_to_anchor = None;
+        let left_margin = None;
+        let width_reduction = None;
+        let path =
+            format!("plot_batching_{}_{}.pdf", batch_max_size, payload_size);
+        let (max_throughputs, _) = fantoch_plot::throughput_latency_plot_split(
+            n,
+            protocols.clone(),
+            search_gen,
+            clients_per_region.clone(),
+            key_gen,
+            empty_key_gen,
+            search_refine,
+            style_fun,
+            latency_precision,
+            x_range,
+            y_range,
+            y_log_scale,
+            x_bbox_to_anchor,
+            left_margin,
+            width_reduction,
+            PLOT_DIR,
+            &path,
+            &db,
+        )?;
+        for (search, max_throughput) in max_throughputs {
+            let name = match search.protocol {
+                Protocol::FPaxos => "fpaxos",
+                Protocol::NewtAtomic => "newt  ",
+                _ => unreachable!(),
+            };
+            println!(
+                "R {} f = {} bms = {:<5} ps = {:<4}: {}",
+                name,
+                search.f,
+                search.batch_max_size.unwrap(),
+                search.payload_size.unwrap(),
+                max_throughput
+            );
+        }
+    }
+
+    // create searches
+    let searches: Vec<_> = protocols
+        .into_iter()
+        .map(|search_gen_input| search_gen(search_gen_input))
+        .collect();
+    let style_fun = None;
+    let path = format!("plot_batching.pdf");
+    let y_range = Some((0.0, 800.0));
+    fantoch_plot::batching_plot(
+        searches, style_fun, n, settings, y_range, PLOT_DIR, &path, &db,
     )?;
 
     Ok(())

@@ -1,4 +1,4 @@
-use crate::executor::GraphExecutor;
+use crate::executor::{GraphExecutionInfo, GraphExecutor};
 use crate::protocol::common::graph::{
     Dependency, KeyDeps, LockedKeyDeps, QuorumDeps, SequentialKeyDeps,
 };
@@ -6,7 +6,6 @@ use crate::protocol::common::synod::{Synod, SynodMessage};
 use crate::protocol::partial::{self, ShardsCommits};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::Executor;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
     Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
@@ -16,14 +15,11 @@ use fantoch::time::SysTime;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
 use threshold::VClock;
 
 pub type AtlasSequential = Atlas<SequentialKeyDeps>;
 pub type AtlasLocked = Atlas<LockedKeyDeps>;
-
-type ExecutionInfo = <GraphExecutor as Executor>::ExecutionInfo;
 
 #[derive(Debug, Clone)]
 pub struct Atlas<KD: KeyDeps> {
@@ -32,7 +28,7 @@ pub struct Atlas<KD: KeyDeps> {
     cmds: SequentialCommandsInfo<AtlasInfo>,
     gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
-    to_executors: Vec<ExecutionInfo>,
+    to_executors: Vec<GraphExecutionInfo>,
     // set of processes in my shard
     shard_processes: HashSet<ProcessId>,
     // commit notifications that arrived before the initial `MCollect` message
@@ -192,7 +188,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
     }
 
     /// Returns new execution info for executors.
-    fn to_executors(&mut self) -> Option<ExecutionInfo> {
+    fn to_executors(&mut self) -> Option<GraphExecutionInfo> {
         self.to_executors.pop()
     }
 
@@ -288,7 +284,7 @@ impl<KD: KeyDeps> Atlas<KD> {
             //   `MCommit` now
 
             info.status = Status::PAYLOAD;
-            info.cmd = Some(Arc::new(cmd));
+            info.cmd = Some(cmd);
 
             // check if there's a buffered commit notification; if yes, handle
             // the commit again (since now we have the payload)
@@ -312,7 +308,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         // update command info
         info.status = Status::COLLECT;
         info.quorum = quorum;
-        info.cmd = Some(Arc::new(cmd));
+        info.cmd = Some(cmd);
         // create and set consensus value
         let value = ConsensusValue::with(deps.clone());
         assert!(info.synod.set_if_not_accepted(|| value));
@@ -445,7 +441,7 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // create execution info
         let execution_info =
-            ExecutionInfo::add(dot, cmd.clone(), value.deps.clone());
+            GraphExecutionInfo::add(dot, cmd.clone(), value.deps.clone());
         self.to_executors.push(execution_info);
 
         // update command info:
@@ -787,7 +783,7 @@ struct AtlasInfo {
     quorum: HashSet<ProcessId>,
     synod: Synod<ConsensusValue>,
     // `None` if not set yet
-    cmd: Option<Arc<Command>>,
+    cmd: Option<Command>,
     // `quorum_deps` is used by the coordinator to compute the threshold
     // deps when deciding whether to take the fast path
     quorum_deps: QuorumDeps,
@@ -924,6 +920,7 @@ enum Status {
 mod tests {
     use super::*;
     use fantoch::client::{Client, KeyGen, Workload};
+    use fantoch::executor::Executor;
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
