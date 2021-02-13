@@ -735,6 +735,12 @@ impl<KC: KeyClocks> Newt<KC> {
         // get cmd info
         let info = self.cmds.get(dot);
 
+        // maybe bump up to `clock`
+        if let Some(cmd) = info.cmd.as_ref() {
+            // we have the payload, thus we can bump to `clock`
+            self.key_clocks.detached(cmd, clock, &mut self.detached);
+        }
+
         // compute message: that can either be nothing, an ack or an mcommit
         let msg = match info
             .synod
