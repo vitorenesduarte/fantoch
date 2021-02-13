@@ -13,6 +13,9 @@ use fantoch_ps::protocol::{
 use rayon::prelude::*;
 use std::time::Duration;
 
+// latency dir
+const LATENCY_AWS: &str = "../latency_aws/2020_06_05";
+
 const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 
 macro_rules! config {
@@ -59,7 +62,7 @@ fn main() {
 }
 
 fn aws_planet() -> (Planet, Vec<Region>) {
-    let planet = Planet::from("../latency_aws");
+    let planet = Planet::from(LATENCY_AWS);
     let regions = vec![
         Region::new("eu-west-1"),
         Region::new("us-west-1"),

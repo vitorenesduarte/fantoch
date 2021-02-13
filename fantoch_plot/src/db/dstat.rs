@@ -40,49 +40,54 @@ impl Dstat {
         let mut mem_used = Histogram::new();
 
         // open csv file
-        let file = File::open(path)?;
-        let mut buf = BufReader::new(file);
+        if let Ok(file) = File::open(path) {
+            let mut buf = BufReader::new(file);
 
-        // skip first 5 lines (non-header lines)
-        for _ in 0..5 {
-            let mut s = String::new();
-            // ignore empty lines
-            while s.trim().is_empty() {
-                buf.read_line(&mut s)?;
-            }
-        }
-
-        // create csv reader:
-        // - `flexible(true)` makes `reader.records()` not throw a error in case
-        //   there's a row with not enough fields
-        let mut reader = ReaderBuilder::new().flexible(true).from_reader(buf);
-
-        // get dstat headers
-        let headers = reader.headers().wrap_err("csv headers")?.clone();
-
-        for row in reader.records() {
-            // fetch row
-            let row = row.wrap_err("csv record")?;
-
-            // skip row if doesn't have enough fields/columns
-            if row.len() < headers.len() {
-                continue;
+            // skip first 5 lines (non-header lines)
+            for _ in 0..5 {
+                let mut s = String::new();
+                // ignore empty lines
+                while s.trim().is_empty() {
+                    buf.read_line(&mut s)?;
+                }
             }
 
-            // parse csv row
-            let row: DstatRow = row
-                .deserialize(Some(&headers))
-                .wrap_err_with(|| format!("deserialize dstat row {}", path))?;
+            // create csv reader:
+            // - `flexible(true)` makes `reader.records()` not throw a error in case
+            //   there's a row with not enough fields
+            let mut reader =
+                ReaderBuilder::new().flexible(true).from_reader(buf);
 
-            // only consider the record if within bounds
-            if row.epoch >= start && row.epoch <= end {
-                cpu_usr.increment(row.cpu_usr);
-                cpu_sys.increment(row.cpu_sys);
-                cpu_wait.increment(row.cpu_wait);
-                net_recv.increment(row.net_recv);
-                net_send.increment(row.net_send);
-                mem_used.increment(row.mem_used);
+            // get dstat headers
+            let headers = reader.headers().wrap_err("csv headers")?.clone();
+
+            for row in reader.records() {
+                // fetch row
+                let row = row.wrap_err("csv record")?;
+
+                // skip row if doesn't have enough fields/columns
+                if row.len() < headers.len() {
+                    continue;
+                }
+
+                // parse csv row
+                let row: DstatRow =
+                    row.deserialize(Some(&headers)).wrap_err_with(|| {
+                        format!("deserialize dstat row {}", path)
+                    })?;
+
+                // only consider the record if within bounds
+                if row.epoch >= start && row.epoch <= end {
+                    cpu_usr.increment(row.cpu_usr);
+                    cpu_sys.increment(row.cpu_sys);
+                    cpu_wait.increment(row.cpu_wait);
+                    net_recv.increment(row.net_recv);
+                    net_send.increment(row.net_send);
+                    mem_used.increment(row.mem_used);
+                }
             }
+        } else {
+            println!("missing dstat file: {:?}", path);
         }
 
         // create self
