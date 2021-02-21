@@ -26,6 +26,9 @@ const EXPERIMENT_TIMEOUTS: ExperimentTimeouts = ExperimentTimeouts {
     stop: Some(minutes(20)),
 };
 
+// latency dir
+const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
+
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::OnDemand;
 // const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
@@ -49,7 +52,7 @@ const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "caesar_parallel";
+const BRANCH: &str = "bump_on_mconsensus";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -69,12 +72,14 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
-    // Protocol::Basic,
-    // Protocol::AtlasLocked,
-    // Protocol::NewtAtomic,
-    // Protocol::FPaxos,
-    // Protocol::EPaxosLocked,
+    Protocol::NewtAtomic,
+    /*
+    Protocol::Basic,
+    Protocol::AtlasLocked,
+    Protocol::FPaxos,
+    Protocol::EPaxosLocked,
     Protocol::CaesarLocked,
+    */
 ];
 
 macro_rules! config {
@@ -193,7 +198,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
     );
 
     // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
+    let planet = Some(Planet::from(LATENCY_AWS));
 
     baremetal_bench(
         regions,
@@ -209,6 +214,101 @@ async fn partial_replication_plot() -> Result<(), Report> {
         results_dir,
     )
     .await
+}
+
+#[allow(dead_code)]
+async fn batching_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_batching";
+
+    // THROUGHPUT
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
+    ];
+    let n = regions.len();
+
+    let mut configs = vec![
+        // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+    ];
+
+    let clients_per_region = vec![
+        // 1024,
+        // 1024 * 2,
+        // 1024 * 4,
+        // 1024 * 8,
+        // 1024 * 16,
+        // 1024 * 20,
+        // 1024 * 24,
+        // 1024 * 28,
+        // 1024 * 44,
+        // 1024 * 48,
+        // 1024 * 52,
+        // 1024 * 56,
+        // 1024 * 60,
+        1024 * 64,
+    ];
+    let batch_max_sizes = vec![1, 10000];
+
+    let shard_count = 1;
+    let keys_per_command = 1;
+    let payload_sizes = vec![256, 1024, 4096];
+    let cpus = 12;
+
+    let key_gen = KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    };
+
+    let mut workloads = Vec::new();
+    for payload_size in payload_sizes {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT_WAN,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
+
+    let skip = |_, _, _| false;
+
+    // set shards in each config
+    configs
+        .iter_mut()
+        .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
+
+    // init logging
+    let progress = TracingProgressBar::init(
+        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+    );
+
+    // create AWS planet
+    let planet = Some(Planet::from(LATENCY_AWS));
+
+    for batch_max_size in batch_max_sizes {
+        baremetal_bench(
+            regions.clone(),
+            shard_count,
+            planet.clone(),
+            configs.clone(),
+            clients_per_region.clone(),
+            workloads.clone(),
+            batch_max_size,
+            cpus,
+            skip,
+            progress.clone(),
+            results_dir,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -229,13 +329,13 @@ async fn increasing_load_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::Basic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
-        // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
         (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
@@ -248,29 +348,12 @@ async fn increasing_load_plot() -> Result<(), Report> {
         1024 * 8,
         1024 * 16,
         1024 * 20,
-        // 1024 * 24,
-        // 1024 * 28,
     ];
-    // let clients_per_region = vec![
-    //     32,
-    //     1024,
-    //     1024 * 4,
-    //     1024 * 16,
-    //     1024 * 24,
-    //     1024 * 32,
-    //     1024 * 40,
-    //     1024 * 48,
-    //     1024 * 56,
-    //     1024 * 60,
-    //     1024 * 64,
-    // ];
     let batch_max_size = 1;
-    // let batch_max_size = 10000;
 
     let shard_count = 1;
     let keys_per_command = 1;
     let payload_size = 4096;
-    // let payload_size = 100;
     let cpus = 12;
 
     let key_gens = vec![
@@ -312,7 +395,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
     );
 
     // create AWS planet
-    let planet = Some(Planet::from("../latency_aws"));
+    let planet = Some(Planet::from(LATENCY_AWS));
 
     baremetal_bench(
         regions,
