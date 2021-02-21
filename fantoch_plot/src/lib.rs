@@ -640,9 +640,8 @@ fn inner_cdf_plot(
             .expect("clients per region should be set"),
         x.iter()
             .zip(y.iter())
-            .filter(
-                |(_, percentile)| vec![98.8, 99.9, 99.99].contains(percentile)
-            )
+            .filter(|(_, percentile)| vec![95.0, 98.8, 99.9, 99.99]
+                .contains(percentile))
             .collect::<Vec<_>>()
     );
 
