@@ -9,6 +9,10 @@ use fantoch_plot::{
 };
 use std::collections::HashMap;
 
+// latency dir
+const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
+// const LATENCY_AWS: &str = "../latency_aws/2020_06_05";
+
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
 
@@ -22,16 +26,17 @@ fn main() -> Result<(), Report> {
     // partial_replication_all()?;
     // multi_key()?;
     // single_key_all()?;
+    show_distance_matrix();
     eurosys()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    // fairness_plot()?;
-    // tail_latency_plot()?;
+    fairness_plot()?;
+    tail_latency_plot()?;
     // increasing_load_plot()?;
-    batching_plot()?;
+    // batching_plot()?;
     // scalability_plot()?;
     // partial_replication_plot()?;
     Ok(())
@@ -186,8 +191,9 @@ fn tail_latency_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_increasing_load";
+    // let results_dir =
+    //     "/home/vitor.enes/eurosys_results/results_increasing_load";
+    let results_dir = "../results_increasing_load";
 
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
@@ -214,19 +220,6 @@ fn increasing_load_plot() -> Result<(), Report> {
         1024 * 16,
         1024 * 20,
     ];
-    // let clients_per_region = vec![
-    //     32,
-    //     1024,
-    //     1024 * 4,
-    //     1024 * 16,
-    //     1024 * 24,
-    //     1024 * 32,
-    //     1024 * 40,
-    //     1024 * 48,
-    //     1024 * 56,
-    //     1024 * 60,
-    //     1024 * 64,
-    // ];
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
@@ -346,9 +339,7 @@ fn batching_plot() -> Result<(), Report> {
     let n = 5;
     let protocols = vec![
         (Protocol::NewtAtomic, 1),
-        // (Protocol::NewtAtomic, 2),
         (Protocol::FPaxos, 1),
-        // (Protocol::FPaxos, 2),
     ];
     let search_gen = |(protocol, f)| Search::new(n, f, protocol);
 
@@ -1320,8 +1311,7 @@ fn multi_key_all() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_increasing_load";
+    let results_dir = "../results_increasing_load";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
@@ -1329,10 +1319,10 @@ fn single_key_all() -> Result<(), Report> {
             conflict_rate: 2,
             pool_size: 1,
         },
-        // KeyGen::ConflictPool {
-        //     conflict_rate: 10,
-        //     pool_size: 1,
-        // },
+        KeyGen::ConflictPool {
+            conflict_rate: 10,
+            pool_size: 1,
+        },
     ];
     let payload_size = 4096;
     let batch_max_size = 1;
@@ -1341,6 +1331,7 @@ fn single_key_all() -> Result<(), Report> {
         Protocol::AtlasLocked,
         Protocol::EPaxosLocked,
         Protocol::FPaxos,
+        Protocol::CaesarLocked,
     ];
     let leader = 1;
     let latency_precision = LatencyPrecision::Millis;
@@ -1650,7 +1641,7 @@ fn single_key_all() -> Result<(), Report> {
 #[allow(dead_code)]
 fn show_distance_matrix() {
     // show distance matrix
-    let planet = Planet::from("../latency_aws/");
+    let planet = Planet::from(LATENCY_AWS);
     let regions = vec![
         Region::new("eu-west-1"),
         Region::new("us-west-1"),

@@ -11,11 +11,11 @@ use tracing_futures::Instrument;
 use tsunami::providers::aws::LaunchMode;
 use tsunami::Tsunami;
 
-const LAUCH_MODE: LaunchMode = LaunchMode::DefinedDuration { hours: 1 };
-const INSTANCE_TYPE: &str = "m3.xlarge";
+const LAUCH_MODE: LaunchMode = LaunchMode::OnDemand;
+const INSTANCE_TYPE: &str = "m5.large";
 const MAX_SPOT_INSTANCE_REQUEST_WAIT_SECS: u64 = 5 * 60; // 5 minutes
 
-const PING_DURATION_SECS: usize = 30 * 60; // 30 minutes
+const PING_DURATION_SECS: usize = 60 * 60; // 60 minutes
 
 /// This script should be called like: $ script hosts seconds output
 /// - hosts: file where each line looks like "region::ip"
@@ -27,7 +27,7 @@ const HOSTS: &str = "./hosts";
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     // all AWS regions
-    let regions = vec![
+    let _all_regions = vec![
         Region::AfSouth1,
         Region::ApEast1,
         Region::ApNortheast1,
@@ -48,6 +48,15 @@ async fn main() -> Result<(), Report> {
         Region::UsEast2,
         Region::UsWest1,
         Region::UsWest2,
+    ];
+
+    // AWS regions used in experiments
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
     ];
 
     ping_experiment(

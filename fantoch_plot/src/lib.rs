@@ -640,7 +640,8 @@ fn inner_cdf_plot(
             .expect("clients per region should be set"),
         x.iter()
             .zip(y.iter())
-            .filter(|(_, percentile)| **percentile >= 95.0)
+            .filter(|(_, percentile)| vec![95.0, 98.8, 99.9, 99.99]
+                .contains(percentile))
             .collect::<Vec<_>>()
     );
 
@@ -1122,6 +1123,10 @@ pub fn batching_plot(
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
 
+    // decrease height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width, height - 0.3)?;
+
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
@@ -1199,7 +1204,8 @@ pub fn batching_plot(
     }
 
     // legend
-    add_legend(plotted, None, None, None, None, py, &ax)?;
+    let y_bbox_to_anchor = Some(1.22);
+    add_legend(plotted, None, None, y_bbox_to_anchor, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
