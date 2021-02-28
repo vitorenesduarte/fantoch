@@ -57,7 +57,7 @@ impl Executor for TableExecutor {
         // handle each new info by updating the votes table and execute ready
         // commands
         match info {
-            TableExecutionInfo::Votes {
+            TableExecutionInfo::AttachedVotes {
                 dot,
                 clock,
                 rifl,
@@ -127,7 +127,7 @@ impl TableExecutor {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TableExecutionInfo {
-    Votes {
+    AttachedVotes {
         dot: Dot,
         clock: u64,
         rifl: Rifl,
@@ -150,7 +150,7 @@ impl TableExecutionInfo {
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
-        TableExecutionInfo::Votes {
+        TableExecutionInfo::AttachedVotes {
             dot,
             clock,
             rifl,
@@ -168,7 +168,7 @@ impl TableExecutionInfo {
 impl MessageKey for TableExecutionInfo {
     fn key(&self) -> &Key {
         match self {
-            TableExecutionInfo::Votes { key, .. } => key,
+            TableExecutionInfo::AttachedVotes { key, .. } => key,
             TableExecutionInfo::DetachedVotes { key, .. } => key,
         }
     }
