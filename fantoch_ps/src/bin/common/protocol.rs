@@ -53,7 +53,6 @@ type ProtocolArgs = (
     usize,
     Option<String>,
     Option<Duration>,
-    Option<Duration>,
     Option<String>,
     usize,
     Option<usize>,
@@ -83,7 +82,6 @@ where
         executors,
         multiplexing,
         execution_log,
-        tracer_show_interval,
         ping_interval,
         metrics_file,
         stack_size,
@@ -108,7 +106,6 @@ where
         executors,
         multiplexing,
         execution_log,
-        tracer_show_interval,
         ping_interval,
         metrics_file,
     );
@@ -328,13 +325,6 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tracer_show_interval")
-                .long("tracer_show_interval")
-                .value_name("TRACER_SHOW_INTERVAL")
-                .help("number indicating the interval (in milliseconds) between tracing information being show; by default there's no tracing; if set, this value should be > 0")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("ping_interval")
                 .long("ping_interval")
                 .value_name("PING_INTERVAL")
@@ -427,8 +417,6 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
     let executors = parse_executors(matches.value_of("executors"));
     let multiplexing = parse_multiplexing(matches.value_of("multiplexing"));
     let execution_log = parse_execution_log(matches.value_of("execution_log"));
-    let tracer_show_interval =
-        parse_tracer_show_interval(matches.value_of("tracer_show_interval"));
     let ping_interval = parse_ping_interval(matches.value_of("ping_interval"));
     let metrics_file = parse_metrics_file(matches.value_of("metrics_file"));
     let stack_size = super::parse_stack_size(matches.value_of("stack_size"));
@@ -456,7 +444,6 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
     info!("executors: {:?}", executors);
     info!("multiplexing: {:?}", multiplexing);
     info!("execution log: {:?}", execution_log);
-    info!("trace_show_interval: {:?}", tracer_show_interval);
     info!("ping_interval: {:?}", ping_interval);
     info!("metrics file: {:?}", metrics_file);
     info!("stack size: {:?}", stack_size);
@@ -479,7 +466,6 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
         executors,
         multiplexing,
         execution_log,
-        tracer_show_interval,
         ping_interval,
         metrics_file,
         stack_size,
@@ -744,15 +730,6 @@ fn parse_multiplexing(multiplexing: Option<&str>) -> usize {
 
 pub fn parse_execution_log(execution_log: Option<&str>) -> Option<String> {
     execution_log.map(String::from)
-}
-
-fn parse_tracer_show_interval(interval: Option<&str>) -> Option<Duration> {
-    interval.map(|interval| {
-        let millis = interval
-            .parse::<u64>()
-            .expect("tracer_show_interval should be a number");
-        Duration::from_millis(millis)
-    })
 }
 
 fn parse_ping_interval(interval: Option<&str>) -> Option<Duration> {

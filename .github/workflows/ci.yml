@@ -18,8 +18,8 @@ jobs:
           toolchain: nightly-2020-12-10
           override: true
 
-      - name: Test fantoch_prof, fantoch, fantoch_ps fantoch_bote
-        run: cargo test --lib -p fantoch_prof -p fantoch -p fantoch_ps -p fantoch_bote
+      - name: Test fantoch, fantoch_ps fantoch_bote
+        run: cargo test --lib -p fantoch -p fantoch_ps -p fantoch_bote
         env:
           QUICKCHECK_TESTS: '10000'
           RUSTFLAGS: '-Zinstrument-coverage'

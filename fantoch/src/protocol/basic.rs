@@ -168,7 +168,6 @@ impl Protocol for Basic {
 
 impl Basic {
     /// Handles a submit operation by a client.
-    // #[instrument(skip(self, dot, cmd))]
     fn handle_submit(&mut self, dot: Option<Dot>, cmd: Command) {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
@@ -185,7 +184,6 @@ impl Basic {
         })
     }
 
-    // #[instrument(skip(self, from, dot, cmd))]
     fn handle_mstore(
         &mut self,
         from: ProcessId,
@@ -228,7 +226,6 @@ impl Basic {
         }
     }
 
-    // #[instrument(skip(self, from, dot))]
     fn handle_mstoreack(&mut self, from: ProcessId, dot: Dot) {
         trace!("p{}: MStoreAck({:?}) from {}", self.id(), dot, from);
 
@@ -251,7 +248,6 @@ impl Basic {
         }
     }
 
-    // #[instrument(skip(self, dot))]
     fn handle_mcommit(&mut self, dot: Dot) {
         trace!("p{}: MCommit({:?})", self.id(), dot);
 
@@ -285,14 +281,12 @@ impl Basic {
         }
     }
 
-    // #[instrument(skip(self, from, dot))]
     fn handle_mcommit_dot(&mut self, from: ProcessId, dot: Dot) {
         trace!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
         self.gc_track.add_to_clock(dot);
     }
 
-    // #[instrument(skip(self, from, committed))]
     fn handle_mgc(&mut self, from: ProcessId, committed: VClock<ProcessId>) {
         trace!(
             "p{}: MGarbageCollection({:?}) from {}",
@@ -311,7 +305,6 @@ impl Basic {
         }
     }
 
-    // #[instrument(skip(self, from, stable))]
     fn handle_mstable(
         &mut self,
         from: ProcessId,
@@ -323,7 +316,6 @@ impl Basic {
         self.bp.stable(stable_count);
     }
 
-    // #[instrument(skip(self))]
     fn handle_event_garbage_collection(&mut self) {
         trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
 

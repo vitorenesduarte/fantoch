@@ -605,9 +605,7 @@ mod tests {
         );
 
         // run until the clients end + another 10 seconds
-        let tracer_show_interval = None;
         let extra_run_time = Some(Duration::from_secs(10));
-        let tracing_directives = None; // Some("fantoch=debug,fantoch_ps=debug");
         let metrics = tokio_test_runtime()
             .block_on(run_test_with_inspect_fun::<P, (usize, usize, usize)>(
                 config,
@@ -615,8 +613,6 @@ mod tests {
                 clients_per_process,
                 workers,
                 executors,
-                tracer_show_interval,
-                tracing_directives,
                 Some(metrics_inspect),
                 extra_run_time,
             ))

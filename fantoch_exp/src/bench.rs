@@ -48,7 +48,6 @@ pub async fn bench_experiment(
     testbed: Testbed,
     planet: Option<Planet>,
     configs: Vec<(Protocol, Config)>,
-    tracer_show_interval: Option<Duration>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
     batch_max_size: usize,
@@ -60,10 +59,6 @@ pub async fn bench_experiment(
     progress: TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
-    if let Some(interval) = tracer_show_interval {
-        panic!("found tracer should interval ({:?}) without the 'prof' feature being set", interval);
-    }
-
     match testbed {
         Testbed::Local | Testbed::Baremetal => {
             cleanup(&machines, protocols_to_cleanup)
@@ -148,7 +143,6 @@ pub async fn bench_experiment(
                         &planet,
                         protocol,
                         config,
-                        tracer_show_interval,
                         clients,
                         *workload,
                         batch_max_size,
@@ -197,7 +191,6 @@ async fn run_experiment(
     planet: &Option<Planet>,
     protocol: Protocol,
     config: Config,
-    tracer_show_interval: Option<Duration>,
     clients_per_region: usize,
     workload: Workload,
     batch_max_size: usize,
@@ -218,7 +211,6 @@ async fn run_experiment(
         planet,
         protocol,
         config,
-        tracer_show_interval,
         cpus,
         &mut dstats,
     );
@@ -318,7 +310,6 @@ async fn start_processes(
     planet: &Option<Planet>,
     protocol: Protocol,
     config: Config,
-    tracer_show_interval: Option<Duration>,
     cpus: usize,
     dstats: &mut Vec<tokio::process::Child>,
 ) -> Result<(Ips, HashMap<ProcessId, (Region, tokio::process::Child)>), Report>
@@ -382,7 +373,7 @@ async fn start_processes(
         dstats.push(dstat);
 
         // create protocol config and generate args
-        let mut protocol_config = ProtocolConfig::new(
+        let protocol_config = ProtocolConfig::new(
             protocol,
             *process_id,
             *shard_id,
@@ -393,9 +384,6 @@ async fn start_processes(
             cpus,
             log_file,
         );
-        if let Some(interval) = tracer_show_interval {
-            protocol_config.set_tracer_show_interval(interval);
-        }
         let args = protocol_config.to_args();
 
         let command = crate::machine::fantoch_bin_script(

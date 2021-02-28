@@ -9,7 +9,6 @@ license = "MIT/Apache-2.0"
 [features]
 jemalloc = ["jemallocator"]
 amortize = ["fantoch/amortize"]
-prof = ["fantoch/prof", "jemallocator"]
 parallel-sim = ["rayon"]
 max_level_debug = ["fantoch/max_level_debug"]
 max_level_trace = ["fantoch/max_level_trace"]
@@ -32,7 +31,6 @@ num_cpus = "1.13.0"
 jemallocator = { version = "0.3.2", optional = true }
 
 fantoch = { path = "../fantoch" }
-fantoch_prof = { path = "../fantoch_prof" }
 
 [dev-dependencies]
 permutator = "0.4.0"

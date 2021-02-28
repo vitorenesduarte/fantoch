@@ -58,6 +58,17 @@ macro_rules! singleton {
     }};
 }
 
+#[macro_export]
+macro_rules! elapsed {
+    ( $x:expr ) => {{
+        use std::time::Instant;
+        let start = Instant::now();
+        let result = $x;
+        let time = start.elapsed();
+        (time, result)
+    }};
+}
+
 #[must_use]
 pub fn init_tracing_subscriber(
     log_file: Option<impl AsRef<std::path::Path> + std::fmt::Debug>,

@@ -17,5 +17,4 @@ rayon = "1.5.0"
 serde = "1.0.118"
 
 fantoch = { path = "../fantoch" }
-fantoch_prof = { path = "../fantoch_prof" }
 fantoch_exp = { path = "../fantoch_exp", default-features = false }

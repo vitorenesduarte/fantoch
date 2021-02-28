@@ -101,7 +101,6 @@ impl Executor for TableExecutor {
 }
 
 impl TableExecutor {
-    // #[instrument(skip(self, key, to_execute))]
     fn execute<I>(&mut self, key: Key, to_execute: I)
     where
         I: Iterator<Item = (Rifl, Arc<Vec<KVOp>>)>,

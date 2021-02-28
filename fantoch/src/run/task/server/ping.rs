@@ -1,9 +1,9 @@
 use crate::id::{ProcessId, ShardId};
+use crate::metrics::Histogram;
 use crate::run::prelude::*;
 use crate::run::task::chan::ChannelSender;
 use crate::HashMap;
 use crate::{info, trace, warn};
-use fantoch_prof::metrics::Histogram;
 use std::net::IpAddr;
 use tokio::time::{self, Duration};
 

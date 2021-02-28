@@ -74,7 +74,6 @@ impl GCTrack {
     }
 
     /// Computes the new set of stable dots.
-    // #[instrument(skip(self))]
     pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
         // compute new stable clock
         let mut new_stable = self.stable_clock();
@@ -122,7 +121,6 @@ impl GCTrack {
     }
 
     // TODO we should design a fault-tolerant version of this
-    // #[instrument(skip(self))]
     fn stable_clock(&mut self) -> VClock<ProcessId> {
         if self.all_but_me.len() != self.n - 1 {
             // if we don't have info from all processes, then there are no

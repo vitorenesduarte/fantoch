@@ -13,6 +13,9 @@ pub mod client;
 // This module contains the implementation of a key-value store.
 pub mod kvs;
 
+// This module contains the definitions of `Metrics`, `Float` and `Histogram`.
+pub mod metrics;
+
 // This module contains the definition of an executor.
 pub mod executor;
 
