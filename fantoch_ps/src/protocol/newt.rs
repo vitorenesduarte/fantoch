@@ -555,9 +555,10 @@ impl<KC: KeyClocks> Newt<KC> {
         mut votes: Votes,
         _time: &dyn SysTime,
     ) {
+        let id = self.id();
         trace!(
             "p{}: MCommit({:?}, {}, {:?}) | time={}",
-            self.id(),
+            id,
             dot,
             clock,
             votes,
@@ -585,16 +586,33 @@ impl<KC: KeyClocks> Newt<KC> {
             .as_ref()
             .expect("there should be a command payload");
         let rifl = cmd.rifl();
-        let cmd_key_count = cmd.total_key_count();
         let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
             let key_votes = votes.remove(&key).unwrap_or_default();
+            let remaining_keys = cmd
+                .all_keys()
+                .filter_map(|(shard_id, shard_key)| {
+                    if key != shard_key {
+                        Some((*shard_id, shard_key.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            trace!(
+                "p{}: MCommit({:?}) key {:?} | remaining keys {:?} | time={}",
+                id,
+                dot,
+                key,
+                remaining_keys,
+                _time.micros()
+            );
             TableExecutionInfo::attached_votes(
                 dot,
                 clock,
                 key.clone(),
                 rifl,
-                cmd_key_count,
+                remaining_keys,
                 ops.clone(),
                 key_votes,
             )

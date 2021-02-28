@@ -1,5 +1,5 @@
 use crate::client::{Client, Workload};
-use crate::command::{Command, CommandResult};
+use crate::command::{Command, CommandResult, DEFAULT_SHARD_ID};
 use crate::config::Config;
 use crate::executor::{ExecutionOrderMonitor, Executor, ExecutorMetrics};
 use crate::id::{ClientId, ProcessId, ShardId};
@@ -407,6 +407,13 @@ where
             .to_executors_iter()
             .flat_map(|info| {
                 executor.handle(info, time);
+                // handle executor messages to self
+                let to_executors =
+                    executor.to_executors_iter().collect::<Vec<_>>();
+                for (shard_id, info) in to_executors {
+                    assert_eq!(shard_id, DEFAULT_SHARD_ID);
+                    executor.handle(info, time);
+                }
                 // TODO remove collect
                 executor.to_clients_iter().collect::<Vec<_>>()
             })

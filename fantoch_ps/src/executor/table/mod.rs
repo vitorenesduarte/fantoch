@@ -269,6 +269,7 @@ impl VotesTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fantoch::command::DEFAULT_SHARD_ID;
     use fantoch::id::{ClientId, Rifl};
     use fantoch::kvs::KVOp;
     use permutator::Permutation;
@@ -299,10 +300,10 @@ mod tests {
 
         // in this example we'll use the dot as rifl;
         // also, all commands access a single key
-        let pending = |key: &'static str, rifl: Rifl| -> Pending {
-            let cmd_key_count = 1;
-            let ops = Arc::new(vec![KVOp::Put(String::from(key))]);
-            Pending::new(rifl, cmd_key_count, ops)
+        let pending = |value: &'static str, rifl: Rifl| -> Pending {
+            let all_keys = vec![(DEFAULT_SHARD_ID, "KEY".to_string())];
+            let ops = Arc::new(vec![KVOp::Put(String::from(value))]);
+            Pending::new(rifl, all_keys, ops)
         };
 
         // a1
@@ -490,10 +491,10 @@ mod tests {
 
         // in this example we'll use the dot as rifl;
         // also, all commands access a single key
-        let pending = |key: &'static str, rifl: Rifl| {
-            let cmd_key_count = 1;
-            let ops = Arc::new(vec![KVOp::Put(String::from(key))]);
-            Pending::new(rifl, cmd_key_count, ops)
+        let pending = |value: &'static str, rifl: Rifl| {
+            let all_keys = vec![(DEFAULT_SHARD_ID, "KEY".to_string())];
+            let ops = Arc::new(vec![KVOp::Put(String::from(value))]);
+            Pending::new(rifl, all_keys, ops)
         };
 
         // a1
