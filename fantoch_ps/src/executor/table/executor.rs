@@ -8,9 +8,34 @@ use fantoch::executor::{
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
+use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Pending {
+    rifl: Rifl,
+    remaining_keys: Vec<(ShardId, Key)>,
+    ops: Arc<Vec<KVOp>>,
+    missing_stable_keys: usize,
+}
+
+impl Pending {
+    pub fn new(
+        rifl: Rifl,
+        remaining_keys: Vec<(ShardId, Key)>,
+        ops: Arc<Vec<KVOp>>,
+    ) -> Self {
+        let missing_stable_keys = remaining_keys.len();
+        Self {
+            rifl,
+            remaining_keys,
+            ops,
+            missing_stable_keys,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct TableExecutor {
@@ -20,27 +45,8 @@ pub struct TableExecutor {
     monitor: Option<ExecutionOrderMonitor>,
     metrics: ExecutorMetrics,
     to_clients: VecDeque<ExecutorResult>,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Pending {
-    rifl: Rifl,
-    all_keys: Vec<(ShardId, Key)>,
-    ops: Arc<Vec<KVOp>>,
-}
-
-impl Pending {
-    pub fn new(
-        rifl: Rifl,
-        all_keys: Vec<(ShardId, Key)>,
-        ops: Arc<Vec<KVOp>>,
-    ) -> Self {
-        Self {
-            rifl,
-            all_keys,
-            ops,
-        }
-    }
+    to_executors: Vec<(ShardId, TableExecutionInfo)>,
+    pending: HashMap<Rifl, Pending>,
 }
 
 impl Executor for TableExecutor {
@@ -63,6 +69,8 @@ impl Executor for TableExecutor {
         };
         let metrics = ExecutorMetrics::new();
         let to_clients = Default::default();
+        let to_executors = Default::default();
+        let pending = Default::default();
 
         Self {
             execute_at_commit: config.execute_at_commit(),
@@ -71,6 +79,8 @@ impl Executor for TableExecutor {
             monitor,
             metrics,
             to_clients,
+            to_executors,
+            pending,
         }
     }
 
@@ -83,11 +93,11 @@ impl Executor for TableExecutor {
                 clock,
                 key,
                 rifl,
-                all_keys,
+                remaining_keys,
                 ops,
                 votes,
             } => {
-                let pending = Pending::new(rifl, all_keys, ops);
+                let pending = Pending::new(rifl, remaining_keys, ops);
                 if self.execute_at_commit {
                     self.try_execute(key, std::iter::once(pending));
                 } else {
@@ -103,14 +113,26 @@ impl Executor for TableExecutor {
                     self.try_execute(key, to_execute);
                 }
             }
-            TableExecutionInfo::Stable { key, rifl } => {
-                todo!()
+            TableExecutionInfo::Stable { rifl, key } => {
+                let pending = self
+                    .pending
+                    .get_mut(&rifl)
+                    .expect("every command in stable messages must be pending");
+                pending.missing_stable_keys -= 1;
+                if pending.missing_stable_keys == 0 {
+                    let pending = self.pending.remove(&rifl).unwrap();
+                    self.execute_pending(&key, pending);
+                }
             }
         }
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
         self.to_clients.pop_front()
+    }
+
+    fn to_executors(&mut self) -> Option<(ShardId, TableExecutionInfo)> {
+        self.to_executors.pop()
     }
 
     fn parallel() -> bool {
@@ -131,12 +153,24 @@ impl TableExecutor {
     where
         I: Iterator<Item = Pending>,
     {
-        to_execute.for_each(|stable| {
-            if stable.all_keys.len() == 1 {
+        to_execute.for_each(|mut stable| {
+            if stable.missing_stable_keys == 0 {
+                // if the command is single-key, execute immediately.
                 self.execute_pending(&key, stable);
             } else {
-                // send `Stable` message to other keys/partitions
-                todo!()
+                // otherwise, send a `Stable` message to each of the other
+                // keys/partitions accessed by the command
+
+                // take `remaining_keys` as they're no longer needed
+                let remaining_keys = std::mem::take(&mut stable.remaining_keys);
+                let msgs = remaining_keys.into_iter().map(|(shard_id, key)| {
+                    let msg = TableExecutionInfo::stable(key, stable.rifl);
+                    (shard_id, msg)
+                });
+                self.to_executors.extend(msgs);
+
+                // add (locally) stable command to `pending`
+                self.pending.insert(stable.rifl, stable);
             }
         })
     }
@@ -166,7 +200,7 @@ pub enum TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        all_keys: Vec<(ShardId, Key)>,
+        remaining_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     },
@@ -186,7 +220,7 @@ impl TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        all_keys: Vec<(ShardId, Key)>,
+        remaining_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
@@ -195,7 +229,7 @@ impl TableExecutionInfo {
             clock,
             key,
             rifl,
-            all_keys,
+            remaining_keys,
             ops,
             votes,
         }
