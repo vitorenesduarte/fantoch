@@ -337,10 +337,7 @@ fn batching_plot() -> Result<(), Report> {
     };
 
     let n = 5;
-    let protocols = vec![
-        (Protocol::NewtAtomic, 1),
-        (Protocol::FPaxos, 1),
-    ];
+    let protocols = vec![(Protocol::NewtAtomic, 1), (Protocol::FPaxos, 1)];
     let search_gen = |(protocol, f)| Search::new(n, f, protocol);
 
     let settings = vec![

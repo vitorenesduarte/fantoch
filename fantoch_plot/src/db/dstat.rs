@@ -53,8 +53,8 @@ impl Dstat {
             }
 
             // create csv reader:
-            // - `flexible(true)` makes `reader.records()` not throw a error in case
-            //   there's a row with not enough fields
+            // - `flexible(true)` makes `reader.records()` not throw a error in
+            //   case there's a row with not enough fields
             let mut reader =
                 ReaderBuilder::new().flexible(true).from_reader(buf);
 
