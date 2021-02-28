@@ -592,9 +592,9 @@ impl<KC: KeyClocks> Newt<KC> {
             TableExecutionInfo::attached_votes(
                 dot,
                 clock,
+                key.clone(),
                 rifl,
                 cmd_key_count,
-                key.clone(),
                 ops.clone(),
                 key_votes,
             )

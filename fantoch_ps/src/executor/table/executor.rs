@@ -22,6 +22,23 @@ pub struct TableExecutor {
     to_clients: VecDeque<ExecutorResult>,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Pending {
+    rifl: Rifl,
+    cmd_key_count: usize,
+    ops: Arc<Vec<KVOp>>,
+}
+
+impl Pending {
+    pub fn new(rifl: Rifl, cmd_key_count: usize, ops: Arc<Vec<KVOp>>) -> Self {
+        Self {
+            rifl,
+            cmd_key_count,
+            ops,
+        }
+    }
+}
+
 impl Executor for TableExecutor {
     type ExecutionInfo = TableExecutionInfo;
 
@@ -60,24 +77,19 @@ impl Executor for TableExecutor {
             TableExecutionInfo::AttachedVotes {
                 dot,
                 clock,
+                key,
                 rifl,
                 cmd_key_count,
-                key,
                 ops,
                 votes,
             } => {
+                let pending = Pending::new(rifl, cmd_key_count, ops);
                 if self.execute_at_commit {
-                    self.execute(key, std::iter::once((rifl, ops)));
+                    self.execute(key, std::iter::once(pending));
                 } else {
-                    let to_execute = self.table.add_votes(
-                        dot,
-                        clock,
-                        rifl,
-                        cmd_key_count,
-                        &key,
-                        ops,
-                        votes,
-                    );
+                    let to_execute = self
+                        .table
+                        .add_attached_votes(dot, clock, &key, pending, votes);
                     self.execute(key, to_execute);
                 }
             }
@@ -110,11 +122,13 @@ impl Executor for TableExecutor {
 impl TableExecutor {
     fn execute<I>(&mut self, key: Key, to_execute: I)
     where
-        I: Iterator<Item = (Rifl, Arc<Vec<KVOp>>)>,
+        I: Iterator<Item = Pending>,
     {
-        to_execute.for_each(|(rifl, ops)| {
+        to_execute.for_each(|pending| {
             // take the ops inside the arc if we're the last with a
             // reference to it (otherwise, clone them)
+            let rifl = pending.rifl;
+            let ops = pending.ops;
             let ops =
                 Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
             // execute ops in the `KVStore`
@@ -137,9 +151,9 @@ pub enum TableExecutionInfo {
     AttachedVotes {
         dot: Dot,
         clock: u64,
+        key: Key,
         rifl: Rifl,
         cmd_key_count: usize,
-        key: Key,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     },
@@ -153,18 +167,18 @@ impl TableExecutionInfo {
     pub fn attached_votes(
         dot: Dot,
         clock: u64,
+        key: Key,
         rifl: Rifl,
         cmd_key_count: usize,
-        key: Key,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
         TableExecutionInfo::AttachedVotes {
             dot,
             clock,
+            key,
             rifl,
             cmd_key_count,
-            key,
             ops,
             votes,
         }
