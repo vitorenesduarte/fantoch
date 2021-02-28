@@ -555,9 +555,10 @@ impl<KC: KeyClocks> Newt<KC> {
         mut votes: Votes,
         _time: &dyn SysTime,
     ) {
+        let id = self.id();
         trace!(
             "p{}: MCommit({:?}, {}, {:?}) | time={}",
-            self.id(),
+            id,
             dot,
             clock,
             votes,
@@ -592,12 +593,20 @@ impl<KC: KeyClocks> Newt<KC> {
                 .all_keys()
                 .filter_map(|(shard_id, shard_key)| {
                     if key != shard_key {
-                        Some((*shard_id, key.clone()))
+                        Some((*shard_id, shard_key.clone()))
                     } else {
                         None
                     }
                 })
                 .collect();
+            trace!(
+                "p{}: MCommit({:?}) key {:?} | remaining keys {:?} | time={}",
+                id,
+                dot,
+                key,
+                remaining_keys,
+                _time.micros()
+            );
             TableExecutionInfo::attached_votes(
                 dot,
                 clock,

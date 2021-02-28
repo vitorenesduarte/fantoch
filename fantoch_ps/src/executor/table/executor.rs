@@ -9,6 +9,7 @@ use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
+use fantoch::trace;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -39,6 +40,7 @@ impl Pending {
 
 #[derive(Clone)]
 pub struct TableExecutor {
+    process_id: ProcessId,
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
@@ -73,6 +75,7 @@ impl Executor for TableExecutor {
         let pending = Default::default();
 
         Self {
+            process_id,
             execute_at_commit: config.execute_at_commit(),
             table,
             store,
@@ -114,9 +117,17 @@ impl Executor for TableExecutor {
                 }
             }
             TableExecutionInfo::Stable { rifl, key } => {
+                trace!("p{}: key={} Stable {:?}", self.process_id, key, rifl);
                 if let Entry::Occupied(mut pending) = self.pending.entry(rifl) {
                     // decrease number of missing stable keys
                     pending.get_mut().missing_stable_keys -= 1;
+                    trace!(
+                        "p{}: key={} Stable {:?} | missing {:?}",
+                        self.process_id,
+                        key,
+                        rifl,
+                        pending.get().missing_stable_keys
+                    );
 
                     if pending.get().missing_stable_keys == 0 {
                         // if all keys are stable, remove command from pending
@@ -158,6 +169,13 @@ impl TableExecutor {
         I: Iterator<Item = Pending>,
     {
         to_execute.for_each(|mut stable| {
+            trace!(
+                "p{}: key={} try_execute {:?} | missing {:?}",
+                self.process_id,
+                key,
+                stable.rifl,
+                stable.missing_stable_keys
+            );
             if stable.missing_stable_keys == 0 {
                 // if the command is single-key, execute immediately.
                 self.do_execute(&key, stable);
