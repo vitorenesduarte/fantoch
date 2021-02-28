@@ -116,13 +116,13 @@ impl Executor for TableExecutor {
                     let to_execute = self
                         .table
                         .add_attached_votes(dot, clock, &key, pending, votes);
-                    self.add_to_execute(key, to_execute);
+                    self.try_execute(key, to_execute);
                 }
             }
             TableExecutionInfo::DetachedVotes { key, votes } => {
                 if !self.execute_at_commit {
                     let to_execute = self.table.add_detached_votes(&key, votes);
-                    self.add_to_execute(key, to_execute);
+                    self.try_execute(key, to_execute);
                 }
             }
             TableExecutionInfo::Stable { key, rifl } => {
@@ -210,7 +210,7 @@ impl TableExecutor {
         *self.buffered_stable_msgs.entry(composite_key).or_default() += 1;
     }
 
-    fn add_to_execute<I>(&mut self, key: Key, mut to_execute: I)
+    fn try_execute<I>(&mut self, key: Key, mut to_execute: I)
     where
         I: Iterator<Item = Pending>,
     {
