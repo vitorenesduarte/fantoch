@@ -105,7 +105,7 @@ impl Executor for TableExecutor {
             } => {
                 let pending = Pending::new(rifl, remaining_keys, ops);
                 if self.execute_at_commit {
-                    self.try_execute(key, std::iter::once(pending));
+                    self.do_execute(key, pending);
                 } else {
                     let to_execute = self
                         .table
@@ -137,14 +137,22 @@ impl Executor for TableExecutor {
                             );
 
                             if pending.missing_stable_keys == 0 {
-                                // if all keys are stable, remove command from pending
-                                // and execute it
+                                // if all keys are stable, remove command from
+                                // pending and execute it
                                 let pending =
                                     pending_at_key.pop_front().unwrap();
-                                self.do_execute(&key, pending);
+                                self.do_execute(key.clone(), pending);
+
+                                // try to execute the remaining pending commands
                                 let to_execute =
                                     self.pending.remove(&key).unwrap();
-                                self.try_execute(key, to_execute.into_iter());
+                                // here we call `try_execute_no_pending` instead
+                                // of `try_execute` because we know that
+                                // `self.pending.get(&key).or_default().is_empty()`
+                                self.try_execute_no_pending(
+                                    key,
+                                    to_execute.into_iter(),
+                                );
                                 return;
                             }
                         }
@@ -182,7 +190,7 @@ impl Executor for TableExecutor {
 }
 
 impl TableExecutor {
-    fn try_execute<I>(&mut self, mut key: Key, mut to_execute: I)
+    fn try_execute<I>(&mut self, key: Key, to_execute: I)
     where
         I: Iterator<Item = Pending>,
     {
@@ -194,7 +202,13 @@ impl TableExecutor {
                 return;
             }
         }
+        self.try_execute_no_pending(key, to_execute)
+    }
 
+    fn try_execute_no_pending<I>(&mut self, mut key: Key, mut to_execute: I)
+    where
+        I: Iterator<Item = Pending>,
+    {
         // execute commands while no command is added as pending
         while let Some(mut pending) = to_execute.next() {
             trace!(
@@ -206,7 +220,7 @@ impl TableExecutor {
             );
             if pending.missing_stable_keys == 0 {
                 // if the command is single-key, execute immediately.
-                self.do_execute(&key, pending);
+                self.do_execute(key.clone(), pending);
             } else {
                 // otherwise, send a `Stable` message to each of the other
                 // keys/partitions accessed by the command
@@ -235,11 +249,11 @@ impl TableExecutor {
                 if pending.missing_stable_keys == 0 {
                     // if the command is already stable at all keys/partitions,
                     // then execute it and keep going
-                    self.do_execute(&key, pending);
+                    self.do_execute(key.clone(), pending);
                 } else {
-                    let pending_at_key = self.pending.entry(key).or_default();
                     // otherwise, add this command and all the remaining
                     // commands as pending
+                    let pending_at_key = self.pending.entry(key).or_default();
                     pending_at_key.push_back(pending);
                     pending_at_key.extend(to_execute);
                     return;
@@ -248,7 +262,7 @@ impl TableExecutor {
         }
     }
 
-    fn do_execute(&mut self, key: &Key, stable: Pending) {
+    fn do_execute(&mut self, key: Key, stable: Pending) {
         // take the ops inside the arc if we're the last with a
         // reference to it (otherwise, clone them)
         let rifl = stable.rifl;
@@ -258,10 +272,10 @@ impl TableExecutor {
         // execute ops in the `KVStore`
         let partial_results =
             self.store
-                .execute_with_monitor(key, ops, rifl, &mut self.monitor);
+                .execute_with_monitor(&key, ops, rifl, &mut self.monitor);
         self.to_clients.push_back(ExecutorResult::new(
             rifl,
-            key.clone(),
+            key,
             partial_results,
         ));
     }
