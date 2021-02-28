@@ -50,6 +50,7 @@ impl MultiVotesTable {
         dot: Dot,
         clock: u64,
         rifl: Rifl,
+        cmd_key_count: usize,
         key: &Key,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
@@ -57,7 +58,7 @@ impl MultiVotesTable {
         // add ops and votes to the votes tables, and at the same time
         // compute which ops are safe to be executed
         self.update_table(key, |table| {
-            table.add(dot, clock, rifl, ops, votes);
+            table.add(dot, clock, rifl, cmd_key_count, ops, votes);
             table.stable_ops()
         })
     }
@@ -103,6 +104,13 @@ impl MultiVotesTable {
 }
 
 #[derive(Clone)]
+struct Pending {
+    rifl: Rifl,
+    cmd_key_count: usize,
+    ops: Arc<Vec<KVOp>>,
+}
+
+#[derive(Clone)]
 struct VotesTable {
     key: Key,
     process_id: ProcessId,
@@ -114,7 +122,7 @@ struct VotesTable {
     // this buffer saves us always allocating a vector when computing the
     // stable clock (see `stable_clock`)
     frontiers_buffer: Vec<u64>,
-    ops: BTreeMap<SortId, (Rifl, Arc<Vec<KVOp>>)>,
+    ops: BTreeMap<SortId, Pending>,
 }
 
 impl VotesTable {
@@ -144,6 +152,7 @@ impl VotesTable {
         dot: Dot,
         clock: u64,
         rifl: Rifl,
+        cmd_key_count: usize,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) {
@@ -162,7 +171,12 @@ impl VotesTable {
         );
 
         // add op to the sorted list of ops to be executed
-        let res = self.ops.insert(sort_id, (rifl, ops));
+        let pending = Pending {
+            rifl,
+            cmd_key_count,
+            ops,
+        };
+        let res = self.ops.insert(sort_id, pending);
         // and check there was nothing there for this exact same position
         assert!(res.is_none());
 
@@ -238,7 +252,9 @@ impl VotesTable {
         );
 
         // return stable ops
-        stable.into_iter().map(|(_, id_and_op)| id_and_op)
+        stable
+            .into_iter()
+            .map(|(_, pending)| (pending.rifl, pending.ops))
     }
 
     // Computes the (potentially) new stable clock in this table.
@@ -297,7 +313,9 @@ mod tests {
             stability_threshold,
         );
 
-        // in this example we'll use the dot as rifl
+        // in this example we'll use the dot as rifl;
+        // also, all commands access a single key
+        let cmd_key_count = 1;
 
         // a1
         let a1 = Arc::new(vec![KVOp::Put(String::from("A1"))]);
@@ -367,31 +385,66 @@ mod tests {
         ];
 
         // add a1 to table
-        table.add(a1_dot, a1_clock, a1_rifl, a1.clone(), a1_votes.clone());
+        table.add(
+            a1_dot,
+            a1_clock,
+            a1_rifl,
+            cmd_key_count,
+            a1.clone(),
+            a1_votes.clone(),
+        );
         // get stable: a1
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(a1_rifl, a1.clone())]);
 
         // add d1 to table
-        table.add(d1_dot, d1_clock, d1_rifl, d1.clone(), d1_votes.clone());
+        table.add(
+            d1_dot,
+            d1_clock,
+            d1_rifl,
+            cmd_key_count,
+            d1.clone(),
+            d1_votes.clone(),
+        );
         // get stable: none
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // add c1 to table
-        table.add(c1_dot, c1_clock, c1_rifl, c1.clone(), c1_votes.clone());
+        table.add(
+            c1_dot,
+            c1_clock,
+            c1_rifl,
+            cmd_key_count,
+            c1.clone(),
+            c1_votes.clone(),
+        );
         // get stable: c1 then d1
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(c1_rifl, c1.clone()), (d1_rifl, d1.clone())]);
 
         // add e2 to table
-        table.add(e2_dot, e2_clock, e2_rifl, e2.clone(), e2_votes.clone());
+        table.add(
+            e2_dot,
+            e2_clock,
+            e2_rifl,
+            cmd_key_count,
+            e2.clone(),
+            e2_votes.clone(),
+        );
         // get stable: none
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
 
         // add e1 to table
-        table.add(e1_dot, e2_clock, e1_rifl, e1.clone(), e1_votes.clone());
+        table.add(
+            e1_dot,
+            e2_clock,
+            e1_rifl,
+            cmd_key_count,
+            e1.clone(),
+            e1_votes.clone(),
+        );
         // get stable: none
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(e1_rifl, e1.clone()), (e2_rifl, e2.clone())]);
@@ -425,7 +478,7 @@ mod tests {
                 .clone()
                 .into_iter()
                 .flat_map(|(dot, clock, rifl, cmd, votes)| {
-                    table.add(dot, clock, rifl, cmd, votes);
+                    table.add(dot, clock, rifl, cmd_key_count, cmd, votes);
                     table.stable_ops()
                 })
                 .collect();
@@ -457,7 +510,9 @@ mod tests {
             stability_threshold,
         );
 
-        // in this example we'll use the dot as rifl
+        // in this example we'll use the dot as rifl;
+        // also, all commands access a single key
+        let cmd_key_count = 1;
 
         // a1
         let a1 = Arc::new(vec![KVOp::Put(String::from("A1"))]);
@@ -472,7 +527,14 @@ mod tests {
         ];
 
         // add a1 to table
-        table.add(a1_dot, a1_clock, a1_rifl, a1.clone(), a1_votes.clone());
+        table.add(
+            a1_dot,
+            a1_clock,
+            a1_rifl,
+            cmd_key_count,
+            a1.clone(),
+            a1_votes.clone(),
+        );
         // get stable: none
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
@@ -491,7 +553,14 @@ mod tests {
         ];
 
         // add c1 to table
-        table.add(c1_dot, c1_clock, c1_rifl, c1.clone(), c1_votes.clone());
+        table.add(
+            c1_dot,
+            c1_clock,
+            c1_rifl,
+            cmd_key_count,
+            c1.clone(),
+            c1_votes.clone(),
+        );
         // get stable: none
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
@@ -509,7 +578,14 @@ mod tests {
         ];
 
         // add e1 to table
-        table.add(e1_dot, e1_clock, e1_rifl, e1.clone(), e1_votes.clone());
+        table.add(
+            e1_dot,
+            e1_clock,
+            e1_rifl,
+            cmd_key_count,
+            e1.clone(),
+            e1_votes.clone(),
+        );
         // get stable: a1 and e1
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![(a1_rifl, a1.clone()), (e1_rifl, e1.clone())]);
@@ -528,7 +604,14 @@ mod tests {
         ];
 
         // add a2 to table
-        table.add(a2_dot, a2_clock, a2_rifl, a2.clone(), a2_votes.clone());
+        table.add(
+            a2_dot,
+            a2_clock,
+            a2_rifl,
+            cmd_key_count,
+            a2.clone(),
+            a2_votes.clone(),
+        );
         // get stable: none
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(stable, vec![]);
@@ -547,7 +630,14 @@ mod tests {
         ];
 
         // add d1 to table
-        table.add(d1_dot, d1_clock, d1_rifl, d1.clone(), d1_votes.clone());
+        table.add(
+            d1_dot,
+            d1_clock,
+            d1_rifl,
+            cmd_key_count,
+            d1.clone(),
+            d1_votes.clone(),
+        );
         // get stable
         let stable = table.stable_ops().collect::<Vec<_>>();
         assert_eq!(

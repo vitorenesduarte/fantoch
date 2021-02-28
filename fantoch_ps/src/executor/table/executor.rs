@@ -61,6 +61,7 @@ impl Executor for TableExecutor {
                 dot,
                 clock,
                 rifl,
+                cmd_key_count,
                 key,
                 ops,
                 votes,
@@ -68,9 +69,15 @@ impl Executor for TableExecutor {
                 if self.execute_at_commit {
                     self.execute(key, std::iter::once((rifl, ops)));
                 } else {
-                    let to_execute = self
-                        .table
-                        .add_votes(dot, clock, rifl, &key, ops, votes);
+                    let to_execute = self.table.add_votes(
+                        dot,
+                        clock,
+                        rifl,
+                        cmd_key_count,
+                        &key,
+                        ops,
+                        votes,
+                    );
                     self.execute(key, to_execute);
                 }
             }
@@ -131,6 +138,7 @@ pub enum TableExecutionInfo {
         dot: Dot,
         clock: u64,
         rifl: Rifl,
+        cmd_key_count: usize,
         key: Key,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
@@ -142,10 +150,11 @@ pub enum TableExecutionInfo {
 }
 
 impl TableExecutionInfo {
-    pub fn votes(
+    pub fn attached_votes(
         dot: Dot,
         clock: u64,
         rifl: Rifl,
+        cmd_key_count: usize,
         key: Key,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
@@ -154,6 +163,7 @@ impl TableExecutionInfo {
             dot,
             clock,
             rifl,
+            cmd_key_count,
             key,
             ops,
             votes,
