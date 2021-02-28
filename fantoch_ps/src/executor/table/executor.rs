@@ -151,8 +151,8 @@ impl Executor for TableExecutor {
 
 impl TableExecutor {
     fn handle_stable_msg(&mut self, key: Key, rifl: Rifl) {
-        // get buffered stable msgs on this key
-        let mut pending_per_key = self.pending.entry(key.clone()).or_default();
+        // get pending commands on this key
+        let pending_per_key = self.pending.entry(key.clone()).or_default();
 
         trace!("p{}: key={} Stable {:?}", self.process_id, key, rifl);
         if let Some(pending) = pending_per_key.pending.get_mut(0) {
@@ -213,7 +213,7 @@ impl TableExecutor {
     where
         I: Iterator<Item = Pending>,
     {
-        let pending_per_key = self.pending.entry(key).or_default();
+        let pending_per_key = self.pending.entry(key.clone()).or_default();
         if !pending_per_key.pending.is_empty() {
             // if there's already commmands pending at this key, then no
             // command can be executed, and thus we add them all as pending
