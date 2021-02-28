@@ -122,7 +122,7 @@ impl Executor for TableExecutor {
                         // if all keys are stable, remove command from pending
                         // and execute it
                         let pending = pending.remove();
-                        self.execute_pending(&key, pending);
+                        self.do_execute(&key, pending);
                     }
                 } else {
                     panic!("every command in stable messages must be pending");
@@ -160,7 +160,7 @@ impl TableExecutor {
         to_execute.for_each(|mut stable| {
             if stable.missing_stable_keys == 0 {
                 // if the command is single-key, execute immediately.
-                self.execute_pending(&key, stable);
+                self.do_execute(&key, stable);
             } else {
                 // otherwise, send a `Stable` message to each of the other
                 // keys/partitions accessed by the command
@@ -179,7 +179,7 @@ impl TableExecutor {
         })
     }
 
-    fn execute_pending(&mut self, key: &Key, stable: Pending) {
+    fn do_execute(&mut self, key: &Key, stable: Pending) {
         // take the ops inside the arc if we're the last with a
         // reference to it (otherwise, clone them)
         let rifl = stable.rifl;
