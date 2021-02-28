@@ -1,6 +1,6 @@
 ![Continuous integration](https://github.com/vitorenesduarte/fantoch/workflows/Continuous%20integration/badge.svg)
-[![codecov](https://codecov.io/gh/vitorenesduarte/fantoch/branch/master/graph/badge.svg?token=yqK2KnILVg)](https://codecov.io/gh/vitorenesduarte/fantoch)
 [![dependency status](https://deps.rs/repo/github/vitorenesduarte/fantoch/status.svg)](https://deps.rs/repo/github/vitorenesduarte/fantoch)
+[![codecov](https://codecov.io/gh/vitorenesduarte/fantoch/branch/master/graph/badge.svg?token=yqK2KnILVg)](https://codecov.io/gh/vitorenesduarte/fantoch)
 
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
@@ -11,18 +11,12 @@
 - [Atlas](https://vitorenes.org/publication/enes-atlas/): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
 - Newt: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
 
-<!--
-Next:
-- Mencius: a variation that we call Flexible Mencius (as in Flexible Paxos) + an optimization that should make it very efficient for low conflict workloads
--->
-
 #### What does it do?
 
 - all protocols implement the [`Protocol`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/protocol/mod.rs) trait
 - this specification can then be used for
   - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU and network bandwidth are assumed)
   - __running__ the protocols in a real setting
-  - (model checking is coming soon!)
 - this is achieved by providing a __"simulator"__ and a __"runner"__ that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
 
 ## License
